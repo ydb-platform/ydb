@@ -363,7 +363,7 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             TActivationContext::Send(new IEventHandle(Request->Sender, Self->SelfId(), new NMon::TEvRemoteHttpInfoRes(
                 Stream.Str()), 0, Request->Cookie));
         }

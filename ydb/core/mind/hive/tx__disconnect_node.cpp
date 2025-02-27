@@ -42,7 +42,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         BLOG_D("THive::TTxDisconnectNode()::Complete");
     }
 };

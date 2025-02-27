@@ -65,7 +65,7 @@ struct TStatisticsAggregator::TTxDatashardScanResponse : public TTxBase {
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxDatashardScanResponse::Complete");
 
         if (IsCorrectShardId && !Self->DatashardRanges.empty()) {

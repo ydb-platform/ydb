@@ -38,7 +38,7 @@ struct TSchemeShard::TTxUnmarkRestoreTables : public TTransactionBase<TSchemeSha
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         if (UnmarkedCount) {
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
                 "TTxUnmarkRestoreTables Complete"

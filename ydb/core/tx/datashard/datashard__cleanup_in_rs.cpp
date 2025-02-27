@@ -48,7 +48,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override
+    void Complete(const TActorContext &ctx) noexcept override
     {
         if (Self->State == TShardState::Offline) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
@@ -126,7 +126,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override
+    void Complete(const TActorContext &ctx) noexcept override
     {
         if (Self->State == TShardState::Offline) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,

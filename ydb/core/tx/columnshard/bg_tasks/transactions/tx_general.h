@@ -18,7 +18,7 @@ public:
     {
     }
 
-    void Complete(const TActorContext& ctx) override final;
+    void Complete(const TActorContext& ctx) noexcept override final;
 };
 
 }

@@ -222,7 +222,7 @@ void TDataShard::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorCo
     return TTabletExecutedFlat::OnTabletStop(ev, ctx);
 }
 
-void TDataShard::TTxStopGuard::Complete(const TActorContext &ctx) {
+void TDataShard::TTxStopGuard::Complete(const TActorContext &ctx) noexcept {
     Self->OnStopGuardComplete(ctx);
 }
 
@@ -2736,7 +2736,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         // nothing
     }
 
@@ -4580,7 +4580,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         ctx.Send(Ev->Sender, Reply.Release(), 0, Ev->Cookie);
     }
 
@@ -4727,7 +4727,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         ctx.Send(Ev->Sender, Reply.Release(), 0, Ev->Cookie);
     }
 

@@ -2072,7 +2072,7 @@ public:
         }
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         auto it = Self->ReadIteratorsByLocalReadId.find(LocalReadId);
         if (it == Self->ReadIteratorsByLocalReadId.end()) {
             // the one who removed the iterator should have reply to user
@@ -2663,7 +2663,7 @@ public:
         state.Request->ReadSpan.EndError(message);
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxReadViaPipeline(" << GetTxType() << ") Complete"
             << ": at tablet# " << Self->TabletID());
 
@@ -2898,7 +2898,7 @@ public:
         return false;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         if (DelayedResult) {
             if (!Self->ReadIteratorsByLocalReadId.contains(LocalReadId)) {
                 // the one who removed the iterator should have replied to the user

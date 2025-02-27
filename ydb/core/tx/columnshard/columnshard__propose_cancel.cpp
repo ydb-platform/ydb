@@ -23,7 +23,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         LOG_S_DEBUG("TTxProposeCancel.Complete");
         const auto* msg = Ev->Get();
         const ui64 txId = msg->Record.GetTxId();

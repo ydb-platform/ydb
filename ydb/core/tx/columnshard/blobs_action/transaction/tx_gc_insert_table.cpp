@@ -21,7 +21,7 @@ bool TTxInsertTableCleanup::Execute(TTransactionContext& txc, const TActorContex
     BlobsAction->OnExecuteTxAfterRemoving(blobManagerDb, true);
     return true;
 }
-void TTxInsertTableCleanup::Complete(const TActorContext& /*ctx*/) {
+void TTxInsertTableCleanup::Complete(const TActorContext& /*ctx*/) noexcept {
     TMemoryProfileGuard mpg("TTxInsertTableCleanup::Complete");
     auto allAborted = Self->InsertTable->GetAborted();
     for (auto& [abortedWriteId, abortedData] : allAborted) {

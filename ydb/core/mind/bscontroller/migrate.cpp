@@ -38,7 +38,7 @@ class TBlobStorageController::TTxMigrate : public TTransactionBase<TBlobStorageC
             return front->Execute(txc);
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             auto& front = Queue.front();
             STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXM04, "Complete tx from queue", (Type, TypeName(*front)));
             front->Complete();
@@ -235,7 +235,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXM02, "Complete tx", (IncompatibleData, IncompatibleData));
         if (IncompatibleData) {
             STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXM00, "CompatibilityInfo check failed", (ErrorReason, CompatibilityError));

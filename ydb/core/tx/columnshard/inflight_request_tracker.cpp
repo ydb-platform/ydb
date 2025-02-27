@@ -76,7 +76,7 @@ private:
         return true;
     }
 
-    virtual void DoComplete(const TActorContext& /*ctx*/) override {
+    virtual void DoComplete(const TActorContext& /*ctx*/) noexcept override {
     }
 
 public:

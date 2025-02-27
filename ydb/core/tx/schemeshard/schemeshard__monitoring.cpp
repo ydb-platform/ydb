@@ -310,7 +310,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         if (Answer) {
             ctx.Send(Ev->Sender, new NMon::TEvRemoteHttpInfoRes(Answer.Str()));
         }

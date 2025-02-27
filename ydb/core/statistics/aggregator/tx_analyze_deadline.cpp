@@ -37,7 +37,7 @@ struct TStatisticsAggregator::TTxAnalyzeDeadline : public TTxBase {
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         SA_LOG_T("[" << Self->TabletID() << "] TTxAnalyzeDeadline::Complete");
 
         if (OperationId) {

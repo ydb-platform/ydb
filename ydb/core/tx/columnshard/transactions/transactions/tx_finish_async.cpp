@@ -7,7 +7,7 @@ bool TTxFinishAsyncTransaction::Execute(TTransactionContext& txc, const TActorCo
     return true;
 }
 
-void TTxFinishAsyncTransaction::Complete(const TActorContext& ctx) {
+void TTxFinishAsyncTransaction::Complete(const TActorContext& ctx) noexcept {
     Self->GetProgressTxController().FinishProposeOnComplete(TxId, ctx);
 }
 

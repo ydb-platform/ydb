@@ -105,7 +105,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         Y_UNUSED(ctx);
     }
 
@@ -231,7 +231,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         Y_UNUSED(ctx);
     }
 
@@ -347,7 +347,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         Y_UNUSED(ctx);
     }
 
@@ -469,7 +469,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         Y_UNUSED(ctx);
     }
 
@@ -565,7 +565,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
     }
 
     void RenderHTMLPage(IOutputStream& out, const TActorContext&) {
@@ -970,7 +970,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         if (ChangeRequest) {
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"ok\"}"));
         } else {
@@ -1402,7 +1402,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         if (ChangeRequest) {
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"ok\"}"));
         } else {
@@ -1437,7 +1437,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         Y_UNUSED(ctx);
     }
 
@@ -2310,7 +2310,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         Y_UNUSED(ctx);
     }
 
@@ -2542,7 +2542,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         BLOG_D("THive::TTxMonEvent_SetDown(" << NodeId << ")::Complete Response=" << Response);
         ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(Response));
     }
@@ -2582,7 +2582,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         BLOG_D("THive::TTxMonEvent_SetFreeze(" << NodeId << ")::Complete Response=" << Response);
         ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(Response));
     }
@@ -2617,7 +2617,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         BLOG_D("THive::TTxMonEvent_KickNode(" << NodeId << ")::Complete Response=" << Response);
         ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(Response));
     }
@@ -2696,7 +2696,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         if (Wait) {
             Self->Execute(Self->CreateSwitchDrainOn(NodeId, {}, WaitActorId));
         } else {
@@ -2728,7 +2728,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
     }
 };
@@ -2754,7 +2754,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
     }
 };
@@ -2793,7 +2793,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
     }
 };
@@ -2967,7 +2967,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         if (Error) {
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
         } else {
@@ -3052,7 +3052,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         if (!Wait) {
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
         }
@@ -3128,7 +3128,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
     }
 };
 
@@ -3221,7 +3221,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {}
+    void Complete(const TActorContext&) noexcept override {}
 };
 
 class TStopTabletWaitActor : public TActor<TStopTabletWaitActor>, public ISubActor {
@@ -3309,7 +3309,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {}
+    void Complete(const TActorContext&) noexcept override {}
 };
 
 class TTxMonEvent_StopDomain : public TTransactionBase<THive>, TLoggedMonTransaction {
@@ -3359,7 +3359,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         if (Stop) {
             Self->ProcessPendingStopTablet();
         } else {
@@ -3454,7 +3454,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {}
+    void Complete(const TActorContext&) noexcept override {}
 };
 
 class TTxMonEvent_FindTablet : public TTransactionBase<THive> {
@@ -3559,7 +3559,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(Result, false)));
     }
 };
@@ -3783,7 +3783,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(Result, false)));
     }
 };
@@ -3822,7 +3822,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(Result, false)));
     }
 
@@ -3890,7 +3890,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         if (Info) {
             ctx.Register(new TResetter(std::move(Info), Source, KnownGeneration));
         } else if (Error) {
@@ -4153,7 +4153,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {}
+    void Complete(const TActorContext&) noexcept override {}
 };
 
 class TTxMonEvent_NotReady : public TTransactionBase<THive> {
@@ -4172,7 +4172,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {}
+    void Complete(const TActorContext&) noexcept override {}
 };
 
 class TTxMonEvent_Storage : public TTransactionBase<THive> {
@@ -4199,7 +4199,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         Y_UNUSED(ctx);
     }
 
@@ -4325,7 +4325,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         Y_UNUSED(ctx);
     }
 
@@ -4426,7 +4426,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {}
+    void Complete(const TActorContext&) noexcept override {}
 };
 
 bool THive::IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {

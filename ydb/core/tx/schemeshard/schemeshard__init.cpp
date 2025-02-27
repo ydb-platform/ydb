@@ -5057,7 +5057,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         }
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         if (Broken) {
             return;
         }

@@ -156,7 +156,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         Y_UNUSED(ctx);
     }
 };
@@ -182,7 +182,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
             "Updated last full compaction of tablet# "<< Self->TabletID()
             << ", tableId# " << TableId

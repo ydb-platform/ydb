@@ -168,7 +168,7 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    "TTxAckPublishToSchemeBoard Complete"
                        << ", at schemeshard: " << Self->TabletID()

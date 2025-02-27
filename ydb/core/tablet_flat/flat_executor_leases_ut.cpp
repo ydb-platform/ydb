@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(TFlatExecutorLeases) {
                 return true;
             }
 
-            void Complete(const TActorContext&) {
+            void Complete(const TActorContext&) noexcept {
                 // nothing
             }
         };
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(TFlatExecutorLeases) {
                 return true;
             }
 
-            void Complete(const TActorContext& ctx) {
+            void Complete(const TActorContext& ctx) noexcept {
                 Self->SwitchToWork(ctx);
             }
         };
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(TFlatExecutorLeases) {
                 return true;
             }
 
-            void Complete(const TActorContext& ctx) {
+            void Complete(const TActorContext& ctx) noexcept {
                 auto* msg = Ev->Get();
                 Self->Data[msg->Key] = msg->Value;
 

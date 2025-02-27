@@ -60,7 +60,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         TEvTabletBase::TEvBlockBlobStorageResult* msg = Result->Get();
         BLOG_D("THive::TTxBlockStorageResult::Complete(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
         SideEffects.Complete(ctx);

@@ -15,7 +15,7 @@ struct TTxCoordinator::TTxSchema : public TTransactionBase<TTxCoordinator> {
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         Self->Execute(Self->CreateTxUpgrade(), ctx);
     }
 };

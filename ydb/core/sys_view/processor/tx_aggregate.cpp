@@ -106,7 +106,7 @@ struct TSysViewProcessor::TTxAggregate : public TTxBase {
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         SVLOG_D("[" << Self->TabletID() << "] TTxAggregate::Complete");
 
         if (Self->CurrentStage == COLLECT) {

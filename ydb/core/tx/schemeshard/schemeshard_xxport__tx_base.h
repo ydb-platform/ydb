@@ -77,7 +77,7 @@ public:
         return DoExecute(txc, ctx);
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         DoComplete(ctx);
 
         for (auto& ev : SendOnComplete) {

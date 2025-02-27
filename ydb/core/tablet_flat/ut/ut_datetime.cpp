@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(TFlatTableDatetime) {
                 return true;
             }
 
-            void Complete(const TActorContext &ctx) override {
+            void Complete(const TActorContext &ctx) noexcept override {
                 Self.Execute(new TTxStore(Self), ctx);
             }
         };
@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(TFlatTableDatetime) {
                 return true;
             }
 
-            void Complete(const TActorContext &ctx) override {
+            void Complete(const TActorContext &ctx) noexcept override {
                 Self.Execute(new TTxSelectSingle(Self), ctx);
             }
         };
@@ -303,7 +303,7 @@ Y_UNIT_TEST_SUITE(TFlatTableDatetime) {
                 return true;
             }
 
-            void Complete(const TActorContext &ctx) override {
+            void Complete(const TActorContext &ctx) noexcept override {
                 Self.Execute(new TTxSelectRange(Self), ctx);
             }
         };
@@ -439,7 +439,7 @@ Y_UNIT_TEST_SUITE(TFlatTableDatetime) {
                 return true;
             }
 
-            void Complete(const TActorContext &ctx) override {
+            void Complete(const TActorContext &ctx) noexcept override {
                 ctx.Send(ctx.SelfID, new TEvents::TEvWakeup);
             }
         };

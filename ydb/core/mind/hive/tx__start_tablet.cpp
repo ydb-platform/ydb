@@ -112,7 +112,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         BLOG_D("THive::TTxStartTablet::Complete Tablet " << TabletId << " SideEffects: " << SideEffects);
         SideEffects.Complete(ctx);
         if (Success) {

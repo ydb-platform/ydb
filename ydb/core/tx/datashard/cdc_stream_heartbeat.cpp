@@ -73,7 +73,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         LOG_I("Enqueue " << ChangeRecords.size() << " change record(s)"
             << ": at tablet# " << Self->TabletID());
         Self->EnqueueChangeRecords(std::move(ChangeRecords));

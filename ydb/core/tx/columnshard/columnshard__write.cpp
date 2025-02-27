@@ -431,7 +431,7 @@ public:
         return true;
     }
 
-    virtual void Complete(const TActorContext& ctx) override {
+    virtual void Complete(const TActorContext& ctx) noexcept override {
         Self->GetOperationsManager().AbortTransactionOnComplete(*Self, TxId);
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), TxId);
         ctx.Send(Source, result.release(), 0, Cookie);

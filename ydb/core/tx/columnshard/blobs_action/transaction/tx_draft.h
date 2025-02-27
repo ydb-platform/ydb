@@ -23,7 +23,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) override;
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_WRITE_DRAFT; }
 };
 

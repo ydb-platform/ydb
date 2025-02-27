@@ -354,7 +354,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
         }
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         if (EngineResultStatusCode != IEngineFlat::EResult::Unknown)
             MakeResponse(nullptr, ctx);
     }

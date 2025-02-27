@@ -17,7 +17,7 @@ public:
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_PLANSTEP; }
 
 private:
@@ -114,7 +114,7 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     return true;
 }
 
-void TTxPlanStep::Complete(const TActorContext& ctx) {
+void TTxPlanStep::Complete(const TActorContext& ctx) noexcept {
     Y_ABORT_UNLESS(Ev);
     Y_ABORT_UNLESS(Result);
     LOG_S_DEBUG(TxPrefix() << "complete" << TxSuffix());

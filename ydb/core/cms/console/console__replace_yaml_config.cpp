@@ -170,7 +170,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override
+    void Complete(const TActorContext &ctx) noexcept override
     {
         LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxReplaceMainYamlConfig Complete");
 
@@ -347,7 +347,7 @@ public:
         Self->Logger.DbLogData(UserToken.GetUserSID(), logData, txc, ctx);
     }
 
-    void Complete(const TActorContext &ctx) override
+    void Complete(const TActorContext &ctx) noexcept override
     {
         LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxReplaceDatabaseYamlConfig Complete");
 

@@ -8,7 +8,7 @@ bool TTxAddSession::Execute(TTransactionContext& txc, const TActorContext& /*ctx
     return true;
 }
 
-void TTxAddSession::Complete(const TActorContext& /*ctx*/) {
+void TTxAddSession::Complete(const TActorContext& /*ctx*/) noexcept {
     Sessions->AddSession(Session).Validate("on add background session");
     Session->GetChannelContainer()->OnAdded();
     if (Session->GetLogicContainer()->IsReadyForStart() && !Session->GetLogicContainer()->IsFinished()) {

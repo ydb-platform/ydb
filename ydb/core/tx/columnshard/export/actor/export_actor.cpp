@@ -42,7 +42,7 @@ protected:
         Self->GetProgressTxController().FinishProposeOnExecute(TxId, txc);
         return true;
     }
-    virtual void Complete(const TActorContext& ctx) override {
+    virtual void Complete(const TActorContext& ctx) noexcept override {
         Self->GetProgressTxController().FinishProposeOnComplete(TxId, ctx);
     }
 public:

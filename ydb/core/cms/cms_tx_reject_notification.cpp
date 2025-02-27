@@ -49,7 +49,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRejectNotification Complete");
 
         Self->Reply(Event, std::move(Response), ctx);

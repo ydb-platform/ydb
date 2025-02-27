@@ -308,7 +308,7 @@ namespace NKikimr::NBlobDepot {
                 return true;
             }
 
-            void Complete(const TActorContext&) override {
+            void Complete(const TActorContext&) noexcept override {
                 if (Self->Data->KeysMadeCertain.empty()) {
                     Self->Data->CommitCertainKeysScheduled = false;
                 } else {

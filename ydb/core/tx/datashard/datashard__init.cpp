@@ -22,7 +22,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_INIT; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext &ctx) override;
+    void Complete(const TActorContext &ctx) noexcept override;
 
 private:
     bool CreateScheme(TTransactionContext &txc);
@@ -38,7 +38,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_INIT_RESTORED; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
 
 private:
     bool InMemoryStateActorStarted = false;
@@ -93,7 +93,7 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
     }
 }
 
-void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
+void TDataShard::TTxInit::Complete(const TActorContext &ctx) noexcept {
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInit::Complete");
 }
 
@@ -121,7 +121,7 @@ bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActor
     return true;
 }
 
-void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
+void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) noexcept {
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Complete");
 
     if (Self->InMemoryStateActor && InMemoryStateActorStarted) {
@@ -699,7 +699,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchema.Complete");
         Self->Execute(Self->CreateTxInit(), ctx);
     }
@@ -726,7 +726,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchemaDefaults.Complete");
     }
 };

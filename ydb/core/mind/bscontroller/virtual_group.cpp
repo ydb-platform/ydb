@@ -264,7 +264,7 @@ namespace NKikimr::NBsController {
                 return true;
             }
 
-            void Complete(const TActorContext&) override {
+            void Complete(const TActorContext&) noexcept override {
                 if (State) {
                     State->ApplyConfigUpdates();
                 }
@@ -306,7 +306,7 @@ namespace NKikimr::NBsController {
                 return true;
             }
 
-            void Complete(const TActorContext&) override {
+            void Complete(const TActorContext&) noexcept override {
                 if (State) {
                     State->ApplyConfigUpdates();
                 }
@@ -931,7 +931,7 @@ namespace NKikimr::NBsController {
                     (ErrorReason, ErrorReason));
             }
 
-            void Complete(const TActorContext&) override {
+            void Complete(const TActorContext&) noexcept override {
                 if (State) {
                     State->ApplyConfigUpdates();
                 }

@@ -66,7 +66,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override
+    void Complete(const TActorContext&) noexcept override
     {}
 
     bool LoadOperationLog(TTransactionContext& txc, ui64 count, ui64 offset) {
@@ -216,7 +216,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override
+    void Complete(const TActorContext&) noexcept override
     {}
 
 private:
@@ -517,7 +517,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         TActivationContext::Send(new IEventHandle(RespondTo, Self->SelfId(), Json
             ? static_cast<IEventBase*>(new NMon::TEvRemoteJsonInfoRes(GenerateJson()))
             : static_cast<IEventBase*>(new NMon::TEvRemoteHttpInfoRes(GenerateHtml()))));
@@ -660,7 +660,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXMO01, "TBlobStorageController::TTxMonEvent_SetDown",
             (GroupId.GetRawId(), GroupId.GetRawId()), (Down, Down), (Persist, Persist), (Response, Response));
         TActivationContext::Send(new IEventHandle(Source, Self->SelfId(), new NMon::TEvRemoteJsonInfoRes(Response)));
@@ -711,7 +711,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXMO02, "TBlobStorageController::TTxMonEvent_GetDown", (GroupId.GetRawId(), GroupId.GetRawId()),
             (Response, Response));
         TActivationContext::Send(new IEventHandle(Source, Self->SelfId(), new NMon::TEvRemoteJsonInfoRes(Response)));

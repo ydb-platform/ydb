@@ -101,7 +101,7 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         if (!LastBlockedActor) {
             // Assume worst case, everything up to LastBlockedStep was planned
             LastPlanned = Max(LastPlanned, LastBlockedStep);

@@ -27,7 +27,7 @@ public:
     }
 
     bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
     TTxType GetTxType() const override { return NColumnShard::TXTYPE_REMOVE_BACKGROUND_SESSION; }
 };
 

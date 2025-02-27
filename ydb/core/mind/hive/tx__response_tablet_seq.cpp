@@ -53,7 +53,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         BLOG_D("THive::TTxResponseTabletSequence()::Complete");
         if (!Sequence.Empty()) {
             Self->ProcessPendingOperations();

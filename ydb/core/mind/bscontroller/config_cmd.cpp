@@ -372,7 +372,7 @@ namespace NKikimr::NBsController {
                 throw TExError() << "unsupported command";
             }
 
-            void Complete(const TActorContext&) override {
+            void Complete(const TActorContext&) noexcept override {
                 if (auto state = std::exchange(State, std::nullopt)) {
                     ui64 configTxSeqNo = state->ApplyConfigUpdates();
                     STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA09, "Transaction complete", (UniqueId, state->UniqueId),

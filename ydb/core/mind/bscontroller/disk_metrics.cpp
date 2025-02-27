@@ -52,7 +52,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         TActivationContext::Schedule(TDuration::Seconds(15), new IEventHandle(TEvPrivate::EvCommitMetrics, 0,
             Self->SelfId(), TActorId(), nullptr, 0));
     }

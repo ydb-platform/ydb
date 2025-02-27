@@ -16,7 +16,7 @@ struct TSchemeShard::TTxInitSchema : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TxInitSchema.Complete");
         Self->Execute(Self->CreateTxUpgradeSchema(), ctx);
     }

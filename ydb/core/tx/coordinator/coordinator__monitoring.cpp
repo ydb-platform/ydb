@@ -27,7 +27,7 @@ struct TTxCoordinator::TTxMonitoring : public TTxCoordinator::TTxConsistencyChec
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         TTxCoordinator::TTxConsistencyCheck::Complete(ctx);
         ctx.Send(ActorToRespond, new NMon::TEvRemoteHttpInfoRes(CheckResult));
     }

@@ -77,7 +77,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         BLOG_D("THive::TTxReleaseTablets::Complete " << Request->Get()->Record << " SideEffects: " << SideEffects);
         SideEffects.Complete(ctx);
         for (const auto& unlockedFromActor : UnlockedFromActor) {

@@ -22,7 +22,7 @@ namespace NKikimr::NBlobDepot {
 
     private:
         bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext&) override;
-        void Complete(const TActorContext&) override;
+        void Complete(const TActorContext&) noexcept override;
 
     public:
         static NTabletFlatExecutor::TTransactionContext *GetTxc();

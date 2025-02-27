@@ -157,7 +157,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         BLOG_D("THive::TTxSeizeTabletsReply::Complete");
         if (!TabletIds.empty()) {
             THolder<TEvHive::TEvReleaseTablets> request(new TEvHive::TEvReleaseTablets());

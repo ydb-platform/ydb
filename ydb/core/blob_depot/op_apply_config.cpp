@@ -45,7 +45,7 @@ namespace NKikimr::NBlobDepot {
                 return true;
             }
 
-            void Complete(const TActorContext&) override {
+            void Complete(const TActorContext&) noexcept override {
                 STLOG(PRI_DEBUG, BLOB_DEPOT, BDT17, "TTxApplyConfig::Complete", (Id, Self->GetLogId()));
 
                 if (!std::exchange(Self->Configured, true)) {

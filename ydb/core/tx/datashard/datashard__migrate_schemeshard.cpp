@@ -60,7 +60,7 @@ bool TDataShard::TTxMigrateSchemeShard::Execute(TTransactionContext& txc, const 
     return true;
 }
 
-void TDataShard::TTxMigrateSchemeShard::Complete(const TActorContext& ctx) {
+void TDataShard::TTxMigrateSchemeShard::Complete(const TActorContext& ctx) noexcept {
     Y_ABORT_UNLESS(Reply);
 
     NTabletPipe::CloseAndForgetClient(Self->SelfId(), Self->DbStatsReportPipe);

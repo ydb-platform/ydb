@@ -48,7 +48,7 @@ namespace NFake {
             return Completed;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             Y_ABORT_UNLESS(Completed, "Finalizing incomplteted transaction");
 

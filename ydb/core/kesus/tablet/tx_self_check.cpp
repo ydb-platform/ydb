@@ -27,7 +27,7 @@ struct TKesusTablet::TTxSelfCheck : public TTxBase {
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         LOG_DEBUG(ctx, NKikimrServices::KESUS_TABLET, "[%lu] TTxSelfCheck::Complete", Self->TabletID());
         Y_ABORT_UNLESS(Self->SelfCheckPending);
         Cookie.Detach();

@@ -15,7 +15,7 @@ namespace NKikimr::NBsController {
         TTxUpdateShred(TShredState::TImpl *impl, TEvBlobStorage::TEvControllerShredRequest::TPtr ev);
         TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_UPDATE_SHRED; }
         bool Execute(TTransactionContext& txc, const TActorContext&) override;
-        void Complete(const TActorContext&) override;
+        void Complete(const TActorContext&) noexcept override;
     };
 
     class TBlobStorageController::TShredState::TImpl {
@@ -439,7 +439,7 @@ namespace NKikimr::NBsController {
         return true;
     }
 
-    void TBlobStorageController::TTxUpdateShred::Complete(const TActorContext&) {
+    void TBlobStorageController::TTxUpdateShred::Complete(const TActorContext&) noexcept {
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerShredResponse>();
         auto& r = ev->Record;
         const auto& current = Impl->ShredState;

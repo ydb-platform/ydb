@@ -19,7 +19,7 @@ public:
 
     virtual ~TTxStoreTopicStats() = default;
 
-    void Complete(const TActorContext& ) override;
+    void Complete(const TActorContext& ) noexcept override;
 
     // returns true to continue batching
     bool PersistSingleStats(const TPathId& pathId, const TStatsQueue<TEvPersQueue::TEvPeriodicTopicStats>::TItem& item, TTransactionContext& txc, const TActorContext& ctx) override;
@@ -80,7 +80,7 @@ bool TTxStoreTopicStats::PersistSingleStats(const TPathId& pathId, const TStatsQ
     return true;
 }
 
-void TTxStoreTopicStats::Complete(const TActorContext&) {
+void TTxStoreTopicStats::Complete(const TActorContext&) noexcept {
     Queue.WriteQueueSizeMetric();
 }
 

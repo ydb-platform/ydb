@@ -84,7 +84,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         BLOG_D("THive::TTxRegisterNode(" << Local.NodeId() << ")::Complete");
         TNodeInfo* node = Self->FindNode(Local.NodeId());
         if (node != nullptr && node->Local) { // we send ping on every RegisterNode because we want to re-sync tablets upon every reconnection

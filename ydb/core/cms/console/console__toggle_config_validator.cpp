@@ -72,7 +72,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override
+    void Complete(const TActorContext &ctx) noexcept override
     {
         LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS,
                   "TConsole::TTxToggleConfigValidator Complete");

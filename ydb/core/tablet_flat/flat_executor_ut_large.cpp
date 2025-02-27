@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTxLarge) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
 
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTxLarge) {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             // nothing
         }
     };
@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTxLarge) {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             // nothing
         }
     };
@@ -139,7 +139,7 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTxLarge) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };

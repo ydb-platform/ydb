@@ -23,7 +23,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {}
+    void Complete(const TActorContext&) noexcept override {}
 };
 
 ITransaction* TBlobStorageController::CreateTxUpdateSeenOperational(TVector<TGroupId> groupIds) {

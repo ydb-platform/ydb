@@ -47,7 +47,7 @@ namespace NKikimr::NBlobDepot {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             if (Response->Get<TEvBlobDepot::TEvBlockResult>()->Record.GetStatus() != NKikimrProto::OK) {
                 TActivationContext::Send(Response.release());
             } else {

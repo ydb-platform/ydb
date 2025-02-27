@@ -23,7 +23,7 @@ struct TPersQueueReadBalancer::TTxPreInit : public ITransaction {
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         Self->Execute(new TTxInit(Self), ctx);
     }
 };

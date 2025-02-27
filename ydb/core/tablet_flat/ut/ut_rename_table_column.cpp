@@ -76,7 +76,7 @@ struct TTxInitSchema : public ITransaction {
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         ctx.Send(ctx.SelfID, new NFake::TEvReturn);
     }
 };
@@ -102,7 +102,7 @@ struct TTxStore : public ITransaction {
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         ctx.Send(Owner, new NFake::TEvResult);
     }
 };
@@ -132,7 +132,7 @@ struct TTxSelect1: public ITransaction {
         return true;
     };
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         ctx.Send(ctx.SelfID, new NFake::TEvReturn);
     }
 };
@@ -162,7 +162,7 @@ struct TTxSelect2: public ITransaction {
         return true;
     };
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         ctx.Send(ctx.SelfID, new NFake::TEvReturn);
     }
 };

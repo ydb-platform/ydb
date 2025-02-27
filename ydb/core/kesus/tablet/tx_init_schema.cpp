@@ -17,7 +17,7 @@ struct TKesusTablet::TTxInitSchema : public TTxBase {
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         LOG_DEBUG(ctx, NKikimrServices::KESUS_TABLET, "[%lu] TTxInitSchema::Complete", Self->TabletID());
         Self->Execute(Self->CreateTxInit(), ctx);
     }

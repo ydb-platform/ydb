@@ -92,7 +92,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXPGK08, "TTxProposeGroupKey Complete");
         if (Status == NKikimrProto::OK) {
             TGroupInfo *group = Self->FindGroup(GroupId);

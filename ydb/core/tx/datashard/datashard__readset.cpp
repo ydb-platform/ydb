@@ -86,7 +86,7 @@ namespace NKikimr::NDataShard {
         return THolder(new IEventHandle(Ev->Sender, ctx.SelfID, event.Release()));
     }
 
-    void TDataShard::TTxReadSet::Complete(const TActorContext &ctx) {
+    void TDataShard::TTxReadSet::Complete(const TActorContext &ctx) noexcept {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                     "TTxReadSet::Complete at " << Self->TabletID());
 

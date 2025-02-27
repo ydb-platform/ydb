@@ -156,7 +156,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
     }
 }
 
-void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
+void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) noexcept {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxProposeTransactionBase::Complete at " << Self->TabletID());
 

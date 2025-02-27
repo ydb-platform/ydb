@@ -48,7 +48,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
     return true;
 }
 
-void TTxWriteIndex::Complete(const TActorContext& ctx) {
+void TTxWriteIndex::Complete(const TActorContext& ctx) noexcept {
     CompleteReady = true;
     auto changes = Ev->Get()->IndexChanges;
     TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())(

@@ -111,7 +111,7 @@ struct TSchemeShard::TTxUpgradeSchema : public TTransactionBase<TSchemeShard> {
 #pragma clang diagnostic pop
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         if (!IsOk) {
             LOG_CRIT_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "send TEvPoisonPill to self " << Self->TabletID());

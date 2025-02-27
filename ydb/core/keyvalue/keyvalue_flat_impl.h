@@ -119,7 +119,7 @@ protected:
             return iter->Last() != NTable::EReady::Page;
         }
 
-        void Complete(const TActorContext &ctx) override {
+        void Complete(const TActorContext &ctx) noexcept override {
             Self.State.InitComplete(ctx, Self.Info());
             Self.State.PushTrashBeingCommitted(TrashBeingCommitted, ctx);
             Self.InitSchemeComplete();
@@ -158,7 +158,7 @@ protected:
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override {
+        void Complete(const TActorContext &ctx) noexcept override {
             ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID() << " TTxRequest Complete");
             Self->State.PushTrashBeingCommitted(TrashBeingCommitted, ctx);
             Self->State.RequestComplete(Intermediate, ctx, Self->Info());
@@ -202,7 +202,7 @@ protected:
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override {
+        void Complete(const TActorContext &ctx) noexcept override {
             ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID() << " TTxDropRefCountsOnError Complete");
             Self->State.PushTrashBeingCommitted(TrashBeingCommitted, ctx);
         }
@@ -242,7 +242,7 @@ protected:
             return true;
         }
 
-        void Complete(const TActorContext &) override {
+        void Complete(const TActorContext &) noexcept override {
         }
     };
 
@@ -265,7 +265,7 @@ protected:
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override {
+        void Complete(const TActorContext &ctx) noexcept override {
             Self->State.ResetCleanupGeneration(ctx, Generation - 1);
             Self->State.StartCleanupData(Generation, Sender);
         }
@@ -296,7 +296,7 @@ protected:
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override {
+        void Complete(const TActorContext &ctx) noexcept override {
             ui64 actualCleanupResetGeneration = Self->State.GetCleanupResetGeneration();
             ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID()
                     << " TTxCompleteCleanupData Complete cleanupResetGeneration# " << CleanupResetGeneration
@@ -327,7 +327,7 @@ protected:
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override {
+        void Complete(const TActorContext &ctx) noexcept override {
             ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID()
                     << ' ' << TDerived::Name << " Complete");
             Self->State.PushTrashBeingCommitted(TrashBeingCommitted, ctx);

@@ -447,7 +447,7 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxScheduleConditionalErase Complete"
             << ": at schemeshard: " << Self->TabletID());
 

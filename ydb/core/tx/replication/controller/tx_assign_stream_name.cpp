@@ -62,7 +62,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         CLOG_D(ctx, "Complete");
 
         if (Replication) {

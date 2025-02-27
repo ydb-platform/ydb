@@ -42,7 +42,7 @@ struct TSchemeShard::TTxListUsers : TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TTxListUsers Complete"
                     << ", result: " << Result->Record.ShortDebugString()

@@ -88,7 +88,7 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
         return ExecuteStartForceTraversal(txc);
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxResponseTabletDistribution::Complete");
 
         switch (Action) {

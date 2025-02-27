@@ -29,7 +29,7 @@ bool TTxInternalScan::Execute(TTransactionContext& /*txc*/, const TActorContext&
     return true;
 }
 
-void TTxInternalScan::Complete(const TActorContext& ctx) {
+void TTxInternalScan::Complete(const TActorContext& ctx) noexcept {
     TMemoryProfileGuard mpg("TTxInternalScan::Complete");
 
     auto& request = *InternalScanEvent->Get();

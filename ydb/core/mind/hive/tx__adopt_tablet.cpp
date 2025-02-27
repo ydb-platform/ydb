@@ -110,7 +110,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         BLOG_D("THive::TTxAdoptTablet::Complete TabletId: " << TabletId <<
                " Status: " << NKikimrProto::EReplyStatus_Name(Status) <<
                " Explain: " << Explain);

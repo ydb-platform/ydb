@@ -63,7 +63,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         BLOG_D("THive::TTxSwitchDrainOn::Complete NodeId: " << NodeId << " Status: " << Status);
         if (ShouldStartDrain) {
             Self->StartHiveDrain(NodeId, std::move(Settings));
@@ -110,7 +110,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         BLOG_D("THive::TTxSwitchDrainOff::Complete NodeId: " << NodeId
             << " Status: " << NKikimrProto::EReplyStatus_Name(Status) << " Movements: " << Movements);
         for (const TActorId& initiator : Initiators) {

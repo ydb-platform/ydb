@@ -106,7 +106,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         *Self->MonCounters.TxInFly -= CompleteTransactions;
         Self->MonCounters.CurrentTxInFly -= CompleteTransactions;
 

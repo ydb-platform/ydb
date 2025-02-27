@@ -7,7 +7,7 @@ class TDataShard::TTxCancelTransactionProposal : public NTabletFlatExecutor::TTr
 public:
     TTxCancelTransactionProposal(TDataShard *self, ui64 txId);
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
-    void Complete(const TActorContext &ctx) override;
+    void Complete(const TActorContext &ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_CANCEL_TX_PROPOSAL; }
 private:
     const ui64 TxId;
@@ -57,7 +57,7 @@ bool TDataShard::TTxCancelTransactionProposal::Execute(TTransactionContext &txc,
     return true;
 }
 
-void TDataShard::TTxCancelTransactionProposal::Complete(const TActorContext &ctx)
+void TDataShard::TTxCancelTransactionProposal::Complete(const TActorContext &ctx) noexcept
 {
     if (ReplyTs) {
         Self->SendConfirmedReplies(ReplyTs, std::move(Replies));

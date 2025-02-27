@@ -184,7 +184,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         if (State) {
             // Send new TNodeWardenServiceSet to NodeWarder inside
             State->ApplyConfigUpdates();
@@ -396,7 +396,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         if (Response) {
             Self->SendInReply(*Request, std::move(Response));
             Self->Execute(new TTxUpdateNodeDrives(std::move(UpdateNodeDrivesRecord), Self));
@@ -425,7 +425,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {}
+    void Complete(const TActorContext&) noexcept override {}
 };
 
 void TBlobStorageController::ReadGroups(TSet<ui32>& groupIDsToRead, bool discard,

@@ -40,7 +40,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxActivateChangeSender Complete"
             << ": origin# " << Origin
             << ", at tablet# " << Self->TabletID());
@@ -94,7 +94,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxActivateChangeSenderAck Complete"
             << ": origin# " << Origin
             << ", at tablet# " << Self->TabletID());

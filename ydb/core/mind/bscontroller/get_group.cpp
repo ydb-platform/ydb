@@ -43,7 +43,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         if (NodeId) {
             Self->SendToWarden(NodeId, std::move(Response), Request->Cookie);
         } else {

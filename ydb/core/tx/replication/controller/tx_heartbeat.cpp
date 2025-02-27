@@ -112,7 +112,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         CLOG_D(ctx, "Complete"
             << ": pending# " << Self->PendingHeartbeats.size());
 
@@ -202,7 +202,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         CLOG_D(ctx, "Complete");
 
         Self->TabletCounters->Simple()[COUNTER_ASSIGNED_TX_IDS] = Self->AssignedTxIds.size();

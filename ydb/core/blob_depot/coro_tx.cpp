@@ -149,7 +149,7 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    void TCoroTx::Complete(const TActorContext&) {
+    void TCoroTx::Complete(const TActorContext&) noexcept {
         // prepare environment
         Y_ABORT_UNLESS(TxContext == nullptr && Current == nullptr);
         Current = this;

@@ -56,7 +56,7 @@ bool TDataShard::TTxStoreScanState::Execute(TTransactionContext &txc,
     return true;
 }
 
-void TDataShard::TTxStoreScanState::Complete(const TActorContext &ctx)
+void TDataShard::TTxStoreScanState::Complete(const TActorContext &ctx) noexcept
 {
     ctx.Send(Ev->Sender, new TDataShard::TEvPrivate::TEvPersistScanStateAck());
 }

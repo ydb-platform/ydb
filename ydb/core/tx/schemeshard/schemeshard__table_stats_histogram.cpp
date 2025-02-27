@@ -262,7 +262,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
 
 }; // TTxStorePartitionStats
 
@@ -440,7 +440,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
 }
 
 
-void TTxPartitionHistogram::Complete(const TActorContext& ctx) {
+void TTxPartitionHistogram::Complete(const TActorContext& ctx) noexcept {
     SplitOpSideEffects.ApplyOnComplete(Self, ctx);
 }
 

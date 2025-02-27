@@ -118,7 +118,7 @@ public:
 
     virtual ~TTxStoreTableStats() = default;
 
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
 
     // returns true to continue batching
     bool PersistSingleStats(const TPathId& pathId, const TStatsQueue<TEvDataShard::TEvPeriodicTableStats>::TItem& item, TTransactionContext& txc, const TActorContext& ctx) override;
@@ -501,7 +501,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     return true;
 }
 
-void TTxStoreTableStats::Complete(const TActorContext& ctx) {
+void TTxStoreTableStats::Complete(const TActorContext& ctx) noexcept {
     MergeOpSideEffects.ApplyOnComplete(Self, ctx);
 
     for (auto& m: PendingMessages) {

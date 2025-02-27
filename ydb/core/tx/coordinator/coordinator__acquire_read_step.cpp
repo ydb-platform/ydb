@@ -51,7 +51,7 @@ struct TTxCoordinator::TTxAcquireReadStep : public TTransactionBase<TTxCoordinat
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         ui64 latencyUs = (ctx.Monotonic() - StartTimeStamp).MicroSeconds();
 
         for (const auto& req : Requests) {

@@ -27,7 +27,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         // group parts by owner tablet
         THashMap<ui64, TVector<TLogoBlobID>> perTabletParts;
         for (const auto& p : PartsToReturn) {
@@ -85,7 +85,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         // Send Ack
         TActorId ackTo = Ev->Sender;
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack parts " << PartMetaVec << " return to tablet " << FromTabletId);
@@ -124,7 +124,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " parts " << PartMetaVec << " return ack processed");
         for (const auto& partMeta : PartMetaVec) {
             Self->LoanReturnTracker.LoanDone(partMeta, ctx);
@@ -187,7 +187,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         Self->ReportState(ctx, Self->State);
     }
 };

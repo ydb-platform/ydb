@@ -37,7 +37,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         if (Failed) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, Self->SelfId(), {}, {}, 0));
         } else {

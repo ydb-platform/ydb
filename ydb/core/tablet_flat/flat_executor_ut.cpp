@@ -41,7 +41,7 @@ namespace NTabletFlatExecutor {
                 return true;
             }
 
-            void Complete(const TActorContext &ctx) override
+            void Complete(const TActorContext &ctx) noexcept override
             {
                 ctx.Send(ctx.SelfID, new NFake::TEvReturn);
             }
@@ -71,7 +71,7 @@ namespace NTabletFlatExecutor {
                 return true;
             }
 
-            void Complete(const TActorContext &ctx) override
+            void Complete(const TActorContext &ctx) noexcept override
             {
                 if (Rows > 0) {
                     auto *next = new TTxAddRows(Key, Rows, Pack, Bytes, WriteVersion);
@@ -106,7 +106,7 @@ namespace NTabletFlatExecutor {
                 return true;
             }
 
-            void Complete(const TActorContext &ctx) override
+            void Complete(const TActorContext &ctx) noexcept override
             {
                 if (Rows > 0) {
                     auto *next = new TTxEraseRows(Key, Rows, Pack, WriteVersion);
@@ -201,7 +201,7 @@ namespace NTabletFlatExecutor {
                 return true;
             }
 
-            void Complete(const TActorContext &) override
+            void Complete(const TActorContext &) тщучсузе override
             {
                 // nothing
             }
@@ -225,7 +225,7 @@ namespace NTabletFlatExecutor {
                 return true;
             }
 
-            void Complete(const TActorContext &ctx) override
+            void Complete(const TActorContext &ctx) noexcept override
             {
                 ctx.Send(ctx.SelfID, new NFake::TEvReturn);
             }
@@ -649,7 +649,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_ExecutorTxLimit) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(Owner, new NFake::TEvResult);
         }
@@ -665,7 +665,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_ExecutorTxLimit) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(Owner, new NFake::TEvResult);
         }
@@ -727,7 +727,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Reschedule) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             Y_ABORT_UNLESS(Done);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -1252,7 +1252,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_ResourceProfile) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override {
+        void Complete(const TActorContext &ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -1267,7 +1267,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_ResourceProfile) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override {
+        void Complete(const TActorContext &ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -1365,7 +1365,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_ResourceProfile) {
             return false;
         }
 
-        void Complete(const TActorContext &ctx) override {
+        void Complete(const TActorContext &ctx) noexcept override {
             if (ReqNo)
                 UNIT_ASSERT(!Requests[ReqNo - 1].OutOfMemoryResult);
             if (ReqNo == Requests.size())
@@ -1899,7 +1899,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_ColumnGroups) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -1964,7 +1964,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CachePressure) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -1992,7 +1992,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CachePressure) {
             return iter->Last() != NTable::EReady::Page;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -2043,7 +2043,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CompressedSelectRows) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -2072,7 +2072,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CompressedSelectRows) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -2145,7 +2145,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_VersionedRows) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -2205,7 +2205,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_VersionedRows) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -2248,7 +2248,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_VersionedRows) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -2306,7 +2306,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_VersionedRows) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -2328,7 +2328,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_VersionedRows) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -2478,7 +2478,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_VersionedLargeBlobs) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -2509,7 +2509,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_VersionedLargeBlobs) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -2543,7 +2543,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_VersionedLargeBlobs) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -2627,7 +2627,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_KeepEraseMarkers) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override {
+        void Complete(const TActorContext &ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -2685,7 +2685,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_KeepEraseMarkers) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -2724,7 +2724,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_KeepEraseMarkers) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -2818,7 +2818,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_MoveTableData) {
                 .SetCompactionPolicy(tableId, policy);
         }
 
-        void Complete(const TActorContext &ctx) override {
+        void Complete(const TActorContext &ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -2857,7 +2857,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_MoveTableData) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override {
+        void Complete(const TActorContext &ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -2898,7 +2898,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_MoveTableData) {
                 return true;
             }
 
-            void Complete(const TActorContext&) override
+            void Complete(const TActorContext&) noexcept override
             {
                 // nothing
             }
@@ -2933,7 +2933,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_MoveTableData) {
                 return true;
             }
 
-            void Complete(const TActorContext &ctx) override
+            void Complete(const TActorContext &ctx) noexcept override
             {
                 ctx.Send(ctx.SelfID, new NFake::TEvReturn);
             }
@@ -2985,7 +2985,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_MoveTableData) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -3106,7 +3106,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_MoveTableData) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -3124,7 +3124,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_MoveTableData) {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             // nothing
         }
     };
@@ -3227,7 +3227,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             // nothing
         }
     };
@@ -3255,7 +3255,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             // nothing
         }
     };
@@ -3298,7 +3298,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -3559,7 +3559,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_RejectProbability) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -3584,7 +3584,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_RejectProbability) {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             // nothing
         }
     };
@@ -3704,7 +3704,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Cold) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -3717,7 +3717,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Cold) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -3735,7 +3735,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Cold) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
 
@@ -3766,7 +3766,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Cold) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -3784,7 +3784,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Cold) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
 
@@ -3801,7 +3801,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Cold) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -3813,7 +3813,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Cold) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -3977,7 +3977,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
 
@@ -3991,7 +3991,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -4011,7 +4011,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             // nothing
         }
     };
@@ -4031,7 +4031,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             // nothing
         }
     };
@@ -4063,7 +4063,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             // nothing
         }
     };
@@ -4111,7 +4111,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -4163,7 +4163,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -4229,7 +4229,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -4242,7 +4242,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -4260,7 +4260,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
 
@@ -4280,7 +4280,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
 
@@ -4994,7 +4994,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTxAndBlobs) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
 
@@ -5009,7 +5009,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTxAndBlobs) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -5041,7 +5041,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTxAndBlobs) {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             // nothing
         }
 
@@ -5069,7 +5069,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTxAndBlobs) {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             // nothing
         }
 
@@ -5149,7 +5149,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_SnapshotWithCommits) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
@@ -5167,7 +5167,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_SnapshotWithCommits) {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
 
@@ -5201,7 +5201,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_SnapshotWithCommits) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -5289,7 +5289,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             return txc.DB.Precharge(TRowsModel::TableId,  { minKey }, { maxKey }, tags, 0, 0, 0);
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -5330,7 +5330,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             }
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -5989,7 +5989,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
             return false;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -6011,7 +6011,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -6029,7 +6029,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
             return true;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
@@ -6467,7 +6467,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_BTreeIndex) {
             return false;
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }

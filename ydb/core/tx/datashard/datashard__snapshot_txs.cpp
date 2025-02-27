@@ -68,7 +68,7 @@ bool TDataShard::TTxRefreshVolatileSnapshot::Execute(TTransactionContext&, const
     return true;
 }
 
-void TDataShard::TTxRefreshVolatileSnapshot::Complete(const TActorContext& ctx) {
+void TDataShard::TTxRefreshVolatileSnapshot::Complete(const TActorContext& ctx) noexcept {
     Y_ABORT_UNLESS(Reply);
 
     ctx.Send(Ev->Sender, Reply.Release(), 0, Ev->Cookie);
@@ -139,7 +139,7 @@ bool TDataShard::TTxDiscardVolatileSnapshot::Execute(TTransactionContext& txc, c
     return true;
 }
 
-void TDataShard::TTxDiscardVolatileSnapshot::Complete(const TActorContext& ctx) {
+void TDataShard::TTxDiscardVolatileSnapshot::Complete(const TActorContext& ctx) noexcept {
     Y_ABORT_UNLESS(Reply);
 
     ctx.Send(Ev->Sender, Reply.Release(), 0, Ev->Cookie);
@@ -156,7 +156,7 @@ bool TDataShard::TTxCleanupRemovedSnapshots::Execute(TTransactionContext& txc, c
     return true;
 }
 
-void TDataShard::TTxCleanupRemovedSnapshots::Complete(const TActorContext& ctx) {
+void TDataShard::TTxCleanupRemovedSnapshots::Complete(const TActorContext& ctx) noexcept {
     Y_UNUSED(ctx);
 }
 

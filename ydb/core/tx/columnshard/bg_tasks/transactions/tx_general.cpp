@@ -3,7 +3,7 @@
 
 namespace NKikimr::NOlap::NBackground {
 
-void TTxGeneral::Complete(const TActorContext& ctx) {
+void TTxGeneral::Complete(const TActorContext& ctx) noexcept {
     DoComplete(ctx);
     if (!!ProgressActorId) {
         ctx.Send(*ProgressActorId, new TEvLocalTransactionCompleted(TxInternalId));

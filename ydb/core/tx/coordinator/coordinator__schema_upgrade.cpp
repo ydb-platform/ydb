@@ -42,7 +42,7 @@ struct TTxCoordinator::TTxUpgrade : public TTransactionBase<TTxCoordinator> {
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         if (UpgradeFail) {
             Self->Become(&TSelf::StateBroken);
             ctx.Send(Self->Tablet(), new TEvents::TEvPoisonPill);

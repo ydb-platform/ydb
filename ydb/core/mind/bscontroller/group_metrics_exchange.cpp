@@ -52,7 +52,7 @@ namespace NKikimr::NBsController {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             if (Response) {
                 Self->Send(Ev->Sender, Response.release(), 0, Ev->Cookie);
             }

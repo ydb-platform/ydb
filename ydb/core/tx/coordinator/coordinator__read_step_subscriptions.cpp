@@ -235,7 +235,7 @@ namespace NKikimr::NFlatTxCoordinator {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             if (PipeServer && !Self->PipeServers.contains(PipeServer)) {
                 // Pipe server disconnected before we finished the transaction
                 // We just ignore this subscription as implicitly discarded
@@ -261,7 +261,7 @@ namespace NKikimr::NFlatTxCoordinator {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             ctx.Send(Self->ReadStepSubscriptionManager, new TEvPrivate::TEvReadStepUnsubscribed(Ev));
         }
     };

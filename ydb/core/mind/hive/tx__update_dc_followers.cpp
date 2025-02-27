@@ -89,7 +89,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         SideEffects.Complete(ctx);
     }
 };

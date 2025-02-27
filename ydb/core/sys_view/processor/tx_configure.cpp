@@ -26,7 +26,7 @@ struct TSysViewProcessor::TTxConfigure : public TTxBase {
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         SVLOG_D("[" << Self->TabletID() << "] TTxConfigure::Complete");
 
         ctx.Send(Sender, new TEvSubDomain::TEvConfigureStatus(

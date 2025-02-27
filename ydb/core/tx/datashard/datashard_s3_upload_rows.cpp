@@ -31,7 +31,7 @@ bool TDataShard::TTxS3UploadRows::Execute(TTransactionContext& txc, const TActor
     return true;
 }
 
-void TDataShard::TTxS3UploadRows::Complete(const TActorContext&) {
+void TDataShard::TTxS3UploadRows::Complete(const TActorContext&) noexcept {
     TActorId target;
     THolder<IEventBase> event;
     ui64 cookie;

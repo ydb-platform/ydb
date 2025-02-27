@@ -502,7 +502,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) {
+    void Complete(const TActorContext&) noexcept {
         // nothing
     }
 

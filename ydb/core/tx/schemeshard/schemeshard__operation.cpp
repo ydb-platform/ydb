@@ -77,7 +77,7 @@ struct TSchemeShard::TTxOperationProposeCancelTx: public NTabletFlatExecutor::TT
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TTxOperationProposeCancelTx Complete"
                         << ", at schemeshard: " << Self->TabletID());
@@ -438,7 +438,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         Y_ABORT_UNLESS(Response);
 
         const auto& record = Request->Get()->Record;
@@ -512,7 +512,7 @@ struct TSchemeShard::TTxOperationProgress: public NTabletFlatExecutor::TTransact
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         OnComplete.ApplyOnComplete(Self, ctx);
     }
 };
@@ -640,7 +640,7 @@ struct TTxOperationReply : public NTabletFlatExecutor::TTransactionBase<TSchemeS
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationReply<" << EvReply->GetTypeName() << "> complete"
             << ", operationId: " << OperationId
             << ", at schemeshard: " << Self->TabletID()
@@ -727,7 +727,7 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         OnComplete.ApplyOnComplete(Self, ctx);
     }
 };

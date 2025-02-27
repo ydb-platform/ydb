@@ -14,7 +14,7 @@ namespace NKikimr::NTestShard {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             Self->Execute(Self->CreateTxLoadEverything(), ctx);
         }
     };

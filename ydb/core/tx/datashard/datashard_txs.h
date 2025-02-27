@@ -22,7 +22,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
 
     TTxType GetTxType() const override { return TXTYPE_STOP_GUARD; }
 };
@@ -31,7 +31,7 @@ class TDataShard::TTxGetShardState : public NTabletFlatExecutor::TTransactionBas
 public:
     TTxGetShardState(TDataShard* ds, TEvDataShard::TEvGetShardState::TPtr ev);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext &ctx) override;
+    void Complete(const TActorContext &ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_GET_STARD_STATE; }
 private:
     TEvDataShard::TEvGetShardState::TPtr Ev;
@@ -42,7 +42,7 @@ class TDataShard::TTxPlanStep : public NTabletFlatExecutor::TTransactionBase<TDa
 public:
     TTxPlanStep(TDataShard *self, TEvTxProcessing::TEvPlanStep::TPtr ev);
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
-    void Complete(const TActorContext &ctx) override;
+    void Complete(const TActorContext &ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_PLAN_STEP; }
 
 private:
@@ -56,7 +56,7 @@ class TDataShard::TTxProgressTransaction : public NTabletFlatExecutor::TTransact
 public:
     explicit TTxProgressTransaction(TDataShard *self, TOperation::TPtr op, NWilson::TTraceId &&traceId);
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
-    void Complete(const TActorContext &ctx) override;
+    void Complete(const TActorContext &ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_PROGRESS_START; }
 
 private:
@@ -77,7 +77,7 @@ public:
 
     bool Execute(NTabletFlatExecutor::TTransactionContext &txc,
                  const TActorContext &ctx) override;
-    void Complete(const TActorContext &ctx) override;
+    void Complete(const TActorContext &ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_PROPOSE; }
 
 private:
@@ -109,7 +109,7 @@ public:
              bool delayed,
              NWilson::TSpan &&datashardTransactionSpan);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
     
 protected:
     TOperation::TPtr Op;
@@ -129,7 +129,7 @@ class TDataShard::TTxReadSet : public NTabletFlatExecutor::TTransactionBase<TDat
 public:
     TTxReadSet(TDataShard *self, TEvTxProcessing::TEvReadSet::TPtr ev);
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
-    void Complete(const TActorContext &ctx) override;
+    void Complete(const TActorContext &ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_READSET; }
 
 private:
@@ -147,7 +147,7 @@ class TDataShard::TTxProgressResendRS : public NTabletFlatExecutor::TTransaction
 public:
     TTxProgressResendRS(TDataShard *self, ui64 seqno);
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
-    void Complete(const TActorContext &ctx) override;
+    void Complete(const TActorContext &ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_PROGRESS_RESEND_RS; }
 private:
     const ui64 Seqno;
@@ -169,7 +169,7 @@ public:
                       const TString &path);
     bool Execute(TTransactionContext &txc,
                  const TActorContext &ctx) override;
-    void Complete(const TActorContext &ctx) override;
+    void Complete(const TActorContext &ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_STORE_TABLE_PATH; }
 
 private:
@@ -181,7 +181,7 @@ class TDataShard::TTxStoreScanState : public NTabletFlatExecutor::TTransactionBa
 public:
     TTxStoreScanState(TDataShard* ds, TEvPrivate::TEvPersistScanState::TPtr ev);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext &ctx) override;
+    void Complete(const TActorContext &ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_STORE_SCAN_STATE; }
 private:
     TEvPrivate::TEvPersistScanState::TPtr Ev;
@@ -192,7 +192,7 @@ class TDataShard::TTxRefreshVolatileSnapshot : public NTabletFlatExecutor::TTran
 public:
     TTxRefreshVolatileSnapshot(TDataShard* ds, TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr ev);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_REFRESH_VOLATILE_SNAPSHOT; }
 private:
     TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr Ev;
@@ -203,7 +203,7 @@ class TDataShard::TTxDiscardVolatileSnapshot : public NTabletFlatExecutor::TTran
 public:
     TTxDiscardVolatileSnapshot(TDataShard* ds, TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr ev);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_DISCARD_VOLATILE_SNAPSHOT; }
 private:
     TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr Ev;
@@ -214,7 +214,7 @@ class TDataShard::TTxCleanupRemovedSnapshots : public NTabletFlatExecutor::TTran
 public:
     TTxCleanupRemovedSnapshots(TDataShard* ds);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_CLEANUP_REMOVED_SNAPSHOTS; }
 };
 
@@ -222,7 +222,7 @@ class TDataShard::TTxMigrateSchemeShard : public NTabletFlatExecutor::TTransacti
 public:
     TTxMigrateSchemeShard(TDataShard* ds, TEvDataShard::TEvMigrateSchemeShardRequest::TPtr ev);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_MIGRATE_SCHEMESHARD; }
 private:
     TEvDataShard::TEvMigrateSchemeShardRequest::TPtr Ev;
@@ -233,7 +233,7 @@ class TDataShard::TTxGetS3Upload: public NTabletFlatExecutor::TTransactionBase<T
 public:
     TTxGetS3Upload(TDataShard* ds, TEvDataShard::TEvGetS3Upload::TPtr ev);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_GET_S3_UPLOAD_ID; }
 private:
     TEvDataShard::TEvGetS3Upload::TPtr Ev;
@@ -244,7 +244,7 @@ class TDataShard::TTxStoreS3UploadId: public NTabletFlatExecutor::TTransactionBa
 public:
     TTxStoreS3UploadId(TDataShard* ds, TEvDataShard::TEvStoreS3UploadId::TPtr ev);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_STORE_S3_UPLOAD_ID; }
 private:
     TEvDataShard::TEvStoreS3UploadId::TPtr Ev;
@@ -255,7 +255,7 @@ class TDataShard::TTxChangeS3UploadStatus: public NTabletFlatExecutor::TTransact
 public:
     TTxChangeS3UploadStatus(TDataShard* ds, TEvDataShard::TEvChangeS3UploadStatus::TPtr ev);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_CHANGE_S3_UPLOAD_STATUS; }
 private:
     TEvDataShard::TEvChangeS3UploadStatus::TPtr Ev;
@@ -266,7 +266,7 @@ class TDataShard::TTxGetS3DownloadInfo: public NTabletFlatExecutor::TTransaction
 public:
     TTxGetS3DownloadInfo(TDataShard* ds, TEvDataShard::TEvGetS3DownloadInfo::TPtr ev);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_GET_S3_DOWNLOAD_INFO; }
 private:
     TEvDataShard::TEvGetS3DownloadInfo::TPtr Ev;
@@ -277,7 +277,7 @@ class TDataShard::TTxStoreS3DownloadInfo: public NTabletFlatExecutor::TTransacti
 public:
     TTxStoreS3DownloadInfo(TDataShard* ds, TEvDataShard::TEvStoreS3DownloadInfo::TPtr ev);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_STORE_S3_DOWNLOAD_INFO; }
 private:
     TEvDataShard::TEvStoreS3DownloadInfo::TPtr Ev;
@@ -291,7 +291,7 @@ class TDataShard::TTxS3UploadRows
 public:
     TTxS3UploadRows(TDataShard* ds, TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_S3_UPLOAD_ROWS; }
 
 private:

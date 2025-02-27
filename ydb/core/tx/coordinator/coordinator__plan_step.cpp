@@ -292,7 +292,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         auto durationMs = (ctx.Now() - ExecStartMoment).MilliSeconds();
         Self->MonCounters.TxPlanLatency->Collect(durationMs);
 

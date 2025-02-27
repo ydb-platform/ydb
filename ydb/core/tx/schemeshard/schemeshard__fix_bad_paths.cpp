@@ -45,7 +45,7 @@ struct TSchemeShard::TTxFixBadPaths : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         Self->Execute(Self->CreateTxInitPopulator(TSideEffects::TPublications()), ctx);
     }
 

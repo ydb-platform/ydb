@@ -104,7 +104,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         // Send Ack
         TActorId ackTo = Ev->Sender;
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
@@ -297,7 +297,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         TActorId ackTo = Ev->Sender;
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
 
@@ -316,7 +316,7 @@ public:
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             // Note: we skip init in an unlikely event of state resetting before reaching Complete
             if (Self->State == TShardState::SplitDstReceivingSnapshot) {
                 // We have received all the data, finish shard initialization
@@ -556,7 +556,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         // nothing
     }
 };

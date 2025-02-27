@@ -26,7 +26,7 @@ public:
     }
 
     virtual bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    virtual void Complete(const TActorContext& ctx) override;
+    virtual void Complete(const TActorContext& ctx) noexcept override;
 };
 
 }

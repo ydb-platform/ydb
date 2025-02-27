@@ -11,7 +11,7 @@ public:
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
     //TTxType GetTxType() const override { return TXTYPE_INIT; }
 
 private:
@@ -24,7 +24,7 @@ bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
     return Self->TablesManager.FillMonitoringReport(txc, JsonReport["tables_manager"]);
 }
 
-void TTxMonitoring::Complete(const TActorContext& ctx) {
+void TTxMonitoring::Complete(const TActorContext& ctx) noexcept {
     ctx.Send(HttpInfoEvent->Sender, new NMon::TEvRemoteJsonInfoRes(JsonReport.GetStringRobust()));
 }
 

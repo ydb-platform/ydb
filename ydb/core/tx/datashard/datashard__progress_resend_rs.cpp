@@ -15,7 +15,7 @@ namespace NDataShard {
         return Self->OutReadSets.ResendRS(txc, ctx, Seqno);
     }
 
-    void TDataShard::TTxProgressResendRS::Complete(const TActorContext &ctx) {
+    void TDataShard::TTxProgressResendRS::Complete(const TActorContext &ctx) noexcept {
         Y_UNUSED(ctx);
         /* no-op */
     }

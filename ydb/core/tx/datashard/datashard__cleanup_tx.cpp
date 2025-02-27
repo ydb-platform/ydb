@@ -72,7 +72,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         if (ReplyTs) {
             Self->SendConfirmedReplies(ReplyTs, std::move(Replies));
         } else {
@@ -126,7 +126,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         if (ReplyTs) {
             Self->SendConfirmedReplies(ReplyTs, std::move(Replies));
         } else {

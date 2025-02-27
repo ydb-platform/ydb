@@ -54,7 +54,7 @@ namespace NKikimr::NBlobDepot {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             if (BlobSeqId) {
                 TChannelInfo& channel = Self->Channels[BlobSeqId.Channel];
                 const ui32 generation = Self->Executor()->Generation();
@@ -263,7 +263,7 @@ namespace NKikimr::NBlobDepot {
                 return true;
             }
 
-            void Complete(const TActorContext&) override {
+            void Complete(const TActorContext&) noexcept override {
                 Self->Self->Data->CommitTrash(this);
                 Self->UpdateAssimilatorPosition();
 
@@ -538,7 +538,7 @@ namespace NKikimr::NBlobDepot {
                 return true;
             }
 
-            void Complete(const TActorContext&) override {
+            void Complete(const TActorContext&) noexcept override {
                 Self->ActionInProgress = false;
                 Self->Action();
             }
@@ -592,7 +592,7 @@ namespace NKikimr::NBlobDepot {
                     return true;
                 }
 
-                void Complete(const TActorContext&) override {}
+                void Complete(const TActorContext&) noexcept override {}
             };
 
             Self->GroupAssimilatorId = {};

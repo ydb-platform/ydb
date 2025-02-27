@@ -155,7 +155,7 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
     return true;
 }
 
-void TDataShard::TTxWrite::Complete(const TActorContext& ctx) {
+void TDataShard::TTxWrite::Complete(const TActorContext& ctx) noexcept {
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxWrite complete: at tablet# " << Self->TabletID());
 
     if (Op) {

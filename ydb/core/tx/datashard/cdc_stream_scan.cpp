@@ -367,7 +367,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         if (Response) {
             LOG_I("Enqueue " << ChangeRecords.size() << " change record(s)"
                 << ": streamPathId# " << Request->Get()->StreamPathId);
@@ -695,7 +695,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         if (Response) {
             ctx.Send(Response.Release());
         }

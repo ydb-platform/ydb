@@ -328,7 +328,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         BLOG_D("THive::TTxUpdateTabletGroups{" << (ui64)this << "}(" << TabletId << ")::Complete SideEffects: " << SideEffects);
         SideEffects.Complete(ctx);
     }

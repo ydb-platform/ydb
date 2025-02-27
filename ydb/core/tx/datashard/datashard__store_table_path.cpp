@@ -33,7 +33,7 @@ bool TDataShard::TTxStoreTablePath::Execute(TTransactionContext &txc, const TAct
     return true;
 }
 
-void TDataShard::TTxStoreTablePath::Complete(const TActorContext &ctx)
+void TDataShard::TTxStoreTablePath::Complete(const TActorContext &ctx) noexcept
 {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxStoreTablePath::Complete at " << Self->TabletID());

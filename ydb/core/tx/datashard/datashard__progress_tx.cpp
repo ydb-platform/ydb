@@ -118,7 +118,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
     }
 }
 
-void TDataShard::TTxProgressTransaction::Complete(const TActorContext &ctx) {
+void TDataShard::TTxProgressTransaction::Complete(const TActorContext &ctx) noexcept {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxProgressTransaction::Complete at " << Self->TabletID());
 

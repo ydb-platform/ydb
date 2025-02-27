@@ -30,7 +30,7 @@ bool TTxScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/
     return true;
 }
 
-void TTxScan::Complete(const TActorContext& ctx) {
+void TTxScan::Complete(const TActorContext& ctx) noexcept {
     TMemoryProfileGuard mpg("TTxScan::Complete");
     auto& request = Ev->Get()->Record;
     auto scanComputeActor = Ev->Sender;

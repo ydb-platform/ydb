@@ -78,7 +78,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override
+    void Complete(const TActorContext &ctx) noexcept override
     {
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxUpdateConfig Complete");
 

@@ -84,7 +84,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         BLOG_D("THive::TTxResumeTablet::Complete TabletId: " << TabletId);
         SideEffects.Complete(ctx);
         if (ByTenant) {

@@ -13,7 +13,7 @@ struct TTxCoordinator::TTxStopGuard : public TTransactionBase<TTxCoordinator> {
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         Self->OnStopGuardComplete(ctx);
     }
 };

@@ -61,7 +61,7 @@ public:
     virtual void DoComplete(const TActorContext& ctx) = 0;
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) noexcept override;
 };
 
 template<typename TRequest, typename TResponse>

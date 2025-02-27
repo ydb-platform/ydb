@@ -469,7 +469,7 @@ Y_UNIT_TEST_SUITE(TConsoleTxProcessorTests) {
             return allowed.contains(No);
         }
 
-        void Complete(const TActorContext &ctx) override
+        void Complete(const TActorContext &ctx) noexcept override
         {
             Processor->TxCompleted(this, ctx);
         }

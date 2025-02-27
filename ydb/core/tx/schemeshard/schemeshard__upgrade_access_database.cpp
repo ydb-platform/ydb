@@ -139,7 +139,7 @@ struct TSchemeShard::TTxUpgradeAccessDatabaseRights : public TTransactionBase<TS
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 };

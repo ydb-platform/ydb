@@ -31,7 +31,7 @@ struct TStatisticsAggregator::TTxAnalyzeTableDeliveryProblem : public TTxBase {
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         SA_LOG_T("[" << Self->TabletID() << "] TTxAnalyzeTableDeliveryProblem::Complete");
 
         ctx.Schedule(AnalyzeDeliveryProblemPeriod, new TEvPrivate::TEvAnalyzeDeliveryProblem());

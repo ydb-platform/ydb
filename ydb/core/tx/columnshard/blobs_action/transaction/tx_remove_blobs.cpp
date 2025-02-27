@@ -13,7 +13,7 @@ bool TTxRemoveSharedBlobs::Execute(TTransactionContext& txc, const TActorContext
     return true;
 }
 
-void TTxRemoveSharedBlobs::Complete(const TActorContext& ctx) {
+void TTxRemoveSharedBlobs::Complete(const TActorContext& ctx) noexcept {
     TMemoryProfileGuard mpg("TTxRemoveSharedBlobs::Complete");
     NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "complete");
     RemoveAction->OnCompleteTxAfterRemoving(true);

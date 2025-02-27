@@ -48,7 +48,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         Y_ABORT_UNLESS(Result);
         ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);
     }

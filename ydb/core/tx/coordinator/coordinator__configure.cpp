@@ -115,7 +115,7 @@ struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         LOG_INFO_S(ctx, NKikimrServices::TX_COORDINATOR,
              "tablet# " << Self->TabletID() <<
              " version# " << Version <<

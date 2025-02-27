@@ -193,7 +193,7 @@ struct TSideEffects : TCompleteNotifications, TCompleteActions {
         TCompleteNotifications::Reset(selfId);
     }
 
-    void Complete(const TActorContext& ctx) {
+    void Complete(const TActorContext& ctx) noexcept {
         TCompleteActions::Run(ctx);
         TCompleteNotifications::Send(ctx);
     }

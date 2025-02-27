@@ -48,7 +48,7 @@ namespace NKikimr::NBsController {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             auto& conf = Self->StorageConfig;
             if (conf.GetGeneration() != GenerationOnStart || conf.GetFingerprint() != FingerprintOnStart) {
                 LOG_ALERT_S(ctx, NKikimrServices::BS_CONTROLLER, "Storage config changed");

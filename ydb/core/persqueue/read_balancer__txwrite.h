@@ -83,7 +83,7 @@ struct TPersQueueReadBalancer::TTxWrite : public ITransaction {
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         for (auto& actor : Self->WaitingResponse) {
             THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
             res->Record.SetStatus(NKikimrPQ::OK);

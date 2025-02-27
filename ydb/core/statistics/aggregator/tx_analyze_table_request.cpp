@@ -51,7 +51,7 @@ struct TStatisticsAggregator::TTxAnalyzeTableRequest : public TTxBase {
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         if (Events.size()) {
             SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTableRequest::Complete. Send " << Events.size() << " events.");
         }

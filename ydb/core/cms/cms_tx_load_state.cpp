@@ -248,7 +248,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxLoadState Complete");
         Self->Become(&TCms::StateWork);
         Self->SignalTabletActive(ctx);

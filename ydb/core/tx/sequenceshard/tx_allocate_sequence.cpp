@@ -170,7 +170,7 @@ namespace NSequenceShard {
             return res;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             SLOG_T("TTxAllocateSequence.Complete");
 
             if (Result) {

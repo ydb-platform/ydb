@@ -108,7 +108,7 @@ namespace NSequenceShard {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             SLOG_T("TTxInit.Complete");
         }
     };

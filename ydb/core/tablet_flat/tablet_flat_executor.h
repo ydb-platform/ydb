@@ -299,7 +299,7 @@ public:
     virtual ~ITransaction() = default;
     /// @return true if execution complete and transaction is ready for commit
     virtual bool Execute(TTransactionContext &txc, const TActorContext &ctx) = 0;
-    virtual void Complete(const TActorContext &ctx) = 0;
+    virtual void Complete(const TActorContext &ctx) noexcept = 0;
     virtual void Terminate(ETerminationReason reason, const TActorContext &/*ctx*/) {
         Y_ABORT("Unexpected transaction termination (reason %" PRIu32 ")", (ui32)reason);
     }

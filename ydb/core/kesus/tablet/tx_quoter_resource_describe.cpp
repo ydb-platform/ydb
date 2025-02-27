@@ -109,7 +109,7 @@ struct TKesusTablet::TTxQuoterResourceDescribe : public TTxBase {
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
             "[" << Self->TabletID() << "] TTxQuoterResourceDescribe::Complete (sender=" << Sender
                 << ", cookie=" << Cookie << ")");

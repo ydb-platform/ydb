@@ -26,7 +26,7 @@ bool TDataShard::TTxGetS3DownloadInfo::Execute(TTransactionContext& txc, const T
     return true;
 }
 
-void TDataShard::TTxGetS3DownloadInfo::Complete(const TActorContext& ctx) {
+void TDataShard::TTxGetS3DownloadInfo::Complete(const TActorContext& ctx) noexcept {
     Y_ABORT_UNLESS(Reply);
     ctx.Send(Ev->Sender, Reply.Release(), 0, Ev->Cookie);
 }
@@ -49,7 +49,7 @@ bool TDataShard::TTxStoreS3DownloadInfo::Execute(TTransactionContext& txc, const
     return true;
 }
 
-void TDataShard::TTxStoreS3DownloadInfo::Complete(const TActorContext& ctx) {
+void TDataShard::TTxStoreS3DownloadInfo::Complete(const TActorContext& ctx) noexcept {
     Y_ABORT_UNLESS(Reply);
     ctx.Send(Ev->Sender, Reply.Release(), 0, Ev->Cookie);
 }

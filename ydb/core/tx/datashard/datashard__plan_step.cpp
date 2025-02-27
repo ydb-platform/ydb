@@ -81,7 +81,7 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
     return true;
 }
 
-void TDataShard::TTxPlanStep::Complete(const TActorContext &ctx) {
+void TDataShard::TTxPlanStep::Complete(const TActorContext &ctx) noexcept {
     Y_ABORT_UNLESS(Ev);
     ui64 step = Ev->Get()->Record.GetStep();
 
@@ -131,7 +131,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         // nothing
     }
 };

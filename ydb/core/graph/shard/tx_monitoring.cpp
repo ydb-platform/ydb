@@ -39,7 +39,7 @@ public:
         return str;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         BLOG_D("TTxMonitoring::Complete");
         TStringBuilder html;
         html << "<html>";

@@ -25,7 +25,7 @@ struct TSysViewProcessor::TTxCollect : public TTxBase {
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         SVLOG_D("[" << Self->TabletID() << "] TTxCollect::Complete");
 
         Self->ScheduleAggregate();

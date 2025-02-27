@@ -132,7 +132,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         BLOG_D("THive::TTxDeleteTablet::Complete() SideEffects: " << SideEffects);
         SideEffects.Complete(ctx);
     }
@@ -192,7 +192,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         BLOG_D("THive::TEvDeleteOwnerTablets::Complete(" << Event->Get()->Record.GetOwner() << ") SideEffects: " << SideEffects);
         SideEffects.Complete(ctx);
     }

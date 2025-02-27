@@ -498,7 +498,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         const TOwnerIdxType::TValueType ownerIdx(OwnerId, OwnerIdx);
         BLOG_D("THive::TTxCreateTablet::Complete " << ownerIdx << " TabletId: " << TabletId << " SideEffects: " << SideEffects);
         SideEffects.Complete(ctx);

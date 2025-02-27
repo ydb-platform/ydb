@@ -112,7 +112,7 @@ namespace NKikimr::NBlobDepot {
 #pragma clang diagnostic pop
             }
 
-            void Complete(const TActorContext&) override {
+            void Complete(const TActorContext&) noexcept override {
                 STLOG(PRI_DEBUG, BLOB_DEPOT, BDT20, "TTxLoad::Complete", (Id, Self->GetLogId()),
                     (Configured, Self->Configured));
 

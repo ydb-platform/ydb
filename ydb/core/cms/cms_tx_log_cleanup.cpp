@@ -19,7 +19,7 @@ public:
         return Self->Logger.DbCleanupLog(txc, ctx);
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxLogCleanup Complete");
         Self->ScheduleLogCleanup(ctx);
     }

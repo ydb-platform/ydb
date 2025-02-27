@@ -418,7 +418,7 @@ bool TSchemeShard::TIndexBuilder::TTxBase::Execute(TTransactionContext& txc, con
     return true;
 }
 
-void TSchemeShard::TIndexBuilder::TTxBase::Complete(const TActorContext& ctx) {
+void TSchemeShard::TIndexBuilder::TTxBase::Complete(const TActorContext& ctx) noexcept {
     DoComplete(ctx);
 
     ApplyOnComplete(ctx);

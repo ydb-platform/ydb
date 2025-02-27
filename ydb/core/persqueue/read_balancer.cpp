@@ -83,7 +83,7 @@ struct TPersQueueReadBalancer::TTxWritePartitionStats : public ITransaction {
         return true;
     }
 
-    void Complete(const TActorContext&) override {};
+    void Complete(const TActorContext&) noexcept override {};
 };
 
 void TPersQueueReadBalancer::Die(const TActorContext& ctx) {
@@ -950,7 +950,7 @@ struct TTxWriteSubDomainPathId : public ITransaction {
         return true;
     }
 
-    void Complete(const TActorContext&) {
+    void Complete(const TActorContext&) noexcept {
     }
 };
 

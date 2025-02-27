@@ -60,7 +60,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         if (Response) {
             ctx.Send(Ev->Sender, std::move(Response));
         }
@@ -86,7 +86,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         auto waiterIt = Self->DataCleanupWaiters.begin();
         while (waiterIt != Self->DataCleanupWaiters.end() && waiterIt->first <= DataCleanupGeneration) {
             auto response = MakeHolder<TEvDataShard::TEvForceDataCleanupResult>(

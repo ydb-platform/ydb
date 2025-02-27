@@ -21,7 +21,7 @@ struct TKesusTablet::TTxDummy : public TTxBase {
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         ctx.Send(Sender, new TEvKesus::TEvDummyResponse(), 0, Cookie);
     }
 };

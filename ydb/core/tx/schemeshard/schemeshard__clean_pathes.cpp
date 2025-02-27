@@ -35,7 +35,7 @@ struct TSchemeShard::TTxCleanTables : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         if (RemovedCount) {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "TTxCleanTables Complete"
@@ -83,7 +83,7 @@ struct TSchemeShard::TTxCleanBlockStoreVolumes : public TTransactionBase<TScheme
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         if (RemovedCount) {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "TTxCleanBlockStoreVolumes Complete"
@@ -148,7 +148,7 @@ struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         Y_ABORT_UNLESS(Self->CleanDroppedPathsInFly);
 
         if (RemovedCount || SkippedCount) {
@@ -233,7 +233,7 @@ struct TSchemeShard::TTxCleanDroppedSubDomains : public TTransactionBase<TScheme
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         Y_ABORT_UNLESS(Self->CleanDroppedSubDomainsInFly);
 
         if (RemovedCount || SkippedCount) {

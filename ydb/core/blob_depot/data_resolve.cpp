@@ -185,7 +185,7 @@ namespace NKikimr::NBlobDepot {
             return std::nullopt;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT30, "TTxResolve::Complete", (Id, Self->GetLogId()),
                 (Sender, Request->Sender), (Cookie, Request->Cookie), (SuccessorTx, SuccessorTx),
                 (Uncertainties.size, Uncertainties.size()));

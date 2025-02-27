@@ -35,7 +35,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         if (State) {
             State->ApplyConfigUpdates();
             State.reset();

@@ -49,7 +49,7 @@ namespace NKikimr::NBlobDepot {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT78, "TTxCollectGarbage::Complete", (Id, Self->GetLogId()),
                 (Sender, Request->Sender), (Cookie, Request->Cookie), (Finished, Finished), (MoreData, MoreData));
 

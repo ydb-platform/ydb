@@ -68,7 +68,7 @@ struct TStatisticsAggregator::TTxNavigate : public TTxBase {
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxNavigate::Complete");
 
         if (Cancelled) {

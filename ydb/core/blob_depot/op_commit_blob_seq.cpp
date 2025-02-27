@@ -187,7 +187,7 @@ namespace NKikimr::NBlobDepot {
                 return true;
             }
 
-            void Complete(const TActorContext&) override {
+            void Complete(const TActorContext&) noexcept override {
                 TAgent& agent = Self->GetAgent(NodeId);
                 for (const TBlobSeqId blobSeqId : BlobSeqIds) {
                     Self->Data->EndCommittingBlobSeqId(agent, blobSeqId);

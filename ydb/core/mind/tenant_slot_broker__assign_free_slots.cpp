@@ -167,7 +167,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override
+    void Complete(const TActorContext &ctx) noexcept override
     {
         LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER, "TTxAssignFreeSlots Complete");
         Self->TxCompleted(this, ctx);

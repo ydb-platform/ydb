@@ -44,7 +44,7 @@ struct TTxInitSchema : public ITransaction {
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         ctx.Send(ctx.SelfID, new NFake::TEvReturn);
     }
 };
@@ -69,7 +69,7 @@ struct TTxWriteRow : public ITransaction {
         return true;
     }
 
-    void Complete(const TActorContext&ctx) override {
+    void Complete(const TActorContext&ctx) noexcept override {
         ctx.Send(ctx.SelfID, new NFake::TEvReturn);
     }
 };
@@ -104,7 +104,7 @@ struct TTxReadRow : public ITransaction {
         return true;
     }
 
-    void Complete(const TActorContext&ctx) override {
+    void Complete(const TActorContext&ctx) noexcept override {
         ctx.Send(ctx.SelfID, new NFake::TEvReturn);
     }
 };

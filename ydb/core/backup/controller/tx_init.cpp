@@ -31,7 +31,7 @@ public:
         return Load(txc.DB);
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         Self->SwitchToWork(ctx);
     }
 }; // TTxInit

@@ -109,7 +109,7 @@ namespace NKikimr::NDataShard {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             if (TxInfo) {
                 OnCommitted(ctx);
             }
@@ -195,7 +195,7 @@ namespace NKikimr::NDataShard {
             return true;
         }
 
-        void Complete(const TActorContext& ctx) override {
+        void Complete(const TActorContext& ctx) noexcept override {
             auto* info = TxInfo;
             if (!info) {
                 return;

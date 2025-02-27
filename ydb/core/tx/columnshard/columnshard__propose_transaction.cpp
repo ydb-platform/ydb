@@ -72,7 +72,7 @@ public:
         return true;
     }
 
-    virtual void Complete(const TActorContext& ctx) override {
+    virtual void Complete(const TActorContext& ctx) noexcept override {
         auto& record = Proto(Ev->Get());
         if (record.GetTxKind() == NKikimrTxColumnShard::TX_KIND_TTL) {
             return;

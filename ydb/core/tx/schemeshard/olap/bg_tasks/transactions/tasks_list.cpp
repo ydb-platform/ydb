@@ -43,7 +43,7 @@ bool TTxTasksList::Execute(NTabletFlatExecutor::TTransactionContext&, const TAct
     return true;
 }
 
-void TTxTasksList::Complete(const TActorContext&) {
+void TTxTasksList::Complete(const TActorContext&) noexcept {
     auto response = std::make_unique<TEvListResponse>(ProtoResponse);
     NActors::TActivationContext::AsActorContext().Send(SenderId, std::move(response), 0, RequestCookie);
 }

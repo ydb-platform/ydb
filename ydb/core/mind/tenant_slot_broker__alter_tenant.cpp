@@ -213,7 +213,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override
+    void Complete(const TActorContext &ctx) noexcept override
     {
         auto &name = Event->Get()->Record.GetTenantName();
         LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER, "TTxAlterTenant "

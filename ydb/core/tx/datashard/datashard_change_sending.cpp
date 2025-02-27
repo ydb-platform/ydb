@@ -222,7 +222,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         size_t sent = 0;
         for (auto& kv : RecordsToSend) {
             const auto& to = kv.first;
@@ -328,7 +328,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxRemoveChangeRecords Complete"
             << ": removed# " << RemovedCount
             << ", left# " << Self->ChangeRecordsToRemove.size()
@@ -389,7 +389,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxChangeExchangeSplitAck Complete"
             << ", at tablet# " << Self->TabletID());
 

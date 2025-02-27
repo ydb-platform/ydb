@@ -1579,7 +1579,7 @@ public:
         virtual ~TRwTxBase() {}
 
         bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override;
-        void Complete(const TActorContext &ctx) override;
+        void Complete(const TActorContext &ctx) noexcept override;
 
         virtual void DoExecute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) = 0;
         virtual void DoComplete(const TActorContext &ctx) = 0;

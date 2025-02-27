@@ -99,7 +99,7 @@ public:
         return Process(db, ctx);
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         for (auto& [sender, status] : Statuses) {
             if (status->Record.GetStatus() == NKikimrChangeExchange::TEvStatus::STATUS_OK) {
                 Self->IncCounter(COUNTER_CHANGE_EXCHANGE_SUCCESSFUL_HANDSHAKES);
@@ -405,7 +405,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         Y_ABORT_UNLESS(Status);
 
         if (MvccReadWriteVersion) {

@@ -20,7 +20,7 @@ public:
 
     virtual bool Execute(NTabletFlatExecutor::TTransactionContext&, const TActorContext&) override;
 
-    virtual void Complete(const TActorContext&) override;
+    virtual void Complete(const TActorContext&) noexcept override;
 };
 
 }

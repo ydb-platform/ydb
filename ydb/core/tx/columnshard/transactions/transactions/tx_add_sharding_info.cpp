@@ -14,7 +14,7 @@ bool TTxAddShardingInfo::Execute(TTransactionContext& txc, const TActorContext& 
     return true;
 }
 
-void TTxAddShardingInfo::Complete(const TActorContext& /*ctx*/) {
+void TTxAddShardingInfo::Complete(const TActorContext& /*ctx*/) noexcept {
     AFL_VERIFY(!!SnapshotVersion);
     NOlap::TGranuleShardingInfo info(GranuleShardingLogic, *SnapshotVersion, ShardingVersion, PathId);
     Self->MutableIndexAs<NOlap::TColumnEngineForLogs>().AddShardingInfo(info);

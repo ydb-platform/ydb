@@ -51,7 +51,7 @@ struct TKesusTablet::TTxSessionTimeout : public TTxBase {
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
             "[" << Self->TabletID() << "] TTxSessionTimeout::Complete (session=" << SessionId << ")");
         Self->RemoveSessionTx(SessionId);

@@ -20,7 +20,7 @@ bool TDataShard::TTxGetShardState::Execute(TTransactionContext& txc, const TActo
     return true;
 }
 
-void TDataShard::TTxGetShardState::Complete(const TActorContext& ctx) {
+void TDataShard::TTxGetShardState::Complete(const TActorContext& ctx) noexcept {
     ctx.Send(Ev->Get()->GetSource(), Result.Release());
 }
 

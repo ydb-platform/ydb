@@ -92,7 +92,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         BLOG_D("THive::TTxStopTablet::Complete TabletId: " << TabletId);
         SideEffects.Complete(ctx);
         Self->ProcessPendingStopTablet();

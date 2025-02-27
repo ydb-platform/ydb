@@ -25,7 +25,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {}
+    void Complete(const TActorContext&) noexcept override {}
 };
 
 class TBlobStorageController::TTxScrubQuantumFinished : public TTransactionBase<TBlobStorageController> {
@@ -61,7 +61,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {}
+    void Complete(const TActorContext&) noexcept override {}
 };
 
 class TBlobStorageController::TScrubState::TImpl {

@@ -86,7 +86,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         Self->SendCommittedReplies(std::move(Replies));
 
         if (SplitAlreadyFinished) {
@@ -226,7 +226,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &) override {
+    void Complete(const TActorContext &) noexcept override {
     }
 };
 
@@ -420,7 +420,7 @@ public:
         }
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Sending snapshots from src for split OpId " << Self->SrcSplitOpId);
         Self->SplitSrcSnapshotSender.DoSend(ctx);
         if (ChangeExchangeSplit) {
@@ -478,7 +478,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         if (AllDstAcksReceived) {
             for (const TActorId& ackTo : Self->SrcAckSplitTo) {
                 ui64 opId = Self->SrcSplitOpId;
@@ -526,7 +526,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         for (const auto& [ackTo, opIds] : Waiters) {
             for (const ui64 opId : opIds) {
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split partitioning changed to schemeshard " << opId);

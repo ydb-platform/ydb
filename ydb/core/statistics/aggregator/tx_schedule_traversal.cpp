@@ -51,7 +51,7 @@ struct TStatisticsAggregator::TTxScheduleTrasersal : public TTxBase {
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTrasersal::Complete");
 
         Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());

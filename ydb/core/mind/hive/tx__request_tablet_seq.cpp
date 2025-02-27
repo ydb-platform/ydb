@@ -52,7 +52,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         BLOG_D("THive::TTxRequestTabletSequence()::Complete");
         if (Sequence == TSequencer::NO_SEQUENCE) {
             BLOG_CRIT("Could not allocate sequence of " << Size << " elements for " << Owner);

@@ -65,7 +65,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         ctx.Send(ctx.SelfID, new NFake::TEvReturn);
     }
 
@@ -156,7 +156,7 @@ public:
         return false;
     }
 
-    void Complete(const TActorContext &ctx) override
+    void Complete(const TActorContext &ctx) noexcept override
     {
         ctx.Send(ctx.SelfID, new NFake::TEvReturn);
     }

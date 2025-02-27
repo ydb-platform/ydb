@@ -234,7 +234,7 @@ public:
         return Load(txc.DB);
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         CLOG_D(ctx, "Complete");
         Self->SwitchToWork(ctx);
     }

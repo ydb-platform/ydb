@@ -75,7 +75,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         const NKikimrHive::TEvReleaseTabletsReply& request(Request->Get()->Record);
         BLOG_D("THive::TTxReleaseTabletsReply::Complete");
 

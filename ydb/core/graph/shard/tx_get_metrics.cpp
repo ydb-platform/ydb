@@ -21,7 +21,7 @@ public:
         return Self->LocalBackend.GetMetrics(txc, Event->Get()->Record, Result);
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         BLOG_D("TTxGetMetric::Complete");
         BLOG_TRACE("TxGetMetrics returned " << Result.TimeSize() << " points for request " << Event->Cookie);
         ctx.Send(Event->Sender, new TEvGraph::TEvMetricsResult(std::move(Result)), 0, Event->Cookie);

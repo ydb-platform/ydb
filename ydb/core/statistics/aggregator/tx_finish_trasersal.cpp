@@ -31,7 +31,7 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete " <<
             Self->LastTraversalWasForceString() << " traversal for path " << PathId);
 

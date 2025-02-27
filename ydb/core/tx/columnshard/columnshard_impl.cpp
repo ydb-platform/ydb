@@ -1505,7 +1505,7 @@ public:
         NConveyor::TInsertServiceOperator::AsyncTaskToExecute(std::make_shared<TAccessorsParsingTask>(FetchCallback, std::move(FetchedAccessors)));
         return true;
     }
-    void Complete(const TActorContext& /*ctx*/) override {
+    void Complete(const TActorContext& /*ctx*/) noexcept override {
     }
     TTxType GetTxType() const override {
         return TXTYPE_ASK_PORTION_METADATA;

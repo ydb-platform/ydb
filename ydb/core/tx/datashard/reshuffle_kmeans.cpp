@@ -363,7 +363,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) final
+    void Complete(const TActorContext&) noexcept final
     {
     }
 

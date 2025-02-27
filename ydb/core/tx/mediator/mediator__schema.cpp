@@ -18,7 +18,7 @@ struct TTxMediator::TTxSchema : public TTransactionBase<TTxMediator> {
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         LOG_INFO_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << Self->TabletID()
             << " TTxSchema Complete");
         Self->Execute(Self->CreateTxUpgrade(), ctx);

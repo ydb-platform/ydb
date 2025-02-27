@@ -108,7 +108,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
     }
 
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         Self->SignalTabletActive(ctx);
         if (Self->Inited)
             Self->InitDone(ctx);

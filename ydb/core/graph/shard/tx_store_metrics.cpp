@@ -21,7 +21,7 @@ public:
         return Self->LocalBackend.StoreMetrics(txc, std::move(Data));
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         BLOG_D("TTxStoreMetrics::Complete");
     }
 };

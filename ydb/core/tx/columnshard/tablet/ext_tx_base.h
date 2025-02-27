@@ -17,7 +17,7 @@ private:
 
 public:
     virtual bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& ctx) override final;
-    virtual void Complete(const NActors::TActorContext& ctx) override final;
+    virtual void Complete(const NActors::TActorContext& ctx) noexcept override final;
 
     TExtendedTransactionBase(TColumnShard* self, const TString& txInfo = Default<TString>());
 };

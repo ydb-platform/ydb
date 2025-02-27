@@ -586,7 +586,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &executorCtx) override
+    void Complete(const TActorContext &executorCtx) noexcept override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxConfigure Complete");

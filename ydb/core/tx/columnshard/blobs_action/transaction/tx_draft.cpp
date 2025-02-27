@@ -11,7 +11,7 @@ bool TTxWriteDraft::Execute(TTransactionContext& txc, const TActorContext& /*ctx
     return true;
 }
 
-void TTxWriteDraft::Complete(const TActorContext& ctx) {
+void TTxWriteDraft::Complete(const TActorContext& ctx) noexcept {
     TMemoryProfileGuard mpg("TTxWriteDraft::Complete");
     Completed = true;
     for (auto&& action : WriteController->GetBlobActions()) {

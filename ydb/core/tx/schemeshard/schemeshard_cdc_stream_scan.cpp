@@ -113,7 +113,7 @@ public:
         }
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         for (auto& [streamPathId, tabletId, ev] : ScanRequests) {
             Self->CdcStreamScanPipes.Create(streamPathId, tabletId, std::move(ev), ctx);
         }

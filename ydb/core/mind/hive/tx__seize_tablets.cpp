@@ -150,7 +150,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& txc) override {
+    void Complete(const TActorContext& txc) noexcept override {
         BLOG_D("THive::TTxSeizeTablets::Complete " << Request->Get()->Record);
         txc.Send(Request->Sender, Response.Release());
     }

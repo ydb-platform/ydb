@@ -116,7 +116,7 @@ struct TSysViewProcessor::TTxTopPartitions : public TTxBase {
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext&) noexcept override {
         SVLOG_D("[" << Self->TabletID() << "] TTxTopPartitions::Complete");
     }
 };

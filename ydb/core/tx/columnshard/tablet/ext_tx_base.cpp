@@ -8,7 +8,7 @@ bool TExtendedTransactionBase::Execute(NTabletFlatExecutor::TTransactionContext&
     NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", Self->TabletID())("local_tx_no", TabletTxNo)("method", "execute")("tx_info", TxInfo);
     return DoExecute(txc, ctx);
 }
-void TExtendedTransactionBase::Complete(const NActors::TActorContext& ctx) {
+void TExtendedTransactionBase::Complete(const NActors::TActorContext& ctx) noexcept {
     NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", Self->TabletID())("local_tx_no", TabletTxNo)("method", "complete")("tx_info", TxInfo);
     DoComplete(ctx);
     NYDBTest::TControllers::GetColumnShardController()->OnAfterLocalTxCommitted(ctx, *Self, TxInfo);

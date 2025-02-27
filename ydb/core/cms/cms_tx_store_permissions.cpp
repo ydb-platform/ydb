@@ -120,7 +120,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxStorePermissions complete");
 
         Self->Reply(Request.Get(), Response, ctx);

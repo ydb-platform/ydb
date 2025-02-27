@@ -18,7 +18,7 @@ public:
     }
 
     virtual bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    virtual void Complete(const TActorContext& ctx) override;
+    virtual void Complete(const TActorContext& ctx) noexcept override;
     TTxType GetTxType() const override { return TXTYPE_CLEANUP_INSERT_TABLE; }
 };
 

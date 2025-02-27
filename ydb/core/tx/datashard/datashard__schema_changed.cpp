@@ -26,7 +26,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
+    void Complete(const TActorContext& ctx) noexcept override {
         NTabletPipe::CloseAndForgetClient(Self->SelfId(), Self->SchemeShardPipe);
         Self->CheckStateChange(ctx);
     }

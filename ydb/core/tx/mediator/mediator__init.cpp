@@ -57,7 +57,7 @@ struct TTxMediator::TTxInit : public TTransactionBase<TTxMediator> {
         return false;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext &ctx) noexcept override {
         if (Coordinators.size()) {
             LOG_INFO_S(ctx, NKikimrServices::TX_MEDIATOR
                        , "tablet# " << Self->TabletID()

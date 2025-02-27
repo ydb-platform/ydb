@@ -31,7 +31,7 @@ namespace NKikimr::NBlobDepot {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             SendToBSProxy(Self->SelfId(), GroupId, CollectGarbage.release(), Cookie);
         }
     };
@@ -76,7 +76,7 @@ namespace NKikimr::NBlobDepot {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             if (Index == TrashDeleted.size()) {
                 Self->Data->OnCommitConfirmedGC(Channel, GroupId, std::move(TrashDeleted));
             } else { // resume transaction
@@ -127,7 +127,7 @@ namespace NKikimr::NBlobDepot {
             return true;
         }
 
-        void Complete(const TActorContext&) override {
+        void Complete(const TActorContext&) noexcept override {
             Self->Data->TrimChannelHistory(Channel, GroupId, std::move(TrashDeleted));
             if (MoreToGo) {
                 Self->Data->ExecuteHardGC(Channel, GroupId, HardGenStep);

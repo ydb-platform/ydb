@@ -1674,7 +1674,7 @@ bool TSchemeShard::TRwTxBase::Execute(NTabletFlatExecutor::TTransactionContext &
     return true;
 }
 
-void TSchemeShard::TRwTxBase::Complete(const TActorContext &ctx) {
+void TSchemeShard::TRwTxBase::Complete(const TActorContext &ctx) noexcept {
     DoComplete(ctx);
 }
 

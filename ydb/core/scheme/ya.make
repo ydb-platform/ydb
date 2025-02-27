@@ -12,7 +12,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/actors/core
-    library/cpp/charset
+    library/cpp/charset/lite
     library/cpp/containers/bitseq
     library/cpp/deprecated/enum_codegen
     library/cpp/yson

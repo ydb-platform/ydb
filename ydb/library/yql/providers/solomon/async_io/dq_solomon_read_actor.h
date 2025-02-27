@@ -16,7 +16,7 @@
 namespace NYql::NDq {
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolomonReadActor(
-    NYql::NSo::NProto::TDqSolomonShard&& settings,
+    NYql::NSo::NProto::TDqSolomonSource&& settings,
     ui64 inputIndex,
     TCollectStatsLevel statsLevel,
     const TTxId& txId,

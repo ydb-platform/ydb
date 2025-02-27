@@ -794,23 +794,24 @@ void TestViewDependentOnAnotherViewIsRestored(
     CompareResults(GetTableContent(session, dependentView), originalContent);
 }
 
-std::pair<std::vector<TChangefeedDescription>, std::vector<Ydb::Topic::DescribeTopicResult>> 
+std::pair<std::vector<TString>, std::vector<TString>> 
 GetChangefeedAndTopicDescriptions(const char* table, TSession& session, NTopic::TTopicClient& topicClient) {
     auto describeChangefeeds = DescribeChangefeeds(session, table);
-    std::vector<Ydb::Topic::DescribeTopicResult> describeTopics;
+    const auto vectorSize = describeChangefeeds.size();
 
-    for (size_t i = 0; i < describeChangefeeds.size(); ++i) {
-        auto changefeedDesc = describeChangefeeds[i];
-        describeTopics.push_back(
-            TProtoAccessor::GetProto(DescribeTopic(topicClient, TStringBuilder() << table << "/" << changefeedDesc.GetName() << "/streamImpl"))
-        );
-    }
+    std::vector<TString> changefeedsStr(vectorSize);
+    std::transform(describeChangefeeds.begin(), describeChangefeeds.end(), changefeedsStr.begin(), [=](TChangefeedDescription changefeedDesc){
+        return changefeedDesc.ToString();
+    });
 
-    // std::transform(describeChangefeeds.begin(), describeChangefeeds.end(), describeTopics.begin(), [table, &topicClient](TChangefeedDescription changefeedDesc){
-    //     return DescribeTopic(topicClient, TStringBuilder() << table << "/" << changefeedDesc.GetName() << "/streamImpl");
-    // });
+    std::vector<TString> topicsStr(vectorSize);
+    std::transform(describeChangefeeds.begin(), describeChangefeeds.end(), topicsStr.begin(), [table, &topicClient](TChangefeedDescription changefeedDesc){
+        return TProtoAccessor::GetProto(DescribeTopic(
+            topicClient, TStringBuilder() << table << "/" << changefeedDesc.GetName() << "/streamImpl"
+        )).SerializeAsString();
+    });
     
-    return {describeChangefeeds, describeTopics};
+    return {changefeedsStr, topicsStr};
 }
 
 void TestChangefeedAndTopicDescriptionsIsPreserved(
@@ -828,7 +829,7 @@ void TestChangefeedAndTopicDescriptionsIsPreserved(
     ));
 
     for (const auto& changefeed : changefeeds) {
-        ExecuteDataModificationQuery(session, Sprintf(R"(
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
                 ALTER TABLE `%s` ADD CHANGEFEED `%s` WITH (
                     FORMAT = 'JSON',
                     MODE = 'UPDATES'
@@ -1599,13 +1600,12 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
-        const std::string table = "/Root/test";
+        const auto table = "/Root/test/table";
 
         TestChangefeedAndTopicDescriptionsIsPreserved(
             table,
             session,
-            tableClient,
-            topicClient
+            topicClient,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup),
             {"update_feed"}
@@ -1775,7 +1775,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeView:
                 return TestViewBackupRestore();
             case EPathTypeCdcStream:
-                return TestChangefeedBackupRestore(); // https://github.com/ydb-platform/ydb/issues/7054
+                return TestChangefeedBackupRestore();
             case EPathTypeReplication:
                 return TestReplicationBackupRestore();
             case EPathTypeTransfer:

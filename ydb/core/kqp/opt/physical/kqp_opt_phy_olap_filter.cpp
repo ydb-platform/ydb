@@ -67,7 +67,34 @@ struct TFilterOpsLevels {
                 .Done();
         }
     }
+    static TMaybeNode<TExprBase> CombinePrdicateWithOlapAnd(const TVector<TExprBase>& preds, TExprContext& ctx, TPositionHandle pos) {
+        if (preds.empty()) {
+            return {};
+        } else if (preds.size() == 1) {
+            return preds[0];
+        } else {
+            return Build<TKqpOlapAnd>(ctx, pos)
+                .Add(preds)
+            .Done();
+        }
+    }
 
+    static TFilterOpsLevels Merge(TVector<TFilterOpsLevels> predicates, TExprContext& ctx, TPositionHandle pos) {
+        TVector<TExprBase> predicatesFirstLevel;
+        TVector<TExprBase> predicatesSecondLevel;
+        for (const auto& p: predicates) {
+            if (p.FirstLevelOps.IsValid()) {
+                predicatesFirstLevel.emplace_back(p.FirstLevelOps.Cast());
+            }
+            if (p.SecondLevelOps.IsValid()) {
+                predicatesSecondLevel.emplace_back(p.SecondLevelOps.Cast());
+            }
+        }
+        return {
+            CombinePrdicateWithOlapAnd(predicatesFirstLevel, ctx, pos),
+            CombinePrdicateWithOlapAnd(predicatesSecondLevel, ctx, pos),
+        };
+    }
 
     TMaybeNode<TExprBase> FirstLevelOps;
     TMaybeNode<TExprBase> SecondLevelOps;
@@ -204,6 +231,15 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
         .Done();
 }
 
+TMaybeNode<TExprBase> JsonExistsPushdown(const TCoJsonExists& jsonExists, TExprContext& ctx, TPositionHandle pos)
+{
+    auto columnName = jsonExists.Json().Cast<TCoMember>().Name();
+    return Build<TKqpOlapJsonExists>(ctx, pos)
+        .Column(columnName)
+        .Path(jsonExists.JsonPath().Cast<TCoUtf8>())
+        .Done();
+}
+
 std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos)
 {
     std::vector<TExprBase> out;
@@ -247,6 +283,10 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
                     .Build();
             }
             return builder.Done();
+        }
+
+        if (auto maybeJsonExists = node.Maybe<TCoJsonExists>()) {
+            return JsonExistsPushdown(maybeJsonExists.Cast(), ctx, pos);
         }
 
         if (const auto maybeJust = node.Maybe<TCoJust>()) {
@@ -295,12 +335,7 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
             }
         }
 
-
-        if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
-            return YqlApplyPushdown(node, argument, ctx);
-        } else {
-            return NullNode;
-        }
+        return NullNode; //YqlApplyPushdown(node, argument, ctx);
     };
 
     // Columns & values may be single element
@@ -515,15 +550,6 @@ TMaybeNode<TExprBase> ExistsPushdown(const TCoExists& exists, TExprContext& ctx,
             .Done();
 }
 
-TMaybeNode<TExprBase> JsonExistsPushdown(const TCoJsonExists& jsonExists, TExprContext& ctx, TPositionHandle pos)
-{
-    auto columnName = jsonExists.Json().Cast<TCoMember>().Name();
-    return Build<TKqpOlapJsonExists>(ctx, pos)
-        .Column(columnName)
-        .Path(jsonExists.JsonPath().Cast<TCoUtf8>())
-        .Done();
-}
-
 TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos)
 {
     /*
@@ -572,10 +598,7 @@ TMaybeNode<TExprBase> CoalescePushdown(const TCoCoalesce& coalesce, const TExprN
         return SafeCastPredicatePushdown(maybeFlatmap.Cast(), argument, ctx, pos);
     } else if (auto maybePredicate = predicate.Maybe<TCoCompare>()) {
         return SimplePredicatePushdown(maybePredicate.Cast(), argument, ctx, pos);
-    } else if (auto maybeJsonExists = predicate.Maybe<TCoJsonExists>()) {
-        return JsonExistsPushdown(maybeJsonExists.Cast(), ctx, pos);
     }
-
     return NullNode;
 }
 
@@ -673,19 +696,17 @@ TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, const TExprNode& 
 }
 
 TOLAPPredicateNode WrapPredicates(const std::vector<TOLAPPredicateNode>& predicates, TExprContext& ctx, TPositionHandle pos) {
+    TOLAPPredicateNode result;
     if (predicates.empty()) {
-        return {};
-    }
-
-    if (const auto predicatesSize = predicates.size(); 1U == predicatesSize) {
-        return predicates.front();
+        result.ExprNode = MakeBool<true>(pos, ctx);;
+    } else if (predicates.size() == 1) {
+        result = predicates.front();
     } else {
-        TOLAPPredicateNode result;
         result.Children = predicates;
         result.CanBePushed = true;
 
         TVector<NNodes::TExprBase> exprNodes;
-        exprNodes.reserve(predicatesSize);
+        exprNodes.reserve(predicates.size());
         for (const auto& pred : predicates) {
             exprNodes.emplace_back(pred.ExprNode);
             result.CanBePushed &= pred.CanBePushed;
@@ -693,29 +714,26 @@ TOLAPPredicateNode WrapPredicates(const std::vector<TOLAPPredicateNode>& predica
         result.ExprNode = NNodes::Build<NNodes::TCoAnd>(ctx, pos)
             .Add(exprNodes)
             .Done().Ptr();
-        return result;
     }
+    return result;
 }
 
-void SplitForPartialPushdown(const TOLAPPredicateNode& predicateTree, TOLAPPredicateNode& predicatesToPush, TOLAPPredicateNode& remainingPredicates,
-    TExprContext& ctx, TPositionHandle pos)
+std::pair<std::vector<TOLAPPredicateNode>, std::vector<TOLAPPredicateNode>> SplitForPartialPushdown(const TOLAPPredicateNode& predicateTree)
 {
     if (predicateTree.CanBePushed) {
-        predicatesToPush = predicateTree;
-        remainingPredicates.ExprNode = MakeBool<true>(pos, ctx);
-        return;
+        return {{predicateTree}, {}};
     }
 
     if (!TCoAnd::Match(predicateTree.ExprNode.Get())) {
         // We can partially pushdown predicates from AND operator only.
         // For OR operator we would need to have several read operators which is not acceptable.
         // TODO: Add support for NOT(op1 OR op2), because it expands to (!op1 AND !op2).
-        remainingPredicates = predicateTree;
-        return;
+        return {{}, {predicateTree}};
     }
 
     bool isFoundNotStrictOp = false;
-    std::vector<TOLAPPredicateNode> pushable, remaining;
+    std::vector<TOLAPPredicateNode> pushable;
+    std::vector<TOLAPPredicateNode> remaining;
     for (const auto& predicate : predicateTree.Children) {
         if (predicate.CanBePushed && !isFoundNotStrictOp) {
             pushable.emplace_back(predicate);
@@ -726,8 +744,7 @@ void SplitForPartialPushdown(const TOLAPPredicateNode& predicateTree, TOLAPPredi
             remaining.emplace_back(predicate);
         }
     }
-    predicatesToPush = WrapPredicates(pushable, ctx, pos);
-    remainingPredicates = WrapPredicates(remaining, ctx, pos);
+    return {pushable, remaining};
 }
 
 } // anonymous namespace end
@@ -751,8 +768,9 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     }
 
     const auto& lambda = flatmap.Lambda();
+    const auto& lambdaArg = lambda.Args().Arg(0).Ref();
 
-    YQL_CLOG(TRACE, ProviderKqp) << "Initial OLAP lambda: " << KqpExprToPrettyString(lambda, ctx);
+    YQL_CLOG(ERROR, ProviderKqp) << "Initial OLAP lambda: " << KqpExprToPrettyString(lambda, ctx);
 
     const auto maybeOptionalIf = lambda.Body().Maybe<TCoOptionalIf>();
     if (!maybeOptionalIf.IsValid()) {
@@ -763,42 +781,53 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     auto predicate = optionaIf.Predicate();
     auto value = optionaIf.Value();
 
-    if constexpr (NSsa::RuntimeVersion >= 5U) {
-        TExprNode::TPtr afterPeephole;
-        bool hasNonDeterministicFunctions;
-        if (const auto status = PeepHoleOptimizeNode(optionaIf.Ptr(), afterPeephole, ctx, typesCtx, nullptr, hasNonDeterministicFunctions);
-            status != IGraphTransformer::TStatus::Ok) {
-            YQL_CLOG(ERROR, ProviderKqp) << "Peephole OLAP failed." << Endl << ctx.IssueManager.GetIssues().ToString();
-            return node;
-        }
-
-        const TCoIf simplified(std::move(afterPeephole));
-        predicate = simplified.Predicate();
-        value = simplified.ThenValue().Cast<TCoJust>().Input();
-    }
-
     TOLAPPredicateNode predicateTree;
     predicateTree.ExprNode = predicate.Ptr();
-    const auto& lambdaArg = lambda.Args().Arg(0).Ref();
-    CollectPredicates(predicate, predicateTree, &lambdaArg, read.Process().Body());
+    CollectPredicates(predicate, predicateTree, &lambdaArg, read.Process().Body(), false);
     YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
 
-    TOLAPPredicateNode predicatesToPush, remainingPredicates;
-    SplitForPartialPushdown(predicateTree, predicatesToPush, remainingPredicates, ctx, node.Pos());
-    if (!predicatesToPush.IsValid()) {
-        return node;
+    auto [pushable, remaining] = SplitForPartialPushdown(predicateTree);
+    TVector<TFilterOpsLevels> pushedPredicates;
+    for (const auto& p: pushable) {
+        pushedPredicates.emplace_back(PredicatePushdown(TExprBase(p.ExprNode), lambdaArg, ctx, node.Pos()));
     }
 
-    YQL_ENSURE(predicatesToPush.IsValid(), "Predicates to push is invalid");
-    YQL_ENSURE(remainingPredicates.IsValid(), "Remaining predicates is invalid");
+    if constexpr (NSsa::RuntimeVersion >= 5U) {
+        if (!remaining.empty()) {
+            const auto remainingPredicates = WrapPredicates(remaining, ctx, node.Pos());
+            const auto recoveredOptinalIfForNonPushedDownPredicates = Build<TCoOptionalIf>(ctx, node.Pos())
+                .Predicate(remainingPredicates.ExprNode)
+                .Value(value)
+            .Build();
+            TExprNode::TPtr afterPeephole;
+            bool hasNonDeterministicFunctions;
+            if (const auto status = PeepHoleOptimizeNode(recoveredOptinalIfForNonPushedDownPredicates.Value().Ptr(), afterPeephole, ctx, typesCtx, nullptr, hasNonDeterministicFunctions);
+                status != IGraphTransformer::TStatus::Ok) {
+                YQL_CLOG(ERROR, ProviderKqp) << "Peephole OLAP failed." << Endl << ctx.IssueManager.GetIssues().ToString();
+                return node;
+            }
+            const TCoIf simplified(std::move(afterPeephole));
+            predicate = simplified.Predicate();
+            value = simplified.ThenValue().Cast<TCoJust>().Input();
 
-    const auto pushedFilters = PredicatePushdown(TExprBase(predicatesToPush.ExprNode), lambdaArg, ctx, node.Pos());
+            TOLAPPredicateNode predicateTree;
+            predicateTree.ExprNode = predicate.Ptr();
+            CollectPredicates(predicate, predicateTree, &lambdaArg, read.Process().Body(), true);
+            YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
+            auto [pushableWithApply, remaining2] = SplitForPartialPushdown(predicateTree);
+            for (const auto& p: pushableWithApply) {
+               pushedPredicates.emplace_back(PredicatePushdown(TExprBase(p.ExprNode), lambdaArg, ctx, node.Pos()));
+            }
+            remaining = std::move(remaining2);
+        }
+    }
+
+    const auto& pushedFilters = TFilterOpsLevels::Merge(pushedPredicates, ctx, node.Pos());
+
+    const auto remainingPredicates = WrapPredicates(remaining, ctx, node.Pos());
     // Temporary fix for https://st.yandex-team.ru/KIKIMR-22560
     // YQL_ENSURE(pushedFilters.IsValid(), "Pushed predicate should be always valid!");
 
-    if (!pushedFilters.IsValid()) {
-        return node;
-    }
 
     TMaybeNode<TExprBase> olapFilter;
     if (pushedFilters.FirstLevelOps.IsValid()) {    
@@ -823,7 +852,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             .Build()
         .Done();
 
-    YQL_CLOG(TRACE, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(newProcessLambda, ctx);
+    YQL_CLOG(ERROR, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(newProcessLambda, ctx);
 
 #ifdef ENABLE_COLUMNS_PRUNING
     TMaybeNode<TCoAtomList> readColumns = BuildColumnsFromLambda(lambda, ctx, node.Pos());

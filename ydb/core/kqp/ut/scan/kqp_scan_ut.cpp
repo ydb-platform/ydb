@@ -2373,7 +2373,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(StreamLookupTryGetDataBeforeSchemeInitialization) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
 
         TPortManager tp;
         ui16 mbusport = tp.GetPort(2134);

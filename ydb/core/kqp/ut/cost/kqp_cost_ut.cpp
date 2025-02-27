@@ -14,8 +14,8 @@ using namespace NYdb::NTable;
 
 static NKikimrConfig::TAppConfig GetAppConfig(bool scanSourceRead = false, bool streamLookup = true, bool streamLookupJoin = false, bool enableOltpSink = false) {
     auto app = NKikimrConfig::TAppConfig();
+    Y_UNUSED(streamLookup);
     app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(scanSourceRead);
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(streamLookup);
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(streamLookupJoin);
     app.MutableTableServiceConfig()->SetEnableOlapSink(true);
     app.MutableTableServiceConfig()->SetEnableOltpSink(enableOltpSink);
@@ -676,7 +676,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
             // TODO: fix status?
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
-            
+
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
             Cerr << stats.DebugString() << Endl;

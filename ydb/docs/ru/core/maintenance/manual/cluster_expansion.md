@@ -63,7 +63,7 @@
     ```bash
     export LD_LIBRARY_PATH=/opt/ydb/lib
     ydb --token-file ydbd-token-file --ca-file ca.crt -e grpcs://<node1.ydb.tech>:2135 \
-        admin storage replace -f config.yaml
+        admin cluster config replace -f config.yaml
     echo $?
     ```
 
@@ -84,7 +84,7 @@
     ```bash
     sudo mkdir -p /opt/ydb/cfg
     sudo chown -R ydb:ydb /opt/ydb/cfg
-    ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.yaml
+    ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:2135>
     ```
 
 1. Запустить процессы, обслуживающие новые статические узлы кластера, на соответствующих серверах.

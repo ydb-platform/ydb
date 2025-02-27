@@ -336,7 +336,7 @@ bool ExistsCanBePushed(const TCoExists& exists, const TExprNode* lambdaArg) {
     return IsMemberColumn(exists.Optional(), lambdaArg);
 }
 
-void CollectChildrenPredicates(const TExprNode& opNode, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody) {
+void CollectChildrenPredicates(const TExprNode& opNode, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, bool allowOlapApply) {
     predicateTree.Children.reserve(opNode.ChildrenSize());
     predicateTree.CanBePushed = true;
     for (const auto& childNodePtr: opNode.Children()) {
@@ -345,7 +345,7 @@ void CollectChildrenPredicates(const TExprNode& opNode, TOLAPPredicateNode& pred
         if (const auto maybeCtor = TMaybeNode<TCoDataCtor>(child.ExprNode))
             child.CanBePushed = IsSupportedDataType(maybeCtor.Cast());
         else
-            CollectPredicates(TExprBase(child.ExprNode), child, lambdaArg, lambdaBody);
+            CollectPredicates(TExprBase(child.ExprNode), child, lambdaArg, lambdaBody, allowOlapApply);
         predicateTree.Children.emplace_back(child);
         predicateTree.CanBePushed &= child.CanBePushed;
     }
@@ -353,15 +353,15 @@ void CollectChildrenPredicates(const TExprNode& opNode, TOLAPPredicateNode& pred
 
 }
 
-void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody) {
+void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, bool allowOlapApply) {
     if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
         if (predicate.Maybe<TCoIf>() || predicate.Maybe<TCoJust>() || predicate.Maybe<TCoCoalesce>()) {
-            return CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody);
+            return CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, allowOlapApply);
         }
     }
 
     if (predicate.Maybe<TCoNot>() || predicate.Maybe<TCoAnd>() || predicate.Maybe<TCoOr>() || predicate.Maybe<TCoXor>()) {
-        return CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody);
+        return CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, allowOlapApply);
     } else if (const auto maybeCoalesce = predicate.Maybe<TCoCoalesce>()) {
         predicateTree.CanBePushed = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, lambdaBody);
     } else if (const auto maybeCompare = predicate.Maybe<TCoCompare>()) {
@@ -371,11 +371,7 @@ void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicate
     } else if (const auto maybeJsonExists = predicate.Maybe<TCoJsonExists>()) {
         predicateTree.CanBePushed = JsonExistsCanBePushed(maybeJsonExists.Cast(), lambdaArg);
     } else {
-        if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
-            predicateTree.CanBePushed = AbstractTreeCanBePushed(predicate, lambdaArg);
-        } else {
-            predicateTree.CanBePushed = false;
-        }
+        predicateTree.CanBePushed = allowOlapApply ? AbstractTreeCanBePushed(predicate, lambdaArg) : false;
     }
 }
 

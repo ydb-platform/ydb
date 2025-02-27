@@ -58,6 +58,9 @@ public:
                 CLOG_N(ctx, "Replication altered"
                     << ": rid# " << rid);
                 Replication->SetState(Replication->GetDesiredState());
+                if (Replication->GetState() != TReplication::EState::Ready) {
+                    Replication.Reset();
+                }
             }
         } else {
             target->SetDstState(TReplication::EDstState::Error);
@@ -104,7 +107,7 @@ public:
     void Complete(const TActorContext& ctx) override {
         CLOG_D(ctx, "Complete");
 
-        if (Replication && Replication->GetState() == TReplication::EState::Ready) {
+        if (Replication) {
             Replication->Progress(ctx);
         }
     }

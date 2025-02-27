@@ -200,6 +200,6 @@ void TTargetBase::Shutdown(const TActorContext& ctx) {
 }
 
 void TTargetBase::UpdateConfig(const NKikimrReplication::TReplicationConfig&) {
-};
+}
 
 }

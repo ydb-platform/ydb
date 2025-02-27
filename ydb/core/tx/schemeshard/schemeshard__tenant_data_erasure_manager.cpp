@@ -4,6 +4,21 @@
 
 namespace NKikimr::NSchemeShard {
 
+namespace {
+
+void SendResponseToRootSchemeShard(TSchemeShard* const schemeShard, const TActorContext& ctx) {
+    std::unique_ptr<TEvSchemeShard::TEvTenantDataErasureResponse> response(
+        new TEvSchemeShard::TEvTenantDataErasureResponse(schemeShard->ParentDomainId, schemeShard->DataErasureManager->GetGeneration(), NKikimrScheme::TEvTenantDataErasureResponse::COMPLETED));
+
+    const ui64 rootSchemeshard = schemeShard->ParentDomainId.OwnerId;
+    schemeShard->PipeClientCache->Send(
+        ctx,
+        ui64(rootSchemeshard),
+        response.release());
+}
+
+} // namespace
+
 TTenantDataErasureManager::TStarter::TStarter(TTenantDataErasureManager* const manager)
     : Manager(manager)
 {}
@@ -49,9 +64,9 @@ void TTenantDataErasureManager::Start() {
         "[TenantDataErasureManager] Start: Status# " << static_cast<ui32>(Status));
 
     Queue->Start();
-    if (Status == EStatus::COMPLETED) {
+    if (Status == EDataErasureStatus::COMPLETED) {
         SendResponseToRootSchemeShard();
-    } else if (Status == EStatus::IN_PROGRESS) {
+    } else if (Status == EDataErasureStatus::IN_PROGRESS) {
         ClearOperationQueue();
         Continue();
     }
@@ -96,18 +111,18 @@ void TTenantDataErasureManager::ClearWaitingDataErasureRequests() {
 }
 
 void TTenantDataErasureManager::Run(NIceDb::TNiceDb& db) {
-    Status = EStatus::IN_PROGRESS;
+    Status = EDataErasureStatus::IN_PROGRESS;
     for (const auto& [shardIdx, shardInfo] : SchemeShard->ShardInfos) {
         if (shardInfo.TabletType == ETabletType::DataShard) {
             Enqueue(shardIdx); // forward generation
-            WaitingDataErasureShards[shardIdx] = EStatus::IN_PROGRESS;
-            db.Table<Schema::WaitingDataErasureShards>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update<Schema::WaitingDataErasureShards::Status>(static_cast<ui32>(WaitingDataErasureShards[shardIdx]));
+            WaitingDataErasureShards[shardIdx] = EDataErasureStatus::IN_PROGRESS;
+            db.Table<Schema::WaitingDataErasureShards>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update<Schema::WaitingDataErasureShards::Status>(WaitingDataErasureShards[shardIdx]);
         }
     }
     if (WaitingDataErasureShards.empty()) {
-        Status = EStatus::COMPLETED;
+        Status = EDataErasureStatus::COMPLETED;
     }
-    db.Table<Schema::TenantDataErasureGenerations>().Key(Generation).Update<Schema::TenantDataErasureGenerations::Status>(static_cast<ui32>(Status));
+    db.Table<Schema::TenantDataErasureGenerations>().Key(Generation).Update<Schema::TenantDataErasureGenerations::Status>(Status);
 
     const auto ctx = SchemeShard->ActorContext();
     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -118,7 +133,7 @@ void TTenantDataErasureManager::Run(NIceDb::TNiceDb& db) {
 
 void TTenantDataErasureManager::Continue() {
     for (const auto& [shardIdx, status] : WaitingDataErasureShards) {
-        if (status == EStatus::IN_PROGRESS) {
+        if (status == EDataErasureStatus::IN_PROGRESS) {
             Enqueue(shardIdx); // forward generation
         }
     }
@@ -199,7 +214,7 @@ void TTenantDataErasureManager::Enqueue(const TShardIdx& shardIdx) {
     if (Queue->Enqueue(shardIdx)) {
         LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "[TenantDataErasureManager] [Enqueue] Enqueued shard# " << shardIdx << " at schemeshard " << SchemeShard->TabletID());
-        WaitingDataErasureShards[shardIdx] = EStatus::IN_PROGRESS;
+        WaitingDataErasureShards[shardIdx] = EDataErasureStatus::IN_PROGRESS;
         UpdateMetrics();
     }  else {
         LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -276,9 +291,9 @@ void TTenantDataErasureManager::OnDone(const TTabletId& tabletId, NIceDb::TNiceD
     {
         auto it = WaitingDataErasureShards.find(shardIdx);
         if (it != WaitingDataErasureShards.end()) {
-            it->second = EStatus::COMPLETED;
+            it->second = EDataErasureStatus::COMPLETED;
         }
-        db.Table<Schema::WaitingDataErasureShards>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update<Schema::WaitingDataErasureShards::Status>(static_cast<ui32>(it->second));
+        db.Table<Schema::WaitingDataErasureShards>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update<Schema::WaitingDataErasureShards::Status>(it->second);
     }
 
     SchemeShard->TabletCounters->Cumulative()[COUNTER_TENANT_DATA_ERASURE_OK].Increment(1);
@@ -286,7 +301,7 @@ void TTenantDataErasureManager::OnDone(const TTabletId& tabletId, NIceDb::TNiceD
 
     bool isTenantDataErasureCompleted = true;
     for (const auto& [shardIdx, status] : WaitingDataErasureShards) {
-        if (status == EStatus::IN_PROGRESS) {
+        if (status == EDataErasureStatus::IN_PROGRESS) {
             isTenantDataErasureCompleted = false;
         }
     }
@@ -294,7 +309,7 @@ void TTenantDataErasureManager::OnDone(const TTabletId& tabletId, NIceDb::TNiceD
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "[TenantDataErasureManager] Data erasure in shards is completed. Send response to root schemeshard");
         Complete();
-        db.Table<Schema::TenantDataErasureGenerations>().Key(Generation).Update<Schema::TenantDataErasureGenerations::Status>(static_cast<ui32>(Status));
+        db.Table<Schema::TenantDataErasureGenerations>().Key(Generation).Update<Schema::TenantDataErasureGenerations::Status>(Status);
     }
 }
 
@@ -311,7 +326,7 @@ void TTenantDataErasureManager::SendRequestToBSC() {
 }
 
 void TTenantDataErasureManager::Complete() {
-    Status = EStatus::COMPLETED;
+    Status = EDataErasureStatus::COMPLETED;
 
     auto ctx = SchemeShard->ActorContext();
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -328,12 +343,7 @@ bool TTenantDataErasureManager::Restore(NIceDb::TNiceDb& db) {
             ui64 generation = rowset.GetValue<Schema::TenantDataErasureGenerations::Generation>();
             if (generation >= Generation) {
                 Generation = generation;
-                ui32 statusValue = rowset.GetValue<Schema::TenantDataErasureGenerations::Status>();
-                Status = EStatus::UNSPECIFIED;
-                if (statusValue >= static_cast<ui32>(EStatus::UNSPECIFIED) &&
-                    statusValue <= static_cast<ui32>(EStatus::IN_PROGRESS_BSC)) {
-                        Status = static_cast<EStatus>(statusValue);
-                }
+                Status = rowset.GetValue<Schema::TenantDataErasureGenerations::Status>();
             }
 
             if (!rowset.Next()) {
@@ -353,14 +363,9 @@ bool TTenantDataErasureManager::Restore(NIceDb::TNiceDb& db) {
             TLocalShardIdx localShardId = rowset.GetValue<Schema::WaitingDataErasureShards::LocalShardIdx>();
             TShardIdx shardId(ownerId, localShardId);
 
-            ui32 statusValue = rowset.GetValue<Schema::WaitingDataErasureShards::Status>();
-            EStatus status = EStatus::COMPLETED;
-            if (statusValue >= static_cast<ui32>(EStatus::UNSPECIFIED) &&
-                statusValue <= static_cast<ui32>(EStatus::IN_PROGRESS_BSC)) {
-                    status = static_cast<EStatus>(statusValue);
-            }
+            EDataErasureStatus status = rowset.GetValue<Schema::WaitingDataErasureShards::Status>();
             WaitingDataErasureShards[shardId] = status;
-            if (status == EStatus::IN_PROGRESS) {
+            if (status == EDataErasureStatus::IN_PROGRESS) {
                 numberDataErasureShardsInRunning++;
             }
 
@@ -368,8 +373,8 @@ bool TTenantDataErasureManager::Restore(NIceDb::TNiceDb& db) {
                 return false;
             }
         }
-        if (Status == EStatus::IN_PROGRESS && (WaitingDataErasureShards.empty() || numberDataErasureShardsInRunning == 0)) {
-            Status = EStatus::COMPLETED;
+        if (Status == EDataErasureStatus::IN_PROGRESS && (WaitingDataErasureShards.empty() || numberDataErasureShardsInRunning == 0)) {
+            Status = EDataErasureStatus::COMPLETED;
         }
     }
 
@@ -394,10 +399,10 @@ bool TTenantDataErasureManager::Remove(const TShardIdx& shardIdx) {
     if (it != WaitingDataErasureShards.end()) {
         Queue->Remove(shardIdx);
         ActivePipes.erase(shardIdx);
-        it->second = EStatus::COMPLETED;
+        it->second = EDataErasureStatus::COMPLETED;
         bool isTenantDataErasureCompleted = true;
         for (const auto& [shardIdx, status] : WaitingDataErasureShards) {
-            if (status == EStatus::IN_PROGRESS) {
+            if (status == EDataErasureStatus::IN_PROGRESS) {
                 isTenantDataErasureCompleted = false;
             }
         }
@@ -413,15 +418,15 @@ bool TTenantDataErasureManager::Remove(const TShardIdx& shardIdx) {
 }
 
 void TTenantDataErasureManager::HandleNewPartitioning(const std::vector<TShardIdx>& dataErasureShards, NIceDb::TNiceDb& db) {
-    Status = EStatus::IN_PROGRESS;
+    Status = EDataErasureStatus::IN_PROGRESS;
     for (const auto& shardIdx : dataErasureShards) {
         Enqueue(shardIdx); // forward generation
-        db.Table<Schema::WaitingDataErasureShards>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update<Schema::WaitingDataErasureShards::Status>(static_cast<ui32>(WaitingDataErasureShards[shardIdx]));
+        db.Table<Schema::WaitingDataErasureShards>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update<Schema::WaitingDataErasureShards::Status>(WaitingDataErasureShards[shardIdx]);
     }
     if (WaitingDataErasureShards.empty()) {
-        Status = EStatus::COMPLETED;
+        Status = EDataErasureStatus::COMPLETED;
     }
-    db.Table<Schema::TenantDataErasureGenerations>().Key(Generation).Update<Schema::TenantDataErasureGenerations::Status>(static_cast<ui32>(Status));
+    db.Table<Schema::TenantDataErasureGenerations>().Key(Generation).Update<Schema::TenantDataErasureGenerations::Status>(Status);
 
     const auto ctx = SchemeShard->ActorContext();
     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -442,14 +447,7 @@ void TTenantDataErasureManager::SendResponseToRootSchemeShard() {
         << ", Status# " << static_cast<ui32>(Status)
         << ", RootSchemeshard# " << SchemeShard->ParentDomainId.OwnerId);
 
-    std::unique_ptr<TEvSchemeShard::TEvTenantDataErasureResponse> response(
-        new TEvSchemeShard::TEvTenantDataErasureResponse(SchemeShard->ParentDomainId, Generation, TEvSchemeShard::TEvTenantDataErasureResponse::EStatus::COMPLETED));
-
-    const ui64 rootSchemeshard = SchemeShard->ParentDomainId.OwnerId;
-    SchemeShard->PipeClientCache->Send(
-        ctx,
-        ui64(rootSchemeshard),
-        response.release());
+    NKikimr::NSchemeShard::SendResponseToRootSchemeShard(SchemeShard, ctx);
 }
 
 
@@ -493,7 +491,7 @@ struct TSchemeShard::TTxRunTenantDataErasure : public TSchemeShard::TRwTxBase {
             dataErasureManager->ClearWaitingDataErasureRequests(db);
             dataErasureManager->Run(db);
         }
-        if (Self->DataErasureManager->GetGeneration() == record.GetGeneration() && Self->DataErasureManager->GetStatus() == TDataErasureManager::EStatus::COMPLETED) {
+        if (Self->DataErasureManager->GetGeneration() == record.GetGeneration() && Self->DataErasureManager->GetStatus() == EDataErasureStatus::COMPLETED) {
             NeedResponseComplete = true;
         }
     }
@@ -504,14 +502,7 @@ struct TSchemeShard::TTxRunTenantDataErasure : public TSchemeShard::TRwTxBase {
             << ", NeedResponseComplete# " << (NeedResponseComplete ? "true" : "false"));
 
         if (NeedResponseComplete) {
-            std::unique_ptr<TEvSchemeShard::TEvTenantDataErasureResponse> response(
-                new TEvSchemeShard::TEvTenantDataErasureResponse(Self->ParentDomainId, Self->DataErasureManager->GetGeneration(), TEvSchemeShard::TEvTenantDataErasureResponse::EStatus::COMPLETED));
-
-            const ui64 rootSchemeshard = Self->ParentDomainId.OwnerId;
-            Self->PipeClientCache->Send(
-                ctx,
-                ui64(rootSchemeshard),
-                response.release());
+            NKikimr::NSchemeShard::SendResponseToRootSchemeShard(Self, ctx);
         }
     }
 };
@@ -546,7 +537,7 @@ struct TSchemeShard::TTxCompleteDataErasureShard : public TSchemeShard::TRwTxBas
         }
         NIceDb::TNiceDb db(txc.DB);
         manager->OnDone(TTabletId(record.GetTabletId()), db);
-        if (Self->DataErasureManager->GetStatus() == TDataErasureManager::EStatus::COMPLETED) {
+        if (Self->DataErasureManager->GetStatus() == EDataErasureStatus::COMPLETED) {
             NeedResponseComplete = true;
         }
     }
@@ -557,14 +548,7 @@ struct TSchemeShard::TTxCompleteDataErasureShard : public TSchemeShard::TRwTxBas
             << ", NeedResponseComplete# " << (NeedResponseComplete ? "true" : "false"));
 
         if (NeedResponseComplete) {
-            std::unique_ptr<TEvSchemeShard::TEvTenantDataErasureResponse> response(
-                new TEvSchemeShard::TEvTenantDataErasureResponse(Self->ParentDomainId, Self->DataErasureManager->GetGeneration(), TEvSchemeShard::TEvTenantDataErasureResponse::EStatus::COMPLETED));
-
-            const ui64 rootSchemeshard = Self->ParentDomainId.OwnerId;
-            Self->PipeClientCache->Send(
-                ctx,
-                ui64(rootSchemeshard),
-                response.release());
+            NKikimr::NSchemeShard::SendResponseToRootSchemeShard(Self, ctx);
         }
     }
 };
@@ -590,7 +574,7 @@ struct TSchemeShard::TTxAddEntryToDataErasure : public TSchemeShard::TRwTxBase {
 
         NIceDb::TNiceDb db(txc.DB);
         Self->DataErasureManager->HandleNewPartitioning(DataErasureShards, db);
-        if (Self->DataErasureManager->GetStatus() == TDataErasureManager::EStatus::COMPLETED) {
+        if (Self->DataErasureManager->GetStatus() == EDataErasureStatus::COMPLETED) {
             if (Self->DataErasureManager->IsRunning()) {
                 NeedResponseComplete = true;
             }
@@ -601,14 +585,7 @@ struct TSchemeShard::TTxAddEntryToDataErasure : public TSchemeShard::TRwTxBase {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TTxAddEntryToDataErasure Complete at schemestard: " << Self->TabletID());
         if (NeedResponseComplete) {
-            std::unique_ptr<TEvSchemeShard::TEvTenantDataErasureResponse> response(
-                new TEvSchemeShard::TEvTenantDataErasureResponse(Self->ParentDomainId, Self->DataErasureManager->GetGeneration(), TEvSchemeShard::TEvTenantDataErasureResponse::EStatus::COMPLETED));
-
-            const ui64 rootSchemeshard = Self->ParentDomainId.OwnerId;
-            Self->PipeClientCache->Send(
-                ctx,
-                ui64(rootSchemeshard),
-                response.release());
+            NKikimr::NSchemeShard::SendResponseToRootSchemeShard(Self, ctx);
         }
     }
 };
@@ -635,11 +612,11 @@ struct TSchemeShard::TTxCancelDataErasureShards : public TSchemeShard::TRwTxBase
         NIceDb::TNiceDb db(txc.DB);
         for (const auto& shard : DataErasureShards) {
             if (Self->DataErasureManager->Remove(shard)) {
-                db.Table<Schema::WaitingDataErasureShards>().Key(shard.GetOwnerId(), shard.GetLocalId()).Update<Schema::WaitingDataErasureShards::Status>(static_cast<ui32>(TDataErasureManager::EStatus::COMPLETED));
+                db.Table<Schema::WaitingDataErasureShards>().Key(shard.GetOwnerId(), shard.GetLocalId()).Update<Schema::WaitingDataErasureShards::Status>(EDataErasureStatus::COMPLETED);
             }
         }
-        if (Self->DataErasureManager->GetStatus() == TDataErasureManager::EStatus::COMPLETED) {
-            db.Table<Schema::TenantDataErasureGenerations>().Key(Self->DataErasureManager->GetGeneration()).Update<Schema::TenantDataErasureGenerations::Status>(static_cast<ui32>(Self->DataErasureManager->GetStatus()));
+        if (Self->DataErasureManager->GetStatus() == EDataErasureStatus::COMPLETED) {
+            db.Table<Schema::TenantDataErasureGenerations>().Key(Self->DataErasureManager->GetGeneration()).Update<Schema::TenantDataErasureGenerations::Status>(Self->DataErasureManager->GetStatus());
             if (Self->DataErasureManager->IsRunning()) {
                 NeedResponseComplete = true;
             }
@@ -650,14 +627,7 @@ struct TSchemeShard::TTxCancelDataErasureShards : public TSchemeShard::TRwTxBase
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TTxCancelDataErasureShards Complete at schemestard: " << Self->TabletID());
         if (NeedResponseComplete) {
-            std::unique_ptr<TEvSchemeShard::TEvTenantDataErasureResponse> response(
-                new TEvSchemeShard::TEvTenantDataErasureResponse(Self->ParentDomainId, Self->DataErasureManager->GetGeneration(), TEvSchemeShard::TEvTenantDataErasureResponse::EStatus::COMPLETED));
-
-            const ui64 rootSchemeshard = Self->ParentDomainId.OwnerId;
-            Self->PipeClientCache->Send(
-                ctx,
-                ui64(rootSchemeshard),
-                response.release());
+            NKikimr::NSchemeShard::SendResponseToRootSchemeShard(Self, ctx);
         }
     }
 };

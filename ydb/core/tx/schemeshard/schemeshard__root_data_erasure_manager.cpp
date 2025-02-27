@@ -66,10 +66,10 @@ void TRootDataErasureManager::Start() {
         "[RootDataErasureManager] Start: Status# " << static_cast<ui32>(Status));
 
     Queue->Start();
-    if (Status == EStatus::UNSPECIFIED) {
+    if (Status == EDataErasureStatus::UNSPECIFIED) {
         SchemeShard->MarkFirstRunRootDataErasureManager();
         ScheduleDataErasureWakeup();
-    } else if (Status == EStatus::COMPLETED) {
+    } else if (Status == EDataErasureStatus::COMPLETED) {
         ScheduleDataErasureWakeup();
     } else {
         ClearOperationQueue();
@@ -111,7 +111,7 @@ void TRootDataErasureManager::ClearWaitingDataErasureRequests() {
 }
 
 void TRootDataErasureManager::Run(NIceDb::TNiceDb& db) {
-    Status = EStatus::IN_PROGRESS;
+    Status = EDataErasureStatus::IN_PROGRESS;
     StartTime = AppData(SchemeShard->ActorContext())->TimeProvider->Now();
     for (auto& [pathId, subdomain] : SchemeShard->SubDomains) {
         auto path = TPath::Init(pathId, SchemeShard);
@@ -122,14 +122,14 @@ void TRootDataErasureManager::Run(NIceDb::TNiceDb& db) {
             continue;
         }
         Enqueue(pathId);
-        WaitingDataErasureTenants[pathId] = EStatus::IN_PROGRESS;
-        db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::WaitingDataErasureTenants::Status>(static_cast<ui32>(WaitingDataErasureTenants[pathId]));
+        WaitingDataErasureTenants[pathId] = EDataErasureStatus::IN_PROGRESS;
+        db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::WaitingDataErasureTenants::Status>(WaitingDataErasureTenants[pathId]);
     }
     if (WaitingDataErasureTenants.empty()) {
-        Status = EStatus::IN_PROGRESS_BSC;
+        Status = EDataErasureStatus::IN_PROGRESS_BSC;
     }
     db.Table<Schema::DataErasureGenerations>().Key(Generation).Update<Schema::DataErasureGenerations::Status,
-                                                                     Schema::DataErasureGenerations::StartTime>(static_cast<ui32>(Status), StartTime.MicroSeconds());
+                                                                     Schema::DataErasureGenerations::StartTime>(Status, StartTime.MicroSeconds());
 
     const auto ctx = SchemeShard->ActorContext();
     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -139,13 +139,13 @@ void TRootDataErasureManager::Run(NIceDb::TNiceDb& db) {
 }
 
 void TRootDataErasureManager::Continue() {
-    if (Status == EStatus::IN_PROGRESS) {
+    if (Status == EDataErasureStatus::IN_PROGRESS) {
         for (const auto& [pathId, status] : WaitingDataErasureTenants) {
-            if (status == EStatus::IN_PROGRESS) {
+            if (status == EDataErasureStatus::IN_PROGRESS) {
                 Enqueue(pathId);
             }
         }
-    } else if (Status == EStatus::IN_PROGRESS_BSC) {
+    } else if (Status == EDataErasureStatus::IN_PROGRESS_BSC) {
         SendRequestToBSC();
     }
 
@@ -313,8 +313,8 @@ void TRootDataErasureManager::OnDone(const TPathId& pathId, NIceDb::TNiceDb& db)
     ActivePipes.erase(pathId);
     auto it = WaitingDataErasureTenants.find(pathId);
     if (it != WaitingDataErasureTenants.end()) {
-        it->second = EStatus::COMPLETED;
-        db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::WaitingDataErasureTenants::Status>(static_cast<ui32>(it->second));
+        it->second = EDataErasureStatus::COMPLETED;
+        db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::WaitingDataErasureTenants::Status>(it->second);
     }
 
     SchemeShard->TabletCounters->Cumulative()[COUNTER_DATA_ERASURE_OK].Increment(1);
@@ -322,7 +322,7 @@ void TRootDataErasureManager::OnDone(const TPathId& pathId, NIceDb::TNiceDb& db)
 
     bool isDataErasureCompleted = true;
     for (const auto& [pathId, status] : WaitingDataErasureTenants) {
-        if (status == EStatus::IN_PROGRESS) {
+        if (status == EDataErasureStatus::IN_PROGRESS) {
             isDataErasureCompleted = false;
             break;
         }
@@ -331,8 +331,8 @@ void TRootDataErasureManager::OnDone(const TPathId& pathId, NIceDb::TNiceDb& db)
     if (isDataErasureCompleted) {
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "[RootDataErasureManager] Data erasure in tenants is completed. Send request to BS controller");
-        Status = EStatus::IN_PROGRESS_BSC;
-        db.Table<Schema::DataErasureGenerations>().Key(Generation).Update<Schema::DataErasureGenerations::Status>(static_cast<ui32>(Status));
+        Status = EDataErasureStatus::IN_PROGRESS_BSC;
+        db.Table<Schema::DataErasureGenerations>().Key(Generation).Update<Schema::DataErasureGenerations::Status>(Status);
     }
 }
 
@@ -366,7 +366,7 @@ void TRootDataErasureManager::SendRequestToBSC() {
 }
 
 void TRootDataErasureManager::Complete() {
-    Status = EStatus::COMPLETED;
+    Status = EDataErasureStatus::COMPLETED;
     auto ctx = SchemeShard->ActorContext();
     FinishTime = AppData(ctx)->TimeProvider->Now();
     TDuration dataErasureDuration = FinishTime - StartTime;
@@ -391,27 +391,23 @@ bool TRootDataErasureManager::Restore(NIceDb::TNiceDb& db) {
             return false;
         }
         if (rowset.EndOfSet()) {
-            Status = EStatus::UNSPECIFIED;
+            Status = EDataErasureStatus::UNSPECIFIED;
         } else {
             Generation = 0;
-            Status = EStatus::UNSPECIFIED;
+            Status = EDataErasureStatus::UNSPECIFIED;
             while (!rowset.EndOfSet()) {
                 ui64 generation = rowset.GetValue<Schema::DataErasureGenerations::Generation>();
                 if (generation >= Generation) {
                     Generation = generation;
                     StartTime = TInstant::FromValue(rowset.GetValue<Schema::DataErasureGenerations::StartTime>());
-                    ui32 statusValue = rowset.GetValue<Schema::DataErasureGenerations::Status>();
-                    if (statusValue >= static_cast<ui32>(EStatus::UNSPECIFIED) &&
-                        statusValue <= static_cast<ui32>(EStatus::IN_PROGRESS_BSC)) {
-                            Status = static_cast<EStatus>(statusValue);
-                    }
+                    Status = rowset.GetValue<Schema::DataErasureGenerations::Status>();
                 }
 
                 if (!rowset.Next()) {
                     return false;
                 }
             }
-            if (Status == EStatus::UNSPECIFIED || Status == EStatus::COMPLETED) {
+            if (Status == EDataErasureStatus::UNSPECIFIED || Status == EDataErasureStatus::COMPLETED) {
                 auto ctx = SchemeShard->ActorContext();
                 TDuration interval = AppData(ctx)->TimeProvider->Now() - StartTime;
                 if (interval > DataErasureInterval) {
@@ -439,15 +435,9 @@ bool TRootDataErasureManager::Restore(NIceDb::TNiceDb& db) {
 
             Y_ABORT_UNLESS(SchemeShard->SubDomains.contains(pathId));
 
-            ui32 statusValue = rowset.GetValue<Schema::WaitingDataErasureTenants::Status>();
-            EStatus status = EStatus::COMPLETED;
-            if (statusValue >= static_cast<ui32>(EStatus::UNSPECIFIED) &&
-                statusValue <= static_cast<ui32>(EStatus::IN_PROGRESS_BSC)) {
-                    status = static_cast<EStatus>(statusValue);
-            }
-
+            EDataErasureStatus status = rowset.GetValue<Schema::WaitingDataErasureTenants::Status>();
             WaitingDataErasureTenants[pathId] = status;
-            if (status == EStatus::IN_PROGRESS) {
+            if (status == EDataErasureStatus::IN_PROGRESS) {
                 numberDataErasureTenantsInRunning++;
             }
 
@@ -455,8 +445,8 @@ bool TRootDataErasureManager::Restore(NIceDb::TNiceDb& db) {
                 return false;
             }
         }
-        if (Status == EStatus::IN_PROGRESS && (WaitingDataErasureTenants.empty() || numberDataErasureTenantsInRunning == 0)) {
-            Status = EStatus::IN_PROGRESS_BSC;
+        if (Status == EDataErasureStatus::IN_PROGRESS && (WaitingDataErasureTenants.empty() || numberDataErasureTenantsInRunning == 0)) {
+            Status = EDataErasureStatus::IN_PROGRESS_BSC;
         }
     }
 
@@ -475,10 +465,10 @@ bool TRootDataErasureManager::Remove(const TPathId& pathId) {
     if (it != WaitingDataErasureTenants.end()) {
         Queue->Remove(pathId);
         ActivePipes.erase(pathId);
-        WaitingDataErasureTenants[pathId] = EStatus::COMPLETED;
+        WaitingDataErasureTenants[pathId] = EDataErasureStatus::COMPLETED;
         bool isDataErasureCompleted = true;
         for (const auto& [pathId, status] : WaitingDataErasureTenants) {
-            if (status == EStatus::IN_PROGRESS) {
+            if (status == EDataErasureStatus::IN_PROGRESS) {
                 isDataErasureCompleted = false;
                 break;
             }
@@ -529,9 +519,9 @@ struct TSchemeShard::TTxDataErasureManagerInit : public TSchemeShard::TRwTxBase 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TTxDataErasureManagerInit Execute at schemeshard: " << Self->TabletID());
         NIceDb::TNiceDb db(txc.DB);
-        Self->DataErasureManager->SetStatus(TDataErasureManager::EStatus::COMPLETED);
+        Self->DataErasureManager->SetStatus(EDataErasureStatus::COMPLETED);
         db.Table<Schema::DataErasureGenerations>().Key(0).Update<Schema::DataErasureGenerations::Status,
-                                                               Schema::DataErasureGenerations::StartTime>(static_cast<ui32>(Self->DataErasureManager->GetStatus()), AppData(ctx)->TimeProvider->Now().MicroSeconds());
+                                                               Schema::DataErasureGenerations::StartTime>(Self->DataErasureManager->GetStatus(), AppData(ctx)->TimeProvider->Now().MicroSeconds());
     }
 
     void DoComplete(const TActorContext& ctx) override {
@@ -568,7 +558,7 @@ struct TSchemeShard::TTxRunDataErasure : public TSchemeShard::TRwTxBase {
             dataErasureManager->IncGeneration();
             dataErasureManager->Run(db);
         }
-        if (Self->DataErasureManager->GetStatus() == TDataErasureManager::EStatus::IN_PROGRESS_BSC) {
+        if (Self->DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS_BSC) {
             NeedSendRequestToBSC = true;
         }
     }
@@ -617,7 +607,7 @@ struct TSchemeShard::TTxCompleteDataErasureTenant : public TSchemeShard::TRwTxBa
             record.GetPathId().GetOwnerId(),
             record.GetPathId().GetLocalId());
         manager->OnDone(pathId, db);
-        if (manager->GetStatus() == TDataErasureManager::EStatus::IN_PROGRESS_BSC) {
+        if (manager->GetStatus() == EDataErasureStatus::IN_PROGRESS_BSC) {
             NeedSendRequestToBSC = true;
         }
     }
@@ -663,7 +653,7 @@ struct TSchemeShard::TTxCompleteDataErasureBSC : public TSchemeShard::TRwTxBase 
         if (record.GetCompleted()) {
             LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxCompleteDataErasureBSC: Data shred in BSC is completed");
             manager->Complete();
-            db.Table<Schema::DataErasureGenerations>().Key(Self->DataErasureManager->GetGeneration()).Update<Schema::DataErasureGenerations::Status>(static_cast<ui32>(Self->DataErasureManager->GetStatus()));
+            db.Table<Schema::DataErasureGenerations>().Key(Self->DataErasureManager->GetGeneration()).Update<Schema::DataErasureGenerations::Status>(Self->DataErasureManager->GetStatus());
         } else {
             LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxCompleteDataErasureBSC: Progress data shred in BSC " << record.GetProgress10k());
             NeedScheduleRequestToBSC = true;

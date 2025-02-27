@@ -806,9 +806,17 @@ GetChangefeedAndTopicDescriptions(const char* table, TSession& session, NTopic::
 
     std::vector<TString> topicsStr(vectorSize);
     std::transform(describeChangefeeds.begin(), describeChangefeeds.end(), topicsStr.begin(), [table, &topicClient](TChangefeedDescription changefeedDesc){
-        return TProtoAccessor::GetProto(DescribeTopic(
-            topicClient, TStringBuilder() << table << "/" << changefeedDesc.GetName() << "/streamImpl"
-        )).SerializeAsString();
+        TString protoStr;
+        auto proto = TProtoAccessor::GetProto(
+            DescribeTopic(topicClient, TStringBuilder() << table << "/" << changefeedDesc.GetName())
+        );
+        proto.clear_self();
+        proto.clear_topic_stats();
+
+        google::protobuf::TextFormat::PrintToString(
+            proto, &protoStr
+        );
+        return protoStr;
     });
     
     return {changefeedsStr, topicsStr};
@@ -1608,7 +1616,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             topicClient,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup),
-            {"update_feed"}
+            {"a", "b", "c"}
         );
     }
 
@@ -2249,6 +2257,22 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    void TestChangefeedBackupRestore() {
+        TS3TestEnv testEnv;
+        NTopic::TTopicClient topicClient(testEnv.GetDriver());
+
+        constexpr const char* table = "/Root/table";
+
+        TestChangefeedAndTopicDescriptionsIsPreserved(
+            table,
+            testEnv.GetTableSession(),
+            topicClient,
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" }),
+            {"a", "b", "c"}
+        );
+    }
+
     Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
         using namespace NKikimrSchemeOp;
 
@@ -2273,7 +2297,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                 TestViewBackupRestore();
                 break;
             case EPathTypeCdcStream:
-                break; // https://github.com/ydb-platform/ydb/issues/7054
+                TestChangefeedBackupRestore();
+                break;
             case EPathTypeReplication:
             case EPathTypeTransfer:
                 break; // https://github.com/ydb-platform/ydb/issues/10436

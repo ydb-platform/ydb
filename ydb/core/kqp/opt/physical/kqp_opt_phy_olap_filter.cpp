@@ -540,6 +540,7 @@ TMaybeNode<TCoAtomList> BuildColumnsFromLambda(const TCoLambda& lambda, TExprCon
 }
 #endif
 
+template<bool Empty>
 TMaybeNode<TExprBase> ExistsPushdown(const TCoExists& exists, TExprContext& ctx, TPositionHandle pos)
 {
     const auto columnName = exists.Optional().Cast<TCoMember>().Name();
@@ -547,16 +548,6 @@ TMaybeNode<TExprBase> ExistsPushdown(const TCoExists& exists, TExprContext& ctx,
             .Operator().Value(Empty ? "empty" : "exists", TNodeFlags::Default).Build()
             .Arg(columnName)
             .Done();
-}
-
-TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos)
-TMaybeNode<TExprBase> JsonExistsPushdown(const TCoJsonExists& jsonExists, TExprContext& ctx, TPositionHandle pos)
-{
-    auto columnName = jsonExists.Json().Cast<TCoMember>().Name();
-    return Build<TKqpOlapJsonExists>(ctx, pos)
-        .Column(columnName)
-        .Path(jsonExists.JsonPath().Cast<TCoUtf8>())
-        .Done();
 }
 
 TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos)

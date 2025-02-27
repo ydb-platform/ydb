@@ -983,7 +983,8 @@ void TPartition::Handle(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const TActor
              " Step " << ev->Get()->Step <<
              ", TxId " << ev->Get()->TxId);
 
-    ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvProposePartitionConfig>(ev->Release().Release()), ctx);
+    AddPendingEvent(ev);
+    ProcessPendingEvents(ctx);
 }
 
 template <class T>
@@ -1074,7 +1075,8 @@ void TPartition::Handle(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext
              " Step " << ev->Get()->Step <<
              ", TxId " << ev->Get()->TxId);
 
-    ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxCalcPredicate>(ev->Release().Release()), ctx);
+    AddPendingEvent(ev);
+    ProcessPendingEvents(ctx);
 }
 
 template <>
@@ -1120,7 +1122,8 @@ void TPartition::Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx)
              " Step " << ev->Get()->Step <<
              ", TxId " << ev->Get()->TxId);
 
-    ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxCommit>(ev->Release().Release()), ctx);
+    AddPendingEvent(ev);
+    ProcessPendingEvents(ctx);
 }
 
 template <>
@@ -1157,7 +1160,8 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxRollback> ev, c
 
 void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx)
 {
-    ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxRollback>(ev->Release().Release()), ctx);
+    AddPendingEvent(ev);
+    ProcessPendingEvents(ctx);
 }
 
 template <>
@@ -1201,7 +1205,9 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorCon
     PQ_LOG_D("Handle TEvPQ::TEvGetWriteInfoRequest");
 
     ev->Get()->OriginalPartition = ev->Sender;
-    ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoRequest>(ev->Release().Release()), ctx);
+
+    AddPendingEvent(ev);
+    ProcessPendingEvents(ctx);
 }
 
 void TPartition::WriteInfoResponseHandler(
@@ -1303,7 +1309,9 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorCo
     PQ_LOG_D("Handle TEvPQ::TEvGetWriteInfoResponse");
 
     ev->Get()->SupportivePartition = ev->Sender;
-    ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoResponse>(ev->Release().Release()), ctx);
+
+    AddPendingEvent(ev);
+    ProcessPendingEvents(ctx);
 }
 
 template <>
@@ -1319,7 +1327,9 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorConte
              ", Message " << ev->Get()->Message);
 
     ev->Get()->SupportivePartition = ev->Sender;
-    ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoError>(ev->Release().Release()), ctx);
+
+    AddPendingEvent(ev);
+    ProcessPendingEvents(ctx);
 }
 
 void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, bool isPredicate) {
@@ -3633,7 +3643,8 @@ void TPartition::Handle(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext
 {
     PQ_LOG_D("Handle TEvPQ::TEvDeletePartition");
 
-    ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvDeletePartition>(ev->Release().Release()), ctx);
+    AddPendingEvent(ev);
+    ProcessPendingEvents(ctx);
 }
 
 void TPartition::ScheduleNegativeReplies()

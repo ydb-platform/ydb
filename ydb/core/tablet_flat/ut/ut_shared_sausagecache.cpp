@@ -153,7 +153,6 @@ Y_UNIT_TEST(Limits) {
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
-    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
     bool bTreeIndex = env->GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
     ui32 passiveBytes = bTreeIndex ? 131 : 7772;
 
@@ -181,7 +180,7 @@ Y_UNIT_TEST(Limits) {
     UNIT_ASSERT_VALUES_EQUAL(counters->LoadInFlyBytes->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 3 * 2), static_cast<i64>(1_MB / 3)); // 2 full layers (fresh & staging)
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 8_MB);
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 131);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 0);
 
     env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(100_MB));
@@ -189,7 +188,7 @@ Y_UNIT_TEST(Limits) {
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 3 * 2), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 8_MB);
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 131);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 100_MB);
 
     env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(6_MB));
@@ -197,14 +196,14 @@ Y_UNIT_TEST(Limits) {
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 3 * 2), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 6_MB);
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 131);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 6_MB);
 
     env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(3_MB));
     WaitEvent(env, NMemory::EvConsumerLimit);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(3_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 3_MB);
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 131);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 3_MB);
 
     env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0_MB));
@@ -221,10 +220,6 @@ Y_UNIT_TEST(Limits_Config) {
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
-
-    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
-    bool bTreeIndex = env->GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
-    ui32 passiveBytes = bTreeIndex ? 131 : 7772;
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
@@ -250,28 +245,28 @@ Y_UNIT_TEST(Limits_Config) {
     UNIT_ASSERT_VALUES_EQUAL(counters->LoadInFlyBytes->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 3 * 2), static_cast<i64>(1_MB / 3)); // 2 full layers (fresh & staging)
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 8_MB);
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 131);
     UNIT_ASSERT_VALUES_EQUAL(counters->ConfigLimitBytes->Val(), 8_MB);
 
     SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU, 100_MB);
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 3 * 2), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 8_MB);
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 131);
     UNIT_ASSERT_VALUES_EQUAL(counters->ConfigLimitBytes->Val(), 100_MB);
 
     SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU, 2_MB);
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 3 * 2), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 2_MB);
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 131);
     UNIT_ASSERT_VALUES_EQUAL(counters->ConfigLimitBytes->Val(), 2_MB);
 
     env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(1_MB));
     WaitEvent(env, NMemory::EvConsumerLimit);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(1_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 1_MB);
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 131);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 1_MB);
     UNIT_ASSERT_VALUES_EQUAL(counters->ConfigLimitBytes->Val(), 2_MB);
 
@@ -279,7 +274,7 @@ Y_UNIT_TEST(Limits_Config) {
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(1_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 0_MB);
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 131);
     UNIT_ASSERT_VALUES_EQUAL(counters->ConfigLimitBytes->Val(), 0_MB);
 }
 
@@ -290,11 +285,11 @@ Y_UNIT_TEST(ThreeLeveledLRU) {
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
     SetupSharedCache(env);
-    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -392,11 +387,11 @@ Y_UNIT_TEST(S3FIFO) {
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
     SetupSharedCache(env, NKikimrSharedCache::S3FIFO);
-    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -494,11 +489,11 @@ Y_UNIT_TEST(ClockPro) {
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
     SetupSharedCache(env, NKikimrSharedCache::ClockPro);
-    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -610,11 +605,11 @@ Y_UNIT_TEST(ReplacementPolicySwitch) {
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
     SetupSharedCache(env);
-    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {

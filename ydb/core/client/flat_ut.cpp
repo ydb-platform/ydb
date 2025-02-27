@@ -2576,14 +2576,14 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.Ls("/dc-1/Dir/TableOld");
     }
 
-    Y_UNIT_TEST(AutoSplitBySize) {
+    Y_UNIT_TEST(AutoSplitBySize_BTreeIndex) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableLocalDBBtreeIndex(true);        
         TServerSettings serverSettings(port);
         serverSettings.SetFeatureFlags(featureFlags);
-        TServer cleverServer = TServer(serverSettings);        
+        TServer cleverServer = TServer(serverSettings);
         DisableSplitMergePartCountLimit(cleverServer);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
@@ -2685,7 +2685,124 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             fnWriteRow(Sprintf("C-%d", i), bigValue);
         }
 
+        // Check that another split actually happened
+        for (int retry = 0; retry < 30 && partitions.size() == 2; ++retry) {
+            partitions = annoyingClient.GetTablePartitions("/dc-1/Dir/T1");
+            Sleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 3);
+    }
+
+    Y_UNIT_TEST(AutoSplitBySize_FlatIndex) {
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableLocalDBBtreeIndex(false);        
+        TServerSettings serverSettings(port);
+        serverSettings.SetFeatureFlags(featureFlags);
+        TServer cleverServer = TServer(serverSettings);
+        DisableSplitMergePartCountLimit(cleverServer);
+
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
+
+        TFlatMsgBusClient annoyingClient(port);
+
+        const char * tableDescr = R"___(
+                Name: "T1"
+                Columns { Name: "Key"    Type: "String"}
+                Columns { Name: "Value"  Type: "Utf8"}
+                KeyColumnNames: ["Key"]
+
+                PartitionConfig {
+                    PartitioningPolicy {
+                        SizeToSplit: 45000000
+                    }
+                    CompactionPolicy {
+                      InMemSizeToSnapshot: 100000
+                      InMemStepsToSnapshot: 1
+                      InMemForceStepsToSnapshot: 2
+                      InMemForceSizeToSnapshot: 200000
+                      InMemCompactionBrokerQueue: 0
+                      ReadAheadHiThreshold: 200000
+                      ReadAheadLoThreshold: 100000
+                      MinDataPageSize: 7168
+                      SnapBrokerQueue: 0
+                        Generation {
+                            GenerationId: 0
+                            SizeToCompact: 10000
+                            CountToCompact: 2
+                            ForceCountToCompact: 2
+                            ForceSizeToCompact: 20000
+                            CompactionBrokerQueue: 1
+                            KeepInCache: true
+                        }
+                    }
+                }
+            )___";
+
+        annoyingClient.InitRoot();
+        annoyingClient.MkDir("/dc-1", "Dir");
+        annoyingClient.CreateTable("/dc-1/Dir", tableDescr);
+
+        TVector<ui64> partitions = annoyingClient.GetTablePartitions("/dc-1/Dir/T1");
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+
+        // Force stats reporting without delays
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+
+        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+//        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+//        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
+
+        // Write rows to trigger split
+        auto fnWriteRow = [&](TString key, TString value) {
+            Cerr << key << Endl;
+            TString insertRowQuery = R"___(
+                    (
+                    (let key '('('Key (String '%s))))
+                    (let value '('('Value (Utf8 '%s))))
+                    (let ret_ (AsList
+                        (UpdateRow '/dc-1/Dir/%s key value)
+                    ))
+                    (return ret_)
+                    )
+                    )___";
+
+            int retryCnt = 20;
+            while (retryCnt--) {
+                TFlatMsgBusClient::TFlatQueryOptions opts;
+                NKikimrClient::TResponse response;
+                annoyingClient.FlatQueryRaw(cleverServer.GetRuntime(), Sprintf(insertRowQuery.data(), key.data(), value.data(), "T1"), opts, response);
+                ui32 responseStatus = response.GetStatus();
+                if (responseStatus == NMsgBusProxy::MSTATUS_REJECTED) {
+                    Sleep(TDuration::Seconds(1));
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(responseStatus, NMsgBusProxy::MSTATUS_OK);
+                    break;
+                }
+            }
+        };
+
+        TString bigValue(6*1024*1024, 'a');
+
+        for (int i = 0; i < 4; ++i) {
+            fnWriteRow(Sprintf("A-%d", i), bigValue);
+            fnWriteRow(Sprintf("B-%d", i), bigValue);
+        }
+
         // Check that split actually happened
+        for (int retry = 0; retry < 30 && partitions.size() == 1; ++retry) {
+            partitions = annoyingClient.GetTablePartitions("/dc-1/Dir/T1");
+            Sleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 2);
+
+        // Write some more rows to trigger another split
+        for (int i = 0; i < 6; ++i) {
+            fnWriteRow(Sprintf("C-%d", i), bigValue);
+        }
+
+        // Check that another split actually happened
         for (int retry = 0; retry < 30 && partitions.size() == 2; ++retry) {
             partitions = annoyingClient.GetTablePartitions("/dc-1/Dir/T1");
             Sleep(TDuration::Seconds(1));

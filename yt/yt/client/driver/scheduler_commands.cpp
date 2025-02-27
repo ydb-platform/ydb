@@ -944,6 +944,7 @@ void TGetOperationCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& {
             return command->Options.IncludeRuntime;
         })
+        // COMPAT(ignat): remove this alias.
         .Alias("include_scheduler")
         .Optional(/*init*/ false);
 

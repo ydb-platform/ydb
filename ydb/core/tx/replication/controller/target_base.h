@@ -71,6 +71,8 @@ public:
     void Progress(const TActorContext& ctx) override;
     void Shutdown(const TActorContext& ctx) override;
 
+    void UpdateConfig(const NKikimrReplication::TReplicationConfig&) override;
+
 private:
     TReplication* const Replication;
     const ui64 Id;

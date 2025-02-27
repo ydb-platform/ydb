@@ -119,9 +119,6 @@ TTargetTable::TTargetTable(TReplication* replication, ui64 id, const IConfig::TP
 {
 }
 
-void TTargetTable::UpdateConfig(const NKikimrReplication::TReplicationConfig&) {
-}
-
 TString TTargetTable::BuildStreamPath() const {
     return CanonizePath(ChildPath(SplitPath(GetSrcPath()), GetStreamName()));
 }
@@ -133,9 +130,6 @@ TString TTargetTableBase::GetStreamPath() const {
 TTargetIndexTable::TTargetIndexTable(TReplication* replication, ui64 id, const IConfig::TPtr& config)
     : TTargetTableBase(replication, ETargetKind::IndexTable, id, config)
 {
-}
-
-void TTargetIndexTable::UpdateConfig(const NKikimrReplication::TReplicationConfig&) {
 }
 
 TString TTargetIndexTable::BuildStreamPath() const {

@@ -228,7 +228,7 @@ private:
     NKikimrReplication::TReplicationConfig Config;
     EState State = EState::Ready;
     TString Issue;
-    EState PurposeState = EState::Ready;
+    EState DesiredState = EState::Ready;
     ui64 NextTargetId = 1;
     THashMap<ui64, TTarget> Targets;
     THashSet<ui64> PendingAlterTargets;
@@ -330,12 +330,12 @@ const TString& TReplication::GetIssue() const {
     return Impl->Issue;
 }
 
-TReplication::EState TReplication::GetPurposeState() const {
-    return Impl->PurposeState;
+TReplication::EState TReplication::GetDesiredState() const {
+    return Impl->DesiredState;
 }
 
-void TReplication::SetPurposeState(EState state) {
-    Impl->PurposeState = state;
+void TReplication::SetDesiredState(EState state) {
+    Impl->DesiredState = state;
 }
 
 void TReplication::SetNextTargetId(ui64 value) {

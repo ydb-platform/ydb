@@ -49,11 +49,11 @@ public:
             alter = oldLambda != newLambda;
         }
 
-        auto purposeState = Replication->GetState();
+        auto desiredState = Replication->GetState();
         if (record.HasSwitchState()) {
             switch (record.GetSwitchState().GetStateCase()) {
                 case NKikimrReplication::TReplicationState::kDone:
-                    purposeState = TReplication::EState::Done;
+                    desiredState = TReplication::EState::Done;
                     alter = true;
                     break;
                 default:
@@ -62,14 +62,14 @@ public:
         }
 
         if (alter) {
-            Replication->SetPurposeState(purposeState);
+            Replication->SetDesiredState(desiredState);
         }
 
         Replication->SetConfig(std::move(*record.MutableConfig()));
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
             NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString()),
-            NIceDb::TUpdate<Schema::Replications::PurposeState>(purposeState)
+            NIceDb::TUpdate<Schema::Replications::DesiredState>(desiredState)
         );
 
         if (!alter) {

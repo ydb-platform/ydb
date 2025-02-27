@@ -47,7 +47,7 @@ public:
         }
 
         if (Ev->Get()->IsSuccess()) {
-            target->SetDstState(NextState(Replication->GetPurposeState()));
+            target->SetDstState(NextState(Replication->GetDesiredState()));
             target->UpdateConfig(Replication->GetConfig());
 
             CLOG_N(ctx, "Target dst altered"
@@ -57,7 +57,7 @@ public:
             if (Replication->CheckAlterDone()) {
                 CLOG_N(ctx, "Replication altered"
                     << ": rid# " << rid);
-                Replication->SetState(Replication->GetPurposeState());
+                Replication->SetState(Replication->GetDesiredState());
             }
         } else {
             target->SetDstState(TReplication::EDstState::Error);

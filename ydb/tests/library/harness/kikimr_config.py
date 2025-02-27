@@ -174,6 +174,7 @@ class KikimrConfigGenerator(object):
 
         self.use_log_files = use_log_files
         self.use_distconf = use_distconf
+        self.simple_config = simple_config
         self.suppress_version_check = suppress_version_check
         self._pdisk_store_path = pdisk_store_path
         self.static_pdisk_size = static_pdisk_size
@@ -256,8 +257,6 @@ class KikimrConfigGenerator(object):
         if self.use_distconf:
             if "security_config" in self.yaml_config["domains_config"]:
                 self.yaml_config["security_config"] = self.yaml_config["domains_config"]["security_config"]
-            self.yaml_config.pop("domains_config")
-            self.yaml_config.pop("channel_profile_config")
             self.yaml_config["default_disk_type"] = "ROT"
             security_config_root = self.yaml_config
 
@@ -489,6 +488,22 @@ class KikimrConfigGenerator(object):
             self.yaml_config["kafka_proxy_config"] = kafka_proxy_config
 
         self.full_config = dict()
+        if self.use_distconf:
+            self.yaml_config.pop("domains_config")
+            self.yaml_config.pop("channel_profile_config")
+            self.yaml_config.pop("system_tablets")
+            self.yaml_config.pop("security_config")
+        if self.simple_config:
+            self.yaml_config.pop("feature_flags")
+            self.yaml_config.pop("federated_query_config")
+            self.yaml_config.pop("grpc_config")
+            self.yaml_config.pop("pqconfig")
+            self.yaml_config.pop("pqcluster_discovery_config")
+            self.yaml_config.pop("net_classifier_config")
+            self.yaml_config.pop("sqs_config")
+            self.yaml_config.pop("table_service_config")
+            self.yaml_config.pop("kqpconfig")
+ 
         if metadata_section:
             self.full_config["metadata"] = metadata_section
             self.full_config["config"] = self.yaml_config

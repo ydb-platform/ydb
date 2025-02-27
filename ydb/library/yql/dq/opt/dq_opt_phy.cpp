@@ -2726,12 +2726,9 @@ TExprBase DqBuildJoin(
     bool shuffleMapJoin, 
     bool useGraceCoreForMap,
     bool shuffleElimination,
-    bool shuffleEliminationWithMap
-);
-
-TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationContext& optCtx,
-                      const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage, EHashJoinMode hashJoin, bool shuffleMapJoin, bool useGraceCoreForMap, bool buildCollectStage)
-{
+    bool shuffleEliminationWithMap,
+    bool buildCollectStage
+) {
     if (!node.Maybe<TDqJoin>()) {
         return node;
     }

@@ -132,7 +132,7 @@ TCompletionChunkReadPart::TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<
     TCompletionAction::CanBeExecutedInAdditionalCompletionThread = true;
 
     TBufferWithGaps *commonBuffer = CumulativeCompletion->GetCommonBuffer();
-    Destination = commonBuffer->RawDataPtr(CommonBufferOffset, PayloadReadSize);
+    Destination = commonBuffer->RawDataPtr(CommonBufferOffset, RawReadSize);
 
     if (!IsTheLastPart) {
         CumulativeCompletion->AddPart();
@@ -159,122 +159,127 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
         return;
     }
 
-    const TDiskFormat &format = PDisk->Format;
+    if (Read->ChunkEncrypted) {
+        const TDiskFormat &format = PDisk->Format;
 
-    ui64 firstSector;
-    ui64 lastSector;
-    ui64 sectorOffset;
-    bool isOk = ParseSectorOffset(PDisk->Format, actorSystem, PDisk->PCtx->PDiskId,
-            Read->Offset + CommonBufferOffset, PayloadReadSize, firstSector, lastSector, sectorOffset,
-            PDisk->PCtx->PDiskLogPrefix);
-    Y_VERIFY(isOk);
+        ui64 firstSector;
+        ui64 lastSector;
+        ui64 sectorOffset;
+        bool isOk = ParseSectorOffset(PDisk->Format, actorSystem, PDisk->PCtx->PDiskId,
+                Read->Offset + CommonBufferOffset, PayloadReadSize, firstSector, lastSector, sectorOffset,
+                PDisk->PCtx->PDiskLogPrefix);
+        Y_VERIFY(isOk);
 
+        ui8* source = Buffer->Data();
 
-    ui8* source = Buffer->Data();
+        TPDiskStreamCypher cypher(PDisk->Cfg->EnableSectorEncryption);
+        cypher.SetKey(format.ChunkKey);
+        ui64 sectorIdx = firstSector;
 
-    TPDiskStreamCypher cypher(PDisk->Cfg->EnableSectorEncryption);
-    cypher.SetKey(format.ChunkKey);
-    ui64 sectorIdx = firstSector;
-
-    ui32 sectorPayloadSize;
-    if (CommonBufferOffset == 0) { // First part
-        sectorPayloadSize = Min(format.SectorPayloadSize() - sectorOffset, PayloadReadSize);
-    } else { // Middle and last parts
-        sectorPayloadSize = Min(format.SectorPayloadSize(), PayloadReadSize);
-        sectorOffset = 0;
-    }
-
-    ui32 beginBadUserOffset = 0xffffffff;
-    ui32 endBadUserOffset = 0xffffffff;
-    ui32 userSectorSize = format.SectorPayloadSize();
-    while (PayloadReadSize > 0) {
-        ui32 beginUserOffset = sectorIdx * userSectorSize;
-
-        TSectorRestorator restorator(false, 1, false,
-            format, PDisk->PCtx.get(), &PDisk->Mon, PDisk->BufferPool.Get());
-        ui64 lastNonce = Min((ui64)0, ChunkNonce - 1);
-        restorator.Restore(source, format.Offset(Read->ChunkIdx, sectorIdx), format.MagicDataChunk, lastNonce,
-                Read->Owner);
-
-        const ui32 sectorCount = 1;
-        if (restorator.GoodSectorCount != sectorCount) {
-            if (beginBadUserOffset == 0xffffffff) {
-                beginBadUserOffset = beginUserOffset;
-            }
-            endBadUserOffset = beginUserOffset + userSectorSize;
-        } else {
-            if (beginBadUserOffset != 0xffffffff) {
-                LOG_INFO_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PCtx->PDiskId
-                        << " ReqId# " << Read->ReqId
-                        << " Can't read chunk chunkIdx# " << Read->ChunkIdx
-                        << " for owner# " << Read->Owner
-                        << " beginBadUserOffet# " << beginBadUserOffset << " endBadUserOffset# " << endBadUserOffset
-                        << " due to multiple sectors with incorrect hashes. Marker# BPC001");
-                CumulativeCompletion->AddGap(beginBadUserOffset, endBadUserOffset);
-                beginBadUserOffset = 0xffffffff;
-                endBadUserOffset = 0xffffffff;
-            }
+        ui32 sectorPayloadSize;
+        if (CommonBufferOffset == 0) { // First part
+            sectorPayloadSize = Min(format.SectorPayloadSize() - sectorOffset, PayloadReadSize);
+        } else { // Middle and last parts
+            sectorPayloadSize = Min(format.SectorPayloadSize(), PayloadReadSize);
+            sectorOffset = 0;
         }
 
-        Y_VERIFY(sectorIdx >= firstSector);
+        ui32 beginBadUserOffset = 0xffffffff;
+        ui32 endBadUserOffset = 0xffffffff;
+        ui32 userSectorSize = format.SectorPayloadSize();
+        while (PayloadReadSize > 0) {
+            ui32 beginUserOffset = sectorIdx * userSectorSize;
 
-        // Decrypt data
-        if (beginBadUserOffset != 0xffffffff) {
-            memset(Destination, 0, sectorPayloadSize);
-        } else {
-            TDataSectorFooter *footer = (TDataSectorFooter*) (source + format.SectorSize - sizeof(TDataSectorFooter));
-            if (footer->Nonce != ChunkNonce + sectorIdx) {
-                ui32 userOffset = sectorIdx * userSectorSize;
-                LOG_INFO_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PCtx->PDiskId
-                        << " ReqId# " << Read->ReqId
-                        << " Can't read chunk chunkIdx# " << Read->ChunkIdx
-                        << " for owner# " << Read->Owner
-                        << " nonce mismatch: expected# " << (ui64)(ChunkNonce + sectorIdx)
-                        << ", on-disk# " << (ui64)footer->Nonce
-                        << " for userOffset# " << userOffset
-                        << " ! Marker# BPC002");
+            TSectorRestorator restorator(false, 1, false,
+                format, PDisk->PCtx.get(), &PDisk->Mon, PDisk->BufferPool.Get());
+            ui64 lastNonce = Min((ui64)0, ChunkNonce - 1);
+            restorator.Restore(source, format.Offset(Read->ChunkIdx, sectorIdx), format.MagicDataChunk, lastNonce,
+                    Read->Owner);
+
+            const ui32 sectorCount = 1;
+            if (restorator.GoodSectorCount != sectorCount) {
                 if (beginBadUserOffset == 0xffffffff) {
-                    beginBadUserOffset = userOffset;
+                    beginBadUserOffset = beginUserOffset;
                 }
                 endBadUserOffset = beginUserOffset + userSectorSize;
-                memset(Destination, 0, sectorPayloadSize);
             } else {
-                cypher.StartMessage(footer->Nonce);
-                if (sectorOffset > 0 || intptr_t(Destination) % 32) {
-                    cypher.InplaceEncrypt(source, sectorOffset + sectorPayloadSize);
-                    if (CommonBufferOffset == 0 || !IsTheLastPart) {
-                        memcpy(Destination, source + sectorOffset, sectorPayloadSize);
-                    } else {
-                        memcpy(Destination, source, sectorPayloadSize);
-                    }
-                } else {
-                    cypher.Encrypt(Destination, source, sectorPayloadSize);
-                }
-                if (CanarySize > 0) {
-                    ui32 canaryPosition = sectorOffset + sectorPayloadSize;
-                    ui32 sizeToEncrypt = format.SectorSize - canaryPosition - ui32(sizeof(TDataSectorFooter));
-                    cypher.InplaceEncrypt(source + canaryPosition, sizeToEncrypt);
-                    PDisk->CheckLogCanary(source, Read->ChunkIdx, sectorIdx);
+                if (beginBadUserOffset != 0xffffffff) {
+                    LOG_INFO_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PCtx->PDiskId
+                            << " ReqId# " << Read->ReqId
+                            << " Can't read chunk chunkIdx# " << Read->ChunkIdx
+                            << " for owner# " << Read->Owner
+                            << " beginBadUserOffet# " << beginBadUserOffset << " endBadUserOffset# " << endBadUserOffset
+                            << " due to multiple sectors with incorrect hashes. Marker# BPC001");
+                    CumulativeCompletion->AddGap(beginBadUserOffset, endBadUserOffset);
+                    beginBadUserOffset = 0xffffffff;
+                    endBadUserOffset = 0xffffffff;
                 }
             }
+
+            Y_VERIFY(sectorIdx >= firstSector);
+
+            // Decrypt data
+            if (beginBadUserOffset != 0xffffffff) {
+                memset(Destination, 0, sectorPayloadSize);
+            } else {
+                TDataSectorFooter *footer = (TDataSectorFooter*) (source + format.SectorSize - sizeof(TDataSectorFooter));
+                if (footer->Nonce != ChunkNonce + sectorIdx) {
+                    ui32 userOffset = sectorIdx * userSectorSize;
+                    LOG_INFO_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PCtx->PDiskId
+                            << " ReqId# " << Read->ReqId
+                            << " Can't read chunk chunkIdx# " << Read->ChunkIdx
+                            << " for owner# " << Read->Owner
+                            << " nonce mismatch: expected# " << (ui64)(ChunkNonce + sectorIdx)
+                            << ", on-disk# " << (ui64)footer->Nonce
+                            << " for userOffset# " << userOffset
+                            << " ! Marker# BPC002");
+                    if (beginBadUserOffset == 0xffffffff) {
+                        beginBadUserOffset = userOffset;
+                    }
+                    endBadUserOffset = beginUserOffset + userSectorSize;
+                    memset(Destination, 0, sectorPayloadSize);
+                } else {
+                    cypher.StartMessage(footer->Nonce);
+                    if (sectorOffset > 0 || intptr_t(Destination) % 32) {
+                        cypher.InplaceEncrypt(source, sectorOffset + sectorPayloadSize);
+                        if (CommonBufferOffset == 0 || !IsTheLastPart) {
+                            memcpy(Destination, source + sectorOffset, sectorPayloadSize);
+                        } else {
+                            memcpy(Destination, source, sectorPayloadSize);
+                        }
+                    } else {
+                        cypher.Encrypt(Destination, source, sectorPayloadSize);
+                    }
+                    if (CanarySize > 0) {
+                        ui32 canaryPosition = sectorOffset + sectorPayloadSize;
+                        ui32 sizeToEncrypt = format.SectorSize - canaryPosition - ui32(sizeof(TDataSectorFooter));
+                        cypher.InplaceEncrypt(source + canaryPosition, sizeToEncrypt);
+                        PDisk->CheckLogCanary(source, Read->ChunkIdx, sectorIdx);
+                    }
+                }
+            }
+            Destination += sectorPayloadSize;
+            source += format.SectorSize;
+            PayloadReadSize -= sectorPayloadSize;
+            sectorPayloadSize = Min(format.SectorPayloadSize(), PayloadReadSize);
+            sectorOffset = 0;
+            ++sectorIdx;
         }
-        Destination += sectorPayloadSize;
-        source += format.SectorSize;
-        PayloadReadSize -= sectorPayloadSize;
-        sectorPayloadSize = Min(format.SectorPayloadSize(), PayloadReadSize);
-        sectorOffset = 0;
-        ++sectorIdx;
-    }
-    if (beginBadUserOffset != 0xffffffff) {
-        LOG_INFO_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PCtx->PDiskId
-            << " ReqId# " << Read->ReqId
-            << " Can't read chunk chunkIdx# " << Read->ChunkIdx
-            << " for owner# " << Read->Owner
-            << " beginBadUserOffet# " << beginBadUserOffset << " endBadUserOffset# " << endBadUserOffset
-            << " due to multiple sectors with incorrect hashes/nonces. Marker# BPC003");
-        CumulativeCompletion->AddGap(beginBadUserOffset, endBadUserOffset);
-        beginBadUserOffset = 0xffffffff;
-        endBadUserOffset = 0xffffffff;
+        if (beginBadUserOffset != 0xffffffff) {
+            LOG_INFO_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PCtx->PDiskId
+                << " ReqId# " << Read->ReqId
+                << " Can't read chunk chunkIdx# " << Read->ChunkIdx
+                << " for owner# " << Read->Owner
+                << " beginBadUserOffet# " << beginBadUserOffset << " endBadUserOffset# " << endBadUserOffset
+                << " due to multiple sectors with incorrect hashes/nonces. Marker# BPC003");
+            CumulativeCompletion->AddGap(beginBadUserOffset, endBadUserOffset);
+            beginBadUserOffset = 0xffffffff;
+            endBadUserOffset = 0xffffffff;
+        }
+    } else { // not encrypted
+        // do nothing?
+        //Cerr << "ChunkRead buffer# " << (void*)Destination << Endl;
+        // Cerr << __PRETTY_FUNCTION__ << Endl << TString((char*)Destination, RawReadSize).Quote() << Endl;
     }
 
     double deviceTimeMs = HPMilliSecondsFloat(GetTime - SubmitTime);

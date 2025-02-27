@@ -2715,7 +2715,6 @@ TMaybeNode<TDqJoin> DqFlipJoin(const TDqJoin& join, TExprContext& ctx) {
 }
 
 
-<<<<<<< HEAD
 TExprBase DqBuildJoin(
     const TExprBase& node, 
     TExprContext& ctx, 

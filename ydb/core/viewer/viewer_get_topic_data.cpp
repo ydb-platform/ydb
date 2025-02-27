@@ -31,8 +31,8 @@ private:
             if (data.size() > MaxMessageSize) {
                 data.resize(MaxMessageSize);
             }
-            jsonRecord.InsertValue("Message", std::move(data));
             totalSize += data.size();
+            jsonRecord.InsertValue("Message", std::move(data));
         };
 
         for (auto& r : results) {

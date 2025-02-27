@@ -12,6 +12,7 @@ from ydb.tests.library.clients.kikimr_config_client import ConfigClient
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+from ydb.tests.library.harness.util import LogLevels
 
 
 logger = logging.getLogger(__name__)
@@ -29,10 +30,13 @@ def get_config_version(yaml_config):
 
 class DistConfKiKiMRTest(object):
     erasure = Erasure.BLOCK_4_2
-    metadata_section = None
     use_config_store = False
     separate_node_configs = False
-
+    metadata_section = {
+        "kind": "MainConfig",
+        "version": 0,
+        "cluster": "",
+    }
 
     @classmethod
     def setup_class(cls):
@@ -44,7 +48,9 @@ class DistConfKiKiMRTest(object):
                                              metadata_section=cls.metadata_section,
                                              separate_node_configs=cls.separate_node_configs,
                                              use_distconf=True,
+                                             simple_config=True,
                                              extra_grpc_services=['config'],
+                                             additional_log_configs={'BS_NODE': LogLevels.DEBUG},
                                              )
         cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()

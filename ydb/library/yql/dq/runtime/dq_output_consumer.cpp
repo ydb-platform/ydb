@@ -168,14 +168,14 @@ struct TColumnShardHashV1 {
             case NYql::NProto::Interval64:
             case NYql::NProto::Datetime64:
             case NYql::NProto::Timestamp64: {
-                auto value = uv.template Get<int64_t>(); 
+                auto value = uv.template Get<i64>(); 
                 HashCalcer.Update(reinterpret_cast<const ui8*>(&value), sizeof(value)); 
                 break; 
             }
             case NYql::NProto::Uint64: 
             case NYql::NProto::Timestamp:
             case NYql::NProto::TzTimestamp: {
-                auto value = uv.template Get<uint64_t>(); 
+                auto value = uv.template Get<ui64>(); 
                 HashCalcer.Update(reinterpret_cast<const ui8*>(&value), sizeof(value));
                 break;  
             }

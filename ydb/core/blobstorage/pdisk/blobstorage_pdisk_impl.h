@@ -49,9 +49,9 @@ class TCompletionEventSender;
 class TPDisk : public IPDisk {
 public:
 #ifdef ENABLE_PDISK_SHRED
-    static constexpr bool IS_SHRED_ENABLED = true; 
+    static constexpr bool IS_SHRED_ENABLED = true;
 #else
-    static constexpr bool IS_SHRED_ENABLED = false; 
+    static constexpr bool IS_SHRED_ENABLED = false;
 #endif
     std::shared_ptr<TPDiskCtx> PCtx;
     // ui32 PDiskId; // deprecated, moved to PCtx
@@ -268,8 +268,6 @@ public:
     void ObliterateCommonLogSectorSet();
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Generic format-related calculations
-    ui32 GetUserAccessibleChunkSize() const;
-    ui32 GetChunkAppendBlockSize() const;
     ui32 SystemChunkSize(const TDiskFormat& format, ui32 userAccessibleChunkSizeBytes, ui32 sectorSizeBytes) const;
     ui64 UsableSectorsPerLogChunk() const;
     void CheckLogCanary(ui8* sector, ui32 chunkIdx = 0, ui64 sectorIdx = 0) const;

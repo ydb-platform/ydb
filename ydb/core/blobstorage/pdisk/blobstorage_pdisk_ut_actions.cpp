@@ -484,14 +484,16 @@ void TTestChunkWrite20Read02::TestFSM(const TActorContext &ctx) {
     case 80:
     {
         TEST_RESPONSE(EvChunkReadResult, OK);
-        ASSERT_YTHROW(LastResponse.Data.Size() == BlockSize * 3,
-            "Unexpected data size=" << LastResponse.Data.Size() << " expected " << BlockSize * 3);
-        ASSERT_YTHROW(LastResponse.Data.IsReadable(0, BlockSize),
-            "Unexpected !IsReadable offset# 0");
-        ASSERT_YTHROW(!LastResponse.Data.IsReadable(BlockSize, BlockSize),
-            "Unexpected IsReadable offset# AppendBlockSize");
-        ASSERT_YTHROW(LastResponse.Data.IsReadable(BlockSize * 2, BlockSize),
-            "Unexpected !IsReadable offset# AppendBlockSize * 2");
+        if (!NPDisk::PlainDataChunk) { // it is expected not to work with plain chunks
+            ASSERT_YTHROW(LastResponse.Data.Size() == BlockSize * 3,
+                "Unexpected data size=" << LastResponse.Data.Size() << " expected " << BlockSize * 3);
+            ASSERT_YTHROW(LastResponse.Data.IsReadable(0, BlockSize),
+                "Unexpected !IsReadable offset# 0");
+            ASSERT_YTHROW(!LastResponse.Data.IsReadable(BlockSize, BlockSize),
+                "Unexpected IsReadable offset# AppendBlockSize");
+            ASSERT_YTHROW(LastResponse.Data.IsReadable(BlockSize * 2, BlockSize),
+                "Unexpected !IsReadable offset# AppendBlockSize * 2");
+        }
         VERBOSE_COUT("Done");
         SignalDoneEvent();
         break;

@@ -23,6 +23,37 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
         UNIT_ASSERT(iter != map.end());
         UNIT_ASSERT_VALUES_EQUAL_C(iter->second, value, key);
     }
+    TString GetRequestUrl(TString topic, ui32 partition, ui64 offset = 0, ui32 limit = 10) {
+        TStringBuilder url;
+        CGIUnescape(topic);
+        url << "/viewer/get_topic_data" << "?topic_path=" << topic << "&partition=" << partition << "&offset=" << offset << "&limit=" << limit;
+        return url;
+    }
+
+    TKeepAliveHttpClient::THttpCode MakeRequest(TKeepAliveHttpClient& httpClient, const TString& url, TJsonValue& json) {
+        json = TJsonValue{};
+        TString response;
+        TStringStream responseStream;
+
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Accept"] = "application/json";
+
+        NKikimr::NViewerTests::THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.HttpHeaders.AddHeader("Accept", "application/json");
+
+        auto statusCode = httpClient.DoGet(url, &responseStream, headers);
+        response = responseStream.ReadAll();
+        if (statusCode != HTTP_OK) {
+            Cerr << "Got response:" << statusCode << ": " << response << Endl;
+            return statusCode;
+        }
+
+        NJson::TJsonReaderConfig jsonCfg;
+        NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
+        Cerr << "Data: " << json.GetString() << Endl;
+        UNIT_ASSERT(json.GetType() == EJsonValueType::JSON_ARRAY);
+        return statusCode;
+    }
 
     Y_UNIT_TEST(GetTopicDataTest) {
         TPortManager tp;
@@ -58,59 +89,125 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
         auto res = topicClient.CreateTopic(topicPath).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
-        NYdb::NPersQueue::TWriteSessionSettings wsSettings;
-        wsSettings.Path(topicPath);
-        wsSettings.MessageGroupId("12345");
-        wsSettings.Codec(ECodec::GZIP);
+        auto writeData = [&](NYdb::NPersQueue::ECodec codec, ui64 count, const TString& producerId, ui64 size = 100u) {
+            NYdb::NPersQueue::TWriteSessionSettings wsSettings;
+            wsSettings.Path(topicPath);
+            wsSettings.MessageGroupId(producerId);
+            wsSettings.Codec(codec);
 
-        Cerr << "Write data\n";
+            Cerr << "Write data\n";
+            auto writer = TPersQueueClient(ydbDriver).CreateSimpleBlockingWriteSession(TWriteSessionSettings(wsSettings).ClusterDiscoveryMode(EClusterDiscoveryMode::Off));
+            TString dataFiller{size, 'a'};
 
-        auto writer = TPersQueueClient(ydbDriver).CreateSimpleBlockingWriteSession(TWriteSessionSettings(wsSettings).ClusterDiscoveryMode(EClusterDiscoveryMode::Off));
-        TString dataFiller{100u, 'a'};
+            for (auto i = 0u; i < count; ++i) {
+                writer->Write(TStringBuilder() << "Message " << i << " : " << dataFiller);
+            }
+            writer->Close();
+            Cerr << "Write data - done\n";
+        };
 
-        for (auto i = 0u; i < 20; ++i) {
-            writer->Write(TStringBuilder() << "Message " << i << " : " << dataFiller);
-        }
-        Cerr << "Close writer\n";
-        writer->Close();
-        Cerr << "Write data - done\n";
-
+        writeData(ECodec::GZIP, 20, "producer1");
+        writeData(ECodec::RAW, 20, "producer2");
 
         TKeepAliveHttpClient httpClient("localhost", monPort);
         NKikimr::NViewerTests::WaitForHttpReady(httpClient);
-        TStringStream responseStream;
-        TStringBuilder url;
-        CGIUnescape(topicPath);
-        url << "/viewer/get_topic_data" << "?topic_path=" << topicPath << "&partition=0" << "&offset=0" << "&limit=10";
 
-        TKeepAliveHttpClient::THeaders headers;
-        headers["Accept"] = "application/json";
+        TJsonValue json;
+        TString producer1, producer2, producer3;
 
-        NKikimr::NViewerTests::THttpRequest httpReq(HTTP_METHOD_GET);
-        httpReq.HttpHeaders.AddHeader("Accept", "application/json");
+        // Test 1 - compressed data with limit
+        {
+            auto statusCode = MakeRequest(httpClient, GetRequestUrl(topicPath, 0, 0, 10), json);
+            UNIT_ASSERT_EQUAL(statusCode, HTTP_OK);
+            const auto& array = json.GetArray();
 
-        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet(url, &responseStream, headers);
-        const TString response = responseStream.ReadAll();
-        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
-        Cerr << "Response: " << response << Endl;
-        NJson::TJsonReaderConfig jsonCfg;
-        NJson::TJsonValue json;
-        NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
-        Cerr << "Data: " << json.GetString() << Endl;
-        UNIT_ASSERT(json.GetType() == EJsonValueType::JSON_ARRAY);
-        const auto& array = json.GetArray();
-        UNIT_ASSERT_VALUES_EQUAL(array.size(), 10);
-        for (auto i = 0u; i < 10; ++i) {
-            const auto& item = array[i];
-            UNIT_ASSERT(item.GetType() == EJsonValueType::JSON_MAP);
-            const auto& jsonMap = item.GetMap();
-            CheckMapValue(jsonMap, "Offset", i);
-            CheckMapValue(jsonMap, "SeqNo", i + 1);
-            CheckMapValue(jsonMap, "Size", 35);
-            CheckMapValue(jsonMap, "OriginalSize", 112);
-            UNIT_ASSERT(jsonMap.find("ProducerId") != jsonMap.end());
-            UNIT_ASSERT(jsonMap.find("CreateTimestamp") != jsonMap.end());
-            UNIT_ASSERT(jsonMap.find("WriteTimestamp") != jsonMap.end());
+            UNIT_ASSERT_VALUES_EQUAL(array.size(), 10);
+            for (auto i = 0u; i < 10; ++i) {
+                const auto& item = array[i];
+                UNIT_ASSERT(item.GetType() == EJsonValueType::JSON_MAP);
+                const auto& jsonMap = item.GetMap();
+                CheckMapValue(jsonMap, "Offset", i);
+                CheckMapValue(jsonMap, "SeqNo", i + 1);
+                CheckMapValue(jsonMap, "Size", 35);
+                CheckMapValue(jsonMap, "OriginalSize", 112);
+                CheckMapValue(jsonMap, "Codec", 1);
+                if (producer1.empty()) {
+                    UNIT_ASSERT(jsonMap.find("ProducerId") != jsonMap.end());
+                    producer1 = jsonMap.find("ProducerId")->second.GetString();
+                } else {
+                    CheckMapValue(jsonMap, "ProducerId", producer1);
+                }
+                UNIT_ASSERT(jsonMap.find("CreateTimestamp") != jsonMap.end());
+                UNIT_ASSERT(jsonMap.find("WriteTimestamp") != jsonMap.end());
+            }
+        }
+        // Test 2 - uncompressed data with limit and start offset
+        {
+            auto statusCode = MakeRequest(httpClient, GetRequestUrl(topicPath, 0, 20, 10), json);
+            UNIT_ASSERT_EQUAL(statusCode, HTTP_OK);
+            const auto& array = json.GetArray();
+
+            UNIT_ASSERT_VALUES_EQUAL(array.size(), 10);
+            for (auto i = 0u; i < 10; ++i) {
+                const auto& item = array[i];
+                UNIT_ASSERT(item.GetType() == EJsonValueType::JSON_MAP);
+                const auto& jsonMap = item.GetMap();
+                CheckMapValue(jsonMap, "Offset", 20 + i);
+                CheckMapValue(jsonMap, "SeqNo", i + 1);
+                CheckMapValue(jsonMap, "Size", 112);
+                CheckMapValue(jsonMap, "OriginalSize", 112);
+                CheckMapValue(jsonMap, "Codec", 0);
+                if (producer2.empty()) {
+                    UNIT_ASSERT(jsonMap.find("ProducerId") != jsonMap.end());
+                    producer2 = jsonMap.find("ProducerId")->second.GetString();
+                    UNIT_ASSERT_VALUES_UNEQUAL(producer2, producer1);
+                } else {
+                    CheckMapValue(jsonMap, "ProducerId", producer2);
+                }
+                UNIT_ASSERT(jsonMap.find("CreateTimestamp") != jsonMap.end());
+                UNIT_ASSERT(jsonMap.find("WriteTimestamp") != jsonMap.end());
+            }
+        }
+        // Test 3 - large messages
+
+        {
+            writeData(ECodec::GZIP, 20, "producer3", 1_MB);
+
+            auto statusCode = MakeRequest(httpClient, GetRequestUrl(topicPath, 0, 40, 20), json);
+            UNIT_ASSERT_EQUAL(statusCode, HTTP_OK);
+            const auto& array = json.GetArray();
+
+            UNIT_ASSERT_C(array.size() <= 10, array.size());
+            for (auto i = 0u; i < 10; ++i) {
+                const auto& item = array[i];
+                UNIT_ASSERT(item.GetType() == EJsonValueType::JSON_MAP);
+                const auto& jsonMap = item.GetMap();
+                CheckMapValue(jsonMap, "Offset", 40 + i);
+                CheckMapValue(jsonMap, "OriginalSize", 1_MB + 12);
+                CheckMapValue(jsonMap, "Codec", 1);
+                UNIT_ASSERT(jsonMap.find("Message") != jsonMap.end());
+                UNIT_ASSERT(jsonMap.find("Message")->second.GetString().size() == 1_MB);
+                CheckMapValue(jsonMap, "SeqNo", i + 1);
+
+                if (producer3.empty()) {
+                    UNIT_ASSERT(jsonMap.find("ProducerId") != jsonMap.end());
+                    producer3 = jsonMap.find("ProducerId")->second.GetString();
+                    UNIT_ASSERT_VALUES_UNEQUAL(producer2, producer3);
+                } else {
+                    CheckMapValue(jsonMap, "ProducerId", producer3);
+                }
+                UNIT_ASSERT(jsonMap.find("CreateTimestamp") != jsonMap.end());
+                UNIT_ASSERT(jsonMap.find("WriteTimestamp") != jsonMap.end());
+            }
+        }
+        // Test 4 - bad topic, partition, offset
+        {
+            auto statusCode = MakeRequest(httpClient, GetRequestUrl("/Root/bad-topic", 0, 20, 10), json);
+            UNIT_ASSERT_EQUAL(statusCode, HTTP_BAD_REQUEST);
+            statusCode = MakeRequest(httpClient, GetRequestUrl(topicPath, 10, 20, 10), json);
+            UNIT_ASSERT_EQUAL(statusCode, HTTP_BAD_REQUEST);
+            statusCode = MakeRequest(httpClient, GetRequestUrl(topicPath, 0, 10000, 10), json);
+            UNIT_ASSERT_EQUAL(statusCode, HTTP_BAD_REQUEST);
         }
     }
 };

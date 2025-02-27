@@ -3793,6 +3793,27 @@
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_join-cross_join_with_lazy_list_/sql.yql"
         }
     ],
+    "test_sql2yql.test[join-eq_over_join_bad_rotate]": [
+        {
+            "checksum": "47d27e638402a2dc26e78efb0e097629",
+            "size": 7441,
+            "uri": "https://{canondata_backend}/1946324/891082d4c661d16090f3d65c259aac9e885ad06c/resource.tar.gz#test_sql2yql.test_join-eq_over_join_bad_rotate_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[join-eq_over_join_basic]": [
+        {
+            "checksum": "91b591c1976c48ea0a66269257975354",
+            "size": 5943,
+            "uri": "https://{canondata_backend}/937458/9c1b5511bc814fa8de5eebef1b58eb00227de013/resource.tar.gz#test_sql2yql.test_join-eq_over_join_basic_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[join-eq_over_join_same_keys]": [
+        {
+            "checksum": "19517c88b9123deeb88f95937f20b46d",
+            "size": 3745,
+            "uri": "https://{canondata_backend}/1130705/cce783534f6c1bc1ef0dac74b138f4dd17bb6df8/resource.tar.gz#test_sql2yql.test_join-eq_over_join_same_keys_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[join-inmem_by_uncomparable_structs]": [
         {
             "checksum": "800f3ffe362c85dc001eb5237220bfd7",
@@ -10001,6 +10022,21 @@
     "test_sql_format.test[join-cross_join_with_lazy_list]": [
         {
             "uri": "file://test_sql_format.test_join-cross_join_with_lazy_list_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[join-eq_over_join_bad_rotate]": [
+        {
+            "uri": "file://test_sql_format.test_join-eq_over_join_bad_rotate_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[join-eq_over_join_basic]": [
+        {
+            "uri": "file://test_sql_format.test_join-eq_over_join_basic_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[join-eq_over_join_same_keys]": [
+        {
+            "uri": "file://test_sql_format.test_join-eq_over_join_same_keys_/formatted.sql"
         }
     ],
     "test_sql_format.test[join-inmem_by_uncomparable_structs]": [

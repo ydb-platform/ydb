@@ -460,10 +460,10 @@ public:
                     Json.AddEntry(TEntry(EEntryType::Number, Json.InternNumber(clipped)), /* createTopLevel */ true);
                     return true;
             }
-            Y_ABORT("unreachable");
+        } else {
+            Json.AddEntry(TEntry(EEntryType::Number, Json.InternNumber(value)), /* createTopLevel */ true);
+            return true;
         }
-        Json.AddEntry(TEntry(EEntryType::Number, Json.InternNumber(value)), /* createTopLevel */ true);
-        return true;
     }
 
     bool OnString(const TStringBuf& value) override {

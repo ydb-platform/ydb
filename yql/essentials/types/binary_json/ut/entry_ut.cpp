@@ -87,9 +87,8 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            const auto serialized = SerializeToBinaryJson(testCase.first);
-            UNIT_ASSERT_C(std::holds_alternative<TBinaryJson>(serialized), std::get<TString>(serialized));
-            const auto reader = TBinaryJsonReader::Make(std::get<TBinaryJson>(serialized));
+            const auto binaryJson = std::get<TBinaryJson>(SerializeToBinaryJson(testCase.first));
+            const auto reader = TBinaryJsonReader::Make(binaryJson);
             const auto container = reader->GetRootCursor();
 
             UNIT_ASSERT_VALUES_EQUAL(container.GetElement(0).GetNumber(), testCase.second);

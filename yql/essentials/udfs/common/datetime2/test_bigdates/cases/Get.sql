@@ -28,6 +28,6 @@ $typeDispatcher = ($row) -> {
     |>;
 };
 
-$input = SELECT CAST(ftimestamp64 AS Timestamp64) as tm FROM Input;
+$input = SELECT CAST(ftztimestamp64 AS TzTimestamp64) as tm FROM Input;
 
 PROCESS $input USING $typeDispatcher(TableRow());

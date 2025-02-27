@@ -255,6 +255,10 @@ Licensing is very important to open source projects. It helps ensure the softwar
 
 
 ====================COPYRIGHT====================
+    Copyright (c) 2005-2024 Intel Corporation
+
+
+====================COPYRIGHT====================
     Copyright (c) 2017-2021 Intel Corporation
 
 
@@ -279,8 +283,32 @@ Licensing is very important to open source projects. It helps ensure the softwar
 
 
 ====================COPYRIGHT====================
-    Copyright (c) 2020-2023 Intel Corporation
+    Copyright (c) 2020-2024 Intel Corporation
 
 
 ====================COPYRIGHT====================
     Copyright (c) 2021 Intel Corporation
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2021-2023 Intel Corporation
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2021-2024 Intel Corporation
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2022-2023 Intel Corporation
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2022-2024 Intel Corporation
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2023 Intel Corporation
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2023-2024 Intel Corporation

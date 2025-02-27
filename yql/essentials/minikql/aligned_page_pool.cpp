@@ -41,7 +41,7 @@ namespace {
 
 ui64 GetMaxMemoryMaps() {
     ui64 maxMapCount = 0;
-#if defined(_unix_)
+#if defined(_unix_) && !defined(_darwin_)
     maxMapCount = FromString<ui64>(Strip(TFileInput("/proc/sys/vm/max_map_count").ReadAll()));
 #endif
     return maxMapCount;
@@ -829,7 +829,7 @@ template void ReleaseAlignedPage<TFakeUnalignedMmap>(void*,ui64);
 size_t GetMemoryMapsCount() {
     size_t lineCount = 0;
     TString line;
-#if defined(_unix_)
+#if defined(_unix_) && !defined(_darwin_)
     TFileInput file("/proc/self/maps");
     while (file.ReadLine(line)) ++lineCount;
 #endif

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/digest/numeric.h>
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <vector>
@@ -50,9 +51,6 @@ struct TError {
     TString ErrorMessage;
 };
 
-struct TStatistics {
-};
-
 struct TYtTableRef {
     TString Path;
     TString Cluster;
@@ -63,24 +61,104 @@ struct TFmrTableRef {
     TString TableId;
 };
 
+struct TTableRange {
+    TString PartId;
+    ui64 MinChunk = 0;
+    ui64 MaxChunk;
+};
+
+struct TFmrTableInputRef {
+    TString TableId;
+    std::vector<TTableRange> TableRanges;
+};
+
+struct TFmrTableOutputRef {
+    TString TableId;
+    TString PartId;
+
+    bool operator==(const TFmrTableOutputRef&) const = default;
+};
+
+struct TTableStats {
+    ui64 Chunks = 0;
+    ui64 Rows;
+    ui64 DataWeight;
+};
+
+} // namespace NYql::NFmr
+
+namespace std {
+    template<>
+    struct hash<NYql::NFmr::TFmrTableOutputRef> {
+        size_t operator()(const NYql::NFmr::TFmrTableOutputRef& ref) const {
+            return CombineHashes(hash<TString>()(ref.TableId), hash<TString>()(ref.PartId));
+        }
+    };
+}
+
+namespace NYql::NFmr {
+
+struct TStatistics {
+    std::unordered_map<TFmrTableOutputRef, TTableStats> OutputTables;
+};
+
+//пока оставляем и со старым названием, чтобы тесты не падали, но после рефактора надо будет убрать
 using TTableRef = std::variant<TYtTableRef, TFmrTableRef>;
 
-struct TUploadTaskParams {
+using TOperationTableRef = std::variant<TYtTableRef, TFmrTableRef>;
+
+using TTaskTableRef = std::variant<TYtTableRef, TFmrTableInputRef, TFmrTableOutputRef>;
+
+struct TUploadOperationParams {
     TFmrTableRef Input;
     TYtTableRef Output;
 };
 
-struct TDownloadTaskParams {
+struct TUploadTaskParams { // DEPRECATED TODO REMOVE
+    TFmrTableRef Input;
+    TYtTableRef Output;
+};
+
+struct TUploadTaskParamsNew {
+    TFmrTableInputRef Input;
+    TYtTableRef Output;
+};
+
+struct TDownloadOperationParams {
     TYtTableRef Input;
     TFmrTableRef Output;
 };
 
-struct TMergeTaskParams {
-    std::vector<TTableRef> Input;
+struct TDownloadTaskParams { // DEPRECATED TODO REMOVE
+    TYtTableRef Input;
     TFmrTableRef Output;
 };
 
-using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams>;
+struct TDownloadTaskParamsNew {
+    TYtTableRef Input;
+    TFmrTableOutputRef Output;
+};
+
+struct TMergeOperationParams {
+    std::vector<TOperationTableRef> Input;
+    TFmrTableRef Output;
+};
+
+struct TMergeTaskParams { // DEPRECATED TODO REMOVE
+    std::vector<TOperationTableRef> Input;
+    TFmrTableRef Output;
+};
+
+struct TMergeTaskParamsNew {
+    std::vector<TTaskTableRef> Input;
+    TFmrTableOutputRef Output;
+};
+
+using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams>;
+
+using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams>; // DEPRECATED TODO REMOVE
+
+using TTaskParamsNew = std::variant<TUploadTaskParamsNew, TDownloadTaskParamsNew, TMergeTaskParamsNew>;
 
 struct TTask: public TThrRefBase {
     TTask() = default;
@@ -110,6 +188,7 @@ struct TTaskState: public TThrRefBase {
     ETaskStatus TaskStatus;
     TString TaskId;
     TMaybe<TFmrError> TaskErrorMessage;
+    TStatistics Stats;
 
     using TPtr = TIntrusivePtr<TTaskState>;
 };

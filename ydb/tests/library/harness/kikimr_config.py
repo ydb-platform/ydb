@@ -262,10 +262,6 @@ class KikimrConfigGenerator(object):
         if disable_iterator_reads:
             self.yaml_config["table_service_config"]["enable_kqp_scan_query_source_read"] = False
 
-        if disable_iterator_lookups:
-            self.yaml_config["table_service_config"]["enable_kqp_scan_query_stream_lookup"] = False
-            self.yaml_config["table_service_config"]["enable_kqp_data_query_stream_lookup"] = False
-
         self.yaml_config["feature_flags"]["enable_public_api_external_blobs"] = enable_public_api_external_blobs
 
         # for faster shutdown: there is no reason to wait while tablets are drained before whole cluster is stopping

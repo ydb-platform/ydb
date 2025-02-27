@@ -78,6 +78,9 @@ class TCompletionChunkWrite : public TCompletionAction {
     NWilson::TSpan Span;
 
 public:
+    TEvChunkWrite::TPartsPtr Parts;
+    std::optional<TAlignedData> Buffer;
+
     TCompletionChunkWrite(const TActorId &recipient, TEvChunkWriteResult *event,
             TPDiskMon *mon, ui32 pdiskId, NHPTimer::STime startTime, size_t sizeBytes,
             ui8 priorityClass, std::function<void()> onDestroy, TReqId reqId,
@@ -94,6 +97,50 @@ public:
         , Span(std::move(span))
     {
         TCompletionAction::ShouldBeExecutedInCompletionThread = false;
+    }
+
+    const void *GetBuffer() {
+        if (Buffer) {
+            return Buffer->Get();
+        } else if (Parts->Size() == 1) {
+            return (*Parts)[0].first;
+        } else {
+            return nullptr;
+        }
+    }
+
+    size_t CompactBuffer(size_t headroom) {
+        size_t totalSize = headroom;
+        for (size_t i = 0; i < Parts->Size(); ++i) {
+            totalSize += (*Parts)[i].second;
+        }
+        totalSize = AlignUp<ui64>(totalSize, 4096);
+        Buffer.emplace(totalSize);
+
+        size_t written = 0;
+
+        // head
+        if (headroom) {
+            memset(Buffer->Get() + written, 0, headroom);
+            written += headroom;
+        }
+
+        // body
+
+        for (size_t i = 0; i < Parts->Size(); ++i) {
+            auto [ptr, size] = (*Parts)[i];
+            memcpy(Buffer->Get() + written, ptr, size);
+            written += size;
+        }
+
+        // tail
+        if (written < totalSize) {
+            auto size = totalSize - written;
+            memset(Buffer->Get() + written, 0, size);
+            written += size;
+        }
+        Y_VERIFY(written == totalSize);
+        return totalSize;
     }
 
     ~TCompletionChunkWrite() {
@@ -183,7 +230,6 @@ public:
         : TCompletionAction()
         , PDisk(pDisk)
         , Read(read)
-        , CommonBuffer(read->Offset, read->Size)
         // 1 in PartsPending stands for the last part, so if any non-last part completes it will not lead to call of Exec()
         , PartsPending(1)
         , Deletes(0)
@@ -191,7 +237,10 @@ public:
         , ChunkNonce(chunkNonce)
         , Span(std::move(span))
         , DoubleFreeCanary(ReferenceCanary)
-    {}
+    {
+        size_t tailroom = AlignUp<size_t>(read->Size + read->Offset % 4096, 4096) - read->Size;
+        CommonBuffer = TBufferWithGaps(read->Offset, read->Size, tailroom);
+    }
 
     void Exec(TActorSystem *actorSystem) override;
     ~TCompletionChunkRead();

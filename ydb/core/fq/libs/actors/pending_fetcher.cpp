@@ -105,6 +105,13 @@ struct TEvPrivate {
 
 constexpr auto CLEANUP_PERIOD = TDuration::Seconds(60);
 
+TDuration GetPendingFetchPeriod(const NFq::NConfig::TPendingFetcherConfig& config) {
+    if (const auto periodMs = config.GetPendingFetchPeriodMs()) {
+        return TDuration::MilliSeconds(periodMs);
+    }
+    return TDuration::Seconds(1);
+}
+
 } // namespace
 
 class TPendingFetcher : public NActors::TActorBootstrapped<TPendingFetcher> {
@@ -170,6 +177,7 @@ public:
         , ServiceCounters(serviceCounters, "pending_fetcher")
         , GetTaskCounters("GetTask", ServiceCounters.Counters)
         , FailedStatusCodeCounters(MakeIntrusive<TStatusCodeByScopeCounters>("IntermediateFailedStatusCode", ServiceCounters.RootCounters->GetSubgroup("component", "QueryDiagnostic")))
+        , PendingFetchPeriod(GetPendingFetchPeriod(config.GetPendingFetcher()))
         , CredentialsFactory(credentialsFactory)
         , S3Gateway(s3Gateway)
         , ConnectorClient(connectorClient)
@@ -518,7 +526,7 @@ private:
     IModuleResolver::TPtr ModuleResolver;
 
     bool HasRunningRequest = false;
-    const TDuration PendingFetchPeriod = TDuration::Seconds(1);
+    const TDuration PendingFetchPeriod;
 
     TActorId DatabaseResolver;
 

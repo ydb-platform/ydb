@@ -4,6 +4,13 @@ Tool can be used to execute queries by using kikimr provider.
 
 For profiling memory allocations build kqprun with ya make flag `-D PROFILE_MEMORY_ALLOCATIONS -D CXXFLAGS=-DPROFILE_MEMORY_ALLOCATIONS`.
 
+## Scripts
+
+* `flame_graph.sh` - script for collecting flame graphs in svg format, usage:
+    ```(bash)
+    ./flame_graph.sh [graph collection time in seconds] [use sudo]
+    ```
+
 ## Examples
 
 ### Queries

@@ -173,6 +173,9 @@ public:
 private:
     bool WaitScriptExecutionOperation(ui64 queryId) {
         StartTime_ = TInstant::Now();
+        Y_DEFER {
+            TYdbSetup::StopTraceOpt();
+        };
 
         TDuration getOperationPeriod = TDuration::Seconds(1);
         if (auto progressStatsPeriodMs = Options_.YdbSettings.AppConfig.GetQueryServiceConfig().GetProgressStatsPeriodMs()) {
@@ -204,8 +207,6 @@ private:
 
             Sleep(getOperationPeriod);
         }
-
-        TYdbSetup::StopTraceOpt();
 
         PrintScriptAst(queryId, ExecutionMeta_.Ast);
         PrintScriptProgress(queryId, ExecutionMeta_.Plan);

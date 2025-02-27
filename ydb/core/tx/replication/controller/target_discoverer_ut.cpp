@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).Config->GetSrcPath(), "/Root/Topic");
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).Config->GetDstPath(), "/Root/Replicated/Table");
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).Kind, TReplication::ETargetKind::Transfer);
-        auto p = std::dynamic_pointer_cast<TTargetTransfer::TTransferConfig>(toAdd.at(0).Config);
+        auto p = std::dynamic_pointer_cast<const TTargetTransfer::TTransferConfig>(toAdd.at(0).Config);
         UNIT_ASSERT(p);
         UNIT_ASSERT_VALUES_EQUAL(p->GetTransformLambda(), "lambda body");
     }

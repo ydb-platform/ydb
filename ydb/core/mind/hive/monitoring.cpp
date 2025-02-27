@@ -2015,24 +2015,94 @@ function clearAlert() {
     $('#alert-placeholder').removeClass('glyphicon-refresh');
 }
 
-function enableType(element, node, type) {
-    $(element).css('color', 'gray');
-    $.ajax({url:'?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&resettype=' + type});
-}
 
-function disableType(element, node, type) {
-    $(element).css('color', 'gray');
-    $.ajax({url:'?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&maxcount=0&changetype=' + type});
-}
+function showConfirmationModal(message, onConfirm, onDismiss) {
+    var modal = $('<div class="modal fade" tabindex="-1" role="dialog" data-backdrop="static">'
+        + '<div class="modal-dialog" role="document">'
+        + '<div class="modal-content">'
+        + '<div class="modal-header">'
+        + '<button type="button" class="close" data-dismiss="modal">&times;</button>'
+        + '<h4 class="modal-title">Confirmation</h4>'
+        + '</div>'
+        + '<div class="modal-body">' + message + '</div>'
+        + '<div class="modal-footer">'
+        + '<button type="button" class="btn btn-default cancel-btn" data-dismiss="modal">Cancel</button>'
+        + '<button type="button" class="btn btn-danger confirm-btn">OK</button>'
+        + '</div>'
+        + '</div>'
+        + '</div>'
+        + '</div>');
 
-function applySetting(button, name, val) {
-    $(button).css('color', 'gray');
-    if (name == "DefaultTabletLimit") {
-        should_refresh_types = true;
-    }
-    $.ajax({
-        url: document.URL + '&page=Settings&' + name + '=' + val,
+    $('.modal').remove();
+    $('body').append(modal);
+    modal.modal('show');
+
+    modal.find('.confirm-btn').click(function () {
+        if (onConfirm) onConfirm();
+        modal.modal('hide').remove();
     });
+
+    modal.on('hidden.bs.modal', function () {
+        if (onDismiss) onDismiss();
+        modal.remove();
+    });
+}
+
+function enableType(element, node, type, tabletName) {
+    $(element).css('color', 'gray');
+
+    showConfirmationModal(
+        'Are you sure you want to proceed? Resetting maxcount on node <b>' + node + '</b> for tablet type <b>' + type + '</b>.',
+        function () {
+            $.ajax({url:'?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&resettype=' + type});
+        },
+        function () {
+            $(element).css('color', '');
+        }
+    );
+}
+
+function disableType(element, node, type, tabletName) {
+    $(element).css('color', 'gray');
+
+    showConfirmationModal(
+        'Are you sure you want to proceed? Setting maxcount=0 on node <b>' + node + '</b> for tablet type <b>' + type + '</b>.',
+        function () {
+            $.ajax({url:'?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&maxcount=0&changetype=' + type});
+        },
+        function () {
+            $(element).css('color', '');
+        }
+    );
+}
+
+function changeDefaultTabletLimit(button, val, tabletTypeName) {
+    let text = '';
+    if (val.endsWith('0')) {
+        text = 'Prohibit starting tablets of type ' + tabletTypeName + ' on every node';
+    } else {
+        text = 'Allow starting tablets of type ' + tabletTypeName + ' on every node';
+    }
+    applySetting(button, 'DefaultTabletLimit', val, text);
+}
+
+function applySetting(button, name, val, text) {
+    $(button).css('color', 'gray');
+
+    showConfirmationModal(
+        'Are you sure you want to proceed? ' + text,
+        function () {
+            if (name == "DefaultTabletLimit") {
+                should_refresh_types = true;
+            }
+            $.ajax({
+                url: document.URL + '&page=Settings&' + name + '=' + val,
+            });
+        },
+        function () {
+            $(button).css('color', '');
+        }
+    );
 }
 
 var Empty = true;
@@ -2329,6 +2399,8 @@ public:
         TString ToHTML() const {
             auto totalCount = LeaderCount + FollowerCount;
             TStringBuilder str;
+            auto shortTypeName = GetTabletTypeShortName(TabletType);
+            auto longTypeName = TTabletTypes::TypeToStr(TabletType);
             if (MaxCount > 0) {
                 str << "<span class='box' ";
             } else {
@@ -2338,9 +2410,9 @@ public:
                 str << " style='color: red' ";
             }
             str << " onclick='"  << (MaxCount == 0 ? "enableType" : "disableType")
-                << "(this," << NodeId << "," << (ui32)TabletType << ")";
+                << "(this," << NodeId << "," << (ui32)TabletType << "\", " << longTypeName << "\")";
             str << "'>";
-            str << GetTabletTypeShortName(TabletType);
+            str << shortTypeName;
             str << " ";
             str << LeaderCount;
             if (FollowerCount > 0) {

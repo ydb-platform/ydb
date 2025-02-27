@@ -12,11 +12,11 @@ from ydb.tools.cfg.templates import (
 
 # Remove specified keys
 STORAGE_ONLY_KEYS = [
-        'static_erasure',
-        'host_configs',
-        'nameservice_config',
-        'blob_storage_config',
-        'hosts'
+    'static_erasure',
+    'host_configs',
+    'nameservice_config',
+    'blob_storage_config',
+    'hosts'
 ]
 
 
@@ -56,13 +56,12 @@ class YamlConfig(object):
 
 class YamlConfigurator(object):
     def __init__(
-                self,
-                cluster_path: os.PathLike,
-                out_dir: os.PathLike,
-                bin_path: os.PathLike,
-                compressed_bin_path: os.PathLike,
-                config_path: os.PathLike,
-            ):
+            self,
+            cluster_path: os.PathLike,
+            out_dir: os.PathLike,
+            bin_path: os.PathLike,
+            compressed_bin_path: os.PathLike,
+            config_path: os.PathLike):
         # walle provider is not used
         # use config_path instad of cluster_path
         self.cluster_description = cluster_description.ClusterDetails(config_path, None)

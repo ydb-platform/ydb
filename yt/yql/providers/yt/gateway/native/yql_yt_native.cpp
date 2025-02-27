@@ -5698,6 +5698,22 @@ private:
         return ctx;
     }
 
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) override {
+        try {
+            auto session =  GetSession(options.SessionId(), true);
+            auto ytServer = Clusters_->GetServer(options.Cluster());
+            auto entry = session->TxCache_.GetEntry(ytServer);
+            TClusterConnectionResult clusterConnectionResult{};
+            clusterConnectionResult.TransactionId = GetGuidAsString(entry->Tx->GetId());
+            clusterConnectionResult.YtServerName = ytServer;
+            clusterConnectionResult.Token = options.Config()->Auth.Get();
+            clusterConnectionResult.SetSuccess();
+            return clusterConnectionResult;
+        } catch (...) {
+            return ResultFromCurrentException<TClusterConnectionResult>({}, true);
+        }
+    }
+
 private:
     const TYtNativeServices Services_;
     const TConfigClusters::TPtr Clusters_;

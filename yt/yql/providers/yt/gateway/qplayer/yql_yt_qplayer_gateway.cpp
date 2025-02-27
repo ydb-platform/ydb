@@ -961,6 +961,10 @@ public:
         return Inner_->AddCluster(cluster);
     }
 
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) override {
+        return Inner_->GetClusterConnection(std::move(options));
+    }
+
 private:
     const IYtGateway::TPtr Inner_;
     const TQContext QContext_;

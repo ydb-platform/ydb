@@ -38,7 +38,6 @@ NProto::TYtTableRef YtTableRefToProto(const TYtTableRef& ytTableRef) {
     NProto::TYtTableRef protoYtTableRef;
     protoYtTableRef.SetPath(ytTableRef.Path);
     protoYtTableRef.SetCluster(ytTableRef.Cluster);
-    protoYtTableRef.SetTransactionId(ytTableRef.TransactionId);
     return protoYtTableRef;
 }
 
@@ -46,7 +45,6 @@ TYtTableRef YtTableRefFromProto(const NProto::TYtTableRef protoYtTableRef) {
     TYtTableRef ytTableRef;
     ytTableRef.Path = protoYtTableRef.GetPath();
     ytTableRef.Cluster = protoYtTableRef.GetCluster();
-    ytTableRef.TransactionId = protoYtTableRef.GetTransactionId();
     return ytTableRef;
 }
 
@@ -170,6 +168,26 @@ TTaskParams TaskParamsFromProto(const NProto::TTaskParams& protoTaskParams) {
     return taskParams;
 }
 
+NProto::TClusterConnection ClusterConnectionToProto(const TClusterConnection& clusterConnection) {
+    NProto::TClusterConnection protoClusterConnection;
+    protoClusterConnection.SetTransactionId(clusterConnection.TransactionId);
+    protoClusterConnection.SetYtServerName(clusterConnection.YtServerName);
+    if (clusterConnection.Token) {
+        protoClusterConnection.SetToken(*clusterConnection.Token);
+    }
+    return protoClusterConnection;
+}
+
+TClusterConnection ClusterConnectionFromProto(const NProto::TClusterConnection& protoClusterConnection) {
+    TClusterConnection clusterConnection{};
+    clusterConnection.TransactionId = protoClusterConnection.GetTransactionId();
+    clusterConnection.YtServerName = protoClusterConnection.GetYtServerName();
+    if (protoClusterConnection.HasToken()) {
+        clusterConnection.Token = protoClusterConnection.GetToken();
+    }
+    return clusterConnection;
+}
+
 NProto::TTask TaskToProto(const TTask& task) {
     NProto::TTask protoTask;
     protoTask.SetTaskType(static_cast<NProto::ETaskType>(task.TaskType));
@@ -178,6 +196,8 @@ NProto::TTask TaskToProto(const TTask& task) {
     protoTask.MutableTaskParams()->Swap(&taskParams);
     protoTask.SetSessionId(task.SessionId);
     protoTask.SetNumRetries(task.NumRetries);
+    auto clusterConnection = ClusterConnectionToProto(task.ClusterConnection);
+    protoTask.MutableClusterConnection()->Swap(&clusterConnection);
     return protoTask;
 }
 
@@ -188,6 +208,7 @@ TTask TaskFromProto(const NProto::TTask& protoTask) {
     task.TaskParams = TaskParamsFromProto(protoTask.GetTaskParams());
     task.SessionId = protoTask.GetSessionId();
     task.NumRetries = protoTask.GetNumRetries();
+    task.ClusterConnection = ClusterConnectionFromProto(protoTask.GetClusterConnection());
     return task;
 }
 

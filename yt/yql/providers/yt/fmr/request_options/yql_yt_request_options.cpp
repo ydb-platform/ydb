@@ -2,8 +2,8 @@
 
 namespace NYql::NFmr {
 
-TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId) {
-    return MakeIntrusive<TTask>(taskType, taskId, taskParams, sessionId);
+TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const TClusterConnection& clusterConnection) {
+    return MakeIntrusive<TTask>(taskType, taskId, taskParams, sessionId, clusterConnection);
 }
 
 TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& taskErrorMessage) {

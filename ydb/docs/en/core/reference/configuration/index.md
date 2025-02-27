@@ -621,19 +621,48 @@ For a configuration located in 3 availability zones, specify 3 rings. For a conf
 
 {{ ydb-short-name }} supports various user authentication methods. The configuration for authentication providers is specified in the `auth_config` section.
 
+### Configuring password complexity {#password-complexity}
+
+{{ ydb-short-name }} allows users to be authenticated by login and password. More details can be found in the section [authentication by login and password](../../security/authentication.md#static-credentials). To enhance security in {{ ydb-short-name }} it is possible to configure the complexity of user passwords. To configure password requirements the `password_complexity` section needs to be described.
+
+Example of the `password_complexity` section:
+
+```yaml
+auth_config:
+  #...
+  password_complexity:
+    min_length: 8
+    min_lower_case_count: 1
+    min_upper_case_count: 1
+    min_numbers_count: 1
+    min_special_chars_count: 1
+    special_chars: "!@#$%^&*()_+{}|<>?="
+    can_contain_username: false
+  #...
+```
+
+| Parameter | Description | Default value
+|:---|:---|:---:|
+| `min_length` | Minimal length of the password | 0 |
+| `min_lower_case_count` | Minimal count of letters in lower case | 0 |
+| `min_upper_case_count` | Minimal cont of letters in upper case | 0 |
+| `min_numbers_count` | Minimal count of number in the password | 0 |
+| `min_special_chars_count` | Minimal count of special chars in the password from list `special_chars`| 0 |
+| `special_chars` | Special chars which can be used in the password. Allow use chars from list `!@#$%^&*()_+{}\|<>?=` only | Without special chars |
+| `can_contain_username` | Allow use username in the password | `false` |
+
 ### Account lockout after unsuccessful password attempts {#account-lockout}
 
 {{ ydb-short-name }} allows for the blocking of user authentication after unsuccessful password entry attempts. Lockout rules are configured in the `account_lockout` section.
 
 Syntax of the `account_lockout` section:
-
 ```yaml
 auth_config:
-  ...
+  #...
   account_lockout:
     attempt_threshold: 4
     attempt_reset_duration: "1h"
-  ...
+  #...
 ```
 
 | Parameter | Description | Default value |

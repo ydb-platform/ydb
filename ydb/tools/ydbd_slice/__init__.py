@@ -558,13 +558,6 @@ def yaml_config_path_args():
         required=False,
         help="Path to file with config.yaml configuration",
     )
-    args.add_argument(
-        "--yaml-dynconfig",
-        metavar="YAML_DYNCONFIG",
-        default="",
-        required=False,
-        help="Path to file with dynconfig.yaml configuration",
-    )
 
     return args
 
@@ -654,14 +647,13 @@ def dispatch_run(func, args, walle_provider, need_confirmation=False):
     kikimr_bin, kikimr_compressed_bin = deduce_kikimr_bin_from_args(args)
     clear_tmp = not args.dry_run and args.temp_dir is None
 
-    if args.yaml_config and args.yaml_dynconfig:
+    if args.yaml_config:
         configurator = yaml_configurator.YamlConfigurator(
             args.cluster,
             temp_dir,
             kikimr_bin,
             kikimr_compressed_bin,
-            args.yaml_config,
-            args.yaml_dynconfig
+            args.yaml_config
         )
         cluster_details = configurator.cluster_description
     else:
@@ -1530,28 +1522,19 @@ def main(walle_provider=None):
         if not args.yaml_config:
             warnings.warn(
                 '''
-
-
-###### WARNING #######
-
 Using cluster.yaml for cluster configuration is deprecated.
 Only the 'domains' section should be filled with database and slot configurations.
-The config.yaml and dynconfig.yaml should be passed as raw files through the --yaml-config and --yaml-dynconfig parameters.
+The config.yaml should be passed as a raw file through the --yaml-config.
 
-    ydbd_slice install cluster.yaml all --binary /path/to/ydbd --yaml-config /path/to/config.yaml --yaml-dynconfig /path/to/dynconfig.yaml
+Example:
+    ydbd_slice install cluster.yaml all --binary /path/to/ydbd --yaml-config /path/to/config.yaml
 
 To save the resulting configuration files from an old cluster.yaml, use the --save-raw-cfg option.
 
+Example:
     ydbd_slice install cluster.yaml all --binary /path/to/ydbd --save-raw-cfg /path/to/save
 
-The resulting configuration files will be saved in the /path/to/save directory. You can find config.yaml and dynconfig.yaml in the /path/to/save/kikimr-static directory.
-
-To generate dynconfig.yaml from config.yaml, you can use the dynconfig-generator command.
-
-    ydbd_slice dynconfig-generator --yaml-config /path/to/config.yaml --output-file /path/to/dynconfig.yaml
-
-###### WARNING #######
-
+The resulting configuration files will be saved in the /path/to/save directory. You can find config.yaml in the /path/to/save/kikimr-static directory.
 ''',
                 DeprecationWarning
             )

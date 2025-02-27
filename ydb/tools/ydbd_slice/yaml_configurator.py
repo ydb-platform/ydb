@@ -10,6 +10,15 @@ from ydb.tools.cfg.templates import (
     kikimr_cfg_for_static_node_new_style,
 )
 
+# Remove specified keys
+STORAGE_ONLY_KEYS = [
+        'static_erasure',
+        'host_configs',
+        'nameservice_config',
+        'blob_storage_config',
+        'hosts'
+]
+
 
 class YamlConfig(object):
     def __init__(self, yaml_config_path: str):
@@ -21,6 +30,11 @@ class YamlConfig(object):
 
     @property
     def dynamic_simple(self):
+        subconfig = copy.deepcopy(self.__yaml_config)
+
+        for key in STORAGE_ONLY_KEYS:
+            subconfig.pop(key, None)
+
         cluster_uuid = self.__yaml_config.get('nameservice_config', {}).get('cluster_uuid', '')
         dynconfig = {
             'metadata': {
@@ -28,7 +42,7 @@ class YamlConfig(object):
                 'cluster': cluster_uuid,
                 'version': 0,
             },
-            'config': copy.deepcopy(self.__yaml_config),
+            'config': subconfig,
             'allowed_labels': {
                 'node_id': {'type': 'string'},
                 'host': {'type': 'string'},
@@ -48,7 +62,6 @@ class YamlConfigurator(object):
                 bin_path: os.PathLike,
                 compressed_bin_path: os.PathLike,
                 config_path: os.PathLike,
-                dynconfig_path: os.PathLike = ""
             ):
         # walle provider is not used
         # use config_path instad of cluster_path
@@ -59,13 +72,11 @@ class YamlConfigurator(object):
             self.cluster_description.domains = _domains.get('domains', [])
 
         self.__static_cfg = out_dir
+        # might be needed in the future to do something locally using the ydbd binary
         self.__kikimr_bin_file = bin_path
         self.__kikimr_compressed_bin_file = compressed_bin_path
         with open(config_path, 'r') as f:
             self.static = f.read()
-
-        with open(dynconfig_path, 'r') as f:
-            self.dynamic = f.read()
 
     @property
     def kikimr_bin(self):
@@ -127,7 +138,7 @@ class YamlConfigurator(object):
         return [host['host'] for host in self.static_dict.get('hosts', [])]
 
     @property
-    def kickimr_cfg(self):
+    def kikimr_cfg(self):
         return kikimr_cfg_for_static_node_new_style()
 
     @property
@@ -149,11 +160,7 @@ class YamlConfigurator(object):
         )
         write_to_file(
             os.path.join(self.__static_cfg, 'kikimr.cfg'),
-            self.kickimr_cfg
-        )
-        write_to_file(
-            os.path.join(self.__static_cfg, 'dynconfig.yaml'),
-            self.__dynamic
+            self.kikimr_cfg
         )
         write_to_file(
             os.path.join(self.__static_cfg, 'dynamic_server.cfg'),
@@ -161,9 +168,3 @@ class YamlConfigurator(object):
         )
 
         return self.__static_cfg
-
-    def create_dynamic_cfg(self) -> str:
-        write_to_file(
-            os.path.join(self.__static_cfg, 'dynconfig.yaml'),
-            self.__dynamic
-        )

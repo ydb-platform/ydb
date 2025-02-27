@@ -512,8 +512,8 @@ protected:
                 if (populateChannels) {
                     auto& task = TasksGraph.GetTask(taskId);
                     THashMap<TActorId, THashSet<ui64>> updates;
-                    CollectTaskChannelsUpdates(task, updates);
-                    PropagateChannelsUpdates(updates);
+                    Planner->CollectTaskChannelsUpdates(task, updates);
+                    Planner->PropagateChannelsUpdates(updates);
                 }
                 break;
             }
@@ -751,14 +751,14 @@ protected:
             TActorId computeActorId = ActorIdFromProto(startedTask.GetActorId());
             LOG_D("Executing task: " << taskId << " on compute actor: " << computeActorId);
             YQL_ENSURE(Planner);
-            bool channelUpdates = Planner->AcknowledgeCA(taskId, computeActorId, nullptr);
-            if (channelUpdates) {
-                CollectTaskChannelsUpdates(task, channelsUpdates);
+            bool ack = Planner->AcknowledgeCA(taskId, computeActorId, nullptr);
+            if (ack) {
+                Planner->CollectTaskChannelsUpdates(task, channelsUpdates);
             }
 
         }
 
-        PropagateChannelsUpdates(channelsUpdates);
+        Planner->PropagateChannelsUpdates(channelsUpdates);
     }
 
     void HandleAbortExecution(TEvKqp::TEvAbortExecution::TPtr& ev) {
@@ -777,68 +777,6 @@ protected:
     }
 
 protected:
-    void CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& task, THashMap<TActorId, THashSet<ui64>>& updates) {
-        YQL_ENSURE(task.ComputeActorId);
-
-        LOG_T("Collect channels updates for task: " << task.Id << " at actor " << task.ComputeActorId);
-
-        auto& selfUpdates = updates[task.ComputeActorId];
-
-        for (auto& input : task.Inputs) {
-            for (auto channelId : input.Channels) {
-                auto& channel = TasksGraph.GetChannel(channelId);
-                YQL_ENSURE(channel.DstTask == task.Id);
-                YQL_ENSURE(channel.SrcTask);
-
-                auto& srcTask = TasksGraph.GetTask(channel.SrcTask);
-                if (srcTask.ComputeActorId) {
-                    updates[srcTask.ComputeActorId].emplace(channelId);
-                    selfUpdates.emplace(channelId);
-                }
-
-                LOG_T("Task: " << task.Id << ", input channelId: " << channelId << ", src task: " << channel.SrcTask
-                    << ", at actor " << srcTask.ComputeActorId);
-            }
-        }
-
-        for (auto& output : task.Outputs) {
-            for (auto channelId : output.Channels) {
-                selfUpdates.emplace(channelId);
-
-                auto& channel = TasksGraph.GetChannel(channelId);
-                YQL_ENSURE(channel.SrcTask == task.Id);
-
-                if (channel.DstTask) {
-                    auto& dstTask = TasksGraph.GetTask(channel.DstTask);
-                    if (dstTask.ComputeActorId) {
-                        // not a optimal solution
-                        updates[dstTask.ComputeActorId].emplace(channelId);
-                    }
-
-                    LOG_T("Task: " << task.Id << ", output channelId: " << channelId << ", dst task: " << channel.DstTask
-                        << ", at actor " << dstTask.ComputeActorId);
-                }
-            }
-        }
-    }
-
-    void PropagateChannelsUpdates(const THashMap<TActorId, THashSet<ui64>>& updates) {
-        for (auto& pair : updates) {
-            auto computeActorId = pair.first;
-            auto& channelIds = pair.second;
-
-            auto channelsInfoEv = MakeHolder<NYql::NDq::TEvDqCompute::TEvChannelsInfo>();
-            auto& record = channelsInfoEv->Record;
-
-            for (auto& channelId : channelIds) {
-                FillChannelDesc(TasksGraph, *record.AddUpdate(), TasksGraph.GetChannel(channelId), TasksGraph.GetMeta().ChannelTransportVersion, false);
-            }
-
-            LOG_T("Sending channels info to compute actor: " << computeActorId << ", channels: " << channelIds.size());
-            this->Send(computeActorId, channelsInfoEv.Release());
-        }
-    }
-
     void UpdateResourcesUsage(bool force) {
         TInstant now = TActivationContext::Now();
         if ((now - LastResourceUsageUpdate < ResourceUsageUpdateInterval) && !force)

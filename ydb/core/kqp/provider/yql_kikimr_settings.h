@@ -180,6 +180,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     ui64 DefaultEnableSpillingNodes = 0;
     bool EnableAntlr4Parser = false;
     bool EnableSnapshotIsolationRW = false;
+    bool AllowMultiBroadcasts = false;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;

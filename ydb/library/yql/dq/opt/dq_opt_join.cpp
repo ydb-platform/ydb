@@ -708,7 +708,7 @@ TExprBase DqRewriteLeftPureJoin(const TExprBase node, TExprContext& ctx, const T
         .Done();
 }
 
-TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap) {
+TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap, bool buildCollectStage) {
     static const std::set<std::string_view> supportedTypes = {
         "Inner"sv,
         "Left"sv,
@@ -745,24 +745,33 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
     TMaybeNode<TDqCnBroadcast> rightBroadcast;
     TNodeOnNodeOwnedMap rightPrecomputes;
 
-    if (rightCn) {
-        auto collectRightStage = Build<TDqStage>(ctx, join.Pos())
-            .Inputs()
-                .Add(rightCn.Cast())
-                .Build()
-            .Program()
-                .Args({"stream"})
-                .Body("stream")
-                .Build()
-            .Settings(TDqStageSettings().BuildNode(ctx, join.Pos()))
-            .Done();
+    if (rightCn) {        
+        if (buildCollectStage) {
+            auto collectRightStage = Build<TDqStage>(ctx, join.Pos())
+                .Inputs()
+                    .Add(rightCn.Cast())
+                    .Build()
+                .Program()
+                    .Args({"stream"})
+                    .Body("stream")
+                    .Build()
+                .Settings(TDqStageSettings().BuildNode(ctx, join.Pos()))
+                .Done();
 
-        rightBroadcast = Build<TDqCnBroadcast>(ctx, join.Pos())
-            .Output()
-                .Stage(collectRightStage)
-                .Index().Build("0")
-                .Build()
-            .Done();
+            rightBroadcast = Build<TDqCnBroadcast>(ctx, join.Pos())
+                .Output()
+                    .Stage(collectRightStage)
+                    .Index().Build("0")
+                    .Build()
+                .Done();
+        } else {
+            rightBroadcast = Build<TDqCnBroadcast>(ctx, join.Pos())
+                .Output()
+                    .Stage(rightCn.Cast().Output().Stage())
+                    .Index(rightCn.Cast().Output().Index())
+                    .Build()
+                .Done();
+        }
     } else {
         YQL_CLOG(TRACE, CoreDq) << "-- DqBuildPhyJoin: right input is DqPure expr";
 

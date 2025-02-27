@@ -134,11 +134,20 @@ TPkcs12Ptr TryReadPkcs12(const TString& cert) {
     return pkcs12;
 }
 
+bool IsPasswordProblem() {
+    while (unsigned long err = ERR_get_error()) {
+        if (ERR_GET_REASON(err) == PKCS12_R_MAC_VERIFY_FAILURE) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void ParsePkcs12(const TPkcs12Ptr& pkcs12, TX509Ptr& cert, TEvpPKeyPtr& key, TPasswordProcessor& password) {
     X509* certPtr = nullptr;
     EVP_PKEY* keyPtr = nullptr;
     int err = PKCS12_parse(pkcs12.get(), password.Password.c_str(), &keyPtr, &certPtr, nullptr);
-    if (err == PKCS12_R_MAC_VERIFY_FAILURE && !password.Password) { // Password in not correct, try to ask password from user (if possible)
+    if (!password.Password && IsPasswordProblem()) { // Password in not correct, try to ask password from user (if possible)
         if (password.GetPassword()) { // Got new password
             err = PKCS12_parse(pkcs12.get(), password.Password.c_str(), &keyPtr, &certPtr, nullptr);
         }
@@ -183,8 +192,10 @@ std::pair<TString, TString> ConvertCertToPEM(
         key = TryReadPrivateKeyFromPEM(certificate, password);
     }
 
-    if (TPkcs12Ptr pkcs12 = TryReadPkcs12(certificate)) {
-        ParsePkcs12(pkcs12, cert, key, password);
+    if (!cert || !key) {
+        if (TPkcs12Ptr pkcs12 = TryReadPkcs12(certificate)) {
+            ParsePkcs12(pkcs12, cert, key, password);
+        }
     }
 
     if (cert && key) {

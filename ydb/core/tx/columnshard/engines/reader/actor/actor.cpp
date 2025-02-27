@@ -10,7 +10,6 @@ namespace NKikimr::NOlap::NReader {
 constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(10);
 constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5);
 
-
 void TColumnShardScan::PassAway() {
     Send(ResourceSubscribeActorId, new TEvents::TEvPoisonPill);
     Send(ReadCoordinatorActorId, new TEvents::TEvPoisonPill);
@@ -192,9 +191,6 @@ bool TColumnShardScan::ProduceResults() noexcept {
 
     std::shared_ptr<TPartialReadResult> resultOpt = resultConclusion.DetachResult();
     if (!resultOpt) {
-        if (!!AckReceivedInstant) {
-            LastResultInstant = TMonotonic::Now();
-        }
         ACFL_DEBUG("stage", "no data is ready yet")("iterator", ScanIterator->DebugString());
         return false;
     }
@@ -260,6 +256,9 @@ void TColumnShardScan::ContinueProcessing() {
     // Send new results if there is available capacity
     while (ScanIterator && ProduceResults()) {
     }
+    if (!!AckReceivedInstant) {
+        LastResultInstant = TMonotonic::Now();
+    }
 
     if (ScanIterator) {
         // Switch to the next range if the current one is finished
@@ -285,9 +284,9 @@ void TColumnShardScan::ContinueProcessing() {
             }
         }
     }
-    AFL_VERIFY(!!FinishInstant || !ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting())("scan_actor_id", ScanActorId)("tx_id", TxId)(
-                                                            "scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)(
-                                                            "debug", ScanIterator->DebugString())("counters", ScanCountersPool.DebugString());
+    AFL_VERIFY(!!FinishInstant || !ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting())("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)(
+                                             "gen", ScanGen)("tablet", TabletId)("debug", ScanIterator->DebugString())(
+                                             "counters", ScanCountersPool.DebugString());
 }
 
 void TColumnShardScan::MakeResult(size_t reserveRows /*= 0*/) {

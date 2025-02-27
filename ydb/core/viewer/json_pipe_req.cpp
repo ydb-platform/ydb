@@ -555,24 +555,47 @@ void TViewerPipeClient::RequestBSControllerPDiskUpdateStatus(const NKikimrBlobSt
     SendRequestToPipe(pipeClient, request.Release());
 }
 
-void TViewerPipeClient::RequestSchemeCacheNavigate(const TString& path) {
+THolder<NSchemeCache::TSchemeCacheNavigate> TViewerPipeClient::SchemeCacheNavigateRequestBuilder (
+        std::function<void (NSchemeCache::TSchemeCacheNavigate::TEntry&)> fillRequestEntryFunc
+) {
     THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
     NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-    entry.Path = SplitPath(path);
     entry.RedirectRequired = false;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
+    fillRequestEntryFunc(entry);
     request->ResultSet.emplace_back(entry);
+    return request;
+}
+
+void TViewerPipeClient::RequestSchemeCacheNavigateWtihAclCheck(const TString& path, ui32 access) {
+    auto request = SchemeCacheNavigateRequestBuilder(
+        [&](auto& entry) {
+            entry.Path = SplitPath(path);
+            entry.Access = access;
+        }
+    );
+    if (!Event->Get()->UserToken.empty())
+        request->UserToken = new NACLib::TUserToken(Event->Get()->UserToken);
+
+    SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+}
+
+void TViewerPipeClient::RequestSchemeCacheNavigate(const TString& path) {
+    auto request = SchemeCacheNavigateRequestBuilder(
+        [&](auto& entry) {
+            entry.Path = SplitPath(path);
+        }
+    );
     SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
 }
 
 void TViewerPipeClient::RequestSchemeCacheNavigate(const TPathId& pathId) {
-    THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-    NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-    entry.TableId.PathId = pathId;
-    entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
-    entry.RedirectRequired = false;
-    entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
-    request->ResultSet.emplace_back(entry);
+    auto request = SchemeCacheNavigateRequestBuilder(
+        [&](auto& entry) {
+            entry.TableId.PathId = pathId;
+            entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+        }
+    );
     SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
 }
 

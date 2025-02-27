@@ -40,4 +40,71 @@ Y_UNIT_TEST_SUITE(AuthConfigValidation) {
         UNIT_ASSERT_STRINGS_EQUAL(error.front(), "password_complexity: Min length of password cannot be less than "
                                                  "total min counts of lower case chars, upper case chars, numbers and special chars");
     }
+
+    Y_UNIT_TEST(AcceptValidAccountLockoutConfig) {
+        NKikimrProto::TAuthConfig authConfig;
+        NKikimrProto::TAccountLockout* validAccountLockoutConfig = authConfig.MutableAccountLockout();
+
+        {
+            validAccountLockoutConfig->SetAttemptResetDuration("12h");
+
+            std::vector<TString> error;
+            EValidationResult result = ValidateAuthConfig(authConfig, error);
+            UNIT_ASSERT_EQUAL(result, EValidationResult::Ok);
+            UNIT_ASSERT_C(error.empty(), "Should not be errors");
+        }
+
+        {
+            validAccountLockoutConfig->SetAttemptResetDuration("5m");
+
+            std::vector<TString> error;
+            EValidationResult result = ValidateAuthConfig(authConfig, error);
+            UNIT_ASSERT_EQUAL(result, EValidationResult::Ok);
+            UNIT_ASSERT_C(error.empty(), "Should not be errors");
+        }
+
+        {
+            validAccountLockoutConfig->SetAttemptResetDuration("5s");
+
+            std::vector<TString> error;
+            EValidationResult result = ValidateAuthConfig(authConfig, error);
+            UNIT_ASSERT_EQUAL(result, EValidationResult::Ok);
+            UNIT_ASSERT_C(error.empty(), "Should not be errors");
+        }
+    }
+
+    Y_UNIT_TEST(CannotAcceptInvalidAccountLockoutConfig) {
+        NKikimrProto::TAuthConfig authConfig;
+        NKikimrProto::TAccountLockout* invalidAccountLockoutConfig = authConfig.MutableAccountLockout();
+
+        {
+            invalidAccountLockoutConfig->SetAttemptResetDuration("h");
+
+            std::vector<TString> error;
+            EValidationResult result = ValidateAuthConfig(authConfig, error);
+            UNIT_ASSERT_EQUAL(result, EValidationResult::Error);
+            UNIT_ASSERT_VALUES_EQUAL(error.size(), 1);
+            UNIT_ASSERT_STRINGS_EQUAL(error.front(), "account_lockout: Cannot parse attempt reset duration");
+        }
+
+        {
+            invalidAccountLockoutConfig->SetAttemptResetDuration("");
+
+            std::vector<TString> error;
+            EValidationResult result = ValidateAuthConfig(authConfig, error);
+            UNIT_ASSERT_EQUAL(result, EValidationResult::Error);
+            UNIT_ASSERT_VALUES_EQUAL(error.size(), 1);
+            UNIT_ASSERT_STRINGS_EQUAL(error.front(), "account_lockout: Cannot parse attempt reset duration");
+        }
+
+        {
+            invalidAccountLockoutConfig->SetAttemptResetDuration("12hhh");
+
+            std::vector<TString> error;
+            EValidationResult result = ValidateAuthConfig(authConfig, error);
+            UNIT_ASSERT_EQUAL(result, EValidationResult::Error);
+            UNIT_ASSERT_VALUES_EQUAL(error.size(), 1);
+            UNIT_ASSERT_STRINGS_EQUAL(error.front(), "account_lockout: Cannot parse attempt reset duration");
+        }
+    }
 }

@@ -95,6 +95,8 @@ public:
 
     virtual bool NeedCommit() const = 0;
 
+    virtual ui64 GetCoordinator() const = 0;
+
     virtual void StartPrepare() = 0;
 
     struct TPrepareInfo {

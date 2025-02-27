@@ -204,6 +204,15 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
         .Done();
 }
 
+TMaybeNode<TExprBase> JsonExistsPushdown(const TCoJsonExists& jsonExists, TExprContext& ctx, TPositionHandle pos)
+{
+    auto columnName = jsonExists.Json().Cast<TCoMember>().Name();
+    return Build<TKqpOlapJsonExists>(ctx, pos)
+        .Column(columnName)
+        .Path(jsonExists.JsonPath().Cast<TCoUtf8>())
+        .Done();
+}
+
 std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos)
 {
     std::vector<TExprBase> out;
@@ -247,6 +256,10 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
                     .Build();
             }
             return builder.Done();
+        }
+
+        if (auto maybeJsonExists = node.Maybe<TCoJsonExists>()) {
+            return JsonExistsPushdown(maybeJsonExists.Cast(), ctx, pos);
         }
 
         if (const auto maybeJust = node.Maybe<TCoJust>()) {
@@ -515,15 +528,6 @@ TMaybeNode<TExprBase> ExistsPushdown(const TCoExists& exists, TExprContext& ctx,
             .Done();
 }
 
-TMaybeNode<TExprBase> JsonExistsPushdown(const TCoJsonExists& jsonExists, TExprContext& ctx, TPositionHandle pos)
-{
-    auto columnName = jsonExists.Json().Cast<TCoMember>().Name();
-    return Build<TKqpOlapJsonExists>(ctx, pos)
-        .Column(columnName)
-        .Path(jsonExists.JsonPath().Cast<TCoUtf8>())
-        .Done();
-}
-
 TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos)
 {
     /*
@@ -572,10 +576,7 @@ TMaybeNode<TExprBase> CoalescePushdown(const TCoCoalesce& coalesce, const TExprN
         return SafeCastPredicatePushdown(maybeFlatmap.Cast(), argument, ctx, pos);
     } else if (auto maybePredicate = predicate.Maybe<TCoCompare>()) {
         return SimplePredicatePushdown(maybePredicate.Cast(), argument, ctx, pos);
-    } else if (auto maybeJsonExists = predicate.Maybe<TCoJsonExists>()) {
-        return JsonExistsPushdown(maybeJsonExists.Cast(), ctx, pos);
     }
-
     return NullNode;
 }
 

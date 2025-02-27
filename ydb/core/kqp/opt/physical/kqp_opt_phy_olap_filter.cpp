@@ -262,33 +262,31 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
             return YqlIfPushdown(maybeIf.Cast(), argument, ctx);
         }
 
-        if constexpr (NKikimr::NSsa::RuntimeVersion >= 4U) {
-            if (const auto maybeArithmetic = node.Maybe<TCoBinaryArithmetic>()) {
-                const auto arithmetic = maybeArithmetic.Cast();
-                if (const auto params = ExtractBinaryFunctionParameters(arithmetic, argument, ctx, pos)) {
-                    return Build<TKqpOlapFilterBinaryOp>(ctx, pos)
-                            .Operator().Value(arithmetic.Ref().Content(), TNodeFlags::Default).Build()
-                            .Left(params->first)
-                            .Right(params->second)
-                            .Done();
-                }
+        if (const auto maybeArithmetic = node.Maybe<TCoBinaryArithmetic>()) {
+            const auto arithmetic = maybeArithmetic.Cast();
+            if (const auto params = ExtractBinaryFunctionParameters(arithmetic, argument, ctx, pos)) {
+                return Build<TKqpOlapFilterBinaryOp>(ctx, pos)
+                        .Operator().Value(arithmetic.Ref().Content(), TNodeFlags::Default).Build()
+                        .Left(params->first)
+                        .Right(params->second)
+                        .Done();
             }
+        }
 
-            if (const auto maybeArithmetic = node.Maybe<TCoUnaryArithmetic>()) {
-                const auto arithmetic = maybeArithmetic.Cast();
-                if (const auto params = ConvertComparisonNode(arithmetic.Arg(), argument, ctx, pos); 1U == params.size()) {
-                    TString oper(arithmetic.Ref().Content());
-                    YQL_ENSURE(oper.to_lower());
-                    return Build<TKqpOlapFilterUnaryOp>(ctx, pos)
-                            .Operator().Value(oper, TNodeFlags::Default).Build()
-                            .Arg(params.front())
-                            .Done();
-                }
+        if (const auto maybeArithmetic = node.Maybe<TCoUnaryArithmetic>()) {
+            const auto arithmetic = maybeArithmetic.Cast();
+            if (const auto params = ConvertComparisonNode(arithmetic.Arg(), argument, ctx, pos); 1U == params.size()) {
+                TString oper(arithmetic.Ref().Content());
+                YQL_ENSURE(oper.to_lower());
+                return Build<TKqpOlapFilterUnaryOp>(ctx, pos)
+                        .Operator().Value(oper, TNodeFlags::Default).Build()
+                        .Arg(params.front())
+                        .Done();
             }
+        }
 
-            if (const auto maybeCoalesce = node.Maybe<TCoCoalesce>()) {
-                return YqlCoalescePushdown(maybeCoalesce.Cast(), argument, ctx);
-            }
+        if (const auto maybeCoalesce = node.Maybe<TCoCoalesce>()) {
+            return YqlCoalescePushdown(maybeCoalesce.Cast(), argument, ctx);
         }
 
         if (const auto maybeCompare = node.Maybe<TCoCompare>()) {
@@ -375,7 +373,7 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
         compareOperator = "gt";
     } else if (predicate.Maybe<TCoCmpGreaterOrEqual>() && !forceStrictComparison) {
         compareOperator = "gte";
-    } else if constexpr (NKikimr::NSsa::RuntimeVersion >= 2U) {
+    } else {
         // We introduced LIKE pushdown in v2 of SSA program
         if (predicate.Maybe<TCoCmpStringContains>()) {
             compareOperator = "string_contains";
@@ -511,16 +509,10 @@ template<bool Empty>
 TMaybeNode<TExprBase> ExistsPushdown(const TCoExists& exists, TExprContext& ctx, TPositionHandle pos)
 {
     const auto columnName = exists.Optional().Cast<TCoMember>().Name();
-    if constexpr (NSsa::RuntimeVersion >= 4U) {
-        return Build<TKqpOlapFilterUnaryOp>(ctx, pos)
-                .Operator().Value(Empty ? "empty" : "exists", TNodeFlags::Default).Build()
-                .Arg(columnName)
-                .Done();
-    } else {
-        return Build<TKqpOlapFilterExists>(ctx, pos)
-            .Column(columnName)
+    return Build<TKqpOlapFilterUnaryOp>(ctx, pos)
+            .Operator().Value(Empty ? "empty" : "exists", TNodeFlags::Default).Build()
+            .Arg(columnName)
             .Done();
-    }
 }
 
 TMaybeNode<TExprBase> JsonExistsPushdown(const TCoJsonExists& jsonExists, TExprContext& ctx, TPositionHandle pos)
@@ -571,10 +563,8 @@ TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap, 
 
 TMaybeNode<TExprBase> CoalescePushdown(const TCoCoalesce& coalesce, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos)
 {
-    if constexpr (NSsa::RuntimeVersion >= 4U) {
-        if (const auto node = YqlCoalescePushdown(coalesce, argument, ctx)) {
-            return node;
-        }
+    if (const auto node = YqlCoalescePushdown(coalesce, argument, ctx)) {
+        return node;
     }
 
     auto predicate = coalesce.Predicate();
@@ -617,10 +607,8 @@ TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, const TExprNode& 
 
     if (const auto maybeNot = predicate.Maybe<TCoNot>()) {
         const auto notNode = maybeNot.Cast();
-        if constexpr (NSsa::RuntimeVersion >= 4U) {
-            if (const auto maybeExists = notNode.Value().Maybe<TCoExists>()) {
-                return TFilterOpsLevels(ExistsPushdown<true>(maybeExists.Cast(), ctx, pos));
-            }
+        if (const auto maybeExists = notNode.Value().Maybe<TCoExists>()) {
+            return TFilterOpsLevels(ExistsPushdown<true>(maybeExists.Cast(), ctx, pos));
         }
         auto pushedFilters = PredicatePushdown(notNode.Value(), argument, ctx, pos);
         pushedFilters.WrapToNotOp(ctx, pos);

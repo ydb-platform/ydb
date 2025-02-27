@@ -177,7 +177,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
 
             auto result = session.ExecuteQuery(Q_(R"(
                 INSERT INTO `/Root/KV` (Key, Value) VALUES (1u, "New");
-                SELECT COUNT(*) FROM `/Root/KV`;
             )"), TTxControl::Tx(tx.GetId())).ExtractValueSync();
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());

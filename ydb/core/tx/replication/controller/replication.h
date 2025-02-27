@@ -56,7 +56,7 @@ public:
     class ITarget {
     public:
         struct IConfig {
-            using TPtr = std::shared_ptr<IConfig>;
+            using TPtr = std::shared_ptr<const IConfig>;
 
             virtual ~IConfig() = default;
 
@@ -98,6 +98,8 @@ public:
         virtual void Progress(const TActorContext& ctx) = 0;
         virtual void Shutdown(const TActorContext& ctx) = 0;
 
+        virtual void UpdateConfig(const NKikimrReplication::TReplicationConfig&) = 0;
+
     protected:
         virtual IActor* CreateWorkerRegistar(const TActorContext& ctx) const = 0;
     };
@@ -135,6 +137,8 @@ public:
     const NKikimrReplication::TReplicationConfig& GetConfig() const;
     void SetState(EState state, TString issue = {});
     EState GetState() const;
+    EState GetDesiredState() const;
+    void SetDesiredState(EState state);
     const TString& GetIssue() const;
     const TMaybe<TDuration> GetLag() const;
 

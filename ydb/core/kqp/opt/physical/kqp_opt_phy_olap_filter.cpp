@@ -249,6 +249,10 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
             return builder.Done();
         }
 
+        if (auto maybeJsonExists = node.Maybe<TCoJsonExists>()) {
+
+        }
+
         if (const auto maybeJust = node.Maybe<TCoJust>()) {
             if (const auto params = ConvertComparisonNode(maybeJust.Cast().Input(), argument, ctx, pos); 1U == params.size()) {
                 return Build<TKqpOlapFilterUnaryOp>(ctx, node.Pos())
@@ -572,8 +576,6 @@ TMaybeNode<TExprBase> CoalescePushdown(const TCoCoalesce& coalesce, const TExprN
         return SafeCastPredicatePushdown(maybeFlatmap.Cast(), argument, ctx, pos);
     } else if (auto maybePredicate = predicate.Maybe<TCoCompare>()) {
         return SimplePredicatePushdown(maybePredicate.Cast(), argument, ctx, pos);
-    } else if (auto maybeJsonExists = predicate.Maybe<TCoJsonExists>()) {
-        return JsonExistsPushdown(maybeJsonExists.Cast(), ctx, pos);
     }
 
     return NullNode;

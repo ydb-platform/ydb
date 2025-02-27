@@ -307,6 +307,10 @@ public:
         return !dontNeedCommit;
     }
 
+    virtual ui64 GetCoordinator() const override {
+        return Coordinator;
+    }
+
     void StartPrepare() override {
         AFL_ENSURE(!CollectOnly);
         AFL_ENSURE(State == ETransactionState::COLLECTING);

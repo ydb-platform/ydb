@@ -3,8 +3,8 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/threading/future/core/future.h>
 #include <ydb-cpp-sdk/client/types/credentials/credentials.h>
-#include <ydb/library/yql/providers/common/solomon_accessor/grpc/solomon_accessor_pb.pb.h>
 #include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
+#include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/solomon_accessor_pb.pb.h>
 
 namespace NYql::NSo {
 

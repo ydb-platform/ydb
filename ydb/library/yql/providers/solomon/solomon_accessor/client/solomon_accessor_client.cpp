@@ -6,8 +6,8 @@
 #include <yql/essentials/utils/url_builder.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <ydb/library/yql/providers/common/solomon_accessor/grpc/solomon_accessor_pb.pb.h>
-#include <ydb/library/yql/providers/common/solomon_accessor/grpc/solomon_accessor_pb.grpc.pb.h>
+#include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/solomon_accessor_pb.pb.h>
+#include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/solomon_accessor_pb.grpc.pb.h>
 
 namespace NYql::NSo {
 
@@ -179,7 +179,7 @@ private:
 
     TString GetGrpcSolomonEndpoint() const
     {
-        return Settings.GetEndpoint() + "443";
+        return Settings.GetEndpoint() + ":443";
     }
 
     TString BuildListMetricsRequest(const TString& selectors, int pageSize, int page) const

@@ -13,6 +13,16 @@ namespace {
 
 constexpr size_t FormatContextLimit = 100;
 
+TString NormalizeEOL(TStringBuf input) {
+    TStringBuilder res;
+    TStringBuf tok;
+    while (input.ReadLine(tok)) {
+        res << tok << '\n';
+    }
+
+    return res;
+}
+
 class TFormatRunner : public ICheckRunner {
 public:
     TString GetCheckName() const final {
@@ -66,7 +76,7 @@ private:
         auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
         TString formattedQuery;
         res.Success = formatter->Format(request.Program, formattedQuery, res.Issues);
-        if (res.Success && formattedQuery != request.Program) {
+        if (res.Success && formattedQuery != NormalizeEOL(request.Program)) {
             res.Success = false;
             TPosition origPos(0, 1, request.File);
             TTextWalker origWalker(origPos, true);

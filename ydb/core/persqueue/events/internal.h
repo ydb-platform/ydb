@@ -199,6 +199,7 @@ struct TEvPQ {
         EvDeletePartitionDone,
         EvTransactionCompleted,
         EvListAllTopicsResponse,
+        EvDecompressionDone,
         EvEnd
     };
 

@@ -117,11 +117,11 @@ private:
         };
 
         auto* privateApiConfig = fqConfig.MutablePrivateApi();
-        privateApiConfig->SetTaskServiceEndpoint(endpoint); // TODO: remove when Loopback: true 
+        privateApiConfig->SetTaskServiceEndpoint(endpoint);
         privateApiConfig->SetTaskServiceDatabase(database);
 
         auto* nodesMenagerConfig = fqConfig.MutableNodesManager();
-        nodesMenagerConfig->SetPort(grpcPort); // TODO: remove?
+        nodesMenagerConfig->SetPort(grpcPort);
         nodesMenagerConfig->SetHost("localhost");
 
         if (Settings.EmulateS3) {
@@ -130,8 +130,8 @@ private:
 
         auto& cpStorage = *fqConfig.MutableControlPlaneStorage();
         cpStorage.SetUseInMemory(!Settings.EnableCpStorage);
-        fillStorageConfig(cpStorage.MutableStorage(), Settings.CpStorageDatabase);  // TODO: remove on in memory cp
-        fillStorageConfig(fqConfig.MutableDbPool()->MutableStorage(), Settings.CpStorageDatabase);  // TODO: remove on in memory cp
+        fillStorageConfig(cpStorage.MutableStorage(), Settings.CpStorageDatabase);
+        fillStorageConfig(fqConfig.MutableDbPool()->MutableStorage(), Settings.CpStorageDatabase);
 
         auto& checkpoints = *fqConfig.MutableCheckpointCoordinator();
         checkpoints.SetEnabled(Settings.EnableCheckpoints);

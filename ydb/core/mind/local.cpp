@@ -52,19 +52,19 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         ui32 Generation;
         TTabletTypes::EType TabletType;
         NKikimrLocal::EBootMode BootMode;
-        ui32 FollowerId;
 
         TTablet()
             : Tablet()
             , Generation(0)
             , TabletType()
             , BootMode(NKikimrLocal::EBootMode::BOOT_MODE_LEADER)
-            , FollowerId(0)
         {}
     };
 
     struct TTabletEntry : TTablet {
         TInstant From;
+        bool IsPromoting = false;
+        ui32 PromotingFromFollower = 0;
 
         TTabletEntry()
             : From(TInstant::MicroSeconds(0))
@@ -140,6 +140,10 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelIsolated;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelDemotedByBS;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelUnknownReason;
+
+    static TTabletId LeaderId(TTabletId tabletId) {
+        return {tabletId.first, 0};
+    }
 
     void Die(const TActorContext &ctx) override {
         if (HivePipeClient) {
@@ -430,15 +434,17 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                     // promote to leader
                     it->second.BootMode = NKikimrLocal::EBootMode::BOOT_MODE_LEADER;
                     it->second.Generation = suggestedGen;
-                    tabletId.second = 0; // FollowerId = 0
-                    TTabletEntry &entry = InbootTablets[tabletId];
+                    TTabletId leaderId = LeaderId(tabletId);
+                    TTabletEntry &entry = InbootTablets[leaderId];
                     entry = it->second;
                     entry.From = ctx.Now();
                     entry.BootMode = NKikimrLocal::EBootMode::BOOT_MODE_LEADER;
                     entry.Generation = suggestedGen;
+                    entry.IsPromoting = true;
+                    entry.PromotingFromFollower = tabletId.second;
                     ctx.Send(entry.Tablet, new TEvTablet::TEvPromoteToLeader(suggestedGen, info));
                     MarkDeadTablet(it->first, 0, TEvLocal::TEvTabletStatus::StatusSupersededByLeader, TEvTablet::TEvTabletDead::ReasonError, ctx);
-                    OnlineTablets.erase(it);
+                    it->second.IsPromoting = true;
                     LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
                         "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet follower tablet " << tabletId << " promoted to leader");
                     return;
@@ -718,6 +724,12 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                     << " marked as running at generation "
                     << generation);
         NTabletPipe::SendData(ctx, HivePipeClient, new TEvLocal::TEvTabletStatus(TEvLocal::TEvTabletStatus::StatusOk, tabletId, generation));
+        if (inbootIt->second.IsPromoting) {
+            TTabletId promotedTablet{tabletId.first, inbootIt->second.PromotingFromFollower};
+            OnlineTablets.erase(promotedTablet);
+            inbootIt->second.IsPromoting = false;
+            inbootIt->second.PromotingFromFollower = 0;
+        }
         OnlineTablets.emplace(tabletId, inbootIt->second);
         InbootTablets.erase(inbootIt);
     }
@@ -818,6 +830,14 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         });
         if (onlineIt != OnlineTablets.end()) { // from online list
             MarkDeadTablet(onlineIt->first, generation, TEvLocal::TEvTabletStatus::StatusFailed, msg->Reason, ctx);
+            if (onlineIt->second.IsPromoting) {
+                TTabletId leader = LeaderId(onlineIt->first);
+                auto inbootIt = InbootTablets.find(leader);
+                if (inbootIt != InbootTablets.end()) {
+                    MarkDeadTablet(leader, inbootIt->second.Generation, TEvLocal::TEvTabletStatus::StatusFailed, msg->Reason, ctx);
+                }
+                InbootTablets.erase(inbootIt);
+            }
             OnlineTablets.erase(onlineIt);
             UpdateEstimate();
             return;

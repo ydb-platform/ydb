@@ -239,12 +239,12 @@ public:
         , Counters(counters)
         , TableWriteActorSpan(TWilsonKqp::TableWriteActor, NWilson::TTraceId(traceId), "TKqpTableWriteActor")
     {
+        AFL_ENSURE(MessageSettings.InFlightMemoryLimitPerActorBytes >= MessageSettings.MemoryLimitPerMessageBytes);
         LogPrefix = TStringBuilder() << "Table: `" << TablePath << "` (" << TableId << "), " << "SessionActorId: " << sessionActorId;
         ShardedWriteController = CreateShardedWriteController(
             TShardedWriteControllerSettings {
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
                 .MemoryLimitPerMessage = MessageSettings.MemoryLimitPerMessageBytes,
-                .MaxBatchesPerMessage = MessageSettings.MaxBatchesPerMessage,
             },
             TypeEnv,
             Alloc);

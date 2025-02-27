@@ -181,7 +181,7 @@ public:
     TBuffer AddBlock(TStringBuf data, bool last);
 
     // Helper that serializes the whole file at one time
-    static TBuffer EncryptFile(TString algorithm, TEncryptionKey key, TEncryptionIV iv, TStringBuf data);
+    static TBuffer EncryptFullFile(TString algorithm, TEncryptionKey key, TEncryptionIV iv, TStringBuf data);
 
 private:
     class TImpl;
@@ -224,7 +224,7 @@ public:
 
     // Helper that deserializes the whole file at one time
     static std::pair<TBuffer, TEncryptionIV> DecryptFile(TEncryptionKey key, TBuffer data);
-    static TBuffer DecryptFile(TEncryptionKey key, TEncryptionIV expectedIV, TBuffer data);
+    static TBuffer DecryptFullFile(TEncryptionKey key, TEncryptionIV expectedIV, TBuffer data);
 
 private:
     class TImpl;

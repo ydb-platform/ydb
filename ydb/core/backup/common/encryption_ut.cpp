@@ -28,8 +28,8 @@ const TEncryptionKey& SelectKey(const TString& alg) {
 Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
     Y_UNIT_TEST(SerializeWholeFileAtATime) {
         TEncryptionIV iv = TEncryptionIV::Generate();
-        TBuffer fileData = TEncryptedFileSerializer::EncryptFile("aes-128_gcm", Key16, iv, "short data file");
-        TBuffer data = TEncryptedFileDeserializer::DecryptFile(Key16, iv, fileData);
+        TBuffer fileData = TEncryptedFileSerializer::EncryptFullFile("aes-128_gcm", Key16, iv, "short data file");
+        TBuffer data = TEncryptedFileDeserializer::DecryptFullFile(Key16, iv, fileData);
         TString dataStr;
         data.AsString(dataStr);
         UNIT_ASSERT_STRINGS_EQUAL(dataStr, "short data file");
@@ -50,9 +50,9 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
 
     Y_UNIT_TEST(WrongParametersForDeserializer) {
         TEncryptionIV iv = TEncryptionIV::Generate();
-        TBuffer testData = TEncryptedFileSerializer::EncryptFile("chacha-20-poly1305", Key32, iv, "test data");
+        TBuffer testData = TEncryptedFileSerializer::EncryptFullFile("chacha-20-poly1305", Key32, iv, "test data");
         UNIT_ASSERT_EXCEPTION_CONTAINS(TEncryptedFileDeserializer::DecryptFile(Key16, testData), yexception, "Invalid key length 16. Expected: 32");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(TEncryptedFileDeserializer::DecryptFile(Key16, TEncryptionIV::Generate(), testData), yexception, "File is corrupted");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TEncryptedFileDeserializer::DecryptFullFile(Key16, TEncryptionIV::Generate(), testData), yexception, "File is corrupted");
     }
 
     Y_UNIT_TEST(SplitOnBlocks) {
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
 
     Y_UNIT_TEST(EmptyFile) {
         TEncryptionIV iv = TEncryptionIV::Generate();
-        TBuffer fileData = TEncryptedFileSerializer::EncryptFile("aes-128_gcm", Key16, iv, TStringBuf());
+        TBuffer fileData = TEncryptedFileSerializer::EncryptFullFile("aes-128_gcm", Key16, iv, TStringBuf());
 
         auto [buffer, headerIV] = TEncryptedFileDeserializer::DecryptFile(Key16, fileData);
         UNIT_ASSERT_VALUES_EQUAL(buffer.Size(), 0);
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
     Y_UNIT_TEST(ReadPartial) {
         for (const TString& alg : Algorithms) {
             TEncryptionIV iv = TEncryptionIV::Generate();
-            TBuffer fileData = TEncryptedFileSerializer::EncryptFile(alg, SelectKey(alg), iv, "encrypted text");
+            TBuffer fileData = TEncryptedFileSerializer::EncryptFullFile(alg, SelectKey(alg), iv, "encrypted text");
 
             TBuffer allButLastBlock(fileData.Data(), fileData.Size() - 20);
             TBuffer lastBlock(fileData.Data() + fileData.Size() - 20, 20);
@@ -156,14 +156,14 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
 
     Y_UNIT_TEST(DeleteLastByte) {
         TEncryptionIV iv = TEncryptionIV::Generate();
-        TBuffer fileData = TEncryptedFileSerializer::EncryptFile("aes-256_gcm", Key32, iv, "short data file");
+        TBuffer fileData = TEncryptedFileSerializer::EncryptFullFile("aes-256_gcm", Key32, iv, "short data file");
         fileData.Resize(fileData.Size() - 1);
         UNIT_ASSERT_EXCEPTION_CONTAINS(TEncryptedFileDeserializer::DecryptFile(Key32, fileData), yexception, "File is corrupted");
     }
 
     Y_UNIT_TEST(AddByte) {
         TEncryptionIV iv = TEncryptionIV::Generate();
-        TBuffer fileData = TEncryptedFileSerializer::EncryptFile("aes-256_gcm", Key32, iv, "short data file");
+        TBuffer fileData = TEncryptedFileSerializer::EncryptFullFile("aes-256_gcm", Key32, iv, "short data file");
         fileData.Resize(fileData.Size() + 1);
         UNIT_ASSERT_EXCEPTION_CONTAINS(TEncryptedFileDeserializer::DecryptFile(Key32, fileData), yexception, "File is corrupted");
 
@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
     Y_UNIT_TEST(RemoveLastBlock) {
         for (const TString& alg : Algorithms) {
             TEncryptionIV iv = TEncryptionIV::Generate();
-            TBuffer fileData = TEncryptedFileSerializer::EncryptFile(alg, SelectKey(alg), iv, "encrypted text");
+            TBuffer fileData = TEncryptedFileSerializer::EncryptFullFile(alg, SelectKey(alg), iv, "encrypted text");
 
             fileData.Resize(fileData.Size() - 20); // remove last block
             TEncryptedFileDeserializer deserializer(SelectKey(alg));
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
     Y_UNIT_TEST(ChangeAnyByte) {
         for (const TString& alg : Algorithms) {
             TEncryptionIV iv = TEncryptionIV::Generate();
-            TBuffer fileData = TEncryptedFileSerializer::EncryptFile(alg, SelectKey(alg), iv, "test text");
+            TBuffer fileData = TEncryptedFileSerializer::EncryptFullFile(alg, SelectKey(alg), iv, "test text");
             for (size_t i = 0; i < fileData.Size(); ++i) {
                 TBuffer modified = fileData;
                 modified.Data()[i] ^= 1;
@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
 
     Y_UNIT_TEST(BigHeaderSize) {
         TEncryptionIV iv = TEncryptionIV::Generate();
-        TBuffer fileData = TEncryptedFileSerializer::EncryptFile("AES-128-GCM", Key16, iv, "test text");
+        TBuffer fileData = TEncryptedFileSerializer::EncryptFullFile("AES-128-GCM", Key16, iv, "test text");
         // Make header big
         fileData.Data()[0] = char(-1);
         UNIT_ASSERT_EXCEPTION_CONTAINS(TEncryptedFileDeserializer::DecryptFile(Key16, fileData), yexception, "File is corrupted");
@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
     Y_UNIT_TEST(BigBlockSize) {
         TEncryptionIV iv = TEncryptionIV::Generate();
         TStringBuf srcText = "File with too big block size";
-        TBuffer fileData = TEncryptedFileSerializer::EncryptFile("AES-256-GCM", Key32, iv, srcText);
+        TBuffer fileData = TEncryptedFileSerializer::EncryptFullFile("AES-256-GCM", Key32, iv, srcText);
         size_t blockSizePos = fileData.Size() - 20 /* last block with MAC */ - 16 /* MAC */ - srcText.size() - 4 /* sizeof(size) */;
         UNIT_ASSERT_LT(blockSizePos, fileData.Size() - 4);
         uint32_t* size = reinterpret_cast<uint32_t*>(fileData.Data() + blockSizePos);

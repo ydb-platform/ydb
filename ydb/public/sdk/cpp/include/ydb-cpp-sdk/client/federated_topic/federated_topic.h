@@ -15,6 +15,8 @@ using TDbInfo = Ydb::FederationDiscovery::DatabaseInfo;
 
 using TSessionClosedEvent = NTopic::TSessionClosedEvent;
 
+using TAsyncDescribeTopicResult = NTopic::TAsyncDescribeTopicResult;
+
 //! Federated partition session.
 struct TFederatedPartitionSession : public TThrRefBase, public TPrintable<TFederatedPartitionSession> {
     using TPtr = TIntrusivePtr<TFederatedPartitionSession>;
@@ -515,6 +517,27 @@ public:
     //! Create write session.
     // std::shared_ptr<NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TFederatedWriteSessionSettings& settings);
     std::shared_ptr<NTopic::IWriteSession> CreateWriteSession(const TFederatedWriteSessionSettings& settings);
+
+    struct TClusterInfo {
+        enum class EStatus : int {
+            STATUS_UNSPECIFIED,
+            AVAILABLE,
+            READ_ONLY,
+            UNAVAILABLE,
+        };
+        std::string Name;
+        std::string Endpoint;
+        std::string Path;
+        EStatus Status;
+        // TODO: Id, Weight, ...?
+        //! Replaces Endpoint and Database for federated clusters
+        void AdjustTopicClientSettings(NTopic::TTopicClientSettings& settings) const;
+        //! Prepend Database for federated clusters
+        void AdjustTopicPath(std::string& path) const;
+    };
+
+    //! Discover all clusters for federated topic
+    NThreading::TFuture<std::vector<TClusterInfo>> GetAllClusterInfo();
 
 protected:
     void OverrideCodec(NTopic::ECodec codecId, std::unique_ptr<NTopic::ICodec>&& codecImpl);

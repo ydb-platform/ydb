@@ -86,4 +86,23 @@ void TFederatedTopicClient::OverrideCodec(NTopic::ECodec codecId, std::unique_pt
     return Impl_->OverrideCodec(codecId, std::move(codecImpl));
 }
 
+NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederatedTopicClient::GetAllClusterInfo() {
+    return Impl_->GetAllClusterInfo();
+}
+
+void TFederatedTopicClient::TClusterInfo::AdjustTopicClientSettings(NTopic::TTopicClientSettings& settings) const {
+    if (!Name.empty()) {
+        settings.DiscoveryEndpoint(Endpoint);
+        settings.Database(Path);
+    }
+}
+
+void TFederatedTopicClient::TClusterInfo::AdjustTopicPath(std::string& path) const {
+    if (!Name.empty()) {
+        if (path.empty() || path[0] != '/') {
+            path = Path + '/' + path;
+        }
+    }
+}
+
 } // namespace NYdb::NFederatedTopic

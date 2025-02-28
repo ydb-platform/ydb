@@ -4,10 +4,12 @@
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/policy.h>
 #include <ydb/core/tx/program/program.h>
 
+#include <yql/essentials/minikql/mkql_terminator.h>
+
 namespace NKikimr::NOlap::NReader {
 
 NKikimr::TConclusionStatus IScannerConstructor::ParseProgram(const TVersionedIndex* vIndex, const NKikimrSchemeOp::EOlapProgramType programType,
-    const TString& serializedProgram, TReadDescription& read, const NArrow::NSSA::IColumnResolver& columnResolver) const {
+    const TString& serializedProgram, TReadDescription& read, const NArrow::NSSA::IColumnResolver& columnResolver) const noexcept {
     try {
         std::set<TString> namesChecker;
         if (serializedProgram.empty()) {
@@ -31,8 +33,8 @@ NKikimr::TConclusionStatus IScannerConstructor::ParseProgram(const TVersionedInd
 
             return TConclusionStatus::Success();
         }
-    } catch (...) {
-        return TConclusionStatus::Fail(TStringBuilder() << "Can't parse program, exception thrown: " << CurrentExceptionMessage());
+    } catch (const NKikimr::NMiniKQL::TTerminateException& terminateException) {
+        return TConclusionStatus::Fail(TStringBuilder() << "Can't parse program, exception thrown: " << terminateException.what());
     }
 }
 

@@ -116,10 +116,10 @@ TMessage _withMessageGroupId(const TString& messageGroupId) {
 using TExpectations = TVector<TVector<std::pair<TString, std::shared_ptr<IChecker>>>>;
 
 struct TConfig {
-    TString TableDDL;
+    const TString TableDDL;
     const TString Lambda;
     const TVector<TMessage> Messages;
-    TExpectations Expectations;
+    const TExpectations Expectations;
     const TVector<TString> AlterLambdas;
 };
 

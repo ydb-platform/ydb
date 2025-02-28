@@ -49,9 +49,27 @@ struct TUnwrapYsonStructIntrusivePtr<TIntrusivePtr<T>>
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TValue>
+TFieldRegistrar<TValue>& TFieldRegistrar<TValue>::Validator(TCallback<void(const TValue&, const TValue&)> validator)
+{
+    VerifyEmptyValidator();
+    Validator_ = validator;
+    return *this;
+}
+
+template <class TValue>
+TFieldRegistrar<TValue>& TFieldRegistrar<TValue>::Validator(TCallback<void(const TValue&)> validator)
+{
+    VerifyEmptyValidator();
+    Validator_ = BIND_NO_PROPAGATE([validator = std::move(validator)] (const TValue& /*oldValue*/, const TValue& newValue) {
+        validator(std::move(newValue));
+    });
+    return *this;
+}
+
+template <class TValue>
 TFieldRegistrar<TValue>& TFieldRegistrar<TValue>::Updater(TCallback<void(const TValue&, const TValue&)> updater)
 {
-    VerifyEmpty();
+    VerifyEmptyUpdater();
     Updater_ = updater;
     return *this;
 }
@@ -59,7 +77,7 @@ TFieldRegistrar<TValue>& TFieldRegistrar<TValue>::Updater(TCallback<void(const T
 template <class TValue>
 TFieldRegistrar<TValue>& TFieldRegistrar<TValue>::Updater(TCallback<void(const TValue&)> updater)
 {
-    VerifyEmpty();
+    VerifyEmptyUpdater();
     Updater_ = BIND_NO_PROPAGATE([updater = std::move(updater)] (const TValue& /*oldValue*/, const TValue& newValue) {
         updater(std::move(newValue));
     });
@@ -90,12 +108,29 @@ TFieldRegistrar<TValue>& TFieldRegistrar<TValue>::NestedUpdater(
             TUnwrappedValue,
             typename NDetail::TUnwrapYsonStructIntrusivePtr<TValue>::TStruct>);
 
-    VerifyEmpty();
+    VerifyEmptyUpdater();
     auto configurator = configureCallback();
     Updater_ = BIND_NO_PROPAGATE([configurator = std::move(configurator)] (const TValue& oldValue, const TValue& newValue) {
         configurator.Update(oldValue, newValue);
     });
     return *this;
+}
+
+template <class TValue>
+void TFieldRegistrar<TValue>::DoValidate(
+    IYsonStructParameterPtr parameter,
+    TYsonStructBase* oldStruct,
+    TYsonStructBase* newStruct) const
+{
+    if (!Validator_) {
+        return;
+    }
+
+    auto typedParameter = DynamicPointerCast<TYsonStructParameter<TValue>>(parameter);
+    YT_VERIFY(typedParameter);
+    Validator_(
+        typedParameter->GetValue(oldStruct),
+        typedParameter->GetValue(newStruct));
 }
 
 template <class TValue>
@@ -116,7 +151,13 @@ void TFieldRegistrar<TValue>::DoUpdate(
 }
 
 template <class TValue>
-void TFieldRegistrar<TValue>::VerifyEmpty() const
+void TFieldRegistrar<TValue>::VerifyEmptyValidator() const
+{
+    YT_VERIFY(!Validator_);
+}
+
+template <class TValue>
+void TFieldRegistrar<TValue>::VerifyEmptyUpdater() const
 {
     YT_VERIFY(!Updater_);
 }
@@ -169,6 +210,7 @@ TSealedConfigurator<TStruct> TConfigurator<TStruct>::Seal() &&
 {
     return std::move(*this);
 }
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <CYsonStructDerived TStruct>
@@ -177,9 +219,26 @@ TSealedConfigurator<TStruct>::TSealedConfigurator(TConfigurator<TStruct> configu
 { }
 
 template <CYsonStructDerived TStruct>
+void TSealedConfigurator<TStruct>::Validate(
+    TIntrusivePtr<TStruct> oldStruct,
+    TIntrusivePtr<TStruct> newStruct) const
+{
+    Do(oldStruct, newStruct, &NDetail::IFieldRegistrar::DoValidate);
+}
+
+template <CYsonStructDerived TStruct>
 void TSealedConfigurator<TStruct>::Update(
     TIntrusivePtr<TStruct> oldStruct,
     TIntrusivePtr<TStruct> newStruct) const
+{
+    Do(oldStruct, newStruct, &NDetail::IFieldRegistrar::DoUpdate);
+}
+
+template <CYsonStructDerived TStruct>
+void TSealedConfigurator<TStruct>::Do(
+    TIntrusivePtr<TStruct> oldStruct,
+    TIntrusivePtr<TStruct> newStruct,
+    TFieldRegistrarMethod fieldMethod) const
 {
     const auto* meta = oldStruct->GetMeta();
     YT_VERIFY(meta == newStruct->GetMeta());
@@ -194,7 +253,7 @@ void TSealedConfigurator<TStruct>::Update(
         if (fieldDescIter == parameterToFieldRegistrar.end()) {
             THROW_ERROR_EXCEPTION("Field %Qv is not marked as updatable, but was changed", name);
         } else {
-            fieldDescIter->second->DoUpdate(parameter, oldStruct.Get(), newStruct.Get());
+            (*(fieldDescIter->second).*fieldMethod)(parameter, oldStruct.Get(), newStruct.Get());
         }
     }
 }

@@ -115,43 +115,52 @@ public:
                     content:
                         application/json:
                             schema:
-                                type: array
-                                items:
-                                    type: object
-                                    properties:
-                                        Offset:
-                                            type: integer
-                                        CreateTimestamp:
-                                            type: integer
-                                        WriteTimestamp:
-                                            type: integer
-                                        Timestamp Diff:
-                                            type: integer
-                                        Message:
-                                            type: string
-                                        Size:
-                                            type: integer
-                                        OriginalSize:
-                                            type: integer
-                                        Codec:
-                                            type: integer
-                                        ProducerId:
-                                            type: string
-                                        SeqNo:
-                                            type: integer
-                                        Metadata:
-                                            type: array
-                                            items:
-                                                type: object
-                                                properties:
-                                                    Key:
-                                                        type: string
-                                                    Value:
-                                                        type: string
+                                type: object
+                                properties:
+                                    StartOffset:
+                                        type: integer
+                                    EndOffset:
+                                        type: integer
+                                    Messages:
+                                        type: array
+                                        items:
+                                            type: object
+                                            properties:
+                                                Offset:
+                                                    type: integer
+                                                CreateTimestamp:
+                                                    type: integer
+                                                WriteTimestamp:
+                                                    type: integer
+                                                Timestamp Diff:
+                                                    type: integer
+                                                Message:
+                                                    type: string
+                                                Size:
+                                                    type: integer
+                                                OriginalSize:
+                                                    type: integer
+                                                Codec:
+                                                    type: integer
+                                                ProducerId:
+                                                    type: string
+                                                SeqNo:
+                                                    type: integer
+                                                Metadata:
+                                                    type: array
+                                                    items:
+                                                        type: object
+                                                        properties:
+                                                            Key:
+                                                                type: string
+                                                            Value:
+                                                                type: string
                 400:
                     description: Bad Request
                 403:
                     description: Forbidden
+                500:
+                    description: Internal Server Error
                 504:
                     description: Gateway Timeout
                 )___");

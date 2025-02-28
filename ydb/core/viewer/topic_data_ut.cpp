@@ -51,7 +51,10 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
         NJson::TJsonReaderConfig jsonCfg;
         NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
         Cerr << "Data: " << json.GetString() << Endl;
-        UNIT_ASSERT(json.GetType() == EJsonValueType::JSON_ARRAY);
+        UNIT_ASSERT(json.GetType() == EJsonValueType::JSON_MAP);
+        const auto& map_ = json.GetMap();
+        UNIT_ASSERT(map_.find("Messages") != map_.end());
+        UNIT_ASSERT(map_.find("Messages")->second.GetType() == EJsonValueType::JSON_ARRAY);
         return statusCode;
     }
 
@@ -119,11 +122,15 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
         {
             auto statusCode = MakeRequest(httpClient, GetRequestUrl(topicPath, 0, 0, 10), json);
             UNIT_ASSERT_EQUAL(statusCode, HTTP_OK);
-            const auto& array = json.GetArray();
+            const auto& overalResponse = json.GetMap();
+            CheckMapValue(overalResponse, "StartOffset", 0);
+            CheckMapValue(overalResponse, "EndOffset", 40);
 
-            UNIT_ASSERT_VALUES_EQUAL(array.size(), 10);
+            const auto& messages = overalResponse.find("Messages")->second.GetArray();
+
+            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 10);
             for (auto i = 0u; i < 10; ++i) {
-                const auto& item = array[i];
+                const auto& item = messages[i];
                 UNIT_ASSERT(item.GetType() == EJsonValueType::JSON_MAP);
                 const auto& jsonMap = item.GetMap();
                 CheckMapValue(jsonMap, "Offset", i);
@@ -145,11 +152,15 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
         {
             auto statusCode = MakeRequest(httpClient, GetRequestUrl(topicPath, 0, 20, 10), json);
             UNIT_ASSERT_EQUAL(statusCode, HTTP_OK);
-            const auto& array = json.GetArray();
+            const auto& overalResponse = json.GetMap();
+            CheckMapValue(overalResponse, "StartOffset", 0);
+            CheckMapValue(overalResponse, "EndOffset", 40);
+            const auto& messages = overalResponse.find("Messages")->second.GetArray();
 
-            UNIT_ASSERT_VALUES_EQUAL(array.size(), 10);
+
+            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 10);
             for (auto i = 0u; i < 10; ++i) {
-                const auto& item = array[i];
+                const auto& item = messages[i];
                 UNIT_ASSERT(item.GetType() == EJsonValueType::JSON_MAP);
                 const auto& jsonMap = item.GetMap();
                 CheckMapValue(jsonMap, "Offset", 20 + i);
@@ -175,11 +186,14 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
 
             auto statusCode = MakeRequest(httpClient, GetRequestUrl(topicPath, 0, 40, 20), json);
             UNIT_ASSERT_EQUAL(statusCode, HTTP_OK);
-            const auto& array = json.GetArray();
+            const auto& overalResponse = json.GetMap();
+            CheckMapValue(overalResponse, "EndOffset", 60);
+            const auto& messages = overalResponse.find("Messages")->second.GetArray();
 
-            UNIT_ASSERT_C(array.size() <= 10, array.size());
+
+            UNIT_ASSERT_C(messages.size() <= 10, messages.size());
             for (auto i = 0u; i < 10; ++i) {
-                const auto& item = array[i];
+                const auto& item = messages[i];
                 UNIT_ASSERT(item.GetType() == EJsonValueType::JSON_MAP);
                 const auto& jsonMap = item.GetMap();
                 CheckMapValue(jsonMap, "Offset", 40 + i);

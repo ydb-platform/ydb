@@ -567,7 +567,7 @@ THolder<NSchemeCache::TSchemeCacheNavigate> TViewerPipeClient::SchemeCacheNaviga
     return request;
 }
 
-void TViewerPipeClient::RequestSchemeCacheNavigateWtihParams(const TString& path, ui32 access, bool showPrivate) {
+void TViewerPipeClient::RequestSchemeCacheNavigateWithParams(const TString& path, ui32 access, bool showPrivate) {
     auto request = SchemeCacheNavigateRequestBuilder(
         [&](auto& entry) {
             entry.Path = SplitPath(path);

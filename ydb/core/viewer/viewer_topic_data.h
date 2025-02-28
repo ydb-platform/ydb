@@ -29,9 +29,9 @@ struct TEvViewerTopicData {
 }; // TEvViewerTopicData
 
 
-class TGetTopicData : public TViewerPipeClient {
+class TTopicData : public TViewerPipeClient {
     using TBase = TViewerPipeClient;
-    using TThis = TGetTopicData;
+    using TThis = TTopicData;
     using TBase::ReplyAndPassAway;
     using TBase::GetHTTPBADREQUEST;
 
@@ -47,7 +47,7 @@ private:
 
 
 public:
-    TGetTopicData(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TTopicData(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TViewerPipeClient(viewer, ev)
     {}
 

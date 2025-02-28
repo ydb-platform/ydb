@@ -14,6 +14,12 @@ When restoring a cluster, databases and their administrators are created. Refer 
 
 Restoring databases requires that dynamic nodes be started for them. Dynamic nodes can be started in advance or while the restore operation is waiting for available nodes. If there are problems with available dynamic nodes, cluster restore can be restarted.
 
+[Cluster configuration](../../../../maintenance/manual/config-overview.md) is restored separately using the following steps:
+
+1) Copy the saved static configuration to the nodes' local disks.
+2) Load the saved dynamic configuration using the `{{{ ydb-cli }} admin cluster config replace` command.
+3) Restart the cluster nodes.
+
 ### Required parameters {#mandatory}
 
 `-i PATH` or `--input PATH`: Path to the directory in the client system the data will be imported from.
@@ -22,9 +28,9 @@ Restoring databases requires that dynamic nodes be started for them. Dynamic nod
 
 `[options]`: Optional parameters of the command:
 
-`--wait-nodes-duration DURATION`: The duration of waiting for available dynamic nodes of the restored databases. If the duration is 0, there is no waiting.
+`--wait-nodes-duration DURATION`: The duration of waiting for available dynamic nodes of the restored databases. Example: 10s, 5m, 1h. If the duration is 0, there is no waiting.
 
-## Database #{db}
+## Database {#db}
 
 The `admin database restore` command restores the database from a backup on the file system previously exported there with the `admin database dump` command or prepared manually as per the rules from the [File structure](../file-structure.md) article:
 
@@ -38,6 +44,12 @@ Restoring database requires that dynamic nodes be started for it. Dynamic nodes 
 
 Restoring database schema objects is the same as described in [Schema objects](#schema-objects).
 
+[Database configuration](../../../../maintenance/manual/config-overview.md) is restored separately using the following steps:
+
+1) Copy the saved static configuration to the nodes' local disks.
+2) Load the saved dynamic configuration using the `{{{ ydb-cli }} admin database config replace` command.
+3) Restart the database nodes.
+
 ### Required parameters {#mandatory}
 
 `-i PATH` or `--input PATH`: Path to the directory in the client system the data will be imported from.
@@ -46,7 +58,7 @@ Restoring database schema objects is the same as described in [Schema objects](#
 
 `[options]`: Optional parameters of the command:
 
-`--wait-nodes-duration DURATION`: The duration of waiting for available dynamic nodes of the restored database. If the duration is 0, there is no waiting.
+`--wait-nodes-duration DURATION`: The duration of waiting for available dynamic nodes of the restored database. Example: 10s, 5m, 1h. If the duration is 0, there is no waiting.
 
 ## Schema objets {#schema-objects}
 

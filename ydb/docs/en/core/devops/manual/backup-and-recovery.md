@@ -14,16 +14,18 @@ Backups protect against data loss by letting you restore data.
 ### Files {#files}
 
 To back up data to a file, the following commands are used:
-- `{{ ydb-cli }} admin cluster dump` - to back up cluster
-- `{{ ydb-cli }} admin database dump` - to back up database
-- `{{ ydb-cli }} tools dump` - to back up individual schema objects or directories
+
+- `{{ ydb-cli }} admin cluster dump` — to back up cluster;
+- `{{ ydb-cli }} admin database dump` — to back up database;
+- `{{ ydb-cli }} tools dump` — to back up individual schema objects or directories.
 
 To learn more about this commands, follow the [link](../../reference/ydb-cli/export-import/tools-dump.md) to the {{ ydb-short-name }} CLI reference.
 
 To restore data from a backup, the following commands are used:
-- `{{ ydb-cli }} admin cluster restore` - to restore cluster from a backup
-- `{{ ydb-cli }} admin database restore` - to restore database from a backup
-- `{{ ydb-cli }} tools restore` - to restore cluster individual schema objects or directories from a backup
+
+- `{{ ydb-cli }} admin cluster restore` — to restore cluster from a backup;
+- `{{ ydb-cli }} admin database restore` — to restore database from a backup;
+- `{{ ydb-cli }} tools restore` — to restore cluster individual schema objects or directories from a backup.
 
 To learn more about this command, follow the [link](../../reference/ydb-cli/export-import/tools-restore.md) to the {{ ydb-short-name }} CLI reference.
 

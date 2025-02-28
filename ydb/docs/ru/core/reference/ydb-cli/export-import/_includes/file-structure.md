@@ -13,12 +13,12 @@
 Кластеру соответствует директория в файловой структуре, в которой находятся:
 
 - Директории, содержащие информацию о [базах данных](#db) в кластере, за исключением:
-  - Схемных объектов базы данных
-  - Пользователей и групп базы данных, не являющихся администраторами базы данных
-- Файл `permissions.pb`, содержащий информацию об ACL корня кластера и его владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
-- Файл `create_user.sql`, содержащий информацию о пользователях кластера в формате `SQL`
-- Файл `create_group.sql`, содержащий информацию о группах кластера в формате `SQL`
-- Файл `alter_group.sql`, содержащий информацию о вхождении пользователей в группы кластера в формате `SQL`
+  - Схемных объектов базы данных.
+  - Пользователей и групп базы данных, не являющихся администраторами базы данных.
+- Файл `permissions.pb`, содержащий информацию об ACL корня кластера и его владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format).
+- Файл `create_user.sql`, содержащий информацию о пользователях кластера в формате `SQL`.
+- Файл `create_group.sql`, содержащий информацию о группах кластера в формате `SQL`.
+- Файл `alter_group.sql`, содержащий информацию о вхождении пользователей в группы кластера в формате `SQL`.
 
 ## База данных {#db}
 
@@ -30,12 +30,12 @@
 
 Базе данных соответствует директория в файловой структуре, в которой находятся:
 
-- Директории, содержащие информацию о схемных объектах базы данных, наприммер, о [таблицах](#tables)
-- Файл `database.pb`, содержащий информацию о настройках базы данных в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
-- Файл `permissions.pb`, содержащий информацию об ACL базы данных и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
-- Файл `create_user.sql`, содержащий информацию о пользователях базы данных в формате `SQL`
-- Файл `create_group.sql`, содержащий информацию о группах базы данных в формате `SQL`
-- Файл `alter_group.sql`, содержащий информацию о вхождении пользователей в группы базы данных в формате `SQL`
+- Директории, содержащие информацию о схемных объектах базы данных, наприммер, о [таблицах](#tables).
+- Файл `database.pb`, содержащий информацию о настройках базы данных в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format).
+- Файл `permissions.pb`, содержащий информацию об ACL базы данных и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format).
+- Файл `create_user.sql`, содержащий информацию о пользователях базы данных в формате `SQL`.
+- Файл `create_group.sql`, содержащий информацию о группах базы данных в формате `SQL`.
+- Файл `alter_group.sql`, содержащий информацию о вхождении пользователей в группы базы данных в формате `SQL`.
 
 ## Директории {#dir}
 
@@ -45,8 +45,8 @@
 
 Каждой таблице в базе данных также соответствует одноименная директория в иерархии директорий файловой структуры, в которой находятся:
 
-- Файл `scheme.pb`, содержащий информацию о структуре таблицы и её параметрах в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
-- Файл `permissions.pb`, содержащий информацию об ACL таблицы и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
+- Файл `scheme.pb`, содержащий информацию о структуре таблицы и её параметрах в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format).
+- Файл `permissions.pb`, содержащий информацию об ACL таблицы и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format).
 - Один или несколько файлов `data_XX.csv`, содержащих данные таблицы в формате `csv`, где `XX` - порядковый номер файла. Выгрузка начинается с файла `data_00.csv`, каждый следующий файл создается при превышении размера текущего файла в 100MB.
 - Директории для описания [потоков изменений](https://ydb.tech/docs/ru/concepts/cdc). Имя директории соответствует названию потока изменений. В директории находятся:
   - Файл `changefeed_description.pb`, содержащий информацию о потоке изменений в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format).

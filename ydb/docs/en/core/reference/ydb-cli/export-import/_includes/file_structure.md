@@ -13,12 +13,12 @@ Cluster export is available only to the file system.
 A cluster corresponds to a directory in the file structure, which contains:
 
 - Directories describing [databases](#db) in the cluster, except:
-  - Database schema objects
-  - Database users and groups that are not administrators
-- The file `permissions.pb`, which describes the cluster root ACL and its owner in [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format
-- The file `create_user.sql`, which describes the cluster users in `SQL` format
-- The file `create_group.sql`, which describes the cluster groups in `SQL` format
-- The file `alter_group.sql`, which describes user membership in the cluster groups in `SQL` format
+  - Database schema objects.
+  - Database users and groups that are not administrators.
+- The file `permissions.pb`, which describes the cluster root ACL and its owner in [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format.
+- The file `create_user.sql`, which describes the cluster users in `SQL` format.
+- The file `create_group.sql`, which describes the cluster groups in `SQL` format.
+- The file `alter_group.sql`, which describes user membership in the cluster groups in `SQL` format.
 
 ## Database {#db}
 
@@ -30,12 +30,12 @@ Export to an S3-compatible object storage exporting only the database schema obj
 
 A database corresponds to a directory in the file structure, which contains:
 
-- Directories describing the database schema objects, for example, [tables](#tables)
-- The file `database.pb`, which describes the database settings in [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format
-- The file `permissions.pb`, which describes the database ACL and its owner in [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format
-- The file `create_user.sql`, which describes the database users in `SQL` format
-- The file `create_group.sql`, which describes the database groups in `SQL` format
-- The file `alter_group.sql`, which describes user membership in the database groups in `SQL` format
+- Directories describing the database schema objects, for example, [tables](#tables).
+- The file `database.pb`, which describes the database settings in [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format.
+- The file `permissions.pb`, which describes the database ACL and its owner in [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format.
+- The file `create_user.sql`, which describes the database users in `SQL` format.
+- The file `create_group.sql`, which describes the database groups in `SQL` format.
+- The file `alter_group.sql`, which describes user membership in the database groups in `SQL` format.
 
 ## Directories {#dir}
 
@@ -45,8 +45,8 @@ Each database directory has a corresponding directory in the file structure. Eac
 
 For each table in the database, there's a same-name directory in the file structure's directory hierarchy that includes:
 
-- The `scheme.pb` file describing the table structure and parameters in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format
-- The `permissions.pb` file describes the table ACL and owner in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format
+- The `scheme.pb` file describing the table structure and parameters in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format.
+- The `permissions.pb` file describes the table ACL and owner in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format.
 - One or more `data_XX.csv` files with the table data in `csv` format, where `XX` is the file's sequence number. The export starts with the `data_00.csv` file, with a next file created whenever the current file exceeds 100 MB.
 - Directories describing the [changefeeds](https://ydb.tech/docs/en/concepts/cdc). Directory names match the names of the changefeeds. Each directory contains the following files:
   - The `changefeed_description.pb` file describing the changefeed in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format.

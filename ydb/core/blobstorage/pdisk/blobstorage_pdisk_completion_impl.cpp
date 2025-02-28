@@ -132,7 +132,7 @@ TCompletionChunkReadPart::TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<
     TCompletionAction::CanBeExecutedInAdditionalCompletionThread = true;
 
     TBufferWithGaps *commonBuffer = CumulativeCompletion->GetCommonBuffer();
-    Destination = commonBuffer->RawDataPtr(CommonBufferOffset, RawReadSize);
+    Destination = commonBuffer->RawDataPtr(CommonBufferOffset, PayloadReadSize);
 
     if (!IsTheLastPart) {
         CumulativeCompletion->AddPart();

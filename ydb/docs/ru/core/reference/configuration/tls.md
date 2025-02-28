@@ -1,4 +1,4 @@
-# Настройка TLS
+# Секция `tls`
 
 {{ ydb-short-name }} поддерживает [шифрование данных при передаче по сети](../../security/encryption/data-in-transit.md), и каждый сетевой протокол может иметь свои настройки [TLS](https://ru.wikipedia.org/wiki/Transport_Layer_Security). Этот раздел документации предоставляет справочную информацию по настройке TLS в {{ ydb-short-name }}.
 
@@ -103,7 +103,7 @@ auth_config:
   scheme: "ldaps"
 ```
 
-Подробнее этот механизм описан в [{#T}](index.md#ldap-auth-config).
+Подробнее этот механизм описан в [{#T}](auth_config.md#ldap-auth-config).
 
 ### Федеративные запросы
 

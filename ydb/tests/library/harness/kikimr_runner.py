@@ -289,7 +289,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
     def server(self):
         return self.__server
 
-    def __call_kikimr_new_cli(self, cmd, connect_to_server=True):
+    def __call_kikimr_new_cli(self, cmd, connect_to_server=True, token=None):
         server = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
         binary_path = self.__configurator.get_binary_path(0)
         full_command = [binary_path]
@@ -297,9 +297,15 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             full_command += ["--server={server}".format(server=server)]
         full_command += cmd
 
+        env = None
+        token = token or self.__configurator.default_clusteradmin
+        if token is not None:
+            env = os.environ.copy()
+            env['YDB_TOKEN'] = token
+
         logger.debug("Executing command = {}".format(full_command))
         try:
-            return yatest.common.execute(full_command)
+            return yatest.common.execute(full_command, env=env)
         except yatest.common.ExecutionError as e:
             logger.exception("KiKiMR command '{cmd}' failed with error: {e}\n\tstdout: {out}\n\tstderr: {err}".format(
                 cmd=" ".join(str(x) for x in full_command),
@@ -366,7 +372,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         logger.info("Cluster started and initialized")
 
         if bs_needed:
-            self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"))
+            self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"), token=self.__configurator.default_clusteradmin)
 
     def __run_node(self, node_id):
         """

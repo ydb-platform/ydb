@@ -10,6 +10,8 @@ The `admin cluster restore` command restores the cluster from a backup on the fi
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
+The destination cluster must be [running and initialized](../../../../devops/manual/initial-deployment.md) before it can be restored.
+
 When restoring a cluster, databases and their administrators are created. Refer to [Database](#db) for further details on restoring databases.
 
 Restoring databases requires that dynamic nodes be started for them. Dynamic nodes can be started in advance or while the restore operation is waiting for available nodes. If there are problems with available dynamic nodes, cluster restore can be restarted.

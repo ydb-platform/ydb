@@ -23,6 +23,12 @@ private:
     YDB_READONLY_DEF(TString, SubColumnName);
 
 public:
+    static ui64 CalcSubColumnHash(const std::string_view sv);
+
+    static ui64 CalcSubColumnHash(const TString& path) {
+        return CalcSubColumnHash(std::string_view(path.data(), path.size()));
+    }
+
     explicit TOriginalDataAddress(const ui32 columnId, const TString& subColumnName = "")
         : ColumnId(columnId)
         , SubColumnName(subColumnName) {

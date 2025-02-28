@@ -72,7 +72,7 @@ protected:
         if (!bFilter.HasColumnId() || !bFilter.GetColumnId()) {
             return false;
         }
-        ColumnIds.emplace(bFilter.GetColumnId());
+        AddColumnId(bFilter.GetColumnId());
         Initialize();
         return true;
     }
@@ -82,12 +82,11 @@ protected:
         AFL_VERIFY(TConstants::CheckFilterSizeBytes(FilterSizeBytes));
         AFL_VERIFY(TConstants::CheckHashesCount(HashesCount));
         AFL_VERIFY(TConstants::CheckRecordsCount(RecordsCount));
-        AFL_VERIFY(ColumnIds.size() == 1);
         filterProto->SetRecordsCount(RecordsCount);
         filterProto->SetNGrammSize(NGrammSize);
         filterProto->SetFilterSizeBytes(FilterSizeBytes);
         filterProto->SetHashesCount(HashesCount);
-        filterProto->SetColumnId(*ColumnIds.begin());
+        filterProto->SetColumnId(GetColumnId());
         *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
     }
 

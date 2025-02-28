@@ -258,32 +258,24 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 rec
 void TIndexMeta::DoFillIndexCheckers(
     const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& /*schema*/) const {
     for (auto&& branch : info->GetBranches()) {
-        THashMap<NRequest::TOriginalDataAddress, NRequest::TLikeDescription> foundColumns;
-        auto addresses = GetDataExtractor()->GetOriginalDataAddresses(ColumnIds);
-        for (auto&& cId : addresses) {
-            auto it = branch->GetLikes().find(cId);
-            if (it == branch->GetLikes().end()) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("warn", "not found like for column")("id", cId.DebugString());
-                break;
+        for (auto&& i : branch->GetLikes()) {
+            if (i.first.GetColumnId() != GetColumnId()) {
+                continue;
             }
-            foundColumns.emplace(cId, it->second);
-        }
-        if (foundColumns.size() != ColumnIds.size()) {
-            continue;
-        }
-
-        std::set<ui64> hashes;
-        const auto predSet = [&](const ui64 hashSecondary) {
-            hashes.emplace(hashSecondary);
-        };
-        TNGrammBuilder builder(HashesCount);
-        AFL_VERIFY(foundColumns.size() == 1);
-        for (auto&& [_, c] : foundColumns) {
-            for (auto&& ls : c.GetLikeSequences()) {
+            ui64 hashBase;
+            if (!GetDataExtractor()->CheckForIndex(i.first, hashBase)) {
+                continue;
+            }
+            std::set<ui64> hashes;
+            const auto predSet = [&](const ui64 hashSecondary) {
+                hashes.emplace(hashSecondary);
+            };
+            TNGrammBuilder builder(HashesCount);
+            for (auto&& ls : i.second.GetLikeSequences()) {
                 builder.FillNGrammHashes(NGrammSize, ls.second.GetOperation(), ls.second.GetValue(), predSet);
             }
+            branch->MutableIndexes().emplace_back(std::make_shared<TFilterChecker>(GetIndexId(), std::move(hashes)));
         }
-        branch->MutableIndexes().emplace_back(std::make_shared<TFilterChecker>(GetIndexId(), std::move(hashes)));
     }
 }
 

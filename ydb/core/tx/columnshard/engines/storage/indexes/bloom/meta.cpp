@@ -54,30 +54,26 @@ TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui3
 void TBloomIndexMeta::DoFillIndexCheckers(
     const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& /*schema*/) const {
     for (auto&& branch : info->GetBranches()) {
-        THashMap<NRequest::TOriginalDataAddress, std::shared_ptr<arrow::Scalar>> foundColumns;
-        auto addresses = GetDataExtractor()->GetOriginalDataAddresses(ColumnIds);
-        for (auto&& cId : addresses) {
-            auto itEqual = branch->GetEquals().find(cId);
-            if (itEqual == branch->GetEquals().end()) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("warn", "column not found for equal")("id", cId.DebugString());
-                break;
+        for (auto&& i : branch->GetEquals()) {
+            if (i.first.GetColumnId() != GetColumnId()) {
+                continue;
             }
-            foundColumns.emplace(cId, itEqual->second);
-        }
-        if (foundColumns.size() != ColumnIds.size()) {
-            continue;
-        }
-        std::set<ui64> hashes;
-        for (ui32 i = 0; i < HashesCount; ++i) {
-            NArrow::NHash::NXX64::TStreamStringHashCalcer_H3 calcer(i);
-            calcer.Start();
-            AFL_VERIFY(foundColumns.size() == 1)("reason", "hashmap not sorted");
-            for (auto&& i : foundColumns) {
+            ui64 hashBase = 0;
+            if (!GetDataExtractor()->CheckForIndex(i.first, hashBase)) {
+                continue;
+            }
+            std::set<ui64> hashes;
+            for (ui32 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
+                NArrow::NHash::NXX64::TStreamStringHashCalcer_H3 calcer(hashSeed);
+                calcer.Start();
+                if (hashBase) {
+                    calcer.Update((const ui8*)&hashBase, sizeof(hashBase));
+                }
                 NArrow::NHash::TXX64::AppendField(i.second, calcer);
+                hashes.emplace(calcer.Finish());
             }
-            hashes.emplace(calcer.Finish());
+            branch->MutableIndexes().emplace_back(std::make_shared<TBloomFilterChecker>(GetIndexId(), std::move(hashes)));
         }
-        branch->MutableIndexes().emplace_back(std::make_shared<TBloomFilterChecker>(GetIndexId(), std::move(hashes)));
     }
 }
 

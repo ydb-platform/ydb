@@ -27,12 +27,11 @@ private:
     virtual void DoVisitAll(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray, const TChunkVisitor& chunkVisitor,
         const TRecordVisitor& recordVisitor) const override;
 
-    virtual std::vector<NRequest::TOriginalDataAddress> DoGetOriginalDataAddresses(const std::set<ui32>& columnIds) const override {
-        std::vector<NRequest::TOriginalDataAddress> result;
-        for (auto&& i : columnIds) {
-            result.emplace_back(NRequest::TOriginalDataAddress(i));
+    virtual bool DoCheckForIndex(const NRequest::TOriginalDataAddress& request, ui64& hashBase) const override {
+        if (request.GetSubColumnName()) {
+            hashBase = NRequest::TOriginalDataAddress::CalcSubColumnHash(request.GetSubColumnName());
         }
-        return result;
+        return true;
     }
 
 public:

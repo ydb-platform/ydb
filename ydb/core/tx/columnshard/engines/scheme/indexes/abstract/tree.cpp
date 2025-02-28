@@ -213,7 +213,7 @@ bool TOperationNode::DoCollapse() {
 bool TKernelNode::DoCollapse() {
     if (KernelName == "JsonValue" && Children.size() == 2 && Children[1]->Is<TConstantNode>() && Children[0]->Is<TOriginalColumn>()) {
         auto scalar = Children[1]->As<TConstantNode>()->GetConstant();
-        AFL_VERIFY(scalar->type->id() == arrow::binary()->id());
+        AFL_VERIFY(scalar->type->id() == arrow::binary()->id() || scalar->type->id() == arrow::utf8()->id())("type", scalar->type->ToString());
         auto scalarString = static_pointer_cast<arrow::BinaryScalar>(scalar);
         const TString jsonPath((const char*)scalarString->value->data(), scalarString->value->size());
         Parent->Exchange(GetNodeId(), std::make_shared<TOriginalColumn>(Children[0]->As<TOriginalColumn>()->GetNodeId().GetColumnId(), jsonPath));

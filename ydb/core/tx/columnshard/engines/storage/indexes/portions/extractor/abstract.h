@@ -23,14 +23,15 @@ private:
 
     virtual void DoSerializeToProto(TProto& proto) const = 0;
     virtual bool DoDeserializeFromProto(const TProto& proto) = 0;
-    virtual std::vector<NRequest::TOriginalDataAddress> DoGetOriginalDataAddresses(const std::set<ui32>& columnIds) const = 0;
+    virtual bool DoCheckForIndex(const NRequest::TOriginalDataAddress& dataSource, ui64& baseHash) const = 0;
 
 public:
     virtual TString GetClassName() const = 0;
     virtual ~IReadDataExtractor() = default;
 
-    std::vector<NRequest::TOriginalDataAddress> GetOriginalDataAddresses(const std::set<ui32>& columnIds) const {
-        return DoGetOriginalDataAddresses(columnIds);
+    bool CheckForIndex(const NRequest::TOriginalDataAddress& dataSource, ui64& baseHash) const {
+        baseHash = 0;
+        return DoCheckForIndex(dataSource, baseHash);
     }
 
     virtual void SerializeToProto(TProto& proto) const {

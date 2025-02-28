@@ -40,7 +40,7 @@ protected:
         auto& bFilter = proto.GetBloomFilter();
         FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
         for (auto&& i : bFilter.GetColumnIds()) {
-            ColumnIds.emplace(i);
+            AddColumnId(i);
         }
         if (!MutableDataExtractor().DeserializeFromProto(bFilter.GetDataExtractor())) {
             return false;
@@ -51,7 +51,7 @@ protected:
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const override {
         auto* filterProto = proto.MutableBloomFilter();
         filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
-        for (auto&& i : ColumnIds) {
+        for (auto&& i : GetColumnIds()) {
             filterProto->AddColumnIds(i);
         }
         *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();

@@ -35,14 +35,14 @@ protected:
         AFL_VERIFY(proto.HasCountMinSketch());
         auto& sketch = proto.GetCountMinSketch();
         for (auto&& i : sketch.GetColumnIds()) {
-            ColumnIds.emplace(i);
+            AddColumnId(i);
         }
         return true;
     }
 
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const override {
         auto* sketchProto = proto.MutableCountMinSketch();
-        for (auto&& i : ColumnIds) {
+        for (auto&& i : GetColumnIds()) {
             sketchProto->AddColumnIds(i);
         }
     }
@@ -55,10 +55,6 @@ public:
 
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
-    }
-
-    const std::set<ui32>& GetColumnIds() const {
-        return ColumnIds;
     }
 };
 

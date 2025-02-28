@@ -12,9 +12,8 @@ private:
     using TBase = IIndexMeta;
     std::shared_ptr<NArrow::NSerialization::ISerializer> Serializer;
     TReadDataExtractorContainer DataExtractor;
-
-protected:
     std::set<ui32> ColumnIds;
+protected:
 
     const TReadDataExtractorContainer& GetDataExtractor() const {
         return DataExtractor;
@@ -33,6 +32,20 @@ protected:
     TConclusionStatus CheckSameColumnsForModification(const IIndexMeta& newMeta) const;
 
 public:
+    void AddColumnId(const ui32 columnId) {
+        AFL_VERIFY(ColumnIds.emplace(columnId).second);
+        AFL_VERIFY(ColumnIds.size() == 1);
+    }
+
+    ui32 GetColumnId() const {
+        AFL_VERIFY(ColumnIds.size() == 1)("size", ColumnIds.size());
+        return *ColumnIds.begin();
+    }
+
+    const std::set<ui32>& GetColumnIds() const {
+        return ColumnIds;
+    }
+
     TIndexByColumns() = default;
     TIndexByColumns(const ui32 indexId, const TString& indexName, const ui32 columnId, const TString& storageId,
         const TReadDataExtractorContainer& extractor);

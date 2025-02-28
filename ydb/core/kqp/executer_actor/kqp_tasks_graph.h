@@ -29,6 +29,12 @@ struct TTransaction : private TMoveOnly {
         , Params(std::move(params)) {}
 };
 
+struct TColumnShardHashV1Params {
+    ui64 SourceShardCount = 0;
+    std::shared_ptr<TVector<NScheme::TTypeInfo>> SourceTableKeyColumnTypes = nullptr;
+    std::shared_ptr<TVector<ui64>> TaskIdByHash = nullptr; // hash belongs [0; ShardCount]
+};
+
 struct TStageInfoMeta {
     const IKqpGateway::TPhysicalTxData& Tx;
 
@@ -44,11 +50,7 @@ struct TStageInfoMeta {
     THolder<TKeyDesc> ShardKey;
     NSchemeCache::TSchemeCacheRequest::EKind ShardKind = NSchemeCache::TSchemeCacheRequest::EKind::KindUnknown;
 
-    // used for ColumnV1Hashing
-    ui64 SourceShardCount = 0;
-    std::shared_ptr<TVector<NScheme::TTypeInfo>> SourceTableKeyColumnTypes = nullptr;
-    std::shared_ptr<TVector<ui64>> TaskIdByHash = nullptr; // hash belongs [0; ShardCount]
-    //
+    TColumnShardHashV1Params ColumnShardHashV1Params{};
 
     const NKqpProto::TKqpPhyStage& GetStage(const size_t idx) const {
         auto& txBody = Tx.Body;
@@ -148,6 +150,7 @@ struct TTaskInputMeta {
 struct TTaskOutputMeta {
     NKikimrKqp::TKqpTableSinkSettings* SinkSettings = nullptr;
     THashMap<ui64, const TKeyDesc::TPartitionInfo*> ShardPartitions;
+    TColumnShardHashV1Params ColumnShardHashV1Params;
 };
 
 struct TShardKeyRanges {

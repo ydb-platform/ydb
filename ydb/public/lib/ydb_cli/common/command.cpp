@@ -303,21 +303,24 @@ void TClientCommand::SetFreeArgTitle(size_t pos, const TString& title, const TSt
     Opts.SetFreeArgTitle(pos, title, help);
 }
 
-void TClientCommand::RenderOneCommandDescription(
+void TClientCommand::RenderCommandDescription(
     TStringStream& stream,
+    bool renderTree,
     const NColorizer::TColors& colors,
-    RenderEntryType type
+    RenderEntryType type,
+    TString prefix
 ) {
+    Y_UNUSED(renderTree);
     if (Hidden && type != BEGIN) {
         return;
     }
-    TString prefix;
     if (type == MIDDLE) {
-        prefix = "├─ ";
+        prefix += "├─ ";
     }
     if (type == END) {
-        prefix = "└─ ";
+        prefix += "└─ ";
     }
+
     TString line = prefix + Name;
     stream << prefix << (Dangerous ? colors.Red() : "") << colors.BoldColor() << Name << colors.OldColor();
     if (!Description.empty()) {
@@ -389,7 +392,7 @@ void TClientCommandTree::Config(TConfig& config) {
     stream << Endl << Endl
         << colors.BoldColor() << "Description" << colors.OldColor() << ": " << Description << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandsDescription(stream, colors);
+    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors);
     stream << Endl;
     PrintParentOptions(stream, config, colors);
     config.Opts->SetCmdLineDescr(stream.Str());
@@ -459,22 +462,32 @@ bool TClientCommandTree::HasOptionsToShow() {
     return false;
 }
 
-void TClientCommandTree::RenderCommandsDescription(
+void TClientCommandTree::RenderCommandDescription(
     TStringStream& stream,
-    const NColorizer::TColors& colors
+    bool renderTree,
+    const NColorizer::TColors& colors,
+    RenderEntryType type,
+    TString prefix
 ) {
-    TClientCommand::RenderOneCommandDescription(stream, colors, BEGIN);
-
-    TVector<TClientCommand*> VisibleSubCommands;
-    for (auto& [_, command] : SubCommands) {
-        if (command->Visible) {
-            VisibleSubCommands.push_back(command.get());
+    TClientCommand::RenderCommandDescription(stream, false, colors, type, prefix);
+    if (type == BEGIN || renderTree) {
+        if (type == MIDDLE) {
+            prefix += "│  ";
         }
-    }
+        if (type == END) {
+            prefix += "   ";
+        }
+        TVector<TClientCommand*> visibleSubCommands;
+        for (auto& [_, command] : SubCommands) {
+            if (command->Visible) {
+                visibleSubCommands.push_back(command.get());
+            }
+        }
 
-    for (auto it = VisibleSubCommands.begin(); it != VisibleSubCommands.end(); ++it) {
-        bool lastCommand = (std::next(it) == VisibleSubCommands.end());
-        (*it)->RenderOneCommandDescription(stream, colors, lastCommand ? END : MIDDLE);
+        for (auto it = visibleSubCommands.begin(); it != visibleSubCommands.end(); ++it) {
+            bool lastCommand = (std::next(it) == visibleSubCommands.end());
+            (*it)->RenderCommandDescription(stream, renderTree, colors, lastCommand ? END : MIDDLE, prefix);
+        }
     }
 }
 

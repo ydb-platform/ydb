@@ -299,3 +299,69 @@ ORDER BY IntervalEnd desc, CPUCores desc
 ```
 
 * `"YYYY-MM-DDTHH:MM:SS.UUUUUUZ"` — время в зоне UTC 0 (`YYYY` — год, `MM` — месяц, `DD` — число, `hh` — часы, `mm` — минуты, `ss` — секунды, `uuuuuu` — микросекунды). Например, `"2023-01-26T13:00:00.000000Z"`.
+
+## Информация о пулах ресурсов {#resource_pools}
+
+`resource_pools` - таблица содержит информацию о [настройках](../yql/reference/syntax/create-resource-pool.md#parameters) [пулов ресурсов](../concepts/glossary.md#resource-pool).
+
+Структура таблицы:
+
+Поле | Описание
+--- | ---
+`Name` | Имя пула ресурсов.<br/>Тип: `Utf8`.<br/>Ключ: `0`.
+`Config` | Настройки пула ресурсов.<br/>Тип: `JsonDocument`.<br/>
+`Owner` | Владелец пула ресурсов.<br/>Тип: `Utf8`.<br/>
+`Permissions` | Список прав, выданных непосредственно на пул ресурсов. Права доступа в формате описанном [здесь](../yql/reference/syntax/grant.md#permissions-list)<br/>Тип: `JsonDocument`.<br/>
+`EffectivePermissions` | Список прав, фактически действующих на данный пул ресурсов с учётом правил наследования прав. Права доступа в формате описанном [здесь](../yql/reference/syntax/grant.md#permissions-list)<br/>Тип: `JsonDocument`.
+
+### Пример
+
+Получение информации о настройках пула ресурсов с именем `default`:
+
+```yql
+SELECT
+    Name,
+    Config,
+    Owner,
+    Permissions,
+    EffectivePermissions
+FROM `.sys/resource_pools`
+WHERE Name = "default";
+```
+
+Пример выдачи:
+
+\# | Name | Config | Owner | Permissions | EffectivePermissions
+--- | --- | --- | --- | --- | ---
+1 | default | <code>{"CONCURRENT_QUERY_LIMIT":"-1","DATABASE_LOAD_CPU_THRESHOLD":"-1","QUERY_CANCEL_AFTER_SECONDS":"0","QUERY_CPU_LIMIT_PERCENT_PER_NODE":"-1","QUERY_MEMORY_LIMIT_PERCENT_PER_NODE":"-1","QUEUE_SIZE":"-1","RESOURCE_WEIGHT":"-1","TOTAL_CPU_LIMIT_PERCENT_PER_NODE":"-1"}</code> | metadata@system | <code>[{"Permission":"ydb.granular.describe_schema","SID":"all-users@well-known"},{"Permission":"ydb.granular.select_row","SID":"all-users@well-known"},{"Permission":"ydb.granular.describe_schema","SID":"root@builtin"},{"Permission":"ydb.granular.select_row","SID":"root@builtin"}]</code> | <code>[{"Permission":"ydb.granular.describe_schema","SID":"all-users@well-known"},{"Permission":"ydb.granular.select_row","SID":"all-users@well-known"},{"Permission":"ydb.granular.describe_schema","SID":"root@builtin"},{"Permission":"ydb.granular.select_row","SID":"root@builtin"}]</code>
+
+## Информация о классификаторах пулов ресурсов {#resource_pools_classifiers}
+
+`resource_pools_classifiers` - таблица содержит информацию о [настройках](../yql/reference/syntax/create-resource-pool-classifier.md#parameters) [классификаторов пулов ресурсов](../concepts/glossary.md#resource-pool-classifier).
+
+Структура таблицы:
+
+Поле | Описание
+--- | ---
+`Name` | Имя классификатора пула ресурсов.<br/>Тип: `Utf8`.<br/>Ключ: `0`.
+`Rank` | Приоритет выбора классификатора пулов ресурсов.<br/>Тип: `Int64`.<br/>
+`Config` | Настройки классификатора пулов ресурсов.<br/>Тип: `JsonDocument`.
+
+### Пример
+
+Получение информации о настройках классификатора пула ресурсов с именем `olap`:
+
+```yql
+SELECT
+    Name,
+    Rank,
+    Config
+FROM `.sys/resource_pools_classifiers`
+WHERE Name = "olap";
+```
+
+Пример выдачи:
+
+\# | Name | Rank | Config
+--- | --- | --- | ---
+1 | olap | 1000 | <code>{"member_name":"olap_group@builtin","resource_pool":"olap"}</code>

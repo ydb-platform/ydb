@@ -138,6 +138,9 @@ void BuildHashShuffleChannels(TGraph& graph, const typename TGraph::TStageInfoTy
 
             logFunc(channel.Id, originTask.Id, targetTask.Id, "Shuffle/HashPartition", !channel.InMemory);
         }
+        
+        Cout << "SHIT: ";
+        Cout << "[" << JoinSeq(",", taskOutput.KeyColumns) << "]" << Endl;
     }
 }
 

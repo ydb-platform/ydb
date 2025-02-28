@@ -16,6 +16,9 @@
 #include <type_traits>
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
 
+#include <util/string/builder.h>
+#include <util/string/join.h>
+
 namespace NYql::NDq {
 
 namespace {
@@ -857,7 +860,30 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
             for (const auto& keyColumnType: columnShardHashV1Proto.GetKeyColumnTypes()) {
                 keyColumnTypes.push_back(static_cast<NYql::NProto::TypeIds>(keyColumnType));
             }
-            Y_ENSURE(keyColumnTypes.size() == keyColumns.size());
+
+            const auto keyColumnsToString = [](const TVector<TColumnInfo>& keyColumns) -> TString {
+                TVector<TString> stringNames;
+                stringNames.reserve(keyColumns.size());
+                for (const auto& keyColumn: keyColumns) {
+                    stringNames.push_back(keyColumn.Name);
+                }
+                return "[" + JoinSeq(",", stringNames) + "]";
+            };
+            
+            const auto keyTypesToString = [](const TVector<NYql::NProto::TypeIds>& keyColumnTypes) -> TString {
+                TVector<TString> stringNames;
+                stringNames.reserve(keyColumnTypes.size());
+                for (const auto& keyColumnType: keyColumnTypes) {
+                    stringNames.push_back(NYql::NProto::TypeIds_Name(keyColumnType));
+                }
+                return "[" + JoinSeq(",", stringNames) + "]";
+            };
+
+            Y_ENSURE(
+                keyColumnTypes.size() == keyColumns.size(), 
+                TStringBuilder{} << "Hashshuffle keycolumns and keytypes args count mismatch, types: " 
+                << keyTypesToString(keyColumnTypes) << " for the columns: " << keyColumnsToString(keyColumns)
+            );
 
             TColumnShardHashV1 columnShardHashV1 = TColumnShardHashV1(shardCount, std::move(taskIdByHash), std::move(keyColumnTypes));
             return CreateOutputPartitionConsumerImpl<TColumnShardHashV1>(std::move(outputs), std::move(keyColumns), outputType, holderFactory, minFillPercentage, std::move(columnShardHashV1), pgBuilder);

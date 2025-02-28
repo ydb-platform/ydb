@@ -29,7 +29,8 @@ private:
 
     virtual bool DoCheckForIndex(const NRequest::TOriginalDataAddress& request, ui64& hashBase) const override {
         if (request.GetSubColumnName()) {
-            hashBase = NRequest::TOriginalDataAddress::CalcSubColumnHash(request.GetSubColumnName());
+            AFL_VERIFY(request.GetSubColumnName().StartsWith("$."));
+            hashBase = NRequest::TOriginalDataAddress::CalcSubColumnHash(request.GetSubColumnName().substr(2));
         }
         return true;
     }

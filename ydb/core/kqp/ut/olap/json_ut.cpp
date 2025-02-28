@@ -65,9 +65,21 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
     class TSelectCommand: public ICommand {
     private:
-        const TString Command;
-        const TString Compare;
+        TString Command;
+        TString Compare;
+        std::optional<ui64> ExpectIndexSkip;
+        std::optional<ui64> ExpectIndexNoData;
+        std::optional<ui64> ExpectIndexApprove;
+        ui64 IndexSkipStart = 0;
+        ui64 IndexNoDataStart = 0;
+        ui64 IndexApproveStart = 0;
+
         virtual TConclusionStatus DoExecute(TKikimrRunner& kikimr) override {
+            auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
+            AFL_VERIFY(controller);
+            IndexSkipStart = controller->GetIndexesSkippingOnSelect().Val();
+            IndexApproveStart = controller->GetIndexesApprovedOnSelect().Val();
+            IndexNoDataStart = controller->GetIndexesSkippedNoData().Val();
             Cerr << "EXECUTE: " << Command << Endl;
             auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
             auto it = kikimr.GetQueryClient().StreamExecuteQuery(Command, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -78,14 +90,60 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                 Cerr << "OUTPUT: " << output << Endl;
                 CompareYson(output, Compare);
             }
+            const ui32 skip = controller->GetIndexesSkippingOnSelect().Val() - IndexSkipStart;
+            const ui32 noData = controller->GetIndexesSkippedNoData().Val() - IndexNoDataStart;
+            const ui32 approves = controller->GetIndexesApprovedOnSelect().Val() - IndexApproveStart;
+            Cerr << noData << "/" << skip << "/" << approves << Endl;
+            if (ExpectIndexSkip) {
+                AFL_VERIFY(skip == *ExpectIndexSkip)("expect", ExpectIndexSkip)("current", controller->GetIndexesSkippingOnSelect().Val())(
+                                     "pred", IndexSkipStart);
+            }
+            if (ExpectIndexNoData) {
+                AFL_VERIFY(noData == *ExpectIndexNoData)("expect", ExpectIndexNoData)("current", controller->GetIndexesSkippedNoData().Val())(
+                                       "pred", IndexNoDataStart);
+            }
+            if (ExpectIndexApprove) {
+                AFL_VERIFY(approves == *ExpectIndexApprove)("expect", ExpectIndexApprove)(
+                                         "current", controller->GetIndexesApprovedOnSelect().Val())("pred", IndexApproveStart);
+            }
             return TConclusionStatus::Success();
         }
 
     public:
-        TSelectCommand(const TString& command, const TString& compare)
-            : Command(command)
-            , Compare(compare) {
+        bool DeserializeFromString(const TString& info) {
+            auto lines = StringSplitter(info).SplitBySet("\n").ToList<TString>();
+            for (auto&& l : lines) {
+                l = Strip(l);
+                if (l.StartsWith("READ:")) {
+                    Command = l.substr(5);
+                } else if (l.StartsWith("EXPECTED:")) {
+                    Compare = l.substr(9);
+                } else if (l.StartsWith("IDX_ND_SKIP_APPROVE:")) {
+                    auto idxExpectations = StringSplitter(l.substr(20)).SplitBySet(" ,.").SkipEmpty().ToList<TString>();
+                    AFL_VERIFY(idxExpectations.size() == 3)("size", idxExpectations.size())("string", l);
+                    if (idxExpectations[0] != "{}") {
+                        ui32 res;
+                        AFL_VERIFY(TryFromString<ui32>(idxExpectations[0], res))("string", l);
+                        ExpectIndexNoData = res;
+                    }
+                    if (idxExpectations[1] != "{}") {
+                        ui32 res;
+                        AFL_VERIFY(TryFromString<ui32>(idxExpectations[1], res))("string", l);
+                        ExpectIndexSkip = res;
+                    }
+                    if (idxExpectations[2] != "{}") {
+                        ui32 res;
+                        AFL_VERIFY(TryFromString<ui32>(idxExpectations[2], res))("string", l);
+                        ExpectIndexApprove = res;
+                    }
+                } else {
+                    AFL_VERIFY(false)("line", l);
+                }
+            }
+            return true;
         }
+
+        TSelectCommand() = default;
     };
 
     class TStopCompactionCommand: public ICommand {
@@ -167,9 +225,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
     public:
         TScriptExecutor(const std::vector<std::shared_ptr<ICommand>>& commands)
-            : Commands(commands)
-        {
-
+            : Commands(commands) {
         }
         void Execute() {
             NKikimrConfig::TAppConfig appConfig;
@@ -198,23 +254,9 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                 command = command.substr(5);
                 return std::make_shared<TDataCommand>(command);
             } else if (command.StartsWith("READ:")) {
-                auto lines = StringSplitter(command.substr(5)).SplitBySet("\n").ToList<TString>();
-                int step = 0;
-                TString request;
-                TString expectation;
-                for (auto&& i : lines) {
-                    i = Strip(i);
-                    if (i.StartsWith("EXPECTED:")) {
-                        step = 1;
-                        i = i.substr(9);
-                    }
-                    if (step == 0) {
-                        request += i;
-                    } else if (step == 1) {
-                        expectation += i;
-                    }
-                }
-                return std::make_shared<TSelectCommand>(request, expectation);
+                auto result = std::make_shared<TSelectCommand>();
+                AFL_VERIFY(result->DeserializeFromString(command));
+                return result;
             } else if (command.StartsWith("WAIT_COMPACTION")) {
                 return std::make_shared<TWaitCompactionCommand>();
             } else if (command.StartsWith("STOP_COMPACTION")) {
@@ -290,7 +332,6 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             for (auto&& i : Scripts) {
                 i.Execute();
             }
-
         }
     };
 
@@ -636,7 +677,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         )";
         TScriptVariator(script).Execute();
     }
-/*
+
     Y_UNIT_TEST(BloomIndexesVariants) {
         TString script = R"(
             STOP_COMPACTION
@@ -680,11 +721,12 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ------
             READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "1a1" ORDER BY Col1;
             EXPECTED: [[11u;["{\"a\":\"1a1\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 1, 1
             
         )";
         TScriptVariator(script).Execute();
     }
-*/
+
     Y_UNIT_TEST(SwitchAccessorCompactionVariants) {
         TString script = R"(
             STOP_COMPACTION
@@ -765,7 +807,6 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         )";
         TScriptVariator(script).Execute();
     }
-
 }
 
 }   // namespace NKikimr::NKqp

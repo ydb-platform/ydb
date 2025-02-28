@@ -8,6 +8,9 @@
             "name": "/local/base_dynumber_insert_params_sql_plan/ResultParamsDyNumber",
             "reads": [
                 {
+                    "lookup_by": [
+                        "Key"
+                    ],
                     "type": "Lookup"
                 }
             ],

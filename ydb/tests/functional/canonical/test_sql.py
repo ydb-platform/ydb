@@ -114,8 +114,6 @@ class BaseCanonicalTest(object):
                 udfs_path=yatest.common.build_path("yql/udfs"),
                 domain_name='local',
                 use_in_memory_pdisks=True,
-                disable_iterator_reads=True,
-                disable_iterator_lookups=True,
                 extra_feature_flags=["enable_resource_pools"]
             )
         )

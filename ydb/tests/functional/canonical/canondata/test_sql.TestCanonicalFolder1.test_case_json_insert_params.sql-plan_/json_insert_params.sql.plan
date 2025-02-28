@@ -8,6 +8,9 @@
             "name": "/local/base_json_insert_params_sql_plan/ResultParamsJD",
             "reads": [
                 {
+                    "lookup_by": [
+                        "Key"
+                    ],
                     "type": "Lookup"
                 }
             ],

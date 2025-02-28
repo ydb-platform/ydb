@@ -8,6 +8,10 @@
             "name": "/local/base_write_insert_revert_sql_plan/Input",
             "reads": [
                 {
+                    "lookup_by": [
+                        "key",
+                        "subkey"
+                    ],
                     "type": "Lookup"
                 }
             ],
@@ -26,6 +30,10 @@
             "name": "/local/base_write_insert_revert_sql_plan/Input1",
             "reads": [
                 {
+                    "lookup_by": [
+                        "Group",
+                        "Name"
+                    ],
                     "type": "Lookup"
                 }
             ],

@@ -312,8 +312,6 @@ TAsyncExecuteQueryIterator TExecQueryImpl::StreamExecuteQuery(const std::shared_
         ? &params->GetProtoMap()
         : nullptr;
 
-        
-
     StreamExecuteQueryImpl(connections, driverState, query, txControl, paramsProto, settings, session)
         .Subscribe(iteratorCallback);
     return promise.GetFuture();

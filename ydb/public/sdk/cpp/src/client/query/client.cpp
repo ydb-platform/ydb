@@ -85,7 +85,7 @@ public:
         const std::optional<TParams>& params, const TExecuteQuerySettings& settings, const std::optional<TSession>& session = {})
     {
         CollectQuerySize(query);
-        CollectParamsSize(params->GetProtoMap());
+        CollectParamsSize(params ? &params->GetProtoMap() : nullptr);
         return TExecQueryImpl::StreamExecuteQuery(
             Connections_, DbDriverState_, query, txControl, params, settings, session);
     }
@@ -95,7 +95,7 @@ public:
         const std::optional<TSession>& session = {})
     {
         CollectQuerySize(query);
-        CollectParamsSize(params->GetProtoMap());
+        CollectParamsSize(params ? &params->GetProtoMap() : nullptr);
         return TExecQueryImpl::ExecuteQuery(
             Connections_, DbDriverState_, query, txControl, params, settings, session);
     }
@@ -525,10 +525,10 @@ public:
         }
     }
 
-    void CollectParamsSize(const ::google::protobuf::Map<TStringType, Ydb::TypedValue>& params) {
-        if (ParamsSizeHistogram_.IsCollecting()) {
+    void CollectParamsSize(const ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params) {
+        if (params && ParamsSizeHistogram_.IsCollecting()) {
             size_t size = 0;
-            for (auto& keyvalue: params) {
+            for (auto& keyvalue: *params) {
                 size += keyvalue.second.ByteSizeLong();
             }
             ParamsSizeHistogram_.Record(size);

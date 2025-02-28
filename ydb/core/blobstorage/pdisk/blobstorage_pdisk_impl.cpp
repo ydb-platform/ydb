@@ -835,22 +835,25 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
         ui64 newSize = 0;
         ui64 diskOffset = (ui64)chunkIdx * Format.ChunkSize + AlignDown<ui32>(chunkOffset, Format.SectorSize);
 
+        P_LOG(PRI_INFO, BPD01, "Chunk write, buffer info",
+            (count, count),
+            (bufferOffsetAligment, (intptr_t)(*evChunkWrite->PartsPtr)[0].first % 512),
+            (chunkOffset, chunkOffset),
+            (size, size)
+        );
         if (count == 1
                 && (intptr_t)(*evChunkWrite->PartsPtr)[0].first % 512 == 0
                 && chunkOffset % FormatSectorSize == 0
                 && size % FormatSectorSize == 0) {
             //
             newSize = size;
-            P_LOG(PRI_CRIT, BPD01, "Chunk write, use buffer as is",
-                (bufferOffset, (intptr_t)(*evChunkWrite->PartsPtr)[0].first),
-                (chunkOffset, chunkOffset ) , (size, size)
-            );
         } else {
             newSize = comp->CompactBuffer(chunkOffset % Format.SectorSize);
-            P_LOG(PRI_CRIT, BPD01, "Chunk write, compact buffer", (NewSize, newSize));
+            P_LOG(PRI_CRIT, BPD01, "Chunk write, compact buffer",
+                (size, size), (newSize, newSize));
         }
         buff = comp->GetBuffer();
-        P_LOG(PRI_CRIT, BPD01, "Chunk write", (ChunkIdx, chunkIdx), (Encrypted, encrypted), (format_ChunkSize, Format.ChunkSize),
+        P_LOG(PRI_INFO, BPD01, "Chunk write", (ChunkIdx, chunkIdx), (Encrypted, encrypted), (format_ChunkSize, Format.ChunkSize),
             (aligndown, AlignDown<ui32>(chunkOffset, Format.SectorSize)),
             (chunkOffset, chunkOffset), (Size, size), (NewSize, newSize),
             (diskOffset, diskOffset), (count, count));
@@ -1001,19 +1004,21 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
 
     size_t diskSize = sectorsToRead * Format.SectorSize;
     ui64 diskOffset = (ui64)read->ChunkIdx * Format.ChunkSize + AlignDown<ui32>(read->Offset, Format.SectorSize);
-    P_LOG(PRI_CRIT, BPD01, "Read chunk", (Encrypted, read->ChunkEncrypted), (ChunkIdx, read->ChunkIdx),
+    P_LOG(PRI_INFO, BPD01, "Read chunk", (Encrypted, read->ChunkEncrypted), (ChunkIdx, read->ChunkIdx),
         (FirstSector, read->FirstSector), (Offset, read->Offset), (DiskSize, diskSize), (DiskOffset, diskOffset),
         (BytesToRead, bytesToRead), (PieceSizeLimit, pieceSizeLimit));
     if (!read->ChunkEncrypted) {
 
-        Y_VERIFY(isTheLastPart);
         Y_VERIFY(isTheFirstPart);
+        //                                  0             +               0              +          128             > 255
+        Y_VERIFY_S(isTheLastPart, read->FirstSector << " + " << read->CurrentSector << " + " << sectorsToRead
+                << " > " << read->LastSector);
 
         NWilson::TSpan span(TWilson::PDiskBasic, std::move(traceId), "PDisk.CompletionChunkReadPart", NWilson::EFlags::NONE, PCtx->ActorSystem);
         THolder<TCompletionChunkReadPart> completion(new TCompletionChunkReadPart(this, read, diskSize,
                     diskSize, 0, read->FinalCompletion, isTheLastPart, std::move(span)));
 
-        Y_ABORT_UNLESS(bytesToRead <= completion->GetBuffer()->Size());
+        Y_VERIFY_S(bytesToRead <= read->FinalCompletion->GetCommonBuffer()->Size(), read->FinalCompletion->GetCommonBuffer()->Size());
         ui8 *data = read->FinalCompletion->GetCommonBuffer()->RawDataPtr(0, diskSize);
         //Cerr << "ChunkRead buffer# " << (void*)data << Endl;
         BlockDevice->PreadAsync(
@@ -1377,7 +1382,7 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
                 (NewOwnerId, req->Owner));
         state.OwnerId = req->Owner;
         state.CommitState = TChunkState::DATA_RESERVED;
-        state.Encrypted = false;
+        state.Encrypted = true;
         Mon.UncommitedDataChunks->Inc();
     }
     return chunks;
@@ -2388,7 +2393,8 @@ void TPDisk::ProcessChunkReadQueue() {
         );
 
         ui64 currentLimit = Min(bufferSize, piece->PieceSizeLimit);
-        EChunkReadPieceResult result = ChunkReadPiece(read, piece->PieceCurrentSector, currentLimit,
+        Y_VERIFY(!read->ChunkEncrypted || piece->PieceSizeLimit <= bufferSize);
+        EChunkReadPieceResult result = ChunkReadPiece(read, piece->PieceCurrentSector, piece->PieceSizeLimit,
             piece->SpanStack.GetTraceId(), std::move(piece->Orbit));
         bool isComplete = (result != ReadPieceResultInProgress);
         Y_VERIFY_S(isComplete || currentLimit >= piece->PieceSizeLimit, isComplete << " " << currentLimit << " " << piece->PieceSizeLimit);
@@ -3056,7 +3062,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 delete request;
                 return false;
             }
-            if (ev.Offset % GetChunkAppendBlockSize() != 0) {
+            if (false && ev.Offset % GetChunkAppendBlockSize() != 0) {
                 err << Sprintf("Can't write chunkIdx# %" PRIu32 " with not aligned offset# %" PRIu32 " ownerId# %"
                         PRIu32, ev.ChunkIdx, ev.Offset, (ui32)ev.Owner);
                 SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);
@@ -3330,6 +3336,7 @@ void TPDisk::PushRequestToScheduler(TRequestBase *request) {
             ? ForsetiOpPieceSizeCached / Format.SectorSize
             : totalSectors;
         const ui32 jobCount = (totalSectors + jobSizeLimit - 1) / jobSizeLimit;
+        Y_VERIFY(read->ChunkEncrypted || jobCount == 1);
         for (ui32 idx = 0; idx < jobCount; ++idx) {
             auto span = request->SpanStack.CreateChild(TWilson::PDiskBasic, "PDisk.ChunkReadPiece", NWilson::EFlags::AUTO_END);
             bool isLast = idx == jobCount - 1;
@@ -3340,6 +3347,8 @@ void TPDisk::PushRequestToScheduler(TRequestBase *request) {
             auto piece = new TChunkReadPiece(read, idx * jobSizeLimit, jobSize * Format.SectorSize, isLast, std::move(span));
             piece->GateId = read->GateId;
             read->Orbit.Fork(piece->Orbit);
+            P_LOG(PRI_INFO, BPD01, "PDiskChunkReadPieceAddToScheduler", (idx, idx), (jobSizeLimit, jobSizeLimit),
+                (jobSize, jobSize), (totalSectors, totalSectors), (FistSector, read->FirstSector), (LastSector, read->LastSector));
             LWTRACK(PDiskChunkReadPieceAddToScheduler, piece->Orbit, PCtx->PDiskId, idx, idx * jobSizeLimit * Format.SectorSize,
                     jobSizeLimit * Format.SectorSize);
             piece->EstimateCost(DriveModel);

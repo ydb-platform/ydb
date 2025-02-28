@@ -197,7 +197,7 @@ private:
         if (PendingRequests.size() >= PendingRequestsLimit) {
             auto result = MakeHolder<TEvSysView::TEvGetPartitionStatsResult>();
             result->Record.SetOverloaded(true);
-            Send(ev->Sender, std::move(result));
+            Send(ev->Sender, std::move(result), 0, ev->Cookie);
             return;
         }
 
@@ -230,14 +230,14 @@ private:
         result->Record.SetLastBatch(true);
 
         if (!record.HasDomainKeyOwnerId() || !record.HasDomainKeyPathId()) {
-            Send(request->Sender, std::move(result));
+            Send(request->Sender, std::move(result), 0, request->Cookie);
             return;
         }
 
         auto domainKey = TPathId(record.GetDomainKeyOwnerId(), record.GetDomainKeyPathId());
         auto itTables = DomainTables.find(domainKey);
         if (itTables == DomainTables.end()) {
-            Send(request->Sender, std::move(result));
+            Send(request->Sender, std::move(result), 0, request->Cookie);
             return;
         }
         auto& tables = itTables->second.Stats;
@@ -310,6 +310,18 @@ private:
 
         bool includePathColumn = !record.HasIncludePathColumn() || record.GetIncludePathColumn();
 
+        auto matchesFilter = [&](const NKikimrSysView::TPartitionStats& stats) {
+                if (record.HasFilter()) {
+                    const auto& filter = record.GetFilter();
+                    if (filter.HasNotLess()) {
+                        if (filter.GetNotLess().HasCPUCores() && stats.GetCPUCores() < filter.GetNotLess().GetCPUCores()) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            };
+
         for (size_t count = 0; count < BatchSize && it != itEnd && it != tables.end(); ++it) {
             auto& pathId = it->first;
             const auto& tableStats = it->second;
@@ -322,7 +334,25 @@ private:
             bool batchFinished = false;
 
             for (ui64 partIdx = startPartIdx; partIdx < end; ++partIdx) {
-                auto* stats = result->Record.AddStats();
+                NKikimrSysView::TPartitionStatsResult* stats = nullptr;
+                auto shardIdx = tableStats.ShardIndices[partIdx];
+                auto part = tableStats.Partitions.find(shardIdx);
+                if (part != tableStats.Partitions.end()) {
+                    for (const auto& followerStat : part->second.FollowerStats) {
+                        if (!matchesFilter(followerStat.second)) {
+                            continue;
+                        }
+                        if (stats == nullptr) {
+                            stats = result->Record.AddStats();
+                        }
+                        *stats->AddStats() = followerStat.second;
+                    }
+                }
+
+                if (!stats) {
+                    continue;
+                }
+
                 auto* key = stats->MutableKey();
 
                 key->SetOwnerId(pathId.OwnerId);
@@ -331,14 +361,6 @@ private:
 
                 if (includePathColumn) {
                     stats->SetPath(tableStats.Path);
-                }
-
-                auto shardIdx = tableStats.ShardIndices[partIdx];
-                auto part = tableStats.Partitions.find(shardIdx);
-                if (part != tableStats.Partitions.end()) {
-                    for (const auto& followerStat : part->second.FollowerStats) {
-                        *stats->AddStats() = followerStat.second;
-                    }
                 }
 
                 if (++count == BatchSize) {
@@ -359,7 +381,7 @@ private:
             startPartIdx = 0;
         }
 
-        Send(request->Sender, std::move(result));
+        Send(request->Sender, std::move(result), 0, request->Cookie);
     }
 
     void Handle(TEvPrivate::TEvProcessOverloaded::TPtr&) {
@@ -693,7 +715,7 @@ private:
                 }});
                 insert({TSchema::FollowerId::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
                     return TCell::Make<ui32>(stats.GetFollowerId());
-                }});                
+                }});
             }
         };
         static TExtractorsMap extractors;
@@ -724,7 +746,7 @@ private:
                 return stats.GetFollowerId() == 0;
             });
 
-            const TPartitionStats& leaderStats = leaderStatsIter != partitionStats.end() 
+            const TPartitionStats& leaderStats = leaderStatsIter != partitionStats.end()
                 ? *leaderStatsIter
                 : TPartitionStats{};   // Only at the very beginning, when there is no statistics from the leader
 

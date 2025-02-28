@@ -93,8 +93,8 @@ struct TChannelDataOOB {
         return Proto.GetData().GetRaw().size() + Payload.Size();
     }
 
-    ui32 RowCount() const {
-        return Proto.GetData().GetRows();
+    ui32 ChunkCount() const {
+        return Proto.GetData().GetChunks();
     }
 };
 

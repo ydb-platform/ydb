@@ -290,10 +290,6 @@ protected:
         size_t Size() const {
             return Proto.GetChannelData().GetData().GetRaw().size() + Payload.size();
         }
-
-        ui32 RowCount() const {
-            return Proto.GetChannelData().GetData().GetRows();
-        }
     };
 
     void HandleChannelData(NYql::NDq::TEvDqCompute::TEvChannelData::TPtr& ev) {

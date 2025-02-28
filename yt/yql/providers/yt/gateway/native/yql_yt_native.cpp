@@ -2533,8 +2533,16 @@ private:
                 yqlAttrs["expiration_timeout"] = isDuration ? duration.MilliSeconds()
                                                          : (*interval).MilliSeconds();
             }
-            if (execCtx->Options_.Config()->NightlyCompress.Get(cluster).GetOrElse(false)) {
-                yqlAttrs["force_nightly_compress"] = true;
+            const TMaybe<bool> nightlyCompress =
+                execCtx->Options_.Config()->NightlyCompress.Get(cluster);
+            if (nightlyCompress.Defined()) {
+                if (*nightlyCompress) {
+                    yqlAttrs["force_nightly_compress"] = true;
+                } else {
+                    NYT::TNode compressSettings = NYT::TNode::CreateMap();
+                    compressSettings["enabled"] = false;
+                    yqlAttrs["nightly_compression_settings"] = compressSettings;
+                }
             }
         }
 

@@ -68,6 +68,8 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptEnableOlapPushdown;
     NCommon::TConfSetting<bool, false> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, false> OptUseFinalizeByKey;
+    NCommon::TConfSetting<bool, false> OptShuffleElimination;
+    NCommon::TConfSetting<bool, false> OptShuffleEliminationWithMap;
     NCommon::TConfSetting<ui32, false> CostBasedOptimizationLevel;
 
     NCommon::TConfSetting<ui32, false> MaxDPHypDPTableSize;
@@ -158,9 +160,6 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableKqpDataQueryStreamLookup = false;
     bool EnableKqpScanQueryStreamIdxLookupJoin = false;
     bool EnableKqpDataQueryStreamIdxLookupJoin = false;
-    bool EnablePreparedDdl = false;
-    bool EnableSequences = false;
-    bool EnableColumnsWithDefault = false;
     NSQLTranslation::EBindingsMode BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
     NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode IndexAutoChooserMode;
     bool EnableAstCache = false;
@@ -173,6 +172,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOlapSink = false;
     bool EnableOltpSink = false;
     bool EnableHtapTx = false;
+    bool EnableStreamWrite = false;
     NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;
     bool EnableSpilling = true;
     ui32 DefaultCostBasedOptimizationLevel = 4;
@@ -180,6 +180,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     ui64 DefaultEnableSpillingNodes = 0;
     bool EnableAntlr4Parser = false;
     bool EnableSnapshotIsolationRW = false;
+    bool AllowMultiBroadcasts = false;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;

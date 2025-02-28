@@ -10,11 +10,10 @@ namespace NYT::NTransactionClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRemoteTimestampProviderConfig
+struct TRemoteTimestampProviderConfig
     : public NRpc::TBalancingChannelConfig
     , public NRpc::TRetryingChannelConfig
 {
-public:
     //! Timeout for RPC requests to timestamp provider.
     TDuration RpcTimeout;
 
@@ -38,10 +37,9 @@ DEFINE_REFCOUNTED_TYPE(TRemoteTimestampProviderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TAlienTimestampProviderConfig
+struct TAlienTimestampProviderConfig
     : public  NYTree::TYsonStruct
 {
-public:
     //! Clock server cell tag
     NObjectClient::TCellTag ClockClusterTag;
 
@@ -54,7 +52,7 @@ public:
 
 DEFINE_REFCOUNTED_TYPE(TAlienTimestampProviderConfig)
 
-DECLARE_REFCOUNTED_CLASS(TAlienTimestampProviderConfig)
+DECLARE_REFCOUNTED_STRUCT(TAlienTimestampProviderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

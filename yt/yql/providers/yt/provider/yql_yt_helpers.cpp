@@ -905,7 +905,30 @@ TExprNode::TPtr GetLimitExpr(const TExprNode::TPtr& limitSetting, TExprContext& 
         }
 
         if (skip) {
-            limitValues.push_back(ctx.NewCallable(child->Pos(), "+", { take, skip }));
+            auto uintMax = ctx.Builder(child->Pos())
+                .Callable("Uint64")
+                    .Atom(0, ToString(Max<ui64>()), TNodeFlags::Default)
+                .Seal()
+                .Build();
+            limitValues.push_back(
+                ctx.Builder(child->Pos())
+                    .Callable("If")
+                        .Callable(0, ">")
+                            .Add(0, take)
+                            .Callable(1, "-")
+                                .Add(0, uintMax)
+                                .Add(1, skip)
+                            .Seal()
+                        .Seal()
+                        .Add(1, uintMax)
+                        .Callable(2, "+")
+                            .Add(0, take)
+                            .Add(1, skip)
+                        .Seal()
+                    .Seal()
+                    .Build()
+            );
+
         } else {
             limitValues.push_back(take);
         }
@@ -2234,6 +2257,12 @@ bool IsYtTableSuitableForArrowInput(NNodes::TExprBase tableNode, std::function<v
     }
     if (meta->Attrs.contains(SCHEMA_MODE_ATTR_NAME) && meta->Attrs[SCHEMA_MODE_ATTR_NAME] == "weak") {
         unsupportedHandler("can't use arrow input on tables with weak schema");
+        return false;
+    }
+
+    auto rowSpec = TYtTableBaseInfo::GetRowSpec(tableNode);
+    if (rowSpec && !rowSpec->StrictSchema) {
+        unsupportedHandler("can't use arrow input on tables with non-strict schema");
         return false;
     }
 

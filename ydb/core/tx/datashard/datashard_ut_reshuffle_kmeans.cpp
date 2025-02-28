@@ -1,3 +1,4 @@
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -84,7 +85,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         }
     }
 
-    static TString DoReshuffleKMeans(Tests::TServer::TPtr server, TActorId sender, ui32 parent,
+    static TString DoReshuffleKMeans(Tests::TServer::TPtr server, TActorId sender, NTableIndex::TClusterId parent,
                                      const std::vector<TString>& level,
                                      NKikimrTxDataShard::TEvLocalKMeansRequest::EState upload,
                                      VectorIndexSettings::VectorType type, VectorIndexSettings::Metric metric)
@@ -171,7 +172,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {ParentColumn, "Uint32", true, true},
+            {ParentColumn, NTableIndex::ClusterIdTypeName, true, true},
             {"key", "Uint32", true, true},
             {"data", "String", false, false},
         });
@@ -183,7 +184,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {ParentColumn, "Uint32", true, true},
+            {ParentColumn, NTableIndex::ClusterIdTypeName, true, true},
             {"key", "Uint32", true, true},
             {"embedding", "String", false, false},
             {"data", "String", false, false},

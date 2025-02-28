@@ -89,8 +89,18 @@ SELECT
 ;
 
 SELECT
+    CAST('-P106751616D' AS interval64),
+    CAST(CAST('-P106751616D' AS interval64) AS string)
+;
+
+SELECT
     CAST('P106751617D' AS interval64),
     CAST(CAST('P106751617D' AS interval64) AS string)
+;
+
+SELECT
+    CAST('-P106751617D' AS interval64),
+    CAST(CAST('-P106751617D' AS interval64) AS string)
 ;
 
 SELECT
@@ -101,6 +111,26 @@ SELECT
 SELECT
     CAST('P15250231W' AS interval64),
     CAST(CAST('P15250231W' AS interval64) AS string)
+;
+
+SELECT
+    CAST('PT9223339708799S' AS interval64),
+    CAST(CAST('PT9223339708799S' AS interval64) AS string)
+;
+
+SELECT
+    CAST('-PT9223339708799S' AS interval64),
+    CAST(CAST('-PT9223339708799S' AS interval64) AS string)
+;
+
+SELECT
+    CAST('PT9223339708800S' AS interval64),
+    CAST(CAST('PT9223339708800S' AS interval64) AS string)
+;
+
+SELECT
+    CAST('-PT9223339708800S' AS interval64),
+    CAST(CAST('-PT9223339708800S' AS interval64) AS string)
 ;
 
 SELECT

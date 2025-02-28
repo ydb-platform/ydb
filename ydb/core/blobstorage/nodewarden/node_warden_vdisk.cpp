@@ -200,11 +200,13 @@ namespace NKikimr::NStorage {
             vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightSSD;
         }
 
-        vdiskConfig->ThrottlingDeviceSpeed = ThrottlingDeviceSpeed;
-        vdiskConfig->ThrottlingMinSstCount = ThrottlingMinSstCount;
-        vdiskConfig->ThrottlingMaxSstCount = ThrottlingMaxSstCount;
-        vdiskConfig->ThrottlingMinInplacedSize = ThrottlingMinInplacedSize;
-        vdiskConfig->ThrottlingMaxInplacedSize = ThrottlingMaxInplacedSize;
+        vdiskConfig->ThrottlingDryRun = ThrottlingDryRun;
+        vdiskConfig->ThrottlingMinLevel0SstCount = ThrottlingMinLevel0SstCount;
+        vdiskConfig->ThrottlingMaxLevel0SstCount = ThrottlingMaxLevel0SstCount;
+        vdiskConfig->ThrottlingMinInplacedSizeHDD = ThrottlingMinInplacedSizeHDD;
+        vdiskConfig->ThrottlingMaxInplacedSizeHDD = ThrottlingMaxInplacedSizeHDD;
+        vdiskConfig->ThrottlingMinInplacedSizeSSD = ThrottlingMinInplacedSizeSSD;
+        vdiskConfig->ThrottlingMaxInplacedSizeSSD = ThrottlingMaxInplacedSizeSSD;
         vdiskConfig->ThrottlingMinOccupancyPerMille = ThrottlingMinOccupancyPerMille;
         vdiskConfig->ThrottlingMaxOccupancyPerMille = ThrottlingMaxOccupancyPerMille;
         vdiskConfig->ThrottlingMinLogChunkCount = ThrottlingMinLogChunkCount;

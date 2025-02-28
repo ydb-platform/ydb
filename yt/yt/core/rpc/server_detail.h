@@ -316,7 +316,7 @@ protected:
     TServerConfigPtr AppliedConfig_;
 
     //! Service name to service.
-    using TServiceMap = THashMap<TString, IServicePtr>;
+    using TServiceMap = THashMap<std::string, IServicePtr>;
     THashMap<TGuid, TServiceMap> RealmIdToServiceMap_;
 
     explicit TServerBase(NLogging::TLogger logger);

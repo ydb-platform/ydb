@@ -319,6 +319,13 @@ TFuture<void> TClient::UnfreezeTable(
     return req->Invoke().As<void>();
 }
 
+TFuture<void> TClient::CancelTabletTransition(
+    NTabletClient::TTabletId /*tabletId*/,
+    const TCancelTabletTransitionOptions& /*options*/)
+{
+    ThrowUnimplemented("CancelTabletTransition");
+}
+
 TFuture<void> TClient::ReshardTable(
     const TYPath& path,
     const std::vector<TLegacyOwningKey>& pivotKeys,
@@ -1159,6 +1166,9 @@ TFuture<void> TClient::SuspendOperation(
 
     NScheduler::ToProto(req, operationIdOrAlias);
     req->set_abort_running_jobs(options.AbortRunningJobs);
+    if (options.Reason) {
+        req->set_reason(*options.Reason);
+    }
 
     return req->Invoke().As<void>();
 }
@@ -1515,6 +1525,9 @@ TFuture<TListJobsResult> TClient::ListJobs(
     }
     if (options.TaskName) {
         req->set_task_name(*options.TaskName);
+    }
+    if (options.OperationIncarnation) {
+        req->set_operation_incarnation(*options.OperationIncarnation);
     }
     if (options.FromTime) {
         req->set_from_time(NYT::ToProto(*options.FromTime));
@@ -2345,7 +2358,7 @@ TFuture<TQueryResult> TClient::GetQueryResult(
             .Schema = rsp->has_schema() ? FromProto<NTableClient::TTableSchemaPtr>(rsp->schema()) : nullptr,
             .DataStatistics = FromProto<NChunkClient::NProto::TDataStatistics>(rsp->data_statistics()),
             .IsTruncated = rsp->is_truncated(),
-            .FullResult = rsp->has_full_result() ? std::make_optional(TYsonString(rsp->full_result())) : std::nullopt,
+            .FullResult = rsp->has_full_result() ? TYsonString(rsp->full_result()) : TYsonString(),
         };
     }));
 }
@@ -2505,6 +2518,7 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
             .ClusterName = FromProto<TString>(rsp->cluster_name()),
             .SupportedFeatures = TYsonString(rsp->supported_features()),
             .AccessControlObjects = FromProto<std::vector<TString>>(rsp->access_control_objects()),
+            .Clusters = FromProto<std::vector<TString>>(rsp->clusters())
         };
     }));
 }
@@ -2715,6 +2729,7 @@ TFuture<TGetFlowViewResult> TClient::GetFlowView(
 
     req->set_pipeline_path(pipelinePath);
     req->set_view_path(viewPath);
+    req->set_cache(options.Cache);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetFlowViewPtr& rsp) {
         return TGetFlowViewResult{

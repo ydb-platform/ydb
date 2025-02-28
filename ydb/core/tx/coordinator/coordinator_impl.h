@@ -655,7 +655,7 @@ private:
     TMediator& Mediator(TTabletId mediatorId, const TActorContext &ctx) {
         TMediator &mediator = Mediators[mediatorId];
         if (!mediator.QueueActor)
-            mediator.QueueActor = ctx.ExecutorThread.RegisterActor(CreateTxCoordinatorMediatorQueue(ctx.SelfID, TabletID(), mediatorId, Executor()->Generation()));
+            mediator.QueueActor = ctx.Register(CreateTxCoordinatorMediatorQueue(ctx.SelfID, TabletID(), mediatorId, Executor()->Generation()));
         return mediator;
     }
 

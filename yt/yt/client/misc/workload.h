@@ -49,6 +49,8 @@ struct TWorkloadDescriptor
     //! Computes the aggregated priority.
     //! Larger is better.
     i64 GetPriority() const;
+
+    bool operator==(const TWorkloadDescriptor& other) const = default;
 };
 
 i64 GetBasicPriority(EWorkloadCategory category);

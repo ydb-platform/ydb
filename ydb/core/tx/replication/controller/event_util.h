@@ -14,6 +14,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
 THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     ui64 replicationId,
     ui64 targetId,
+    const TReplication::ITarget::IConfig::TPtr& config,
     ui64 workerId,
     const NKikimrReplication::TConnectionParams& connectionParams,
     const NKikimrReplication::TConsistencySettings& consistencySettings,

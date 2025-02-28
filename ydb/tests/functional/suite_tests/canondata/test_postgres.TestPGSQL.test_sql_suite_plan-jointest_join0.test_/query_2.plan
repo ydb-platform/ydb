@@ -30,7 +30,7 @@
                                 "Plans": [
                                     {
                                         "CTE Name": "precompute_0_0",
-                                        "Node Type": "Limit-CrossJoin-InnerJoin (MapJoin)-Filter-Filter-ConstantExpr-ConstantExpr",
+                                        "Node Type": "Limit-CrossJoin-InnerJoin (MapJoin)-ConstantExpr-Filter-ConstantExpr",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -71,7 +71,7 @@
                                                         "InternalOperatorId": 2
                                                     },
                                                     {
-                                                        "InternalOperatorId": 6
+                                                        "InternalOperatorId": 5
                                                     }
                                                 ],
                                                 "Name": "CrossJoin"
@@ -80,13 +80,18 @@
                                                 "Condition": "t.thousand = b.Sum0",
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 3
+                                                        "InternalOperatorId": 4
                                                     },
                                                     {
-                                                        "InternalOperatorId": 4
+                                                        "InternalOperatorId": 3
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [],
+                                                "Name": "ToFlow",
+                                                "ToFlow": "precompute_0_0"
                                             },
                                             {
                                                 "Inputs": [
@@ -96,20 +101,6 @@
                                                 ],
                                                 "Name": "Filter",
                                                 "Predicate": "Exist(item.thousand)"
-                                            },
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 5
-                                                    }
-                                                ],
-                                                "Name": "Filter",
-                                                "Predicate": "Exist(item.Sum0)"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "ToFlow",
-                                                "ToFlow": "precompute_0_0"
                                             },
                                             {
                                                 "Inputs": [],

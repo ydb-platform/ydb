@@ -857,6 +857,7 @@
   - linux/prctl.h
   - linux/psample.h
   - linux/psci.h
+  - linux/psp-dbc.h
   - linux/psp-sev.h
   - linux/ptp_clock.h
   - linux/ptrace.h

@@ -1,18 +1,18 @@
 diff --git a/include/__algorithm/simd_utils.h b/include/__algorithm/simd_utils.h
-index 989a195..c2fc02e 100644
+index 549197b..c0d04c4 100644
 --- a/include/__algorithm/simd_utils.h
 +++ b/include/__algorithm/simd_utils.h
-@@ -27,7 +27,7 @@ _LIBCPP_PUSH_MACROS
+@@ -28,7 +28,7 @@ _LIBCPP_PUSH_MACROS
  #include <__undef_macros>
  
  // TODO: Find out how altivec changes things and allow vectorizations there too.
--#if _LIBCPP_STD_VER >= 14 && defined(_LIBCPP_CLANG_VER) && _LIBCPP_CLANG_VER >= 1700 && !defined(__ALTIVEC__)
-+#if _LIBCPP_STD_VER >= 14 && defined(_LIBCPP_CLANG_VER) && _LIBCPP_CLANG_VER >= 1700 && !defined(__ALTIVEC__) && !defined(__CUDACC__)
+-#if _LIBCPP_STD_VER >= 14 && defined(_LIBCPP_CLANG_VER) && !defined(__ALTIVEC__)
++#if _LIBCPP_STD_VER >= 14 && defined(_LIBCPP_CLANG_VER) && !defined(__ALTIVEC__) && !defined(__CUDACC__)
  #  define _LIBCPP_HAS_ALGORITHM_VECTOR_UTILS 1
  #else
  #  define _LIBCPP_HAS_ALGORITHM_VECTOR_UTILS 0
 diff --git a/include/__iterator/reverse_iterator.h b/include/__iterator/reverse_iterator.h
-index 2ae1461..3fb2a42 100644
+index 50c0f21..a2e3528 100644
 --- a/include/__iterator/reverse_iterator.h
 +++ b/include/__iterator/reverse_iterator.h
 @@ -132,7 +132,7 @@ public:
@@ -40,32 +40,32 @@ index f3cd1e5..c0a77ef 100644
  template <class _Iterator>
  using __is_segmented_iterator = __has_specialization<__segmented_iterator_traits<_Iterator> >;
 diff --git a/include/__math/traits.h b/include/__math/traits.h
-index da585af..b271b8f 100644
+index a448266..9fdf409 100644
 --- a/include/__math/traits.h
 +++ b/include/__math/traits.h
-@@ -67,7 +67,7 @@ _LIBCPP_NODISCARD_EXT _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool i
+@@ -67,7 +67,7 @@ _LIBCPP_NODISCARD _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool isinf
    return false;
  }
  
 -#ifdef _LIBCPP_PREFERRED_OVERLOAD
 +#ifdef _LIBCPP_PREFERRED_OVERLOAD && !defined(__CUDACC__)
- _LIBCPP_NODISCARD_EXT inline _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool isinf(float __x) _NOEXCEPT {
+ _LIBCPP_NODISCARD inline _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool isinf(float __x) _NOEXCEPT {
    return __builtin_isinf(__x);
  }
-@@ -94,7 +94,7 @@ _LIBCPP_NODISCARD_EXT _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool i
+@@ -94,7 +94,7 @@ _LIBCPP_NODISCARD _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool isnan
    return false;
  }
  
 -#ifdef _LIBCPP_PREFERRED_OVERLOAD
 +#ifdef _LIBCPP_PREFERRED_OVERLOAD && !defined(__CUDACC__)
- _LIBCPP_NODISCARD_EXT inline _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool isnan(float __x) _NOEXCEPT {
+ _LIBCPP_NODISCARD inline _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool isnan(float __x) _NOEXCEPT {
    return __builtin_isnan(__x);
  }
 diff --git a/include/complex b/include/complex
-index a81f968..1e4d99d 100644
+index 22271ac..bfe61c5 100644
 --- a/include/complex
 +++ b/include/complex
-@@ -1513,6 +1513,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<double> operator""i(unsigned long
+@@ -1453,6 +1453,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<double> operator""i(unsigned long
    return {0.0, static_cast<double>(__im)};
  }
  
@@ -73,7 +73,7 @@ index a81f968..1e4d99d 100644
  _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double __im) {
    return {0.0f, static_cast<float>(__im)};
  }
-@@ -1520,6 +1521,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double _
+@@ -1460,6 +1461,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double _
  _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(unsigned long long __im) {
    return {0.0f, static_cast<float>(__im)};
  }
@@ -82,10 +82,10 @@ index a81f968..1e4d99d 100644
  } // namespace literals
  #endif
 diff --git a/include/tuple b/include/tuple
-index c7fc550..ed7d912 100644
+index 26652ff..9caeaaf 100644
 --- a/include/tuple
 +++ b/include/tuple
-@@ -297,7 +297,7 @@ class __tuple_leaf {
+@@ -296,7 +296,7 @@ class __tuple_leaf {
  
    template <class _Tp>
    static _LIBCPP_HIDE_FROM_ABI constexpr bool __can_bind_reference() {
@@ -94,7 +94,7 @@ index c7fc550..ed7d912 100644
      return !__reference_binds_to_temporary(_Hp, _Tp);
  #  else
      return true;
-@@ -599,8 +599,16 @@ public:
+@@ -603,8 +603,16 @@ public:
                is_constructible<_Tp, _Up>... > {};
  
    template <class... _Up,
@@ -111,5 +111,5 @@ index c7fc550..ed7d912 100644
 +                           >::value,
 +                     int> = 0>
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 explicit(_Not<_Lazy<_And, is_convertible<_Up, _Tp>...> >::value)
-       tuple(_Up&&... __u) _NOEXCEPT_(_And<is_nothrow_constructible<_Tp, _Up>...>::value)
+       tuple(_Up&&... __u) noexcept(_And<is_nothrow_constructible<_Tp, _Up>...>::value)
        : __base_(typename __make_tuple_indices<sizeof...(_Up)>::type(),

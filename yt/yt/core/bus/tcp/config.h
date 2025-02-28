@@ -13,10 +13,9 @@ namespace NYT::NBus {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMultiplexingBandConfig
+struct TMultiplexingBandConfig
     : public NYTree::TYsonStruct
 {
-public:
     int TosLevel;
     THashMap<std::string, int> NetworkToTosLevel;
 
@@ -32,10 +31,9 @@ DEFINE_REFCOUNTED_TYPE(TMultiplexingBandConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTcpDispatcherConfig
+struct TTcpDispatcherConfig
     : public NYTree::TYsonStruct
 {
-public:
     int ThreadPoolSize;
 
     TDuration ThreadPoolPollingPeriod;
@@ -63,10 +61,9 @@ DEFINE_REFCOUNTED_TYPE(TTcpDispatcherConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTcpDispatcherDynamicConfig
+struct TTcpDispatcherDynamicConfig
     : public NYTree::TYsonStruct
 {
-public:
     std::optional<int> ThreadPoolSize;
 
     std::optional<TDuration> ThreadPoolPollingPeriod;
@@ -91,10 +88,9 @@ DEFINE_REFCOUNTED_TYPE(TTcpDispatcherDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBusConfig
+struct TBusConfig
     : public NNet::TDialerConfig
 {
-public:
     bool EnableQuickAck;
 
     int BindRetryCount;
@@ -130,10 +126,23 @@ DEFINE_REFCOUNTED_TYPE(TBusConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBusServerConfig
+struct TBusDynamicConfig
+    : public NYTree::TYsonStruct
+{
+    bool NeedRejectConnectionDueMemoryOvercommit;
+
+    REGISTER_YSON_STRUCT(TBusDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TBusDynamicConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TBusServerConfig
     : public TBusConfig
 {
-public:
     std::optional<int> Port;
     std::optional<std::string> UnixDomainSocketPath;
     int MaxBacklogSize;
@@ -151,10 +160,21 @@ DEFINE_REFCOUNTED_TYPE(TBusServerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBusClientConfig
+struct TBusServerDynamicConfig
+    : public TBusDynamicConfig
+{
+    REGISTER_YSON_STRUCT(TBusServerDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TBusServerDynamicConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TBusClientConfig
     : public TBusConfig
 {
-public:
     std::optional<std::string> Address;
     std::optional<std::string> UnixDomainSocketPath;
 
@@ -167,6 +187,18 @@ public:
 };
 
 DEFINE_REFCOUNTED_TYPE(TBusClientConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TBusClientDynamicConfig
+    : public TBusDynamicConfig
+{
+    REGISTER_YSON_STRUCT(TBusClientDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TBusClientDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

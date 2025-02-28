@@ -12,4 +12,4 @@
 +++ contrib/python/zstandard/py2/zstd.c	(working tree)
 @@ -213,1 +213,1 @@ void zstd_module_init(PyObject* m) {
 -	if (ZSTD_VERSION_NUMBER != 10405 || ZSTD_versionNumber() != 10405) {
-+	if (ZSTD_VERSION_NUMBER != 10506 || ZSTD_versionNumber() != 10506) {
++	if (ZSTD_VERSION_NUMBER != 10507 || ZSTD_versionNumber() != 10507) {

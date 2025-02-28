@@ -218,7 +218,7 @@ public:
     }
 
     IQWriterPtr MakeWriter(const TString& operationId, const TQWriterSettings& settings) const final {
-        return std::make_shared<TWriter>(Settings_, operationId, settings);
+        return MakeCloseAwareWriterDecorator(std::make_shared<TWriter>(Settings_, operationId, settings));
     }
 
     IQReaderPtr MakeReader(const TString& operationId, const TQReaderSettings& settings) const final {
@@ -238,7 +238,7 @@ private:
     void LoadTable(const TString& operationId, const IQStoragePtr& memory) const {
         auto driver = MakeDriver(Settings_);
         NYdb::NTable::TTableClient tableClient(driver);
-        
+
         auto operationsTable  = Settings_.TablesPrefix + "operations";
         auto fullOperationId = Settings_.OperationIdPrefix + operationId;
 
@@ -287,7 +287,7 @@ private:
         TString blobTable = Settings_.Database + "/" + Settings_.TablesPrefix + "blobs";
 
         const auto maxBatchSize = Settings_.MaxBatchSize.GetOrElse(DefaultMaxBatchSize);
-        auto rtResult = tableClient.RetryOperationSync([&tableIter, maxBatchSize, blobTable, 
+        auto rtResult = tableClient.RetryOperationSync([&tableIter, maxBatchSize, blobTable,
             fullOperationId, writtenAt, loadedTotalItems](NYdb::NTable::TSession session) {
             auto key1 = NYdb::TValueBuilder()
                 .BeginTuple()
@@ -321,7 +321,7 @@ private:
             if (res.IsSuccess()) {
                 tableIter = res;
             }
-            
+
             return res;
         }, readRetrySettings);
         ThrowOnError(rtResult);

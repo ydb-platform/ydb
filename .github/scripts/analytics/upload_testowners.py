@@ -93,7 +93,10 @@ def main():
             run_timestamp >= CurrentUtcDate()- Interval("P10D") 
             AND branch = 'main' 
             and job_name in (
-                'Nightly-run', 'Postcommit_relwithdebinfo', 
+                'Nightly-run',
+                'Regression-run',
+                'Regression-whitelist-run',
+                'Postcommit_relwithdebinfo', 
                 'Postcommit_asan'
             ) 
             WINDOW w AS (

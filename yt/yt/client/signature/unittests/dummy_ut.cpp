@@ -24,7 +24,7 @@ const auto YsonSignature = TYsonString(
 TEST(TDummySignatureGeneratorTest, Generate)
 {
     auto generator = CreateDummySignatureGenerator();
-    auto signature = generator->Sign(TYsonString("payload"_sb));
+    auto signature = generator->Sign("payload");
     EXPECT_EQ(ConvertToYsonString(signature, EYsonFormat::Text), YsonSignature);
     generator->Sign(signature);
     EXPECT_EQ(ConvertToYsonString(signature, EYsonFormat::Text), YsonSignature);
@@ -45,7 +45,7 @@ TEST(TDummySignatureValidatorTest, GenerateValidate)
 {
     auto generator = CreateDummySignatureGenerator();
     auto validator = CreateDummySignatureValidator();
-    auto signature = generator->Sign(TYsonString("payload"_sb));
+    auto signature = generator->Sign("payload");
     EXPECT_TRUE(validator->Validate(signature).Get().Value());
 }
 

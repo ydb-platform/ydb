@@ -72,6 +72,9 @@ namespace NKikimr::NDataShard {
                 }
             }
 
+            Self->VolatileTxManager.RemoveFromTxMap(info);
+            Self->VolatileTxManager.UnstableVolatileTxByVersion.insert(info);
+
             auto getGroup = [&]() -> ui64 {
                 if (!info->ChangeGroup) {
                     if (info->Version.TxId != info->TxId) {
@@ -123,8 +126,6 @@ namespace NKikimr::NDataShard {
 
             Self->VolatileTxManager.UnblockDependents(info);
 
-            Self->VolatileTxManager.RemoveFromTxMap(info);
-
             Self->VolatileTxManager.RemoveVolatileTx(info);
 
             Y_DEBUG_ABORT_UNLESS(!TxInfo, "TTxVolatileTxCommit has an unexpected link to a removed volatile tx");
@@ -167,6 +168,9 @@ namespace NKikimr::NDataShard {
                     }
                 }
             }
+
+            Self->VolatileTxManager.RemoveFromTxMap(info);
+            Self->VolatileTxManager.UnstableVolatileTxByVersion.insert(info);
 
             if (!info->ArbiterReadSets.empty()) {
                 NKikimrTx::TReadSetData data;
@@ -218,8 +222,6 @@ namespace NKikimr::NDataShard {
 
             Self->VolatileTxManager.UnblockDependents(info);
 
-            Self->VolatileTxManager.RemoveFromTxMap(info);
-
             Self->VolatileTxManager.RemoveVolatileTx(info);
 
             Y_DEBUG_ABORT_UNLESS(!TxInfo, "TTxVolatileTxAbort has an unexpected link to a removed volatile tx");
@@ -255,6 +257,7 @@ namespace NKikimr::NDataShard {
     void TVolatileTxManager::Clear() {
         VolatileTxs.clear();
         VolatileTxByVersion.clear();
+        UnstableVolatileTxByVersion.clear();
         VolatileTxByCommitTxId.clear();
         VolatileTxByCommitOrder.Clear();
         TxMap.Reset();
@@ -267,6 +270,7 @@ namespace NKikimr::NDataShard {
         Y_ABORT_UNLESS(
             VolatileTxs.empty() &&
             VolatileTxByVersion.empty() &&
+            UnstableVolatileTxByVersion.empty() &&
             VolatileTxByCommitTxId.empty() &&
             VolatileTxByCommitOrder.Empty() &&
             !TxMap,
@@ -640,6 +644,7 @@ namespace NKikimr::NDataShard {
             VolatileTxByCommitTxId.erase(commitTxId);
         }
 
+        Y_DEBUG_ABORT_UNLESS(!UnstableVolatileTxByVersion.contains(info));
         VolatileTxByVersion.erase(info);
 
         // FIXME: do we need to handle WaitingSnapshotEvents somehow?
@@ -682,6 +687,7 @@ namespace NKikimr::NDataShard {
         for (ui64 commitTxId : info->CommitTxIds) {
             VolatileTxByCommitTxId.erase(commitTxId);
         }
+        UnstableVolatileTxByVersion.erase(info);
         VolatileTxByVersion.erase(info);
 
         Self->IncCounter(COUNTER_VOLATILE_TX_TOTAL_LATENCY_MS, info->LatencyTimer.Passed() * 1000);
@@ -827,10 +833,9 @@ namespace NKikimr::NDataShard {
                 return true;
 
             case EVolatileTxState::Aborting:
-                // Aborting state will not change as long as we're still leader
-                return true;
-                // Ack readset normally as long as we're still a leader
-                return true;
+                // We need to wait until volatile tx abort is committed to send rs acks
+                info->DelayedAcks.push_back(std::move(ack));
+                return false;
         }
 
         ui64 srcTabletId = record.GetTabletSource();
@@ -885,8 +890,10 @@ namespace NKikimr::NDataShard {
         }();
 
         if (!committed) {
+            // We need to wait until volatile tx abort is committed to send rs acks
+            info->DelayedAcks.push_back(std::move(ack));
             AbortWaitingTransaction(info);
-            return true;
+            return false;
         }
 
         NIceDb::TNiceDb db(txc.DB);

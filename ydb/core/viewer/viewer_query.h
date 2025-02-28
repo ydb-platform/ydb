@@ -47,6 +47,7 @@ class TJsonQuery : public TViewerPipeClient {
     NHttp::THttpOutgoingResponsePtr HttpResponse;
     std::vector<bool> ResultSetHasColumns;
     bool ConcurrentResults = false;
+    TString ContentType;
 
 public:
     ESchemaType StringToSchemaType(const TString& schemaStr) {
@@ -129,8 +130,16 @@ public:
         if (Streaming) {
             NHttp::THeaders headers(HttpEvent->Get()->Request->Headers);
             TStringBuf accept = headers["Accept"];
-            if (accept.find("multipart/x-mixed-replace") == TString::npos) {
-                return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Multipart request must accept multipart/x-mixed-replace content"), "BadRequest");
+            auto posMixedReplace = accept.find("multipart/x-mixed-replace");
+            auto posFormData = accept.find("multipart/form-data");
+            auto posFirst = std::min(posMixedReplace, posFormData);
+            if (posFirst == TString::npos) {
+                return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Multipart request must accept multipart content-type"), "BadRequest");
+            }
+            if (posFirst == posMixedReplace) {
+                ContentType = "multipart/x-mixed-replace";
+            } else if (posFirst == posFormData) {
+                ContentType = "multipart/form-data";
             }
         }
         if (Streaming && QueryId.empty()) {
@@ -238,7 +247,7 @@ public:
         }
         CreateSessionResponse = MakeRequest<NKqp::TEvKqp::TEvCreateSessionResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
         if (Streaming) {
-            HttpResponse = HttpEvent->Get()->Request->CreateResponseString(Viewer->GetChunkedHTTPOK(GetRequest(), "multipart/x-mixed-replace;boundary=boundary"));
+            HttpResponse = HttpEvent->Get()->Request->CreateResponseString(Viewer->GetChunkedHTTPOK(GetRequest(), ContentType + ";boundary=boundary"));
             Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(HttpResponse));
         }
     }
@@ -594,7 +603,7 @@ private:
                 NJson::ReadJsonTree(progress.GetQueryPlan(), &(json["plan"]));
             }
             if (progress.HasQueryStats()) {
-                NProtobufJson::Proto2Json(progress.GetQueryStats(), json["stats"]);
+                Proto2Json(progress.GetQueryStats(), json["stats"]);
             }
             StreamJsonResponse(json);
         }
@@ -821,7 +830,7 @@ private:
                 NJson::ReadJsonTree(response.GetQueryPlan(), &(jsonResponse["plan"]));
             }
             if (response.HasQueryStats()) {
-                NProtobufJson::Proto2Json(response.GetQueryStats(), jsonResponse["stats"]);
+                Proto2Json(response.GetQueryStats(), jsonResponse["stats"]);
             }
         }
         catch (const std::exception& ex) {
@@ -1019,6 +1028,10 @@ public:
                                 type: object
                                 description: format depends on schema parameter
                         multipart/x-mixed-replace:
+                            schema:
+                                type: object
+                                description: format depends on schema parameter
+                        multipart/form-data:
                             schema:
                                 type: object
                                 description: format depends on schema parameter

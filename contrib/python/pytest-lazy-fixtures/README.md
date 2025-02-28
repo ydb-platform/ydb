@@ -2,7 +2,8 @@
 
 [![codecov](https://codecov.io/gh/dev-petrov/pytest-lazy-fixtures/branch/master/graph/badge.svg)](https://codecov.io/gh/dev-petrov/pytest-lazy-fixtures)
 [![CI](https://github.com/dev-petrov/pytest-lazy-fixtures/workflows/CI/badge.svg)](https://github.com/dev-petrov/pytest-lazy-fixtures/actions/workflows/ci-test.yml)
-[![PyPI version](https://badge.fury.io/py/pytest-lazy-fixtures.svg)](https://badge.fury.io/py/pytest-lazy-fixtures)
+[![PyPI version](https://badge.fury.io/py/pytest-lazy-fixtures.svg)](https://pypi.org/project/pytest-lazy-fixtures/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/pytest-lazy-fixtures)](https://pypistats.org/packages/pytest-lazy-fixtures)
 
 Use your fixtures in `@pytest.mark.parametrize`.
 

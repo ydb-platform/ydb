@@ -561,5 +561,57 @@ TEST(TDeserializeTest, Enums)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TYsonConceptsTest
+    : public ::testing::Test
+{
+    struct TEmptyStruct
+    { };
+
+    struct TStructWithSerialize
+    { };
+
+    struct TStructWithDeserialize
+    { };
+
+    struct TStructWithBoth
+        : TStructWithSerialize
+        , TStructWithDeserialize
+    { };
+};
+
+[[maybe_unused]] void Serialize(const TYsonConceptsTest::TStructWithSerialize& /*value*/, NYson::IYsonConsumer* /*consumer*/)
+{ }
+
+[[maybe_unused]] void Deserialize(TYsonConceptsTest::TStructWithDeserialize& /*value*/, NYTree::INodePtr /*node*/)
+{ }
+
+TEST_F(TYsonConceptsTest, EmptyStruct)
+{
+    static_assert(!CYsonSerializable<TEmptyStruct>);
+    static_assert(!CYsonDeserializable<TEmptyStruct>);
+    static_assert(!CYsonSerializableDeserializable<TEmptyStruct>);
+}
+
+TEST_F(TYsonConceptsTest, StructWithSerialize)
+{
+    static_assert(CYsonSerializable<TStructWithSerialize>);
+    static_assert(!CYsonDeserializable<TStructWithSerialize>);
+    static_assert(!CYsonSerializableDeserializable<TStructWithSerialize>);
+}
+
+TEST_F(TYsonConceptsTest, StructWithDeserialize)
+{
+    static_assert(!CYsonSerializable<TStructWithDeserialize>);
+    static_assert(CYsonDeserializable<TStructWithDeserialize>);
+    static_assert(!CYsonSerializableDeserializable<TStructWithDeserialize>);
+}
+
+TEST_F(TYsonConceptsTest, StructWithBoth)
+{
+    static_assert(CYsonSerializableDeserializable<TStructWithBoth>);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
 } // namespace NYT::NYTree

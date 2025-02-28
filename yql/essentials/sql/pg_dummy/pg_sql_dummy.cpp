@@ -2,6 +2,7 @@
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack_impl.h>
 #include <yql/essentials/minikql/mkql_buffer.h>
+#include <yql/essentials/sql/settings/translator.h>
 
 namespace NSQLTranslationPG {
 
@@ -31,6 +32,10 @@ std::unique_ptr<NYql::NPg::ISystemFunctionsParser> CreateSystemFunctionsParser()
 
 std::unique_ptr<NYql::NPg::ISqlLanguageParser> CreateSqlLanguageParser() {
     throw yexception() << "CreateSqlLanguageParser: PG types are not supported";
+}
+
+NSQLTranslation::TTranslatorPtr MakeTranslator() {
+    return NSQLTranslation::MakeDummyTranslator("pg");
 }
 
 } // NSQLTranslationPG

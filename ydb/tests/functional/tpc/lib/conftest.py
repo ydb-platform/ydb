@@ -20,7 +20,8 @@ class FunctionalTestBase:
         YdbCluster.reset(
             ydb_endpoint=f'grpc://{node.host}:{node.grpc_port}',
             ydb_database=f'{cls.cluster.domain_name}/test_db',
-            ydb_mon_port=node.mon_port
+            ydb_mon_port=node.mon_port,
+            dyn_nodes_count=1
         )
         db = f'/{YdbCluster.ydb_database}'
         cls.cluster.create_database(
@@ -29,7 +30,7 @@ class FunctionalTestBase:
                 'hdd': 1
             }
         )
-        cls.cluster.register_and_start_slots(db, count=1)
+        cls.cluster.register_and_start_slots(db, count=YdbCluster.get_dyn_nodes_count())
         cls.cluster.wait_tenant_up(db)
 
     @classmethod

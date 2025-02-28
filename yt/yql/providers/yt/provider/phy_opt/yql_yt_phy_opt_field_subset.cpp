@@ -99,14 +99,14 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::LambdaVisitFieldsSubset
                 auto itemType = visitLambda->Head().Head().GetTypeAnn()->Cast<TStructExprType>();
                 auto reduceBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::ReduceBy);
                 for (auto& col: reduceBy) {
-                    if (auto type = itemType->FindItemType(col)) {
-                        memberSet.insert(type->Cast<TItemExprType>()->GetName());
+                    if (itemType->FindItem(col)) {
+                        memberSet.insert(col);
                     }
                 }
                 auto sortBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::SortBy);
                 for (auto& col: sortBy) {
-                    if (auto type = itemType->FindItemType(col)) {
-                        memberSet.insert(type->Cast<TItemExprType>()->GetName());
+                    if (itemType->FindItem(col)) {
+                        memberSet.insert(col);
                     }
                 }
 

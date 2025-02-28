@@ -18,7 +18,7 @@ struct TPlainStatus {
     NYdb::NIssue::TIssues Issues;
     std::string Endpoint;
     std::multimap<std::string, std::string> Metadata;
-    Ydb::CostInfo ConstInfo;
+    Ydb::CostInfo CostInfo;
 
     TPlainStatus()
         : Status(EStatus::SUCCESS)
@@ -35,7 +35,9 @@ struct TPlainStatus {
         , Issues(std::move(issues))
         , Endpoint(endpoint)
         , Metadata(std::move(metadata))
-    { }
+    {
+        InitCostInfo();
+    }
 
     TPlainStatus(EStatus status, const std::string& message)
         : Status(status)
@@ -51,7 +53,7 @@ struct TPlainStatus {
 
     template<class T>
     void SetCostInfo(T&& costInfo) {
-        ConstInfo = std::forward<T>(costInfo);
+        CostInfo = std::forward<T>(costInfo);
     }
 
     bool Ok() const {
@@ -73,7 +75,8 @@ struct TPlainStatus {
         return ret;
     }
 
-
+private:
+    void InitCostInfo();
 };
 
 } // namespace NYdb

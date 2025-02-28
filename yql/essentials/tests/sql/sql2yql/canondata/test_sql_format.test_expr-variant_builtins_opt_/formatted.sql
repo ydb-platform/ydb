@@ -8,8 +8,8 @@ $handle_b = ($x) -> {
     RETURN CAST(($x || '2') AS Uint32);
 };
 
-$var_a = VARIANT ('5', 'a', $vartype);
-$var_b = VARIANT ('6', 'b', $vartype);
+$var_a = Variant('5', 'a', $vartype);
+$var_b = Variant('6', 'b', $vartype);
 
 SELECT
     Visit(Just($var_a), $handle_a AS a, $handle_b AS b),
@@ -19,8 +19,8 @@ SELECT
 ;
 
 $vartype_t = Variant<Optional<String>, Optional<String>>;
-$var_1 = VARIANT ('7', '0', $vartype_t);
-$var_2 = VARIANT ('8', '1', $vartype_t);
+$var_1 = Variant('7', '0', $vartype_t);
+$var_2 = Variant('8', '1', $vartype_t);
 
 SELECT
     Visit(Just($var_1), $handle_a, $handle_b),

@@ -10,10 +10,9 @@ namespace NYT::NJournalClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChunkReaderConfig
+struct TChunkReaderConfig
     : public virtual NChunkClient::TReplicationReaderConfig
 {
-public:
     REGISTER_YSON_STRUCT(TChunkReaderConfig);
 
     static void Register(TRegistrar registrar);

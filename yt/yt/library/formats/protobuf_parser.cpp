@@ -31,7 +31,6 @@ using namespace NComplexTypes;
 
 using ::google::protobuf::internal::WireFormatLite;
 
-
 namespace {
 
 ////////////////////////////////////////////////////////////////////////////////

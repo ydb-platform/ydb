@@ -75,6 +75,7 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/public/udf/tz
     yql/essentials/sql/settings
+    yql/essentials/sql
     yql/essentials/utils
     yql/essentials/utils/log
     yql/essentials/core/expr_nodes

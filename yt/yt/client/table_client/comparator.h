@@ -105,7 +105,7 @@ using TPrefixComparer = TUUComparerSignature;
 
 int GetCompareSign(int value);
 
-//! Obeys the usual rule: the result's sign incidates the comparison outcome.
+//! Obeys the usual rule: the result's sign indicates the comparison outcome.
 //! Also |abs(result) - 1| is equal to index of first non-equal component.
 template <typename TComparer>
 int CompareKeys(TUnversionedValueRange lhs, TUnversionedValueRange rhs, const TComparer& prefixComparer);

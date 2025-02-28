@@ -33,7 +33,7 @@ public:
 
     TDataCleanupLogic(IOps* ops, IExecutor* executor, ITablet* owner, NUtil::ILogger* logger, TExecutorGCLogic* gcLogic);
 
-    bool TryStartCleanup();
+    bool TryStartCleanup(ui64 dataCleanupGeneration, const TActorContext& ctx);
     void OnCompactionPrepared(ui32 tableId, ui64 compactionId);
     void WaitCompaction();
     void OnCompleteCompaction(ui32 tableId, const TFinishedCompactionInfo& finishedCompactionInfo);
@@ -54,8 +54,9 @@ private:
     NUtil::ILogger* const Logger;
     TExecutorGCLogic* const GcLogic;
 
+    ui64 CurrentDataCleanupGeneration = 0;
+    ui64 NextDataCleanupGeneration = 0;
     EDataCleanupState State = EDataCleanupState::Idle;
-    bool StartNextCleanup = false;
     THashMap<ui32, TCleanupTableInfo> CompactingTables; // tracks statuses of compaction
 
     // two subsequent are snapshots required to force GC

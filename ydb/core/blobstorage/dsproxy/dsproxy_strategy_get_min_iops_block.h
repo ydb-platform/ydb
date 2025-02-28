@@ -303,7 +303,7 @@ public:
 
         if (auto res = SetAbsentForUnrecoverableAltruistic(altruisticState, state)) {
             return *res;
-        } else if (auto res = ProcessOptimistic(altruisticState, optimisticState, false, state)) {
+        } else if (auto res = ProcessOptimistic(altruisticState, optimisticState, false, state, info)) {
             return *res;
         } else if (auto res = ProcessPessimistic(info, pessimisticState, false, state)) {
             return *res;
@@ -320,7 +320,7 @@ public:
             EvaluateCurrentLayout(logCtx, state, info, &fastPessimisticState, &fastOptimisticState,
                     &fastAltruisticState, true);
             if (!IsUnrecoverableAltruistic(fastAltruisticState)
-                    && !ProcessOptimistic(fastAltruisticState, fastOptimisticState, true, state)) {
+                    && !ProcessOptimistic(fastAltruisticState, fastOptimisticState, true, state, info)) {
                 IssueGetRequests(logCtx, state, info, true, groupDiskRequests);
                 isDone = true;
             }

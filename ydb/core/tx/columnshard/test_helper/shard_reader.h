@@ -1,13 +1,16 @@
 #pragma once
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
-#include <ydb/library/accessor/accessor.h>
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
-#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/datashard/datashard.h>
+
+#include <ydb/library/accessor/accessor.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+
 #include <optional>
 
 namespace NKikimr::NTxUT {
@@ -25,13 +28,13 @@ private:
     std::optional<TString> SerializedProgram;
     YDB_ACCESSOR(bool, Reverse, false);
     YDB_ACCESSOR(ui32, Limit, 0);
-    std::vector<TString> ReplyColumns;
     std::vector<TSerializedTableRange> Ranges;
 
     std::unique_ptr<TEvDataShard::TEvKqpScan> BuildStartEvent() const;
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> ResultBatches;
     YDB_READONLY(ui32, IterationsCount, 0);
+
 public:
     ui64 GetReadStat(const TString& paramName) const {
         AFL_VERIFY(IsCorrectlyFinished());
@@ -54,8 +57,6 @@ public:
         return r ? r->num_rows() : 0;
     }
 
-    TShardReader& SetReplyColumns(const std::vector<TString>& replyColumns);
-
     TShardReader& SetReplyColumnIds(const std::vector<ui32>& replyColumnIds);
 
     TShardReader& SetProgram(const NKikimrSSA::TProgram& p) {
@@ -77,7 +78,6 @@ public:
         , TabletId(tabletId)
         , PathId(pathId)
         , Snapshot(snapshot) {
-
     }
 
     bool IsFinished() const {
@@ -125,7 +125,7 @@ public:
         if (auto* evData = std::get<0>(event)) {
             auto b = evData->ArrowBatch;
             if (b) {
-                ResultBatches.push_back(NArrow::ToBatch(b, true));
+                ResultBatches.push_back(NArrow::ToBatch(b));
                 NArrow::TStatusValidator::Validate(ResultBatches.back()->ValidateFull());
             } else {
                 AFL_VERIFY(evData->Finished);
@@ -173,4 +173,4 @@ public:
     }
 };
 
-} //namespace NKikimr::NTxUT
+}   //namespace NKikimr::NTxUT

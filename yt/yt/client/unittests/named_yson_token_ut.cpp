@@ -45,6 +45,7 @@ public:
     {
         PositionalToNamedConfigInstance() = OldConfig_;
     }
+
 private:
     TYsonConverterConfig OldConfig_;
 };

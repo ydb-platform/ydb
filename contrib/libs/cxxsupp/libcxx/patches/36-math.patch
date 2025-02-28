@@ -1,27 +1,5 @@
-diff --git a/include/__math/rounding_functions.h b/include/__math/rounding_functions.h
-index 29e42fd..7943b6f 100644
---- a/include/__math/rounding_functions.h
-+++ b/include/__math/rounding_functions.h
-@@ -204,7 +204,7 @@ _LIBCPP_NODISCARD_EXT inline _LIBCPP_HIDE_FROM_ABI double rint(_A1 __x) _NOEXCEP
- 
- // round
- 
--_LIBCPP_NODISCARD_EXT inline _LIBCPP_HIDE_FROM_ABI float round(float __x) _NOEXCEPT { return __builtin_round(__x); }
-+_LIBCPP_NODISCARD_EXT inline _LIBCPP_HIDE_FROM_ABI float round(float __x) _NOEXCEPT { return __builtin_roundf(__x); }
- 
- template <class = int>
- _LIBCPP_NODISCARD_EXT _LIBCPP_HIDE_FROM_ABI double round(double __x) _NOEXCEPT {
-@@ -222,7 +222,7 @@ _LIBCPP_NODISCARD_EXT inline _LIBCPP_HIDE_FROM_ABI double round(_A1 __x) _NOEXCE
- 
- // trunc
- 
--_LIBCPP_NODISCARD_EXT inline _LIBCPP_HIDE_FROM_ABI float trunc(float __x) _NOEXCEPT { return __builtin_trunc(__x); }
-+_LIBCPP_NODISCARD_EXT inline _LIBCPP_HIDE_FROM_ABI float trunc(float __x) _NOEXCEPT { return __builtin_truncf(__x); }
- 
- template <class = int>
- _LIBCPP_NODISCARD_EXT _LIBCPP_HIDE_FROM_ABI double trunc(double __x) _NOEXCEPT {
 diff --git a/include/math.h b/include/math.h
-index 0598973..376bbf7 100644
+index 4e6304a..4d245d4 100644
 --- a/include/math.h
 +++ b/include/math.h
 @@ -290,6 +290,9 @@ float          truncf(float x);

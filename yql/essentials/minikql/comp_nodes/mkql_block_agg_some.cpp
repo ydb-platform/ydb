@@ -6,6 +6,8 @@
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 
+#include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -182,6 +184,7 @@ public:
         , Type_(type)
         , Reader_(MakeBlockReader(TTypeInfoHelper(), type))
         , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type, ctx.Builder->GetPgBuilder()))
+        , Packer_(false, type)
     {
     }
 
@@ -207,6 +210,16 @@ public:
         PushValueToState(typedState, datum, row, *Reader_, *Converter_, Ctx_);
     }
 
+    void SerializeState(void* state, NUdf::TOutputBuffer& buffer) final {
+        auto typedState = static_cast<TGenericState*>(state);
+        buffer.PushString(Packer_.Pack(*typedState));
+    }
+
+    void DeserializeState(void* state, NUdf::TInputBuffer& buffer) final {
+        auto typedState = static_cast<TGenericState*>(state);
+        *typedState = Packer_.Unpack(buffer.PopString(), Ctx_.HolderFactory).Release();
+    }
+
     std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) final {
         return std::make_unique<TGenericColumnBuilder>(size, Type_, Ctx_);
     }
@@ -216,6 +229,7 @@ private:
     TType* const Type_;
     const std::unique_ptr<IBlockReader> Reader_;
     const std::unique_ptr<IBlockItemConverter> Converter_;
+    TValuePacker Packer_;
 };
 
 template <typename TTag>

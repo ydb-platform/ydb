@@ -3,6 +3,7 @@
 #include <yt/yql/providers/yt/comp_nodes/yql_mkql_input.h>
 #include <yt/yql/providers/yt/comp_nodes/yql_mkql_output.h>
 #include <yt/yql/providers/yt/comp_nodes/yql_mkql_table_content.h>
+#include <yt/yql/providers/yt/comp_nodes/yql_mkql_block_table_content.h>
 #include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
@@ -23,6 +24,9 @@ TComputationNodeFactory GetJobFactory(NYql::NCommon::TCodecContext& codecCtx, co
         if (name.SkipPrefix("Yt") && name.ChopSuffix("Job")) {
             if (name == "TableContent") {
                 return WrapYtTableContent(codecCtx, ctx.Mutables, callable, optLLVM, {} /*empty pathPrefix inside job*/);
+            }
+            if (name == "BlockTableContent") {
+                return WrapYtBlockTableContent(codecCtx, ctx.Mutables, callable, {} /*empty pathPrefix inside job*/);
             }
             if (name == "Input") {
                 YQL_ENSURE(reader);

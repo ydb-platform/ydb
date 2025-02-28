@@ -188,13 +188,8 @@ namespace NKikimr {
                 LockedChunks.insert(std::move(nh));
                 return true;
             } else {
-                // chunk is already freed
-                return false;
+                return LockedChunks.contains(chunkId);
             }
-        }
-
-        void TChain::UnlockChunk(TChunkID chunkId) {
-            FreeSpace.insert(LockedChunks.extract(chunkId));
         }
 
         THeapStat TChain::GetStat() const {
@@ -376,6 +371,31 @@ namespace NKikimr {
             };
             traverse(FreeSpace);
             traverse(LockedChunks);
+        }
+
+        void TChain::ShredNotify(const std::vector<ui32>& chunksToShred) {
+            auto chunksIt = chunksToShred.begin();
+            for (auto it = FreeSpace.begin(); it != FreeSpace.end(); ) {
+                const TChunkIdx chunkId = it->first;
+                while (chunksIt != chunksToShred.end() && *chunksIt < chunkId) {
+                    ++chunksIt;
+                }
+                if (chunksIt != chunksToShred.end() && *chunksIt == chunkId) {
+                    LockedChunks.insert(FreeSpace.extract(it++));
+                } else {
+                    ++it;
+                }
+            }
+        }
+
+        void TChain::ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks) {
+            for (auto& map : {FreeSpace, LockedChunks}) {
+                for (const auto& [chunkIdx, freeSpace] : map) {
+                    if (chunksOfInterest.contains(chunkIdx)) {
+                        chunks.insert(chunkIdx);
+                    }
+                }
+            }
         }
 
         ////////////////////////////////////////////////////////////////////////////
@@ -646,6 +666,18 @@ namespace NKikimr {
             BuildSearchTable();
         }
 
+        void TAllChains::ShredNotify(const std::vector<ui32>& chunksToShred) {
+            for (TChain& chain : Chains) {
+                chain.ShredNotify(chunksToShred);
+            }
+        }
+
+        void TAllChains::ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks) {
+            for (TChain& chain : Chains) {
+                chain.ListChunks(chunksOfInterest, chunks);
+            }
+        }
+
         ////////////////////////////////////////////////////////////////////////////
         // THeap
         ////////////////////////////////////////////////////////////////////////////
@@ -704,11 +736,16 @@ namespace NKikimr {
         }
 
         void THeap::AddChunk(ui32 chunkId) {
+            ForbiddenChunks.erase(chunkId); // may be this was forbidden chunk from other subsystem, but now it is clean
             PutChunkIdToFreeChunks(chunkId);
         }
 
         ui32 THeap::RemoveChunk() {
-            if (FreeChunks.size() > FreeChunksReservation) {
+            if (!ForceFreeChunks.empty()) {
+                const ui32 chunkId = ForceFreeChunks.front();
+                ForceFreeChunks.pop_front();
+                return chunkId;
+            } else if (FreeChunks.size() > FreeChunksReservation) {
                 ui32 chunkId = GetChunkIdFromFreeChunks();
                 Y_VERIFY_S(chunkId, VDiskLogPrefix << "State# " << ToString());
                 return chunkId;
@@ -723,18 +760,36 @@ namespace NKikimr {
             return chain->LockChunkForAllocation(chunkId);
         }
 
-        void THeap::UnlockChunk(ui32 chunkId, ui32 slotSize) {
-            TChain *chain = Chains.GetChain(slotSize);
-            Y_ABORT_UNLESS(chain);
-            chain->UnlockChunk(chunkId);
-        }
-
         void THeap::FinishRecovery() {
             Chains.FinishRecovery();
         }
 
         THeapStat THeap::GetStat() const {
             return Chains.GetStat();
+        }
+
+        void THeap::ShredNotify(const std::vector<ui32>& chunksToShred) {
+            Chains.ShredNotify(chunksToShred);
+
+            ForbiddenChunks.insert(chunksToShred.begin(), chunksToShred.end());
+
+            for (auto it = FreeChunks.begin(); it != FreeChunks.end(); ) {
+                if (ForbiddenChunks.erase(*it)) {
+                    ForceFreeChunks.push_back(*it);
+                    FreeChunks.erase(it++);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
+        void THeap::ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks) {
+            for (const TChunkIdx chunkIdx : FreeChunks) {
+                if (chunksOfInterest.contains(chunkIdx)) {
+                    chunks.insert(chunkIdx);
+                }
+            }
+            Chains.ListChunks(chunksOfInterest, chunks);
         }
 
         //////////////////////////////////////////////////////////////////////////////////////////
@@ -874,8 +929,12 @@ namespace NKikimr {
         }
 
         inline void THeap::PutChunkIdToFreeChunks(ui32 chunkId) {
-            bool res = FreeChunks.insert(chunkId).second;
-            Y_VERIFY_S(res, VDiskLogPrefix << "State# " << ToString());
+            if (ForbiddenChunks.erase(chunkId)) {
+                ForceFreeChunks.push_back(chunkId);
+            } else {
+                bool res = FreeChunks.insert(chunkId).second;
+                Y_VERIFY_S(res, VDiskLogPrefix << "State# " << ToString());
+            }
         }
 
     } // NHuge

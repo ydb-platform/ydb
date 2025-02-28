@@ -1,0 +1,40 @@
+{
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "value";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "String"
+                        ]
+                    ]
+                ];
+                [
+                    "codec";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "String"
+                        ]
+                    ]
+                ];
+                [
+                    "dummy";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "String"
+                        ]
+                    ]
+                ];
+            ]
+        ]
+    };
+    "dynamic" = %true;
+}

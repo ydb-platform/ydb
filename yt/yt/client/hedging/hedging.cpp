@@ -125,6 +125,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<void>, RemountTable, (const TYPath&, const TRemountTableOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, FreezeTable, (const TYPath&, const TFreezeTableOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, UnfreezeTable, (const TYPath&, const TUnfreezeTableOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, CancelTabletTransition, (NTabletClient::TTabletId, const TCancelTabletTransitionOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, ReshardTable, (const TYPath&, const std::vector<NTableClient::TUnversionedOwningRow>&, const TReshardTableOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, ReshardTable, (const TYPath&, int, const TReshardTableOptions&));
     UNSUPPORTED_METHOD(TFuture<std::vector<NTabletClient::TTabletActionId>>, ReshardTableAutomatic, (const TYPath&, const TReshardTableAutomaticOptions&));

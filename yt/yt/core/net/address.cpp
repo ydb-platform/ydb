@@ -1016,15 +1016,16 @@ public:
 
     void EnsureLocalHostName()
     {
-        if (Config_->LocalHostNameOverride) {
+        const auto config = Config_.Acquire();
+        if (config->LocalHostNameOverride) {
             return;
         }
 
-        UpdateLocalHostName(Config_);
+        UpdateLocalHostName(config);
 
         YT_LOG_INFO("Localhost name determined via system call (LocalHostName: %v, ResolveHostNameIntoFqdn: %v)",
             GetLocalHostName(),
-            Config_->ResolveHostNameIntoFqdn);
+            config->ResolveHostNameIntoFqdn);
     }
 
     bool IsLocalAddress(const TNetworkAddress& address)
@@ -1045,22 +1046,22 @@ public:
 
     void Configure(TAddressResolverConfigPtr config)
     {
-        Config_ = std::move(config);
+        Config_.Store(config);
 
-        SetDnsResolver(CreateAresDnsResolver(Config_));
-        TAsyncExpiringCache::Reconfigure(Config_);
+        SetDnsResolver(CreateAresDnsResolver(config));
+        TAsyncExpiringCache::Reconfigure(config);
 
-        if (Config_->LocalHostNameOverride) {
-            SetLocalHostName(*Config_->LocalHostNameOverride);
+        if (config->LocalHostNameOverride) {
+            SetLocalHostName(*config->LocalHostNameOverride);
             YT_LOG_INFO("Localhost name configured via config override (LocalHostName: %v)",
-                Config_->LocalHostNameOverride);
+                config->LocalHostNameOverride);
         }
 
-        UpdateLoopbackAddress(Config_);
+        UpdateLoopbackAddress(config);
     }
 
 private:
-    TAddressResolverConfigPtr Config_;
+    TAtomicIntrusivePtr<TAddressResolverConfig> Config_;
 
     std::atomic<bool> HasCachedLocalAddresses_ = false;
     std::vector<TNetworkAddress> CachedLocalAddresses_;
@@ -1072,9 +1073,10 @@ private:
 
     TFuture<TNetworkAddress> DoGet(const std::string& hostName, bool /*isPeriodicUpdate*/) noexcept override
     {
+        const auto config = Config_.Acquire();
         TDnsResolveOptions options{
-            .EnableIPv4 = Config_->EnableIPv4,
-            .EnableIPv6 = Config_->EnableIPv6,
+            .EnableIPv4 = config->EnableIPv4,
+            .EnableIPv6 = config->EnableIPv6,
         };
         return GetDnsResolver()->Resolve(hostName, options)
             .Apply(BIND([=] (const TErrorOr<TNetworkAddress>& result) {

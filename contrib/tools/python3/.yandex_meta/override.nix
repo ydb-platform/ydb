@@ -1,11 +1,11 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "3.12.8";
+  version = "3.12.9";
 
   src = fetchFromGitHub {
     owner = "python";
     repo = "cpython";
     rev = "v${version}";
-    hash = "sha256-1Z2SMEut5YY9tTtrzPpmXcsIQKw5MGcGI4l0ysJbg28=";
+    hash = "sha256-5Hl+kKhavxihPmxVOyzUpchxiYMfYRfcjTbjiIq1i1o=";
   };
 
   patches = [];

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "yql_cost_function.h"
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -50,7 +51,7 @@ struct TColumnStatistics {
 struct TOptimizerStatistics {
     struct TKeyColumns : public TSimpleRefCount<TKeyColumns> {
         TVector<TString> Data;
-        TKeyColumns(const TVector<TString>& vec) : Data(vec) {}
+        TKeyColumns(TVector<TString> data) : Data(std::move(data)) {}
     };
 
     struct TSortColumns : public TSimpleRefCount<TSortColumns> {
@@ -65,7 +66,12 @@ struct TOptimizerStatistics {
     struct TColumnStatMap : public TSimpleRefCount<TColumnStatMap> {
         THashMap<TString,TColumnStatistics> Data;
         TColumnStatMap() {}
-        TColumnStatMap(const THashMap<TString,TColumnStatistics>& map) : Data(map) {}
+        TColumnStatMap(THashMap<TString,TColumnStatistics> data) : Data(std::move(data)) {}
+    };
+
+    struct TShuffledByColumns : public TSimpleRefCount<TShuffledByColumns> {
+        TVector<NDq::TJoinColumn> Data;
+        TShuffledByColumns(TVector<NDq::TJoinColumn> data) : Data(std::move(data)) {}
     };
 
     EStatisticsType Type = BaseTable;
@@ -76,6 +82,7 @@ struct TOptimizerStatistics {
     double Selectivity = 1.0;
     TIntrusivePtr<TKeyColumns> KeyColumns;
     TIntrusivePtr<TColumnStatMap> ColumnStatistics;
+    TIntrusivePtr<TShuffledByColumns> ShuffledByColumns;
     EStorageType StorageType = EStorageType::NA;
     TIntrusivePtr<TSortColumns> SortColumns;
     std::shared_ptr<IProviderStatistics> Specific;

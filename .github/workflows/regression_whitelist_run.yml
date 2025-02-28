@@ -31,7 +31,7 @@ jobs:
           - build_preset: release-msan
             threads_count: 20
             timeout: 480
-            build_target: "ydb/tests/sql/ ydb/tests/stress"
+            build_target: "ydb/tests/sql/ ydb/tests/stress ydb/tests/functional/tpc ydb/tests/functional/benchmarks_init"
             test_size: small,medium,large
             test_type: unittest,py3test,py2test,pytest
           - build_preset: release-tsan

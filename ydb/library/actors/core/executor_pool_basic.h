@@ -5,6 +5,7 @@
 #include "executor_thread.h"
 #include "executor_thread_ctx.h"
 #include "executor_pool_basic_feature_flags.h"
+#include "executor_pool_shared.h"
 #include "scheduler_queue.h"
 #include "executor_pool_base.h"
 #include <memory>
@@ -24,7 +25,7 @@ namespace NActors {
 
     class TExecutorPoolJail;
     class TBasicExecutorPoolSanitizer;
-
+    class TSharedExecutorPool;
     struct TWaitingStatsConstants {
         static constexpr ui64 BucketCount = 128;
         static constexpr double MaxSpinThersholdUs = 12.8;
@@ -128,10 +129,9 @@ namespace NActors {
         }
     };
 
-
-
     class TBasicExecutorPool: public TExecutorPoolBase {
         friend class TBasicExecutorPoolSanitizer;
+        friend class TSharedExecutorPool;
 
         NThreading::TPadded<std::atomic_bool> AllThreadsSleep = true;
         const ui64 DefaultSpinThresholdCycles;
@@ -150,7 +150,8 @@ namespace NActors {
 
         const TString PoolName;
         const TDuration TimePerMailbox;
-        const ui32 EventsPerMailbox;
+        const ui64 TimePerMailboxTsValue;
+        const ui32 EventsPerMailboxValue;
 
         const int RealtimePriority;
 
@@ -161,6 +162,7 @@ namespace NActors {
         std::atomic<ui64> SpinningTimeUs;
 
         TAtomic ThreadCount;
+        std::atomic<float> SharedCpuQuota = 0.0;
         TMutex ChangeThreadsLock;
 
         float MinThreadCount;
@@ -172,15 +174,13 @@ namespace NActors {
         IHarmonizer *Harmonizer;
         ui64 SoftProcessingDurationTs = 0;
         bool HasOwnSharedThread = false;
+        ui16 MaxLocalQueueSize = 0;
+        ui16 MinLocalQueueSize = 0;
 
         const i16 Priority = 0;
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
         TExecutorPoolJail *Jail = nullptr;
-
-        static constexpr ui64 MaxSharedThreadsForPool = 2;
-        NThreading::TPadded<std::atomic_uint64_t> SharedThreadsCount = 0;
-        NThreading::TPadded<std::atomic<TSharedExecutorThreadCtx*>> SharedThreads[MaxSharedThreadsForPool] = {nullptr, nullptr};
-
+        TSharedExecutorPool *SharedPool = nullptr;
         std::unique_ptr<TBasicExecutorPoolSanitizer> Sanitizer;
 
     public:
@@ -230,10 +230,11 @@ namespace NActors {
         explicit TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer, TExecutorPoolJail *jail=nullptr);
         ~TBasicExecutorPool();
 
-        void Initialize(TWorkerContext& wctx) override;
-        TMailbox* GetReadyActivation(TWorkerContext& wctx, ui64 revolvingReadCounter) override;
-        TMailbox* GetReadyActivationCommon(TWorkerContext& wctx, ui64 revolvingReadCounter);
-        TMailbox* GetReadyActivationLocalQueue(TWorkerContext& wctx, ui64 revolvingReadCounter);
+        void Initialize() override;
+        TMailbox* GetReadyActivation(ui64 revolvingReadCounter) override;
+        TMailbox* GetReadyActivationCommon(ui64 revolvingReadCounter);
+        TMailbox* GetReadyActivationShared(ui64 revolvingReadCounter);
+        TMailbox* GetReadyActivationLocalQueue(ui64 revolvingReadCounter);
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
@@ -244,7 +245,9 @@ namespace NActors {
         void ScheduleActivationExLocalQueue(TMailbox* mailbox, ui64 revolvingWriteCounter);
 
         void SetLocalQueueSize(ui16 size);
-
+        ui16 GetLocalQueueSize() const;
+        ui16 GetMaxLocalQueueSize() const;
+        ui16 GetMinLocalQueueSize() const;
         void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) override;
         void Start() override;
         void PrepareStop() override;
@@ -278,16 +281,17 @@ namespace NActors {
         void CalcSpinPerThread(ui64 wakingUpConsumption);
         void ClearWaitingStats() const;
 
-        TSharedExecutorThreadCtx* ReleaseSharedThread() override;
-        void AddSharedThread(TSharedExecutorThreadCtx* thread) override;
-        bool IsSharedThreadEnabled() const override {
-            return true;
-        }
+        TSemaphore GetSemaphore() const;
+        void SetSharedPool(TSharedExecutorPool* pool);
+        void SetSharedCpuQuota(float quota);
 
+        ui64 TimePerMailboxTs() const final;
+        ui32 EventsPerMailbox() const final;
     private:
         void AskToGoToSleep(bool *needToWait, bool *needToBlock);
 
         void WakeUpLoop(i16 currentThreadCount);
         bool WakeUpLoopShared();
+        
     };
 }

@@ -9,16 +9,9 @@ namespace NKikimr::NOlap::NReader::NSimple {
 std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(const std::shared_ptr<NCommon::IDataSource>& sourceExt) {
     const auto source = std::static_pointer_cast<IDataSource>(sourceExt);
     const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < source->GetRecordSnapshotMax();
-    if (!needSnapshots && GetFFColumns()->GetColumnIds().size() == 1 &&
-        GetFFColumns()->GetColumnIds().contains(NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX)) {
-        std::shared_ptr<TFetchingScript> result = std::make_shared<TFetchingScript>(*this);
-        source->SetSourceInMemory(true);
-        result->SetBranchName("FAKE");
-        result->AddStep<TBuildFakeSpec>();
-        result->AddStep<TBuildResultStep>(0, source->GetRecordsCount());
-        return result;
-    }
-    if (!source->GetStageData().HasPortionAccessor()) {
+    const bool dontNeedColumns = !needSnapshots && GetFFColumns()->GetColumnIds().size() == 1 &&
+                             GetFFColumns()->GetColumnIds().contains(NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX);
+    if (!dontNeedColumns && !source->GetStageData().HasPortionAccessor()) {
         if (!AskAccumulatorsScript) {
             AskAccumulatorsScript = std::make_shared<TFetchingScript>(*this);
             AskAccumulatorsScript->AddStep<NCommon::TAllocateMemoryStep>(
@@ -32,7 +25,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
         switch (source->GetUsageClass()) {
             case TPKRangeFilter::EUsageClass::PartialUsage:
                 return true;
-            case TPKRangeFilter::EUsageClass::DontUsage:
+            case TPKRangeFilter::EUsageClass::NoUsage:
                 return true;
             case TPKRangeFilter::EUsageClass::FullUsage:
                 return false;
@@ -49,7 +42,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
     }
     {
         auto& result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
-                                          [hasDeletions ? 1 : 0];
+                                           [hasDeletions ? 1 : 0];
         if (result.NeedInitialization()) {
             TGuard<TMutex> g(Mutex);
             if (auto gInit = result.StartInitialization()) {
@@ -80,7 +73,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
     }
     {
         result->SetBranchName("exclusive");
-        TColumnsSet columnsFetch = *GetEFColumns();
+        TColumnsSet columnsFetch;
         if (needFilterDeletion) {
             columnsFetch = columnsFetch + *GetDeletionColumns();
         }
@@ -107,22 +100,21 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             acc.AddAssembleStep(*result, *GetSpecColumns(), "SPEC", EStageFeaturesIndexes::Filter, false);
             result->AddStep(std::make_shared<TSnapshotFilter>());
         }
-        for (auto&& i : GetReadMetadata()->GetProgram().GetSteps()) {
-            if (i->GetFilterOriginalColumnIds().empty()) {
-                break;
+        const auto& chainProgram = GetReadMetadata()->GetProgram().GetChainVerified();
+        for (ui32 stepIdx = 0; stepIdx < chainProgram->GetProcessors().size(); ++stepIdx) {
+            auto& step = chainProgram->GetProcessors()[stepIdx];
+            if (!chainProgram->GetLastOriginalDataFilter() && GetReadMetadata()->HasLimit() &&
+                step->GetProcessorType() == NArrow::NSSA::EProcessorType::Projection) {
+                result->AddStep(std::make_shared<TFilterCutLimit>(GetReadMetadata()->GetLimitRobust(), GetReadMetadata()->IsDescSorted()));
             }
-            TColumnsSet stepColumnIds(i->GetFilterOriginalColumnIds(), GetReadMetadata()->GetResultSchema());
-            acc.AddAssembleStep(*result, stepColumnIds, "EF", EStageFeaturesIndexes::Filter, false);
-            result->AddStep(std::make_shared<TFilterProgramStep>(i));
-            if (!i->IsFilterOnly()) {
-                break;
+            result->AddStep(std::make_shared<NCommon::TProgramStepPrepare>(step));
+            result->AddStep(std::make_shared<NCommon::TProgramStepAssemble>(step));
+            result->AddStep(std::make_shared<NCommon::TProgramStep>(step));
+            if (step->GetProcessorType() == NArrow::NSSA::EProcessorType::Filter && GetReadMetadata()->HasLimit() &&
+                chainProgram->GetLastOriginalDataFilter() == stepIdx) {
+                result->AddStep(std::make_shared<TFilterCutLimit>(GetReadMetadata()->GetLimitRobust(), GetReadMetadata()->IsDescSorted()));
             }
         }
-        if (GetReadMetadata()->HasLimit()) {
-            result->AddStep(std::make_shared<TFilterCutLimit>(GetReadMetadata()->GetLimitRobust(), GetReadMetadata()->IsDescSorted()));
-        }
-        acc.AddFetchingStep(*result, *GetFFColumns(), EStageFeaturesIndexes::Fetching);
-        acc.AddAssembleStep(*result, *GetFFColumns(), "LAST", EStageFeaturesIndexes::Fetching, false);
     }
     result->AddStep<NCommon::TBuildStageResultStep>();
     result->AddStep<TPrepareResultStep>();

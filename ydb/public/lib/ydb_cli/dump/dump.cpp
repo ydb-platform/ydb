@@ -8,8 +8,7 @@
 
 #include <util/string/printf.h>
 
-namespace NYdb {
-namespace NDump {
+namespace NYdb::NDump {
 
 TString DataFileName(ui32 id) {
     return Sprintf("data_%02d.csv", id);
@@ -31,6 +30,26 @@ public:
     TRestoreResult Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
         auto client = TRestoreClient(Driver, Log);
         return client.Restore(fsPath, dbPath, settings);
+    }
+
+    TDumpResult DumpCluster(const TString& fsPath) {
+        auto client = TDumpClient(Driver, Log);
+        return client.DumpCluster(fsPath);
+    }
+
+    TRestoreResult RestoreCluster(const TString& fsPath, const TRestoreClusterSettings& settings) {
+        auto client = TRestoreClient(Driver, Log);
+        return client.RestoreCluster(fsPath, settings);
+    }
+
+    TDumpResult DumpDatabase(const TString& database, const TString& fsPath) {
+        auto client = TDumpClient(Driver, Log);
+        return client.DumpDatabase(database, fsPath);
+    }
+
+    TRestoreResult RestoreDatabase(const TString& fsPath, const TRestoreDatabaseSettings& settings) {
+        auto client = TRestoreClient(Driver, Log);
+        return client.RestoreDatabase(fsPath, settings);
     }
 
 private:
@@ -67,5 +86,20 @@ TRestoreResult TClient::Restore(const TString& fsPath, const TString& dbPath, co
     return Impl_->Restore(fsPath, dbPath, settings);
 }
 
-} // NDump
-} // NYdb
+TDumpResult TClient::DumpCluster(const TString& fsPath) {
+    return Impl_->DumpCluster(fsPath);
+}
+
+TRestoreResult TClient::RestoreCluster(const TString& fsPath, const TRestoreClusterSettings& settings) {
+     return Impl_->RestoreCluster(fsPath, settings);
+}
+
+TDumpResult TClient::DumpDatabase(const TString& database, const TString& fsPath) {
+    return Impl_->DumpDatabase(database, fsPath);
+}
+
+TRestoreResult TClient::RestoreDatabase(const TString& fsPath, const TRestoreDatabaseSettings& settings) {
+    return Impl_->RestoreDatabase(fsPath, settings);
+}
+
+} // NYdb::NDump

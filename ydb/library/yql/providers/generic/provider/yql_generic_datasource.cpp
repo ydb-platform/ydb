@@ -126,7 +126,7 @@ namespace NYql {
                             auto cluster = dataSource.Cast().Cluster();
                             tableNameBuilder << cluster.Value() << ".";
                         }
-                        tableNameBuilder << '`' << maybeTable.Cast().Value() << '`';
+                        tableNameBuilder << '`' << maybeTable.Cast().Name().Value() << '`';
                         inputs.push_back(
                             TPinInfo(maybeRead.DataSource().Raw(), nullptr, maybeTable.Cast().Raw(), tableNameBuilder, false));
                         return 1;

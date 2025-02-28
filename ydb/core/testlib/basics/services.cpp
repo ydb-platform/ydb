@@ -12,6 +12,7 @@
 #include <ydb/core/cms/console/immediate_controls_configurator.h>
 #include <ydb/core/control/immediate_control_board_actor.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/core/quoter/quoter_service.h>
 #include <ydb/core/tablet/tablet_monitoring_proxy.h>
@@ -329,11 +330,13 @@ namespace NPDisk {
     }
 
     void SetupBasicServices(TTestActorRuntime& runtime, TAppPrepare& app, bool mock,
-                            NFake::INode* factory, NFake::TStorage storage, const NSharedCache::TSharedCacheConfig* sharedCacheConfig, bool forceFollowers)
+                            NFake::INode* factory, NFake::TStorage storage, const NSharedCache::TSharedCacheConfig* sharedCacheConfig, bool forceFollowers,
+                            TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies)
     {
         runtime.SetDispatchTimeout(storage.UseDisk ? DISK_DISPATCH_TIMEOUT : DEFAULT_DISPATCH_TIMEOUT);
 
-        TTestStorageFactory disk(runtime, storage, mock);
+        bool addGroups = dsProxies.empty();
+        TTestStorageFactory disk(runtime, storage, mock, addGroups);
 
         {
             NKikimrBlobStorage::TNodeWardenServiceSet bsConfig;
@@ -360,6 +363,12 @@ namespace NPDisk {
                 keyConfig = it->second;
             }
             SetupIcb(runtime, nodeIndex, app.ImmediateControlsConfig, app.Icb[nodeIndex]);
+            for (const auto& dsProxy : dsProxies) {
+                runtime.AddLocalService(
+                    MakeBlobStorageProxyID(dsProxy->GetGroupId()),
+                    TActorSetupCmd(CreateBlobStorageGroupProxyMockActor(dsProxy), TMailboxType::ReadAsFilled, 0),
+                    nodeIndex);
+            }
             SetupBSNodeWarden(runtime, nodeIndex, disk.MakeWardenConf(*app.Domains, keyConfig));
 
             SetupTabletResolver(runtime, nodeIndex);

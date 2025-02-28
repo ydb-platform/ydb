@@ -53,9 +53,32 @@ public:
         return idx;
     }
 
-    ui32 Size() const {
-        return AtomicGet(FreeChunkCount);
+    TDeque<TChunkIdx>::const_iterator begin() const {
+        return FreeChunks.begin();
     }
+
+    TDeque<TChunkIdx>::const_iterator end() const {
+        return FreeChunks.end();
+    }
+
+    TChunkIdx PopAt(TDeque<TChunkIdx>::const_iterator it) {
+        Y_VERIFY(it != FreeChunks.end());
+        Y_VERIFY(FreeChunks.size() > 0);
+        TChunkIdx idx = *it;
+        FreeChunks.erase(it);
+        AtomicDecrement(FreeChunkCount);
+        MonFreeChunks->Dec();
+        return idx;
+    }
+
+    void PushFront(TChunkIdx idx) {
+        FreeChunks.push_front(idx);
+        AtomicIncrement(FreeChunkCount);
+        MonFreeChunks->Inc();
+    }
+
+    // A thread-safe function that returns the current number of free chunks.
+    ui32 Size() const { return AtomicGet(FreeChunkCount); }
 };
 
 } // NPDisk

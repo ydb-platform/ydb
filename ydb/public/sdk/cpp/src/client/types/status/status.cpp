@@ -71,7 +71,7 @@ const std::multimap<std::string, std::string>& TStatus::GetResponseMetadata() co
 }
 
 float TStatus::GetConsumedRu() const {
-    return Impl_->Status.ConstInfo.consumed_units();
+    return Impl_->Status.CostInfo.consumed_units();
 }
 
 void TStatus::Out(IOutputStream& out) const {

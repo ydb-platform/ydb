@@ -2,6 +2,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_devicemode.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/tx/datashard/export_iface.h>
+#include <ydb/core/tx/schemeshard/schemeshard_operation_factory.h>
 #include <ydb/core/persqueue/actor_persqueue_client_iface.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/base/grpc_service_factory.h>
@@ -17,6 +18,8 @@
 
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
+
+#include <ydb/library/yaml_config/yaml_config.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/wilson/wilson_uploader.h>
@@ -40,6 +43,8 @@ struct TModuleFactories {
     std::shared_ptr<NDataShard::IExportFactory> DataShardExportFactory;
     // Factory for Simple queue services implementation details
     std::shared_ptr<NSQS::IEventsWriterFactory> SqsEventsWriterFactory;
+    // Scheme operations
+    std::shared_ptr<NSchemeShard::IOperationFactory> SchemeOperationFactory;
 
     IActor*(*CreateTicketParser)(const TTicketParserSettings&);
     IActor*(*FolderServiceFactory)(const NKikimrProto::NFolderService::TFolderServiceConfig&);
@@ -58,6 +63,8 @@ struct TModuleFactories {
     std::vector<NKikimr::NMiniKQL::TComputationNodeFactory> AdditionalComputationNodeFactories;
 
     std::unique_ptr<NWilson::IGrpcSigner>(*WilsonGrpcSignerFactory)(const NKikimrConfig::TTracingConfig::TBackendConfig::TAuthConfig&);
+
+    std::unique_ptr<NYamlConfig::IConfigSwissKnife> ConfigSwissKnife;
 
     ~TModuleFactories();
 };

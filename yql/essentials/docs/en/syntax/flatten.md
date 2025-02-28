@@ -22,7 +22,7 @@ For example:
   |d|2|
 
 
-### Example
+#### Example
 
 ```yql
 $sample = AsList(
@@ -40,7 +40,7 @@ This conversion can be convenient in the following cases:
 
 * When the cells in a container column store IDs from another table that you want to join with [`JOIN`](join.md).
 
-### Syntax
+#### Syntax
 
 * `FLATTEN BY` is specified after `FROM`, but before `GROUP BY`, if `GROUP BY` is present in the query.
 * The type of the result column depends on the type of the source column:
@@ -83,7 +83,7 @@ To specify the type of container to convert to, you can use:
 
    To filter the `NULL` values without serialization, specify the operation by using `FLATTEN OPTIONAL BY`.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -129,7 +129,7 @@ Converts a table where all columns must be structures to a table with columns co
 
 The names of the source column structures are not used and not returned in the result. Be sure that the structure element names aren't repeated in the source columns.
 
-### Example
+#### Example
 
 ```yql
 SELECT x, y, z

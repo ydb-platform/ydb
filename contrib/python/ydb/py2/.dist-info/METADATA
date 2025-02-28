@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: ydb
-Version: 2.15.1
+Version: 2.15.2
 Summary: YDB Python SDK
 Home-page: http://github.com/ydb-platform/ydb-python-sdk
 Author: Yandex LLC

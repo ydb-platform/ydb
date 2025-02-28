@@ -1,11 +1,11 @@
 #include "registry.h"
 
-#include <yql/essentials/core/arrow_kernels/registry/registry.h>
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
-#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <util/system/tls.h>
+#include <yql/essentials/core/arrow_kernels/registry/registry.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
-namespace NKikimr::NOlap {
+namespace NKikimr::NArrow::NSSA {
 
 ::NTls::TValue<TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry>> Registry;
 
@@ -18,7 +18,7 @@ bool TKernelsRegistry::Parse(const TString& serialized) {
     }
 
     auto nodeFactory = NMiniKQL::GetBuiltinFactory();
-    auto kernels =  NYql::LoadKernels(serialized, *Registry.Get(), nodeFactory);
+    auto kernels = NYql::LoadKernels(serialized, *Registry.Get(), nodeFactory);
     Kernels.swap(kernels);
     for (const auto& kernel : Kernels) {
         arrow::compute::Arity arity(kernel->signature->in_types().size(), kernel->signature->is_varargs());
@@ -30,13 +30,13 @@ bool TKernelsRegistry::Parse(const TString& serialized) {
         Functions.push_back(func);
     }
     return true;
-}   
+}
 
-NKikimr::NSsa::TFunctionPtr TKernelsRegistry::GetFunction(const size_t index) const {
+std::shared_ptr<arrow::compute::ScalarFunction> TKernelsRegistry::GetFunction(const size_t index) const {
     if (index < Functions.size()) {
         return Functions[index];
     }
     return nullptr;
 }
 
-}
+}   // namespace NKikimr::NOlap::NSSA

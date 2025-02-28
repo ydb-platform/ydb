@@ -1341,12 +1341,11 @@ TEST_F(TLoggingTest, Anchors)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TTestWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TTestWriterConfig)
 
-class TTestWriterConfig
+struct TTestWriterConfig
     : public TYsonStruct
 {
-public:
     int Padding;
 
     REGISTER_YSON_STRUCT(TTestWriterConfig);

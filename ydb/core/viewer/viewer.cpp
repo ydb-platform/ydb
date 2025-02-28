@@ -11,6 +11,7 @@
 #include <util/stream/file.h>
 #include <util/system/fstat.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/tablet_types.h>
@@ -74,6 +75,12 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
+            });
+            mon->RegisterActorPage({
+                .RelPath = "viewer/capabilities",
+                .ActorSystem = ctx.ActorSystem(),
+                .ActorId = ctx.SelfID,
+                .UseAuth = false,
             });
             mon->RegisterActorPage({
                 .Title = "Viewer",
@@ -210,16 +217,7 @@ public:
                 return true;
             }
         }
-        if (userTokenObject.empty()) {
-            return false;
-        }
-        auto token = std::make_unique<NACLib::TUserToken>(userTokenObject);
-        for (const auto& allowedSID : KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetAdministrationAllowedSIDs()) {
-            if (token->IsExist(allowedSID)) {
-                return true;
-            }
-        }
-        return false;
+        return IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
     }
 
     static bool IsStaticGroup(ui32 groupId) {

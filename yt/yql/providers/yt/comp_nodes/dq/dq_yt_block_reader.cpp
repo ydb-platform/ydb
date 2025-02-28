@@ -428,7 +428,7 @@ public:
 
         if (!res.IsOK()) {
             // Propagate error
-            Listener_->HandleError(res.GetMessage());
+            Listener_->HandleError(TString(res.GetMessage()));
             return;
         }
 

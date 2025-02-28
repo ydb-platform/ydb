@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include "flat_executor_counters.h"
 #include "tablet_flat_executor.h"
 
 namespace NKikimr {
@@ -52,6 +53,8 @@ protected:
      * is never called, and will be removed in the future.
      */
     virtual void DefaultSignalTabletActive(const TActorContext &ctx) = 0;
+
+    void ReportStartTime();
 
     /**
      * Called by StateInitImpl for unhandled non-system events. Used to delay

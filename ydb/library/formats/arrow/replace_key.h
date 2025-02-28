@@ -2,7 +2,6 @@
 #include "arrow_helpers.h"
 #include "permutations.h"
 
-#include "common/validation.h"
 #include "switch/compare.h"
 
 #include <ydb/library/actors/core/log.h>

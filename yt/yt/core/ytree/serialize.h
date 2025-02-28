@@ -11,6 +11,7 @@
 #include <yt/yt/core/yson/writer.h>
 
 #include <library/cpp/yt/compact_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
 
@@ -150,9 +151,13 @@ void Serialize(const std::array<T, N>& value, NYson::IYsonConsumer* consumer);
 template <class... T>
 void Serialize(const std::tuple<T...>& value, NYson::IYsonConsumer* consumer);
 
-// For any associative container.
+// Any associative container (except TCompactFlatMap).
 template <template<typename...> class C, class... T, class K = typename C<T...>::key_type>
 void Serialize(const C<T...>& value, NYson::IYsonConsumer* consumer);
+
+// TCompactFlatMap.
+template <class K, class V, size_t N>
+void Serialize(const TCompactFlatMap<K, V, N>& value, NYson::IYsonConsumer* consumer);
 
 // TEnumIndexedArray
 template <class E, class T, E Min, E Max>
@@ -284,6 +289,15 @@ concept CYsonSerializable = requires (const T& value, NYson::IYsonConsumer* cons
 {
     { Serialize(value, consumer, std::forward<TExtraArgs>(args)...) } -> std::same_as<void>;
 };
+
+template <class T>
+concept CYsonDeserializable = requires (T& value, INodePtr node)
+{
+    { Deserialize(value, node) } -> std::same_as<void>;
+};
+
+template <class T, class... TExtraArgs>
+concept CYsonSerializableDeserializable = CYsonSerializable<T, TExtraArgs...> && CYsonDeserializable<T>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

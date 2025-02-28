@@ -397,7 +397,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             UNIT_ASSERT_VALUES_EQUAL(columnParser.GetDecimal().DecimalType_.Precision, 35);
             UNIT_ASSERT_VALUES_EQUAL(columnParser.GetDecimal().DecimalType_.Scale, 10);
         }
-    }    
+    }
 
     Y_UNIT_TEST(TestDecimalFullStack) {
         TKikimrWithGrpcAndRootSchema server;
@@ -755,9 +755,11 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
     }
 
     Y_UNIT_TEST(ConnectDbAclIsStrictlyChecked) {
+        const TString clusterAdminToken = "root@builtin";
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddAdministrationAllowedSIDs(clusterAdminToken);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
         TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig);
 
@@ -772,7 +774,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                     .SetEndpoint(location));
 
             NYdb::NTable::TClientSettings settings;
-            settings.AuthToken("root@builtin");
+            settings.AuthToken(clusterAdminToken);
 
             NYdb::NTable::TTableClient client(driver, settings);
             auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus {
@@ -818,7 +820,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::CLIENT_UNAUTHENTICATED, status.GetIssues().ToString());
         }
 
-        { // no connect right
+        { // no connect right (for the ordinary user)
             TString location = TStringBuilder() << "localhost:" << grpc;
             auto driver = NYdb::TDriver(
                 TDriverConfig()
@@ -839,7 +841,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 
         { // set connect
             NYdb::TCommonClientSettings settings;
-            settings.AuthToken("root@builtin");
+            settings.AuthToken(clusterAdminToken);
             auto scheme = NYdb::NScheme::TSchemeClient(driver, settings);
             auto status = scheme.ModifyPermissions("/Root",
                 NYdb::NScheme::TModifyPermissionsSettings()
@@ -878,6 +880,11 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
         TKikimrWithGrpcAndRootSchema server(appConfig);
+
+        // Make all users except root@builtin non-admins.
+        // (Can't set AdministrationAllowedSIDs before `server` initialization --
+        // initial scheme root initialization would not work.)
+        server.GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back("root@builtin");
 
         ui16 grpc = server.GetPort();
         {

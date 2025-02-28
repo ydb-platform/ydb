@@ -1738,13 +1738,12 @@ void SafeUnRefUnboxedOne(Value* pointer, const TCodegenContext& ctx, BasicBlock*
 }
 
 void SafeUnRefUnboxedArray(Value* pointer, ArrayType* arrayType, const TCodegenContext& ctx, BasicBlock*& block) {
-    auto itemType = arrayType->getElementType();
     const auto indexType = Type::getInt64Ty(ctx.Codegen.GetContext());
-    Value* zeros = UndefValue::get(itemType);
+    Value* zeros = UndefValue::get(arrayType);
     for (ui32 idx = 0U; idx < arrayType->getNumElements(); ++idx) {
-        const auto item = GetElementPtrInst::CreateInBounds(itemType, pointer, { ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx) }, (TString("item_") += ToString(idx)).c_str(), block);
+        const auto item = GetElementPtrInst::CreateInBounds(arrayType, pointer, { ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx) }, (TString("item_") += ToString(idx)).c_str(), block);
         UnRefUnboxed(item, ctx, block);
-        zeros = InsertValueInst::Create(zeros, ConstantInt::get(itemType->getArrayElementType(), 0), {idx}, (TString("zero_") += ToString(idx)).c_str(), block);
+        zeros = InsertValueInst::Create(zeros, ConstantInt::get(arrayType->getArrayElementType(), 0), {idx}, (TString("zero_") += ToString(idx)).c_str(), block);
     }
     new StoreInst(zeros, pointer, block);
 }

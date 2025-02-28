@@ -1,6 +1,50 @@
 title: gdb14
 service: buildroot
 
+arcanum:
+    review:
+        ignore_self_ship: true
+        min_approvers_count: 1
+        disabling_policy: denied
+        override_policy: append
+        groups:
+          - name: reviewers
+            roles:
+              - "cc:duty"
+          - name: owners
+            roles:
+              - "cc:duty"
+              - "cc:developer"
+        rules:
+          - reviewers:
+              - name: reviewers
+                ship: 0
+                assign: 1
+            ignore_self_ship: false
+
+          - subpaths: "a.yaml"
+            reviewers:
+              - name: reviewers
+                ship: 0
+                assign: 1
+              - name: owners
+                ship: 1
+                assign: 0
+            ignore_self_ship: false
+
+    auto_merge:
+        requirements:
+          - system: arcanum
+            type: st_issue_linked
+            disabling_policy: denied
+            override_policy: final
+            data:
+                in_commit_message: true
+          - system: arcanum
+            type: comment_issues_closed
+            disabling_policy: need_reason
+            override_policy: final
+
 shared:
   mapping_path: &mapping-path "build/external_resources/gdb/resources.json"
   input: &base-input

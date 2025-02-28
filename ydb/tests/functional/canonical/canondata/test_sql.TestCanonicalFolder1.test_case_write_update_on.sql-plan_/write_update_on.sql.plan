@@ -12,6 +12,10 @@
                         "key",
                         "subkey"
                     ],
+                    "lookup_by": [
+                        "key",
+                        "subkey"
+                    ],
                     "type": "Lookup"
                 }
             ],
@@ -45,6 +49,10 @@
                 },
                 {
                     "columns": [
+                        "Group",
+                        "Name"
+                    ],
+                    "lookup_by": [
                         "Group",
                         "Name"
                     ],

@@ -86,7 +86,14 @@ void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig
             basic.MaxThreadCount = poolConfig.GetMaxThreads();
             basic.DefaultThreadCount = poolConfig.GetThreads();
             basic.Priority = poolConfig.GetPriority();
+            if (poolConfig.HasMinLocalQueueSize()) {
+                basic.MinLocalQueueSize = poolConfig.GetMinLocalQueueSize();
+            }
+            if (poolConfig.HasMaxLocalQueueSize()) {
+                basic.MaxLocalQueueSize = poolConfig.GetMaxLocalQueueSize();
+            }
             cpuManager.Basic.emplace_back(std::move(basic));
+            
             break;
         }
 

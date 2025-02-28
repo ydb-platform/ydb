@@ -2,7 +2,7 @@
 
 #include <ydb/library/actors/core/actorsystem.h>
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/events/abstract.h>
 #include <ydb/core/wrappers/events/common.h>
 #include <ydb/core/wrappers/events/get_object.h>

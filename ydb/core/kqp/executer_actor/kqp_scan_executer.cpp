@@ -185,7 +185,6 @@ private:
                         case NKqpProto::TKqpSource::kReadRangesSource:
                             BuildScanTasksFromSource(
                                 stageInfo,
-                                /* shardsResolved */ true,
                                 /* limitTasksPerNode */ false);
                             break;
                         default:
@@ -197,7 +196,7 @@ private:
                     BuildSysViewScanTasks(stageInfo);
                 } else if (stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()) {
                     HasOlapTable = true;
-                    BuildScanTasksFromShards(stageInfo);
+                    BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination());
                 } else {
                     YQL_ENSURE(false, "Unexpected stage type " << (int) stageInfo.Meta.TableKind);
                 }
@@ -220,7 +219,7 @@ private:
                 }
 
                 TasksGraph.GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
-                BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ TasksGraph.GetMeta().AllowWithSpilling);
+                BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ TasksGraph.GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
             }
 
             ResponseEv->InitTxResult(tx.Body);

@@ -217,7 +217,23 @@ The [authentication mode](../../security/authentication.md) in the {{ ydb-short-
 domains_config:
   ...
   security_config:
-    enforce_user_token_requirement: Bool
+    # authentication mode settings
+    enforce_user_token_requirement: false
+    enforce_user_token_check_requirement: false
+    default_user_sids: <SID list for anonymous requests>
+    all_authenticated_users: <group SID for all authenticated users>
+    all_users_group: <group SID for all users>
+
+    # initial security settings
+    default_users: <initial list of users>
+    default_groups: <initial list of groups>
+    default_access: <initial permissions>
+
+    # настройки привилегий
+    viewer_allowed_sids: <list of SIDs enabled for YDB UI access>
+    monitoring_allowed_sids: <list of SIDs enabled for tablet administration>
+    administration_allowed_sids: <list of SIDs enabled for storage administration>
+    register_dynamic_node_allowed_sids: <list of SIDs enabled for database node registration>
   ...
 ```
 

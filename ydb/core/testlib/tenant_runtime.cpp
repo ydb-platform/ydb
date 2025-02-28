@@ -395,7 +395,7 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
     {
         TIntrusivePtr<TBootstrapperInfo> bi(new TBootstrapperInfo(new TTabletSetupInfo(op, TMailboxType::Simple, 0,
                                                                                        TMailboxType::Simple, 0)));
-        return ctx.ExecutorThread.RegisterActor(CreateBootstrapper(CreateTestTabletInfo(State.NextTabletId, tabletType, erasure), bi.Get()));
+        return ctx.Register(CreateBootstrapper(CreateTestTabletInfo(State.NextTabletId, tabletType, erasure), bi.Get()));
     }
 
     void SendDeletionNotification(ui64 tabletId, TActorId waiter, const TActorContext& ctx)

@@ -387,7 +387,15 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
             THashMap<TActorId, TVector<ui64>> acks;
             for (const auto& tx : ev->Get()->Record.GetTransactions()) {
                 ui64 txId = tx.GetTxId();
+                // For compatibility mediator must send some AckTo
+                Y_ABORT_UNLESS(tx.HasAckTo());
                 TActorId owner = ActorIdFromProto(tx.GetAckTo());
+                // Yet mediator should specify an invalid AckTo, so acks from
+                // older tablets are sent to no actor and are ignored
+                Y_ABORT_UNLESS(!owner);
+                // We just simulate the behavior of older tablet versions that
+                // send acks unconditionally. Some tests validate no acks are
+                // reaching queues too soon.
                 acks[owner].push_back(txId);
             }
             for (auto& pr : acks) {
@@ -416,8 +424,20 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         }
     };
 
+    struct TCoordinatorIndex {
+        size_t Value;
+
+        explicit TCoordinatorIndex(size_t value)
+            : Value(value)
+        {}
+    };
+
     class TMediatorTestWithWatcher : public NUnitTest::TBaseFixture {
     public:
+        TMediatorTestWithWatcher(ui64 coordinatorCount = 1)
+            : CoordinatorCount(coordinatorCount)
+        {}
+
         void SetUp(NUnitTest::TTestContext&) override {
             auto& pm = PM.emplace();
 
@@ -434,7 +454,9 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
             runtime.SetLogPriority(NKikimrServices::TX_MEDIATOR_TABLETQUEUE, NLog::PRI_TRACE);
             runtime.SetLogPriority(NKikimrServices::TX_MEDIATOR_PRIVATE, NLog::PRI_TRACE);
 
-            CoordinatorId = ChangeStateStorage(TTestTxConfig::Coordinator, Server->GetSettings().Domain);
+            for (ui64 i = 0; i < CoordinatorCount; ++i) {
+                CoordinatorIds.push_back(ChangeStateStorage(TTestTxConfig::Coordinator + i, Server->GetSettings().Domain));
+            }
             MediatorId = ChangeStateStorage(TTestTxConfig::TxTablet0, Server->GetSettings().Domain);
 
             MediatorBootstrapper = CreateTestBootstrapper(runtime,
@@ -451,7 +473,9 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
                 auto msg = std::make_unique<TEvSubDomain::TEvConfigure>();
                 msg->Record.SetVersion(1);
                 msg->Record.SetPlanResolution(500);
-                msg->Record.AddCoordinators(CoordinatorId);
+                for (ui64 coordinatorId : CoordinatorIds) {
+                    msg->Record.AddCoordinators(coordinatorId);
+                }
                 msg->Record.AddMediators(MediatorId);
                 msg->Record.SetTimeCastBucketsPerMediator(1);
                 runtime.SendToPipe(MediatorId, Sender, msg.release());
@@ -482,11 +506,11 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
             return client;
         }
 
-        NKikimrTx::TEvCoordinatorSyncResult Sync(const TActorId& queue, ui64 genCookie) {
+        NKikimrTx::TEvCoordinatorSyncResult Sync(const TActorId& queue, TCoordinatorIndex coordinatorIndex, ui64 genCookie) {
             auto& runtime = GetRuntime();
 
             TActorId client = QueuePipeClient(queue);
-            runtime.SendToPipe(client, queue, new TEvTxCoordinator::TEvCoordinatorSync(genCookie, MediatorId, CoordinatorId));
+            runtime.SendToPipe(client, queue, new TEvTxCoordinator::TEvCoordinatorSync(genCookie, MediatorId, CoordinatorIds.at(coordinatorIndex.Value)));
             auto ev = runtime.GrabEdgeEventRethrow<TEvTxCoordinator::TEvCoordinatorSyncResult>(queue);
             auto* msg = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetCookie(), genCookie);
@@ -494,13 +518,17 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
             return std::move(msg->Record);
         }
 
-        void SendStep(const TActorId& queue, ui32 gen, ui64 step, THashMap<ui64, std::vector<ui64>> txs = {}) {
+        NKikimrTx::TEvCoordinatorSyncResult Sync(const TActorId& queue, ui64 genCookie) {
+            return Sync(queue, TCoordinatorIndex(0), genCookie);
+        }
+
+        void SendStep(const TActorId& queue, TCoordinatorIndex coordinatorIndex, ui32 gen, ui64 step, THashMap<ui64, std::vector<ui64>> txs = {}) {
             auto& runtime = GetRuntime();
 
             TActorId client = QueuePipeClient(queue);
             // Note: prevStep is not actually used by mediator
             auto msg = std::make_unique<TEvTxCoordinator::TEvCoordinatorStep>(
-                step, /* prevStep */ 0, MediatorId, CoordinatorId, gen);
+                step, /* prevStep */ 0, MediatorId, CoordinatorIds.at(coordinatorIndex.Value), gen);
             size_t totalAffected = 0;
             for (auto& pr : txs) {
                 auto* protoTx = msg->Record.AddTransactions();
@@ -512,6 +540,10 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
             }
             msg->Record.SetTotalTxAffectedEntries(totalAffected);
             runtime.SendToPipe(client, queue, msg.release());
+        }
+
+        void SendStep(const TActorId& queue, ui32 gen, ui64 step, THashMap<ui64, std::vector<ui64>> txs = {}) {
+            return SendStep(queue, TCoordinatorIndex(0), gen, step, std::move(txs));
         }
 
         ui64 AddTargetTablet() {
@@ -575,7 +607,8 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         TServer::TPtr Server;
         TActorId Sender;
 
-        ui64 CoordinatorId;
+        ui64 CoordinatorCount;
+        std::vector<ui64> CoordinatorIds;
 
         ui64 MediatorId;
         TActorId MediatorBootstrapper;
@@ -587,6 +620,13 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         TActorId Watcher;
 
         THashMap<TActorId, TActorId> PerQueuePipes; // Queue -> PipeClient
+    };
+
+    class TMediatorTestWithWatcherTwoCoordinators : public TMediatorTestWithWatcher {
+    public:
+        TMediatorTestWithWatcherTwoCoordinators()
+            : TMediatorTestWithWatcher(2)
+        {}
     };
 
     Y_UNIT_TEST_F(BasicTimecastUpdates, TMediatorTestWithWatcher) {
@@ -821,10 +861,10 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
             {1, {tablet1}},
         });
 
-        // Our queue must receive an ack
+        // Our queue should not receive acks until plan step is accepted
         {
-            auto ev = runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvPlanStepAck>(queue1);
-            UNIT_ASSERT(ev);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvPlanStepAck>(queue1, TDuration::MilliSeconds(1));
+            UNIT_ASSERT(!ev);
         }
 
         // Mediator's ack must be blocked
@@ -842,6 +882,7 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         // Unblock the mediator ack
         blockedAccept.Unblock();
 
+        // The reconnected queue should receive an ack
         {
             auto ev = runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvPlanStepAck>(queue2);
             UNIT_ASSERT(ev);
@@ -853,6 +894,7 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
             {1, {tablet1}},
         });
 
+        // The reconnected queue should receive an additional ack
         {
             auto ev = runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvPlanStepAck>(queue3);
             UNIT_ASSERT(ev);
@@ -1143,10 +1185,15 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates.back(), TWatchUpdate(1010));
 
-        for (int i = 0; i < 2; ++i) {
-            auto ev = runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvPlanStepAck>(queue2);
+        // The reconnected queue should receive exactly one ack per tablet from mediator
+        for (int i = 0; ; ++i) {
+            auto ev = runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvPlanStepAck>(queue2, TDuration::MilliSeconds(1));
+            if (i == 2) {
+                UNIT_ASSERT(!ev);
+                break;
+            }
             UNIT_ASSERT(ev);
-            Cerr << "... ack from " << ev->Get()->Record.GetTabletId() << Endl;
+            Cerr << "... ack for tablet " << ev->Get()->Record.GetTabletId() << Endl;
         }
     }
 
@@ -1193,12 +1240,74 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates.back(), TWatchUpdate(1010));
 
-        // We should receive acks from tablets, plus additional acks from mediator
-        for (int i = 0; i < 4; ++i) {
-            auto ev = runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvPlanStepAck>(queue1);
+        // The reconnected queue should receive exactly one ack per tablet from mediator
+        for (int i = 0; ; ++i) {
+            auto ev = runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvPlanStepAck>(queue1, TDuration::MilliSeconds(1));
+            if (i == 2) {
+                UNIT_ASSERT(!ev);
+                break;
+            }
             UNIT_ASSERT(ev);
-            Cerr << "... ack from " << ev->Get()->Record.GetTabletId() << Endl;
+            Cerr << "... ack for tablet " << ev->Get()->Record.GetTabletId() << Endl;
         }
+    }
+
+    Y_UNIT_TEST_F(OneCoordinatorResendTxNotLost, TMediatorTestWithWatcherTwoCoordinators) {
+        auto& runtime = GetRuntime();
+
+        ui64 tablet1 = AddTargetTablet();
+        ui64 tablet2 = AddTargetTablet();
+        AddWatchTablet(tablet1);
+        AddWatchTablet(tablet2);
+        WaitNoPending();
+        WatcherState->Updates.clear();
+
+        auto queue1 = runtime.AllocateEdgeActor();
+        Sync(queue1, TCoordinatorIndex(0), 1);
+        auto queue2 = runtime.AllocateEdgeActor();
+        Sync(queue2, TCoordinatorIndex(1), 1);
+
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan(runtime);
+
+        SendStep(queue1, TCoordinatorIndex(0), /* gen */ 1, /* step */ 1010, {
+            {1, {tablet1, tablet2}},
+        });
+        SendStep(queue2, TCoordinatorIndex(1), /* gen */ 1, /* step */ 1010, {
+            {2, {tablet1, tablet2}},
+        });
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
+            TGranularUpdate(1010, {{tablet1, 1009}, {tablet2, 1009}})));
+        WatcherState->Updates.clear();
+        UNIT_ASSERT_VALUES_EQUAL(blockedPlan.size(), 2u);
+        blockedPlan.clear();
+
+        // Simulate one coordinator restarting and resending the step
+        auto queue3 = runtime.AllocateEdgeActor();
+        Sync(queue3, TCoordinatorIndex(1), 2);
+        SendStep(queue3, TCoordinatorIndex(1), /* gen */ 2, /* step */ 1010, {
+            {2, {tablet1, tablet2}},
+        });
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        // Reboot tablets, we expect plans to be resent
+        RebootTablet(runtime, tablet1, Sender);
+        RebootTablet(runtime, tablet2, Sender);
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates());
+        UNIT_ASSERT_VALUES_EQUAL(blockedPlan.size(), 2u);
+
+        // Tablets must see both transactions
+        // Note: the bug was causing some transactions to be lost
+        THashSet<ui64> observedTxIds;
+        for (auto& ev : blockedPlan) {
+            auto* msg = ev->Get();
+            for (const auto& tx : msg->Record.GetTransactions()) {
+                observedTxIds.insert(tx.GetTxId());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(observedTxIds.size(), 2u);
     }
 
 }

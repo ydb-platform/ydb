@@ -143,7 +143,7 @@ void TConsole::ProcessEnqueuedEvents(const TActorContext &ctx)
         LOG_DEBUG(ctx, NKikimrServices::CMS,
                   "TConsole::Dequeue: %" PRIu64 ", event type: %" PRIu32 " event: %s",
                   TabletID(), ev->GetTypeRewrite(), ev->ToString().data());
-        ctx.ExecutorThread.Send(ev.Release());
+        ctx.Send(ev.Release());
         InitQueue.pop_front();
     }
 }
@@ -184,6 +184,24 @@ void TConsole::Handle(TEvConsole::TEvGetConfigRequest::TPtr &ev, const TActorCon
 void TConsole::Handle(TEvConsole::TEvSetConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxSetConfig(ev), ctx);
+}
+
+bool TConsole::HasTenant(const TString& path) const
+{
+    if (!TenantsManager) {
+        return false;
+    }
+
+    return TenantsManager->HasTenant(path);
+}
+
+TString TConsole::GetDomainName() const
+{
+    if (!TenantsManager) {
+        return {};
+    }
+
+    return TenantsManager->GetDomainName();
 }
 
 IActor *CreateConsole(const TActorId &tablet, TTabletStorageInfo *info)

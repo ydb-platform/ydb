@@ -340,6 +340,9 @@ namespace {
             else if (option.IsAtom("join_algo")) {
                 //do nothing
             }
+            else if (option.IsAtom("shuffle_lhs_by") || option.IsAtom("shuffle_rhs_by")) {
+                //do nothing
+            }
             else if (option.IsAtom("compact")) {
                 if (!EnsureTupleSize(*child, 1, ctx)) {
                     return IGraphTransformer::TStatus::Error;
@@ -811,6 +814,8 @@ IGraphTransformer::TStatus ValidateEquiJoinOptions(TPositionHandle positionHandl
         } else if (optionName == "cbo_passed") {
             // do nothing
         } else if (optionName == "join_algo") {
+            // do nothing
+        } else if (optionName == "shuffle_lhs_by" || optionName == "shuffle_rhs_by") {
             // do nothing
         } else if (optionName == "compact") {
             options.Compact = true;
@@ -1387,6 +1392,28 @@ TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings) {
     if (auto algo = GetSetting(linkSettings, "join_algo")) {
         YQL_ENSURE(algo->Child(1)->IsAtom());
         result.JoinAlgo = FromString<EJoinAlgoType>(algo->Child(1)->Content());
+    }
+
+    auto collectShuffleColumnsFromSetting = [](const TExprNode::TPtr& shuffleSetting) -> TVector<NDq::TJoinColumn> {
+        TVector<NDq::TJoinColumn> shuffleBy;
+        shuffleBy.reserve(shuffleSetting->ChildrenSize());
+
+        for (std::size_t i = 1; i < shuffleSetting->ChildrenSize(); ++i) {
+            const auto& shuffleByNode = shuffleSetting->Child(i);
+            auto relName = TString(shuffleByNode->Child(0)->Content());
+            auto columnName = TString(shuffleByNode->Child(1)->Content());
+            shuffleBy.emplace_back(std::move(relName), std::move(columnName));
+        }
+
+        return shuffleBy;
+    };
+
+    if (auto shuffleLhsBy = GetSetting(linkSettings, "shuffle_lhs_by")) {
+        result.ShuffleLhsBy = collectShuffleColumnsFromSetting(shuffleLhsBy);
+    }
+
+    if (auto shuffleRhsBy = GetSetting(linkSettings, "shuffle_rhs_by")) {
+        result.ShuffleRhsBy = collectShuffleColumnsFromSetting(shuffleRhsBy);
     }
 
     result.ForceSortedMerge = HasSetting(linkSettings, "forceSortedMerge");

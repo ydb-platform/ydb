@@ -13,6 +13,7 @@ using namespace NActors;
 
 namespace NKikimr::NKqp {
 
+#define LOG_T(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
 #define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
 #define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
@@ -501,7 +502,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .ShareMailbox = (computeTasksSize <= 1),
         .RlPath = Nothing(),
         .BlockTrackingMode = BlockTrackingMode,
-        .UserToken = UserToken
+        .UserToken = UserToken,
+        .Database = Database
     });
 
     if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&startResult)) {
@@ -510,7 +512,11 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
 
     TActorId* actorId = std::get_if<TActorId>(&startResult);
     Y_ABORT_UNLESS(actorId);
-    AcknowledgeCA(taskId, *actorId, nullptr);
+    Y_ABORT_UNLESS(AcknowledgeCA(taskId, *actorId, nullptr));
+
+    THashMap<TActorId, THashSet<ui64>> updates;
+    CollectTaskChannelsUpdates(task, updates);
+    PropagateChannelsUpdates(updates);
     return TString();
 }
 
@@ -758,6 +764,68 @@ ui32 TKqpPlanner::CalcSendMessageFlagsForNode(ui32 nodeId) {
         flags |= IEventHandle::FlagSubscribeOnSession;
     }
     return flags;
+}
+
+void TKqpPlanner::PropagateChannelsUpdates(const THashMap<TActorId, THashSet<ui64>>& updates) {
+    for (auto& pair : updates) {
+        auto computeActorId = pair.first;
+        auto& channelIds = pair.second;
+
+        auto channelsInfoEv = MakeHolder<NYql::NDq::TEvDqCompute::TEvChannelsInfo>();
+        auto& record = channelsInfoEv->Record;
+
+        for (auto& channelId : channelIds) {
+            FillChannelDesc(TasksGraph, *record.AddUpdate(), TasksGraph.GetChannel(channelId), TasksGraph.GetMeta().ChannelTransportVersion, false);
+        }
+
+        LOG_T("Sending channels info to compute actor: " << computeActorId << ", channels: " << channelIds.size());
+        TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(computeActorId, ExecuterId, channelsInfoEv.Release()));
+    }
+}
+
+void TKqpPlanner::CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& task, THashMap<TActorId, THashSet<ui64>>& updates) {
+    YQL_ENSURE(task.ComputeActorId);
+
+    LOG_T("Collect channels updates for task: " << task.Id << " at actor " << task.ComputeActorId);
+
+    auto& selfUpdates = updates[task.ComputeActorId];
+
+    for (auto& input : task.Inputs) {
+        for (auto channelId : input.Channels) {
+            auto& channel = TasksGraph.GetChannel(channelId);
+            YQL_ENSURE(channel.DstTask == task.Id);
+            YQL_ENSURE(channel.SrcTask);
+
+            auto& srcTask = TasksGraph.GetTask(channel.SrcTask);
+            if (srcTask.ComputeActorId) {
+                updates[srcTask.ComputeActorId].emplace(channelId);
+                selfUpdates.emplace(channelId);
+            }
+
+            LOG_T("Task: " << task.Id << ", input channelId: " << channelId << ", src task: " << channel.SrcTask
+                << ", at actor " << srcTask.ComputeActorId);
+        }
+    }
+
+    for (auto& output : task.Outputs) {
+        for (auto channelId : output.Channels) {
+            selfUpdates.emplace(channelId);
+
+            auto& channel = TasksGraph.GetChannel(channelId);
+            YQL_ENSURE(channel.SrcTask == task.Id);
+
+            if (channel.DstTask) {
+                auto& dstTask = TasksGraph.GetTask(channel.DstTask);
+                if (dstTask.ComputeActorId) {
+                    // not a optimal solution
+                    updates[dstTask.ComputeActorId].emplace(channelId);
+                }
+
+                LOG_T("Task: " << task.Id << ", output channelId: " << channelId << ", dst task: " << channel.DstTask
+                    << ", at actor " << dstTask.ComputeActorId);
+            }
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

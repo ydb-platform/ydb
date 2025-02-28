@@ -2400,11 +2400,13 @@ namespace {
                 case EDataSlot::Date:
                 case EDataSlot::TzDate:
                 case EDataSlot::Date32:
+                case EDataSlot::TzDate32:
                     value = ctx.Expr.NewAtom(input->Pos(), "86400000000", TNodeFlags::Default);
                     break;
                 case EDataSlot::Datetime:
                 case EDataSlot::TzDatetime:
                 case EDataSlot::Datetime64:
+                case EDataSlot::TzDatetime64:
                     value = ctx.Expr.NewAtom(input->Pos(), "1000000", TNodeFlags::Default);
                     break;
                 default:

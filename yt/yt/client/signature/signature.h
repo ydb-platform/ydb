@@ -20,15 +20,22 @@ public:
     //! Constructs an empty TSignature.
     TSignature() = default;
 
-    [[nodiscard]] const NYson::TYsonString& Payload() const;
+    [[nodiscard]] const std::string& Payload() const;
 
 private:
     NYson::TYsonString Header_;
-    NYson::TYsonString Payload_;
+    std::string Payload_;
     std::vector<std::byte> Signature_;
 
-    friend class TSignatureGeneratorBase;
-    friend class TSignatureValidatorBase;
+    friend struct ISignatureGenerator;
+    friend struct TDummySignatureGenerator;
+    friend struct TAlwaysThrowingSignatureGenerator;
+    friend class TSignatureGenerator;
+
+    friend struct ISignatureValidator;
+    friend struct TDummySignatureValidator;
+    friend struct TAlwaysThrowingSignatureValidator;
+    friend class TSignatureValidator;
 
     friend void Serialize(const TSignature& signature, NYson::IYsonConsumer* consumer);
     friend void Deserialize(TSignature& signature, NYTree::INodePtr node);

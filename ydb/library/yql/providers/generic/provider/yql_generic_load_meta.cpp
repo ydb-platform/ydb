@@ -1,3 +1,4 @@
+// clang-format off
 #include "yql_generic_provider_impl.h"
 
 #include <library/cpp/json/json_reader.h>
@@ -25,16 +26,21 @@ namespace NYql {
     using namespace NKikimr;
     using namespace NKikimr::NMiniKQL;
 
-    struct TGenericTableDescription {
-        using TPtr = std::shared_ptr<TGenericTableDescription>;
-
-        NYql::TGenericDataSourceInstance DataSourceInstance;
-        std::optional<NConnector::NApi::TDescribeTableResponse> Response;
-    };
-
     class TGenericLoadTableMetadataTransformer: public TGraphTransformerBase {
-        using TMapType =
-            std::unordered_map<TGenericState::TTableAddress, TGenericTableDescription::TPtr, THash<TGenericState::TTableAddress>>;
+        struct TTableDescription {
+            using TPtr = std::shared_ptr<TTableDescription>;
+
+            NYql::TGenericDataSourceInstance DataSourceInstance;
+
+            std::optional<NConnector::NApi::TSchema> Schema;
+            std::vector<NConnector::NApi::TSplit> Splits;
+
+            // Issues that could occure at any phase of network interaction with Connector
+            TIssues Issues; 
+        };
+
+        using TTableDescriptionMap =
+            std::unordered_map<TGenericState::TTableAddress, TTableDescription::TPtr, THash<TGenericState::TTableAddress>>;
 
     public:
         TGenericLoadTableMetadataTransformer(TGenericState::TPtr state)
@@ -49,13 +55,14 @@ namespace NYql {
                 return TStatus::Ok;
             }
 
-            std::unordered_set<TMapType::key_type, TMapType::hasher> pendingTables;
+            std::unordered_set<TTableDescriptionMap::key_type, TTableDescriptionMap::hasher> pendingTables;
             const auto& reads = FindNodes(input, [&](const TExprNode::TPtr& node) {
                 if (const auto maybeRead = TMaybeNode<TGenRead>(node)) {
                     return maybeRead.Cast().DataSource().Category().Value() == GenericProviderName;
                 }
                 return false;
             });
+
             if (!reads.empty()) {
                 for (const auto& r : reads) {
                     const TGenRead read(r);
@@ -87,39 +94,10 @@ namespace NYql {
 
             std::vector<NThreading::TFuture<void>> handles;
             handles.reserve(pendingTables.size());
-            Results_.reserve(pendingTables.size());
+            TableDescriptions_.reserve(pendingTables.size());
 
-            for (const auto& item : pendingTables) {
-                const auto& clusterName = item.first;
-                const auto it = State_->Configuration->ClusterNamesToClusterConfigs.find(clusterName);
-                YQL_ENSURE(State_->Configuration->ClusterNamesToClusterConfigs.cend() != it, "cluster not found: " << clusterName);
-
-                NConnector::NApi::TDescribeTableRequest request;
-                FillDescribeTableRequest(request, it->second, item.second);
-
-                auto promise = NThreading::NewPromise();
-                handles.emplace_back(promise.GetFuture());
-
-                // preserve data source instance for the further usage
-                auto emplaceIt = Results_.emplace(std::make_pair(item, std::make_shared<TGenericTableDescription>()));
-                auto desc = emplaceIt.first->second;
-                desc->DataSourceInstance = request.data_source_instance();
-
-                Y_ENSURE(State_->GenericClient);
-                State_->GenericClient->DescribeTable(request).Subscribe(
-                    [desc = std::move(desc), promise = std::move(promise)](const NConnector::TDescribeTableAsyncResult& f1) mutable {
-                        NConnector::TDescribeTableAsyncResult f2(f1);
-                        auto result = f2.ExtractValueSync();
-
-                        // Check only transport errors;
-                        // logic errors will be checked later in DoApplyAsyncChanges
-                        if (result.Status.Ok()) {
-                            desc->Response = std::move(result.Response);
-                            promise.SetValue();
-                        } else {
-                            promise.SetException(result.Status.ToDebugString());
-                        }
-                    });
+            for (const auto& tableAddress : pendingTables) {
+                LoadTableMetadataFromConnector(tableAddress, handles);
             }
 
             if (handles.empty()) {
@@ -129,11 +107,124 @@ namespace NYql {
             AsyncFuture_ = NThreading::WaitExceptionOrAll(handles);
             return TStatus::Async;
         }
+        // clang-format on
 
+    private:
+        void LoadTableMetadataFromConnector(const TGenericState::TTableAddress& tableAddress,
+                                            std::vector<NThreading::TFuture<void>>& handles) {
+            const auto it = State_->Configuration->ClusterNamesToClusterConfigs.find(tableAddress.ClusterName);
+            YQL_ENSURE(State_->Configuration->ClusterNamesToClusterConfigs.cend() != it,
+                       "cluster not found: " << tableAddress.ClusterName);
+
+            NConnector::NApi::TDescribeTableRequest request;
+            FillDescribeTableRequest(request, it->second, tableAddress.TableName);
+
+            auto promise = NThreading::NewPromise();
+            handles.emplace_back(promise.GetFuture());
+
+            // preserve data source instance for the further usage
+            auto emplaceIt =
+                TableDescriptions_.emplace(tableAddress, std::make_shared<TTableDescription>());
+            auto desc = emplaceIt.first->second;
+            desc->DataSourceInstance = request.data_source_instance();
+
+            Y_ENSURE(State_->GenericClient);
+
+            State_->GenericClient->DescribeTable(request).Subscribe(
+                [desc, tableAddress, promise,
+                 client = State_->GenericClient](const NConnector::TDescribeTableAsyncResult& f1) mutable {
+                    NConnector::TDescribeTableAsyncResult f2(f1);
+                    auto result = f2.ExtractValueSync();
+
+                    // Check transport error
+                    if (!result.Status.Ok()) {
+                        desc->Issues.AddIssue(TStringBuilder()
+                                              << "Call DescribeTable for table " << tableAddress.ToString() << ": "
+                                              << result.Status.ToDebugString());
+                        promise.SetValue();
+                        return;
+                    }
+
+                    // Check logical error
+                    if (!NConnector::IsSuccess(*result.Response)) {
+                        desc->Issues.AddIssues(NConnector::ErrorToIssues(
+                            result.Response->error(),
+                            TStringBuilder() << "Call DescribeTable for table " << tableAddress.ToString() << ": "));
+                        promise.SetValue();
+                        return;
+                    }
+
+                    // Preserve schema for the further usage
+                    desc->Schema = result.Response->schema();
+
+                    // Call ListSplits
+                    NConnector::NApi::TListSplitsRequest request;
+                    auto select = request.add_selects();
+                    *select->mutable_data_source_instance() = desc->DataSourceInstance;
+                    select->mutable_from()->set_table(tableAddress.TableName);
+
+                    client->ListSplits(request).Subscribe(
+                        [desc, promise,
+                         tableAddress](const NConnector::TListSplitsStreamIteratorAsyncResult f3) mutable {
+                            NConnector::TListSplitsStreamIteratorAsyncResult f4(f3);
+                            auto streamIterResult = f4.ExtractValueSync();
+
+                            // Check transport error
+                            if (!streamIterResult.Status.Ok()) {
+                                desc->Issues.AddIssue(TStringBuilder()
+                                                      << "Call ListSplits for table " << tableAddress.ToString() << ": "
+                                                      << streamIterResult.Status.ToDebugString());
+                                promise.SetValue();
+                                return;
+                            }
+
+                            Y_ENSURE(streamIterResult.Iterator);
+
+                            auto drainer =
+                                NConnector::MakeListSplitsStreamIteratorDrainer(std::move(streamIterResult.Iterator));
+
+                            drainer->Run().Subscribe([desc,
+                                                      promise,
+                                                      tableAddress,
+                                                      drainer // pass drainer to the callback because we want him to
+                                                              // stay alive until the callback is called
+                            ](const NThreading::TFuture<NConnector::TListSplitsStreamIteratorDrainer::TBuffer>&
+                                                         f5) mutable {
+                                NThreading::TFuture<NConnector::TListSplitsStreamIteratorDrainer::TBuffer> f6(f5);
+                                auto drainerResult = f6.ExtractValueSync();
+
+                                // check transport and logical errors
+                                if (drainerResult.Issues) {
+                                    TIssue dstIssue(TStringBuilder() << "Call ListSplits for table " << tableAddress.ToString());
+                                    for (const auto& srcIssue : drainerResult.Issues) {
+                                        dstIssue.AddSubIssue(MakeIntrusive<TIssue>(srcIssue));
+                                    };
+                                    desc->Issues.AddIssue(std::move(dstIssue));
+                                    promise.SetValue();
+                                    return;
+                                }
+
+                                // collect all the splits from every response into a single vector
+                                for (auto&& response : drainerResult.Responses) {
+                                    std::transform(std::make_move_iterator(response.mutable_splits()->begin()),
+                                                   std::make_move_iterator(response.mutable_splits()->end()),
+                                                   std::back_inserter(desc->Splits),
+                                                   [](auto&& split) { return std::move(split); });
+                                }
+
+                                promise.SetValue();
+                            });
+                        });
+                });
+        }
+
+    public:
         NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode&) final {
             return AsyncFuture_;
         }
 
+        // TODO: for some reason engine calls this function more than once.
+        // It worth adding some checks to avoid multiple data copying.
         TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
             AsyncFuture_.GetValue();
 
@@ -145,109 +236,133 @@ namespace NYql {
             });
 
             TNodeOnNodeOwnedMap replaces(reads.size());
-            bool hasErrors = false;
 
+            // Iterate over all the requested tables, check Connector responses
             for (const auto& r : reads) {
-                const TGenRead read(r);
-                const auto clusterName = read.DataSource().Cluster().StringValue();
-                const auto& keyArg = TExprBase(read.FreeArgs().Get(2).Ref().HeadPtr()).Cast<TCoKey>().Ref().Head();
+                const TGenRead genRead(r);
+                const auto clusterName = genRead.DataSource().Cluster().StringValue();
+                const auto& keyArg = TExprBase(genRead.FreeArgs().Get(2).Ref().HeadPtr()).Cast<TCoKey>().Ref().Head();
                 const auto tableName = TString(keyArg.Tail().Head().Content());
+                const TGenericState::TTableAddress tableAddress{clusterName, tableName};
 
-                const auto it = Results_.find(TGenericState::TTableAddress(clusterName, tableName));
-                if (Results_.cend() != it) {
-                    const auto& response = it->second->Response;
+                // Find appropriate response
+                auto iter = TableDescriptions_.find(tableAddress);
+                if (iter == TableDescriptions_.end()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(genRead.Pos()), TStringBuilder()
+                                                                            << "Connector response not found for table "
+                                                                            << tableAddress.ToString()));
 
-                    if (NConnector::IsSuccess(*response)) {
-                        TGenericState::TTableMeta tableMeta;
-                        tableMeta.Schema = response->schema();
-                        tableMeta.DataSourceInstance = it->second->DataSourceInstance;
-
-                        const auto& parse = ParseTableMeta(tableMeta.Schema, clusterName, tableName, ctx, tableMeta.ColumnOrder);
-
-                        if (parse) {
-                            tableMeta.ItemType = parse;
-                            if (const auto ins = replaces.emplace(read.Raw(), TExprNode::TPtr()); ins.second) {
-                                // clang-format off
-                                auto row = Build<TCoArgument>(ctx, read.Pos())
-                                    .Name("row")
-                                    .Done();
-                                auto emptyPredicate = Build<TCoLambda>(ctx, read.Pos())
-                                    .Args({row})
-                                    .Body<TCoBool>()
-                                        .Literal().Build("true")
-                                        .Build()
-                                    .Done().Ptr();
-
-                                ins.first->second = Build<TGenReadTable>(ctx, read.Pos())
-                                    .World(read.World())
-                                    .DataSource(read.DataSource())
-                                    .Table().Value(tableName).Build()
-                                    .Columns<TCoVoid>().Build()
-                                    .FilterPredicate(emptyPredicate)
-                                .Done().Ptr();
-                                // clang-format on
-                            }
-                            State_->AddTable(clusterName, tableName, std::move(tableMeta));
-                        } else {
-                            hasErrors = true;
-                            break;
-                        }
-                    } else {
-                        const auto& error = response->error();
-                        NConnector::ErrorToExprCtx(error, ctx, ctx.GetPosition(read.Pos()),
-                                                   TStringBuilder() << "Loading metadata for table: " << clusterName << '.' << tableName);
-                        hasErrors = true;
-                        break;
-                    }
-                } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder()
-                                                                         << "Not found result for " << clusterName << '.' << tableName));
-                    hasErrors = true;
-                    break;
+                    return TStatus::Error;
                 }
-            }
 
-            if (hasErrors) {
-                return TStatus::Error;
+                auto& result = iter->second;
+
+                // If errors occured during network interaction with Connector, return them
+                if (result->Issues) {
+                    for (const auto& issue : result->Issues) {
+                        ctx.AddError(issue);
+                    }
+
+                    return TStatus::Error;
+                }
+
+                Y_ENSURE(result->Schema);
+                Y_ENSURE(result->Splits.size() > 0);
+
+                TGenericState::TTableMeta tableMeta;
+                tableMeta.Schema = *result->Schema;
+                tableMeta.DataSourceInstance = result->DataSourceInstance;
+                tableMeta.Splits = result->Splits;
+
+                // Parse table schema
+                ParseTableMeta(ctx, ctx.GetPosition(genRead.Pos()), tableAddress, tableMeta);
+
+                // Fill AST for a table
+                if (const auto ins = replaces.emplace(genRead.Raw(), TExprNode::TPtr()); ins.second) {
+                    ins.first->second = MakeTableMetaNode(ctx, genRead, tableName);
+                }
+
+                // Save table metadata into provider state
+                State_->AddTable(tableAddress, std::move(tableMeta));
             }
 
             return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(nullptr));
         }
 
+        // clang-format off
+
         void Rewind() final {
-            Results_.clear();
+            TableDescriptions_.clear();
             AsyncFuture_ = {};
         }
 
     private:
-        const TStructExprType* ParseTableMeta(const NConnector::NApi::TSchema& schema, const std::string_view& cluster,
-                                              const std::string_view& table, TExprContext& ctx, TVector<TString>& columnOrder) try {
+        TIssues ParseTableMeta(
+            TExprContext& ctx,
+            const TPosition& pos,
+            const TGenericState::TTableAddress& tableAddress,
+            TGenericState::TTableMeta& tableMeta
+        ) try {
             TVector<const TItemExprType*> items;
 
-            auto columns = schema.columns();
+            const auto& columns = tableMeta.Schema.columns();
             if (columns.empty()) {
-                ctx.AddError(TIssue({}, TStringBuilder() << "Table " << cluster << '.' << table << " doesn't exist."));
-                return nullptr;
+                TIssues issues;
+                issues.AddIssue(TIssue(pos, TStringBuilder() << "Table " << tableAddress.ToString() << " doesn't exist."));
+                return issues;
             }
 
-            for (auto i = 0; i < columns.size(); i++) {
+            for (const auto& column: columns) {
                 // Make type annotation
-                NYdb::TTypeParser parser(columns.Get(i).type());
+                NYdb::TTypeParser parser(column.type());
                 auto typeAnnotation = NFq::MakeType(parser, ctx);
 
                 // Create items from graph
-                items.emplace_back(ctx.MakeType<TItemExprType>(columns.Get(i).name(), typeAnnotation));
-                columnOrder.emplace_back(columns.Get(i).name());
+                items.emplace_back(ctx.MakeType<TItemExprType>(column.name(), typeAnnotation));
+                tableMeta.ColumnOrder.emplace_back(column.name());
             }
-            // FIXME: handle on Connector's side?
-            return ctx.MakeType<TStructExprType>(items);
+
+            tableMeta.ItemType = ctx.MakeType<TStructExprType>(items);
+            return TIssues{};
         } catch (std::exception&) {
-            ctx.AddError(TIssue({}, TStringBuilder() << "Failed to parse table metadata: " << CurrentExceptionMessage()));
-            return nullptr;
+            TIssues issues;
+            issues.AddIssue(TIssue(pos, TStringBuilder() << "Failed to parse table metadata: " << CurrentExceptionMessage()));
+            return issues;
         }
 
-        void FillDescribeTableRequest(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig,
-                                      const TString& tablePath) {
+        TExprNode::TPtr MakeTableMetaNode(
+            TExprContext& ctx,
+            const TGenRead& read,
+            const TString& tableName
+        ) {
+            // clang-format off
+            auto row = Build<TCoArgument>(ctx, read.Pos())
+                .Name("row")
+                .Done();
+
+            auto emptyPredicate = Build<TCoLambda>(ctx, read.Pos())
+                .Args({row})
+                .Body<TCoBool>()
+                    .Literal().Build("true")
+                    .Build()
+                .Done().Ptr();
+
+            auto table = Build<TGenTable>(ctx, read.Pos())
+                .Name().Value(tableName).Build()
+            .Done();
+
+            return Build<TGenReadTable>(ctx, read.Pos())
+                .World(read.World())
+                .DataSource(read.DataSource())
+                .Table(table)
+                .Columns<TCoVoid>().Build()
+                .FilterPredicate(emptyPredicate)
+            .Done().Ptr();
+            // clang-format on
+        }
+
+        void FillDescribeTableRequest(NConnector::NApi::TDescribeTableRequest& request,
+                                      const TGenericClusterConfig& clusterConfig, const TString& tablePath) {
             const auto dataSourceKind = clusterConfig.GetKind();
             auto dsi = request.mutable_data_source_instance();
             *dsi->mutable_endpoint() = clusterConfig.GetEndpoint();
@@ -260,7 +375,8 @@ namespace NYql {
             FillTablePath(request, clusterConfig, tablePath);
         }
 
-        void FillCredentials(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig) {
+        void FillCredentials(NConnector::NApi::TDescribeTableRequest& request,
+                             const TGenericClusterConfig& clusterConfig) {
             auto dsi = request.mutable_data_source_instance();
 
             // If login/password is provided, just copy them into request:
@@ -274,9 +390,7 @@ namespace NYql {
 
             // 1. Client provided own IAM-token to access external data source
             auto iamToken = State_->Types->Credentials->FindCredentialContent(
-                "default_" + clusterConfig.name(),
-                "default_generic",
-                clusterConfig.GetToken());
+                "default_" + clusterConfig.name(), "default_generic", clusterConfig.GetToken());
             if (iamToken) {
                 *dsi->mutable_credentials()->mutable_token()->mutable_value() = iamToken;
                 *dsi->mutable_credentials()->mutable_token()->mutable_type() = "IAM";
@@ -286,8 +400,8 @@ namespace NYql {
             // 2. Client provided service account creds that must be converted into IAM-token
             Y_ENSURE(State_->CredentialsFactory, "CredentialsFactory is not initialized");
 
-            auto structuredTokenJSON = TStructuredTokenBuilder().SetServiceAccountIdAuth(
-                                                                    clusterConfig.GetServiceAccountId(),
+            auto structuredTokenJSON = TStructuredTokenBuilder()
+                                           .SetServiceAccountIdAuth(clusterConfig.GetServiceAccountId(),
                                                                     clusterConfig.GetServiceAccountIdSignature())
                                            .ToJson();
 
@@ -298,13 +412,12 @@ namespace NYql {
             auto providersIt = State_->CredentialProviders.find(clusterConfig.name());
             if (providersIt == State_->CredentialProviders.end()) {
                 auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(
-                    State_->CredentialsFactory,
-                    structuredTokenJSON,
-                    false);
+                    State_->CredentialsFactory, structuredTokenJSON, false);
 
-                providersIt = State_->CredentialProviders.emplace(
-                                                             std::make_pair(clusterConfig.name(), credentialsProviderFactory->CreateProvider()))
-                                  .first;
+                providersIt =
+                    State_->CredentialProviders
+                        .emplace(clusterConfig.name(), credentialsProviderFactory->CreateProvider())
+                        .first;
             }
 
             iamToken = providersIt->second->GetAuthInfo();
@@ -342,7 +455,8 @@ namespace NYql {
             }
         }
 
-        void FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig) {
+        void FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request,
+                                   const TGenericClusterConfig& clusterConfig) {
             const auto dataSourceKind = clusterConfig.GetKind();
             switch (dataSourceKind) {
                 case NYql::EGenericDataSourceKind::CLICKHOUSE:
@@ -370,8 +484,8 @@ namespace NYql {
                     SetLoggingFolderId(*options, clusterConfig);
                 } break;
                 default:
-                    ythrow yexception() << "Unexpected data source kind: '" << NYql::EGenericDataSourceKind_Name(dataSourceKind)
-                                        << "'";
+                    throw yexception() << "Unexpected data source kind: '"
+                                       << NYql::EGenericDataSourceKind_Name(dataSourceKind) << "'";
             }
         }
 
@@ -383,7 +497,7 @@ namespace NYql {
             } else if (dateTimeFormat == "YQL") {
                 request.mutable_type_mapping_settings()->set_date_time_format(NConnector::NApi::YQL_FORMAT);
             } else {
-                ythrow yexception() << "Unexpected date/time format: '" << dateTimeFormat << "'";
+                throw yexception() << "Unexpected date/time format: '" << dateTimeFormat << "'";
             }
         }
 
@@ -396,7 +510,8 @@ namespace NYql {
     private:
         const TGenericState::TPtr State_;
 
-        TMapType Results_;
+        TTableDescriptionMap TableDescriptions_;
+
         NThreading::TFuture<void> AsyncFuture_;
     };
 

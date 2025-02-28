@@ -10,11 +10,11 @@ namespace NYT::NServiceDiscovery {
 
 struct TEndpoint
 {
-    TString Id;
-    TString Protocol;
-    TString Fqdn;
-    TString IP4Address;
-    TString IP6Address;
+    std::string Id;
+    std::string Protocol;
+    std::string Fqdn;
+    std::string IP4Address;
+    std::string IP6Address;
     int Port;
 
     //! Identifies whether this endpoint is ready to serve traffic according to the provider.
@@ -32,7 +32,7 @@ struct TEndpoint
 
 struct TEndpointSet
 {
-    TString Id;
+    std::string Id;
 
     std::vector<TEndpoint> Endpoints;
 };
@@ -43,8 +43,8 @@ struct IServiceDiscovery
     : public virtual TRefCounted
 {
     virtual TFuture<TEndpointSet> ResolveEndpoints(
-        const TString& cluster,
-        const TString& endpointSetId) = 0;
+        const std::string& cluster,
+        const std::string& endpointSetId) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IServiceDiscovery)

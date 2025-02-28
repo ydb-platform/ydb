@@ -2,15 +2,20 @@
 
 ## Install ydb-dstool package
 
+For Unix-like systems:
+
 ```bash
-user@host:~$ pip install ydb-dstool
+user@host:~$ curl -sSL 'https://install.ydb.tech/dstool' | bash
 ```
 
-## Set up environment and run
+For Windows:
 
-```bash
-user@host:~$ export PATH=${PATH}:${HOME}/.local/bin
-user@host:~$ ydb-dstool -e ydb.endpoint cluster list
+```powershell
+iex (New-Object System.Net.WebClient).DownloadString('https://install.ydb.tech/dstool-windows')
+```
+
+```cmd
+@"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://install.ydb.tech/dstool-windows'))"
 ```
 
 # How to run ydb-dstool from source
@@ -23,49 +28,12 @@ user@host:~$ cd github
 user@host:~/github$ git clone https://github.com/ydb-platform/ydb.git
 ```
 
-## Install grpc_tools python package
-
-Follow the steps described at https://grpc.io/docs/languages/python/quickstart.
-
-Typical command to install the `grpc_tools` package:
+## Use ya make to build ydb-dstool
 
 ```bash
-pip3 install grpcio-tools 'protobuf<5.0.0,>=3.13.0'
-```
-
-## Compile proto files for python
-
-```bash
-user@host:~$ cd ~/github/ydb
-user@host:~/github/ydb$ ydb_root=$(pwd)
-user@host:~/github/ydb$ ./ydb/apps/dstool/compile_protos.py --ydb-root ${ydb_root} 2>/dev/null
-```
-
-## Set up environment and run
-
-```bash
-user@host:~$ cd ~/github/ydb
-user@host:~/github/ydb$ ydb_root=$(pwd)
-user@host:~/github/ydb$ export PATH=${PATH}:${ydb_root}/ydb/apps/dstool
-user@host:~/github/ydb$ export PYTHONPATH=${PYTHONPATH}:${ydb_root}
-user@host:~/github/ydb$ alias ydb-dstool=${PWD}/main.py
-user@host:~/github/ydb$ ydb-dstool -e ydb.endpoint cluster list
-```
-
-# How to build and upload ydb-dstool package
-
-```bash
-user@host:~$ mkdir github
-user@host:~$ cd github
-user@host:~/github$ git clone https://github.com/ydb-platform/ydb.git
-user@host:~/github$ cd ydb
-user@host:~/github/ydb$ ydb_root=$(pwd)
-user@host:~/github/ydb$ ./ydb/apps/dstool/compile_protos.py --ydb-root ${ydb_root} 2>/dev/null
-user@host:~/github/ydb$ mv ydb/apps/dstool/setup.py .
-user@host:~/github/ydb$ python3 -m pip install --upgrade build
-user@host:~/github/ydb$ python3 -m build
-user@host:~/github/ydb$ python3 -m pip install --upgrade twine
-user@host:~/github/ydb$ python3 -m twine upload dist/*
+user@host:~/github$ cd ydb/apps/dstool
+user@host:~/github/ydb/apps/dstool$ ya make
+user@host:~/github/ydb/apps/dstool$ ./ydb-dstool --help
 ```
 
 # How to do things with ydb-dstool

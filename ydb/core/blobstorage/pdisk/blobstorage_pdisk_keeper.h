@@ -26,6 +26,8 @@ protected:
     TFreeChunks TrimmedFreeChunks; // Trimmed free chunk list for fast allocation
 
     TChunkTracker ChunkTracker;
+
+    friend class TPDisk;
 public:
 
     TKeeper(TPDiskMon &mon, TIntrusivePtr<TPDiskConfig> cfg)

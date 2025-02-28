@@ -250,12 +250,12 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
                 partition_at_keys {
                     split_points {
-                        type { tuple_type { elements { optional_type { item { type_id: UINT32 } } } } }
-                        value { items { uint32_value: 12345 } }
+                        type { tuple_type { elements { optional_type { item { type_id: UINT64 } } } } }
+                        value { items { uint64_value: 12345 } }
                     }
                     split_points {
-                        type { tuple_type { elements { optional_type { item { type_id: UINT32 } } } } }
-                        value { items { uint32_value: 54321 } }
+                        type { tuple_type { elements { optional_type { item { type_id: UINT64 } } } } }
+                        value { items { uint64_value: 54321 } }
                     }
                 }
                 partitioning_settings {
@@ -310,14 +310,14 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             NLs::PartitionCount(3),
             NLs::MinPartitionsCountEqual(3),
             NLs::MaxPartitionsCountEqual(3),
-            NLs::SplitBoundaries<ui32>({12345, 54321})
+            NLs::SplitBoundaries<ui64>({12345, 54321})
         });
         TestDescribeResult(DescribePrivatePath(runtime, JoinFsPaths("/MyRoot/vectors/by_embedding", PostingTable), true, true), {
             NLs::IsTable,
             NLs::PartitionCount(3),
             NLs::MinPartitionsCountEqual(3),
             NLs::MaxPartitionsCountEqual(3),
-            NLs::SplitBoundaries<ui32>({12345, 54321})
+            NLs::SplitBoundaries<ui64>({12345, 54321})
         });
 
         for (size_t i = 0; i != 3; ++i) {

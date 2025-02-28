@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
+#include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
@@ -20,6 +21,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
+#include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <yql/essentials/providers/pg/provider/yql_pg_provider_impl.h>
@@ -60,6 +62,38 @@ void AddQueryStats(NKqpProto::TKqpStatsQuery& total, NKqpProto::TKqpStatsQuery&&
     }
 
     total.SetWorkerCpuTimeUs(total.GetWorkerCpuTimeUs() + stats.GetWorkerCpuTimeUs());
+}
+
+bool CheckIsBatch(const TExprNode::TPtr& root, TExprContext& exprCtx) {
+    ui64 writeCount = 0;
+    ui64 readCount = 0;
+    bool isBatch = false;
+
+    VisitExpr(root, [&](const TExprNode::TPtr& node) {
+        if (node->ChildrenSize() == 2
+            && node->Child(0)->Content() == "is_batch"
+            && node->Child(1)->Content() == "true") {
+            isBatch = true;
+            return true;
+        }
+
+        if (NYql::NNodes::TCoWrite::Match(node.Get())) {
+            writeCount++;
+        } else if (NYql::NNodes::TCoRead::Match(node.Get())) {
+            readCount++;
+        }
+
+        return true;
+    });
+
+    if (isBatch && (writeCount > 1 || readCount != 0)) {
+        exprCtx.AddError(NYql::TIssue(
+            exprCtx.GetPosition(NYql::NNodes::TExprBase(root).Pos()),
+            "BATCH can't be used with multiple writes or reads."));
+        return false;
+    }
+
+    return true;
 }
 
 class TKqpResultWriter : public IResultWriter {
@@ -1338,6 +1372,10 @@ private:
             return result;
         }
 
+        if (!CheckIsBatch(queryExpr, ctx)) {
+            return result;
+        }
+
         YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*queryExpr, ctx);
 
         result.NeedToSplit = Config->EnableCreateTableAs && NeedToSplit(queryExpr, ctx);
@@ -1848,6 +1886,18 @@ private:
         TypesCtx->AddDataSink(NYql::PgProviderName, NYql::CreatePgDataSink(state));
     }
 
+    void InitSolomonProvider() {
+        auto solomonState = MakeIntrusive<TSolomonState>();
+
+        solomonState->Types = TypesCtx.Get();
+        solomonState->Gateway = FederatedQuerySetup->SolomonGateway;
+        solomonState->DqIntegration = NYql::CreateSolomonDqIntegration(solomonState);
+        solomonState->Configuration->Init(FederatedQuerySetup->SolomonGatewayConfig, TypesCtx);
+
+        TypesCtx->AddDataSource(NYql::SolomonProviderName, NYql::CreateSolomonDataSource(solomonState));
+        TypesCtx->AddDataSink(NYql::SolomonProviderName, NYql::CreateSolomonDataSink(solomonState));
+    }
+
     void Init(EKikimrQueryType queryType) {
         TransformCtx = MakeIntrusive<TKqlTransformContext>(Config, SessionCtx->QueryPtr(), SessionCtx->TablesPtr());
         KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, TransformCtx, *FuncRegistry, ActorSystem);
@@ -1883,6 +1933,9 @@ private:
             InitGenericProvider();
             if (FederatedQuerySetup->YtGateway) {
                 InitYtProvider();
+            }
+            if (FederatedQuerySetup->SolomonGateway) {
+                InitSolomonProvider();
             }
         }
 

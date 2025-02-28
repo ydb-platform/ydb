@@ -57,7 +57,7 @@ protected:
         }
     }
 
-    bool DoHandleChannelsAfterFinishImpl() override final{ 
+    bool DoHandleChannelsAfterFinishImpl() override final{
         Y_ABORT_UNLESS(this->Checkpoints);
 
         if (this->Checkpoints->HasPendingCheckpoint() && !this->Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
@@ -83,7 +83,7 @@ protected: //TDqComputeActorChannels::ICalbacks
 
         auto channel = inputChannel->Channel;
 
-        if (channelData.RowCount()) {
+        if (channelData.ChunkCount()) {
             TDqSerializedBatch batch;
             batch.Proto = std::move(*channelData.Proto.MutableData());
             batch.Payload = std::move(channelData.Payload);
@@ -211,7 +211,7 @@ protected:
         if (!limits.OutputChunkMaxSize) {
             limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
 	}
-    
+
         if (this->Task.GetEnableSpilling()) {
             TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback(), execCtx.GetErrorCallback()));
         }

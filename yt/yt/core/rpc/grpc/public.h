@@ -8,14 +8,14 @@ namespace NYT::NRpc::NGrpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TDispatcherConfig)
-DECLARE_REFCOUNTED_CLASS(TSslPemKeyCertPairConfig)
-DECLARE_REFCOUNTED_CLASS(TServerCredentialsConfig)
-DECLARE_REFCOUNTED_CLASS(TServerAddressConfig)
-DECLARE_REFCOUNTED_CLASS(TServerConfig)
-DECLARE_REFCOUNTED_CLASS(TChannelCredentialsConfig)
+DECLARE_REFCOUNTED_STRUCT(TDispatcherConfig)
+DECLARE_REFCOUNTED_STRUCT(TSslPemKeyCertPairConfig)
+DECLARE_REFCOUNTED_STRUCT(TServerCredentialsConfig)
+DECLARE_REFCOUNTED_STRUCT(TServerAddressConfig)
+DECLARE_REFCOUNTED_STRUCT(TServerConfig)
+DECLARE_REFCOUNTED_STRUCT(TChannelCredentialsConfig)
 DECLARE_REFCOUNTED_CLASS(TChannelConfigTemplate)
-DECLARE_REFCOUNTED_CLASS(TChannelConfig)
+DECLARE_REFCOUNTED_STRUCT(TChannelConfig)
 
 DECLARE_REFCOUNTED_STRUCT(IGrpcChannel)
 

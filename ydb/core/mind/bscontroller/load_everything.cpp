@@ -1,4 +1,6 @@
 #include "impl.h"
+#include "console_interaction.h"
+#include "group_geometry_info.h"
 
 #include <ydb/library/yaml_config/yaml_config.h>
 
@@ -95,9 +97,12 @@ public:
                 Self->TryToRelocateBrokenDisksLocallyFirst = state.GetValue<T::TryToRelocateBrokenDisksLocallyFirst>();
                 if (state.HaveValue<T::YamlConfig>()) {
                     Self->YamlConfig = DecompressYamlConfig(state.GetValue<T::YamlConfig>());
+                    Self->YamlConfigHash = GetSingleConfigHash(*Self->YamlConfig);
                 }
                 if (state.HaveValue<T::StorageYamlConfig>()) {
                     Self->StorageYamlConfig = DecompressStorageYamlConfig(state.GetValue<T::StorageYamlConfig>());
+                    Self->StorageYamlConfigVersion = NYamlConfig::GetStorageMetadata(*Self->StorageYamlConfig).Version.value_or(0);
+                    Self->StorageYamlConfigHash = NYaml::GetConfigHash(*Self->StorageYamlConfig);
                 }
                 if (state.HaveValue<T::ShredState>()) {
                     Self->ShredState.OnLoad(state.GetValue<T::ShredState>());
@@ -511,9 +516,23 @@ public:
             }
         }
 
+        THashMap<TBoxStoragePoolId, TGroupGeometryInfo> cache;
+
         // calculate group status for all groups
         for (auto& [id, group] : Self->GroupMap) {
             group->CalculateGroupStatus();
+
+            group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
+                const auto [it, inserted] = cache.try_emplace(group->StoragePoolId);
+                if (inserted) {
+                    if (const auto jt = Self->StoragePools.find(it->first); jt != Self->StoragePools.end()) {
+                        it->second = TGroupGeometryInfo(group->Topology->GType, jt->second.GetGroupGeometry());
+                    } else {
+                        Y_DEBUG_ABORT();
+                    }
+                }
+                return it->second;
+            });
         }
 
         return true;
@@ -522,6 +541,9 @@ public:
     void Complete(const TActorContext&) override {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE03, "TTxLoadEverything Complete");
         Self->LoadFinished();
+        if (!Self->SelfManagementEnabled) {
+            Self->ConsoleInteraction->Start();
+        }
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE04, "TTxLoadEverything InitQueue processed");
     }
 };

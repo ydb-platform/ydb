@@ -2,7 +2,7 @@ syntax = "proto3";
 
 option cc_enable_arenas = true;
 
-package NYql.Generic;
+package NYql.NGeneric;
 
 import "ydb/library/yql/providers/generic/connector/api/service/protos/connector.proto";
 import "yql/essentials/providers/common/proto/gateways_config.proto";

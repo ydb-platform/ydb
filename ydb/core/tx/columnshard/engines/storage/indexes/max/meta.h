@@ -1,5 +1,8 @@
 #pragma once
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
+
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 
 namespace NKikimr::NOlap::NIndexes::NMax {
 
@@ -8,9 +11,11 @@ public:
     static TString GetClassNameStatic() {
         return "MAX";
     }
+
 private:
     using TBase = TIndexByColumns;
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
+
 protected:
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const override {
         Y_UNUSED(newMeta);
@@ -77,4 +82,4 @@ public:
     std::shared_ptr<arrow::Scalar> GetMaxScalarVerified(const std::vector<TString>& data, const std::shared_ptr<arrow::DataType>& type) const;
 };
 
-}   // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NIndexes::NMax

@@ -977,6 +977,7 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_COMPILE_SERVICE", COMPUTE_NODE_COUNT)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_FORMAT_HANDLER", 1)
         wait_row_dispatcher_sensor_value(kikimr, "ClientsCount", 1)
         wait_row_dispatcher_sensor_value(kikimr, "RowsSent", 1, exact_match=False)
         wait_row_dispatcher_sensor_value(kikimr, "IncomingRequests", 1, exact_match=False)

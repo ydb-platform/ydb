@@ -1,5 +1,4 @@
 #pragma once
-#include "switch_type.h"
 #include <library/cpp/json/writer/json_value.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
@@ -43,19 +42,22 @@ TString SerializeSchema(const arrow::Schema& schema);
 std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::Schema>& schema, const ui32 rowsCount = 0);
 std::shared_ptr<arrow::Table> ToTable(const std::shared_ptr<arrow::RecordBatch>& batch);
 
-std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& combinedTable, const bool combine);
+std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& combinedTable);
 std::shared_ptr<arrow::RecordBatch> CombineBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches);
 std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& rb);
 std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& sharding, ui32 numShards);
 std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::vector<ui32>>& shardRows, const ui32 numShards);
 THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch, const THashMap<ui64, std::vector<ui32>>& shardRows);
 
-std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::Field>& field);
-std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::DataType>& type);
+std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(
+    const std::shared_ptr<arrow::Field>& field, const ui32 reserveItems = 0, const ui32 reserveSize = 0);
+std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(
+    const std::shared_ptr<arrow::DataType>& type, const ui32 reserveItems = 0, const ui32 reserveSize = 0);
 
 std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared_ptr<arrow::Schema>& schema,
     size_t reserve = 0, const std::map<std::string, ui64>& sizeByColumn = {});
 std::vector<std::shared_ptr<arrow::Array>> Finish(std::vector<std::unique_ptr<arrow::ArrayBuilder>>&& builders);
+std::shared_ptr<arrow::Array> FinishBuilder(std::unique_ptr<arrow::ArrayBuilder>&& builders);
 
 std::shared_ptr<arrow::UInt64Array> MakeUI64Array(const ui64 value, const i64 size);
 std::shared_ptr<arrow::StringArray> MakeStringArray(const TString& value, const i64 size);

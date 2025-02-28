@@ -1,4 +1,6 @@
 {%- set publish = target.publish -%}
 {%- set libraries = target.consumer|selectattr('type', 'eq', 'library') -%}
+{%- set with_kotlin = target.with_kotlin -%}
+{%- set kotlin_version = target.kotlin_version -%}
 
 {%- include "[generator]/jdk.jinja" -%}

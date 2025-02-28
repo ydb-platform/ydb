@@ -53,6 +53,10 @@ public:
         const NYPath::TYPath& path,
         const NApi::TUnfreezeTableOptions& options) override;
 
+    TFuture<void> CancelTabletTransition(
+        NTabletClient::TTabletId tabletId,
+        const NApi::TCancelTabletTransitionOptions& options) override;
+
     TFuture<void> ReshardTable(
         const NYPath::TYPath& path,
         const std::vector<NTableClient::TLegacyOwningKey>& pivotKeys,

@@ -42,7 +42,7 @@ $lambda = ($big_dec) -> {
     RETURN $big_dec;
 };
 
-$func = CALLABLE (Callable<(Decimal (10, 5)) -> Decimal (10, 5)>, $lambda);
+$func = Callable(Callable<(Decimal (10, 5)) -> Decimal (10, 5)>, $lambda);
 $small_dec = Decimal('3.0', 2, 1);
 
 SELECT

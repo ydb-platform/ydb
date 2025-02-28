@@ -203,3 +203,23 @@ message AcquireLockResult {
     uint64 cookie = 2;
     uint64 node_id = 3;
 }
+
+message CleanUpDataRequest {
+    uint64 generation = 1;
+    bool reset_actual_generation = 2;
+}
+
+message CleanUpDataResponse {
+    enum Status {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_SUCCESS = 1;
+        STATUS_ALREADY_COMPLETED = 2;
+        STATUS_ABORTED = 3;
+        STATUS_ERROR = 4;
+    }
+
+    uint64 generation = 1;
+    uint64 actual_generation = 2;
+    Status status = 3;
+    string error_reason = 4;
+}

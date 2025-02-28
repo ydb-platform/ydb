@@ -45,7 +45,6 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
 
     Y_UNIT_TEST(CheckSetConfig) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto settings = NYdb::NQuery::TExecuteQuerySettings()
             .Syntax(NYdb::NQuery::ESyntax::Pg)

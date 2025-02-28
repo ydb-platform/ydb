@@ -35,7 +35,6 @@
 
 using namespace std::string_view_literals;
 
-
 namespace NYT {
 namespace {
 

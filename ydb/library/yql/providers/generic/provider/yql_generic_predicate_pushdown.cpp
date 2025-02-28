@@ -112,6 +112,7 @@ namespace NYql {
             MATCH_TYPE(String, STRING);
             MATCH_TYPE(Utf8, UTF8);
             MATCH_TYPE(Json, JSON);
+            MATCH_TYPE(Timestamp, TIMESTAMP);
 
             ctx.Err << "unknown data slot " << static_cast<ui64>(dataSlot) << " for safe cast";
             return false;

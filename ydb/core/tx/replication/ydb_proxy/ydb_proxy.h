@@ -167,6 +167,9 @@ struct TEvYdbProxy {
                 , Data(msg.GetData())
                 , CreateTime(msg.GetCreateTime())
                 , Codec(codec)
+                , MessageGroupId(msg.GetMessageGroupId())
+                , ProducerId(msg.GetProducerId())
+                , SeqNo(msg.GetSeqNo())
             {
             }
 
@@ -186,6 +189,9 @@ struct TEvYdbProxy {
             TString& GetData() { return Data; }
             TInstant GetCreateTime() const { return CreateTime; }
             ECodec GetCodec() const { return Codec; }
+            TString& GetMessageGroupId() { return MessageGroupId; }
+            TString& GetProducerId() { return ProducerId; }
+            ui64 GetSeqNo() { return SeqNo; }
             void Out(IOutputStream& out) const;
 
         private:
@@ -193,6 +199,9 @@ struct TEvYdbProxy {
             TString Data;
             TInstant CreateTime;
             ECodec Codec;
+            TString MessageGroupId;
+            TString ProducerId;
+            ui64 SeqNo;
         };
 
         explicit TReadTopicResult(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {

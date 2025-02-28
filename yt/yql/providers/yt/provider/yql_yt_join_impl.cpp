@@ -274,8 +274,6 @@ TStatus UpdateInMemorySizeUsingBlocksSetting(TMapJoinSettings& settings, TYtSect
     const TStructExprType* itemType, const TVector<TString>& joinKeyList, const TYtState::TPtr& state, const TString& cluster,
     const TVector<TYtPathInfo::TPtr>& tables)
 {
-    Y_ENSURE(!op.JoinKind->IsAtom("Cross"));
-
     ui64 dataSize = 0;
     auto status = CalculateJoinLeafSize(dataSize, settings, inputSection, op, ctx, isLeft, itemType, joinKeyList, state, cluster, tables);
     if (status != TStatus::Ok) {
@@ -1624,13 +1622,49 @@ TExprNode::TPtr BuildBlockMapJoin(TExprNode::TPtr leftFlow, TExprNode::TPtr righ
         }
     }
 
-    auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, pos);
-    if (isUniqueKey) {
-        settingsBuilder
-            .Add()
-                .Name()
-                    .Value("rightAny")
-                .Build()
+    auto rightStream = ctx.Builder(pos)
+        .Callable("WideToBlocks")
+            .Callable(0, "FromFlow")
+                .Callable(0, "ExpandMap")
+                    .Add(0, std::move(rightFlow))
+                    .Add(1, std::move(rightExpandLambda))
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto rightStreamItemTypeNode = ctx.Builder(pos)
+        .Callable("StreamItemType")
+            .Callable(0, "TypeOf")
+                .Add(0, rightStream)
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto rightBlockStorage = ctx.Builder(pos)
+        .Callable("BlockStorage")
+            .Add(0, std::move(rightStream))
+        .Seal()
+        .Build();
+
+    if (joinType->Content() != "Cross") {
+        auto indexSettingsBuilder = Build<TCoNameValueTupleList>(ctx, pos);
+        if (isUniqueKey) {
+            indexSettingsBuilder
+                .Add()
+                    .Name()
+                        .Value("any")
+                    .Build()
+                .Build();
+        }
+
+        rightBlockStorage = ctx.Builder(pos)
+            .Callable("BlockMapJoinIndex")
+                .Add(0, std::move(rightBlockStorage))
+                .Add(1, rightStreamItemTypeNode)
+                .Add(2, ctx.NewList(pos, TExprNode::TListType(rightKeyColumnPositionNodes)))
+                .Add(3, indexSettingsBuilder.Done().Ptr())
+            .Seal()
             .Build();
     }
 
@@ -1639,28 +1673,21 @@ TExprNode::TPtr BuildBlockMapJoin(TExprNode::TPtr leftFlow, TExprNode::TPtr righ
             .Callable(0, "ToFlow")
                 .Callable(0, "WideFromBlocks")
                     .Callable(0, "BlockMapJoinCore")
-                        .Callable(0, "FromFlow")
-                            .Callable(0, "WideToBlocks")
+                        .Callable(0, "WideToBlocks")
+                            .Callable(0, "FromFlow")
                                 .Callable(0, "ExpandMap")
                                     .Add(0, std::move(leftFlow))
                                     .Add(1, std::move(leftExpandLambda))
                                 .Seal()
                             .Seal()
                         .Seal()
-                        .Callable(1, "FromFlow")
-                            .Callable(0, "WideToBlocks")
-                                .Callable(0, "ExpandMap")
-                                    .Add(0, std::move(rightFlow))
-                                    .Add(1, std::move(rightExpandLambda))
-                                .Seal()
-                            .Seal()
-                        .Seal()
-                        .Add(2, std::move(joinType))
-                        .Add(3, ctx.NewList(pos, std::move(leftKeyColumnPositionNodes)))
-                        .Add(4, ctx.NewList(pos, std::move(leftKeyDropPositionNodes)))
-                        .Add(5, ctx.NewList(pos, std::move(rightKeyColumnPositionNodes)))
-                        .Add(6, ctx.NewList(pos, std::move(rightKeyDropPositionNodes)))
-                        .Add(7, settingsBuilder.Done().Ptr())
+                        .Add(1, std::move(rightBlockStorage))
+                        .Add(2, std::move(rightStreamItemTypeNode))
+                        .Add(3, std::move(joinType))
+                        .Add(4, ctx.NewList(pos, std::move(leftKeyColumnPositionNodes)))
+                        .Add(5, ctx.NewList(pos, std::move(leftKeyDropPositionNodes)))
+                        .Add(6, ctx.NewList(pos, std::move(rightKeyColumnPositionNodes)))
+                        .Add(7, ctx.NewList(pos, std::move(rightKeyDropPositionNodes)))
                     .Seal()
                 .Seal()
             .Seal()
@@ -2087,46 +2114,56 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
             }
         }
 
-        TExprNode::TPtr joined;
-        if (!isCross) {
-            TExprNode::TListType leftKeyColumnNodes;
-            TExprNode::TListType leftKeyColumnNodesNullable;
-            auto mapInput = RemapNonConvertibleItems(listArg, mainLabel, *leftKeyColumns, outputKeyType, leftKeyColumnNodes, leftKeyColumnNodesNullable, ctx);
-
-            if (useBlocks) {
-                for (auto& [_, columnType] : columnTypes) {
-                    if (!IsSupportedAsBlockType(pos, *columnType, ctx, *state->Types)) {
-                        useBlocks = false;
-                        YQL_CLOG(INFO, ProviderYt) << "Block mapjoin won't be used because of unsupported type: " << *columnType;
-                        break;
-                    }
+        if (useBlocks) {
+            for (auto& [_, columnType] : columnTypes) {
+                if (!IsSupportedAsBlockType(pos, *columnType, ctx, *state->Types)) {
+                    useBlocks = false;
+                    YQL_CLOG(INFO, ProviderYt) << "Block mapjoin won't be used because of unsupported type: " << *columnType;
+                    break;
                 }
             }
+        }
 
-            if (useBlocks) {
-                if (!mapJoinUseFlow) {
-                    mapInput = ctx.Builder(pos)
-                        .Callable("ToFlow")
-                            .Add(0, std::move(mapInput))
-                        .Seal()
-                        .Build();
-                }
+        TExprNode::TPtr joined;
+        if (useBlocks) {
+            TExprNode::TListType leftKeyColumnNodes;
+            TExprNode::TListType leftKeyColumnNodesNullable;
 
-                tableContent = ctx.Builder(pos)
+            TExprNode::TPtr mapInput;
+            if (!isCross) {
+                mapInput = RemapNonConvertibleItems(listArg, mainLabel, *leftKeyColumns, outputKeyType, leftKeyColumnNodes, leftKeyColumnNodesNullable, ctx);
+            } else {
+                YQL_ENSURE(remappedMembers.empty());
+                mapInput = listArg;
+            }
+
+            if (!mapJoinUseFlow) {
+                mapInput = ctx.Builder(pos)
                     .Callable("ToFlow")
-                        .Add(0, std::move(tableContent))
-                        .Callable(1, "DependsOn")
-                            .Add(0, listArg)
-                        .Seal()
+                        .Add(0, std::move(mapInput))
                     .Seal()
                     .Build();
+            }
 
-                joined = BuildBlockMapJoin(std::move(mapInput), std::move(tableContent),
-                    leftKeyColumnNodes, leftOutputColumns, leftOutputColumnSources, leftUsedSourceColumns,
-                    remappedMembers, rightOutputColumns, rightOutputColumnSources, rightUsedSourceColumns,
-                    outItemType, joinType, pos, needPayload, isUniqueKey, ctx
-                );
-            } else {
+            tableContent = ctx.Builder(pos)
+                .Callable("ToFlow")
+                    .Add(0, std::move(tableContent))
+                    .Callable(1, "DependsOn")
+                        .Add(0, listArg)
+                    .Seal()
+                .Seal()
+                .Build();
+
+            joined = BuildBlockMapJoin(std::move(mapInput), std::move(tableContent),
+                leftKeyColumnNodes, leftOutputColumns, leftOutputColumnSources, leftUsedSourceColumns,
+                remappedMembers, rightOutputColumns, rightOutputColumnSources, rightUsedSourceColumns,
+                outItemType, joinType, pos, needPayload, isUniqueKey, ctx
+            );
+        } else {
+            if (!isCross) {
+                TExprNode::TListType leftKeyColumnNodes;
+                TExprNode::TListType leftKeyColumnNodesNullable;
+                auto mapInput = RemapNonConvertibleItems(listArg, mainLabel, *leftKeyColumns, outputKeyType, leftKeyColumnNodes, leftKeyColumnNodesNullable, ctx);
                 if (mapJoinUseFlow) {
                     joined = ctx.Builder(pos)
                         .Callable("FlatMap")
@@ -2180,31 +2217,31 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
                         .Seal()
                         .Build();
                 }
-            }
-        } else {
-            auto joinedOut = ctx.NewCallable(pos, "AsStruct", std::move(joinedOutNodes));
-            auto joinedBody = ctx.Builder(pos)
-                .Callable("Map")
-                    .Callable(0, "ToFlow")
-                        .Add(0, std::move(tableContent))
-                        .Callable(1, "DependsOn")
-                            .Add(0, listArg)
+            } else {
+                auto joinedOut = ctx.NewCallable(pos, "AsStruct", std::move(joinedOutNodes));
+                auto joinedBody = ctx.Builder(pos)
+                    .Callable("Map")
+                        .Callable(0, "ToFlow")
+                            .Add(0, std::move(tableContent))
+                            .Callable(1, "DependsOn")
+                                .Add(0, listArg)
+                            .Seal()
+                        .Seal()
+                        .Lambda(1)
+                            .Param("smallRow")
+                            .ApplyPartial(nullptr, std::move(joinedOut)).WithNode(*lookupArg, "smallRow").Seal()
                         .Seal()
                     .Seal()
-                    .Lambda(1)
-                        .Param("smallRow")
-                        .ApplyPartial(nullptr, std::move(joinedOut)).WithNode(*lookupArg, "smallRow").Seal()
-                    .Seal()
-                .Seal()
-                .Build();
+                    .Build();
 
-            auto joinedLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, { mainArg }), std::move(joinedBody));
-            joined = ctx.Builder(pos)
-                .Callable("FlatMap")
-                .Add(0, listArg)
-                .Add(1, std::move(joinedLambda))
-                .Seal()
-                .Build();
+                auto joinedLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, { mainArg }), std::move(joinedBody));
+                joined = ctx.Builder(pos)
+                    .Callable("FlatMap")
+                    .Add(0, listArg)
+                    .Add(1, std::move(joinedLambda))
+                    .Seal()
+                    .Build();
+            }
         }
 
         auto mapLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {std::move(listArg)}), std::move(joined));
@@ -3605,9 +3642,6 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
 
             bool mapJoinUseFlow = state->Configuration->MapJoinUseFlow.Get().GetOrElse(DEFAULT_MAP_JOIN_USE_FLOW);
             bool mapJoinUseBlocks = state->Configuration->BlockMapJoin.Get().GetOrElse(state->Types->UseBlocks);
-            if (joinType == "Cross") {
-                mapJoinUseBlocks = false;
-            }
 
             if (leftTablesReady) {
                 auto status = UpdateInMemorySizeSetting(mapSettings, leftLeaf.Section, labels, op, ctx, true, leftItemType, leftJoinKeyList, state, cluster, leftTables, mapJoinUseFlow);

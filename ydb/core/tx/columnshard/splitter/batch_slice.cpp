@@ -161,7 +161,8 @@ TGeneralSerializedSlice::TGeneralSerializedSlice(const THashMap<ui32, std::vecto
             if (!recordsCount) {
                 recordsCount = entity.GetRecordsCount();
             } else {
-                AFL_VERIFY(*recordsCount == entity.GetRecordsCount())("records_count", *recordsCount)("column", entity.GetRecordsCount());
+                AFL_VERIFY(*recordsCount == entity.GetRecordsCount())("records_count", *recordsCount)("column", entity.GetRecordsCount())(
+                                              "chunks", chunks.size());
             }
         }
         Size += entity.GetSize();

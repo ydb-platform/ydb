@@ -136,7 +136,8 @@ private:
 
 TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> params)
     : MetricRegistryPtr_(nullptr)
-    , ResponseQueue_(CreateThreadPool(params->GetClientThreadsNum()))
+    , ClientThreadsNum_(params->GetClientThreadsNum())
+    , ResponseQueue_(CreateThreadPool(ClientThreadsNum_))
     , DefaultDiscoveryEndpoint_(params->GetEndpoint())
     , SslCredentials_(params->GetSslCredentials())
     , DefaultDatabase_(params->GetDatabase())
@@ -144,6 +145,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , StateTracker_(this)
     , DefaultDiscoveryMode_(params->GetDiscoveryMode())
     , MaxQueuedRequests_(params->GetMaxQueuedRequests())
+    , MaxQueuedResponses_(params->GetMaxQueuedResponses())
     , DrainOnDtors_(params->GetDrinOnDtors())
     , BalancingSettings_(params->GetBalancingSettings())
     , GRpcKeepAliveTimeout_(params->GetGRpcKeepAliveTimeout())
@@ -153,14 +155,17 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , MaxOutboundMessageSize_(params->GetMaxOutboundMessageSize())
     , MaxMessageSize_(params->GetMaxMessageSize())
     , QueuedRequests_(0)
+    , TcpKeepAliveSettings_(params->GetTcpKeepAliveSettings())
+    , SocketIdleTimeout_(params->GetSocketIdleTimeout())
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    , ChannelPool_(params->GetTcpKeepAliveSettings(), params->GetSocketIdleTimeout())
+    , ChannelPool_(TcpKeepAliveSettings_, SocketIdleTimeout_)
 #endif
-    , GRpcClientLow_(params->GetNetworkThreadsNum())
+    , NetworkThreadsNum_(params->GetNetworkThreadsNum())
+    , GRpcClientLow_(NetworkThreadsNum_)
     , Log(params->GetLog())
 {
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    if (params->GetSocketIdleTimeout() != TDuration::Max()) {
+    if (SocketIdleTimeout_ != TDuration::Max()) {
         auto channelPoolUpdateWrapper = [this]
             (NYdb::NIssue::TIssues&&, EStatus status) mutable
         {
@@ -171,11 +176,11 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
             ChannelPool_.DeleteExpiredStubsHolders();
             return true;
         };
-        AddPeriodicTask(channelPoolUpdateWrapper, params->GetSocketIdleTimeout() * 0.1);
+        AddPeriodicTask(channelPoolUpdateWrapper, SocketIdleTimeout_ * 0.1);
     }
 #endif
     //TAdaptiveThreadPool ignores params
-    ResponseQueue_->Start(params->GetClientThreadsNum(), params->GetMaxQueuedResponses());
+    ResponseQueue_->Start(ClientThreadsNum_, MaxQueuedResponses_);
     if (!DefaultDatabase_.empty()) {
         DefaultState_ = StateTracker_.GetDriverState(
             DefaultDatabase_,

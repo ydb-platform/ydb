@@ -14,6 +14,7 @@ SRCS(
     mock_service.cpp
     test_env.h
     test_table.cpp
+    test_topic.cpp
     write_topic.h
 )
 

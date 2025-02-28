@@ -1613,18 +1613,37 @@
             ]
         },
         {
+            "Name": "TCoBlockStorage",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "BlockStorage"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TCoBlockMapJoinIndex",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "BlockMapJoinIndex"},
+            "Children": [
+                {"Index": 0, "Name": "BlockStorage", "Type": "TExprBase"},
+                {"Index": 1, "Name": "InputType", "Type": "TExprBase"},
+                {"Index": 2, "Name": "KeyColumns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "Options", "Type": "TExprList"}
+            ]
+        },
+        {
             "Name": "TCoBlockMapJoinCore",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "BlockMapJoinCore"},
             "Children": [
                 {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
                 {"Index": 1, "Name": "RightInput", "Type": "TExprBase"},
-                {"Index": 2, "Name": "JoinKind", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "LeftKeyColumns", "Type": "TCoAtomList"},
-                {"Index": 4, "Name": "LeftKeyDrops", "Type": "TCoAtomList"},
-                {"Index": 5, "Name": "RightKeyColumns", "Type": "TCoAtomList"},
-                {"Index": 6, "Name": "RightKeyDrops", "Type": "TCoAtomList"},
-                {"Index": 7, "Name": "Options", "Type": "TExprList"}
+                {"Index": 2, "Name": "RightInputType", "Type": "TExprBase"},
+                {"Index": 3, "Name": "JoinKind", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "LeftKeyColumns", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "LeftKeyDrops", "Type": "TCoAtomList"},
+                {"Index": 6, "Name": "RightKeyColumns", "Type": "TCoAtomList"},
+                {"Index": 7, "Name": "RightKeyDrops", "Type": "TCoAtomList"}
             ]
         },
         {

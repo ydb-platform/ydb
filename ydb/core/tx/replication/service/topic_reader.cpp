@@ -58,10 +58,10 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
         for (auto& msg : result.Messages) {
             Y_ABORT_UNLESS(msg.GetCodec() == NYdb::NTopic::ECodec::RAW);
-            records.emplace_back(msg.GetOffset(), std::move(msg.GetData()), msg.GetCreateTime());
+            records.emplace_back(msg.GetOffset(), std::move(msg.GetData()), msg.GetCreateTime(), std::move(msg.GetMessageGroupId()), std::move(msg.GetProducerId()), msg.GetSeqNo());
         }
 
-        Send(Worker, new TEvWorker::TEvData(ToString(result.PartitionId), std::move(records)));
+        Send(Worker, new TEvWorker::TEvData(result.PartitionId, ToString(result.PartitionId), std::move(records)));
     }
 
     void Handle(TEvYdbProxy::TEvTopicEndPartition::TPtr& ev) {

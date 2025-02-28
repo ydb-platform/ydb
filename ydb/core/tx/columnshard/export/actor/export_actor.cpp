@@ -8,7 +8,7 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
     auto data = ev->Get()->ArrowBatch;
     AFL_VERIFY(!!data || ev->Get()->Finished);
     if (data) {
-        CurrentData = NArrow::ToBatch(data, true);
+        CurrentData = NArrow::ToBatch(data);
         CurrentDataBlob = ExportSession->GetTask().GetSerializer()->SerializeFull(CurrentData);
         if (data) {
             auto controller = std::make_shared<TWriteController>(SelfId(), std::vector<TString>({CurrentDataBlob}), 

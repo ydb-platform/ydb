@@ -48,9 +48,9 @@ cdef extern from "library/cpp/monlib/metrics/metric.h" namespace "NMonitoring" n
     cdef cppclass TCounter:
         TCounter(ui64 value) except +
 
-        void Set(ui64)
         ui64 Get() const
-        void Inc()
+        ui64 Add(ui64)
+        ui64 Inc()
         void Reset()
 
     cdef cppclass TRate:

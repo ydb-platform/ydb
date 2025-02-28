@@ -1,7 +1,6 @@
 #pragma once
 
 #include "sql_translation.h"
-#include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
 
 namespace NSQLTranslationV1 {
 

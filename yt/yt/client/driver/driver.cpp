@@ -115,8 +115,8 @@ public:
     TDriver(
         TDriverConfigPtr config,
         IConnectionPtr connection,
-        TSignatureGeneratorBasePtr signatureGenerator,
-        TSignatureValidatorBasePtr signatureValidator)
+        ISignatureGeneratorPtr signatureGenerator,
+        ISignatureValidatorPtr signatureValidator)
         : Config_(std::move(config))
         , Connection_(std::move(connection))
         , ClientCache_(New<TClientCache>(Config_->ClientCache, Connection_))
@@ -230,6 +230,7 @@ public:
         REGISTER    (TRemountTableCommand,                 "remount_table",                   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TFreezeTableCommand,                  "freeze_table",                    Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TUnfreezeTableCommand,                "unfreeze_table",                  Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TCancelTabletTransitionCommand,       "cancel_tablet_transition",        Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TReshardTableCommand,                 "reshard_table",                   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TAlterTableCommand,                   "alter_table",                     Null,       Structured, true,  false, ApiVersion4);
 
@@ -501,12 +502,12 @@ public:
         return Connection_;
     }
 
-    TSignatureGeneratorBasePtr GetSignatureGenerator() override
+    ISignatureGeneratorPtr GetSignatureGenerator() override
     {
         return SignatureGenerator_;
     }
 
-    TSignatureValidatorBasePtr GetSignatureValidator() override
+    ISignatureValidatorPtr GetSignatureValidator() override
     {
         return SignatureValidator_;
     }
@@ -534,8 +535,8 @@ private:
     TClientCachePtr ClientCache_;
     const IClientPtr RootClient_;
     IProxyDiscoveryCachePtr ProxyDiscoveryCache_;
-    TSignatureGeneratorBasePtr SignatureGenerator_;
-    TSignatureValidatorBasePtr SignatureValidator_;
+    ISignatureGeneratorPtr SignatureGenerator_;
+    ISignatureValidatorPtr SignatureValidator_;
 
     class TCommandContext;
     using TCommandContextPtr = TIntrusivePtr<TCommandContext>;
@@ -729,8 +730,8 @@ private:
 IDriverPtr CreateDriver(
     IConnectionPtr connection,
     TDriverConfigPtr config,
-    TSignatureGeneratorBasePtr signatureGenerator,
-    TSignatureValidatorBasePtr signatureValidator)
+    ISignatureGeneratorPtr signatureGenerator,
+    ISignatureValidatorPtr signatureValidator)
 {
     YT_VERIFY(connection);
     YT_VERIFY(config);

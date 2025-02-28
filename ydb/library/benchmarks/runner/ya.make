@@ -2,9 +2,7 @@ PY3TEST()
 
 SIZE(LARGE)
 
-TAG(
-    ya:fat
-)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 TEST_SRCS(
     tpc_tests.py

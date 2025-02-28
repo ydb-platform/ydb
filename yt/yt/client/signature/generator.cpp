@@ -10,56 +10,42 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSignaturePtr TSignatureGeneratorBase::Sign(TYsonString data)
+TSignaturePtr ISignatureGenerator::Sign(std::string payload)
 {
     auto signature = New<TSignature>();
-    signature->Payload_ = std::move(data);
+    signature->Payload_ = std::move(payload);
     Sign(signature);
     return signature;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TYsonString& TSignatureGeneratorBase::GetHeader(const TSignaturePtr& signature)
+struct TDummySignatureGenerator
+    : public ISignatureGenerator
 {
-    return signature->Header_;
-}
-
-std::vector<std::byte>& TSignatureGeneratorBase::GetSignature(const TSignaturePtr& signature)
-{
-    return signature->Signature_;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TDummySignatureGenerator
-    : public TSignatureGeneratorBase
-{
-public:
     void Sign(const TSignaturePtr& signature) override
     {
-        GetHeader(signature) = NYson::TYsonString("DummySignature"_sb);
+        signature->Header_ = NYson::TYsonString("DummySignature"_sb);
     }
 };
 
-TSignatureGeneratorBasePtr CreateDummySignatureGenerator()
+ISignatureGeneratorPtr CreateDummySignatureGenerator()
 {
     return New<TDummySignatureGenerator>();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TAlwaysThrowingSignatureGenerator
-    : public TSignatureGeneratorBase
+struct TAlwaysThrowingSignatureGenerator
+    : public ISignatureGenerator
 {
-public:
     void Sign(const TSignaturePtr& /*signature*/) override
     {
         THROW_ERROR_EXCEPTION("Signature generation is unsupported");
     }
 };
 
-TSignatureGeneratorBasePtr CreateAlwaysThrowingSignatureGenerator()
+ISignatureGeneratorPtr CreateAlwaysThrowingSignatureGenerator()
 {
     return New<TAlwaysThrowingSignatureGenerator>();
 }

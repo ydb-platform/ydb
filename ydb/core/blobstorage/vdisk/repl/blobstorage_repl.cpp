@@ -604,7 +604,7 @@ namespace NKikimr {
             DonorQueryActors.insert(Register(new TDonorQueryActor(*ev->Get(), Donors, ReplCtx->VCtx)));
         }
 
-        void Handle(TEvents::TEvActorDied::TPtr ev) {
+        void Handle(TEvents::TEvGone::TPtr ev) {
             const size_t num = DonorQueryActors.erase(ev->Sender);
             Y_ABORT_UNLESS(num);
         }
@@ -630,7 +630,7 @@ namespace NKikimr {
             hFunc(TEvVGenerationChange, HandleGenerationChange)
             hFunc(TEvResumeForce, Handle)
             hFunc(TEvBlobStorage::TEvEnrichNotYet, Handle)
-            hFunc(TEvents::TEvActorDied, Handle)
+            hFunc(TEvents::TEvGone, Handle)
             cFunc(TEvBlobStorage::EvCommenceRepl, StartReplication)
             hFunc(TEvReplInvoke, Handle)
             hFunc(TEvReplCheckProgress, ReplProgressWatchdog)
@@ -682,7 +682,7 @@ namespace NKikimr {
             hFunc(TEvVGenerationChange, HandleGenerationChange)
             hFunc(TEvResumeForce, Handle)
             hFunc(TEvBlobStorage::TEvEnrichNotYet, Handle)
-            hFunc(TEvents::TEvActorDied, Handle)
+            hFunc(TEvents::TEvGone, Handle)
             cFunc(TEvBlobStorage::EvCommenceRepl, Ignore)
             hFunc(TEvReplInvoke, Handle)
             hFunc(TEvReplCheckProgress, ReplProgressWatchdog)

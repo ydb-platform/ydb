@@ -575,6 +575,19 @@ void TUnfreezeTableCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TCancelTabletTransitionCommand::DoExecute(ICommandContextPtr context)
+{
+    auto asyncResult = context->GetClient()->CancelTabletTransition(
+        TabletId,
+        Options);
+    WaitFor(asyncResult)
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TReshardTableCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("pivot_keys", &TThis::PivotKeys)
@@ -869,6 +882,12 @@ void TSelectRowsCommand::DoExecute(ICommandContextPtr context)
             Options.Timestamp);
     }
 
+    auto format = context->GetOutputFormat();
+    // Allows to display simple types like `timestamp` correctly in UI (YT-16386).
+    if (format.GetType() == EFormatType::WebJson) {
+        Options.UseOriginalTableSchema = true;
+    }
+
     auto result = WaitFor(clientBase->SelectRows(Query, Options))
         .ValueOrThrow();
 
@@ -883,7 +902,6 @@ void TSelectRowsCommand::DoExecute(ICommandContextPtr context)
         });
     }
 
-    auto format = context->GetOutputFormat();
     auto output = context->Request().OutputStream;
     auto writer = CreateSchemafulWriterForFormat(format, rowset->GetSchema(), output);
 

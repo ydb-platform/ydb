@@ -9,6 +9,7 @@ bool CheckBlockIOSupportedTypes(
     const TSet<TString>& supportedTypes,
     const TSet<NUdf::EDataSlot>& supportedDataTypes,
     std::function<void(const TString&)> unsupportedTypeHandler,
+    size_t wideFlowLimit,
     bool allowNestedOptionals = true
 );
 

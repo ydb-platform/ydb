@@ -172,7 +172,7 @@ TConclusionStatus TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*ta
                     Context.GetActualSchema()
                         ->NormalizeBatch(*Context.GetActualSchema(), std::make_shared<NArrow::TGeneralContainer>(OriginalBatch), columnIdsSet)
                         .DetachResult();
-                OriginalBatch = NArrow::ToBatch(normalized->BuildTableVerified(), true);
+                OriginalBatch = NArrow::ToBatch(normalized->BuildTableVerified());
             }
         }
         auto batches = BuildSlices();

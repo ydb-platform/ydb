@@ -6,11 +6,9 @@
 #include "viewer_helper.h"
 #include "viewer_tabletinfo.h"
 #include "wb_group.h"
-#include <library/cpp/protobuf/json/proto2json.h>
 
 namespace NKikimr::NViewer {
 
-using namespace NProtobufJson;
 using namespace NActors;
 using namespace NNodeWhiteboard;
 
@@ -3230,15 +3228,7 @@ public:
             }
         }
         AddEvent("RenderingResult");
-        TStringStream out;
-        Proto2Json(json, out, {
-            .EnumMode = TProto2JsonConfig::EnumValueMode::EnumName,
-            .MapAsObject = true,
-            .StringifyNumbers = TProto2JsonConfig::EStringifyNumbersMode::StringifyInt64Always,
-            .WriteNanAsString = true,
-        });
-        AddEvent("ResultReady");
-        TBase::ReplyAndPassAway(GetHTTPOKJSON(out.Str()));
+        TBase::ReplyAndPassAway(GetHTTPOKJSON(json));
     }
 
     static YAML::Node GetSwagger() {

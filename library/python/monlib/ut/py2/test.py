@@ -252,6 +252,16 @@ def test_gauge_sensors():
     assert ig.get() == 5
 
 
+def test_counter():
+    registry = MetricRegistry()
+    c = registry.counter({'a': 'b'})
+
+    assert c.inc() == 1
+    assert c.add(2) == 3
+    c.reset()
+    assert c.get() == 0
+
+
 UNISTAT_DATA = """[
     ["signal1_max", 10],
     ["signal2_hgram", [[0, 100], [50, 200], [200, 300]]],

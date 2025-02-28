@@ -207,12 +207,6 @@ TExecutorGCLogic::TChannelInfo::TChannelInfo()
 {
 }
 
-void TExecutorGCLogic::TChannelInfo::ApplyDelta(TGCTime time, TGCBlobDelta& delta) {
-    TGCBlobDelta& committedDelta = CommittedDelta[time];
-    DoSwap(committedDelta, delta);
-    Y_DEBUG_ABORT_UNLESS(delta.Created.empty() && delta.Deleted.empty());
-}
-
 void TExecutorGCLogic::MergeVectors(TVector<TLogoBlobID>& destination, const TVector<TLogoBlobID>& source) {
     if (!source.empty()) {
         destination.insert(destination.end(), source.begin(), source.end());
@@ -388,7 +382,7 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
 
     // The first barrier of gen:0 (zero entry) is special
     TGCTime zeroTime{ generation, 0 };
-    if (KnownGcBarrier < zeroTime && collectBarrier < zeroTime && zeroTime <= uncommittedTime) {
+    if (CommitedGcBarrier < zeroTime && collectBarrier < zeroTime && zeroTime <= uncommittedTime) {
         collectBarrier = zeroTime;
     }
 

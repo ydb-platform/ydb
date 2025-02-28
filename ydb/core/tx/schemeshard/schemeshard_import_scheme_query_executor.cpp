@@ -99,7 +99,7 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
     void Finish(Ydb::StatusIds::StatusCode status, std::variant<TString, NKikimrSchemeOp::TModifyScheme> result) {
         auto logMessage = TStringBuilder() << "TSchemeQueryExecutor Reply"
             << ", self: " << SelfId()
-            << ", success: " << status;
+            << ", status: " << status;
         LOG_I(logMessage);
 
         std::visit([&]<typename T>(T& value) {

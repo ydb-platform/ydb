@@ -1,6 +1,7 @@
 #include "dst_creator.h"
 #include "private_events.h"
 #include "stream_creator.h"
+#include "target_table.h"
 
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
@@ -39,7 +40,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
         env.GetRuntime().Register(CreateStreamCreator(
             env.GetSender(), env.GetYdbProxy(), 1 /* rid */, 1 /* tid */,
-            TReplication::ETargetKind::Table, "/Root/Table", "/Root/Replica",
+            std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
             "Stream", TDuration::Hours(1), resolvedTimestamps
         ));
         {

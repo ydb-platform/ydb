@@ -22,6 +22,7 @@ public:
     TCommandImportFromS3();
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
+    void ExtractParams(TConfig& config) override;
     int Run(TConfig& config) override;
 
 private:
@@ -56,6 +57,7 @@ public:
         Args[0] = "<input files...>";
     }
     void Config(TConfig& config) override;
+    void ExtractParams(TConfig& config) override;
     void Parse(TConfig& config) override;
 
 protected:

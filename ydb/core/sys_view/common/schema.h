@@ -49,6 +49,8 @@ constexpr TStringBuf PgTablesName = "pg_tables";
 constexpr TStringBuf InformationSchemaTablesName = "tables";
 constexpr TStringBuf PgClassName = "pg_class";
 
+constexpr TStringBuf ResourcePoolClassifiersName = "resource_pool_classifiers";
+
 namespace NAuth {
     constexpr TStringBuf UsersName = "auth_users";
     constexpr TStringBuf GroupsName = "auth_groups";
@@ -304,6 +306,7 @@ struct Schema : NIceDb::Schema {
         struct PutTabletLogLatency : Column<13, NScheme::NTypeIds::Interval> {};
         struct PutUserDataLatency : Column<14, NScheme::NTypeIds::Interval> {};
         struct GetFastLatency : Column<15, NScheme::NTypeIds::Interval> {};
+        struct LayoutCorrect : Column<16, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<GroupId>;
         using TColumns = TableColumns<
@@ -319,7 +322,8 @@ struct Schema : NIceDb::Schema {
             SeenOperational,
             PutTabletLogLatency,
             PutUserDataLatency,
-            GetFastLatency>;
+            GetFastLatency,
+            LayoutCorrect>;
     };
 
     struct StoragePools : Table<7> {
@@ -700,6 +704,18 @@ struct Schema : NIceDb::Schema {
         const TVector<PgColumn>& GetColumns(TStringBuf tableName) const;
     private:
         std::unordered_map<TString, TVector<PgColumn>> columnsStorage;
+    };
+
+    struct ResourcePoolClassifiers : Table<20> {
+        struct Name    : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Rank    : Column<2, NScheme::NTypeIds::Int64> {};
+        struct Config  : Column<3, NScheme::NTypeIds::JsonDocument> {};
+
+        using TKey = TableKey<Name>;
+        using TColumns = TableColumns<
+            Name,
+            Rank,
+            Config>;
     };
 };
 

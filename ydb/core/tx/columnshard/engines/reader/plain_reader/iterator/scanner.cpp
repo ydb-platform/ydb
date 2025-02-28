@@ -125,10 +125,7 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
 }
 
 TConclusion<bool> TScanHead::BuildNextInterval() {
-    if (Context->IsAborted()) {
-        return false;
-    }
-    while (BorderPoints.size()) {
+    while (BorderPoints.size() && !Context->IsAborted()) {
         if (BorderPoints.begin()->second.GetStartSources().size()) {
             if (FetchingIntervals.size() >= InFlightLimit) {
                 AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_next_interval")("reason", "too many intervals in flight")(

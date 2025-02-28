@@ -131,6 +131,7 @@ public:
         std::shared_ptr<IKqpNodeState> State = nullptr;
         TComputeActorSchedulingOptions SchedulingOptions = {};
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+        TString Database;
     };
 
     typedef std::variant<TActorId, NKikimr::NKqp::NRm::TKqpRMAllocateResult> TActorStartResult;

@@ -101,6 +101,24 @@ namespace NTable {
                 aggr.MemTableOps += Self->GetOpsCount();
             }
 
+            /**
+             * Returns serial before the transaction (when in transaction),
+             * but possibly after schema changes or memtable flushes.
+             */
+            ui64 StableSerial() const noexcept
+            {
+                return DataModified && !EpochSnapshot ? SerialBackup : Serial;
+            }
+
+            /**
+             * Returns epoch before the transaction (when in transaction),
+             * but possibly after schema changes or memtable flushes.
+             */
+            TEpoch StableHead() const noexcept
+            {
+                return EpochSnapshot ? *EpochSnapshot : Self->Head();
+            }
+
             const ui32 Table = Max<ui32>();
             const TIntrusivePtr<TTable> Self;
             const TTxStamp Edge = 0;    /* Stamp of last snapshot       */
@@ -145,6 +163,14 @@ namespace NTable {
         ui64 Serial() const noexcept
         {
             return Serial_;
+        }
+
+        /**
+         * Returns serial before the transaction (when in transaction)
+         */
+        ui64 StableSerial() const noexcept
+        {
+            return InTransaction ? Begin_ : Serial_;
         }
 
         TTableWrapper& Get(ui32 table, bool require) noexcept
@@ -481,21 +507,16 @@ namespace NTable {
             wrap.Aggr(Stats, true /* enter */);
         }
 
-        void Replace(ui32 tid, TArrayRef<const TPartView> partViews, const TSubset &subset) noexcept
+        void Replace(
+            ui32 tid,
+            const TSubset &subset,
+            TArrayRef<const TPartView> newParts,
+            TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> newTxStatus) noexcept
         {
             auto &wrap = Get(tid, true);
 
             wrap.Aggr(Stats, false /* leave */);
-            wrap->Replace(partViews, subset);
-            wrap.Aggr(Stats, true /* enter */);
-        }
-
-        void ReplaceTxStatus(ui32 tid, TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> txStatus, const TSubset &subset) noexcept
-        {
-            auto &wrap = Get(tid, true);
-
-            wrap.Aggr(Stats, false /* leave */);
-            wrap->ReplaceTxStatus(txStatus, subset);
+            wrap->Replace(subset, newParts, newTxStatus);
             wrap.Aggr(Stats, true /* enter */);
         }
 
@@ -524,6 +545,22 @@ namespace NTable {
             wrap.Aggr(Stats, false /* leave */);
             wrap->Merge(std::move(txStatus));
             wrap.Aggr(Stats, true /* enter */);
+        }
+
+        void MergeDone(ui32 tid) noexcept
+        {
+            auto &wrap = Get(tid, true);
+
+            wrap.Aggr(Stats, false /* leave */);
+            wrap->MergeDone();
+            wrap.Aggr(Stats, true /* enter */);
+        }
+
+        void MergeDone() noexcept
+        {
+            for (auto &pr : Tables) {
+                MergeDone(pr.first);
+            }
         }
 
         bool ApplySchema(const TSchemeChanges &delta)

@@ -44,11 +44,10 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSingletonsConfig
+struct TSingletonsConfig
     : public NDetail::TSingletonsConfigBase<true>
     , public virtual NYTree::TYsonStruct
 {
-public:
     REGISTER_YSON_STRUCT(TSingletonsConfig);
 
     static void Register(TRegistrar registrar);
@@ -58,11 +57,10 @@ DEFINE_REFCOUNTED_TYPE(TSingletonsConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSingletonsDynamicConfig
+struct TSingletonsDynamicConfig
     : public NDetail::TSingletonsConfigBase<false>
     , public virtual NYTree::TYsonStruct
 {
-public:
     REGISTER_YSON_STRUCT(TSingletonsDynamicConfig);
 
     static void Register(TRegistrar registrar);

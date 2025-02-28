@@ -209,7 +209,7 @@ bool TNodeInfo::IsAllowedToRunTablet(const TTabletInfo& tablet, TTabletDebugStat
     return true;
 }
 
-i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet) const {
+i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet, TDataCenterPriority& dcPriority) const {
     i32 priority = 0;
 
     auto it = TabletAvailability.find(tablet.GetTabletType());
@@ -220,6 +220,9 @@ i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet) const {
     if (tablet.FailedNodeId == Id) {
         --priority;
     }
+
+    priority += dcPriority[GetDataCenter()];
+    priority -= GetRestartsPerPeriod() / Hive.GetNodeRestartsForPenalty();
 
     return priority;
 }

@@ -17,10 +17,9 @@ namespace NYT::NDriver {
 constexpr int ApiVersion3 = 3;
 constexpr int ApiVersion4 = 4;
 
-class TDriverConfig
+struct TDriverConfig
     : public NYTree::TYsonStruct
 {
-public:
     NApi::TFileReaderConfigPtr FileReader;
     NApi::TFileWriterConfigPtr FileWriter;
     NTableClient::TTableReaderConfigPtr TableReader;

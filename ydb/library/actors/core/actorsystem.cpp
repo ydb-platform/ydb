@@ -1,4 +1,5 @@
 #include "defs.h"
+#include "debug.h"
 #include "activity_guard.h"
 #include "actorsystem.h"
 #include "callstack.h"
@@ -12,6 +13,7 @@
 #include "log.h"
 #include "probes.h"
 #include "ask.h"
+#include "thread_context.h"
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/datetime.h>
 #include <util/generic/hash.h>
@@ -19,6 +21,7 @@
 #include <util/random/random.h>
 
 namespace NActors {
+
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
     TActorSetupCmd::TActorSetupCmd()
@@ -167,9 +170,9 @@ namespace NActors {
         if (!TlsThreadContext) {
             return this->GenericSend<&IExecutorPool::Send>(ev);
         } else {
-            ESendingType previousType = std::exchange(TlsThreadContext->SendingType, sendingType);
+            ESendingType previousType = TlsThreadContext->ExchangeSendingType(sendingType);
             bool isSent = this->GenericSend<&IExecutorPool::SpecificSend>(ev);
-            TlsThreadContext->SendingType = previousType;
+            TlsThreadContext->SetSendingType(previousType);
             return isSent;
         }
     }
@@ -273,6 +276,7 @@ namespace NActors {
     }
 
     void TActorSystem::Start() {
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start");
         Y_ABORT_UNLESS(StartExecuted == false);
         StartExecuted = true;
 
@@ -283,6 +287,7 @@ namespace NActors {
         Scheduler->Prepare(this, &CurrentTimestamp, &CurrentMonotonic);
         Scheduler->PrepareSchedules(&scheduleReaders.front(), (ui32)scheduleReaders.size());
 
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: setup interconnect proxies start");
         // setup interconnect proxies
         {
             TInterconnectSetup& setup = SystemSetup->Interconnect;
@@ -297,6 +302,7 @@ namespace NActors {
             ProxyWrapperFactory = std::move(SystemSetup->Interconnect.ProxyWrapperFactory);
         }
 
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: setup local services start");
         // setup local services
         {
             for (ui32 i = 0, e = (ui32)SystemSetup->LocalServices.size(); i != e; ++i) {
@@ -312,11 +318,15 @@ namespace NActors {
         CpuManager->Start();
         Send(MakeSchedulerActorId(), new TEvSchedulerInitialize(scheduleReaders, &CurrentTimestamp, &CurrentMonotonic));
         Scheduler->Start();
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: started");
     }
 
     void TActorSystem::Stop() {
-        if (StopExecuted || !StartExecuted)
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop");
+        if (StopExecuted || !StartExecuted) {
+            ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop: already stopped");
             return;
+        }
 
         StopExecuted = true;
 
@@ -328,15 +338,20 @@ namespace NActors {
         CpuManager->PrepareStop();
         Scheduler->Stop();
         CpuManager->Shutdown();
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop: stopped");
     }
 
     void TActorSystem::Cleanup() {
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Cleanup");
         Stop();
-        if (CleanupExecuted || !StartExecuted)
+        if (CleanupExecuted || !StartExecuted) {
+            ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Cleanup: already cleaned up");
             return;
+        }
         CleanupExecuted = true;
         CpuManager->Cleanup();
         Scheduler.Destroy();
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Cleanup: cleaned up");
     }
 
     void TActorSystem::GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const {

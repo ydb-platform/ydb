@@ -17,16 +17,16 @@ namespace NYT::NSecurityClient {
 struct TSerializableAccessControlEntry
 {
     ESecurityAction Action = ESecurityAction::Undefined;
-    std::vector<TString> Subjects;
+    std::vector<std::string> Subjects;
     NYTree::EPermissionSet Permissions;
     EAceInheritanceMode InheritanceMode = EAceInheritanceMode::ObjectAndDescendants;
-    TString SubjectTagFilter;
+    std::optional<std::string> SubjectTagFilter;
     std::optional<std::vector<std::string>> Columns;
     std::optional<bool> Vital;
 
     TSerializableAccessControlEntry(
         ESecurityAction action,
-        std::vector<TString> subjects,
+        std::vector<std::string> subjects,
         NYTree::EPermissionSet permissions,
         EAceInheritanceMode inheritanceMode = EAceInheritanceMode::ObjectAndDescendants);
 

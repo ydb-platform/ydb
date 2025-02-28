@@ -1,7 +1,5 @@
 #include "run_query.h"
 
-#include <ydb/library/actors/core/executor_thread.h>
-
 namespace NKikimr::NSQS {
 
     void RunYqlQuery(
@@ -42,7 +40,7 @@ namespace NKikimr::NSQS {
         if (sendAfter == TDuration::Zero()) {
             ctx.Send(kqpActor, ev.Release());
         } else {
-            ctx.ExecutorThread.Schedule(sendAfter, new IEventHandle(kqpActor, ctx.SelfID, ev.Release()));
+            TActivationContext::Schedule(sendAfter, new IEventHandle(kqpActor, ctx.SelfID, ev.Release()));
         }
     }
 

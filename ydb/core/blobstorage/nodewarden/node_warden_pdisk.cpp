@@ -224,8 +224,10 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(jt != PDiskByPath.end() && jt->second.RunningPDiskId == it->first);
             pending = std::move(jt->second.Pending);
             PDiskByPath.erase(jt);
-            for (ui64 cookie : it->second.ShredCookies) {
-                ShredInFlight.erase(cookie);
+            auto& cookies = it->second.ShredCookies;
+            for (auto it = cookies.begin(); it != cookies.end(); ) {
+                const auto& [cookie, generation] = *it++;
+                ProcessShredStatus(cookie, generation, "pdisk has been restarted");
             }
             LocalPDisks.erase(it);
             PDiskRestartInFlight.erase(pdiskId);

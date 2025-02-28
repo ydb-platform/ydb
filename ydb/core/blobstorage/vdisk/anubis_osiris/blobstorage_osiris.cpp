@@ -201,7 +201,7 @@ namespace NKikimr {
                             "THullOsirisActor: FINISH: BlobsResurrected# %" PRIu64 " PartsResurrected# %" PRIu64,
                             BlobsResurrected, PartsResurrected));
                 ctx.Send(NotifyId, new TEvOsirisDone(ConfirmedLsn));
-                ctx.Send(ParentId, new TEvents::TEvActorDied);
+                ctx.Send(ParentId, new TEvents::TEvGone);
                 Die(ctx);
             }
         }

@@ -61,7 +61,7 @@ public:
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = FastConnectRetryPolicy();
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, Subscription->Subscriber.TabletId, pipeConfig);
-        Pipe = ctx.ExecutorThread.RegisterActor(pipe);
+        Pipe = ctx.Register(pipe);
     }
 
     void SendNotifyRequest(const TActorContext &ctx)
@@ -390,7 +390,7 @@ void TConfigsProvider::Bootstrap(const TActorContext &ctx)
     NActors::TMon *mon = AppData()->Mon;
     if (mon) {
         NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-        mon->RegisterActorPage(actorsMonPage, "console_configs_provider", "Console Configs Provider", false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+        mon->RegisterActorPage(actorsMonPage, "console_configs_provider", "Console Configs Provider", false, TActivationContext::ActorSystem(), SelfId());
     }
 
     Become(&TThis::StateWork);
@@ -649,7 +649,7 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
 
     bool yamlChanged = false;
 
-    if (subscription->YamlConfigVersion != YamlConfigVersion) {
+    if (subscription->MainYamlConfigVersion != MainYamlConfigVersion) {
         yamlChanged = true;
     }
 
@@ -683,11 +683,11 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
             std::move(appConfig),
             affectedKinds);
 
-    if (subscription->YamlConfigVersion != YamlConfigVersion) {
-        subscription->YamlConfigVersion = YamlConfigVersion;
-        request->Record.SetYamlConfig(YamlConfig);
+    if (subscription->MainYamlConfigVersion != MainYamlConfigVersion) {
+        subscription->MainYamlConfigVersion = MainYamlConfigVersion;
+        request->Record.SetMainYamlConfig(MainYamlConfig);
     } else {
-        request->Record.SetYamlConfigNotChanged(true);
+        request->Record.SetMainYamlConfigNotChanged(true);
     }
 
     for (auto &[id, hash] : VolatileYamlConfigHashes) {
@@ -709,6 +709,16 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
 
     subscription->VolatileYamlConfigHashes = VolatileYamlConfigHashes;
 
+    if (auto it = DatabaseYamlConfigs.find(subscription->Tenant); it != DatabaseYamlConfigs.end()) {
+        // FIXME: handle version change correctly, instead of always sending on first update
+        if (!subscription->DatabaseYamlConfigVersion || *subscription->DatabaseYamlConfigVersion != it->second.Version || !subscription->FirstUpdateSent) {
+            subscription->DatabaseYamlConfigVersion = it->second.Version;
+            request->Record.SetDatabaseYamlConfig(it->second.Config);
+        } else {
+            request->Record.SetDatabaseYamlConfigNotChanged(true);
+        }
+    }
+
     ctx.Send(subscription->Worker, request.Release());
 
     subscription->FirstUpdateSent = true;
@@ -722,7 +732,7 @@ void TConfigsProvider::DumpStateHTML(IOutputStream &os) const {
                     os << "Presistent Config" << Endl;
                 }
                 PRE() {
-                    os << YamlConfig;
+                    os << MainYamlConfig;
                 }
                 for (auto &[id, config] : VolatileYamlConfigs) {
                     TAG(TH5) {
@@ -749,7 +759,7 @@ void TConfigsProvider::DumpStateHTML(IOutputStream &os) const {
                            << "  ConfigVersions: " << s->LastProvided.ShortDebugString() << Endl
                            << "  ServeYaml: " << s->ServeYaml << Endl
                            << "  YamlApiVersion: " << s->YamlApiVersion << Endl
-                           << "  YamlVersion: " << s->YamlConfigVersion << ".[";
+                           << "  YamlVersion: " << s->MainYamlConfigVersion << ".[";
                         bool first = true;
                         for (auto &[id, hash] : s->VolatileYamlConfigHashes) {
                             os << (first ? "" : ",") << id << "." << hash;
@@ -809,7 +819,11 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev
     if (rec.HasServeYaml() && rec.GetServeYaml() && rec.HasYamlApiVersion() && rec.GetYamlApiVersion() == 1) {
         subscription->ServeYaml = rec.GetServeYaml();
         subscription->YamlApiVersion = rec.GetYamlApiVersion();
-        subscription->YamlConfigVersion = rec.GetYamlVersion();
+        subscription->MainYamlConfigVersion = rec.GetMainYamlVersion();
+        // FIXME: store version to avoid resending
+        // if (auto it = DatabaseYamlConfigs.find(rec.GetOptions().GetTenant()); it != DatabaseYamlConfigs.end()) {
+        //     subscription->DatabaseYamlConfig = it->second.Config;
+        // }
         for (auto &volatileConfigVersion : rec.GetVolatileYamlVersion()) {
             subscription->VolatileYamlConfigHashes[volatileConfigVersion.GetId()] = volatileConfigVersion.GetHash();
         }
@@ -1092,12 +1106,16 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigRequest::TPtr &ev, con
                 "Send TEvGetNodeConfigResponse: " << response->Record.ShortDebugString());
 
     if (rec.HasServeYaml() && rec.GetServeYaml() && rec.HasYamlApiVersion() && rec.GetYamlApiVersion() == 1) {
-        response->Record.SetYamlConfig(YamlConfig);
+        response->Record.SetMainYamlConfig(MainYamlConfig);
 
         for (auto &[id, config] : VolatileYamlConfigs) {
             auto &item = *response->Record.AddVolatileConfigs();
             item.SetId(id);
             item.SetConfig(config);
+        }
+
+        if (auto it = DatabaseYamlConfigs.find(rec.GetNode().GetTenant()); it != DatabaseYamlConfigs.end()) {
+            response->Record.SetDatabaseYamlConfig(it->second.Config);
         }
     }
 
@@ -1223,48 +1241,74 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateSubscriptions::TPtr &ev, cons
 }
 
 void TConfigsProvider::Handle(TEvPrivate::TEvUpdateYamlConfig::TPtr &ev, const TActorContext &ctx) {
-    YamlConfig = ev->Get()->YamlConfig;
-    VolatileYamlConfigs.clear();
+    DatabaseYamlConfigs = ev->Get()->DatabaseYamlConfigs;
+    if (!ev->Get()->ChangedDatabase) {
+        MainYamlConfig = ev->Get()->MainYamlConfig;
+        VolatileYamlConfigs.clear();
 
-    YamlConfigVersion = NYamlConfig::GetVersion(YamlConfig);
-    VolatileYamlConfigHashes.clear();
-    for (auto& [id, config] : ev->Get()->VolatileYamlConfigs) {
-        auto doc = NFyaml::TDocument::Parse(config);
-        // we strip it to provide old format for config dispatcher
-        auto node = doc.Root().Map().at("selector_config");
-        TString strippedConfig = "\n" + config.substr(node.BeginMark().InputPos, node.EndMark().InputPos - node.BeginMark().InputPos) + "\n";
-        VolatileYamlConfigs[id] = strippedConfig;
-        VolatileYamlConfigHashes[id] = THash<TString>()(strippedConfig);
-    }
+        MainYamlConfigVersion = NYamlConfig::GetVersion(MainYamlConfig);
+        VolatileYamlConfigHashes.clear();
 
-    for (auto &[_, subscription] : InMemoryIndex.GetSubscriptions()) {
-        if (subscription->ServeYaml) {
-            auto request = MakeHolder<TEvConsole::TEvConfigSubscriptionNotification>(
-                    subscription->Generation,
-                    NKikimrConfig::TAppConfig{},
-                    THashSet<ui32>{});
-
-            if (subscription->YamlConfigVersion != YamlConfigVersion) {
-                subscription->YamlConfigVersion = YamlConfigVersion;
-                request->Record.SetYamlConfig(YamlConfig);
-            } else {
-                request->Record.SetYamlConfigNotChanged(true);
-            }
-
-            for (auto &[id, hash] : VolatileYamlConfigHashes) {
-                auto *volatileConfig = request->Record.AddVolatileConfigs();
-                volatileConfig->SetId(id);
-                if (auto it = subscription->VolatileYamlConfigHashes.find(id); it != subscription->VolatileYamlConfigHashes.end() && it->second == hash) {
-                    volatileConfig->SetNotChanged(true);
-                } else {
-                    volatileConfig->SetConfig(VolatileYamlConfigs[id]);
-                }
-            }
-
-            subscription->VolatileYamlConfigHashes = VolatileYamlConfigHashes;
-
-            ctx.Send(subscription->Worker, request.Release());
+        for (auto& [id, config] : ev->Get()->VolatileYamlConfigs) {
+            auto doc = NFyaml::TDocument::Parse(config);
+            // we strip it to provide old format for config dispatcher
+            auto node = doc.Root().Map().at("selector_config");
+            TString strippedConfig = "\n" + config.substr(node.BeginMark().InputPos, node.EndMark().InputPos - node.BeginMark().InputPos) + "\n";
+            VolatileYamlConfigs[id] = strippedConfig;
+            VolatileYamlConfigHashes[id] = THash<TString>()(strippedConfig);
         }
+
+        for (auto &[_, subscription] : InMemoryIndex.GetSubscriptions()) {
+            UpdateConfig(subscription, ctx);
+        }
+    } else {
+        const auto* subs = InMemoryIndex.GetSubscriptions(ev->Get()->ChangedDatabase);
+        if (subs) {
+            for (auto &subscription : *subs) {
+                UpdateConfig(subscription, ctx);
+            }
+        }
+    }
+}
+
+void TConfigsProvider::UpdateConfig(TInMemorySubscription::TPtr subscription,
+                                    const TActorContext &ctx)
+{
+    if (subscription->ServeYaml) {
+        auto request = MakeHolder<TEvConsole::TEvConfigSubscriptionNotification>(
+                subscription->Generation,
+                NKikimrConfig::TAppConfig{},
+                THashSet<ui32>{});
+
+        if (subscription->MainYamlConfigVersion != MainYamlConfigVersion) {
+            subscription->MainYamlConfigVersion = MainYamlConfigVersion;
+            request->Record.SetMainYamlConfig(MainYamlConfig);
+        } else {
+            request->Record.SetMainYamlConfigNotChanged(true);
+        }
+
+        for (auto &[id, hash] : VolatileYamlConfigHashes) {
+            auto *volatileConfig = request->Record.AddVolatileConfigs();
+            volatileConfig->SetId(id);
+            if (auto it = subscription->VolatileYamlConfigHashes.find(id); it != subscription->VolatileYamlConfigHashes.end() && it->second == hash) {
+                volatileConfig->SetNotChanged(true);
+            } else {
+                volatileConfig->SetConfig(VolatileYamlConfigs[id]);
+            }
+        }
+
+        subscription->VolatileYamlConfigHashes = VolatileYamlConfigHashes;
+
+        if (auto it = DatabaseYamlConfigs.find(subscription->Tenant); it != DatabaseYamlConfigs.end()) {
+            if (!subscription->DatabaseYamlConfigVersion || *subscription->DatabaseYamlConfigVersion != it->second.Version) {
+                subscription->DatabaseYamlConfigVersion = it->second.Version;
+                request->Record.SetDatabaseYamlConfig(it->second.Config);
+            } else {
+                request->Record.SetDatabaseYamlConfigNotChanged(true);
+            }
+        }
+
+        ctx.Send(subscription->Worker, request.Release());
     }
 }
 

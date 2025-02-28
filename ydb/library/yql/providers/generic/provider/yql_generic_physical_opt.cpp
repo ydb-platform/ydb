@@ -27,7 +27,7 @@ namespace NYql {
                 : NPushdown::TSettings(NLog::EComponent::ProviderGeneric)
             {
                 using EFlag = NPushdown::TSettings::EFeatureFlag;
-                Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64);
+                Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 | EFlag::DateTimeTypes | EFlag::TimestampCtor);
             }
         };
 
@@ -70,16 +70,20 @@ namespace NYql {
                             const auto& read = maybe.Cast();
 
                             // Get table metadata
-                            const auto [tableMeta, issue] = State_->GetTable(
-                                read.DataSource().Cluster().Value(),
-                                read.Table().Value(),
-                                ctx.GetPosition(node.Pos()));
-                            if (issue.has_value()) {
-                                ctx.AddError(issue.value());
+                            const auto [tableMeta, issues] = State_->GetTable(
+                                TGenericState::TTableAddress(
+                                    TString(read.DataSource().Cluster().Value()),
+                                    TString(read.Table().Name().Value())
+                                )
+                            );
+                            if (issues) {
+                                for (const auto& issue : issues) {
+                                    ctx.AddError(issue);
+                                }
                                 return node;
                             }
 
-                            const auto structType = tableMeta.value()->ItemType;
+                            const auto structType = tableMeta->ItemType;
                             YQL_ENSURE(structType->GetSize());
                             auto columns =
                                 ctx.NewList(read.Pos(), {ctx.NewAtom(read.Pos(), GetLightColumn(*structType)->GetName())});

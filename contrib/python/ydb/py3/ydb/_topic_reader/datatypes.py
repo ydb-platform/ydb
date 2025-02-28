@@ -121,6 +121,16 @@ class PartitionSession:
     def closed(self):
         return self.state == PartitionSession.State.Stopped
 
+    def end(self):
+        if self.closed:
+            return
+
+        self.state = PartitionSession.State.Ended
+
+    @property
+    def ended(self):
+        return self.state == PartitionSession.State.Ended
+
     def _ensure_not_closed(self):
         if self.state == PartitionSession.State.Stopped:
             raise topic_reader_asyncio.PublicTopicReaderPartitionExpiredError()
@@ -129,6 +139,7 @@ class PartitionSession:
         Active = 1
         GracefulShutdown = 2
         Stopped = 3
+        Ended = 4
 
     @dataclass(order=True)
     class CommitAckWaiter:

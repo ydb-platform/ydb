@@ -254,17 +254,16 @@ public:
             return result;
         }
 
-        if (!alter.HasChannelProfileId()) {
-            result->SetError(TEvSchemeShard::EStatus::StatusInvalidParameter, "set channel profile id, please");
-            return result;
-        }
-
         TChannelsBindings channelsBinding;
         bool isResolved = false;
         if (alter.HasStorageConfig()) {
             isResolved = context.SS->ResolveSolomonChannels(alter.GetStorageConfig(), path.GetPathIdForDomain(), channelsBinding);
         } else {
-            isResolved = context.SS->ResolveSolomonChannels(channelProfileId, path.GetPathIdForDomain(), channelsBinding);
+            if (!alter.HasChannelProfileId()) {
+                result->SetError(TEvSchemeShard::EStatus::StatusInvalidParameter, "set channel profile id, please");
+                return result;
+            }
+            isResolved = context.SS->ResolveSolomonChannels(alter.GetChannelProfileId(), path.GetPathIdForDomain(), channelsBinding);
         }
         if (!isResolved) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding with the storage pool");

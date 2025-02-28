@@ -311,6 +311,7 @@ void Serialize(const TJob& job, NYson::IYsonConsumer* consumer, TStringBuf idKey
             .OptionalItem("is_stale", job.IsStale)
             .OptionalItem("job_cookie", job.JobCookie)
             .OptionalItem("archive_features", job.ArchiveFeatures)
+            .OptionalItem("operation_incarnation", job.OperationIncarnation)
         .EndMap();
 }
 

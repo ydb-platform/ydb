@@ -24,8 +24,12 @@ struct TDqSerializedBatch {
         return Proto.GetRaw().size() + Payload.Size();
     }
 
+    ui32 ChunkCount() const {
+        return Proto.GetChunks();
+    }
+
     ui32 RowCount() const {
-        return Proto.GetRows();
+        return Proto.GetChunks(); // FIXME with Rows
     }
 
     void Clear() {

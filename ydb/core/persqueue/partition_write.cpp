@@ -388,13 +388,18 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
         HeadKeys.clear();
     }
 
+    // New blocks have been recorded. You can now delete the keys of the repackaged blocks.
+    DefferedKeysForDeletion.clear();
+
     if (NewHeadKey.Size > 0) {
         while (!HeadKeys.empty() &&
-            (HeadKeys.back().Key.GetOffset() > NewHeadKey.Key.GetOffset() || HeadKeys.back().Key.GetOffset() == NewHeadKey.Key.GetOffset()
-                                                                       && HeadKeys.back().Key.GetPartNo() >= NewHeadKey.Key.GetPartNo())) {
-                HeadKeys.pop_back();
+               (HeadKeys.back().Key.GetOffset() > NewHeadKey.Key.GetOffset() ||
+                (HeadKeys.back().Key.GetOffset() == NewHeadKey.Key.GetOffset() && HeadKeys.back().Key.GetPartNo() >= NewHeadKey.Key.GetPartNo()))) {
+            HeadKeys.pop_back();
         }
-        HeadKeys.push_back(NewHeadKey);
+
+        HeadKeys.push_back(std::move(NewHeadKey));
+
         NewHeadKey = TDataKey{TKey{}, 0, TInstant::Zero(), 0};
     }
 
@@ -425,7 +430,11 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
                 GapSize += ck.first.GetOffset() - lastOffset;
             }
         }
-        DataKeysBody.push_back({ck.first, ck.second, ctx.Now(), DataKeysBody.empty() ? 0 : DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size});
+        DataKeysBody.emplace_back(ck.first,
+                                  ck.second,
+                                  ctx.Now(),
+                                  DataKeysBody.empty() ? 0 : DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size,
+                                  MakeBlobKeyToken(ck.first.ToString()));
 
         CompactedKeys.pop_front();
     } // head cleared, all data moved to body
@@ -1060,7 +1069,6 @@ void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobIn
 
     TKey resKey = newWrite->Key;
     resKey.SetType(TKeyPrefix::TypeData);
-    write->SetKeyToCache(resKey.ToString());
     WriteCycleSize += newWrite->Value.size();
 }
 
@@ -1477,9 +1485,6 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
     write->SetKey(key.Data(), key.Size());
     write->SetValue(valueD);
 
-    if (!key.IsHead())
-        write->SetKeyToCache(key.Data(), key.Size());
-
     bool isInline = key.IsHead() && valueD.size() < MAX_INLINE_SIZE;
 
     if (isInline)
@@ -1491,7 +1496,7 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
     }
 
     //Need to clear all compacted blobs
-    TKey k = CompactedKeys.empty() ? key : CompactedKeys.front().first;
+    const TKey& k = CompactedKeys.empty() ? key : CompactedKeys.front().first;
     ClearOldHead(k.GetOffset(), k.GetPartNo(), request);
 
     if (!key.IsHead()) {
@@ -1505,7 +1510,7 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
         NewHead.PartNo = 0;
     } else {
         Y_ABORT_UNLESS(NewHeadKey.Size == 0);
-        NewHeadKey = {key, res.second, CurrentTimestamp, 0};
+        NewHeadKey = {key, res.second, CurrentTimestamp, 0, MakeBlobKeyToken(key.ToString())};
     }
     WriteCycleSize += write->GetValue().size();
     UpdateWriteBufferIsFullState(ctx.Now());

@@ -1,9 +1,6 @@
 #include "yql_mkql_file_list.h"
 #include "yql_mkql_file_input_state.h"
 
-#include <yt/yql/providers/yt/lib/errors/yql_emergency_sleep.h>
-
-
 namespace NYql {
 
 using namespace NKikimr::NMiniKQL;
@@ -21,12 +18,12 @@ bool TFileListValueBase::TIterator::Next(NUdf::TUnboxedValue& value) {
     }
     AtStart_ = false;
     if (!State_->IsValid()) {
-        YQL_EMERGENCY_SLEEP(!ExpectedLength_ || *ExpectedLength_ == 0, "Invalid file length, ExpectedLength=" << *ExpectedLength_ << ", State: " << State_->DebugInfo());
+        MKQL_ENSURE(!ExpectedLength_ || *ExpectedLength_ == 0, "Invalid file length, ExpectedLength=" << *ExpectedLength_ << ", State: " << State_->DebugInfo());
         return false;
     }
 
     if (ExpectedLength_) {
-        YQL_EMERGENCY_SLEEP(*ExpectedLength_ > 0, "Invalid file length. State: " << State_->DebugInfo());
+        MKQL_ENSURE(*ExpectedLength_ > 0, "Invalid file length. State: " << State_->DebugInfo());
         --(*ExpectedLength_);
     }
     value = State_->GetCurrent();

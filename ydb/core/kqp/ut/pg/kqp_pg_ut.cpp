@@ -978,8 +978,10 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         testSingleType(partialArrayCoerce);
     }
 
-    Y_UNIT_TEST(TypeCoercionInsert) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(TypeCoercionInsert, useSink) {
+        NKikimrConfig::TAppConfig AppConfig;
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false));
 
         auto testSingleType = [&kikimr] (const TPgTypeCoercionTestSpec& spec) {
             auto db = kikimr.GetTableClient();
@@ -1026,8 +1028,11 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(EmptyQuery) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(EmptyQuery, useSink) {
+        NKikimrConfig::TAppConfig AppConfig;
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false));
+
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1039,8 +1044,11 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         Y_ENSURE(result.GetResultSets().empty());
     }
 
-    Y_UNIT_TEST(NoTableQuery) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(NoTableQuery, useSink) {
+        NKikimrConfig::TAppConfig AppConfig;
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false));
+
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1062,8 +1070,10 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(TableSelect) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(TableSelect, useSink) {
+        NKikimrConfig::TAppConfig AppConfig;
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false));
 
         auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec) {
             auto db = kikimr.GetTableClient();
@@ -1106,8 +1116,11 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(DuplicatedColumns) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(DuplicatedColumns, useSink) {
+        NKikimrConfig::TAppConfig AppConfig;
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false));
+
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1133,8 +1146,10 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         auto value = NYql::NCommon::PgValueFromNativeBinary(binaryStr, INT2ARRAYOID);
     }
 
-    Y_UNIT_TEST(TableInsert) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(TableInsert, useSink) {
+        NKikimrConfig::TAppConfig AppConfig;
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false));
 
         auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec) {
             auto db = kikimr.GetTableClient();
@@ -1164,8 +1179,10 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(TableArrayInsert) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(TableArrayInsert, useSink) {
+        NKikimrConfig::TAppConfig AppConfig;
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false));
 
         auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec) {
             auto db = kikimr.GetTableClient();
@@ -1204,8 +1221,10 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(InsertFromSelect_Simple) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(InsertFromSelect_Simple, useSink) {
+        NKikimrConfig::TAppConfig AppConfig;
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false));
 
         auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec) {
             auto db = kikimr.GetTableClient();
@@ -1233,9 +1252,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(InsertFromSelect_NoReorder) {
+    Y_UNIT_TEST_TWIN(InsertFromSelect_NoReorder, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -1276,10 +1295,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(InsertFromSelect_Serial) {
+    Y_UNIT_TEST_TWIN(InsertFromSelect_Serial, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -1462,9 +1480,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(Returning) {
+    Y_UNIT_TEST_TWIN(Returning, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false);
@@ -1637,9 +1655,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(CreateTableSerialColumns) {
+    Y_UNIT_TEST_TWIN(CreateTableSerialColumns, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false)
@@ -1730,9 +1748,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(CopyTableSerialColumns) {
+    Y_UNIT_TEST_TWIN(CopyTableSerialColumns, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false)
@@ -1868,7 +1886,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(CreateIndex) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -1949,9 +1966,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(SelectIndex) {
+    Y_UNIT_TEST_TWIN(SelectIndex, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -2009,7 +2026,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(DropIndex) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -2049,8 +2065,10 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         // TODO: test with <schema>.<name>: "DROP INDEX test2_fk.idx_cover;"
     }
 
-    Y_UNIT_TEST(CreateUniqPgColumn) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(CreateUniqPgColumn, useSink) {
+        NKikimrConfig::TAppConfig AppConfig;
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
         {
@@ -2156,8 +2174,10 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(CreateUniqComplexPgColumn) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(CreateUniqComplexPgColumn, useSink) {
+        NKikimrConfig::TAppConfig AppConfig;
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
         {
@@ -2263,7 +2283,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(CreateTempTable) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -2314,8 +2333,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(CreateTempTableSerial) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -2366,8 +2383,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(CreateSequence) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -2414,8 +2429,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(DropSequence) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -2500,8 +2513,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(AlterSequence) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -2695,8 +2706,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(AlterColumnSetDefaultFromSequence) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -2730,7 +2739,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = Q_(R"(
@@ -2801,7 +2810,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = Q_(R"(
@@ -2849,7 +2858,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = Q_(R"(
@@ -2890,7 +2899,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = Q_(R"(
@@ -2952,7 +2961,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto queryAlter = R"(
@@ -2988,12 +2997,11 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             CompareYson(R"(
                 [["1";"1"];["5";"4"];["8";"5"];["10";"2"];["12";"3"];["13";"14"];["14";"16"];["105"; "105"];["107";"107"];["206"; "206"];["208";"208"]]
             )", FormatResultSetYson(result.GetResultSet(0)));
-        } 
+        }
     }
 
     Y_UNIT_TEST(TempTablesSessionsIsolation) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -3045,7 +3053,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(TempTablesDrop) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -3121,7 +3128,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(TempTablesWithCache) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -3337,8 +3343,10 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(ValuesInsert) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(ValuesInsert, useSink) {
+        NKikimrConfig::TAppConfig AppConfig;
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false));
         auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec) {
             auto tableClient = kikimr.GetTableClient();
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -3399,8 +3407,10 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(TableDeleteAllData) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(TableDeleteAllData, useSink) {
+        NKikimrConfig::TAppConfig AppConfig;
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false));
 
         auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec) {
             auto db = kikimr.GetTableClient();
@@ -3456,8 +3466,10 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(TableDeleteWhere) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(TableDeleteWhere, useSink) {
+        NKikimrConfig::TAppConfig AppConfig;
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false));
         int cnt = 0;
         auto testSingleType = [&kikimr, &cnt] (TPgTypeTestSpec spec) {
             auto db = kikimr.GetTableClient();
@@ -3524,8 +3536,10 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(DeleteWithQueryService) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(DeleteWithQueryService, useSink) {
+        NKikimrConfig::TAppConfig AppConfig;
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false));
         auto db = kikimr.GetQueryClient();
         auto settings = NYdb::NQuery::TExecuteQuerySettings()
             .Syntax(NYdb::NQuery::ESyntax::Pg);
@@ -3557,8 +3571,10 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(PgUpdate) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(PgUpdate, useSink) {
+        NKikimrConfig::TAppConfig AppConfig;
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false));
         auto db = kikimr.GetQueryClient();
         auto settings = NYdb::NQuery::TExecuteQuerySettings()
             .Syntax(NYdb::NQuery::ESyntax::Pg);
@@ -3626,8 +3642,10 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(PgUpdateCompoundKey) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(PgUpdateCompoundKey,  useSink) {
+        NKikimrConfig::TAppConfig AppConfig;
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false));
         auto db = kikimr.GetQueryClient();
         auto settings = NYdb::NQuery::TExecuteQuerySettings()
             .Syntax(NYdb::NQuery::ESyntax::Pg);
@@ -3701,7 +3719,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(CreateTableIfNotExists_GenericQuery) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -3809,9 +3826,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
     }
 
     Y_UNIT_TEST(AlterColumnSetDefaultFromSequenceWithSchemaname) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
+        NKikimrConfig::TAppConfig appConfig;;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -3845,7 +3860,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = Q_(R"(
@@ -3917,7 +3932,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = Q_(R"(
@@ -3965,7 +3980,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = Q_(R"(
@@ -4006,7 +4021,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        } 
+        }
 
         {
             const auto query = Q_(R"(
@@ -4026,7 +4041,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(DropTableIfExists_GenericQuery) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4121,8 +4135,10 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(EquiJoin) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(EquiJoin, useSink) {
+        NKikimrConfig::TAppConfig AppConfig;
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false));
         auto db = kikimr.GetQueryClient();
         auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
         {
@@ -4160,8 +4176,10 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(PgAggregate) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(PgAggregate, useSink) {
+        NKikimrConfig::TAppConfig AppConfig;
+        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false));
         auto db = kikimr.GetQueryClient();
         auto settings = NYdb::NQuery::TExecuteQuerySettings()
             .Syntax(NYdb::NQuery::ESyntax::Pg);
@@ -4189,9 +4207,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(InsertNoTargetColumns_Simple) {
+    Y_UNIT_TEST_TWIN(InsertNoTargetColumns_Simple, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4224,9 +4242,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(InsertNoTargetColumns_ColumnOrder) {
+    Y_UNIT_TEST_TWIN(InsertNoTargetColumns_ColumnOrder, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4259,9 +4277,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(InsertNoTargetColumns_NotOneSize) {
+    Y_UNIT_TEST_TWIN(InsertNoTargetColumns_NotOneSize, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4319,9 +4337,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(InsertNoTargetColumns_Alter) {
+    Y_UNIT_TEST_TWIN(InsertNoTargetColumns_Alter, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4368,10 +4386,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(Insert_Serial) {
+    Y_UNIT_TEST_TWIN(Insert_Serial, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4405,10 +4422,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(InsertNoTargetColumns_Serial) {
+    Y_UNIT_TEST_TWIN(InsertNoTargetColumns_Serial, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4441,9 +4457,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(InsertValuesFromTableWithDefault) {
+    Y_UNIT_TEST_TWIN(InsertValuesFromTableWithDefault, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4476,9 +4492,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(InsertValuesFromTableWithDefaultAndCast) {
+    Y_UNIT_TEST_TWIN(InsertValuesFromTableWithDefaultAndCast, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4520,9 +4536,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(InsertValuesFromTableWithDefaultBool) {
+    Y_UNIT_TEST_TWIN(InsertValuesFromTableWithDefaultBool, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4555,9 +4571,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(InsertValuesFromTableWithDefaultText) {
+    Y_UNIT_TEST_TWIN(InsertValuesFromTableWithDefaultText, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4590,9 +4606,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(InsertValuesFromTableWithDefaultTextNotNull) {
+    Y_UNIT_TEST_TWIN(InsertValuesFromTableWithDefaultTextNotNull, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4625,9 +4641,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(InsertValuesFromTableWithDefaultTextNotNullButNull) {
+    Y_UNIT_TEST_TWIN(InsertValuesFromTableWithDefaultTextNotNullButNull, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4644,9 +4660,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(InsertValuesFromTableWithDefaultNegativeCase) {
+    Y_UNIT_TEST_TWIN(InsertValuesFromTableWithDefaultNegativeCase, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4663,10 +4679,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(InsertNoTargetColumns_SerialNotNull) {
+    Y_UNIT_TEST_TWIN(InsertNoTargetColumns_SerialNotNull, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -4711,9 +4726,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(CheckPgAutoParams) {
+    Y_UNIT_TEST_TWIN(CheckPgAutoParams, useSink) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
         auto settings = NYdb::NQuery::TExecuteQuerySettings()
             .Syntax(NYdb::NQuery::ESyntax::Pg)
@@ -4980,7 +4995,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(MkqlTerminate) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -5020,7 +5034,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(NoSelectFullScan) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -5198,7 +5211,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(LongDomainName) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)

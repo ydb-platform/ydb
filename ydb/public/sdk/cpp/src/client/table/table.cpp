@@ -1367,7 +1367,7 @@ TScanQueryPartIterator::TScanQueryPartIterator(
 TAsyncScanQueryPart TScanQueryPartIterator::ReadNext() {
     if (!ReaderImpl_ || ReaderImpl_->IsFinished()) {
         if (!IsSuccess())
-            RaiseError(TStringBuilder() << "Attempt to perform read on an unsuccessful result " 
+            RaiseError(TStringBuilder() << "Attempt to perform read on an unsuccessful result "
                 << GetIssues().ToString());
         RaiseError("Attempt to perform read on invalid or finished stream");
     }
@@ -1828,6 +1828,14 @@ TFuture<TStatus> TSession::CopyTable(const std::string& src, const std::string& 
 
 TAsyncDescribeTableResult TSession::DescribeTable(const std::string& path, const TDescribeTableSettings& settings) {
     return Client_->DescribeTable(SessionImpl_->GetId(), path, settings);
+}
+
+TAsyncDescribeExternalDataSourceResult TSession::DescribeExternalDataSource(const std::string& path, const TDescribeExternalDataSourceSettings& settings) {
+    return Client_->DescribeExternalDataSource(path, settings);
+}
+
+TAsyncDescribeExternalTableResult TSession::DescribeExternalTable(const std::string& path, const TDescribeExternalTableSettings& settings) {
+    return Client_->DescribeExternalTable(path, settings);
 }
 
 TAsyncDataQueryResult TSession::ExecuteDataQuery(const std::string& query, const TTxControl& txControl,
@@ -2340,7 +2348,7 @@ const std::vector<std::string>& TIndexDescription::GetDataColumns() const {
     return DataColumns_;
 }
 
-const std::variant<std::monostate, TKMeansTreeSettings>& TIndexDescription::GetVectorIndexSettings() const {
+const std::variant<std::monostate, TKMeansTreeSettings>& TIndexDescription::GetIndexSettings() const {
     return SpecializedIndexSettings_;
 }
 
@@ -3307,6 +3315,74 @@ TReadRowsResult::TReadRowsResult(TStatus&& status, TResultSet&& resultSet)
     : TStatus(std::move(status))
     , ResultSet(std::move(resultSet))
 {}
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TExternalDataSourceDescription::TImpl {
+    Ydb::Table::DescribeExternalDataSourceResult Proto_;
+
+public:
+    TImpl(Ydb::Table::DescribeExternalDataSourceResult&& description)
+        : Proto_(std::move(description))
+    {}
+
+    const Ydb::Table::DescribeExternalDataSourceResult& GetProto() const {
+        return Proto_;
+    }
+};
+
+TExternalDataSourceDescription::TExternalDataSourceDescription(Ydb::Table::DescribeExternalDataSourceResult&& description)
+    : Impl_(std::make_shared<TImpl>(std::move(description)))
+{
+}
+
+const Ydb::Table::DescribeExternalDataSourceResult& TExternalDataSourceDescription::GetProto() const {
+    return Impl_->GetProto();
+}
+
+TDescribeExternalDataSourceResult::TDescribeExternalDataSourceResult(TStatus&& status, Ydb::Table::DescribeExternalDataSourceResult&& description)
+    : NScheme::TDescribePathResult(std::move(status), description.self())
+    , ExternalDataSourceDescription_(std::move(description))
+{}
+
+TExternalDataSourceDescription TDescribeExternalDataSourceResult::GetExternalDataSourceDescription() const {
+    CheckStatusOk("TDescribeExternalDataSourceResult::GetExternalDataSourceDescription");
+    return ExternalDataSourceDescription_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TExternalTableDescription::TImpl {
+    Ydb::Table::DescribeExternalTableResult Proto_;
+
+public:
+    TImpl(Ydb::Table::DescribeExternalTableResult&& description)
+        : Proto_(std::move(description))
+    {}
+
+    const Ydb::Table::DescribeExternalTableResult& GetProto() const {
+        return Proto_;
+    }
+};
+
+TExternalTableDescription::TExternalTableDescription(Ydb::Table::DescribeExternalTableResult&& description)
+    : Impl_(std::make_shared<TImpl>(std::move(description)))
+{
+}
+
+const Ydb::Table::DescribeExternalTableResult& TExternalTableDescription::GetProto() const {
+    return Impl_->GetProto();
+}
+
+TDescribeExternalTableResult::TDescribeExternalTableResult(TStatus&& status, Ydb::Table::DescribeExternalTableResult&& description)
+    : NScheme::TDescribePathResult(std::move(status), description.self())
+    , ExternalTableDescription_(std::move(description))
+{}
+
+TExternalTableDescription TDescribeExternalTableResult::GetExternalTableDescription() const {
+    CheckStatusOk("TDescribeExternalTableResult::GetExternalTableDescription");
+    return ExternalTableDescription_;
+}
 
 } // namespace NTable
 } // namespace NYdb

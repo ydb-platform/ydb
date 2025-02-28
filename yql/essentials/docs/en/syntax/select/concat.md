@@ -24,7 +24,7 @@ All arguments of the functions described above can be declared separately using 
 
 To get the name of the source table from which you originally obtained each row, use [TablePath()](../../builtins/basic.md#tablepath).
 
-### Examples
+#### Examples
 
 ```yql
 USE some_cluster;

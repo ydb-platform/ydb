@@ -430,6 +430,10 @@ namespace NFake {
             return Blobs;
         }
 
+        TGroupId GetGroupId() const {
+            return GroupId;
+        }
+
     private:
         // check if provided generation is blocked for specific tablet
         bool IsBlocked(TTabletId tabletId, TGeneration generation) const noexcept {

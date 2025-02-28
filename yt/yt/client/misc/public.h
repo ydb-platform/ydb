@@ -48,7 +48,7 @@ DEFINE_ENUM_UNKNOWN_VALUE(EWorkloadCategory, UserBatch);
 
 struct TWorkloadDescriptor;
 
-DECLARE_REFCOUNTED_CLASS(TWorkloadConfig)
+DECLARE_REFCOUNTED_STRUCT(TWorkloadConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

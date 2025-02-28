@@ -32,12 +32,18 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
     txIds.reserve(Ev->Get()->Record.TransactionsSize());
     for (const auto& tx : Ev->Get()->Record.GetTransactions()) {
         Y_ABORT_UNLESS(tx.HasTxId());
-        Y_ABORT_UNLESS(tx.HasAckTo());
 
         txIds.push_back(tx.GetTxId());
 
-        TActorId txOwner = ActorIdFromProto(tx.GetAckTo());
-        TxByAck[txOwner].push_back(tx.GetTxId());
+        // Note: we plan to remove AckTo in the future
+        if (tx.HasAckTo()) {
+            TActorId txOwner = ActorIdFromProto(tx.GetAckTo());
+            // Note: when mediators ack transactions on their own they also
+            // specify an empty AckTo. Sends to empty actors are a no-op anyway.
+            if (txOwner) {
+                TxByAck[txOwner].push_back(tx.GetTxId());
+            }
+        }
     }
 
     if (Self->State != TShardState::Offline && Self->State != TShardState::PreOffline) {

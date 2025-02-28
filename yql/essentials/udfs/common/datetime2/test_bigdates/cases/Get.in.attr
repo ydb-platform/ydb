@@ -4,7 +4,7 @@
             "StructType";
             [
                 [
-                    "ftimestamp64";
+                    "ftztimestamp64";
                     [
                         "DataType";
                         "String"

@@ -187,8 +187,6 @@ Table structure:
 | `QueryText` | Query text.<br/>Type: `Utf8`. |
 | `Count` | Number of query runs.<br/>Type: `Uint64`. |
 | `SumDuration` | Total duration of queries.<br/>Type: `Interval`. |
-| `Count` | Number of query runs.<br/>Type: `Uint64`. |
-| `SumDuration` | Total duration of queries.<br/>Type: `Interval`. |
 | `MinDuration` | Minimum query duration.<br/>Type: `Interval`. |
 | `MaxDuration` | Maximum query duration.<br/>Type: `Interval`. |
 | `SumCPUTime` | Total CPU time used.<br/>Type: `Uint64`. |

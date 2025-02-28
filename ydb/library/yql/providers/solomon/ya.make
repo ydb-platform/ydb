@@ -4,4 +4,5 @@ RECURSE(
     gateway
     provider
     scheme
+    solomon_accessor
 )

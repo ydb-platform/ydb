@@ -1,6 +1,8 @@
 #define INCLUDE_YDB_INTERNAL_H
 #include "status.h"
 
+#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
+
 #include <util/string/builder.h>
 
 namespace NYdb::inline V3 {
@@ -62,10 +64,26 @@ TPlainStatus::TPlainStatus(
             std::string(value.begin(), value.end())
         );
     }
+
+    InitCostInfo();
 }
 
 TPlainStatus TPlainStatus::Internal(const std::string& message) {
     return { EStatus::CLIENT_INTERNAL_ERROR, "Internal client error: " + message };
+}
+
+void TPlainStatus::InitCostInfo() {
+    if (auto metaIt = Metadata.find(YDB_CONSUMED_UNITS_HEADER); metaIt != Metadata.end()) {
+        try {
+            CostInfo.set_consumed_units(std::stod(metaIt->second));
+        } catch (std::exception& e) {
+            if (Ok()) {
+                Status = EStatus::CLIENT_INTERNAL_ERROR;
+            }
+
+            Issues.AddIssue(NIssue::TIssue{"Failed to parse CostInfo from Metadata: " + std::string{e.what()}});
+        }
+    }
 }
 
 } // namespace NYdb

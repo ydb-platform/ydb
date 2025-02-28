@@ -756,8 +756,8 @@ public:
     TTenant::TPtr FindComputationalUnitKindUsage(const TString &kind);
     TTenant::TPtr FindComputationalUnitKindUsage(const TString &kind, const TString &zone);
 
-    TTenant::TPtr GetTenant(const TString &name);
-    TTenant::TPtr GetTenant(const TDomainId &domainId);
+    TTenant::TPtr GetTenant(const TString &name) const;
+    TTenant::TPtr GetTenant(const TDomainId &domainId) const;
     void AddTenant(TTenant::TPtr tenant);
     void RemoveTenant(TTenant::TPtr tenant);
     void RemoveTenantFailed(TTenant::TPtr tenant,
@@ -1006,6 +1006,13 @@ public:
 
     void Bootstrap(const TActorContext &ctx);
     void Detach();
+    bool HasTenant(const TString& path) const {
+        return Tenants.contains(path);
+    }
+
+    TString GetDomainName() const {
+        return Domain->Name;
+    }
 
 private:
     TConsole &Self;

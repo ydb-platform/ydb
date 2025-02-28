@@ -604,6 +604,33 @@ TWriteReplicationSettings ParseWriteReplicationSettings(TExprList node, TExprCon
     return ret;
 }
 
+TDatabaseSettings ParseDatabaseSettings(TExprList node, TExprContext& ctx) {
+    TMaybeNode<TCoAtom> mode;
+    TVector<TCoNameValueTuple> other;
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+
+            if (name == "mode") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                mode = tuple.Value().Cast<TCoAtom>();
+            } else {
+                other.push_back(tuple);
+            }
+        }
+    }
+
+    const auto& otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(other)
+        .Done();
+
+    TDatabaseSettings ret(otherSettings);
+    ret.Mode = mode;
+
+    return ret;
+}
+
 TWriteTransferSettings ParseWriteTransferSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoAtom> mode;
     TMaybeNode<TCoAtom> source;

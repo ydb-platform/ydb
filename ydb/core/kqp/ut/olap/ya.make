@@ -5,7 +5,7 @@ SPLIT_FACTOR(200)
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -20,6 +20,7 @@ SRCS(
     decimal_ut.cpp
     delete_ut.cpp
     indexes_ut.cpp
+    json_ut.cpp
     kqp_olap_stats_ut.cpp
     locks_ut.cpp
     optimizer_ut.cpp

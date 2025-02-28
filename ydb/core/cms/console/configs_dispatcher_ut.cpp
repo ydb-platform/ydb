@@ -189,7 +189,7 @@ public:
             TAutoPtr<IEventHandle> &ev = EventsQueue.front();
             LOG_DEBUG_S(ctx, NKikimrServices::CONFIGS_DISPATCHER,
                         "Dequeue event type: " << ev->GetTypeRewrite());
-            ctx.ExecutorThread.Send(ev.Release());
+            ctx.Send(ev.Release());
             EventsQueue.pop_front();
         }
     }

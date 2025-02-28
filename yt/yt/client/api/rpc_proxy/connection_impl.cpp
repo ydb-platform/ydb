@@ -383,7 +383,7 @@ std::vector<std::string> TConnection::DiscoverProxiesViaHttp()
         auto poller = TTcpDispatcher::Get()->GetXferPoller();
         auto headers = New<THeaders>();
         SetUserAgent(headers, GetRpcUserAgent());
-        if (auto token = DiscoveryToken_.Load()) {
+        if (auto token = DiscoveryToken_.Load(); !token.empty()) {
             headers->Add("Authorization", "OAuth " + token);
         }
         headers->Add("X-YT-Correlation-Id", ToString(correlationId));

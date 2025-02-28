@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import ydb.core.protos.msgbus_pb2 as msgbus
 
-from ydb.tests.library.common.protobuf import AbstractProtobufBuilder
+from ydb.tests.library.common.protobuf import AbstractProtobufBuilder, to_bytes
 
 
 class CreateTenantRequest(AbstractProtobufBuilder):
@@ -13,6 +13,10 @@ class CreateTenantRequest(AbstractProtobufBuilder):
     def __init__(self, path):
         super(CreateTenantRequest, self).__init__(msgbus.TConsoleRequest())
         self.protobuf.CreateTenantRequest.Request.path = path
+
+    def set_user_token(self, token):
+        self.protobuf.SecurityToken = to_bytes(token)
+        self.protobuf.CreateTenantRequest.UserToken = to_bytes(token)
 
     def add_storage_pool(self, pool_type, pool_size):
         pool = self.protobuf.CreateTenantRequest.Request.resources.storage_units.add()
@@ -78,6 +82,10 @@ class AlterTenantRequest(AbstractProtobufBuilder):
         super(AlterTenantRequest, self).__init__(msgbus.TConsoleRequest())
         self.protobuf.AlterTenantRequest.Request.path = path
 
+    def set_user_token(self, token):
+        self.protobuf.SecurityToken = to_bytes(token)
+        self.protobuf.AlterTenantRequest.UserToken = to_bytes(token)
+
     def set_schema_quotas(self, schema_quotas):
         quotas = self.protobuf.AlterTenantRequest.Request.schema_operation_quotas
         quotas.SetInParent()
@@ -106,6 +114,10 @@ class GetTenantStatusRequest(AbstractProtobufBuilder):
         super(GetTenantStatusRequest, self).__init__(msgbus.TConsoleRequest())
         self.protobuf.GetTenantStatusRequest.Request.path = path
 
+    def set_user_token(self, token):
+        self.protobuf.SecurityToken = to_bytes(token)
+        self.protobuf.GetTenantStatusRequest.UserToken = to_bytes(token)
+
 
 class RemoveTenantRequest(AbstractProtobufBuilder):
     """
@@ -115,6 +127,10 @@ class RemoveTenantRequest(AbstractProtobufBuilder):
     def __init__(self, path):
         super(RemoveTenantRequest, self).__init__(msgbus.TConsoleRequest())
         self.protobuf.RemoveTenantRequest.Request.path = path
+
+    def set_user_token(self, token):
+        self.protobuf.SecurityToken = to_bytes(token)
+        self.protobuf.RemoveTenantRequest.UserToken = to_bytes(token)
 
 
 class SetConfigRequest(AbstractProtobufBuilder):
@@ -158,3 +174,6 @@ class GetOperationRequest(AbstractProtobufBuilder):
     def __init__(self, op_id):
         super(GetOperationRequest, self).__init__(msgbus.TConsoleRequest())
         self.protobuf.GetOperationRequest.id = op_id
+
+    def set_user_token(self, token):
+        self.protobuf.SecurityToken = to_bytes(token)

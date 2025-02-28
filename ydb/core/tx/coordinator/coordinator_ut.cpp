@@ -8,6 +8,21 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/async.h>
 
+// ad-hoc test parametrization support: only for single boolean flag
+// taken from ydb/core/ut/common/kqp_ut_common.h:Y_UNIT_TEST_TWIN
+//TODO: introduce general support for test parametrization?
+#define Y_UNIT_TEST_FLAG(N, OPT)                                                                                   \
+    template<bool OPT> void N(NUnitTest::TTestContext&);                                                           \
+    struct TTestRegistration##N {                                                                                  \
+        TTestRegistration##N() {                                                                                   \
+            TCurrentTest::AddTest(#N "-" #OPT "-false", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false>), false); \
+            TCurrentTest::AddTest(#N "-" #OPT "-true", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true>), false);   \
+        }                                                                                                          \
+    };                                                                                                             \
+    static TTestRegistration##N testRegistration##N;                                                               \
+    template<bool OPT>                                                                                             \
+    void N(NUnitTest::TTestContext&)
+
 namespace NKikimr::NFlatTxCoordinator::NTest {
 
     using namespace Tests;
@@ -379,7 +394,7 @@ namespace NKikimr::NFlatTxCoordinator::NTest {
             Ydb::Cms::CreateDatabaseRequest,
             Ydb::Cms::CreateDatabaseResponse>;
 
-        Y_UNIT_TEST(RestoreTenantConfiguration) {
+        Y_UNIT_TEST_FLAG(RestoreTenantConfiguration, AlterDatabaseCreateHiveFirst) {
             struct TCoordinatorHooks : public ICoordinatorHooks {
                 bool AllowPersistConfig_ = true;
                 std::unordered_map<ui64, NKikimrSubDomains::TProcessingParams> PersistConfig_;
@@ -397,7 +412,8 @@ namespace NKikimr::NFlatTxCoordinator::NTest {
                 .SetNodeCount(1)
                 .SetDynamicNodeCount(4)
                 .SetUseRealThreads(false)
-                .AddStoragePoolType("ssd");
+                .AddStoragePoolType("ssd")
+                .SetEnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst);
 
             Tests::TServer::TPtr server = new TServer(serverSettings);
 
@@ -413,6 +429,8 @@ namespace NKikimr::NFlatTxCoordinator::NTest {
 
             hooks.AllowPersistConfig_ = false;
             hooks.PersistConfig_.clear();
+
+            const ui32 ExpectedProcessingParamsVersion = 2 + (AlterDatabaseCreateHiveFirst ? 1 : 0);
 
             auto createDatabase = [&]() {
                 Ydb::Cms::CreateDatabaseRequest request;
@@ -445,8 +463,8 @@ namespace NKikimr::NFlatTxCoordinator::NTest {
             UNIT_ASSERT_C(hooks.PersistConfig_.size() > 0, "Expected coordinators to attempt to persist configs");
             std::vector<ui64> coordinators;
             for (auto& pr : hooks.PersistConfig_) {
-                UNIT_ASSERT_C(pr.second.GetVersion() == 2,
-                    "Expected tenant coordinator to have a version 2 config:\n" << pr.second.DebugString());
+                UNIT_ASSERT_C(pr.second.GetVersion() == ExpectedProcessingParamsVersion,
+                    "Expected tenant coordinator to have a version " << ExpectedProcessingParamsVersion << " config:\n" << pr.second.DebugString());
                 coordinators.push_back(pr.first);
             }
 
@@ -460,8 +478,8 @@ namespace NKikimr::NFlatTxCoordinator::NTest {
             runtime.SimulateSleep(TDuration::MilliSeconds(50));
             UNIT_ASSERT_C(hooks.PersistConfig_.size() == coordinators.size(), "Expected all coordinators to persist restored config");
             for (auto& pr : hooks.PersistConfig_) {
-                UNIT_ASSERT_C(pr.second.GetVersion() == 2,
-                    "Expected tenant coordinator to restore a version 2 config:\n" << pr.second.DebugString());
+                UNIT_ASSERT_C(pr.second.GetVersion() == ExpectedProcessingParamsVersion,
+                    "Expected tenant coordinator to restore a version " << ExpectedProcessingParamsVersion << " config:\n" << pr.second.DebugString());
             }
 
             // runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG);

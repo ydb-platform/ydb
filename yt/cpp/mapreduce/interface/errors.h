@@ -157,16 +157,13 @@ class TErrorResponse
     : public yexception
 {
 public:
-    TErrorResponse(int httpCode, const TString& requestId);
+    TErrorResponse(TYtError error, const TString& requestId);
 
     /// Get error object returned by server.
     const TYtError& GetError() const;
 
     /// Get if (correlation-id) of request that was responded with error.
     TString GetRequestId() const;
-
-    /// Get HTTP code of response.
-    int GetHttpCode() const;
 
     /// Is error parsed from response trailers.
     bool IsFromTrailers() const;
@@ -179,6 +176,9 @@ public:
 
     /// Check if error was caused by lack of permissions to execute request.
     bool IsAccessDenied() const;
+
+    /// Check if error was caused by authorization issues.
+    bool IsUnauthorized() const;
 
     /// Check if error was caused by failure to lock object because of another transaction is holding lock.
     bool IsConcurrentTransactionLockConflict() const;
@@ -213,7 +213,6 @@ private:
     void Setup();
 
 private:
-    int HttpCode_;
     TString RequestId_;
     TYtError Error_;
     bool IsFromTrailers_ = false;

@@ -2,7 +2,7 @@
 
 PY2_LIBRARY()
 
-VERSION(2.15.1)
+VERSION(2.15.2)
 
 LICENSE(Apache-2.0)
 

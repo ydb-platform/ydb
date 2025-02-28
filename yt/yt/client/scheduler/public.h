@@ -78,6 +78,7 @@ YT_DEFINE_ERROR_ENUM(
     ((CannotUseBothAclAndAco)                 (221))
     ((GangOperationsAllowedOnlyInFifoPools)   (222))
     ((OperationLaunchedInNonexistentPool)     (223))
+    ((OperationHasNoController)               (224))
 );
 
 DEFINE_ENUM(EUnavailableChunkAction,
@@ -166,7 +167,7 @@ DEFINE_ENUM(EAbortReason,
 
 DEFINE_ENUM_UNKNOWN_VALUE(EAbortReason, Unknown);
 
-DEFINE_ENUM(EInterruptReason,
+DEFINE_ENUM(EInterruptionReason,
     ((None)               (0))
     ((Preemption)         (1))
     ((UserRequest)        (2))
@@ -175,7 +176,7 @@ DEFINE_ENUM(EInterruptReason,
     ((JobsDisabledOnNode) (5))
 );
 
-DEFINE_ENUM_UNKNOWN_VALUE(EInterruptReason, Unknown);
+DEFINE_ENUM_UNKNOWN_VALUE(EInterruptionReason, Unknown);
 
 DEFINE_ENUM(EAutoMergeMode,
     (Disabled)

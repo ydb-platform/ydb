@@ -520,15 +520,6 @@ private:
             return {false, std::nullopt};
         }
 
-        if (TBase::IsUserAdmin()) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
-                        "Skip check permission connect db, user is a admin"
-                        << ", database: " << CheckedDatabaseName_
-                        << ", user: " << TBase::GetUserSID()
-                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
-            return {false, std::nullopt};
-        }
-
         if (!TBase::GetSecurityToken()) {
             if (!TBase::IsTokenRequired()) {
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
@@ -549,8 +540,23 @@ private:
             return {false, std::nullopt};
         }
 
-        const ui32 access = NACLib::ConnectDatabase;
         const auto& parsedToken = TBase::GetParsedToken();
+        const auto& databaseOwner = SecurityObject_->GetOwnerSID();
+
+        // admins can connect to databases without having connect rights:
+        // - cluster admin -- to any database
+        // - database admin -- to their database
+        const bool isAdmin = TBase::IsUserAdmin() || (parsedToken && IsDatabaseAdministrator(parsedToken.Get(), databaseOwner));
+        if (isAdmin) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
+                        "Skip check permission connect db, user is a admin"
+                        << ", database: " << CheckedDatabaseName_
+                        << ", user: " << TBase::GetUserSID()
+                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
+            return {false, std::nullopt};
+        }
+
+        const ui32 access = NACLib::ConnectDatabase;
         if (parsedToken && SecurityObject_->CheckAccess(access, *parsedToken)) {
             return {false, std::nullopt};
         }
@@ -562,7 +568,7 @@ private:
         }
 
         const TString error = "No permission to connect to the database";
-        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::GRPC_SERVER, 
+        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::GRPC_SERVER,
             error
             << ": " << CheckedDatabaseName_
             << ", user: " << TBase::GetUserSID()

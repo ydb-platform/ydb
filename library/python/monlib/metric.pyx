@@ -103,6 +103,12 @@ cdef class Counter:
         """
         return self.__wrapped.Inc()
 
+    def add(self, i64 value):
+        """
+        Add value to metric
+        """
+        return self.__wrapped.Add(value)
+
     def reset(self):
         """
         Reset metric value to zero

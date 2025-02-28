@@ -217,6 +217,7 @@ public:
             case TNavigate::KindSequence:
                 return NKikimrViewer::sequence;
             case TNavigate::KindReplication:
+            case TNavigate::KindTransfer:
                 return NKikimrViewer::replication;
             case TNavigate::KindBlobDepot:
                 return NKikimrViewer::blob_depot;

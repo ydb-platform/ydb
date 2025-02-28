@@ -35,6 +35,7 @@ YT_DEFINE_ERROR_ENUM(
     ((RequestInvolvesSequoia)                    (1007))
     ((RequestInvolvesCypress)                    (1008))
     ((BeginCopyDeprecated)                       (1009))
+    ((PrerequisitePathDifferFromExecutionPaths)  (1010))
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -146,6 +147,7 @@ DEFINE_ENUM(EObjectType,
     ((ChunkMap)                                     (402))
     ((LostChunkMap)                                 (403))
     ((LostVitalChunkMap)                            (413))
+    ((LostVitalChunksSampleMap)                     (464))
     ((PrecariousChunkMap)                           (410))
     ((PrecariousVitalChunkMap)                      (411))
     ((OverreplicatedChunkMap)                       (404))

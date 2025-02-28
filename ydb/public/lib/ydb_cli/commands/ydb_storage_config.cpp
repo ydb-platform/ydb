@@ -1,6 +1,6 @@
 #include "ydb_storage_config.h"
 
-#include <ydb-cpp-sdk/client/bsconfig/storage_config.h>
+#include <ydb-cpp-sdk/client/config/config.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
 
 #include <openssl/sha.h>
@@ -22,11 +22,24 @@ TString WrapYaml(const TString& yaml) {
     return out.Str();
 }
 
-TCommandStorageConfig::TCommandStorageConfig()
+TCommandStorageConfig::TCommandStorageConfig(std::optional<bool> overrideOnlyExplicitProfile)
     : TClientCommandTree("storage", {}, "Storage config")
+    , OverrideOnlyExplicitProfile(overrideOnlyExplicitProfile)
 {
     AddCommand(std::make_unique<TCommandStorageConfigFetch>());
     AddCommand(std::make_unique<TCommandStorageConfigReplace>());
+}
+
+void TCommandStorageConfig::PropagateFlags(const TCommandFlags& flags) {
+    TClientCommand::PropagateFlags(flags);
+
+    if (OverrideOnlyExplicitProfile) {
+        OnlyExplicitProfile = *OverrideOnlyExplicitProfile;
+    }
+
+    for (auto& [_, cmd] : SubCommands) {
+        cmd->PropagateFlags(TCommandFlags{.Dangerous = Dangerous, .OnlyExplicitProfile = OnlyExplicitProfile});
+    }
 }
 
 TCommandStorageConfigFetch::TCommandStorageConfigFetch()
@@ -49,23 +62,41 @@ void TCommandStorageConfigFetch::Parse(TConfig& config) {
 
 int TCommandStorageConfigFetch::Run(TConfig& config) {
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NStorageConfig::TStorageConfigClient(*driver);
-    auto result = client.FetchStorageConfig(DedicatedStorageSection, DedicatedClusterSection).GetValueSync();
+    auto client = NYdb::NConfig::TConfigClient(*driver);
+
+    NYdb::NConfig::TFetchAllConfigsSettings settings;
+
+    auto result = client.FetchAllConfigs(settings).GetValueSync();
     NStatusHelpers::ThrowOnError(result);
 
-    const auto& clusterConfig = result.GetConfig();
-    const auto& storageConfig = result.GetStorageConfig();
+    TString clusterConfig;
+    TString storageConfig;
+
+    for (const auto& entry : result.GetConfigs()) {
+        std::visit([&](auto&& arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, NYdb::NConfig::TMainConfigIdentity>) {
+                if (DedicatedClusterSection || !DedicatedStorageSection) {
+                    clusterConfig = entry.Config;
+                }
+            } else if constexpr (std::is_same_v<T, NYdb::NConfig::TStorageConfigIdentity>) {
+                if (DedicatedStorageSection || !DedicatedClusterSection) {
+                    storageConfig = entry.Config;
+                }
+            }
+        }, entry.Identity);
+    }
 
     if (!clusterConfig.empty()) {
         if (!storageConfig.empty() || DedicatedStorageSection) {
-            Cout << "cluster config: " << Endl;
+            Cerr << "cluster config: " << Endl;
         }
         Cout << WrapYaml(TString(clusterConfig));
     }
 
     if (!storageConfig.empty()) {
         if (!clusterConfig.empty() || DedicatedClusterSection) {
-            Cout << "storage config:" << Endl;
+            Cerr << "storage config:" << Endl;
         }
         Cout << WrapYaml(TString(storageConfig));
     }
@@ -128,8 +159,20 @@ void TCommandStorageConfigReplace::Parse(TConfig& config) {
 
 int TCommandStorageConfigReplace::Run(TConfig& config) {
     std::unique_ptr<NYdb::TDriver> driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NStorageConfig::TStorageConfigClient(*driver);
-    auto status = client.ReplaceStorageConfig(ClusterYaml, StorageYaml, SwitchDedicatedStorageSection, DedicatedConfigMode).GetValueSync();
+    auto client = NYdb::NConfig::TConfigClient(*driver);
+
+    auto status = [&]() {
+        if (SwitchDedicatedStorageSection && !*SwitchDedicatedStorageSection) {
+            return client.ReplaceConfigDisableDedicatedStorageSection(ClusterYaml.value()).GetValueSync();
+        } else if (SwitchDedicatedStorageSection && *SwitchDedicatedStorageSection) {
+            return client.ReplaceConfigEnableDedicatedStorageSection(ClusterYaml.value(), StorageYaml.value()).GetValueSync();
+        } else if (DedicatedConfigMode) {
+            return client.ReplaceConfig(ClusterYaml.value(), StorageYaml.value()).GetValueSync();
+        } else {
+            return client.ReplaceConfig(ClusterYaml.value()).GetValueSync();
+        }
+    }();
+
     NStatusHelpers::ThrowOnError(status);
 
     if (!status.GetIssues()) {

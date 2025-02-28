@@ -153,6 +153,43 @@ TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType, bool sc
     return pgmBuilder.NewTupleType(blockItemTypes);
 }
 
+TType* MakeJoinType(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
+    TType* leftStreamType, const TVector<ui32>& leftKeyDrops,
+    TType* rightStreamType, const TVector<ui32>& rightKeyDrops
+) {
+    const auto leftStreamItems = ValidateBlockStreamType(leftStreamType);
+    const auto rightStreamItems = ValidateBlockStreamType(rightStreamType);
+
+    TVector<TType*> joinReturnItems;
+
+    const THashSet<ui32> leftKeyDropsSet(leftKeyDrops.cbegin(), leftKeyDrops.cend());
+    for (size_t i = 0; i < leftStreamItems.size() - 1; i++) {  // Excluding block size
+        if (leftKeyDropsSet.contains(i)) {
+            continue;
+        }
+        joinReturnItems.push_back(pgmBuilder.NewBlockType(leftStreamItems[i], TBlockType::EShape::Many));
+    }
+
+    if (joinKind != EJoinKind::LeftSemi && joinKind != EJoinKind::LeftOnly) {
+        const THashSet<ui32> rightKeyDropsSet(rightKeyDrops.cbegin(), rightKeyDrops.cend());
+        for (size_t i = 0; i < rightStreamItems.size() - 1; i++) {  // Excluding block size
+            if (rightKeyDropsSet.contains(i)) {
+                continue;
+            }
+
+            joinReturnItems.push_back(pgmBuilder.NewBlockType(
+                joinKind == EJoinKind::Inner ? rightStreamItems[i]
+                    : IsOptionalOrNull(rightStreamItems[i]) ? rightStreamItems[i]
+                    : pgmBuilder.NewOptionalType(rightStreamItems[i]),
+                TBlockType::EShape::Many
+            ));
+        }
+    }
+
+    joinReturnItems.push_back(pgmBuilder.NewBlockType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
+    return pgmBuilder.NewStreamType(pgmBuilder.NewMultiType(joinReturnItems));
+}
+
 NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize,
     const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values
 ) {

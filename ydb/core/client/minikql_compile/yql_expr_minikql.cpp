@@ -4,7 +4,6 @@
 #include "db_key_resolver.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/domain.h>
@@ -1608,7 +1607,7 @@ private:
     }
 
     void SendResponseAndDie(const TMiniKQLCompileResult& result, THashMap<TString, ui64> &&resolveCookies, const TActorContext& ctx) {
-        ctx.ExecutorThread.Send(
+        ctx.Send(
             new IEventHandle(
                 ResponseTo,
                 ctx.SelfID,

@@ -7,7 +7,7 @@
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/tiering/tier/identifier.h>
 
-#include <ydb/library/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
 #include <util/generic/hash_set.h>

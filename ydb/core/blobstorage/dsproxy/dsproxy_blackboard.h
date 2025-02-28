@@ -65,6 +65,7 @@ struct TBlobState {
     struct TDiskPart {
         TIntervalSet<i32> Requested;
         ESituation Situation = ESituation::Unknown;
+        TString ErrorReason;
 
         TString ToString() const;
     };
@@ -93,7 +94,8 @@ struct TBlobState {
             ui32 shift, TRope&& data);
     void AddPutOkResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 orderNumber);
     void AddNoDataResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 diskIdxInSubring);
-    void AddErrorResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 diskIdxInSubring);
+    void AddErrorResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 diskIdxInSubring,
+            const TString& errorReason);
     void AddNotYetResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 diskIdxInSubring);
     ui64 GetPredictedDelayNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
             ui32 diskIdxInSubring, NKikimrBlobStorage::EVDiskQueueId queueId) const;
@@ -101,8 +103,10 @@ struct TBlobState {
             NKikimrBlobStorage::EVDiskQueueId queueId, TDiskDelayPredictions *outNWorst,
             const TAccelerationParams& accelerationParams) const;
     TString ToString() const;
+    TString ReportProblems(const TBlobStorageGroupInfo& info) const;
     bool HasWrittenQuorum(const TBlobStorageGroupInfo& info, const TBlobStorageGroupInfo::TGroupVDisks& expired) const;
     static TString SituationToString(ESituation situation);
+    static TString SituationToShortString(ESituation situation);
 };
 
 struct TDiskGetRequest {
@@ -199,7 +203,7 @@ struct TBlackboard {
     void AddResponseData(const TLogoBlobID &id, ui32 orderNumber, ui32 shift, TRope&& data);
     void AddPutOkResponse(const TLogoBlobID &id, ui32 orderNumber);
     void AddNoDataResponse(const TLogoBlobID &id, ui32 orderNumber);
-    void AddErrorResponse(const TLogoBlobID &id, ui32 orderNumber);
+    void AddErrorResponse(const TLogoBlobID &id, ui32 orderNumber, const TString& errorReason);
     void AddNotYetResponse(const TLogoBlobID &id, ui32 orderNumber);
 
     EStrategyOutcome RunStrategies(TLogContext& logCtx, const TStackVec<IStrategy*, 1>& strategies,

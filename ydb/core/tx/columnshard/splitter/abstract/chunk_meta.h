@@ -1,14 +1,15 @@
 #pragma once
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
-
-#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
-
+#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 #include <util/system/types.h>
 #include <util/system/yassert.h>
 
-#include <optional>
 #include <memory>
+#include <optional>
+
+namespace NKikimr::NArrow::NAccessor {
+class IChunkedArray;
+}
 
 namespace NKikimr::NOlap {
 
@@ -17,6 +18,7 @@ protected:
     ui32 RecordsCount = 0;
     ui32 RawBytes = 0;
     TSimpleChunkMeta() = default;
+
 public:
     TSimpleChunkMeta(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column);
 
@@ -30,6 +32,5 @@ public:
     ui32 GetRawBytes() const {
         return RawBytes;
     }
-
 };
-}
+}   // namespace NKikimr::NOlap

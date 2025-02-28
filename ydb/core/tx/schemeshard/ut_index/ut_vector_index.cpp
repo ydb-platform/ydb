@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
 
       }
       NTableIndex::TTableColumns implTableColumns = {{"data2", "data1"}, {}};
-      auto desc = CalcVectorKmeansTreePostingImplTableDesc(baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc, "something");
+      auto desc = CalcVectorKmeansTreePostingImplTableDesc({}, baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc, "something");
       std::string_view expected[] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, "data1", "data2"};
       for (size_t i = 0; auto& column : desc.GetColumns()) {
         UNIT_ASSERT_STRINGS_EQUAL(column.GetName(), expected[i]);

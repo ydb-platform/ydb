@@ -462,6 +462,9 @@ class RetryFilter::CallData {
     grpc_transport_stream_op_batch_payload batch_payload_;
     // For send_initial_metadata.
     grpc_metadata_batch send_initial_metadata_{calld_->arena_};
+
+    SliceBuffer send_message_;
+
     // For send_trailing_metadata.
     grpc_metadata_batch send_trailing_metadata_{calld_->arena_};
     // For intercepting recv_initial_metadata.
@@ -1911,6 +1914,7 @@ void RetryFilter::CallData::CallAttempt::BatchData::OnComplete(
   }
   if (batch_data->batch_.send_message) {
     ++call_attempt->completed_send_message_count_;
+    call_attempt->send_message_.Clear();
   }
   if (batch_data->batch_.send_trailing_metadata) {
     call_attempt->completed_send_trailing_metadata_ = true;
@@ -1999,7 +2003,8 @@ void RetryFilter::CallData::CallAttempt::BatchData::
       calld->send_messages_[call_attempt_->started_send_message_count_];
   ++call_attempt_->started_send_message_count_;
   batch_.send_message = true;
-  batch_.payload->send_message.send_message = cache.slices;
+  call_attempt_->send_message_ = cache.slices->Copy();
+  batch_.payload->send_message.send_message = &call_attempt_->send_message_;
   batch_.payload->send_message.flags = cache.flags;
 }
 

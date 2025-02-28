@@ -46,53 +46,115 @@ TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
     const auto leftStream = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, leftList));
     const auto rightStream = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, rightList));
 
-    const auto leftStreamItems = ValidateBlockStreamType(leftStream.GetStaticType());
-    const auto rightStreamItems = ValidateBlockStreamType(rightStream.GetStaticType());
+    const auto joinReturnType = MakeJoinType(pgmBuilder,
+        joinKind,
+        leftStream.GetStaticType(),
+        leftKeyDrops,
+        rightStream.GetStaticType(),
+        rightKeyDrops
+    );
 
-    TVector<TType*> joinReturnItems;
-
-    const THashSet<ui32> leftKeyDropsSet(leftKeyDrops.cbegin(), leftKeyDrops.cend());
-    for (size_t i = 0; i < leftStreamItems.size() - 1; i++) {  // Excluding block size
-        if (leftKeyDropsSet.contains(i)) {
-            continue;
-        }
-        joinReturnItems.push_back(pgmBuilder.NewBlockType(leftStreamItems[i], TBlockType::EShape::Many));
+    auto rightBlockStorageNode = pgmBuilder.BlockStorage(rightStream, pgmBuilder.NewResourceType(BlockStorageResourcePrefix));
+    if (joinKind != EJoinKind::Cross) {
+        rightBlockStorageNode = pgmBuilder.BlockMapJoinIndex(
+            rightBlockStorageNode,
+            AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
+            rightKeyColumns,
+            rightAny,
+            pgmBuilder.NewResourceType(BlockMapJoinIndexResourcePrefix)
+        );
     }
 
-    if (joinKind != EJoinKind::LeftSemi && joinKind != EJoinKind::LeftOnly) {
-        const THashSet<ui32> rightKeyDropsSet(rightKeyDrops.cbegin(), rightKeyDrops.cend());
-        for (size_t i = 0; i < rightStreamItems.size() - 1; i++) {  // Excluding block size
-            if (rightKeyDropsSet.contains(i)) {
-                continue;
-            }
-
-            joinReturnItems.push_back(pgmBuilder.NewBlockType(
-                joinKind == EJoinKind::Inner ? rightStreamItems[i]
-                    : IsOptionalOrNull(rightStreamItems[i]) ? rightStreamItems[i]
-                    : pgmBuilder.NewOptionalType(rightStreamItems[i]),
-                TBlockType::EShape::Many
-            ));
-        }
-    }
-
-    joinReturnItems.push_back(pgmBuilder.NewBlockType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
-
-    TType* joinReturnType = pgmBuilder.NewStreamType(pgmBuilder.NewMultiType(joinReturnItems));
     auto joinNode = pgmBuilder.BlockMapJoinCore(
         leftStream,
-        rightStream,
+        rightBlockStorageNode,
+        AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
         joinKind,
         leftKeyColumns,
         leftKeyDrops,
         rightKeyColumns,
         rightKeyDrops,
-        rightAny,
         joinReturnType
     );
 
     return FromWideStream(pgmBuilder, DethrottleStream(pgmBuilder, joinNode));
 }
 
+TRuntimeNode BuildBlockJoinsWithNodeMultipleUsage(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
+    TRuntimeNode leftList, const TVector<ui32>& leftKeyColumns, const TVector<ui32>& leftKeyDrops,
+    TRuntimeNode rightList, const TVector<ui32>& rightKeyColumns, const TVector<ui32>& rightKeyDrops, bool rightAny
+) {
+    Y_ENSURE(joinKind == EJoinKind::Inner);
+    Y_ENSURE(!rightAny);
+    Y_ENSURE(leftKeyDrops.empty() && rightKeyDrops.empty());
+
+    const auto leftStream = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, leftList));
+    const auto leftStream2 = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, leftList));
+    const auto leftStream3 = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, leftList));
+
+    const auto rightStream = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, rightList));
+
+    const auto joinReturnType = MakeJoinType(pgmBuilder,
+        joinKind,
+        leftStream.GetStaticType(),
+        leftKeyDrops,
+        rightStream.GetStaticType(),
+        rightKeyDrops
+    );
+
+    auto rightBlockStorageNode = pgmBuilder.BlockStorage(rightStream, pgmBuilder.NewResourceType(BlockStorageResourcePrefix));
+    auto rightBlockIndexNode = pgmBuilder.BlockMapJoinIndex(
+        rightBlockStorageNode,
+        AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
+        rightKeyColumns,
+        rightAny,
+        pgmBuilder.NewResourceType(BlockMapJoinIndexResourcePrefix)
+    );
+
+    auto joinNode = pgmBuilder.BlockMapJoinCore(
+        leftStream,
+        rightBlockIndexNode,
+        AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
+        EJoinKind::Inner,
+        leftKeyColumns,
+        leftKeyDrops,
+        rightKeyColumns,
+        rightKeyDrops,
+        joinReturnType
+    );
+
+    auto joinNode2 = pgmBuilder.BlockMapJoinCore(
+        leftStream2,
+        rightBlockIndexNode,
+        AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
+        EJoinKind::Inner,
+        leftKeyColumns,
+        leftKeyDrops,
+        rightKeyColumns,
+        rightKeyDrops,
+        joinReturnType
+    );
+
+    auto joinNode3 = pgmBuilder.BlockMapJoinCore(
+        leftStream3,
+        rightBlockStorageNode,
+        AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
+        EJoinKind::Cross,
+        {},
+        {},
+        {},
+        {},
+        joinReturnType
+    );
+
+    return pgmBuilder.OrderedExtend({
+        FromWideStream(pgmBuilder, DethrottleStream(pgmBuilder, joinNode)),
+        FromWideStream(pgmBuilder, DethrottleStream(pgmBuilder, joinNode2)),
+        FromWideStream(pgmBuilder, DethrottleStream(pgmBuilder, joinNode3))
+    });
+}
+
+template<auto BuildBlockJoinFunc>
 NUdf::TUnboxedValue DoTestBlockJoin(TSetup<false>& setup,
     TType* leftType, NUdf::TUnboxedValue&& leftListValue, const TVector<ui32>& leftKeyColumns, const TVector<ui32>& leftKeyDrops,
     TType* rightType, NUdf::TUnboxedValue&& rightListValue, const TVector<ui32>& rightKeyColumns, const TVector<ui32>& rightKeyDrops, bool rightAny,
@@ -112,7 +174,7 @@ NUdf::TUnboxedValue DoTestBlockJoin(TSetup<false>& setup,
 
     TRuntimeNode leftList = pb.Arg(pb.NewListType(leftBlockType));
     TRuntimeNode rightList = pb.Arg(pb.NewListType(rightBlockType));
-    const auto joinNode = BuildBlockJoin(pb, joinKind, leftList, leftKeyColumns, leftKeyDrops, rightList, rightKeyColumns, rightKeyDrops, rightAny);
+    const auto joinNode = BuildBlockJoinFunc(pb, joinKind, leftList, leftKeyColumns, leftKeyDrops, rightList, rightKeyColumns, rightKeyDrops, rightAny);
 
     const auto joinType = joinNode.GetStaticType();
     Y_ENSURE(joinType->IsList(), "Join result has to be list");
@@ -137,6 +199,7 @@ NUdf::TUnboxedValue DoTestBlockJoin(TSetup<false>& setup,
     return FromBlocks(ctx, AS_TYPE(TTupleType, joinItemType)->GetElements(), graph->GetValue());
 }
 
+template<auto BuildBlockJoinFunc = BuildBlockJoin>
 void RunTestBlockJoin(TSetup<false>& setup, EJoinKind joinKind,
     TType* expectedType, const NUdf::TUnboxedValue& expected,
     TType* leftType, NUdf::TUnboxedValue&& leftListValue, const TVector<ui32>& leftKeyColumns,
@@ -146,7 +209,7 @@ void RunTestBlockJoin(TSetup<false>& setup, EJoinKind joinKind,
 ) {
     const size_t testSize = leftListValue.GetListLength();
     for (size_t blockSize = 1; blockSize <= testSize; blockSize <<= 1) {
-        const auto got = DoTestBlockJoin(setup,
+        const auto got = DoTestBlockJoin<BuildBlockJoinFunc>(setup,
             leftType, std::move(leftListValue), leftKeyColumns, leftKeyDrops,
             rightType, std::move(rightListValue), rightKeyColumns, rightKeyDrops, rightAny,
             joinKind, blockSize, scalar
@@ -1318,6 +1381,85 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestCross) {
                          leftType, std::move(leftList), {},
                          rightType, std::move(rightList), {},
                          {}, {}
+        );
+    }
+
+} // Y_UNIT_TEST_SUITE
+
+Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestNodeMultipleUsage) {
+    constexpr size_t testSize = 1 << 7;
+    constexpr size_t valueSize = 3;
+    static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
+    static const TSet<ui64> fibonacci = GenerateFibonacci(testSize);
+    static const TString hugeString(128, '1');
+
+    Y_UNIT_TEST(TestBasic) {
+        TSetup<false> setup(GetNodeFactory());
+
+        // 1. Make input for the "left" stream.
+        TVector<ui64> leftKeyInit(testSize);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
+            [](const auto key) { return key * 1001; });
+        TVector<TString> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
+            [](const auto key) { return threeLetterValues[key]; });
+
+        // 2. Make input for the "right" stream.
+        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+        TVector<TString> rightValueInit;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
+            [](const auto key) { return std::to_string(key); });
+
+        // 3. Make "expected" data.
+        TVector<ui64> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<TString> expectedValue;
+        TVector<ui64> expectedRightKey;
+        TVector<TString> expectedRightValue;
+
+        TMap<ui64, TString> rightMap;
+        for (size_t i = 0; i < rightKeyInit.size(); i++) {
+            rightMap[rightKeyInit[i]] = rightValueInit[i];
+        }
+
+        // Two inner joins
+        for (size_t join = 0; join < 2; join++) {
+            for (size_t i = 0; i < leftKeyInit.size(); i++) {
+                const auto& found = rightMap.find(leftKeyInit[i]);
+                if (found != rightMap.cend()) {
+                    expectedKey.push_back(leftKeyInit[i]);
+                    expectedSubkey.push_back(leftSubkeyInit[i]);
+                    expectedValue.push_back(leftValueInit[i]);
+                    expectedRightKey.push_back(found->first);
+                    expectedRightValue.push_back(found->second);
+                }
+            }
+        }
+
+        // Cross join
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            for (size_t j = 0; j < rightKeyInit.size(); j++) {
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+                expectedRightKey.push_back(rightKeyInit[j]);
+                expectedRightValue.push_back(rightValueInit[j]);
+            }
+        }
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKeyInit, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue, expectedRightKey, expectedRightValue);
+
+        RunTestBlockJoin<BuildBlockJoinsWithNodeMultipleUsage>(setup, EJoinKind::Inner, expectedType, expected,
+                                                               leftType, std::move(leftList), {0},
+                                                               rightType, std::move(rightList), {0},
+                                                               {}, {}
         );
     }
 

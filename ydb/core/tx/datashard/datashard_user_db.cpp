@@ -334,6 +334,9 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId, const
             auto* info = Self.GetVolatileTxManager().FindByCommitTxId(txId);
             if (info && info->State != EVolatileTxState::Aborting) {
                 if (VolatileDependencies.insert(txId).second && !VolatileTxId) {
+                    if (GlobalTxId == 0) {
+                        throw TNeedGlobalTxId();
+                    }
                     SetVolatileTxId(GlobalTxId);
                 }
             }
@@ -564,6 +567,9 @@ void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<co
     } else if (auto* cached = Self.GetConflictsCache().GetTableCache(localTableId).FindUncommittedWrites(keyCells)) {
         for (ui64 txId : *cached) {
             BreakWriteConflict(txId);
+            if (NeedGlobalTxId) {
+                throw TNeedGlobalTxId();
+            }
         }
         return;
     } else {
@@ -581,6 +587,10 @@ void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<co
         nullptr, txObserver
     );
 
+    if (NeedGlobalTxId) {
+        throw TNeedGlobalTxId();
+    }
+
     if (res.Ready == NTable::EReady::Page) {
         if (mustFindConflicts || LockTxId) {
             // We must gather all conflicts
@@ -590,6 +600,9 @@ void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<co
         // Upgrade to volatile ordered commit and ignore the page fault
         if (!VolatileCommitOrdered) {
             if (!VolatileTxId) {
+                if (GlobalTxId == 0) {
+                    throw TNeedGlobalTxId();
+                }
                 SetVolatileTxId(GlobalTxId);
             }
             VolatileCommitOrdered = true;
@@ -634,6 +647,10 @@ void TDataShardUserDb::BreakWriteConflict(ui64 txId) {
                 // it into a real volatile transaction, it works as usual in
                 // every sense, only persistent commit order is affected by
                 // a dependency below.
+                if (GlobalTxId == 0) {
+                    NeedGlobalTxId = true;
+                    return;
+                }
                 SetVolatileTxId(GlobalTxId);
             }
             VolatileDependencies.insert(info->TxId);

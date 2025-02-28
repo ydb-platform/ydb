@@ -141,17 +141,8 @@ IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeF
         const auto& name = rowType->GetMemberName(i);
         MKQL_ENSURE_S(inputIndex.emplace(TString(name), i).second);
 
-        auto memberType = rowType->GetMemberType(i);
-        if (memberType->IsOptional()) {
-            memberType = AS_TYPE(TOptionalType, memberType)->GetItemType();
-        }
-
-        if (memberType->IsPg()) {
-            auto pgType = AS_TYPE(TPgType, memberType);
-            rowTypes[i] = NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(pgType->GetTypeId()));
-        } else {
-            rowTypes[i] = NScheme::TTypeInfo(AS_TYPE(TDataType, memberType)->GetSchemeType());
-        }
+        const NScheme::TTypeInfo typeInfo = NKqp::UnwrapTypeInfoFromStruct(*rowType, i);
+        rowTypes[i] = typeInfo;
     }
 
     TVector<ui32> keyIndices(tableInfo->KeyColumnIds.size());

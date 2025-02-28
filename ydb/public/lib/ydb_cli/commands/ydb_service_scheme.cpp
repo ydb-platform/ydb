@@ -41,8 +41,8 @@ void TCommandMakeDirectory::Config(TConfig& config) {
     SetFreeArgTitle(0, "<path>", "Path to create");
 }
 
-void TCommandMakeDirectory::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandMakeDirectory::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -76,8 +76,8 @@ void TCommandRemoveDirectory::Config(TConfig& config) {
     SetFreeArgTitle(0, "<path>", "Path to remove");
 }
 
-void TCommandRemoveDirectory::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandRemoveDirectory::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -245,6 +245,10 @@ void TCommandDescribe::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     Database = config.Database;
     ParseOutputFormats();
+}
+
+void TCommandDescribe::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -279,6 +283,10 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
         return DescribeReplication(driver);
     case NScheme::ESchemeEntryType::View:
         return DescribeView(driver);
+    case NScheme::ESchemeEntryType::ExternalDataSource:
+        return DescribeExternalDataSource(driver);
+    case NScheme::ESchemeEntryType::ExternalTable:
+        return DescribeExternalTable(driver);
     default:
         return DescribeEntryDefault(entry);
     }
@@ -609,6 +617,36 @@ int TCommandDescribe::DescribeView(const TDriver& driver) {
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintViewResponsePretty);
+}
+
+int TCommandDescribe::PrintExternalDataSourceResponsePretty(const NYdb::NTable::TExternalDataSourceDescription& description) const {
+    // to do
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::DescribeExternalDataSource(const TDriver& driver) {
+    NTable::TTableClient client(driver);
+    const auto sessionResult = client.CreateSession().ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
+    const auto description = sessionResult.GetSession().DescribeExternalDataSource(Path).ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(description);
+
+    return PrintDescription(this, OutputFormat, description.GetExternalDataSourceDescription(), &TCommandDescribe::PrintExternalDataSourceResponsePretty);
+}
+
+int TCommandDescribe::PrintExternalTableResponsePretty(const NYdb::NTable::TExternalTableDescription& description) const {
+    // to do
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::DescribeExternalTable(const TDriver& driver) {
+    NTable::TTableClient client(driver);
+    const auto sessionResult = client.CreateSession().ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
+    const auto result = sessionResult.GetSession().DescribeExternalTable(Path).ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+    return PrintDescription(this, OutputFormat, result.GetExternalTableDescription(), &TCommandDescribe::PrintExternalTableResponsePretty);
 }
 
 namespace {
@@ -1059,11 +1097,15 @@ void TCommandList::Config(TConfig& config) {
 
 void TCommandList::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0, true);
     if (AdvancedMode && FromNewLine) {
         // TODO: add "consider using --format shell"
         throw TMisuseException() << "Options -1 and -l are incompatible";
     }
+}
+
+void TCommandList::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    ParsePath(config, 0, true);
 }
 
 int TCommandList::Run(TConfig& config) {
@@ -1129,7 +1171,6 @@ void TCommandPermissionGrant::Config(TConfig& config) {
 
 void TCommandPermissionGrant::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0);
     Subject = config.ParseResult->GetFreeArgs()[1];
     if (Subject.empty()) {
         throw TMisuseException() << "Missing required argument <subject>";
@@ -1137,6 +1178,11 @@ void TCommandPermissionGrant::Parse(TConfig& config) {
     if (!PermissionsToGrant.size()) {
         throw TMisuseException() << "At least one permission to grant should be provided";
     }
+}
+
+void TCommandPermissionGrant::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    ParsePath(config, 0);
 }
 
 int TCommandPermissionGrant::Run(TConfig& config) {
@@ -1170,7 +1216,6 @@ void TCommandPermissionRevoke::Config(TConfig& config) {
 
 void TCommandPermissionRevoke::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0);
     Subject = config.ParseResult->GetFreeArgs()[1];
     if (Subject.empty()) {
         throw TMisuseException() << "Missing required argument <subject>";
@@ -1178,6 +1223,11 @@ void TCommandPermissionRevoke::Parse(TConfig& config) {
     if (!PermissionsToRevoke.size()) {
         throw TMisuseException() << "At least one permission to revoke should be provided";
     }
+}
+
+void TCommandPermissionRevoke::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    ParsePath(config, 0);
 }
 
 int TCommandPermissionRevoke::Run(TConfig& config) {
@@ -1211,7 +1261,6 @@ void TCommandPermissionSet::Config(TConfig& config) {
 
 void TCommandPermissionSet::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0);
     Subject = config.ParseResult->GetFreeArgs()[1];
     if (Subject.empty()) {
         throw TMisuseException() << "Missing required argument <subject>";
@@ -1219,6 +1268,11 @@ void TCommandPermissionSet::Parse(TConfig& config) {
     if (!PermissionsToSet.size()) {
         throw TMisuseException() << "At least one permission to set should be provided";
     }
+}
+
+void TCommandPermissionSet::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    ParsePath(config, 0);
 }
 
 int TCommandPermissionSet::Run(TConfig& config) {
@@ -1249,11 +1303,15 @@ void TCommandChangeOwner::Config(TConfig& config) {
 
 void TCommandChangeOwner::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0);
     Owner = config.ParseResult->GetFreeArgs()[1];
     if (!Owner){
         throw TMisuseException() << "Missing required argument <owner>";
     }
+}
+
+void TCommandChangeOwner::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    ParsePath(config, 0);
 }
 
 int TCommandChangeOwner::Run(TConfig& config) {
@@ -1281,8 +1339,8 @@ void TCommandPermissionClear::Config(TConfig& config) {
     SetFreeArgTitle(0, "<path>", "Path to clear permissions to");
 }
 
-void TCommandPermissionClear::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandPermissionClear::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -1311,8 +1369,8 @@ void TCommandPermissionSetInheritance::Config(TConfig& config) {
     SetFreeArgTitle(0, "<path>", "Path to set interrupt-inheritance flag for");
 }
 
-void TCommandPermissionSetInheritance::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandPermissionSetInheritance::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -1341,8 +1399,8 @@ void TCommandPermissionClearInheritance::Config(TConfig& config) {
     SetFreeArgTitle(0, "<path>", "Path to set interrupt-inheritance flag for");
 }
 
-void TCommandPermissionClearInheritance::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandPermissionClearInheritance::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -1371,8 +1429,8 @@ void TCommandPermissionList::Config(TConfig& config) {
     SetFreeArgTitle(0, "<path>", "Path to list permissions for");
 }
 
-void TCommandPermissionList::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandPermissionList::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 

@@ -2,14 +2,15 @@ LIBRARY()
 
 SRCS(
     actors.cpp
-    common.cpp
     kqp_runner.cpp
     ydb_setup.cpp
 )
 
 PEERDIR(
+    ydb/core/kqp/workload_service/actors
     ydb/core/testlib
 
+    ydb/tests/tools/kqprun/runlib
     ydb/tests/tools/kqprun/src/proto
 )
 

@@ -15,7 +15,3 @@ YQL_UDF_CONTRIB(json_udf)
     )
 
     END()
-
-RECURSE_FOR_TESTS(
-    test
-)

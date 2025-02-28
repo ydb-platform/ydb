@@ -88,8 +88,15 @@ namespace NKikimr::NBsController {
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNeeded:
                 if (ConsolePipe) {
                     Y_ABORT_UNLESS(Self.YamlConfig);
-                    const auto& [yaml, configVersion, yamlReturnedByFetch] = *Self.YamlConfig;
-                    NTabletPipe::SendData(Self.SelfId(), ConsolePipe, new TEvBlobStorage::TEvControllerConsoleCommitRequest(yaml));
+                    if (const auto& [yaml, configVersion, yamlReturnedByFetch] = *Self.YamlConfig; yaml) {
+                        NTabletPipe::SendData(
+                            Self.SelfId(),
+                            ConsolePipe,
+                            new TEvBlobStorage::TEvControllerConsoleCommitRequest(
+                                yaml,
+                                AllowUnknownFields,
+                                BypassMetadataChecks));
+                    }
                 }
                 break;
 
@@ -143,8 +150,15 @@ namespace NKikimr::NBsController {
         }
         if (ConsolePipe) {
             Y_ABORT_UNLESS(Self.YamlConfig);
-            const auto& [yaml, configVersion, yamlReturnedByFetch] = *Self.YamlConfig;
-            NTabletPipe::SendData(Self.SelfId(), ConsolePipe, new TEvBlobStorage::TEvControllerConsoleCommitRequest(yaml));
+            if (const auto& [yaml, configVersion, yamlReturnedByFetch] = *Self.YamlConfig; yaml) {
+                NTabletPipe::SendData(
+                    Self.SelfId(),
+                    ConsolePipe,
+                    new TEvBlobStorage::TEvControllerConsoleCommitRequest(
+                        yaml,
+                        AllowUnknownFields,
+                        BypassMetadataChecks));
+            }
         } else {
             Y_ABORT_UNLESS(!ClientId);
         }
@@ -170,8 +184,8 @@ namespace NKikimr::NBsController {
                 break;
 
             case NKikimrBlobStorage::TEvControllerConsoleCommitResponse::NotCommitted:
-                STLOG(PRI_CRIT, BS_CONTROLLER, BSC28, "Console config not commited");
-                Y_DEBUG_ABORT();
+                STLOG(PRI_CRIT, BS_CONTROLLER, BSC28, "Console config not committed");
+                Y_DEBUG_ABORT_S(record.GetErrorReason()); // FIXME: fails here on force
                 break;
 
             case NKikimrBlobStorage::TEvControllerConsoleCommitResponse::Committed:
@@ -255,6 +269,10 @@ namespace NKikimr::NBsController {
 
         if (record.HasClusterYaml()) {
             PendingYamlConfig.emplace(record.GetClusterYaml());
+            // don't need to reset them explicitly
+            // every time we get new request we just replace them
+            AllowUnknownFields = record.GetAllowUnknownFields();
+            BypassMetadataChecks = record.GetBypassMetadataChecks();
         } else {
             PendingYamlConfig.reset();
         }
@@ -286,6 +304,8 @@ namespace NKikimr::NBsController {
 
         auto validateConfigEv = std::make_unique<TEvBlobStorage::TEvControllerValidateConfigRequest>();
         validateConfigEv->Record.SetYAML(record.GetClusterYaml());
+        validateConfigEv->Record.SetAllowUnknownFields(record.GetAllowUnknownFields());
+        validateConfigEv->Record.SetBypassMetadataChecks(record.GetBypassMetadataChecks());
         NTabletPipe::SendData(Self.SelfId(), ConsolePipe, validateConfigEv.release());
     }
 
@@ -356,14 +376,14 @@ namespace NKikimr::NBsController {
             auto parseConfig = [&](const TString& yaml, NKikimrConfig::TAppConfig& appConfig, ui64& version) {
                 try {
                     auto json = NYaml::Yaml2Json(YAML::Load(yaml), true);
-                    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(), appConfig, true);
+                    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(AllowUnknownFields), appConfig, true);
                     if (json.Has("metadata")) {
                         if (auto& metadata = json["metadata"]; metadata.Has("version")) {
                             version = metadata["version"].GetUIntegerRobust();
                         }
                     }
                 } catch (const std::exception& ex) {
-                    throw TExError(TStringBuilder() << "failed to parse YAML config: " << ex.what());
+                    throw TExError(TStringBuilder() << "failed to parse YAML config: " << ex.what() << "\n" << yaml);
                 }
             };
 

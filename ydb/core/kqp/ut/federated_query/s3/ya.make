@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/kqp)
 
 IF (WITH_VALGRIND OR SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

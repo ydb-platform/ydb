@@ -161,7 +161,7 @@ public:
     }
 
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const {
-        NYdb::NTopic::TTopicClientSettings opts;
+        NYdb::NTopic::TTopicClientSettings opts = PqGateway->GetTopicClientSettings();
         opts.Database(SourceParams.GetDatabase())
             .DiscoveryEndpoint(SourceParams.GetEndpoint())
             .SslCredentials(NYdb::TSslCredentials(SourceParams.GetUseSsl()))

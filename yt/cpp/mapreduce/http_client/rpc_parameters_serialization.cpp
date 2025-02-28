@@ -442,6 +442,9 @@ TNode SerializeParamsForSuspendOperation(
     if (options.AbortRunningJobs_) {
         result["abort_running_jobs"] = *options.AbortRunningJobs_;
     }
+    if (options.Reason_) {
+        result["reason"] = **options.Reason_;
+    }
     return result;
 }
 
@@ -554,6 +557,9 @@ TNode SerializeParamsForListJobs(
     }
     if (options.WithMonitoringDescriptor_) {
         result["with_monitoring_descriptor"] = *options.WithMonitoringDescriptor_;
+    }
+    if (options.OperationIncarnation_) {
+        result["operation_incarnation"] = *options.OperationIncarnation_;
     }
     if (options.FromTime_) {
         result["from_time"] = ToString(options.FromTime_);
@@ -876,7 +882,10 @@ TNode SerializeParamsForSkyShareTable(
     }
 
     if (options.Pool_) {
-        result["pool"] = *options.Pool_;
+        result["share_operation_options"] = BuildYsonNodeFluently()
+            .BeginMap()
+                .Item("pool").Value(*options.Pool_)
+            .EndMap();
     }
 
     return result;

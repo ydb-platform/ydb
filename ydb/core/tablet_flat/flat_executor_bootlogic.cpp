@@ -122,7 +122,7 @@ void TExecutorBootLogic::PrepareEnv(bool follower, ui32 gen, TExecutorCaches cac
 {
     BootTimestamp = AppData()->MonotonicTimeProvider->Now();
 
-    auto *sys = TlsActivationContext->ExecutorThread.ActorSystem;
+    auto *sys = TActivationContext::ActorSystem();
     auto *logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_FLATBOOT);
 
     LoadBlobQueue.Config.TabletID = Info->TabletID;

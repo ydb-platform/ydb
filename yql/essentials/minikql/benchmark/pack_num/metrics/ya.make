@@ -16,4 +16,6 @@ DEPENDS(
     yql/essentials/minikql/benchmark/pack_num
 )
 
+INCLUDE(${ARCADIA_ROOT}/devtools/large_on_multi_slots.inc)
+
 END()

@@ -23,6 +23,15 @@ namespace NKikimr {
             // list of freed chunks; FoundChunksToDefrag can differ from FreedChunks.size(),
             // because we search ChunksToDefrag on some snapshot, real state can differ
             TDefragChunks FreedChunks;
+
+            void Output(IOutputStream& s) const {
+                s << "{FoundChunksToDefrag# " << FoundChunksToDefrag
+                    << " RewrittenRecs# " << RewrittenRecs
+                    << " RewrittenBytes# " << RewrittenBytes
+                    << " Eof# " << Eof
+                    << " FreedChunks# " << FormatList(FreedChunks)
+                    << "}";
+            }
         };
 
         TStat Stat;

@@ -12,6 +12,7 @@
 #include <yql/essentials/core/url_lister/interface/url_lister_manager.h>
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/sql/sql.h>
 
 #include <library/cpp/yson/node/node.h>
 #include <library/cpp/time_provider/time_provider.h>
@@ -39,9 +40,11 @@ public:
 
 class TModuleResolver : public IModuleResolver {
 public:
-    TModuleResolver(TModulesTable&& modules, ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
+    TModuleResolver(const NSQLTranslation::TTranslators& translators, TModulesTable&& modules,
+        ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
         const THashSet<TString>& sqlFlags, bool optimizeLibraries = true, THolder<TExprContext> ownedCtx = {})
-        : OwnedCtx(std::move(ownedCtx))
+        : Translators(translators)
+        , OwnedCtx(std::move(ownedCtx))
         , LibsContext(nextUniqueId)
         , Modules(std::move(modules))
         , ClusterMapping(clusterMapping)
@@ -53,10 +56,12 @@ public:
         }
     }
 
-    TModuleResolver(const TModulesTable* parentModules, ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
+    TModuleResolver(const NSQLTranslation::TTranslators& translators, const TModulesTable* parentModules,
+        ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
         const THashSet<TString>& sqlFlags, bool optimizeLibraries, const TSet<TString>& knownPackages, const THashMap<TString,
         THashMap<int, TLibraryCohesion>>& libs, const TString& fileAliasPrefix)
-        : ParentModules(parentModules)
+        : Translators(translators)
+        , ParentModules(parentModules)
         , LibsContext(nextUniqueId)
         , KnownPackages(knownPackages)
         , Libs(libs)
@@ -111,6 +116,7 @@ private:
     TString SubstParameters(const TString& str);
 
 private:
+    const NSQLTranslation::TTranslators Translators;
     THolder<TExprContext> OwnedCtx;
     const TModulesTable* ParentModules = nullptr;
     TUserDataStorage::TPtr UserData;
@@ -301,6 +307,12 @@ enum class EBlockEngineMode {
     Force /* "force" */,
 };
 
+enum class EEngineType {
+    Default /* "default" */,
+    Dq /* "dq" */,
+    Ytflow /* "ytflow" */,
+};
+
 struct TUdfCachedInfo {
     TString NormalizedName;
     const TTypeAnnotationNode* FunctionType = nullptr;
@@ -429,6 +441,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
 
     std::optional<bool> InitializeResult;
     EHiddenMode HiddenMode = EHiddenMode::Disable;
+    EEngineType EngineType = EEngineType::Default;
 
     template <typename T>
     T GetRandom() const noexcept;

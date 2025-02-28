@@ -8,6 +8,7 @@
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 
 #include <yql/essentials/minikql/arrow/arrow_defs.h>
 #include <yql/essentials/minikql/arrow/arrow_util.h>
@@ -352,6 +353,7 @@ public:
         , Reader_(MakeBlockReader(TTypeInfoHelper(), type))
         , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type, ctx.Builder->GetPgBuilder()))
         , Compare_(TBlockTypeHelper().MakeComparator(type))
+        , Packer_(false, type)
     {
     }
 
@@ -373,6 +375,16 @@ public:
         PushValueToState<IsMin>(typedState, datum, row, *Reader_, *Converter_, *Compare_, Ctx_);
     }
 
+    void SerializeState(void* state, NUdf::TOutputBuffer& buffer) final {
+        auto typedState = static_cast<TGenericState*>(state);
+        buffer.PushString(Packer_.Pack(*typedState));
+    }
+
+    void DeserializeState(void* state, NUdf::TInputBuffer& buffer) final {
+        auto typedState = static_cast<TGenericState*>(state);
+        *typedState = Packer_.Unpack(buffer.PopString(), Ctx_.HolderFactory).Release();
+    }
+
     std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) final {
         return std::make_unique<TGenericColumnBuilder>(size, Type_, Ctx_);
     }
@@ -383,6 +395,7 @@ private:
     const std::unique_ptr<IBlockReader> Reader_;
     const std::unique_ptr<IBlockItemConverter> Converter_;
     const NYql::NUdf::IBlockItemComparator::TPtr Compare_;
+    const TValuePacker Packer_;
 };
 
 template <typename TStringType, bool IsMin>
@@ -603,6 +616,17 @@ public:
         auto typedState = static_cast<TGenericState*>(state);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         PushValueToState<TStringType, IsMin>(typedState, datum, row);
+    }
+
+    void SerializeState(void* state, NUdf::TOutputBuffer& buffer) final {
+        auto typedState = static_cast<TGenericState*>(state);
+        buffer.PushString(typedState->AsStringRef());
+    }
+
+    void DeserializeState(void* state, NUdf::TInputBuffer& buffer) final {
+        auto typedState = static_cast<TGenericState*>(state);
+
+        *typedState = std::move(MakeString(buffer.PopString()));
     }
 
     std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) final {
@@ -832,6 +856,24 @@ public:
         auto typedState = MakeStateWrapper<TStateType>(state);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         PushValueToState<IsNullable, IsScalar, TIn, IsMin>(typedState.Get(), datum, row);
+    }
+
+    void SerializeState(void* state, NUdf::TOutputBuffer& buffer) final {
+        auto typedState = MakeStateWrapper<TStateType>(state);
+        if constexpr (IsNullable) {
+            buffer.PushNumber(typedState->IsValid);
+        }
+        buffer.PushNumber(typedState->Value);
+    }
+
+    void DeserializeState(void* state, NUdf::TInputBuffer& buffer) final {
+        auto typedState = MakeStateWrapper<TStateType>(state);
+
+        buffer.PopNumber(typedState->Value);
+
+        if constexpr (IsNullable) {
+            buffer.PopNumber(typedState->IsValid);
+        }
     }
 
     std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) final {

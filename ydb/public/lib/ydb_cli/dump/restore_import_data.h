@@ -4,8 +4,7 @@
 
 class TLog;
 
-namespace NYdb {
-namespace NDump {
+namespace NYdb::NDump {
 
 NPrivate::IDataAccumulator* CreateImportDataAccumulator(
     const NTable::TTableDescription& dumpedDesc,
@@ -16,11 +15,11 @@ NPrivate::IDataAccumulator* CreateImportDataAccumulator(
 NPrivate::IDataWriter* CreateImportDataWriter(
     const TString& path,
     const NTable::TTableDescription& desc,
+    ui32 partitionCount,
     NImport::TImportClient& importClient,
     NTable::TTableClient& tableClient,
     const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators,
     const TRestoreSettings& settings,
     const std::shared_ptr<TLog>& log);
 
-} // NDump
-} // NYdb
+} // NYdb::NDump

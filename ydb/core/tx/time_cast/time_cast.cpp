@@ -333,7 +333,12 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
             if (bucket.Tablets.empty()) {
                 // There are no tablets interested in this bucket, avoid unnecessary watches
                 bucket.WatchSent = false;
-                bucket.Waiters = { };
+                if (!bucket.Waiters.empty()) {
+                    bucket.Waiters = { };
+                }
+                if (!bucket.TabletWaiters.empty()) {
+                    bucket.TabletWaiters.clear();
+                }
                 continue;
             }
 
@@ -368,6 +373,7 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
             NTabletPipe::SendData(ctx, client, req.release());
 
             bucket.WatchSent = true;
+            bucket.WatchSynced = false;
         }
     }
 
@@ -627,48 +633,46 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvUpdate::TPtr& ev, co
         Y_ABORT_UNLESS(record.GetBucket() < mediator.BucketsSz);
         auto& bucket = mediator.Buckets[record.GetBucket()];
         const ui64 step = record.GetTimeBarrier();
-        switch (bucket.SafeStep.RefCount()) {
-            case 0:
-                break;
-            case 1:
+        bucket.SafeStep->Set(step);
+        if (bucket.Tablets.empty()) {
+            if (!bucket.Waiters.empty()) {
                 bucket.Waiters = { };
-                bucket.TabletWaiters = { };
-                [[fallthrough]];
-            default: {
-                bucket.SafeStep->Set(step);
-                THashSet<std::pair<TActorId, ui64>> processed; // a set of processed tablets
-                while (!bucket.Waiters.empty()) {
-                    const auto& top = bucket.Waiters.top();
-                    if (step < top.PlanStep) {
-                        break;
-                    }
-                    if (processed.insert(std::make_pair(top.Sender, top.TabletId)).second) {
-                        ctx.Send(top.Sender, new TEvMediatorTimecast::TEvNotifyPlanStep(top.TabletId, step));
-                    }
-                    bucket.Waiters.pop();
+            }
+            if (!bucket.TabletWaiters.empty()) {
+                bucket.TabletWaiters.clear();
+            }
+        } else {
+            THashSet<std::pair<TActorId, ui64>> processed; // a set of processed tablets
+            while (!bucket.Waiters.empty()) {
+                const auto& top = bucket.Waiters.top();
+                if (step < top.PlanStep) {
+                    break;
                 }
-                while (!bucket.TabletWaiters.empty()) {
-                    const auto& candidate = *bucket.TabletWaiters.begin();
-                    if (step < candidate.PlanStep) {
-                        break;
-                    }
-                    auto it = Tablets.find(candidate.TabletId);
-                    if (it != Tablets.end()) {
-                        auto& tabletInfo = it->second;
-                        while (!tabletInfo.Waiters.empty()) {
-                            const auto& top = *tabletInfo.Waiters.begin();
-                            if (step < top.PlanStep) {
-                                break;
-                            }
-                            if (processed.insert(std::make_pair(top.Sender, top.TabletId)).second) {
-                                ctx.Send(top.Sender, new TEvMediatorTimecast::TEvNotifyPlanStep(top.TabletId, step));
-                            }
-                            tabletInfo.Waiters.erase(tabletInfo.Waiters.begin());
+                if (processed.insert(std::make_pair(top.Sender, top.TabletId)).second) {
+                    ctx.Send(top.Sender, new TEvMediatorTimecast::TEvNotifyPlanStep(top.TabletId, step));
+                }
+                bucket.Waiters.pop();
+            }
+            while (!bucket.TabletWaiters.empty()) {
+                const auto& candidate = *bucket.TabletWaiters.begin();
+                if (step < candidate.PlanStep) {
+                    break;
+                }
+                auto it = Tablets.find(candidate.TabletId);
+                if (it != Tablets.end()) {
+                    auto& tabletInfo = it->second;
+                    while (!tabletInfo.Waiters.empty()) {
+                        const auto& top = *tabletInfo.Waiters.begin();
+                        if (step < top.PlanStep) {
+                            break;
                         }
+                        if (processed.insert(std::make_pair(top.Sender, top.TabletId)).second) {
+                            ctx.Send(top.Sender, new TEvMediatorTimecast::TEvNotifyPlanStep(top.TabletId, step));
+                        }
+                        tabletInfo.Waiters.erase(tabletInfo.Waiters.begin());
                     }
-                    bucket.TabletWaiters.erase(bucket.TabletWaiters.begin());
                 }
-                break;
+                bucket.TabletWaiters.erase(bucket.TabletWaiters.begin());
             }
         }
         for (ui64 coordinatorId : mediator.Coordinators) {

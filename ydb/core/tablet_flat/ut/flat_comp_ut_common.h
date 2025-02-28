@@ -125,10 +125,13 @@ public:
             SnapshotTable(params->Table);
         }
 
-        auto subset = DB.Subset(params->Table, { }, params->Edge.Head);
+        auto subset = DB.CompactionSubset(params->Table, params->Edge.Head, { });
         if (params->Parts) {
             subset->Flatten.insert(subset->Flatten.end(), params->Parts.begin(), params->Parts.end());
         }
+
+        // Note: we don't compact TxStatus in these tests
+        Y_ABORT_UNLESS(subset->TxStatus.empty());
 
         Y_ABORT_UNLESS(!*subset || subset->IsStickedToHead());
 
@@ -163,8 +166,7 @@ public:
             Y_ABORT_UNLESS(parts.back());
         }
 
-        auto partsCopy = parts;
-        DB.Replace(params->Table, partsCopy, *subset);
+        DB.Replace(params->Table, *subset, parts, { });
 
         return MakeHolder<TCompactionResult>(subset->Epoch(), std::move(parts));
     }

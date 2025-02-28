@@ -9,7 +9,7 @@ namespace NYT::NAuth {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TTvmServiceConfig)
+DECLARE_REFCOUNTED_STRUCT(TTvmServiceConfig)
 DECLARE_REFCOUNTED_STRUCT(ITvmService)
 DECLARE_REFCOUNTED_STRUCT(IDynamicTvmService)
 

@@ -1024,7 +1024,7 @@ TTableSchemaPtr TTableSchema::ToQuery() const
 TTableSchemaPtr TTableSchema::WithSystemColumns(const TSystemColumnOptions& options) const
 {
     std::vector<TColumnSchema> columns;
-    auto safeAdd = [&](const std::string& name, const ESimpleLogicalValueType type) {
+    auto safeAdd = [&] (const std::string& name, const ESimpleLogicalValueType type) {
         const auto existing = FindColumn(name);
         if (!existing) {
             columns.push_back(TColumnSchema(name, type));

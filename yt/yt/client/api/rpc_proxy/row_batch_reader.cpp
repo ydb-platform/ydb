@@ -18,7 +18,7 @@ TRowBatchReader::TRowBatchReader(
     IAsyncZeroCopyInputStreamPtr underlying,
     bool isStreamWithStatistics)
     : Underlying_(std::move(underlying))
-    , Decoder_(CreateWireRowStreamDecoder(NameTable_))
+    , Decoder_(CreateWireRowStreamDecoder(NameTable_, CreateUnlimitedWireProtocolOptions()))
     , IsStreamWithStatistics_(isStreamWithStatistics)
 {
     YT_VERIFY(Underlying_);
@@ -97,7 +97,7 @@ const TNameTablePtr& TRowBatchReader::GetNameTable() const
 TFuture<TSharedRange<TUnversionedRow>> TRowBatchReader::GetRows()
 {
     return Underlying_->Read()
-        .Apply(BIND([this, weakThis = MakeWeak(this)](const TSharedRef& block) {
+        .Apply(BIND([this, weakThis = MakeWeak(this)] (const TSharedRef& block) {
             auto this_ = weakThis.Lock();
             if (!this_) {
                 THROW_ERROR_EXCEPTION(NYT::EErrorCode::Canceled, "Reader destroyed");

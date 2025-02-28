@@ -1,6 +1,6 @@
 /* syntax version 1 */
 /* postgres can not */
-$make_struct = CALLABLE (
+$make_struct = Callable(
     Callable<(String) -> Struct<lel: Int32>>,
     ($_string) -> {
         RETURN AsStruct(5 AS lel);
@@ -22,7 +22,7 @@ $kekify_struct = ($struct) -> {
 };
 
 $struct = AsStruct(
-    CALLABLE (
+    Callable(
         Callable<(String) -> Struct<kek: Int32>>,
         ($string) -> {
             RETURN $kekify_struct($make_struct($string));

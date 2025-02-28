@@ -85,11 +85,11 @@ DEFINE_REFCOUNTED_TYPE(TDelayedExecutorEntry)
     R^acq(Stopping_, false)    (c)       RMW^acq(Queue_, empty, empty) (f)
 
     Since (c) reads |false| it must be reading from Stopping_ ctor which is
-    W^na(Stopping_, false) which preceedes (d) in modification order. Thus
+    W^na(Stopping_, false) which precedes (d) in modification order. Thus
     (c) must read-from some modification preceding (d) in modification order (ctor)
     and therefore (c) -cob-> (d) (coherence ordered before).
     Likewise, (f) reads |empty| which can only be read from Queue_ ctor or
-    prior Dequeue both of which preceede (a) in modification order (ctor is obvious;
+    prior Dequeue both of which precede (a) in modification order (ctor is obvious;
     former Dequeue by assumption that no one has read |CB| ever: if some (a) was
     prior to some Dequeue in modification order, |CB| would inevitably be read).
     So, (f) -cob-> (a). For fences we now have to relations:

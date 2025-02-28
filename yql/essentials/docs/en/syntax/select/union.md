@@ -6,7 +6,7 @@ Union of the results of the underlying queries, with duplicates removed.
 Behavior is identical to using `UNION ALL` followed by `SELECT DISTINCT *`.
 Refer to [UNION ALL](#union-all) for more details.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT key FROM T1
@@ -41,7 +41,7 @@ In the "by position" mode, the output of the resulting data schema uses the foll
 
 The order of the output columns in this mode is the same as the order of columns in the first input.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT 1 AS x

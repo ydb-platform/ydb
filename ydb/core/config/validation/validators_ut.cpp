@@ -2,6 +2,8 @@
 
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -403,6 +405,29 @@ Y_UNIT_TEST_SUITE(ConfigValidation) {
         auto res = ValidateStaticGroup(cur, proposed, err);
         UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(err[0], "Too many VDiskLocation changes");
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+}
+
+Y_UNIT_TEST_SUITE(DatabaseConfigValidation) {
+    Y_UNIT_TEST(AllowedFields) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnablePgSyntax(true);
+        config.MutableTableServiceConfig()->SetEnableStreamWrite(true);
+
+        std::vector<TString> err;
+        auto res = ValidateDatabaseConfig(config, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 0);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+    }
+
+    Y_UNIT_TEST(NotAllowedFields) {
+        auto [config, _] = PrepareStaticStorageTest();
+
+        std::vector<TString> err;
+        auto res = ValidateDatabaseConfig(config, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(err[0], "'blob_storage_config' is not allowed to be used in the database configuration");
         UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
     }
 }

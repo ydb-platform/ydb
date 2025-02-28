@@ -20,6 +20,7 @@ namespace NKikimr {
         Mine->Types->CalculateMetadataEtag();
         Mine->DataShardExportFactory = ef;
         Mine->IoContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
+        Mine->SchemeOperationFactory.reset(NSchemeShard::DefaultOperationFactory());
 
         Domains = new TDomainsInfo;
     }
@@ -38,6 +39,7 @@ namespace NKikimr {
         auto *app = new TAppData(0, 0, 0, 0, { }, Mine->Types.Get(), Mine->Funcs.Get(), Mine->Formats.Get(), nullptr);
         app->DataShardExportFactory = Mine->DataShardExportFactory.get();
         app->IoContextFactory = Mine->IoContext.get();
+        app->SchemeOperationFactory = Mine->SchemeOperationFactory.get();
 
         app->DomainsInfo = std::move(Domains);
         app->ChannelProfiles = Channels ? Channels : new TChannelProfiles;

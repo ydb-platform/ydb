@@ -30,21 +30,22 @@ IClientsCachePtr CreateClientsCache(const TClientsCacheConfigPtr& config, const 
 IClientsCachePtr CreateClientsCache(const TClientsCacheConfigPtr& config, const NApi::TClientOptions& defaultClientOptions);
 
 //! Creates clients cache which shares same config (except server name).
+//! Note: It also registers a connection in the cache for getting a client from the cache by |connectionConfig.ClusterName|.
 IClientsCachePtr CreateClientsCache(
-    const NApi::NRpcProxy::TConnectionConfigPtr& config,
+    const NApi::NRpcProxy::TConnectionConfigPtr& connectionConfig,
     const NApi::TClientOptions& options);
 
 //! Shortcut to use client options from env.
-IClientsCachePtr CreateClientsCache(const NApi::NRpcProxy::TConnectionConfigPtr& config);
+IClientsCachePtr CreateClientsCache(const NApi::NRpcProxy::TConnectionConfigPtr& connectionConfig);
 
-//! Shortcut to create cache with custom options and proxy role.
+//! Shortcut to create cache with custom options and default config.
 IClientsCachePtr CreateClientsCache(const NApi::TClientOptions& options);
 
 //! Shortcut to create cache with default config.
 IClientsCachePtr CreateClientsCache();
 
-//! Helper function to create one cluster config from cluster URL and clusters config.
-NApi::NRpcProxy::TConnectionConfigPtr MakeClusterConfig(const TClientsCacheConfigPtr& config, TStringBuf clusterUrl);
+//! Helper function to get a cluster config by |clusterUrl|.
+NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TClientsCacheConfigPtr& config, TStringBuf clusterUrl);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -89,7 +89,7 @@ TEST(TUpdateYsonStructTest, Simple)
 
     std::string updatedPool;
 
-    auto configurator = NYsonStructUpdate::TConfigurator<TSpecWithPool>();
+    auto configurator = TConfigurator<TSpecWithPool>();
     {
         configurator.Field("pool", &TSpecBase::Pool)
             .Updater(BIND([&] (const std::string& newPool) {
@@ -97,7 +97,7 @@ TEST(TUpdateYsonStructTest, Simple)
             }));
     }
 
-    NYsonStructUpdate::Update(configurator, oldSpec, newSpec);
+    std::move(configurator).Seal().Update(oldSpec, newSpec);
 
     EXPECT_EQ(updatedPool, "new_pool");
 }
@@ -109,7 +109,7 @@ TEST(TUpdateYsonStructTest, NonUpdatable)
 
     std::string updatedPool;
 
-    auto configurator = NYsonStructUpdate::TConfigurator<TSpecWithPool>();
+    auto configurator = TConfigurator<TSpecWithPool>();
     {
         configurator.Field("pool", &TSpecBase::Pool)
             .Updater(BIND([&] (const std::string& newPool) {
@@ -118,7 +118,7 @@ TEST(TUpdateYsonStructTest, NonUpdatable)
     }
 
     EXPECT_ANY_THROW({
-        NYsonStructUpdate::Update(configurator, oldSpec, newSpec);
+        std::move(configurator).Seal().Update(oldSpec, newSpec);
     });
 }
 
@@ -130,16 +130,16 @@ TEST(TUpdateYsonStructTest, Inherited)
 
     std::string updatedPool;
 
-    auto configurator = NYsonStructUpdate::TConfigurator<TSpecBase>();
+    auto configurator = TConfigurator<TSpecBase>();
     {
-        NYsonStructUpdate::TConfigurator<TSpecWithPool> parentRegistrar = configurator;
+        TConfigurator<TSpecWithPool> parentRegistrar = configurator;
         parentRegistrar.Field("pool", &TSpecBase::Pool)
             .Updater(BIND([&] (const std::string& newPool) {
                 updatedPool = newPool;
             }));
     }
 
-    NYsonStructUpdate::Update(configurator, oldSpec, newSpec);
+    std::move(configurator).Seal().Update(oldSpec, newSpec);
 
     EXPECT_EQ(updatedPool, "new_pool");
 }
@@ -152,23 +152,25 @@ TEST(TUpdateYsonStructTest, Nested)
     std::string updatedPool;
     std::string updatedCommand;
 
-    auto configurator = NYsonStructUpdate::TConfigurator<TSpecBase>();
+    auto configurator = TConfigurator<TSpecBase>();
     {
-        NYsonStructUpdate::TConfigurator<TSpecWithPool> parentRegistrar = configurator;
+        TConfigurator<TSpecWithPool> parentRegistrar = configurator;
         parentRegistrar.Field("pool", &TSpecBase::Pool)
             .Updater(BIND([&] (const std::string& newPool) {
                 updatedPool = newPool;
             }));
     }
     configurator.Field("mapper", &TSpecBase::Mapper)
-        .NestedUpdater(BIND([&](NYsonStructUpdate::TConfigurator<TMapperSpec> configurator) {
+        .NestedUpdater(BIND([&] () {
+            TConfigurator<TMapperSpec> configurator;
             configurator.Field("command", &TMapperSpec::Command)
                 .Updater(BIND([&] (const std::string& newCommand) {
                     updatedCommand = newCommand;
                 }));
+            return TSealedConfigurator(std::move(configurator));
         }));
 
-    NYsonStructUpdate::Update(configurator, oldSpec, newSpec);
+    std::move(configurator).Seal().Update(oldSpec, newSpec);
 
     EXPECT_EQ(updatedPool, "new_pool");
     EXPECT_EQ(updatedCommand, "sort");

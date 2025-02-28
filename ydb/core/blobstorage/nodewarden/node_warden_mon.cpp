@@ -106,23 +106,23 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
         TAG(TH3) { out << "StorageConfig"; }
         DIV() {
             out << "<p>Self-management enabled: " << (SelfManagementEnabled ? "yes" : "no") << "</p>";
-            TString s;
-            NProtoBuf::TextFormat::PrintToString(StorageConfig, &s);
-            out << "<pre>" << s << "</pre>";
+            out << "<pre>";
+            OutputPrettyMessage(out, StorageConfig);
+            out << "</pre>";
         }
 
         TAG(TH3) { out << "Static service set"; }
         DIV() {
-            TString s;
-            NProtoBuf::TextFormat::PrintToString(StaticServices, &s);
-            out << "<pre>" << s << "</pre>";
+            out << "<pre>";
+            OutputPrettyMessage(out, StaticServices);
+            out << "</pre>";
         }
 
         TAG(TH3) { out << "Dynamic service set"; }
         DIV() {
-            TString s;
-            NProtoBuf::TextFormat::PrintToString(DynamicServices, &s);
-            out << "<pre>" << s << "</pre>";
+            out << "<pre>";
+            OutputPrettyMessage(out, DynamicServices);
+            out << "</pre>";
         }
 
         RenderLocalDrives(out);
@@ -361,4 +361,70 @@ void TNodeWarden::RenderLocalDrives(IOutputStream& out) {
             }
         }
     }
+}
+
+void NKikimr::NStorage::EscapeHtmlString(IOutputStream& out, const TString& s) {
+    size_t begin = 0;
+    auto dump = [&](size_t end) {
+        out << TStringBuf(s.data() + begin, end - begin);
+        begin = end + 1;
+    };
+    for (size_t i = 0, len = s.size(); i < len; ++i) {
+        char ch = s[i];
+        switch (ch) {
+            case '&':
+                dump(i);
+                out << "&amp;";
+                break;
+
+            case '<':
+                dump(i);
+                out << "&lt;";
+                break;
+
+            case '>':
+                dump(i);
+                out << "&gt;";
+                break;
+
+            case '\'':
+                dump(i);
+                out << "&#39;";
+                break;
+
+            case '"':
+                dump(i);
+                out << "&quot;";
+                break;
+        }
+    }
+    dump(s.size());
+}
+
+void NKikimr::NStorage::OutputPrettyMessage(IOutputStream& out, const NProtoBuf::Message& message) {
+    class TFieldPrinter : public NProtoBuf::TextFormat::FastFieldValuePrinter {
+    public:
+        void PrintBytes(const TProtoStringType& value, NProtoBuf::TextFormat::BaseTextGenerator *generator) const override {
+            TStringStream newValue;
+            constexpr size_t maxPrintedLen = 32;
+            for (size_t i = 0; i < Min<size_t>(value.size(), maxPrintedLen); ++i) {
+                if (i) {
+                    newValue << ' ';
+                }
+                newValue << Sprintf("%02x", static_cast<std::byte>(value[i]));
+            }
+            if (value.size() > maxPrintedLen) {
+                newValue << " ... (total " << value.size() << " bytes)";
+            }
+            TString& s = newValue.Str();
+            generator->Print(s.data(), s.size());
+        }
+    };
+
+    NProtoBuf::TextFormat::Printer p;
+    p.SetDefaultFieldValuePrinter(new TFieldPrinter);
+
+    TString s;
+    p.PrintToString(message, &s);
+    EscapeHtmlString(out, s);
 }

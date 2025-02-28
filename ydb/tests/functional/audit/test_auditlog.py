@@ -434,7 +434,8 @@ def test_dynconfig(ydb_cluster, prepared_test_env, _client_session_pool_with_aut
         _client_session_pool_with_auth_root.retry_operation_sync(apply_config, config=config)
 
     print(capture_audit.captured, file=sys.stderr)
-    assert json.dumps(config) in capture_audit.captured
+    cfg = json.dumps(config)
+    assert cfg in capture_audit.captured
 
 
 @pytest.mark.parametrize('config_fixture', ["_bad_dynconfig", "_good_dynconfig"])
@@ -450,4 +451,5 @@ def test_broken_dynconfig(ydb_cluster, prepared_test_env, pool_fixture, config_f
             pass
 
     print(capture_audit.captured, file=sys.stderr)
-    assert json.dumps(config) in capture_audit.captured
+    cfg = json.dumps(config)
+    assert cfg in capture_audit.captured

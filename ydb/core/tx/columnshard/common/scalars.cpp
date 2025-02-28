@@ -1,7 +1,8 @@
 #include "scalars.h"
 
-#include <ydb/library/formats/arrow/switch_type.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+
 #include <util/system/unaligned_mem.h>
 
 namespace NKikimr::NOlap {
@@ -64,27 +65,27 @@ void ScalarToConstant(const arrow::Scalar& scalar, NKikimrSSA::TProgram_TConstan
             break;
         case arrow::Type::STRING: {
             auto& buffer = static_cast<const arrow::StringScalar&>(scalar).value;
-            value.SetText(TString(reinterpret_cast<const char *>(buffer->data()), buffer->size()));
+            value.SetText(TString(reinterpret_cast<const char*>(buffer->data()), buffer->size()));
             break;
         }
         case arrow::Type::LARGE_STRING: {
             auto& buffer = static_cast<const arrow::LargeStringScalar&>(scalar).value;
-            value.SetText(TString(reinterpret_cast<const char *>(buffer->data()), buffer->size()));
+            value.SetText(TString(reinterpret_cast<const char*>(buffer->data()), buffer->size()));
             break;
         }
         case arrow::Type::BINARY: {
             auto& buffer = static_cast<const arrow::BinaryScalar&>(scalar).value;
-            value.SetBytes(TString(reinterpret_cast<const char *>(buffer->data()), buffer->size()));
+            value.SetBytes(TString(reinterpret_cast<const char*>(buffer->data()), buffer->size()));
             break;
         }
         case arrow::Type::LARGE_BINARY: {
             auto& buffer = static_cast<const arrow::LargeBinaryScalar&>(scalar).value;
-            value.SetBytes(TString(reinterpret_cast<const char *>(buffer->data()), buffer->size()));
+            value.SetBytes(TString(reinterpret_cast<const char*>(buffer->data()), buffer->size()));
             break;
         }
         case arrow::Type::FIXED_SIZE_BINARY: {
             auto& buffer = static_cast<const arrow::FixedSizeBinaryScalar&>(scalar).value;
-            value.SetBytes(TString(reinterpret_cast<const char *>(buffer->data()), buffer->size()));
+            value.SetBytes(TString(reinterpret_cast<const char*>(buffer->data()), buffer->size()));
             break;
         }
         default:
@@ -92,8 +93,7 @@ void ScalarToConstant(const arrow::Scalar& scalar, NKikimrSSA::TProgram_TConstan
     }
 }
 
-std::shared_ptr<arrow::Scalar> ConstantToScalar(const NKikimrSSA::TProgram_TConstant& value,
-                                                const std::shared_ptr<arrow::DataType>& type) {
+std::shared_ptr<arrow::Scalar> ConstantToScalar(const NKikimrSSA::TProgram_TConstant& value, const std::shared_ptr<arrow::DataType>& type) {
     switch (type->id()) {
         case arrow::Type::BOOL:
             return std::make_shared<arrow::BooleanScalar>(value.GetBool());
@@ -166,10 +166,8 @@ TString SerializeKeyScalar(const std::shared_ptr<arrow::Scalar>& key) {
         using T = typename TWrap::T;
         using TScalar = typename arrow::TypeTraits<T>::ScalarType;
 
-        if constexpr (std::is_same_v<T, arrow::StringType> ||
-                      std::is_same_v<T, arrow::BinaryType> ||
-                      std::is_same_v<T, arrow::LargeStringType> ||
-                      std::is_same_v<T, arrow::LargeBinaryType> ||
+        if constexpr (std::is_same_v<T, arrow::StringType> || std::is_same_v<T, arrow::BinaryType> ||
+                      std::is_same_v<T, arrow::LargeStringType> || std::is_same_v<T, arrow::LargeBinaryType> ||
                       std::is_same_v<T, arrow::FixedSizeBinaryType>) {
             auto& buffer = static_cast<const TScalar&>(*key).value;
             out = buffer->ToString();
@@ -197,10 +195,8 @@ std::shared_ptr<arrow::Scalar> DeserializeKeyScalar(const TString& key, const st
         using T = typename TWrap::T;
         using TScalar = typename arrow::TypeTraits<T>::ScalarType;
 
-        if constexpr (std::is_same_v<T, arrow::StringType> ||
-                      std::is_same_v<T, arrow::BinaryType> ||
-                      std::is_same_v<T, arrow::LargeStringType> ||
-                      std::is_same_v<T, arrow::LargeBinaryType> ||
+        if constexpr (std::is_same_v<T, arrow::StringType> || std::is_same_v<T, arrow::BinaryType> ||
+                      std::is_same_v<T, arrow::LargeStringType> || std::is_same_v<T, arrow::LargeBinaryType> ||
                       std::is_same_v<T, arrow::FixedSizeBinaryType>) {
             out = std::make_shared<TScalar>(arrow::Buffer::FromString(key), type);
         } else if constexpr (std::is_same_v<T, arrow::HalfFloatType>) {
@@ -228,4 +224,4 @@ std::shared_ptr<arrow::Scalar> DeserializeKeyScalar(const TString& key, const st
     return out;
 }
 
-}
+}   // namespace NKikimr::NOlap

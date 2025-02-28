@@ -1055,6 +1055,17 @@ auto IWireProtocolReader::GetSchemaData(const TTableSchema& schema) -> TSchemaDa
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TWireProtocolOptions CreateUnlimitedWireProtocolOptions()
+{
+    return {
+        .MaxStringValueLength = std::numeric_limits<i64>::max(),
+        .MaxAnyValueLength = std::numeric_limits<i64>::max(),
+        .MaxCompositeValueLength = std::numeric_limits<i64>::max(),
+    };
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 std::unique_ptr<IWireProtocolReader> CreateWireProtocolReader(TSharedRef data, TRowBufferPtr rowBuffer, TWireProtocolOptions options)
 {
     return std::make_unique<TWireProtocolReader>(std::move(data), std::move(rowBuffer), std::move(options));

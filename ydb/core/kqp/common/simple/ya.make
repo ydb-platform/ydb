@@ -2,10 +2,11 @@ LIBRARY()
 
 SRCS(
     helpers.cpp
-    query_id.cpp
-    settings.cpp
-    services.cpp
     kqp_event_ids.cpp
+    query_id.cpp
+    reattach.cpp
+    services.cpp
+    settings.cpp
     temp_tables.cpp
 )
 

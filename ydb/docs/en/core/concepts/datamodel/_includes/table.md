@@ -205,7 +205,7 @@ At the moment, not all functionality of column-oriented tables is implemented. T
 * Adding data to column-oriented tables using the SQL INSERT statement.
 * Deleting data from column-oriented tables using the SQL DELETE statement. In fact, deletion is only possible after the TTL data retention time has expired.
 
-## Partitioning of a column-oriented table {#olap-tables-partitioning}
+### Partitioning column-oriented tables {#olap-tables-partitioning}
 
 Unlike row-oriented {{ ydb-short-name }} tables, you cannot partition column-oriented tables by primary keys but only by specially designated partitioning keys. Partitioning keys constitute a subset of the table's primary keys.
 

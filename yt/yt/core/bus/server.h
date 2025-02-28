@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <yt/yt/core/bus/tcp/public.h>
+
 #include <yt/yt/core/actions/future.h>
 
 namespace NYT::NBus {
@@ -21,6 +23,12 @@ struct IBusServer
      *  \param handler Incoming messages handler.
      */
     virtual void Start(IMessageHandlerPtr handler) = 0;
+
+    //! Apply new dynamic config.
+    /*
+     *  \param config New config.
+     */
+    virtual void OnDynamicConfigChanged(const NBus::TBusServerDynamicConfigPtr& config) = 0;
 
     //! Asynchronously stops the listener.
     /*!

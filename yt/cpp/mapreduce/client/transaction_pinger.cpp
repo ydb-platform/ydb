@@ -40,25 +40,23 @@ namespace {
 
 void CheckError(const TString& requestId, NHttp::IResponsePtr response)
 {
-    TErrorResponse errorResponse(static_cast<int>(response->GetStatusCode()), requestId);
-
     if (const auto* ytError = response->GetHeaders()->Find("X-YT-Error")) {
-        errorResponse.ParseFromJsonError(*ytError);
-    }
-    if (errorResponse.IsOk()) {
-        return;
-    }
+        TYtError error;
+        error.ParseFrom(*ytError);
 
-    YT_LOG_ERROR("RSP %v - HTTP %v - %v",
+        TErrorResponse errorResponse(std::move(error), requestId);
+        if (errorResponse.IsOk()) {
+            return;
+        }
+
+        YT_LOG_ERROR("RSP %v - HTTP %v - %v",
             requestId,
             response->GetStatusCode(),
             errorResponse.AsStrBuf());
 
-    ythrow errorResponse;
-
-////////////////////////////////////////////////////////////////////////////////
-
-} // namespace
+        ythrow errorResponse;
+    }
+}
 
 void PingTx(NHttp::IClientPtr httpClient, const TPingableTransaction& tx)
 {

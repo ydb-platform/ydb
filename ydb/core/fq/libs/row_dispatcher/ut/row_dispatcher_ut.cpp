@@ -73,6 +73,7 @@ public:
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_TRACE);
         NConfig::TRowDispatcherConfig config;
         config.SetEnabled(true);
+        config.SetSendStatusPeriodSec(1);
         NConfig::TRowDispatcherCoordinatorConfig& coordinatorConfig = *config.MutableCoordinator();
         coordinatorConfig.SetCoordinationNodePath("RowDispatcher");
         auto& database = *coordinatorConfig.MutableDatabase();
@@ -156,9 +157,9 @@ public:
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, 1));
     }
 
-    void MockNoSession(TActorId readActorId) {
+    void MockNoSession(TActorId readActorId, ui64 generation) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvNoSession>();
-        Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, 1));
+        Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, generation));
     }
 
     void MockNewDataArrived(ui64 partitionId, TActorId topicSessionId, TActorId readActorId) {
@@ -181,10 +182,10 @@ public:
         Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release()));
     }
     
-    void MockGetNextBatch(ui64 partitionId, TActorId readActorId, ui64 generation) {
+    void MockGetNextBatch(ui64 partitionId, TActorId readActorId, ui64 generation, ui64 seqNo = 2) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvGetNextBatch>();
         event->Record.SetPartitionId(partitionId);
-        event->Record.MutableTransportMeta()->SetSeqNo(2);
+        event->Record.MutableTransportMeta()->SetSeqNo(seqNo);
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, generation));
     }
 
@@ -236,11 +237,11 @@ public:
         return actorId;
     }
 
-    void ProcessData(NActors::TActorId readActorId, ui64 partId, NActors::TActorId topicSessionActorId, ui64 generation = 1) {
+    void ProcessData(NActors::TActorId readActorId, ui64 partId, NActors::TActorId topicSessionActorId, ui64 generation = 1, ui64 seqNo = 1) {
         MockNewDataArrived(partId, topicSessionActorId, readActorId);
         ExpectNewDataArrived(readActorId, partId);
 
-        MockGetNextBatch(partId, readActorId, generation);
+        MockGetNextBatch(partId, readActorId, generation, seqNo);
         ExpectGetNextBatch(topicSessionActorId, partId);
 
         MockMessageBatch(partId, topicSessionActorId, readActorId, generation);
@@ -440,13 +441,29 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
     }
 
     Y_UNIT_TEST_F(ProcessNoSession, TFixture) {
-        MockAddSession(Source1, {PartitionId0}, ReadActorId3);
+        ui64 generation = 42;
+        MockAddSession(Source1, {PartitionId0}, ReadActorId3, generation);
         auto topicSessionId = ExpectRegisterTopicSession();
-        ExpectStartSessionAck(ReadActorId3);
+        ExpectStartSessionAck(ReadActorId3, generation);
         ExpectStartSession(topicSessionId);
-        ProcessData(ReadActorId3, PartitionId0, topicSessionId);
+        ProcessData(ReadActorId3, PartitionId0, topicSessionId, generation, 2);
 
-        MockNoSession(ReadActorId3);
+        MockNoSession(ReadActorId3, generation - 1); // Ignore NoSession with wrong generation.
+        ProcessData(ReadActorId3, PartitionId0, topicSessionId, generation, 3);
+
+        MockNoSession(ReadActorId3, generation);
+        ExpectStopSession(topicSessionId);
+    }
+
+    Y_UNIT_TEST_F(IgnoreWrongPartitionId, TFixture) {
+        MockAddSession(Source1, {PartitionId0}, ReadActorId1);
+        auto topicSessionId = ExpectRegisterTopicSession();
+        ExpectStartSessionAck(ReadActorId1);
+        ExpectStartSession(topicSessionId);
+
+        MockNewDataArrived(PartitionId1, topicSessionId, ReadActorId1);
+
+        MockStopSession(Source1, ReadActorId1);
         ExpectStopSession(topicSessionId);
     }
 }

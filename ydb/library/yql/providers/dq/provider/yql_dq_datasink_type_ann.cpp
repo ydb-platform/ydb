@@ -14,7 +14,7 @@ namespace {
 
 class TDqsDataSinkTypeAnnotationTransformer : public TVisitorTransformerBase {
 public:
-    TDqsDataSinkTypeAnnotationTransformer(TTypeAnnotationContext* typeCtx, bool enableDqReplicate)
+    TDqsDataSinkTypeAnnotationTransformer(TTypeAnnotationContext* typeCtx)
         : TVisitorTransformerBase(true), TypeCtx(typeCtx)
     {
         AddHandler({TDqStage::CallableName()}, Hndl(&NDq::AnnotateDqStage));
@@ -28,11 +28,7 @@ public:
         AddHandler({TDqCnBroadcast::CallableName()}, Hndl(&NDq::AnnotateDqConnection));
         AddHandler({TDqCnValue::CallableName()}, Hndl(&NDq::AnnotateDqCnValue));
         AddHandler({TDqCnMerge::CallableName()}, Hndl(&NDq::AnnotateDqCnMerge));
-        if (enableDqReplicate) {
-            AddHandler({TDqReplicate::CallableName()}, Hndl(&NDq::AnnotateDqReplicate));
-        } else {
-            AddHandler({TDqReplicate::CallableName()}, Hndl(&TDqsDataSinkTypeAnnotationTransformer::AnnotateDqReplicateAlwaysError));
-        }
+        AddHandler({TDqReplicate::CallableName()}, Hndl(&NDq::AnnotateDqReplicate));
         AddHandler({TDqJoin::CallableName()}, Hndl(&NDq::AnnotateDqJoin));
         AddHandler({TDqPhyGraceJoin::CallableName()}, Hndl(&NDq::AnnotateDqMapOrDictJoin));
         AddHandler({TDqPhyMapJoin::CallableName()}, Hndl(&NDq::AnnotateDqMapOrDictJoin));
@@ -47,11 +43,6 @@ public:
     }
 
 private:
-    TStatus AnnotateDqReplicateAlwaysError(const TExprNode::TPtr& input, TExprContext& ctx) {
-        ctx.AddError(YqlIssue(ctx.GetPosition(input->Pos()), TIssuesIds::DQ_OPTIMIZE_ERROR, "Reading multiple times from the same source is not supported"));
-        return TStatus::Error;
-    }
-
     TStatus AnnotateDqWrite(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         if (!EnsureMinArgsCount(*input, 2, ctx)) {
             return TStatus::Error;
@@ -86,8 +77,8 @@ private:
 
 } // unnamed
 
-THolder<TVisitorTransformerBase> CreateDqsDataSinkTypeAnnotationTransformer(TTypeAnnotationContext* typeCtx, bool enableDqReplicate) {
-    return THolder(new TDqsDataSinkTypeAnnotationTransformer(typeCtx, enableDqReplicate));
+THolder<TVisitorTransformerBase> CreateDqsDataSinkTypeAnnotationTransformer(TTypeAnnotationContext* typeCtx) {
+    return THolder(new TDqsDataSinkTypeAnnotationTransformer(typeCtx));
 }
 
 } // NYql

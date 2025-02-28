@@ -6,7 +6,6 @@
 
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/base/location.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>

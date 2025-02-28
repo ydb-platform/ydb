@@ -1,5 +1,4 @@
 import six
-import sys
 import hashlib
 import base64
 
@@ -61,15 +60,6 @@ def tobuilddir(fname):
         return fname
 
 
-def before(s, ss):
-    p = s.find(ss)
-
-    if p == -1:
-        return s
-
-    return s[:p]
-
-
 def sort_by_keywords(keywords, args):
     flat = []
     res = {}
@@ -115,28 +105,8 @@ def resolve_common_const(path):
     return path
 
 
-def resolve_to_abs_path(path, source_root, build_root):
-    if path.startswith('$S') and source_root is not None:
-        return path.replace('$S', source_root, 1)
-    if path.startswith('$B') and build_root is not None:
-        return path.replace('$B', build_root, 1)
-    return path
-
-
-def resolve_to_ymake_path(path):
-    return resolve_to_abs_path(path, '${ARCADIA_ROOT}', '${ARCADIA_BUILD_ROOT}')
-
-
 def get(fun, num):
     return fun()[num][0]
-
-
-def make_tuples(arg_list):
-    def tpl():
-        for x in arg_list:
-            yield (x, [])
-
-    return list(tpl())
 
 
 def resolve_includes(unit, src, paths):
@@ -167,13 +137,6 @@ def skip_build_root(x):
         return x[len('${ARCADIA_BUILD_ROOT}') :].lstrip('/')
 
     return x
-
-
-def get_interpreter_path():
-    interpreter_path = [sys.executable]
-    if 'ymake' in interpreter_path[0]:
-        interpreter_path.append('--python')
-    return interpreter_path
 
 
 def filter_out_by_keyword(test_data, keyword):

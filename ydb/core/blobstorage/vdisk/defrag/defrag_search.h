@@ -14,21 +14,19 @@ namespace NKikimr {
         static constexpr TDuration WorkQuantum = TDuration::MilliSeconds(10);
     }
 
-    struct THugeBlobRecord {
-        TDiskPart Part;
-        TLogoBlobID Id;
-        bool Useful;
-
-        friend bool operator <(const THugeBlobRecord& x, const THugeBlobRecord& y) {
-            return x.Part < y.Part;
-        }
-   };
-
     struct TChunksToDefrag {
         TDefragChunks Chunks;
         ui32 FoundChunksToDefrag = 0;
         ui64 EstimatedSlotsCount = 0;
-        std::vector<THugeBlobRecord> HugeBlobs;
+        bool IsShred = false;
+        THashSet<TChunkIdx> ChunksToShred;
+
+        static TChunksToDefrag Shred(THashSet<TChunkIdx> chunksToShred) {
+            return {
+                .IsShred = true,
+                .ChunksToShred = std::move(chunksToShred),
+            };
+        }
 
         void Output(IOutputStream &str) const {
             str << "{Chunks# " << FormatList(Chunks);
@@ -61,91 +59,120 @@ namespace NKikimr {
 
     template<typename TDerived>
     class TDefragScanner {
+    protected:
+        using TLevelSegment = NKikimr::TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>;
+
+    private:
         THullDsSnap FullSnap;
         const TBlobStorageGroupType GType;
         const TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> Barriers;
         const bool AllowKeepFlags;
         TLogoBlobsSnapshot::TForwardIterator Iter;
 
-        TDataMerger Merger;
         TKeyLogoBlob Key;
-        TMemRecLogoBlob MemRec;
+        std::optional<TMemRecLogoBlob> MemRec;
+        NMatrix::TVectorType SeenParts;
+        std::array<std::tuple<ui64, TDiskPart, const TLevelSegment*>, 8> PartInfo;
 
     public:
-        TDefragScanner(THullDsSnap&& fullSnap)
+        TDefragScanner(THullDsSnap&& fullSnap, std::optional<TKeyLogoBlob> seek = std::nullopt)
             : FullSnap(std::move(fullSnap))
             , GType(FullSnap.HullCtx->VCtx->Top->GType)
             , Barriers(FullSnap.BarriersSnap.CreateEssence(FullSnap.HullCtx))
             , AllowKeepFlags(FullSnap.HullCtx->AllowKeepFlags)
             , Iter(FullSnap.HullCtx, &FullSnap.LogoBlobsSnap)
-            , Merger(GType, false /* addHeader doesn't really matter here */)
+            , SeenParts(0, GType.TotalPartCount())
         {
-            Iter.SeekToFirst();
+            if (seek) {
+                Iter.Seek(*seek);
+            } else {
+                Iter.SeekToFirst();
+            }
+            FullSnap.BarriersSnap.Destroy();
+            FullSnap.BlocksSnap.Destroy();
         }
 
-        bool Scan(TDuration maxTime) {
+        std::optional<TKeyLogoBlob> Scan(TDuration maxTime) {
+            THeapIterator<TKeyLogoBlob, TMemRecLogoBlob, true> heapIt(&Iter);
             ui64 endTime = GetCycleCountFast() + DurationToCycles(maxTime);
             ui32 count = 0;
-            for (; Iter.Valid(); Iter.Next()) {
-                if (++count % 1024 == 0 && GetCycleCountFast() >= endTime) {
-                    break;
-                }
-                Start(Iter.GetCurKey());
-                Iter.PutToMerger(this);
-                Finish();
-            }
-            return Iter.Valid();
+            auto callback = [&](TKeyLogoBlob /*key*/, auto* /*merger*/) {
+                return ++count % 1024 != 0 || GetCycleCountFast() < endTime;
+            };
+            heapIt.Walk(std::nullopt, this, callback);
+            return heapIt.Valid()
+                ? std::make_optional(heapIt.GetCurKey())
+                : std::nullopt;
         }
 
         void AddFromFresh(const TMemRecLogoBlob& memRec, const TRope* /*data*/, const TKeyLogoBlob& key, ui64 lsn) {
-            Update(memRec, nullptr, lsn);
-            MemRec.Merge(memRec, key);
+            Update(memRec, nullptr, key, lsn, nullptr);
         }
 
-        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key, ui64 circaLsn) {
-            Update(memRec, outbound, circaLsn);
-            MemRec.Merge(memRec, key);
+        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key, ui64 circaLsn,
+                const TLevelSegment *sst) {
+            Update(memRec, outbound, key, circaLsn, sst);
         }
 
         static constexpr bool HaveToMergeData() { return false; }
 
-    private:
-        void Start(const TKeyLogoBlob& key) {
-            Key = key;
-            MemRec = {};
+        void Clear() {
+            Key = TKeyLogoBlob();
+            MemRec.reset();
+            SeenParts.Clear();
         }
 
         void Finish() {
-            TBlobType::EType type;
-            ui32 inplacedDataSize;
-            Merger.Finish(true, Key.LogoBlobID(), &type, &inplacedDataSize);
-            if (!Merger.Empty()) {
-                NGc::TKeepStatus status = Barriers->Keep(Key, MemRec, {}, AllowKeepFlags, true /*allowGarbageCollection*/);
-                for (const TDiskPart& part : Merger.GetSavedHugeBlobs()) {
-                    if (!part.Empty()) {
-                        static_cast<TDerived&>(*this).Add(part, Key.LogoBlobID(), status.KeepData);
-                    }
-                }
-                for (const TDiskPart& part : Merger.GetDeletedHugeBlobs()) {
-                    Y_ABORT_UNLESS(!part.Empty());
-                    static_cast<TDerived&>(*this).Add(part, Key.LogoBlobID(), false);
+            Y_DEBUG_ABORT_UNLESS(Key != TKeyLogoBlob());
+            Y_DEBUG_ABORT_UNLESS(MemRec);
+            const auto status = Barriers->Keep(Key, *MemRec, {}, AllowKeepFlags, true /*allowGarbageCollection*/);
+            for (ui8 partIdx : SeenParts) {
+                const auto& [lsn, part, sst] = PartInfo[partIdx];
+                if (!part.Empty()) {
+                    static_cast<TDerived&>(*this).Add(part, TLogoBlobID(Key.LogoBlobID(), partIdx + 1), status.KeepData,
+                        sst);
                 }
             }
-            Merger.Clear();
         }
 
-        void Update(const TMemRecLogoBlob &memRec, const TDiskPart *outbound, ui64 lsn) {
-            TDiskDataExtractor extr;
-            switch (memRec.GetType()) {
-                case TBlobType::HugeBlob:
-                case TBlobType::ManyHugeBlobs:
-                    memRec.GetDiskData(&extr, outbound);
-                    Merger.AddHugeBlob(extr.Begin, extr.End, memRec.GetIngress().LocalParts(GType), lsn);
-                    break;
-
-                default:
-                    break;
+    private:
+        void Update(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key, ui64 lsn,
+                const TLevelSegment *sst) {
+            Y_DEBUG_ABORT_UNLESS(Key == TKeyLogoBlob() || Key == key);
+            Key = key;
+            if (MemRec) {
+                MemRec->Merge(memRec, key, false, GType);
+            } else {
+                MemRec.emplace(memRec).SetNoBlob();
             }
+
+            if (memRec.GetType() != TBlobType::HugeBlob && memRec.GetType() != TBlobType::ManyHugeBlobs) {
+                return;
+            }
+
+            TDiskDataExtractor extr;
+            memRec.GetDiskData(&extr, outbound);
+
+            const NMatrix::TVectorType local = memRec.GetLocalParts(GType);
+            Y_DEBUG_ABORT_UNLESS(local.CountBits() == extr.End - extr.Begin);
+
+            const TDiskPart *p = extr.Begin;
+            for (ui8 partIdx : local) {
+                const TDiskPart& part = *p++;
+                auto& item = PartInfo[partIdx];
+                std::optional<TDiskPart> obsolete;
+                if (!SeenParts.Get(partIdx) || std::get<0>(item) < lsn) {
+                    obsolete = SeenParts.Get(partIdx) ? std::make_optional(std::get<1>(item)) : std::nullopt;
+                    item = {lsn, part, sst};
+                    SeenParts.Set(partIdx);
+                } else {
+                    obsolete.emplace(part);
+                }
+                if (obsolete && !obsolete->Empty()) {
+                    static_cast<TDerived&>(*this).Add(*obsolete, TLogoBlobID(key.LogoBlobID(), partIdx + 1), false, sst);
+                }
+            }
+            Y_DEBUG_ABORT_UNLESS(p == extr.End);
         }
     };
 
@@ -154,7 +181,6 @@ namespace NKikimr {
         // Info gathered per chunk
         struct TChunkInfo {
             ui32 UsefulSlots = 0;
-            std::vector<THugeBlobRecord> Records;
             const ui32 SlotSize;
             const ui32 NumberOfSlotsInChunk;
 
@@ -174,7 +200,6 @@ namespace NKikimr {
         struct TAggrSlotInfo {
             ui64 UsefulSlots = 0;
             ui32 UsedChunks = 0;
-            std::unordered_map<ui32, const std::vector<THugeBlobRecord>*> RecordPtrs;
             const ui32 NumberOfSlotsInChunk;
 
             TAggrSlotInfo(ui32 numberOfSlotsInChunk)
@@ -197,7 +222,6 @@ namespace NKikimr {
                     TAggrSlotInfo& aggr = it->second;
                     aggr.UsefulSlots += chunk.UsefulSlots;
                     ++aggr.UsedChunks;
-                    aggr.RecordPtrs.emplace(chunkIdx, &chunk.Records);
                 }
                 return aggrSlots;
             }
@@ -207,7 +231,7 @@ namespace NKikimr {
                 : HugeBlobCtx(hugeBlobCtx)
             {}
 
-            void Add(TDiskPart part, const TLogoBlobID& id, bool useful) {
+            void Add(TDiskPart part, const TLogoBlobID& /*id*/, bool useful) {
                 auto it = PerChunkMap.find(part.ChunkIdx);
                 if (it == PerChunkMap.end()) {
                     const THugeSlotsMap::TSlotInfo *slotInfo = HugeBlobCtx->HugeSlotsMap->GetSlotInfo(part.Size);
@@ -216,7 +240,6 @@ namespace NKikimr {
                         std::make_tuple(slotInfo->SlotSize, slotInfo->NumberOfSlotsInChunk)).first;
                 }
                 it->second.UsefulSlots += useful;
-                it->second.Records.push_back(THugeBlobRecord{part, id, useful});
             }
 
             TChunksToDefrag GetChunksToDefrag(size_t maxChunksToDefrag) const {
@@ -248,8 +271,8 @@ namespace NKikimr {
                         if (result.Chunks.size() < maxChunksToDefrag) {
                             result.Chunks.emplace_back(chunkIdx, chunk.SlotSize);
                             result.EstimatedSlotsCount += chunk.UsefulSlots;
-                            const auto& rp = a.RecordPtrs.at(chunkIdx);
-                            result.HugeBlobs.insert(result.HugeBlobs.end(), rp->begin(), rp->end());
+                        } else {
+                            break;
                         }
                     }
                 }
@@ -289,7 +312,7 @@ namespace NKikimr {
             return ChunksMap.GetChunksToDefrag(maxChunksToDefrag);
         }
 
-        void Add(TDiskPart part, const TLogoBlobID& id, bool useful) {
+        void Add(TDiskPart part, const TLogoBlobID& id, bool useful, const void* /*sst*/) {
             ChunksMap.Add(part, id, useful);
         }
     };
@@ -310,85 +333,74 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     class TDefragQuantumFindRecords {
-        using TLevelSegment = ::NKikimr::TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>;
-        using TLevelSstPtr = typename TLevelSegment::TLevelSstPtr;
-
-        TChunksToDefrag ChunksToDefrag;
-        std::unordered_set<ui32> Chunks; // chunks to defrag (i.e. move all data from these chunks)
+        THashSet<TChunkIdx> Chunks; // chunks to defrag (i.e. move all data from these chunks)
+        THashSet<TChunkIdx> LockedChunks; // allow rewrites from
         std::vector<TDefragRecord> RecsToRewrite;
-        std::optional<TLogoBlobID> NextId;
-        const TBlobStorageGroupType GType;
+        std::optional<TKeyLogoBlob> NextId;
+        THashSet<ui64> TablesToCompact;
+        bool NeedsFreshCompaction = false;
 
-    public:
-        TDefragQuantumFindRecords(TChunksToDefrag&& chunksToDefrag, TBlobStorageGroupType gtype)
-            : ChunksToDefrag(std::move(chunksToDefrag))
-            , GType(gtype)
+        class TScanQuantum
+            : public TDefragScanner<TScanQuantum>
         {
-            for (const auto& chunk : ChunksToDefrag.Chunks) {
-                Chunks.insert(chunk.ChunkId);
-            }
-            Y_ABORT_UNLESS(Chunks.size() == ChunksToDefrag.Chunks.size()); // ensure there are no duplicate numbers
-            std::sort(ChunksToDefrag.HugeBlobs.begin(), ChunksToDefrag.HugeBlobs.end());
-            RecsToRewrite.reserve(ChunksToDefrag.EstimatedSlotsCount);
-        }
+            TDefragQuantumFindRecords& Parent;
 
-        bool Scan(TDuration quota, THullDsSnap fullSnap) {
-            // create iterator and set it up to point to next blob of interest
-            TLogoBlobsSnapshot::TForwardIterator iter(fullSnap.HullCtx, &fullSnap.LogoBlobsSnap);
-            THeapIterator<TKeyLogoBlob, TMemRecLogoBlob, true> heapIt(&iter);
-            // calculate timestamp to finish scanning
-            const ui64 endTime = GetCycleCountFast() + DurationToCycles(quota);
-            ui32 count = 0;
-            auto callback = [&](TKeyLogoBlob /*key*/, auto* /*merger*/) -> bool {
-                return (++count % 1024 != 0 || GetCycleCountFast() < endTime);
-            };
-            heapIt.Walk(NextId.value_or(TLogoBlobID()), this, callback);
-            if (heapIt.Valid()) {
-                NextId.emplace(heapIt.GetCurKey().LogoBlobID());
-            }
-            return heapIt.Valid();
-        }
+        public:
+            TScanQuantum(THullDsSnap&& fullSnap, std::optional<TKeyLogoBlob> seek, TDefragQuantumFindRecords& parent)
+                : TDefragScanner(std::move(fullSnap), seek)
+                , Parent(parent)
+            {}
 
-        void AddFromFresh(const TMemRecLogoBlob& memRec, const TRope* /*data*/, const TKeyLogoBlob& key, ui64 /*lsn*/) {
-            Update(key, memRec, nullptr);
-        }
+            using TDefragScanner::Scan;
 
-        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key, ui64 /*circaLsn*/) {
-            Update(key, memRec, outbound);
-        }
-
-        void Finish() {}
-
-        void Clear() {}
-
-        static constexpr bool HaveToMergeData() { return false; }
-
-        std::vector<TDefragRecord> GetRecordsToRewrite() {
-            return std::move(RecsToRewrite);
-        }
-
-    private:
-        void Update(const TKeyLogoBlob& key, const TMemRecLogoBlob& memRec, const TDiskPart *outbound) {
-            TDiskDataExtractor extr;
-            if (memRec.GetType() == TBlobType::HugeBlob || memRec.GetType() == TBlobType::ManyHugeBlobs) {
-                memRec.GetDiskData(&extr, outbound);
-                const NMatrix::TVectorType local = memRec.GetIngress().LocalParts(GType);
-                ui8 partIdx = local.FirstPosition();
-                for (const TDiskPart *p = extr.Begin; p != extr.End; ++p, partIdx = local.NextPosition(partIdx)) {
-                    Y_ABORT_UNLESS(partIdx != local.GetSize());
-                    if (!p->ChunkIdx || !Chunks.count(p->ChunkIdx)) {
-                        continue; // not from chunks of our interest
+            void Add(TDiskPart part, const TLogoBlobID& id, bool useful, const TLevelSegment *sst) {
+                if (Parent.Chunks.contains(part.ChunkIdx)) {
+                    if (useful && Parent.LockedChunks.contains(part.ChunkIdx)) {
+                        Parent.RecsToRewrite.emplace_back(id, part);
                     }
-
-                    const TLogoBlobID fullId = key.LogoBlobID();
-                    const auto it = std::lower_bound(ChunksToDefrag.HugeBlobs.begin(), ChunksToDefrag.HugeBlobs.end(),
-                        THugeBlobRecord{*p, fullId, true});
-                    if (it == ChunksToDefrag.HugeBlobs.end() || it->Part != *p || it->Id != fullId || it->Useful) {
-                        RecsToRewrite.emplace_back(TLogoBlobID(fullId, partIdx + 1), *p);
+                    if (sst) {
+                        Parent.TablesToCompact.insert(sst->AssignedSstId);
+                    } else {
+                        Parent.NeedsFreshCompaction = true;
                     }
                 }
             }
+        };
+
+    public:
+        TDefragQuantumFindRecords(TChunksToDefrag&& chunksToDefrag, const TDefragChunks& locked) {
+            if (chunksToDefrag.IsShred) {
+                LockedChunks = Chunks = std::move(chunksToDefrag.ChunksToShred);
+            } else {
+                for (const auto& chunk : chunksToDefrag.Chunks) {
+                    Chunks.insert(chunk.ChunkId);
+                }
+                for (const auto& chunk : locked) {
+                    LockedChunks.insert(chunk.ChunkId);
+                }
+                Y_ABORT_UNLESS(Chunks.size() == chunksToDefrag.Chunks.size()); // ensure there are no duplicate numbers
+            }
         }
+
+        bool Scan(TDuration quota, THullDsSnap fullSnap) {
+            NextId = TScanQuantum(std::move(fullSnap), NextId, *this).Scan(quota);
+            return NextId.has_value();
+        }
+
+        void StartFindingTablesToCompact() {
+            RecsToRewrite.clear();
+            NextId.reset();
+            TablesToCompact.clear();
+            NeedsFreshCompaction = false;
+        }
+
+        void SetLockedChunks(THashSet<ui32> lockedChunks) {
+            LockedChunks = std::move(lockedChunks);
+        }
+
+        std::vector<TDefragRecord> GetRecordsToRewrite() { return std::move(RecsToRewrite); }
+        THashSet<ui64> GetTablesToCompact() { return std::move(TablesToCompact); }
+        bool GetNeedsFreshCompaction() const { return NeedsFreshCompaction; }
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -417,14 +429,14 @@ namespace NKikimr {
             , HugeBlobCtx(hugeBlobCtx)
         {}
 
-        void Add(TDiskPart part, const TLogoBlobID& id, bool useful) {
+        void Add(TDiskPart part, const TLogoBlobID& id, bool useful, const TLevelSegment *sst) {
             Chunks.insert(part.ChunkIdx);
             if (useful) {
                 const THugeSlotsMap::TSlotInfo *slotInfo = HugeBlobCtx->HugeSlotsMap->GetSlotInfo(part.Size);
                 Y_ABORT_UNLESS(slotInfo, "size# %" PRIu32, part.Size);
                 ++Map[slotInfo->NumberOfSlotsInChunk];
             }
-            TDefragQuantumChunkFinder::Add(part, id, useful);
+            TDefragQuantumChunkFinder::Add(part, id, useful, sst);
         }
 
         ui32 GetTotalChunks() {

@@ -76,6 +76,9 @@ struct TDqStageSettings {
 };
 
 
+const TTypeAnnotationNode* GetColumnType(const NNodes::TDqConnection& node, const TStructExprType& structType, TStringBuf name, TPositionHandle pos, TExprContext& ctx);
+const TTypeAnnotationNode* GetDqConnectionType(const NYql::NNodes::TDqConnection& node, TExprContext& ctx);
+
 TString PrintDqStageOnly(const NNodes::TDqStageBase& stage, TExprContext& ctx);
 
 } // namespace NYql::NDq

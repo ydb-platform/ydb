@@ -79,23 +79,25 @@ def ydb_database_ctx(ydb_cluster, database_path, node_count=1, timeout_seconds=2
     '''???'''
     assert os.path.abspath(database_path), 'database_path should be an (absolute) path, not a database name'
 
-    ydb_cluster.remove_database(database_path, timeout_seconds=timeout_seconds)
+    token = ydb_cluster.config.default_clusteradmin
+
+    ydb_cluster.remove_database(database_path, timeout_seconds=timeout_seconds, token=token)
 
     logger.debug("create database %s: create path and declare internals", database_path)
 
-    ydb_cluster.create_database(database_path, storage_pool_units_count=storage_pools, timeout_seconds=timeout_seconds)
+    ydb_cluster.create_database(database_path, storage_pool_units_count=storage_pools, timeout_seconds=timeout_seconds, token=token)
 
     logger.debug("create database %s: start nodes and construct internals", database_path)
     database_nodes = ydb_cluster.register_and_start_slots(database_path, node_count)
 
     logger.debug("create database %s: wait construction done", database_path)
-    ydb_cluster.wait_tenant_up(database_path)
+    ydb_cluster.wait_tenant_up(database_path, token=token)
 
     logger.debug("create database %s: database up", database_path)
     yield database_path
 
     logger.debug("destroy database %s: remove path and dismantle internals", database_path)
-    ydb_cluster.remove_database(database_path, timeout_seconds=timeout_seconds)
+    ydb_cluster.remove_database(database_path, timeout_seconds=timeout_seconds, token=token)
 
     logger.debug("destroy database %s: stop nodes", database_path)
     ydb_cluster.unregister_and_stop_slots(database_nodes)

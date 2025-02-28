@@ -16,15 +16,15 @@ class TFiberSchedulerThread
 {
 public:
     TFiberSchedulerThread(
-        TString threadGroupName,
-        TString threadName,
+        std::string threadGroupName,
+        std::string threadName,
         NThreading::TThreadOptions options = {});
 
     //! Empty callback signals about stopping.
     virtual TClosure OnExecute() = 0;
 
 private:
-    const TString ThreadGroupName_;
+    const std::string ThreadGroupName_;
 
     void ThreadMain() override;
 };

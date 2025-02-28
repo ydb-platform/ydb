@@ -1,0 +1,17 @@
+{
+    "test.test[ObfuscateColumn]": [
+        {
+            "uri": "file://test.test_ObfuscateColumn_/results.txt"
+        }
+    ],
+    "test.test[ObfuscateLiterals]": [
+        {
+            "uri": "file://test.test_ObfuscateLiterals_/results.txt"
+        }
+    ],
+    "test.test[ObfuscateTable]": [
+        {
+            "uri": "file://test.test_ObfuscateTable_/results.txt"
+        }
+    ]
+}

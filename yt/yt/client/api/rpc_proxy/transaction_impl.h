@@ -48,6 +48,8 @@ public:
         i64 sequenceNumberSourceId,
         TStringBuf capitalizedCreationReason);
 
+    void Initialize();
+
     // ITransaction implementation.
     NApi::IConnectionPtr GetConnection() override;
     NApi::IClientPtr GetClient() const override;

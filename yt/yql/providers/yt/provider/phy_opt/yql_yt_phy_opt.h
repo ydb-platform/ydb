@@ -158,6 +158,7 @@ private:
 
     TMaybe<bool> CanFuseLambdas(const NNodes::TCoLambda& innerLambda, const NNodes::TCoLambda& outerLambda, TExprContext& ctx) const;
 
+    NNodes::TExprBase RebuildKeyFilterAfterPushDown(NNodes::TExprBase filter, size_t usedKeysCount, TExprContext& ctx) const;
 
 private:
     const TYtState::TPtr State_;

@@ -7,6 +7,7 @@
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
 #include <ydb/core/discovery/discovery.h>
 #include <ydb/core/kafka_proxy/kafka_listener.h>
+#include <ydb/core/persqueue/events/internal.h>
 
 
 namespace NKafka {
@@ -33,12 +34,13 @@ private:
         ui32 Port;
     };
 
-    TActorId SendTopicRequest(const TMetadataRequestData::TMetadataRequestTopic& topicRequest);
+    TActorId SendTopicRequest(const TString& topic);
     void HandleLocationResponse(TEvLocationResponse::TPtr ev, const NActors::TActorContext& ctx);
     void HandleNodesResponse(NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev,
                              const NActors::TActorContext& ctx);
     void HandleDiscoveryData(NKikimr::TEvDiscovery::TEvDiscoveryData::TPtr& ev);
     void HandleDiscoveryError(NKikimr::TEvDiscovery::TEvError::TPtr& ev);
+    void HandleListTopics(NKikimr::TEvPQ::TEvListAllTopicsResponse::TPtr& ev);
 
     void AddTopicResponse(TMetadataResponseData::TMetadataResponseTopic& topic, TEvLocationResponse* response,
                           const TVector<TNodeInfo*>& nodes);
@@ -47,10 +49,12 @@ private:
     void AddProxyNodeToBrokers();
     void AddBroker(ui64 nodeId, const TString& host, ui64 port);
     void RequestICNodeCache();
-    void ProcessTopics();
+    void ProcessTopicsFromRequest();
     void SendDiscoveryRequest();
     void ProcessDiscoveryData(NKikimr::TEvDiscovery::TEvDiscoveryData::TPtr& ev);
     TVector<TNodeInfo*> CheckTopicNodes(TEvLocationResponse* response);
+
+    void AddTopic(const TString& topic, ui64 index);
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
@@ -58,6 +62,7 @@ private:
             HFunc(NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse, HandleNodesResponse);
             hFunc(NKikimr::TEvDiscovery::TEvDiscoveryData, HandleDiscoveryData);
             hFunc(NKikimr::TEvDiscovery::TEvError, HandleDiscoveryError);
+            hFunc(NKikimr::TEvPQ::TEvListAllTopicsResponse, HandleListTopics);
         }
     }
 
@@ -77,12 +82,14 @@ private:
     EKafkaErrors ErrorCode = EKafkaErrors::NONE_ERROR;
 
     TActorId DiscoveryCacheActor;
-    bool NeedCurrentNode = false;
+    bool NeedAllNodes = false;
     bool HaveError = false;
     bool FallbackToIcDiscovery = false;
     TMap<ui64, TAutoPtr<TEvLocationResponse>> PendingTopicResponses;
 
     THashMap<ui64, TNodeInfo> Nodes;
+    THashMap<TString, TActorId> PartitionActors;
+
 };
 
 } // namespace NKafka

@@ -26,6 +26,9 @@
 
 namespace NYT {
 
+const TString DefaultRemoteTempTablesDirectory = "//tmp/yt_wrapper/table_storage";
+const TString DefaultRemoteTempFilesDirectory = "//tmp/yt_wrapper/file_storage";
+
 ////////////////////////////////////////////////////////////////////////////////
 
 bool TConfig::GetBool(const char* var, bool defaultValue)
@@ -219,12 +222,9 @@ void TConfig::Reset()
     ReadRetryCount = Max(GetInt("YT_READ_RETRY_COUNT", 30), 1);
     StartOperationRetryCount = Max(GetInt("YT_START_OPERATION_RETRY_COUNT", 30), 1);
 
-    RemoteTempFilesDirectory = GetEnv("YT_FILE_STORAGE",
-        "//tmp/yt_wrapper/file_storage");
-    RemoteTempTablesDirectory = GetEnv("YT_TEMP_TABLES_STORAGE",
-        "//tmp/yt_wrapper/table_storage");
-    RemoteTempTablesDirectory = GetEnv("YT_TEMP_DIR",
-        RemoteTempTablesDirectory);
+    RemoteTempFilesDirectory = GetEnv("YT_FILE_STORAGE", DefaultRemoteTempFilesDirectory);
+    RemoteTempTablesDirectory = GetEnv("YT_TEMP_TABLES_STORAGE", DefaultRemoteTempTablesDirectory);
+    RemoteTempTablesDirectory = GetEnv("YT_TEMP_DIR", RemoteTempTablesDirectory);
     KeepTempTables = GetBool("YT_KEEP_TEMP_TABLES");
 
     InferTableSchema = false;

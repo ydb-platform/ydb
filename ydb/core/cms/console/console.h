@@ -56,7 +56,7 @@ namespace TEvConsole {
         EvGetAllMetadataRequest,
         EvGetNodeLabelsRequest,
         EvIsYamlReadOnlyRequest,
-
+        EvFetchStartupConfigRequest,
         // responses
         EvCreateTenantResponse = EvCreateTenantRequest + 1024,
         EvAlterTenantResponse,
@@ -102,6 +102,7 @@ namespace TEvConsole {
         EvGenericError,
 
         EvIsYamlReadOnlyResponse,
+        EvFetchStartupConfigResponse,
 
         EvEnd
     };
@@ -225,6 +226,10 @@ namespace TEvConsole {
 
     struct TEvResolveAllConfigResponse : public TEventShortDebugPB<TEvResolveAllConfigResponse, NKikimrConsole::TResolveAllConfigResponse, EvResolveAllConfigResponse> {};
 
+    struct TEvFetchStartupConfigRequest : public TEventShortDebugPB<TEvFetchStartupConfigRequest, NKikimrConsole::TFetchStartupConfigRequest, EvFetchStartupConfigRequest> {};
+
+    struct TEvFetchStartupConfigResponse : public TEventShortDebugPB<TEvFetchStartupConfigResponse, NKikimrConsole::TFetchStartupConfigResponse, EvFetchStartupConfigResponse> {};
+
     struct TEvUnauthorized : public TEventShortDebugPB<TEvUnauthorized, NKikimrConsole::TUnauthorized, EvUnauthorized> {};
 
     struct TEvDisabled : public TEventShortDebugPB<TEvDisabled, NKikimrConsole::TDisabled, EvDisabled> {};
@@ -343,7 +348,7 @@ namespace TEvConsole {
                 Record.AddAffectedKinds(kind);
 
             if (!yamlConfig.empty()) {
-                Record.SetYamlConfig(yamlConfig);
+                Record.SetMainYamlConfig(yamlConfig);
                 for (auto &[id, config] : volatileYamlConfigs) {
                     auto *volatileConfig = Record.AddVolatileConfigs();
                     volatileConfig->SetId(id);
@@ -367,7 +372,7 @@ namespace TEvConsole {
                 Record.AddAffectedKinds(kind);
 
             if (!yamlConfig.empty()) {
-                Record.SetYamlConfig(yamlConfig);
+                Record.SetMainYamlConfig(yamlConfig);
                 for (auto &[id, config] : volatileYamlConfigs) {
                     auto *volatileConfig = Record.AddVolatileConfigs();
                     volatileConfig->SetId(id);
@@ -375,6 +380,35 @@ namespace TEvConsole {
                 }
             }
         }
+
+        TEvConfigSubscriptionNotification(
+            ui64 generation,
+            const NKikimrConfig::TAppConfig &config,
+            const THashSet<ui32> &affectedKinds,
+            const TString &yamlConfig,
+            const TMap<ui64, TString> &volatileYamlConfigs,
+            const NKikimrConfig::TAppConfig &rawConfig,
+            const TMaybe<TString> databaseYamlConfig)
+        {
+            Record.SetGeneration(generation);
+            Record.MutableConfig()->CopyFrom(config);
+            Record.MutableRawConsoleConfig()->CopyFrom(rawConfig);
+            for (ui32 kind : affectedKinds)
+                Record.AddAffectedKinds(kind);
+
+            if (!yamlConfig.empty()) {
+                Record.SetMainYamlConfig(yamlConfig);
+                for (auto &[id, config] : volatileYamlConfigs) {
+                    auto *volatileConfig = Record.AddVolatileConfigs();
+                    volatileConfig->SetId(id);
+                    volatileConfig->SetConfig(config);
+                }
+            }
+            if (databaseYamlConfig) {
+                Record.SetDatabaseYamlConfig(*databaseYamlConfig);
+            }
+        }
+
     };
 
     /**

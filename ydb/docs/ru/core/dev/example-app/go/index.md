@@ -2,7 +2,7 @@
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-На этой странице подробно разбирается код [тестового приложения](https://github.com/ydb-platform/ydb-go-examples/tree/master/basic), использующего [Go SDK](https://github.com/ydb-platform/ydb-go-sdk/v3) {{ ydb-short-name }}.
+На этой странице подробно разбирается код [тестового приложения](https://github.com/ydb-platform/ydb-go-examples/tree/master/basic), использующего {{ ydb-short-name }} [Go SDK](https://github.com/ydb-platform/ydb-go-sdk).
 
 ## Скачивание и запуск {#download}
 

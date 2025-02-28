@@ -1,20 +1,28 @@
 /* syntax version 1 */
-$format = DateTime::Format("%Y-%m-%d %H:%M:%S %Z");
+$check = ($arg) -> {
+    return <|
+        soyear:    DateTime::StartOfYear($arg),
+        soquarter: DateTime::StartOfQuarter($arg),
+        somonth:   DateTime::StartOfMonth($arg),
+        soweek:    DateTime::StartOfWeek($arg),
+        soday:     DateTime::StartOfDay($arg),
+        sopt13h:   DateTime::StartOf($arg, Interval("PT13H")),
+        sopt4h:    DateTime::StartOf($arg, Interval("PT4H")),
+        sopt15m:   DateTime::StartOf($arg, Interval("PT15M")),
+        sopt20s:   DateTime::StartOf($arg, Interval("PT20S")),
+        sopt7s:    DateTime::StartOf($arg, Interval("PT7S")),
+        timeofday: DateTime::TimeOfDay($arg),
+    |>
+};
 
-select
-    $format(DateTime::StartOfYear(`tztimestamp`)),
-    $format(DateTime::StartOfQuarter(`tztimestamp`)),
-    $format(DateTime::StartOfMonth(`tztimestamp`)),
-    $format(DateTime::StartOfWeek(`tztimestamp`)),
-    $format(DateTime::StartOfDay(`tztimestamp`)),
-    $format(DateTime::StartOf(`tztimestamp`, Interval("PT13H"))),
-    $format(DateTime::StartOf(`tztimestamp`, Interval("PT4H"))),
-    $format(DateTime::StartOf(`tztimestamp`, Interval("PT15M"))),
-    $format(DateTime::StartOf(`tztimestamp`, Interval("PT20S"))),
-    $format(DateTime::StartOf(`tztimestamp`, Interval("PT7S"))),
-    DateTime::TimeOfDay(`tztimestamp`)
-from (
-    select
-        cast(ftztimestamp as TzTimestamp) as `tztimestamp`
-    from Input
-);
+$typeDispatcher = ($row) -> {
+    $tm = $row.tm;
+    return <|
+        explicit: $check(DateTime::Split($tm)),
+        implicit: $check($tm),
+    |>;
+};
+
+$input = SELECT CAST(ftztimestamp as TzTimestamp) as tm FROM Input;
+
+PROCESS $input USING $typeDispatcher(TableRow());

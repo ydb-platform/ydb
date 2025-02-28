@@ -137,7 +137,7 @@ std::string ConvertToTextYsonString<double>(const double& value)
         "%v%v",
         str,
         MakeFormatterWrapper([&] (TStringBuilderBase* builder) {
-            if (str.find('.') == TString::npos && str.find('e') == TString::npos && std::isfinite(value)) {
+            if (str.find('.') == std::string::npos && str.find('e') == std::string::npos && std::isfinite(value)) {
                 builder->AppendChar('.');
             }
         }));
@@ -233,13 +233,13 @@ TSomeInt ParseSomeIntFromTextYsonString(TStringBuf strBuf)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString DoParseStringFromTextYson(TStringBuf strBuf)
+std::string DoParseStringFromTextYson(TStringBuf strBuf)
 {
     // Remove quotation marks.
     return ::UnescapeC(TStringBuf{strBuf.data() + 1, strBuf.length() - 2});
 }
 
-TString ParseStringFromTextYsonString(TStringBuf strBuf)
+std::string ParseStringFromTextYsonString(TStringBuf strBuf)
 {
     if (std::ssize(strBuf) < 2 || strBuf.front() != '\"' || strBuf.back() != '\"') {
         THROW_ERROR_EXCEPTION(
@@ -314,7 +314,7 @@ PARSE_INT(ui64, ui64)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <>
-TString ConvertFromTextYsonString<TString>(TStringBuf str)
+std::string ConvertFromTextYsonString<std::string>(TStringBuf str)
 {
     try {
         return ParseStringFromTextYsonString(str);
@@ -324,9 +324,9 @@ TString ConvertFromTextYsonString<TString>(TStringBuf str)
 }
 
 template <>
-std::string ConvertFromTextYsonString<std::string>(TStringBuf str)
+TString ConvertFromTextYsonString<TString>(TStringBuf str)
 {
-    return std::string(ConvertFromTextYsonString<TString>(str));
+    return TString(ConvertFromTextYsonString<std::string>(str));
 }
 
 template <>

@@ -13,7 +13,6 @@
 
 #include <util/datetime/base.h>
 
-
 namespace NYT::NClient::NFederated {
 namespace {
 

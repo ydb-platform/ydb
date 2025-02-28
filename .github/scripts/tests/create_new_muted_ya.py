@@ -40,10 +40,10 @@ def execute_query(driver):
 
         FROM
         (SELECT test_name, suite_folder, full_name, date_window, build_type, branch, days_ago_window, history, history_class, pass_count, mute_count, fail_count, skip_count, success_rate, summary, owner, is_muted, is_test_chunk, state, previous_state, state_change_date, days_in_state, previous_state_filtered, state_change_date_filtered, days_in_state_filtered, state_filtered
-        FROM `test_results/analytics/tests_monitor_test_with_filtered_states`) as data
+        FROM `test_results/analytics/tests_monitor`) as data
         left JOIN 
         (SELECT full_name, build_type, branch
-            FROM `test_results/analytics/tests_monitor_test_with_filtered_states`
+            FROM `test_results/analytics/tests_monitor`
             WHERE state = 'Flaky'
             AND days_in_state = 1
             AND date_window = CurrentUtcDate()
@@ -54,7 +54,7 @@ def execute_query(driver):
             and data.branch = new_flaky.branch
         LEFT JOIN 
         (SELECT full_name, build_type, branch
-            FROM `test_results/analytics/tests_monitor_test_with_filtered_states`
+            FROM `test_results/analytics/tests_monitor`
             WHERE state = 'Flaky'
             AND date_window = CurrentUtcDate()
             )as flaky
@@ -64,7 +64,7 @@ def execute_query(driver):
             and data.branch = flaky.branch
         LEFT JOIN 
         (SELECT full_name, build_type, branch
-            FROM `test_results/analytics/tests_monitor_test_with_filtered_states`
+            FROM `test_results/analytics/tests_monitor`
             WHERE state = 'Muted Stable'
             AND date_window = CurrentUtcDate()
             )as muted_stable
@@ -75,7 +75,7 @@ def execute_query(driver):
             and data.branch = muted_stable.branch
         LEFT JOIN 
         (SELECT full_name, build_type, branch
-            FROM `test_results/analytics/tests_monitor_test_with_filtered_states`
+            FROM `test_results/analytics/tests_monitor`
             WHERE state= 'Muted Stable'
             AND days_in_state >= 14
             AND date_window = CurrentUtcDate()
@@ -89,7 +89,7 @@ def execute_query(driver):
        
         LEFT JOIN 
         (SELECT full_name, build_type, branch
-            FROM `test_results/analytics/tests_monitor_test_with_filtered_states`
+            FROM `test_results/analytics/tests_monitor`
             WHERE state = 'no_runs'
             AND days_in_state >= 14
             AND date_window = CurrentUtcDate()

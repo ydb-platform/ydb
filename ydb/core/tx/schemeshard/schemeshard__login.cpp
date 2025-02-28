@@ -1,5 +1,6 @@
 #include <ydb/library/security/util.h>
 #include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/base/auth.h>
 
 #include "schemeshard_impl.h"
 
@@ -87,19 +88,12 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
 
 private:
     bool IsAdmin() const {
-        const auto& adminSids = AppData()->AdministrationAllowedSIDs;
-        if (adminSids.empty()) {
-            return true;
-        }
-
         const auto& user = Request->Get()->Record.GetUser();
         const auto providerGroups = Self->LoginProvider.GetGroupsMembership(user);
         const TVector<NACLib::TSID> groups(providerGroups.begin(), providerGroups.end());
         const auto userToken = NACLib::TUserToken(user, groups);
-        auto hasSid = [&userToken](const TString& sid) -> bool {
-            return userToken.IsExist(sid);
-        };
-        return std::find_if(adminSids.begin(), adminSids.end(), hasSid) != adminSids.end();
+
+        return IsAdministrator(AppData(), &userToken);
     }
 
     void LoginAttempt(NIceDb::TNiceDb& db, const TActorContext& ctx) {
@@ -159,7 +153,7 @@ private:
         case TLoginProvider::TLoginUserResponse::EStatus::SUCCESS: {
             const auto& sid = Self->LoginProvider.Sids[loginRequest.User];
             db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::LastSuccessfulAttempt,
-                                                                        Schema::LoginSids::FailedAttemptCount>(ToInstant(sid.LastSuccessfulLogin).MilliSeconds(), sid.FailedLoginAttemptCount);
+                                                                        Schema::LoginSids::FailedAttemptCount>(ToMicroSeconds(sid.LastSuccessfulLogin), sid.FailedLoginAttemptCount);
             Result->Record.SetToken(loginResponse.Token);
             Result->Record.SetSanitizedToken(loginResponse.SanitizedToken);
             Result->Record.SetIsAdmin(IsAdmin());
@@ -168,7 +162,7 @@ private:
         case TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD: {
             const auto& sid = Self->LoginProvider.Sids[loginRequest.User];
             db.Table<Schema::LoginSids>().Key(loginRequest.User).Update<Schema::LoginSids::LastFailedAttempt,
-                                                                        Schema::LoginSids::FailedAttemptCount>(ToInstant(sid.LastFailedLogin).MilliSeconds(), sid.FailedLoginAttemptCount);
+                                                                        Schema::LoginSids::FailedAttemptCount>(ToMicroSeconds(sid.LastFailedLogin), sid.FailedLoginAttemptCount);
             Result->Record.SetError(loginResponse.Error);
             break;
         }

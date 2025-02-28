@@ -3,8 +3,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/tablet_flat/test/libs/table/test_iter.h>
-
 #include <utility>
 
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)

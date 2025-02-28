@@ -95,7 +95,7 @@ bool TPredicateContainer::IsInclude() const {
     return CompareType == NArrow::ECompareType::GREATER_OR_EQUAL || CompareType == NArrow::ECompareType::LESS_OR_EQUAL;
 }
 
-bool TPredicateContainer::CrossRanges(const TPredicateContainer& ext) {
+bool TPredicateContainer::CrossRanges(const TPredicateContainer& ext) const {
     if (Object && ext.Object) {
         if (IsForwardInterval() == ext.IsForwardInterval()) {
             return true;

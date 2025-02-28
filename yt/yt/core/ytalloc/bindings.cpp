@@ -202,7 +202,6 @@ void EnableYTProfiling(const TYTProfilingConfigPtr& config)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-
 namespace {
 
 std::atomic<bool> ConfiguredFromEnv_;

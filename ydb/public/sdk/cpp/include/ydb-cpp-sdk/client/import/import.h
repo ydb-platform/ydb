@@ -17,6 +17,7 @@ enum class EImportProgress {
     Done = 4,
     Cancellation = 5,
     Cancelled = 6,
+    CreateChangefeeds = 7,
 
     Unknown = std::numeric_limits<int>::max(),
 };

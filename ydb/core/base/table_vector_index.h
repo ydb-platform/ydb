@@ -18,4 +18,7 @@ inline constexpr const char* PostingTable = "indexImplPostingTable";
 inline constexpr const char* BuildSuffix0 = "0build";
 inline constexpr const char* BuildSuffix1 = "1build";
 
+// Prefix table
+inline constexpr const char* PrefixTable = "indexImplPrefixTable";
+
 }

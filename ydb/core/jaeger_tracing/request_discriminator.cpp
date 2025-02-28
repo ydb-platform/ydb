@@ -42,6 +42,8 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Table.StreamExecuteScanQuery", ERequestType::TABLE_STREAMEXECUTESCANQUERY},
     {"Table.StreamReadTable", ERequestType::TABLE_STREAMREADTABLE},
     {"Table.ReadRows", ERequestType::TABLE_READROWS},
+    {"Table.DescribeExternalDataSource", ERequestType::TABLE_DESCRIBEEXTERNALDATASOURCE},
+    {"Table.DescribeExternalTable", ERequestType::TABLE_DESCRIBEEXTERNALTABLE},
 
     {"Query.ExecuteQuery", ERequestType::QUERY_EXECUTEQUERY},
     {"Query.ExecuteScript", ERequestType::QUERY_EXECUTESCRIPT},
@@ -64,9 +66,9 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"RateLimiter.DescribeResource", ERequestType::RATELIMITER_DESCRIBE_RESOURCE},
     {"RateLimiter.AcquireResource", ERequestType::RATELIMITER_ACQUIRE_RESOURCE},
 
-    {"BSConfig.ReplaceStorageConfig", ERequestType::BSCONFIG_REPLACESTORAGECONFIG},
-    {"BSConfig.FetchStorageConfig", ERequestType::BSCONFIG_FETCHSTORAGECONFIG},
-    {"BSConfig.Bootstrap", ERequestType::BSCONFIG_BOOTSTRAP},
+    {"Config.ReplaceConfig", ERequestType::CONFIG_REPLACECONFIG},
+    {"Config.FetchConfig", ERequestType::CONFIG_FETCHCONFIG},
+    {"Config.Bootstrap", ERequestType::CONFIG_BOOTSTRAP},
 
     {"Topic.StreamWrite", ERequestType::TOPIC_STREAMWRITE},
     {"Topic.StreamWrite.Init", ERequestType::TOPIC_STREAMWRITE_INIT},

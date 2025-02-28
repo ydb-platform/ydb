@@ -1,54 +1,40 @@
 #pragma once
 
-#include "registry.h" 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/library/formats/arrow/protos/ssa.pb.h>
-#include <ydb/core/formats/arrow/program.h>
-#include <ydb/core/formats/arrow/custom_registry.h>
-#include <ydb/core/tablet_flat/flat_dbase_scheme.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
-#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/checker.h>
-#include <ydb/core/tx/columnshard/common/portion.h>
+#include "registry.h"
 
-namespace NKikimr::NSchemeShard {
-class TOlapSchema;
-}
+#include <ydb/core/formats/arrow/process_columns.h>
+#include <ydb/core/formats/arrow/program/chain.h>
+#include <ydb/core/formats/arrow/program/custom_registry.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/checker.h>
+
+#include <ydb/library/formats/arrow/protos/ssa.pb.h>
 
 namespace NKikimr::NOlap {
-class IColumnResolver {
-public:
-    virtual ~IColumnResolver() = default;
-    virtual TString GetColumnName(ui32 id, bool required = true) const = 0;
-    virtual std::optional<ui32> GetColumnIdOptional(const TString& name) const = 0;
-    virtual NSsa::TColumnInfo GetDefaultColumn() const = 0;
-};
-
-class TSchemaResolverColumnsOnly: public IColumnResolver {
-private:
-    std::shared_ptr<NSchemeShard::TOlapSchema> Schema;
-public:
-    TSchemaResolverColumnsOnly(const std::shared_ptr<NSchemeShard::TOlapSchema>& schema)
-        : Schema(schema) {
-        AFL_VERIFY(Schema);
-    }
-
-    virtual TString GetColumnName(ui32 id, bool required = true) const override;
-    virtual std::optional<ui32> GetColumnIdOptional(const TString& name) const override;
-    virtual NSsa::TColumnInfo GetDefaultColumn() const override {
-        return NSsa::TColumnInfo::Original((ui32)NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX, NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP);
-    }
-};
 
 class TProgramContainer {
 private:
+    using TColumnInfo = NArrow::NSSA::TColumnInfo;
     NKikimrSSA::TProgram ProgramProto;
-    std::shared_ptr<NSsa::TProgram> Program;
-    std::shared_ptr<arrow::RecordBatch> ProgramParameters; // TODO
-    TKernelsRegistry KernelsRegistry;
-    std::optional<std::set<std::string>> OverrideProcessingColumnsSet;
-    std::optional<std::vector<TString>> OverrideProcessingColumnsVector;
+    std::shared_ptr<NArrow::NSSA::TProgramChain> Program;
+    std::shared_ptr<arrow::RecordBatch> ProgramParameters;   // TODO
+    NArrow::NSSA::TKernelsRegistry KernelsRegistry;
+    std::optional<THashSet<ui32>> OverrideProcessingColumnsSet;
+    std::optional<std::vector<ui32>> OverrideProcessingColumnsVector;
     YDB_READONLY_DEF(NIndexes::TIndexCheckerContainer, IndexChecker);
+
 public:
+    bool IsGenerated(const ui32 columnId) const {
+        if (!Program) {
+            return false;
+        }
+        return Program->IsGenerated(columnId);
+    }
+
+    const THashSet<ui32>& GetSourceColumns() const;
+    const THashSet<ui32>& GetEarlyFilterColumns() const;
+    const THashSet<ui32>& GetProcessingColumns() const;
+
     TString ProtoDebugString() const {
         return ProgramProto.DebugString();
     }
@@ -64,49 +50,47 @@ public:
     bool HasProcessingColumnIds() const {
         return !!Program || !!OverrideProcessingColumnsVector;
     }
-    void OverrideProcessingColumns(const std::vector<TString>& data) {
+    void OverrideProcessingColumns(const std::vector<TString>& data, const NArrow::NSSA::IColumnResolver& resolver) {
         if (data.empty()) {
             return;
         }
-        Y_ABORT_UNLESS(!Program);
-        OverrideProcessingColumnsVector = data;
-        OverrideProcessingColumnsSet = std::set<std::string>(data.begin(), data.end());
-    }
-
-    bool Init(const IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram, TString& error);
-    bool Init(const IColumnResolver& columnResolver, const NKikimrSSA::TOlapProgram& olapProgramProto, TString& error);
-    bool Init(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& programProto, TString& error);
-
-    const std::vector<std::shared_ptr<NSsa::TProgramStep>>& GetSteps() const {
-        if (!Program) {
-            return Default<std::vector<std::shared_ptr<NSsa::TProgramStep>>>();
-        } else {
-            return Program->Steps;
+        AFL_VERIFY(!Program);
+        std::vector<ui32> columnsVector;
+        THashSet<ui32> columnsSet;
+        for (auto&& i : data) {
+            const ui32 id = resolver.GetColumnIdVerified(i);
+            columnsVector.emplace_back(id);
+            columnsSet.emplace(id);
         }
+        OverrideProcessingColumnsVector = std::move(columnsVector);
+        OverrideProcessingColumnsSet = std::move(columnsSet);
     }
 
-    const std::vector<std::shared_ptr<NSsa::TProgramStep>>& GetStepsVerified() const {
+    void OverrideProcessingColumns(const std::vector<ui32>& data) {
+        std::vector<ui32> columnsVector = data;
+        THashSet<ui32> columnsSet(data.begin(), data.end());
+        OverrideProcessingColumnsVector = std::move(columnsVector);
+        OverrideProcessingColumnsSet = std::move(columnsSet);
+    }
+
+    [[nodiscard]] TConclusionStatus Init(
+        const NArrow::NSSA::IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram);
+    [[nodiscard]] TConclusionStatus Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TOlapProgram& olapProgramProto);
+    [[nodiscard]] TConclusionStatus Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TProgram& programProto);
+
+    const std::shared_ptr<NArrow::NSSA::TProgramChain>& GetChainVerified() const {
         AFL_VERIFY(!!Program);
-        return Program->Steps;
+        return Program;
     }
 
-    template <class TDataContainer>
-    inline arrow::Status ApplyProgram(std::shared_ptr<TDataContainer>& batch) const {
-        if (Program) {
-            return Program->ApplyTo(batch, NArrow::GetCustomExecContext());
-        } else if (OverrideProcessingColumnsVector) {
-            batch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(batch, *OverrideProcessingColumnsVector);
-        }
-        return arrow::Status::OK();
-    }
+    [[nodiscard]] TConclusionStatus ApplyProgram(const std::shared_ptr<NArrow::NAccessor::TAccessorsCollection>& collection) const;
+    [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> ApplyProgram(
+        const std::shared_ptr<arrow::RecordBatch>& batch, const NArrow::NSSA::IColumnResolver& resolver) const;
 
-    const THashMap<ui32, NSsa::TColumnInfo>& GetSourceColumns() const;
     bool HasProgram() const;
 
-    std::set<std::string> GetEarlyFilterColumns() const;
-    std::set<std::string> GetProcessingColumns() const;
 private:
-    bool ParseProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program, TString& error);
+    [[nodiscard]] TConclusionStatus ParseProgram(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program);
 };
 
-}
+}   // namespace NKikimr::NOlap

@@ -12,7 +12,7 @@ We'll conclude our talk by presenting performance results from the TPC-C benchma
 
 [{{ team.ivanov.name }}]({{ team.ivanov.profile }}) ({{ team.ivanov.position }}) discussed best high-performance benchmarking practices and some pitfalls found during TPC-C implementation, then demonstrated TPC-C results of PostgreSQL, CockroachDB, and YDB.
 
-@[YouTube](https://youtu.be/LlqfqzPtLD0?si=YYDcXkUZFsLJRJEY)
+@[YouTube](https://youtu.be/PYkVo8ApuAE?si=1HQFzWp3UGgNGFAP)
 
 The presentation will be of interest to developers of high-load systems and developers of platforms for various purposes.
 

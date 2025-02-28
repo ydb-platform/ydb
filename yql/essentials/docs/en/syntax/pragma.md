@@ -4,7 +4,7 @@
 
 Redefinition of settings.
 
-### Syntax
+#### Syntax
 
 `PRAGMA x.y = "z";` or `PRAGMA x.y("z", "z2", "z3");`:
 
@@ -15,7 +15,7 @@ Redefinition of settings.
   * `Kb`, `Mb`, `Gb`:  For the data amounts.
   * `sec`, `min`, `h`, `d`: For the time values.
 
-### Examples
+#### Examples
 
 ```yql
 PRAGMA AutoCommit;

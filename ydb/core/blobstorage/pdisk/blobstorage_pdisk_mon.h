@@ -479,7 +479,7 @@ struct TPDiskMon {
     TIoCounters WriteHuge;
     TIoCounters WriteComp;
     TIoCounters Trim;
-
+    TIoCounters ChunkShred;
     TIoCounters ReadSyncLog;
     TIoCounters ReadComp;
     TIoCounters ReadOnlineRt;

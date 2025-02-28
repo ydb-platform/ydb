@@ -1,7 +1,19 @@
 RECURSE(
-    bsconfig
+    cms
+    common_client
+    common_client/impl
+    config
+    coordination
+    datastreams
+    debug
+    discovery
     draft
+    driver
+    export
+    extension_common
     extensions
+    federated_topic
+    federated_topic/impl
     helpers
     impl/ydb_endpoints
     impl/ydb_internal/common
@@ -13,18 +25,6 @@ RECURSE(
     impl/ydb_internal/thread_pool
     impl/ydb_internal/value_helpers
     impl/ydb_stats
-    resources
-    common_client
-    common_client/impl
-    coordination
-    datastreams
-    debug
-    discovery
-    driver
-    export
-    extension_common
-    federated_topic
-    federated_topic/impl
     import
     operation
     params
@@ -34,6 +34,7 @@ RECURSE(
     query
     query/impl
     rate_limiter
+    resources
     result
     scheme
     table

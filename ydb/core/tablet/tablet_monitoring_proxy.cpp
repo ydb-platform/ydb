@@ -81,7 +81,7 @@ public:
         config.PreferLocal = Config.PreferLocal;
         config.RetryPolicy = Config.RetryPolicy;
 
-        PipeClient = ctx.ExecutorThread.RegisterActor(NTabletPipe::CreateClient(ctx.SelfID, TargetTablet, config));
+        PipeClient = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, TargetTablet, config));
         NTabletPipe::SendData(ctx, PipeClient, new NMon::TEvRemoteHttpInfo(std::move(Request)));
 
         ctx.Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
@@ -226,7 +226,7 @@ TTabletMonitoringProxyActor::Bootstrap(const TActorContext &ctx) {
     NActors::TMon* mon = AppData(ctx)->Mon;
 
     if (mon) {
-        mon->RegisterActorPage(nullptr, "tablets", "Tablets", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+        mon->RegisterActorPage(nullptr, "tablets", "Tablets", false, ctx.ActorSystem(), ctx.SelfID);
     }
 }
 
@@ -280,7 +280,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
         const TString &tabletIdParam = cgi->Get("FollowerID");
         const ui64 tabletId = TryParseTabletId(tabletIdParam);
         if (tabletId) {
-            ctx.ExecutorThread.RegisterActor(new TForwardingActor(Config, tabletId, true, ev->Sender, msg->Request, msg->UserToken));
+            ctx.Register(new TForwardingActor(Config, tabletId, true, ev->Sender, msg->Request, msg->UserToken));
             return;
         }
     }
@@ -290,7 +290,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
         const TString &tabletIdParam = cgi->Get("TabletID");
         const ui64 tabletId = TryParseTabletId(tabletIdParam);
         if (tabletId) {
-            ctx.ExecutorThread.RegisterActor(new TForwardingActor(Config, tabletId, false, ev->Sender, msg->Request, msg->UserToken));
+            ctx.Register(new TForwardingActor(Config, tabletId, false, ev->Sender, msg->Request, msg->UserToken));
             return;
         }
     }
@@ -300,7 +300,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
         const ui64 tabletId = TryParseTabletId(ssIdParam);
         if (tabletId) {
             TString url = TStringBuilder() << msg->Request.GetPathInfo() << "?" << cgi->Print();
-            ctx.ExecutorThread.RegisterActor(CreateStateStorageMonitoringActor(tabletId, ev->Sender, std::move(url)));
+            ctx.Register(CreateStateStorageMonitoringActor(tabletId, ev->Sender, std::move(url)));
             return;
         }
     }

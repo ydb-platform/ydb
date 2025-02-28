@@ -18,10 +18,6 @@
 #include <util/generic/deque.h>
 #include <util/generic/vector.h>
 
-#define ANTLR3_TOKEN(NAME) SQLv1LexerTokens::TOKEN_##NAME << 16
-#define ANTLR4_TOKEN(NAME) (SQLv1Antlr4Lexer::TOKEN_##NAME << 16) + 1
-#define IS_TOKEN(ID, NAME) (UnifiedToken(ID) == ANTLR3_TOKEN(NAME) || UnifiedToken(ID) == ANTLR4_TOKEN(NAME))
-
 namespace NSQLTranslationV1 {
     inline bool IsAnonymousName(const TString& name) {
         return name == "$_";
@@ -92,10 +88,12 @@ namespace NSQLTranslationV1 {
 
     class TContext {
     public:
-        TContext(const NSQLTranslation::TTranslationSettings& settings,
-                 const NSQLTranslation::TSQLHints& hints,
-                 NYql::TIssues& issues,
-                 const TString& query = {});
+        TContext(const TLexers& lexers,
+                const TParsers& parsers,
+                const NSQLTranslation::TTranslationSettings& settings,
+                const NSQLTranslation::TSQLHints& hints,
+                NYql::TIssues& issues,
+                const TString& query = {});
 
         virtual ~TContext();
 
@@ -236,11 +234,23 @@ namespace NSQLTranslationV1 {
             return true;
         }
 
+        [[nodiscard]] auto& GetMatchRecognizeAggregations() {
+            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState,
+                       "MATCH_RECOGNIZE Var can only be accessed within processing of MATCH_RECOGNIZE lambdas");
+            return MatchRecognizeAggregations;
+        }
+
         TVector<NSQLTranslation::TSQLHint> PullHintForToken(NYql::TPosition tokenPos);
         void WarnUnusedHints();
 
     private:
         IOutputStream& MakeIssue(NYql::ESeverity severity, NYql::TIssueCode code, NYql::TPosition pos);
+
+    public:
+        const TLexers Lexers;
+        const TParsers Parsers;
 
     private:
         NYql::TPosition Position;
@@ -258,6 +268,11 @@ namespace NSQLTranslationV1 {
         EColumnRefState TopLevelColumnReferenceState = EColumnRefState::Deny;
         TString MatchRecognizeDefineVar;
         TString MatchRecognizeAggrVar;
+        struct TMatchRecognizeAggregation {
+            TString Var;
+            TAggregationPtr Aggr;
+        };
+        TVector<TMatchRecognizeAggregation> MatchRecognizeAggregations;
         TString NoColumnErrorContext = "in current scope";
         TVector<TBlocks*> CurrentBlocks;
 
@@ -358,6 +373,8 @@ namespace NSQLTranslationV1 {
         bool SeqMode = false;
         bool EmitUnionMerge = false;
         TVector<size_t> ForAllStatementsParts;
+
+        TMaybe<TString> Engine;
     };
 
     class TColumnRefScope {
@@ -417,10 +434,6 @@ namespace NSQLTranslationV1 {
 
         const TString& Token(const NSQLv1Generated::TToken& token) {
             return Ctx.Token(token);
-        }
-
-        ui32 UnifiedToken(ui32 id) const {
-            return Ctx.Settings.Antlr4Parser + (id << 16);
         }
 
         TString Identifier(const NSQLv1Generated::TToken& token) {

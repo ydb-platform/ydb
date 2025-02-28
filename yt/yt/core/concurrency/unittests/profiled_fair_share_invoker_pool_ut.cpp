@@ -150,7 +150,7 @@ protected:
 
     TDiagnosableInvokerPoolPtr CreateInvokerPool(IInvokerPtr underlyingInvoker, int invokerCount, TSolomonRegistryPtr registry = nullptr)
     {
-        std::vector<TString> bucketNames;
+        std::vector<std::string> bucketNames;
 
         for (int i = 0; i < invokerCount; ++i) {
             bucketNames.push_back("invoker_" + ToString(i));

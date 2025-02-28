@@ -361,14 +361,11 @@ void GenerateInputQueryWhereExpression(const TExprNode::TPtr& node, TStringBuild
     }
 }
 
-TString GenerateInputQuery(const TExprNode& settings, const TVector<TInputInfo>& inputs) {
+TString GenerateInputQueryWhereExpression(const TExprNode& settings) {
     auto qlFilterNode = NYql::GetSetting(settings, EYtSettingType::QLFilter);
     if (!qlFilterNode) {
         return "";
     }
-
-    // TODO: how to handle multiple inputs?
-    YQL_ENSURE(inputs.size() == 1, "YtQLFilter: multiple inputs are not supported");
 
     qlFilterNode = qlFilterNode->ChildPtr(1);
     YQL_ENSURE(qlFilterNode && qlFilterNode->IsCallable("YtQLFilter"));
@@ -376,54 +373,67 @@ TString GenerateInputQuery(const TExprNode& settings, const TVector<TInputInfo>&
     const auto predicate = qlFilter.Predicate().Body();
 
     TStringBuilder result;
-    bool foundSomeColumns = false;
-    for (const auto& table: inputs) {
-        YQL_ENSURE(table.Path.Columns_ && table.Path.Columns_->Parts_, "YtQLFilter: TRichYPath should have columns");
-        for (const auto& column: table.Path.Columns_->Parts_) {
-            if (foundSomeColumns) {
-                result << ", ";
-            }
-            QuoteColumnForQL(column, result);
-            foundSomeColumns = true;
-        }
-    }
-    if (!foundSomeColumns) {
-        result << "*";
-    }
-    result << " WHERE ";
     GenerateInputQueryWhereExpression(predicate.Ptr(), result);
     YQL_CLOG(INFO, ProviderYt)  << __FUNCTION__ << ": " << result;
     return result;
 }
 
-void SetInputQuerySpec(NYT::TNode& spec, const TString& inputQuery) {
+TString GenerateInputQuery(const TRichYPath& path, const TString& whereExpression, bool useSystemColumns) {
+    YQL_ENSURE(whereExpression);
+    TStringBuilder result;
+    if (!path.Columns_ || !path.Columns_->Parts_) {
+        result << "*";
+    } else {
+        bool first = true;
+        for (const auto& column: path.Columns_->Parts_) {
+            if (!first) {
+                result << ", ";
+            }
+            QuoteColumnForQL(column, result);
+            first = false;
+        }
+        if (useSystemColumns) {
+            result << ", `$row_index`, `$range_index`";
+        }
+    }
+    result << " WHERE " << whereExpression;
+    YQL_CLOG(INFO, ProviderYt)  << __FUNCTION__ << ": " << result;
+    return result;
+}
+
+void SetInputQuerySpec(NYT::TNode& spec, const TString& inputQuery, bool useSystemColumns) {
     spec["input_query"] = inputQuery;
     spec["input_query_filter_options"]["enable_chunk_filter"] = true;
     spec["input_query_filter_options"]["enable_row_filter"] = true;
+    if (useSystemColumns) {
+        spec["input_query_options"]["use_system_columns"] = true;
+    }
 }
 
-void PrepareInputQueryForMerge(NYT::TNode& spec, TVector<TRichYPath>& paths, const TString& inputQuery) {
+void PrepareInputQueryForMerge(NYT::TNode& spec, TVector<TRichYPath>& paths, const TString& whereExpression) {
     // YQL-19382
-    if (inputQuery) {
-        for (auto& path : paths) {
-            path.Columns_.Clear();
-        }
-        SetInputQuerySpec(spec, inputQuery);
+    if (whereExpression) {
+        YQL_ENSURE(paths.size() == 1, "YtQLFilter: multiple inputs are not supported");
+        auto& path = paths[0];
+        const TString inputQuery = GenerateInputQuery(path, whereExpression, /*useSystemColumns*/ false);
+        path.Columns_.Clear();
+        SetInputQuerySpec(spec, inputQuery, /*useSystemColumns*/ false);
     }
 }
 
 template <typename T>
-void PrepareInputQueryForMap(NYT::TNode& spec, T& specWithPaths, const TString& inputQuery, const bool useSkiff) {
+void PrepareInputQueryForMap(NYT::TNode& spec, T& specWithPaths, const TString& whereExpression, bool useSystemColumns) {
     // YQL-19382
-    if (inputQuery) {
-        YQL_ENSURE(!useSkiff, "QLFilter can't work with skiff on map/mapreduce right now, try with PRAGMA yt.UseSkiff='false'");
+    if (whereExpression) {
         const auto& inputs = specWithPaths.GetInputs();
-        for (size_t i = 0; i < inputs.size(); ++i) {
-            auto path = inputs[i];
+        YQL_ENSURE(inputs.size() == 1, "YtQLFilter: multiple inputs are not supported");
+        auto path = inputs[0];
+        const TString inputQuery = GenerateInputQuery(path, whereExpression, useSystemColumns);
+        if (path.Columns_) {
             path.Columns_.Clear();
-            specWithPaths.SetInput(i, path);
+            specWithPaths.SetInput(0, path);
         }
-        SetInputQuerySpec(spec, inputQuery);
+        SetInputQuerySpec(spec, inputQuery, useSystemColumns);
     }
 }
 
@@ -3594,10 +3604,10 @@ private:
         bool forceTransform = NYql::HasAnySetting(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::SoftTransform);
         bool combineChunks = NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::CombineChunks);
         TMaybe<ui64> limit = GetLimit(merge.Settings().Ref());
-        const TString inputQuery = GenerateInputQuery(merge.Settings().Ref(), execCtx->InputTables_);
+        const TString inputQueryExpr = GenerateInputQueryWhereExpression(merge.Settings().Ref());
 
-        return execCtx->Session_->Queue_->Async([forceTransform, combineChunks, limit, inputQuery, execCtx]() {
-            return execCtx->LookupQueryCacheAsync().Apply([forceTransform, combineChunks, limit, inputQuery, execCtx] (const auto& f) {
+        return execCtx->Session_->Queue_->Async([forceTransform, combineChunks, limit, inputQueryExpr, execCtx]() {
+            return execCtx->LookupQueryCacheAsync().Apply([forceTransform, combineChunks, limit, inputQueryExpr, execCtx] (const auto& f) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                 auto entry = execCtx->GetEntry();
                 bool cacheHit = f.GetValue();
@@ -3643,7 +3653,7 @@ private:
                     spec["schema_inference_mode"] = "from_output"; // YTADMINREQ-17692
                 }
 
-                PrepareInputQueryForMerge(spec, mergeOpSpec.Inputs_, inputQuery);
+                PrepareInputQueryForMerge(spec, mergeOpSpec.Inputs_, inputQueryExpr);
 
                 return execCtx->RunOperation([entry, mergeOpSpec = std::move(mergeOpSpec), spec = std::move(spec)](){
                     return entry->Tx->Merge(mergeOpSpec, TOperationOptions().StartOperationMode(TOperationOptions::EStartOperationMode::AsyncPrepare).Spec(spec));
@@ -3662,13 +3672,13 @@ private:
         TString mapLambda,
         const TString& inputType,
         const TExpressionResorceUsage& extraUsage,
-        const TString& inputQuery,
+        const TString& inputQueryExpr,
         const TExecContext<TRunOptions>::TPtr& execCtx
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([ordered, blockInput, blockOutput, jobCount, limit, sortLimitBy, mapLambda,
-                          inputType, extraUsage, inputQuery, execCtx, testRun] (const auto& f) mutable
+                          inputType, extraUsage, inputQueryExpr, execCtx, testRun] (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             TTransactionCache::TEntry::TPtr entry;
@@ -3831,7 +3841,7 @@ private:
                 spec["job_count"] = static_cast<i64>(*jobCount);
             }
 
-            PrepareInputQueryForMap(spec, mapOpSpec, inputQuery, useSkiff);
+            PrepareInputQueryForMap(spec, mapOpSpec, inputQueryExpr, /*useSystemColumns*/ useSkiff);
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -3870,12 +3880,12 @@ private:
         }
         auto extraUsage = execCtx->ScanExtraResourceUsage(map.Mapper().Body().Ref(), true);
         TString inputType = NCommon::WriteTypeToYson(GetSequenceItemType(map.Input().Size() == 1U ? TExprBase(map.Input().Item(0)) : TExprBase(map.Mapper().Args().Arg(0)), true));
-        const TString inputQuery = GenerateInputQuery(map.Settings().Ref(), execCtx->InputTables_);
+        const TString inputQueryExpr = GenerateInputQueryWhereExpression(map.Settings().Ref());
 
-        return execCtx->Session_->Queue_->Async([ordered, blockInput, blockOutput, jobCount, limit, sortLimitBy, mapLambda, inputType, extraUsage, inputQuery, execCtx]() {
+        return execCtx->Session_->Queue_->Async([ordered, blockInput, blockOutput, jobCount, limit, sortLimitBy, mapLambda, inputType, extraUsage, inputQueryExpr, execCtx]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
-            return ExecMap(ordered, blockInput, blockOutput, jobCount, limit, sortLimitBy, mapLambda, inputType, extraUsage, inputQuery, execCtx);
+            return ExecMap(ordered, blockInput, blockOutput, jobCount, limit, sortLimitBy, mapLambda, inputType, extraUsage, inputQueryExpr, execCtx);
         });
     }
 
@@ -4103,14 +4113,14 @@ private:
         NYT::TNode intermediateMeta,
         const NYT::TNode& intermediateSchema,
         const NYT::TNode& intermediateStreams,
-        const TString& inputQuery,
+        const TString& inputQueryExpr,
         const TExecContext<TRunOptions>::TPtr& execCtx
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs,
                           mapExtraUsage, reduceLambda, reduceInputType, reduceExtraUsage,
-                          intermediateMeta, intermediateSchema, intermediateStreams, inputQuery, execCtx, testRun]
+                          intermediateMeta, intermediateSchema, intermediateStreams, inputQueryExpr, execCtx, testRun]
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -4328,7 +4338,7 @@ private:
                 spec["mapper"]["output_streams"] = intermediateStreams;
             }
 
-            PrepareInputQueryForMap(spec, mapReduceOpSpec, inputQuery, useSkiff);
+            PrepareInputQueryForMap(spec, mapReduceOpSpec, inputQueryExpr, /*useSystemColumns*/ useSkiff);
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -4351,13 +4361,13 @@ private:
         const TExpressionResorceUsage& reduceExtraUsage,
         const NYT::TNode& intermediateSchema,
         bool useIntermediateStreams,
-        const TString& inputQuery,
+        const TString& inputQueryExpr,
         const TExecContext<TRunOptions>::TPtr& execCtx
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType,
-                          reduceExtraUsage, intermediateSchema, useIntermediateStreams, inputQuery, execCtx, testRun]
+                          reduceExtraUsage, intermediateSchema, useIntermediateStreams, inputQueryExpr, execCtx, testRun]
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -4475,7 +4485,7 @@ private:
                 spec["reducer"]["enable_input_table_index"] = true;
             }
 
-            PrepareInputQueryForMap(spec, mapReduceOpSpec, inputQuery, useSkiff);
+            PrepareInputQueryForMap(spec, mapReduceOpSpec, inputQueryExpr, /*useSystemColumns*/ useSkiff);
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -4598,19 +4608,19 @@ private:
             limit.Clear();
         }
 
-        const TString inputQuery = GenerateInputQuery(mapReduce.Settings().Ref(), execCtx->InputTables_);
+        const TString inputQueryExpr = GenerateInputQueryWhereExpression(mapReduce.Settings().Ref());
 
         return execCtx->Session_->Queue_->Async([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage,
-            reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, useIntermediateStreams, inputQuery, execCtx]()
+            reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, useIntermediateStreams, inputQueryExpr, execCtx]()
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
             if (mapLambda) {
                 return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage,
-                    reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, inputQuery, execCtx);
+                    reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, inputQueryExpr, execCtx);
             } else {
                 return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType, reduceExtraUsage, intermediateSchema,
-                    useIntermediateStreams, inputQuery, execCtx);
+                    useIntermediateStreams, inputQueryExpr, execCtx);
             }
         });
     }
@@ -5696,6 +5706,22 @@ private:
             }
         }
         return ctx;
+    }
+
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) override {
+        try {
+            auto session =  GetSession(options.SessionId(), true);
+            auto ytServer = Clusters_->GetServer(options.Cluster());
+            auto entry = session->TxCache_.GetEntry(ytServer);
+            TClusterConnectionResult clusterConnectionResult{};
+            clusterConnectionResult.TransactionId = GetGuidAsString(entry->Tx->GetId());
+            clusterConnectionResult.YtServerName = ytServer;
+            clusterConnectionResult.Token = options.Config()->Auth.Get();
+            clusterConnectionResult.SetSuccess();
+            return clusterConnectionResult;
+        } catch (...) {
+            return ResultFromCurrentException<TClusterConnectionResult>({}, true);
+        }
     }
 
 private:

@@ -208,6 +208,7 @@ private:
     absl::flat_hash_set<ui64> CommittedLockChanges;
     absl::flat_hash_map<TPathId, TIntrusivePtr<NTable::TDynamicTransactionMap>> TxMaps;
     absl::flat_hash_map<TPathId, NTable::ITransactionObserverPtr> TxObservers;
+    bool NeedGlobalTxId = false;
 
     absl::flat_hash_set<ui64> VolatileCommitTxIds;
     YDB_ACCESSOR_DEF(absl::flat_hash_set<ui64>, VolatileDependencies);

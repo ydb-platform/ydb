@@ -48,7 +48,7 @@ public:
 
     void CreateUser(TString user, TString password) {
         TClient client(*(Server.ServerSettings));
-        client.SetSecurityToken("root@builtin");
+        client.SetSecurityToken(RootToken);
         auto status = client.CreateUser("/Root", user, password);
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
     }
@@ -60,14 +60,14 @@ public:
         else
             acl.RemoveAccess(NACLib::EAccessType::Allow, access, user);
         TClient client(*(Server.ServerSettings));
-        client.SetSecurityToken("root@builtin");
+        client.SetSecurityToken(RootToken);
         client.ModifyACL("", "Root", acl.SerializeAsString());
     }
 
     void TestConnectRight(TString token, TString expectedErrorReason) {
         const TString sql = "SELECT 1;";
         const auto result = ExecuteSql(token, sql);
-            
+
         if (expectedErrorReason.empty()) {
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         } else {
@@ -75,7 +75,7 @@ public:
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), expectedErrorReason, result.GetIssues().ToString());
         }
     }
-    
+
     void TestDescribeRight(TString token, TString expectedErrorReason) {
         TClient client(*(Server.ServerSettings));
         client.SetSecurityToken(token);
@@ -111,6 +111,7 @@ private:
         authConfig->SetUseLoginProvider(true);
         authConfig->SetEnableLoginAuthentication(isLoginAuthenticationEnabled);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddAdministrationAllowedSIDs(RootToken);
         appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true);
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
 
@@ -124,6 +125,7 @@ private:
     }
 
 private:
+    TString RootToken = "root@builtin";
     TKikimrWithGrpcAndRootSchemaWithAuth Server;
     NYdb::TDriver Connection;
     NConsoleClient::TDummyClient Client;
@@ -176,7 +178,7 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
         loginConnection.CreateUser(User, Password);
 
         auto token = loginConnection.GetToken(User, Password);
-        
+
         loginConnection.TestConnectRight(token, "No permission to connect to the database");
 
         loginConnection.Stop();
@@ -188,7 +190,7 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
         loginConnection.ModifyACL(true, User, NACLib::EAccessRights::ConnectDatabase);
 
         auto token = loginConnection.GetToken(User, Password);
-        
+
         loginConnection.TestConnectRight(token, "");
         loginConnection.TestDescribeRight(token, "Access denied");
 

@@ -106,7 +106,7 @@ namespace NKikimr {
 
         template <class TRecordMerger>
         void PutToMerger(TRecordMerger *merger) {
-            merger->AddFromSegment(Ptr->MemRec, Segment->GetOutbound(), GetCurKey(), Segment->Info.LastLsn);
+            merger->AddFromSegment(Ptr->MemRec, Segment->GetOutbound(), GetCurKey(), Segment->Info.LastLsn, Segment);
         }
 
         template <class Heap>

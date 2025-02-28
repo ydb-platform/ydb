@@ -2324,10 +2324,10 @@ Pear;15;33'''
     def test_s3_push_down_parquet(self, kikimr, s3, client, unique_prefix):
         data = [
             [
-                int(datetime.fromisoformat("2024-06-17 00:00:00").timestamp() * 1000),
-                int(datetime.fromisoformat("2024-06-16 00:00:00").timestamp() * 1000),
-                int(datetime.fromisoformat("2024-06-15 00:00:00").timestamp() * 1000),
-                int(datetime.fromisoformat("2024-06-14 00:00:00").timestamp() * 1000),
+                int(datetime.fromisoformat("2024-06-17 00:00:00+00:00").timestamp() * 1000),
+                int(datetime.fromisoformat("2024-06-16 00:00:00+00:00").timestamp() * 1000),
+                int(datetime.fromisoformat("2024-06-15 00:00:00+00:00").timestamp() * 1000),
+                int(datetime.fromisoformat("2024-06-14 00:00:00+00:00").timestamp() * 1000),
             ],
             ['apple', "banana", "pineapple", "watermelon"],
         ]

@@ -391,8 +391,6 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(FindingPartsWithTimeout) {
-            return;
-
             TBlobStorageGroupType type(TErasureType::Erasure4Plus2Block);
             TVPatchTestGeneralData testData(type, 10);
             TTestActorRuntimeBase &runtime = testData.Runtime;

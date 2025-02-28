@@ -4,7 +4,8 @@ from ydb.tests.olap.scenario.helpers.scenario_tests_helper import (
     TestContext,
 )
 from abc import abstractmethod, ABC
-from typing import override, Dict
+from typing import override, Dict, Iterable, Optional
+from datetime import timedelta
 
 
 class CreateTableLikeObject(ScenarioTestHelper.IYqlble):
@@ -22,6 +23,7 @@ class CreateTableLikeObject(ScenarioTestHelper.IYqlble):
         super().__init__(name)
         self._schema = None
         self._partitions = 64
+        self._existing_ok = False
 
     def with_schema(self, schema: ScenarioTestHelper.Schema) -> CreateTableLikeObject:
         """Specify the schema of the created object.
@@ -47,6 +49,18 @@ class CreateTableLikeObject(ScenarioTestHelper.IYqlble):
         self._partitions = partitions
         return self
 
+    def existing_ok(self, value: bool = True) -> CreateTableLikeObject:
+        """Set existing_ok value.
+
+         Args:
+            value: existing_ok.
+
+        Returns:
+            self."""
+
+        self._existing_ok = value
+        return self
+
     @override
     def params(self) -> Dict[str, str]:
         return {self._type(): self._name}
@@ -60,7 +74,7 @@ class CreateTableLikeObject(ScenarioTestHelper.IYqlble):
         schema_str = ',\n    '.join([c.to_yql() for c in self._schema.columns])
         column_families_str = ',\n'.join([c.to_yql() for c in self._schema.column_families])
         keys = ', '.join(self._schema.key_columns)
-        return f'''CREATE {self._type().upper()} `{ScenarioTestHelper(ctx).get_full_path(self._name)}` (
+        return f'''CREATE {self._type().upper()}{' IF NOT EXISTS' if self.existing_ok else ''} `{ScenarioTestHelper(ctx).get_full_path(self._name)}` (
     {schema_str},
     PRIMARY KEY({keys})
     {"" if not column_families_str else f", {column_families_str}"}
@@ -537,30 +551,7 @@ class AlterTableLikeObject(ScenarioTestHelper.IYqlble):
 
         return self(DropColumn(column))
 
-    def set_tiering(self, tiering_rule: str) -> AlterTableLikeObject:
-        """Set a tiering policy.
-
-        The method is similar to calling {AlterTableLikeObject.action} with a {SetSetting} instance.
-
-        Args:
-            tiering_rule: Name of a TIERING_RULE object.
-
-        Returns:
-            self."""
-
-        return self(SetSetting('TIERING', f'"{tiering_rule}"'))
-
-    def reset_tiering(self) -> AlterTableLikeObject:
-        """Remove a tiering policy.
-
-        The method is similar to calling {AlterTableLikeObject.action} with a {SetSetting} instance.
-
-        Returns:
-            self."""
-
-        return self(ResetSetting('TIERING'))
-
-    def set_ttl(self, interval: str, column: str) -> AlterTableLikeObject:
+    def set_ttl(self, tiers: Iterable[(timedelta, Optional[str])], column: str) -> AlterTableLikeObject:
         """Set TTL for rows.
 
         The method is similar to calling {AlterTableLikeObject.action} with a {SetSetting} instance.
@@ -571,7 +562,15 @@ class AlterTableLikeObject(ScenarioTestHelper.IYqlble):
         Returns:
             self."""
 
-        return self(SetSetting('TTL', f'Interval("{interval}") ON `{column}`'))
+        def make_tier_literal(delay: timedelta, storage_path: Optional[str]):
+            delay_literal = f'Interval("PT{delay.total_seconds()}S")'
+            if storage_path:
+                return delay_literal + ' TO EXTERNAL DATA SOURCE `' + storage_path + '`'
+            else:
+                return delay_literal + ' DELETE'
+
+        tiers_literal = ', '.join(map(lambda x: make_tier_literal(*x), tiers))
+        return self(SetSetting('TTL', f'{tiers_literal} ON {column}'))
 
     def add_column_family(self, column_family: ScenarioTestHelper.ColumnFamily) -> AlterTableLikeObject:
         """Add a column_family.

@@ -150,6 +150,9 @@ struct TEquiJoinLinkSettings {
     bool ForceSortedMerge = false;
     bool Compact = false;
     TVector<TString> JoinAlgoOptions;
+
+    TVector<NDq::TJoinColumn> ShuffleLhsBy;
+    TVector<NDq::TJoinColumn> ShuffleRhsBy;
 };
 
 TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings);

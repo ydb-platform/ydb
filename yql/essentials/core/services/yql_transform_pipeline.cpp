@@ -160,7 +160,18 @@ TTransformationPipeline& TTransformationPipeline::AddFinalCommonOptimization(EYq
 TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode) {
     AddCommonOptimization(issueCode);
     Transformers_.push_back(TTransformStage(
-        CreateRecaptureDataProposalsInspector(*TypeAnnotationContext_, TString{DqProviderName}),
+        CreateChoiceGraphTransformer(
+            [&typesCtx = std::as_const(*TypeAnnotationContext_)](const TExprNode::TPtr&, TExprContext&) {
+                return typesCtx.EngineType == EEngineType::Ytflow;
+            },
+            TTransformStage(
+                CreateRecaptureDataProposalsInspector(*TypeAnnotationContext_, TString{YtflowProviderName}),
+                "RecaptureDataProposalsYtflow",
+                issueCode),
+            TTransformStage(
+                CreateRecaptureDataProposalsInspector(*TypeAnnotationContext_, TString{DqProviderName}),
+                "RecaptureDataProposalsDq",
+                issueCode)),
         "RecaptureDataProposals",
         issueCode));
     Transformers_.push_back(TTransformStage(

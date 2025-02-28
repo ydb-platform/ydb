@@ -135,7 +135,7 @@ namespace NKikimr {
                     TQueueClientId(EQueueClientType::VDiskLoad, TAppData::RandomProvider->GenRand64()),
                     "",
                     TInterconnectChannels::IC_BLOBSTORAGE,
-                    ctx.ExecutorThread.ActorSystem->NodeId == VDiskActorId.NodeId(),
+                    SelfId().NodeId() == VDiskActorId.NodeId(),
                     TDuration::Minutes(1),
                     flowRecord,
                     NMonitoring::TCountableBase::EVisibility::Public

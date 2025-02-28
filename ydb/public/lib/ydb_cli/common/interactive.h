@@ -7,6 +7,8 @@ namespace NConsoleClient {
 
 bool AskYesOrNo();
 
+bool AskPrompt(const std::string &query, bool defaultAnswer);
+
 bool IsStdinInteractive();
 
 bool IsStdoutInteractive();

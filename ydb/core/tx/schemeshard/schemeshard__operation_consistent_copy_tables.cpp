@@ -9,7 +9,7 @@
 
 #include <util/generic/algorithm.h>
 
-NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst, const NKikimrSchemeOp::TCopyTableConfig& descr) {
+static NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst, const NKikimrSchemeOp::TCopyTableConfig& descr) {
     using namespace NKikimr::NSchemeShard;
 
     auto scheme = TransactionTemplate(dst.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
@@ -29,7 +29,7 @@ NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath& src, 
     return scheme;
 }
 
-NKikimrSchemeOp::TModifyScheme CreateIndexTask(NKikimr::NSchemeShard::TTableIndexInfo::TPtr indexInfo, NKikimr::NSchemeShard::TPath& dst) {
+static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NSchemeShard::TTableIndexInfo::TPtr indexInfo, NKikimr::NSchemeShard::TPath& dst) {
     using namespace NKikimr::NSchemeShard;
 
     auto scheme = TransactionTemplate(dst.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
@@ -39,13 +39,20 @@ NKikimrSchemeOp::TModifyScheme CreateIndexTask(NKikimr::NSchemeShard::TTableInde
     operation->SetName(dst.LeafName());
 
     operation->SetType(indexInfo->Type);
-    Y_ABORT_UNLESS(indexInfo->Type != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
+
     for (const auto& keyName: indexInfo->IndexKeys) {
         *operation->MutableKeyColumnNames()->Add() = keyName;
     }
 
     for (const auto& dataColumn: indexInfo->IndexDataColumns) {
         *operation->MutableDataColumnNames()->Add() = dataColumn;
+    }
+
+    if (indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+        *operation->MutableVectorIndexKmeansTreeDescription() =
+            std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
+    } else if (!std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription)) {
+        return {};
     }
 
     return scheme;
@@ -182,23 +189,23 @@ bool CreateConsistentCopyTables(
 
             Y_ABORT_UNLESS(srcIndexPath.Base()->PathId == pathId);
             TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
-            if (indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+            auto scheme = CreateIndexTask(indexInfo, dstIndexPath);
+            if (!scheme) {
                 result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
-                                       "Consistent copy table doesn't support table with vector index")};
+                                       TStringBuilder{} << "Consistent copy table doesn't support table with index type " << indexInfo->Type)};
                 return false;
             }
-            Y_VERIFY_S(srcIndexPath.Base()->GetChildren().size() == 1, srcIndexPath.PathString() << " has children " << srcIndexPath.Base()->GetChildren().size() << " but 1 expected");
+            result.push_back(CreateNewTableIndex(NextPartId(nextId, result), *scheme));
 
-            result.push_back(CreateNewTableIndex(NextPartId(nextId, result), CreateIndexTask(indexInfo, dstIndexPath)));
+            for (const auto& [srcImplTableName, srcImplTablePathId] : srcIndexPath.Base()->GetChildren()) {
+                TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
+                Y_ABORT_UNLESS(srcImplTable.Base()->PathId == srcImplTablePathId);
+                TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 
-            TString srcImplTableName = srcIndexPath.Base()->GetChildren().begin()->first;
-            TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
-            Y_ABORT_UNLESS(srcImplTable.Base()->PathId == srcIndexPath.Base()->GetChildren().begin()->second);
-            TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
-
-            result.push_back(CreateCopyTable(
-                                 NextPartId(nextId, result),
-                                 CopyTableTask(srcImplTable, dstImplTable, descr)));
+                result.push_back(CreateCopyTable(
+                                     NextPartId(nextId, result),
+                                     CopyTableTask(srcImplTable, dstImplTable, descr)));
+            }
         }
 
         for (auto&& sequenceDescription : sequenceDescriptions) {

@@ -247,6 +247,24 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TCancelTabletTransitionCommand
+    : public TTypedCommand<NApi::TCancelTabletTransitionOptions>
+{
+    NTabletClient::TTabletId TabletId;
+
+    REGISTER_YSON_STRUCT_LITE(TCancelTabletTransitionCommand);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("tablet_id", &TThis::TabletId);
+    }
+
+public:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TReshardTableCommand
     : public TTabletCommandBase<NApi::TReshardTableOptions>
 {

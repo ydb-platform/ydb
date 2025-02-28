@@ -157,9 +157,9 @@ public:
                 }
             }
             NKikimrConfig::TAppConfig appConfig;
-            if (AllConfigsResponse->Record.GetResponse().config()) {
+            if (AllConfigsResponse->Record.GetResponse().config_size()) {
                 try {
-                    NYamlConfig::ResolveAndParseYamlConfig(AllConfigsResponse->Record.GetResponse().config(), {}, {{"tenant", realDatabase}}, appConfig);
+                    NYamlConfig::ResolveAndParseYamlConfig(AllConfigsResponse->Record.GetResponse().config(0), {}, {{"tenant", realDatabase}}, appConfig);
                 } catch (const std::exception& e) {
                     BLOG_ERROR("Failed to parse config for tenant " << realDatabase << ": " << e.what());
                 }

@@ -6,6 +6,7 @@
 #include "executor_thread.h"
 #include "mailbox.h"
 #include "probes.h"
+#include "debug.h"
 #include <ydb/library/actors/util/datetime.h>
 
 namespace NActors {
@@ -20,11 +21,12 @@ namespace NActors {
     TExecutorPoolBaseMailboxed::TExecutorPoolBaseMailboxed(ui32 poolId)
         : IExecutorPool(poolId)
         , ActorSystem(nullptr)
-        , MailboxTable(new TMailboxTable)
+        , MailboxTableHolder(new TMailboxTable)
+        , MailboxTable(MailboxTableHolder.Get())
     {}
 
     TExecutorPoolBaseMailboxed::~TExecutorPoolBaseMailboxed() {
-        MailboxTable.Destroy();
+        MailboxTableHolder.Destroy();
     }
 
 #if defined(ACTORSLIB_COLLECT_EXEC_STATS)
@@ -69,6 +71,7 @@ namespace NActors {
     TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue)
         : TExecutorPoolBaseMailboxed(poolId)
         , PoolThreads(threads)
+        , UseRingQueue(useRingQueue)
         , ThreadsAffinity(affinity)
     {
         if (useRingQueue) {
@@ -144,35 +147,32 @@ namespace NActors {
     }
 
     void TExecutorPoolBase::ScheduleActivation(TMailbox* mailbox) {
-#ifdef RING_ACTIVATION_QUEUE
-        ScheduleActivationEx(mailbox, 0);
-#else
-        ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
-#endif
+        if (UseRingQueue) {
+            ScheduleActivationEx(mailbox, 0);
+        } else {
+            ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
+        }
     }
 
     Y_FORCE_INLINE bool IsAllowedToCapture(IExecutorPool *self) {
-        if (TlsThreadContext->Pool != self || TlsThreadContext->CapturedType == ESendingType::Tail) {
+        if (TlsThreadContext->Pool() != self || TlsThreadContext->CheckCapturedSendingType(ESendingType::Tail)) {
             return false;
         }
-        return TlsThreadContext->SendingType != ESendingType::Common;
+        return !TlsThreadContext->CheckSendingType(ESendingType::Common);
     }
 
     Y_FORCE_INLINE bool IsTailSend(IExecutorPool *self) {
-        return TlsThreadContext->Pool == self && TlsThreadContext->SendingType == ESendingType::Tail && TlsThreadContext->CapturedType != ESendingType::Tail;
+        return TlsThreadContext->Pool() == self && TlsThreadContext->CheckSendingType(ESendingType::Tail) && !TlsThreadContext->CheckCapturedSendingType(ESendingType::Tail);
     }
 
     void TExecutorPoolBase::SpecificScheduleActivation(TMailbox* mailbox) {
         if (NFeatures::IsCommon() && IsAllowedToCapture(this) || IsTailSend(this)) {
-            std::swap(TlsThreadContext->CapturedActivation, mailbox);
-            TlsThreadContext->CapturedType = TlsThreadContext->SendingType;
+            mailbox = TlsThreadContext->CaptureMailbox(mailbox);
         }
-        if (mailbox) {
-#ifdef RING_ACTIVATION_QUEUE
-        ScheduleActivationEx(mailbox, 0);
-#else
-        ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
-#endif
+        if (mailbox && UseRingQueue) {
+            ScheduleActivationEx(mailbox, 0);
+        } else if (mailbox) {
+            ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
         }
     }
 
@@ -297,5 +297,9 @@ namespace NActors {
 
     ui32 TExecutorPoolBase::GetThreads() const {
         return PoolThreads;
+    }
+
+    TMailboxTable* TExecutorPoolBaseMailboxed::GetMailboxTable() const {
+        return MailboxTable;
     }
 }

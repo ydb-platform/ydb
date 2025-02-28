@@ -16,7 +16,7 @@ struct TKqpCompileResult {
 
     TKqpCompileResult(const TString& uid, const Ydb::StatusIds::StatusCode& status, const NYql::TIssues& issues,
             ETableReadType maxReadType, TMaybe<TKqpQueryId> query = {}, TMaybe<TQueryAst> queryAst = {},
-            bool needToSplit = false, const TMaybe<TString>& commandTagName = {})
+            bool needToSplit = false, const TMaybe<TString>& commandTagName = {}, const TMaybe<TString>& replayMessageUserView = {})
         : Status(status)
         , Issues(issues)
         , Query(std::move(query))
@@ -24,13 +24,14 @@ struct TKqpCompileResult {
         , MaxReadType(maxReadType)
         , QueryAst(std::move(queryAst))
         , NeedToSplit(needToSplit)
-        , CommandTagName(commandTagName) {}
+        , CommandTagName(commandTagName)
+        , ReplayMessageUserView(replayMessageUserView) {}
 
     static std::shared_ptr<TKqpCompileResult> Make(const TString& uid, const Ydb::StatusIds::StatusCode& status,
         const NYql::TIssues& issues, ETableReadType maxReadType, TMaybe<TKqpQueryId> query = {},
-        TMaybe<TQueryAst> queryAst = {}, bool needToSplit = false, const TMaybe<TString>& commandTagName = {})
+        TMaybe<TQueryAst> queryAst = {}, bool needToSplit = false, const TMaybe<TString>& commandTagName = {}, const TMaybe<TString>& replayMessageUserView = {})
     {
-        return std::make_shared<TKqpCompileResult>(uid, status, issues, maxReadType, std::move(query), std::move(queryAst), needToSplit, commandTagName);
+        return std::make_shared<TKqpCompileResult>(uid, status, issues, maxReadType, std::move(query), std::move(queryAst), needToSplit, commandTagName, replayMessageUserView);
     }
 
     std::shared_ptr<NYql::TAstParseResult> GetAst() const;
@@ -46,6 +47,8 @@ struct TKqpCompileResult {
     TMaybe<TQueryAst> QueryAst;
     bool NeedToSplit = false;
     TMaybe<TString> CommandTagName = {};
+
+    TMaybe<TString> ReplayMessageUserView;
 
     std::shared_ptr<const TPreparedQueryHolder> PreparedQuery;
 };

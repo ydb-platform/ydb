@@ -334,6 +334,9 @@ namespace NActors {
         bool IsScheduleForActorEnabled(const TActorId& actorId) const;
         TIntrusivePtr<NMonitoring::TDynamicCounters> GetDynamicCounters(ui32 nodeIndex = 0);
         void SetupMonitoring(ui16 monitoringPortOffset = 0, bool monitoringTypeAsync = false);
+        void DisableBreakOnStopCondition() {
+            AllowBreakOnStopCondition = false;
+        }
 
         using TEventObserverCollection = std::list<std::function<void(TAutoPtr<IEventHandle>& event)>>;
         class TEventObserverHolder {
@@ -790,7 +793,7 @@ namespace NActors {
         THashMap<TActorId, TString> ActorNames;
         TDispatchContext* CurrentDispatchContext;
         TVector<ui64> TxAllocatorTabletIds;
-
+        bool AllowBreakOnStopCondition = true;
         static ui32 NextNodeId;
     };
 

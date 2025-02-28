@@ -215,6 +215,7 @@ namespace {
     SIMPLE_STRICT_UDF(TIntervalTo##unit, type(TAutoMap<TInterval>)) {                                \
         Y_UNUSED(valueBuilder);                                                                      \
         const i64 input = args[0].Get<i64>();                                                        \
+        Y_DEBUG_ABORT_UNLESS(input > -(i64)NUdf::MAX_TIMESTAMP && input < (i64)NUdf::MAX_TIMESTAMP); \
         TDuration duration = TDuration::MicroSeconds(std::abs(input));                               \
         return TUnboxedValuePod(static_cast<type>(input >= 0 ? duration.unit() : -duration.unit())); \
     }

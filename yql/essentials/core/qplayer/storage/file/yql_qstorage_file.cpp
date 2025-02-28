@@ -7,8 +7,8 @@
 #include <util/folder/tempdir.h>
 #include <util/generic/hash_set.h>
 #include <util/system/fs.h>
-#include <util/system/mutex.h>
 #include <util/stream/file.h>
+#include <util/system/mutex.h>
 
 namespace NYql {
 
@@ -195,9 +195,9 @@ public:
         auto opPath = Folder_ / operationId;
         auto writtenAt = writerSettings.WrittenAt.GetOrElse(Now());
         if (Settings_.BufferUntilCommit) {
-            return std::make_shared<TBufferedWriter>(opPath, writtenAt, writerSettings);
+            return MakeCloseAwareWriterDecorator(std::make_shared<TBufferedWriter>(opPath, writtenAt, writerSettings));
         } else {
-            return std::make_shared<TUnbufferedWriter>(opPath, writtenAt, writerSettings, Settings_.AlwaysFlushIndex);
+            return MakeCloseAwareWriterDecorator(std::make_shared<TUnbufferedWriter>(opPath, writtenAt, writerSettings, Settings_.AlwaysFlushIndex));
         }
     }
 

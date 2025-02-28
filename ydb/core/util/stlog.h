@@ -99,6 +99,8 @@ namespace NKikimr::NStLog {
     template<typename T, typename Y> struct TIsIterable<std::deque<T, Y>> { static constexpr bool value = true; };
     template<typename T, typename Y> struct TIsIterable<std::list<T, Y>> { static constexpr bool value = true; };
     template<typename T, typename Y> struct TIsIterable<std::vector<T, Y>> { static constexpr bool value = true; };
+    template<typename T, typename Y> struct TIsIterable<TVector<T, Y>> { static constexpr bool value = true; };
+    template<typename T, typename X, typename Y, typename Z> struct TIsIterable<THashSet<T, X, Y, Z>> { static constexpr bool value = true; };
     template<typename T> struct TIsIterable<NProtoBuf::RepeatedField<T>> { static constexpr bool value = true; };
     template<typename T> struct TIsIterable<NProtoBuf::RepeatedPtrField<T>> { static constexpr bool value = true; };
 
@@ -354,7 +356,7 @@ namespace NKikimr::NStLog {
         void WriteParamsToJson(NJson::TJsonWriter& json) const {
             WriteParams<0>(&json);
         }
-        
+
         template<size_t Index, typename = std::enable_if_t<Index != NumParams>>
         void WriteParams(IOutputStream *s) const {
             std::get<Index>(Params).WriteToStream(*s << " ");

@@ -139,7 +139,8 @@ void TBlobState::AddPutOkResponse(const TBlobStorageGroupInfo &info, const TLogo
     diskPart.Situation = ESituation::Present;
 }
 
-void TBlobState::AddErrorResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 orderNumber) {
+void TBlobState::AddErrorResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 orderNumber,
+        const TString& errorReason) {
     Y_ABORT_UNLESS(id.PartId() != 0);
     ui32 partIdx = id.PartId() - 1;
     IsChanged = true;
@@ -153,6 +154,7 @@ void TBlobState::AddErrorResponse(const TBlobStorageGroupInfo &info, const TLogo
     TDiskPart &diskPart = disk.DiskParts[partIdx];
     diskPart.Situation = ESituation::Error;
     diskPart.Requested.Clear();
+    diskPart.ErrorReason = errorReason;
 }
 
 void TBlobState::AddNotYetResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 orderNumber) {
@@ -238,7 +240,26 @@ TString TBlobState::SituationToString(ESituation situation) {
         case ESituation::Sent:
             return "ESituation::Sent";
     }
-    Y_ABORT_UNLESS(false, "Unexpected situation# %" PRIu64, ui64(situation));
+    Y_DEBUG_ABORT("Unexpected situation# %" PRIu64, ui64(situation));
+    return "";
+}
+
+TString TBlobState::SituationToShortString(ESituation situation) {
+    switch (situation) {
+        case ESituation::Unknown:
+            return "U";
+        case ESituation::Error:
+            return "E";
+        case ESituation::Absent:
+            return "A";
+        case ESituation::Lost:
+            return "L";
+        case ESituation::Present:
+            return "P";
+        case ESituation::Sent:
+            return "S";
+    }
+    Y_DEBUG_ABORT("Unexpected situation# %" PRIu64, ui64(situation));
     return "";
 }
 
@@ -258,6 +279,9 @@ TString TBlobState::TDiskPart::ToString() const {
     TStringStream str;
     str << "{Requested# " << Requested.ToString();
     str << " Situation# " << SituationToString(Situation);
+    if (ErrorReason) {
+        str << " ErrorReason# " << ErrorReason;
+    }
     str << "}";
     return str.Str();
 }
@@ -277,6 +301,48 @@ TString TBlobState::TWholeState::ToString() const {
     str << " Needed# " << Needed.ToString();
     str << " NotHere# " << NotHere().ToString();
     str << "}";
+    return str.Str();
+}
+
+TString TBlobState::ReportProblems(const TBlobStorageGroupInfo& info) const {
+    TStackVec<TStackVec<TString, 3>, TypicalDisksInSubring> errorsByDisk(Disks.size());
+    for (const TDisk& disk : Disks) {
+        for (const TDiskPart& part : disk.DiskParts) {
+            if (part.ErrorReason) {
+                TVDiskID vdiskId = info.GetVDiskId(disk.OrderNumber);
+                ui32 diskIdx = info.GetIdxInSubgroup(vdiskId, Id.Hash());
+                errorsByDisk[diskIdx].push_back(part.ErrorReason);
+            }
+        }
+    }
+
+    TStringStream str;
+    str << "[ ";
+    for (ui32 diskIdx = 0; diskIdx < errorsByDisk.size(); ++diskIdx) {
+        if (!errorsByDisk[diskIdx].empty()) {
+            ui32 orderNumber = Disks[diskIdx].OrderNumber;
+            str << "{ OrderNumber# " << orderNumber;
+            str << " VDiskId# " << info.GetVDiskId(orderNumber);
+            str << " NodeId# " << info.GetActorId(orderNumber).NodeId();
+            str << " ErrorReasons# [ ";
+            for (const TString& errorReason : errorsByDisk[diskIdx]) {
+                str << "\"" << errorReason << "\", ";
+            }
+            str << "] } ";
+        }
+    }
+    str << "] ";
+
+    str << " Part situations# [ ";
+    for (const TDisk& disk : Disks) {
+        str << "{ OrderNumber# " << disk.OrderNumber << " Situations# ";
+        for (const TDiskPart& part : disk.DiskParts) {
+            str << SituationToShortString(part.Situation);
+        }
+        str << " } ";
+    }
+    str << "] ";
+
     return str.Str();
 }
 
@@ -359,11 +425,11 @@ void TBlackboard::AddNotYetResponse(const TLogoBlobID &id, ui32 orderNumber) {
     state.AddNotYetResponse(*Info, id, orderNumber);
 }
 
-void TBlackboard::AddErrorResponse(const TLogoBlobID &id, ui32 orderNumber) {
+void TBlackboard::AddErrorResponse(const TLogoBlobID &id, ui32 orderNumber, const TString& errorReason) {
     Y_ABORT_UNLESS(bool(id));
     Y_ABORT_UNLESS(id.PartId() != 0);
     TBlobState &state = GetState(id);
-    state.AddErrorResponse(*Info, id, orderNumber);
+    state.AddErrorResponse(*Info, id, orderNumber, errorReason);
 }
 
 EStrategyOutcome TBlackboard::RunStrategies(TLogContext &logCtx, const TStackVec<IStrategy*, 1>& s,

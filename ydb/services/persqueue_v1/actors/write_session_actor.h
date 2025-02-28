@@ -166,7 +166,7 @@ private:
 
     void SetupBytesWrittenByUserAgentCounter(const TString& topicPath);
     void SetupCounters();
-    void SetupCounters(const TActorContext& ctx, const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId);
+    void SetupCounters(const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId);
 
     void CloseSpans(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode);
 

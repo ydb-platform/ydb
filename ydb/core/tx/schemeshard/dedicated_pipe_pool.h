@@ -5,8 +5,6 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 
-#include <ydb/library/actors/core/executor_thread.h>
-
 #include <util/generic/map.h>
 
 namespace NKikimr::NSchemeShard {
@@ -21,7 +19,7 @@ public:
         Y_ABORT_UNLESS(!Pipes[entityId].contains(dst));
         using namespace NTabletPipe;
 
-        const auto clientId = ctx.ExecutorThread.RegisterActor(CreateClient(ctx.SelfID, ui64(dst), TClientRetryPolicy {
+        const auto clientId = ctx.Register(CreateClient(ctx.SelfID, ui64(dst), TClientRetryPolicy {
             .MinRetryTime = TDuration::MilliSeconds(100),
             .MaxRetryTime = TDuration::Seconds(30),
         }));

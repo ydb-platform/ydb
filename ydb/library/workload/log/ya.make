@@ -7,6 +7,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/workload/abstract
+    ydb/public/api/protos
     library/cpp/json
     library/cpp/resource
 )

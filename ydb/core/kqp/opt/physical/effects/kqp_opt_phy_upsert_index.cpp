@@ -666,6 +666,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         .Input(tableUpsertRows)
         .Columns(inputColumns)
         .ReturningColumns(returningColumns)
+        .IsBatch(ctx.NewAtom(pos, "false"))
         .Settings(settings)
         .Done();
 
@@ -878,6 +879,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 .Table(tableNode)
                 .Input(deleteIndexKeys)
                 .ReturningColumns<TCoAtomList>().Build()
+                .IsBatch(ctx.NewAtom(pos, "false"))
                 .Done();
 
             effects.emplace_back(indexDelete);
@@ -900,6 +902,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 .Input(upsertIndexRows)
                 .Columns(BuildColumnsList(indexTableColumns, pos, ctx))
                 .ReturningColumns<TCoAtomList>().Build()
+                .IsBatch(ctx.NewAtom(pos, "false"))
                 .Done();
 
             effects.emplace_back(indexUpsert);

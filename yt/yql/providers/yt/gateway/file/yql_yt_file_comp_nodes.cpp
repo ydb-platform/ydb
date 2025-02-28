@@ -129,6 +129,9 @@ public:
         , Length_(std::move(length))
     {
         Spec_.Init(codecCtx, inputSpecs, groups, tableNames, itemType, auxColumns, NYT::TNode());
+        if constexpr (TableContent) {
+            Spec_.SetIsTableContent();
+        }
         if (!rowOffsets.empty()) {
             Spec_.SetTableOffsets(rowOffsets);
         }

@@ -12,6 +12,14 @@ const Ydb::Table::DescribeTableResult& TProtoAccessor::GetProto(const NTable::TT
     return tableDescription.GetProto();
 }
 
+const Ydb::Table::DescribeExternalDataSourceResult& TProtoAccessor::GetProto(const NTable::TExternalDataSourceDescription& description) {
+    return description.GetProto();
+}
+
+const Ydb::Table::DescribeExternalTableResult& TProtoAccessor::GetProto(const NTable::TExternalTableDescription& description) {
+    return description.GetProto();
+}
+
 NTable::TQueryStats TProtoAccessor::FromProto(const Ydb::TableStats::QueryStats& queryStats) {
     return NTable::TQueryStats(queryStats);
 }

@@ -1277,6 +1277,11 @@ namespace NSQLTranslationV1 {
         bool Temporary = false;
     };
 
+    struct TAlterDatabaseParameters {
+        TDeferredAtom DbPath;
+        std::optional<TDeferredAtom> Owner;
+    };
+
     struct TTableRef;
     struct TAnalyzeParams {
         std::shared_ptr<TTableRef> Table;

@@ -1,5 +1,7 @@
+/* yt can not */
+/* waiting for update YT-24048 */
+
 pragma yt.UseQLFilter;
-PRAGMA yt.UseSkiff='false';
 
 select c
 from plato.Input

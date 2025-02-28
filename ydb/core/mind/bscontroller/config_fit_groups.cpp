@@ -621,6 +621,14 @@ namespace NKikimr {
 
                 groupInfo->FinishVDisksInGroup();
                 groupInfo->CalculateGroupStatus();
+                groupInfo->CalculateLayoutStatus(&State.Self, groupInfo->Topology.get(), [&] {
+                    const auto& pools = State.StoragePools.Get();
+                    if (const auto it = pools.find(groupInfo->StoragePoolId); it != pools.end()) {
+                        return TGroupGeometryInfo(groupInfo->Topology->GType, it->second.GetGroupGeometry());
+                    }
+                    Y_DEBUG_ABORT(); // this can't normally happen
+                    return TGroupGeometryInfo();
+                });
 
                 return res;
             }

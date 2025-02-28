@@ -1314,6 +1314,70 @@ TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, b
     return new TCreateTableNode(pos, tr, existingOk, replaceIfExists, params, std::move(values), scoped);
 }
 
+class TAlterDatabaseNode final : public TAstListNode {
+public:
+    TAlterDatabaseNode(
+        TPosition pos,
+        const TString& service,
+        const TDeferredAtom& cluster,
+        const TAlterDatabaseParameters& params,
+        TScopedStatePtr scoped
+    )
+    : TAstListNode(pos)
+    , Params(params)
+    , Scoped(scoped)
+    , Cluster(cluster)
+    , Service(service)
+    {
+        scoped->UseCluster(service, cluster);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        TNodePtr cluster = Scoped->WrapCluster(Cluster, ctx);
+
+        auto options = Y(Q(Y(Q("mode"), Q("alterDatabase"))));
+
+        if (Params.Owner.has_value()) {
+            options = L(options, Q(Y(Q("owner"), Params.Owner.value().Build())));
+        }
+
+        Add("block", Q(Y(
+            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Service), cluster)),
+            Y("let", "world", Y(TString(WriteName), "world", "sink", Y("Key", Q(Y(Q("databasePath"), Y("String", Params.DbPath.Build())))), Y("Void"), Q(options))),
+            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
+            )));
+
+        return TAstListNode::DoInit(ctx, src);
+    }
+
+    TPtr DoClone() const final {
+        return {};
+    }
+
+private:
+    const TAlterDatabaseParameters Params;
+    TScopedStatePtr Scoped;
+    TDeferredAtom Cluster;
+    TString Service;
+};
+
+TNodePtr BuildAlterDatabase(
+    TPosition pos,
+    const TString& service,
+    const TDeferredAtom& cluster,
+    const TAlterDatabaseParameters& params,
+    TScopedStatePtr scoped
+) {
+    return new TAlterDatabaseNode(
+        pos,
+        service,
+        cluster,
+        params,
+        scoped
+    );
+}
+
+
 class TAlterTableNode final : public TAstListNode {
 public:
     TAlterTableNode(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped)
@@ -3193,6 +3257,11 @@ public:
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                         BuildQuotedAtom(Pos, "BlockEngine"), BuildQuotedAtom(Pos, mode))));
                 }
+
+                if (ctx.Engine) {
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                        BuildQuotedAtom(Pos, "Engine"), BuildQuotedAtom(Pos, *ctx.Engine))));
+                }
             }
         }
 
@@ -3599,6 +3668,80 @@ private:
 
 TNodePtr BuildAnalyze(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TAnalyzeParams& params, TScopedStatePtr scoped) {
     return new TAnalyzeNode(pos, service, cluster, params, scoped);
+}
+
+class TShowCreateNode final : public TAstListNode {
+public:
+    TShowCreateNode(TPosition pos, const TTableRef& tr, TScopedStatePtr scoped)
+        : TAstListNode(pos)
+        , Table(tr)
+        , Scoped(scoped)
+        , FakeSource(BuildFakeSource(pos))
+    {
+        Scoped->UseCluster(Table.Service, Table.Cluster);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (Table.Options) {
+            if (!Table.Options->Init(ctx, src)) {
+                return false;
+            }
+            Table.Options = L(Table.Options, Q(Y(Q("showCreateTable"))));
+        } else {
+            Table.Options = Y(Q(Y(Q("showCreateTable"))));
+        }
+
+        bool asRef = ctx.PragmaRefSelect;
+        bool asAutoRef = true;
+        if (ctx.PragmaSampleSelect) {
+            asRef = false;
+            asAutoRef = false;
+        }
+
+        auto settings = Y(Q(Y(Q("type"))));
+        if (asRef) {
+            settings = L(settings, Q(Y(Q("ref"))));
+        } else if (asAutoRef) {
+            settings = L(settings, Q(Y(Q("autoref"))));
+        }
+
+        TNodePtr node(BuildInputTables(Pos, {Table}, false, Scoped));
+        if (!node->Init(ctx, src)) {
+            return false;
+        }
+
+        auto source = BuildTableSource(TPosition(ctx.Pos()), Table);
+        if (!source) {
+            return false;
+        }
+        auto output = source->Build(ctx);
+        if (!output) {
+            return false;
+        }
+        node = L(node, Y("let", "output", output));
+
+        auto writeResult(BuildWriteResult(Pos, "output", settings));
+        if (!writeResult->Init(ctx, src)) {
+            return false;
+        }
+        node = L(node, Y("let", "world", writeResult));
+        node = L(node, Y("return", "world"));
+        Add("block", Q(node));
+
+        return TAstListNode::DoInit(ctx, FakeSource.Get());
+    }
+
+    TPtr DoClone() const final {
+        return {};
+    }
+private:
+    TTableRef Table;
+    TScopedStatePtr Scoped;
+    TSourcePtr FakeSource;
+};
+
+TNodePtr BuildShowCreate(TPosition pos, const TTableRef& tr, TScopedStatePtr scoped) {
+    return new TShowCreateNode(pos, tr, scoped);
 }
 
 class TBaseBackupCollectionNode

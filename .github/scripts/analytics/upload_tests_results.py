@@ -133,16 +133,27 @@ def parse_junit_xml(test_results_file, build_type, job_name, job_id, commit, bra
     return results
 
 
+def sort_codeowners_lines(codeowners_lines):
+    def path_specificity(line):
+        # removing comments
+        trimmed_line = line.strip()
+        if not trimmed_line or trimmed_line.startswith('#'):
+            return -1, -1
+        path = trimmed_line.split()[0]
+        return len(path.split('/')), len(path)
+
+    sorted_lines = sorted(codeowners_lines, key=path_specificity)
+    return sorted_lines
+
 def get_codeowners_for_tests(codeowners_file_path, tests_data):
     with open(codeowners_file_path, 'r') as file:
-        data = file.read()
-        owners_odj = CodeOwners(data)
-
+        data = file.readlines()
+        owners_odj = CodeOwners(''.join(sort_codeowners_lines(data)))
         tests_data_with_owners = []
         for test in tests_data:
             target_path = f'{test["suite_folder"]}'
             owners = owners_odj.of(target_path)
-            test["owners"] = joined_owners = ";;".join(
+            test["owners"] = ";;".join(
                 [(":".join(x)) for x in owners])
             tests_data_with_owners.append(test)
         return tests_data_with_owners

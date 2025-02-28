@@ -30,7 +30,7 @@ constexpr double DefaultStructuredValidationSamplingRate = 0.01;
 
 struct TLoggingCategory
 {
-    TString Name;
+    std::string Name;
     //! This value is used for early dropping of plaintext events in order
     //! to reduce load on logging thread for events which are definitely going
     //! to be dropped due to rule setup.
@@ -50,7 +50,7 @@ struct TLoggingAnchor
     TLoggingAnchor* NextAnchor = nullptr;
 
     ::TSourceLocation SourceLocation = {TStringBuf{}, 0};
-    TString AnchorMessage;
+    std::string AnchorMessage;
 
     std::atomic<int> CurrentVersion = 0;
 

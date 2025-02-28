@@ -14,24 +14,17 @@ TDiagnosableInvokerPoolPtr CreateEnumIndexedProfiledFairShareInvokerPool(
     IInvokerPtr underlyingInvoker,
     TFairShareCallbackQueueFactory callbackQueueFactory,
     TDuration actionTimeRelevancyHalflife,
-    const TString& poolName,
+    const std::string& poolName,
     NProfiling::IRegistryPtr registry)
 {
-    using TTraits = TEnumTraits<EInvoker>;
-
-    std::vector<TString> bucketNames;
-    bucketNames.reserve(TTraits::GetDomainSize());
-
-    for (const auto& enumName : TTraits::GetDomainNames()) {
-        bucketNames.emplace_back(enumName);
-    }
+    const auto& domainNames = TEnumTraits<EInvoker>::GetDomainNames();
 
     return CreateProfiledFairShareInvokerPool(
         std::move(underlyingInvoker),
         std::move(callbackQueueFactory),
         actionTimeRelevancyHalflife,
         poolName,
-        bucketNames,
+        /*bucketNames*/ {domainNames.begin(), domainNames.end()},
         std::move(registry));
 }
 

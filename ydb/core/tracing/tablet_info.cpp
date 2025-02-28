@@ -672,7 +672,7 @@ void TTabletInfoActor::Bootstrap(const TActorContext &ctx) {
     TMon* mon = AppData(ctx)->Mon;
 
     if (mon) {
-        mon->RegisterActorPage(nullptr, "tablet", "Tablet boot tracing", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+        mon->RegisterActorPage(nullptr, "tablet", "Tablet boot tracing", false, ctx.ActorSystem(), ctx.SelfID);
     }
 }
 
@@ -722,7 +722,7 @@ void TTabletInfoActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &
                             : NTracing::TTimestampInfo::PrecisionDefault
                 )
             };
-            ctx.ExecutorThread.RegisterActor(
+            ctx.Register(
                 new TSignalBodyRequestActor(traceInfo, signalID, ev->Sender)
             );
             return;
@@ -760,7 +760,7 @@ void TTabletInfoActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &
                             : NTracing::TTimestampInfo::PrecisionDefault
                 )
             };
-            ctx.ExecutorThread.RegisterActor(
+            ctx.Register(
                 new TTraceRequestActor(traceInfo, ev->Sender)
             );
             return;
@@ -777,7 +777,7 @@ void TTabletInfoActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &
         try {
             ui32 nodeId = hasNodeIdParam ? FromString<ui32>(cgi.Get("NodeID")) : 0;
             ui64 tabletId = TryParseTabletId(tabletIdParam);
-            ctx.ExecutorThread.RegisterActor(
+            ctx.Register(
                 new TTraceLookupActor(nodeId, tabletId, ev->Sender, timeout)
             );
             return;
@@ -806,7 +806,7 @@ void TTabletInfoActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &
     if (hasNodeIdParam) {
         try {
             ui32 nodeId = FromString<ui32>(cgi.Get("NodeID"));
-            ctx.ExecutorThread.RegisterActor(
+            ctx.Register(
                 new TTabletLookupActor(nodeId, ev->Sender, timeout)
             );
             return;

@@ -404,5 +404,17 @@ void TChunkTrimCompletion::Exec(TActorSystem *actorSystem) {
     delete this;
 }
 
+void TChunkShredCompletion::Exec(TActorSystem *actorSystem) {
+    LOG_TRACE_S(*actorSystem, NKikimrServices::BS_PDISK_SHRED,
+            "PDiskId# " << PDisk->PCtx->PDiskId << " ReqId# " << ReqId
+            << " TChunkShredCompletion Chunk# " << Chunk
+            << " SectorIdx# " << SectorIdx
+            << " SizeBytes# " << SizeBytes);
+    PDisk->Mon.ChunkShred.CountResponse();
+    TChunkShredResult *shredResult = PDisk->ReqCreator.CreateFromArgs<TChunkShredResult>(Chunk, SectorIdx, SizeBytes);
+    PDisk->InputRequest(shredResult);
+    delete this;
+}
+
 } // NPDisk
 } // NKikimr

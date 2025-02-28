@@ -321,6 +321,7 @@ private:
             response.Status = NKikimrLdap::ErrorToStatus(result);
             response.Error = {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)};
             LDAP_LOG_D(logErrorMessage);
+            NKikimrLdap::MsgFree(searchMessage);
             return response;
         }
         const int countEntries = NKikimrLdap::CountEntries(request.Ld, searchMessage);
@@ -357,6 +358,7 @@ private:
         LDAPMessage* searchMessage = nullptr;
         int result = NKikimrLdap::Search(ld, Settings.GetBaseDn(), NKikimrLdap::EScope::SUBTREE, filter, NKikimrLdap::noAttributes, 0, &searchMessage);
         if (!NKikimrLdap::IsSuccess(result)) {
+            NKikimrLdap::MsgFree(searchMessage);
             return {};
         }
         const int countEntries = NKikimrLdap::CountEntries(ld, searchMessage);
@@ -403,6 +405,7 @@ private:
             LDAPMessage* searchMessage = nullptr;
             int result = NKikimrLdap::Search(ld, Settings.GetBaseDn(), NKikimrLdap::EScope::SUBTREE, filter, RequestedAttributes, 0, &searchMessage);
             if (!NKikimrLdap::IsSuccess(result)) {
+                NKikimrLdap::MsgFree(searchMessage);
                 return;
             }
             if (NKikimrLdap::CountEntries(ld, searchMessage) == 0) {

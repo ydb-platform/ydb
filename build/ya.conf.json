@@ -39,19 +39,19 @@
             "formula": {
                 "by_platform": {
                     "darwin-arm64": {
-                        "uri": "sbr:7257127197"
+                        "uri": "sbr:8110637457"
                     },
                     "darwin-x86_64": {
-                        "uri": "sbr:7257128993"
+                        "uri": "sbr:8110637758"
                     },
                     "linux-aarch64": {
-                        "uri": "sbr:7257125308"
+                        "uri": "sbr:8110637017"
                     },
                     "linux-x86_64": {
-                        "uri": "sbr:7257132940"
+                        "uri": "sbr:8110638456"
                     },
                     "win32-x86_64": {
-                        "uri": "sbr:7257131047"
+                        "uri": "sbr:8110638108"
                     }
                 }
             }
@@ -552,6 +552,7 @@
                 "cxx_compiler": "$(CLANG)/bin/clang++",
                 "llvm-symbolizer": "$(CLANG)/bin/llvm-symbolizer",
                 "match_root": "CLANG",
+                "nm": "$(CLANG)/bin/llvm-nm",
                 "objcopy": "$(CLANG)/bin/llvm-objcopy",
                 "profiles": "$(XCODE_TOOLS_ROOT-sbr:799017771)/Xcode/Contents/Developer/Platforms/iPhoneOS.platform/Developer/Library/CoreSimulator/Profiles",
                 "simctl": "$(XCODE_TOOLS_ROOT-sbr:799017771)/Xcode/SystemRoot/PrivateFrameworks/CoreSimulator.framework/Resources/bin/simctl",
@@ -1229,6 +1230,7 @@
                 "cxx_compiler": "$(CLANG)/bin/clang++",
                 "llvm-symbolizer": "$(CLANG)/bin/llvm-symbolizer",
                 "match_root": "CLANG",
+                "nm": "$(CLANG)/bin/llvm-nm",
                 "objcopy": "$(CLANG)/bin/llvm-objcopy",
                 "profiles": "$(XCODE_TOOLS_ROOT-sbr:799017771)/Xcode/Contents/Developer/Platforms/iPhoneOS.platform/Developer/Library/CoreSimulator/Profiles",
                 "simctl": "$(XCODE_TOOLS_ROOT-sbr:799017771)/Xcode/SystemRoot/PrivateFrameworks/CoreSimulator.framework/Resources/bin/simctl",

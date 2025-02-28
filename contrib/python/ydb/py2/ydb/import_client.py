@@ -31,7 +31,10 @@ class ImportProgress(enum.IntEnum):
 
 def _initialize_progresses():
     for key, value in ydb_import_pb2.ImportProgress.Progress.items():
-        _progresses[value] = getattr(ImportProgress, key[len("PROGRESS_") :])
+        try:
+            _progresses[value] = getattr(ImportProgress, key[len("PROGRESS_") :])
+        except Exception:
+            pass
 
 
 _initialize_progresses()

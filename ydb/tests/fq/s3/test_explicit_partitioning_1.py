@@ -574,3 +574,113 @@ Banana,3,100'''
         assert result_set.rows[1].items[2].int32_value == 2
         assert result_set.rows[2].items[2].int32_value == 1
         assert result_set.rows[3].items[2].int32_value == 2
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    @pytest.mark.parametrize("runtime_listing", ["true"])
+    def test_valid_projected_column_values(self, kikimr, s3, client, runtime_listing, yq_version, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("bucket")
+        bucket.create(ACL='public-read')
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        s3_client.put_object(
+            Body='''data
+text1''',
+            Bucket='bucket',
+            Key='2024/01/file.txt',
+            ContentType='text/plain',
+        )
+        s3_client.put_object(
+            Body='''data
+text2''',
+            Bucket='bucket',
+            Key='2024/02/file.txt',
+            ContentType='text/plain',
+        )
+        s3_client.put_object(
+            Body='''data
+text3''',
+            Bucket='bucket',
+            Key='2025/01/file.txt',
+            ContentType='text/plain',
+        )
+
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "bucket"
+        client.create_storage_connection(storage_connection_name, "bucket")
+
+        sql = (
+            f'''
+            pragma s3.UseRuntimeListing="{runtime_listing}";
+            '''
+            + R'''
+            $projection = @@ {
+                "projection.enabled" : true,
+
+                "projection.year.type" : "integer",
+                "projection.year.min" : 2024,
+                "projection.year.max" : 2025,
+                "projection.year.interval" : 1,
+
+                "projection.month.type" : "integer",
+                "projection.month.min" : 1,
+                "projection.month.max" : 2,
+                "projection.month.interval" : 1,
+                "projection.month.digits" : 2,
+
+                "storage.location.template" : "${year}/${month}"
+            }
+            @@;
+            '''
+            + fR'''
+            SELECT
+                *
+            FROM
+                `{storage_connection_name}`.`/`
+            WITH
+            (
+                format=csv_with_names,
+                schema=(
+                    data String NOT NULL,
+                    year Int NOT NULL,
+                    month Int NOT NULL,
+                ),
+                partitioned_by=(year, month),
+                projection=$projection
+            )
+            WHERE data ILIKE '%text2%';
+        '''
+        )
+
+        # temporary fix for dynamic listing
+        if yq_version == "v1":
+            sql = 'pragma dq.MaxTasksPerStage="10"; ' + sql
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        describe_result = client.describe_query(query_id).result
+        logging.info("AST: {}".format(describe_result.query.ast.data))
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+
+        assert len(result_set.columns) == 3
+        assert result_set.columns[0].name == "data"
+        assert result_set.columns[0].type.type_id == ydb.Type.STRING
+        assert result_set.columns[1].name == "month"
+        assert result_set.columns[1].type.type_id == ydb.Type.INT32
+        assert result_set.columns[2].name == "year"
+        assert result_set.columns[2].type.type_id == ydb.Type.INT32
+        assert len(result_set.rows) == 1
+        assert result_set.rows[0].items[0].bytes_value == b"text2"
+        assert result_set.rows[0].items[1].int32_value == 2
+        assert result_set.rows[0].items[2].int32_value == 2024

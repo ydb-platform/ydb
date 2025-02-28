@@ -27,17 +27,13 @@ TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui3
     return TFixStringBitsStorage(filterBits).GetData();
 }
 
-void TBloomIndexMeta::DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const {
+void TBloomIndexMeta::DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& /*schema*/) const {
     for (auto&& branch : info->GetBranches()) {
         std::map<ui32, std::shared_ptr<arrow::Scalar>> foundColumns;
         for (auto&& cId : ColumnIds) {
-            auto c = schema.GetColumns().GetById(cId);
-            if (!c) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "incorrect index column")("id", cId);
-                return;
-            }
-            auto itEqual = branch->GetEquals().find(c->GetName());
+            auto itEqual = branch->GetEquals().find(cId);
             if (itEqual == branch->GetEquals().end()) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("warn", "column not found for equal")("id", cId);
                 break;
             }
             foundColumns.emplace(cId, itEqual->second);

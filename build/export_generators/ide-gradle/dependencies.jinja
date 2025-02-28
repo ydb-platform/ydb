@@ -1,3 +1,15 @@
+{%- macro AnnotationProcessors(funcName, annotation_processors) -%}
+{%-     if annotation_processors|length -%}
+{%-         set lomboks = annotation_processors|select('startsWith', 'contrib/java/org/projectlombok/lombok') -%}
+{%-         for lombok in lomboks %}
+    {{ funcName }}(files("$project_root/{{ lombok }}"))
+{%-         endfor -%}
+{%-         set annotation_processors = annotation_processors|reject('in', lomboks) -%}
+{%-         for annotation_processor in annotation_processors %}
+    {{ funcName }}(files("$project_root/{{ annotation_processor }}"))
+{%-         endfor -%}
+{%-     endif -%}
+{%- endmacro -%}
 {#- empty string #}
 dependencies {
 {%- for library in target.consumer if library.classpath -%}
@@ -36,9 +48,7 @@ dependencies {
 {%-     endif -%}
 {%- endfor -%}
 
-{%- for annotation_processor in target.use_annotation_processor %}
-    annotationProcessor(files("$project_root/{{ annotation_processor}}"))
-{%- endfor -%}
+{{ AnnotationProcessors("annotationProcessor", target.use_annotation_processor) }}
 
 {%- for extra_target in extra_targets -%}
 {%-     for library in extra_target.consumer if library.classpath -%}
@@ -64,8 +74,6 @@ dependencies {
 {%-             endif -%}
 {%-         endif -%}
 {%-     endfor -%}
-{%-     for annotation_processor in extra_target.use_annotation_processor %}
-    testAnnotationProcessor(files("$project_root/{{ annotation_processor}}"))
-{%-     endfor -%}
+{{ AnnotationProcessors("testAnnotationProcessor", extra_target.use_annotation_processor) }}
 {%- endfor %}
 }

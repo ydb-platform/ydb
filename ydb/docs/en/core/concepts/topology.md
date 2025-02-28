@@ -28,10 +28,10 @@ Fault-tolerant operation modes of distributed storage require a significant amou
 
 | Mode | Storage<br>volume multiplier | Minimum<br>number<br>of nodes | Fail<br>domain | Fail<br>realm | Number of<br>data centers | Number of<br>server racks |
 | --- | --- | --- | --- | --- | --- | --- |
-| `mirror-3-dc`, can stand a failure of a data center and 1 rack in one of the remaining data centers | 3 | 9 (12 recommended) | Rack | Data center | 3 | 3 in each data center |
+| `mirror-3-dc`, can stand a failure of a data center and 1 rack in one of the remaining data centers | 3 | 9 ([12 recommended](*recommended-node-count)) | Rack | Data center | 3 | 3 in each data center |
 | `mirror-3-dc` *(reduced)*, can stand a failure of a data center and 1 server in one of the two other data centers | 3 | 12 | ½ a rack | Data center | 3 | 6 |
 | `mirror-3-dc` *(3 nodes)*, can stand a failure of a single server, or a failure of a data center | 3 | 3 | Server | Data center | 3 | Doesn't matter |
-| `block-4-2`, can stand a failure of 2 racks | 1.5 | 8 (10 recommended) | Rack | Data center | 1 | 8 |
+| `block-4-2`, can stand a failure of 2 racks | 1.5 | 8 ([10 recommended](*recommended-node-count)) | Rack | Data center | 1 | 8 |
 | `block-4-2` *(reduced)*, can stand a failure of 1 rack | 1.5 | 10 | ½ a rack | Data center | 1 | 5 |
 | `none`, no fault tolerance | 1 | 1 | Node | Node | 1 | 1 |
 
@@ -88,3 +88,5 @@ To survive an entire data center outage at the database level, assuming a cluste
 * [{#T}](../reference/configuration/index.md#domains-blob)
 * [Example cluster configuration files](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/)
 * [{#T}](../contributor/distributed-storage.md)
+
+[*recommended-node-count]: Using fewer than this number of nodes will limit the cluster's ability to [self-heal](../maintenance/manual/selfheal.md).

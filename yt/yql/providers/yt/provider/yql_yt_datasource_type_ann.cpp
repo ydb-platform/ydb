@@ -46,6 +46,7 @@ public:
         AddHandler({TYtReadTable::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleReadTable));
         AddHandler({TYtReadTableScheme::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleReadTableScheme));
         AddHandler({TYtTableContent::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableContent));
+        AddHandler({TYtBlockTableContent::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleBlockTableContent));
         AddHandler({TYtLength::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleLength));
         AddHandler({TCoConfigure::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleConfigure));
         AddHandler({TYtConfigure::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleYtConfigure));
@@ -846,7 +847,8 @@ public:
             return TStatus::Error;
         }
 
-        const EYtSettingTypes allowed = EYtSettingType::MemUsage | EYtSettingType::ItemsCount | EYtSettingType::RowFactor | EYtSettingType::Split | EYtSettingType::Small;
+        const EYtSettingTypes allowed = EYtSettingType::MemUsage | EYtSettingType::ItemsCount | EYtSettingType::RowFactor
+            | EYtSettingType::Split | EYtSettingType::Small | EYtSettingType::BlockInputReady;
         if (!ValidateSettings(tableContent.Settings().Ref(), allowed, ctx)) {
             return TStatus::Error;
         }
@@ -858,6 +860,49 @@ public:
         if (auto columnOrder = State_->Types->LookupColumnOrder(tableContent.Input().Ref())) {
             return State_->Types->SetColumnOrder(input.Ref(), *columnOrder, ctx);
         }
+
+        return TStatus::Ok;
+    }
+
+    TStatus HandleBlockTableContent(TExprBase input, TExprContext& ctx) {
+        if (!EnsureArgsCount(input.Ref(), 2, ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto tableContent = input.Cast<TYtBlockTableContent>();
+
+        if (!tableContent.Input().Ref().IsCallable(TYtReadTable::CallableName())
+            && !tableContent.Input().Ref().IsCallable(TYtOutput::CallableName())) {
+            ctx.AddError(TIssue(ctx.GetPosition(tableContent.Input().Pos()), TStringBuilder()
+                << "Expected " << TYtReadTable::CallableName() << " or " << TYtOutput::CallableName()));
+            return TStatus::Error;
+        }
+
+        if (!EnsureTuple(tableContent.Settings().MutableRef(), ctx)) {
+            return TStatus::Error;
+        }
+
+        const EYtSettingTypes allowed = EYtSettingType::MemUsage | EYtSettingType::ItemsCount | EYtSettingType::RowFactor | EYtSettingType::Split | EYtSettingType::Small;
+        if (!ValidateSettings(tableContent.Settings().Ref(), allowed, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto listType = tableContent.Input().Maybe<TYtOutput>()
+            ? tableContent.Input().Ref().GetTypeAnn()
+            : tableContent.Input().Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back();
+        auto itemStructType = listType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+        TTypeAnnotationNode::TListType multiTypeItems;
+        for (auto& item: itemStructType->GetItems()) {
+            multiTypeItems.emplace_back(ctx.MakeType<TBlockExprType>(item->GetItemType()));
+        }
+        multiTypeItems.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+        input.Ptr()->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TMultiExprType>(multiTypeItems)));
+
+        if (auto columnOrder = State_->Types->LookupColumnOrder(tableContent.Input().Ref())) {
+            return State_->Types->SetColumnOrder(input.Ref(), *columnOrder, ctx);
+        }
+
         return TStatus::Ok;
     }
 

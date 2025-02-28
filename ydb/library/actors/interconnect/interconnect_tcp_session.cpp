@@ -54,7 +54,7 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::Init() {
-        auto destroyCallback = [as = TlsActivationContext->ExecutorThread.ActorSystem, id = Proxy->Common->DestructorId](THolder<IEventBase> event) {
+        auto destroyCallback = [as = TActivationContext::ActorSystem(), id = Proxy->Common->DestructorId](THolder<IEventBase> event) {
             as->Send(id, event.Release());
         };
         Pool.ConstructInPlace(Proxy->Common, std::move(destroyCallback));
@@ -1029,7 +1029,7 @@ namespace NActors {
             }
 
             callback({
-                .ActorSystem = TlsActivationContext->ExecutorThread.ActorSystem,
+                .ActorSystem = TActivationContext::ActorSystem(),
                 .PeerNodeId = Proxy->PeerNodeId,
                 .PeerName = Proxy->Metrics->GetHumanFriendlyPeerHostName(),
                 .Connected = connected,
@@ -1375,7 +1375,17 @@ namespace NActors {
         TActivationContext::Send(h.release());
     }
 
+    void TInterconnectSessionKiller::Bootstrap() {
+        auto sender = SelfId();
+        const auto eventFabric = [&sender](const TActorId& recp) -> IEventHandle* {
+            auto ev = new TEvSessionBufferSizeRequest();
+            return new IEventHandle(recp, sender, ev, IEventHandle::FlagTrackDelivery);
+        };
+        RepliesNumber = TActivationContext::ActorSystem()->BroadcastToProxies(eventFabric);
+        Become(&TInterconnectSessionKiller::StateFunc);
+    }
+
     void CreateSessionKillingActor(TInterconnectProxyCommon::TPtr common) {
-        TlsActivationContext->ExecutorThread.ActorSystem->Register(new TInterconnectSessionKiller(common));
+        TActivationContext::ActorSystem()->Register(new TInterconnectSessionKiller(common));
     }
 }

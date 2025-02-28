@@ -87,7 +87,7 @@ public:
             TActorId &head = HeadGophers.back();
             head = ctx.SelfID;
             for (const auto &xpair : LineProfile)
-                head = ctx.ExecutorThread.ActorSystem->Register(CreateMelancholicGopher(xpair.second, head), TMailboxType::Simple, xpair.first);
+                head = ctx.ActorSystem()->Register(CreateMelancholicGopher(xpair.second, head), TMailboxType::Simple, xpair.first);
         }
 
         Round(ctx);

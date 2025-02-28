@@ -9,10 +9,9 @@ namespace NYT::NCrypto {
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Either an inlined value or a file reference.
-class TPemBlobConfig
+struct TPemBlobConfig
     : public NYTree::TYsonStruct
 {
-public:
     std::optional<TString> FileName;
     std::optional<TString> Value;
 

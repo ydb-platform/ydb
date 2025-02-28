@@ -5,6 +5,7 @@
 #include <ydb/core/util/source_location.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/yaml_config/yaml_config.h>
 
 #include <library/cpp/getopt/small/last_getopt_opts.h>
 
@@ -156,9 +157,11 @@ class IConfigurationResult {
 public:
     virtual ~IConfigurationResult() {}
     virtual const NKikimrConfig::TAppConfig& GetConfig() const = 0;
-    virtual bool HasYamlConfig() const = 0;
-    virtual const TString& GetYamlConfig() const = 0;
+    virtual bool HasMainYamlConfig() const = 0;
+    virtual const TString& GetMainYamlConfig() const = 0;
     virtual TMap<ui64, TString> GetVolatileYamlConfigs() const = 0;
+    virtual bool HasDatabaseYamlConfig() const = 0;
+    virtual const TString& GetDatabaseYamlConfig() const = 0;
 };
 
 class IDynConfigClient {
@@ -226,6 +229,7 @@ struct TDebugInfo {
 
 struct TConfigsDispatcherInitInfo {
     NKikimrConfig::TAppConfig InitialConfig;
+    TString StartupConfigYaml;
     TMap<TString, TString> Labels;
     std::variant<std::monostate, TDenyList, TAllowList> ItemsServeRules;
     std::optional<TDebugInfo> DebugInfo;
@@ -238,7 +242,7 @@ public:
     virtual ~IInitialConfigurator() {};
     virtual void RegisterCliOptions(NLastGetopt::TOpts& opts) = 0;
     virtual void ValidateOptions(const NLastGetopt::TOpts& opts, const NLastGetopt::TOptsParseResult& parseResult) = 0;
-    virtual void Parse(const TVector<TString>& freeArgs) = 0;
+    virtual void Parse(const TVector<TString>& freeArgs, NYamlConfig::IConfigSwissKnife* csk) = 0;
     virtual void Apply(
         NKikimrConfig::TAppConfig& appConfig,
         ui32& nodeId,
@@ -292,8 +296,8 @@ public:
         Impl->ValidateOptions(opts, parseResult);
     }
 
-    void Parse(const TVector<TString>& freeArgs) {
-        Impl->Parse(freeArgs);
+    void Parse(const TVector<TString>& freeArgs, NYamlConfig::IConfigSwissKnife* csk) {
+        Impl->Parse(freeArgs, csk);
     }
 
     void Apply(

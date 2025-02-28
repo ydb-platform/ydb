@@ -384,7 +384,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Extend(TExprBase node, 
     bool hasTables = false;
     bool allAreTableContents = true;
     bool hasContents = false;
-    bool keepSort = !ctx.IsConstraintEnabled<TSortedConstraintNode>() || (bool)extend.Ref().GetConstraint<TSortedConstraintNode>();
+    const auto outSort = extend.Ref().GetConstraint<TSortedConstraintNode>();
+    bool keepSort = !ctx.IsConstraintEnabled<TSortedConstraintNode>() || (bool)outSort;
     TString resultCluster;
     TMaybeNode<TYtDSource> dataSource;
 
@@ -427,8 +428,14 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Extend(TExprBase node, 
         bool updateChildren = false;
         bool unordered = false;
         bool nonUniq = false;
+
         for (auto child: extend) {
             newExtendParts.push_back(child.Ptr());
+            if (outSort && outSort != child.Ref().GetConstraint<TSortedConstraintNode>()) {
+                newExtendParts.back() = KeepSortedConstraint(child.Ptr(), outSort, GetSeqItemType(child.Ref().GetTypeAnn()), ctx);
+                updateChildren = true;
+                continue;
+            }
 
             auto read = child.Maybe<TCoRight>().Input().Maybe<TYtReadTable>();
             if (!read) {

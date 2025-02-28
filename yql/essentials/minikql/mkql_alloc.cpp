@@ -309,7 +309,7 @@ void MKQLArrowFree(const void* mem, ui64 size) {
 
     Y_ENSURE(size == header->Size);
 
-#if defined(ALLOW_MEMORY_ALLOCATOR)
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
     if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
         free(header);
         return;

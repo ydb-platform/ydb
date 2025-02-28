@@ -2,10 +2,7 @@
 
 LIBRARY()
 
-LICENSE(
-    BSD-3-Clause AND
-    LicenseRef-scancode-unknown-license-reference
-)
+LICENSE(BSD-3-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 

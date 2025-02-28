@@ -1,7 +1,0 @@
-exclude_from_macros:
-  - olefile/*.rst
-  - olefile/*.txt
-exclude:
-  - olefile/doc/*
-  - olefile/*.html
-  - olefile/olefile2.py

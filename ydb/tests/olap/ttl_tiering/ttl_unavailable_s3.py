@@ -2,16 +2,21 @@ import os
 import signal
 import sys
 import time
+import logging
 
-from .base import TllTieringTestBase
+from .base import TllTieringTestBase, ColumnTableHelper
+
+from ydb.tests.library.test_meta import link_test_case
+
+logger = logging.getLogger(__name__)
 
 ROWS_CHUNK_SIZE = 1000000
 ROWS_CHUNKS_COUNT = 10
 
 
 class TestUnavailableS3(TllTieringTestBase):
+    @link_test_case("#13545")
     def test(self):
-        """As per https://github.com/ydb-platform/ydb/issues/13545"""
         bucket_s3_name = "cold"
         bucket_db_path = f"{self.ydb_client.database}/buckets/{bucket_s3_name}"
 
@@ -21,8 +26,14 @@ class TestUnavailableS3(TllTieringTestBase):
                 v String,
                 PRIMARY KEY(ts),
             )
-            WITH (STORE = COLUMN)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            )
         """)
+
+        table = ColumnTableHelper(self.ydb_client, f"{self.ydb_client.database}/table")
+        table.set_fast_compaction()
 
         self.s3_client.create_bucket(bucket_s3_name)
 
@@ -58,6 +69,9 @@ class TestUnavailableS3(TllTieringTestBase):
                 SELECT * FROM AS_TABLE($rows_list);
             """)
 
+        def get_stat():
+            return self.s3_client.get_bucket_stat(bucket_s3_name)[0]
+
         for i in range(0, ROWS_CHUNKS_COUNT // 2):
             upsert_chunk(i)
 
@@ -68,6 +82,8 @@ class TestUnavailableS3(TllTieringTestBase):
             )
         """)
 
+        assert self.wait_for(get_stat, 30), "initial eviction"
+
         print("!!! simulating S3 hang up -- sending SIGSTOP", file=sys.stderr)
         os.kill(self.s3_pid, signal.SIGSTOP)
 
@@ -76,13 +92,9 @@ class TestUnavailableS3(TllTieringTestBase):
         print("!!! simulating S3 recovery -- sending SIGCONT", file=sys.stderr)
         os.kill(self.s3_pid, signal.SIGCONT)
 
-        def get_stat():
-            return self.s3_client.get_bucket_stat(bucket_s3_name)[0]
-
-        # stat_old = get_stat()
+        stat_old = get_stat()
 
         for i in range(ROWS_CHUNKS_COUNT // 2, ROWS_CHUNKS_COUNT):
             upsert_chunk(i)
 
-        # Uncomment after fixing https://github.com/ydb-platform/ydb/issues/13719
-        # assert self.wait_for(lambda: get_stat() != stat_old, 120), "data distribution continuation"
+        assert self.wait_for(lambda: get_stat() != stat_old, 120), "data distribution continuation"

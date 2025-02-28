@@ -6,6 +6,7 @@
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <yt/yql/providers/yt/comp_nodes/yql_mkql_output.h>
+#include <yt/yql/providers/yt/comp_nodes/yql_mkql_block_table_content.h>
 #include <yt/yql/providers/yt/comp_nodes/yql_mkql_table_content.h>
 
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
@@ -72,6 +73,11 @@ NKikimr::NMiniKQL::TComputationNodeFactory GetGatewayNodeFactory(TCodecContext* 
         if (callable.GetType()->GetName() == "YtTableContentJob") {
             YQL_ENSURE(codecCtx);
             return WrapYtTableContent(*codecCtx, ctx.Mutables, callable, "OFF" /* no LLVM for local exec */, filePrefix);
+        }
+
+        if (callable.GetType()->GetName() == "YtBlockTableContentJob") {
+            YQL_ENSURE(codecCtx);
+            return WrapYtBlockTableContent(*codecCtx, ctx.Mutables, callable, filePrefix);
         }
 
         if (!exprContextObject) {

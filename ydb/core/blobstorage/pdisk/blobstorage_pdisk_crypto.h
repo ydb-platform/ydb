@@ -74,7 +74,11 @@ public:
 
     TPDiskStreamCypher(bool encryption)
         : Impl()
+#ifdef DISABLE_PDISK_ENCRYPTION
+        , EnableEncryption(false && encryption)
+#else
         , EnableEncryption(encryption)
+#endif
     {}
 
     void SetKey(const ui64 &key) {

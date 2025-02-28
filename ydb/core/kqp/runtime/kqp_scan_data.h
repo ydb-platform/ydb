@@ -14,6 +14,7 @@
 #include <ydb/core/tablet_flat/flat_database.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -166,6 +167,7 @@ public:
             return BatchReader->GetColumns();
         }
 
+        void UpdateStats(size_t rows, size_t bytes, TMaybe<ui64> shardId);
         ui64 AddData(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory);
         ui64 AddData(const TBatchDataAccessor& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory);
 
@@ -196,10 +198,25 @@ public:
         // shared with actor via TableReader
         TIntrusivePtr<IKqpTableReader> TableReader;
 
+        struct TExternalStats {
+            ui64 ExternalRows = 0;
+            ui64 ExternalBytes = 0;
+            ui64 FirstMessageMs = 0;
+            ui64 LastMessageMs = 0;
+
+            TExternalStats() = default;
+            TExternalStats(ui64 externalRows, ui64 externalBytes, ui64 firstMessageMs, ui64 lastMessageMs)
+            : ExternalRows(externalRows), ExternalBytes(externalBytes), FirstMessageMs(firstMessageMs), LastMessageMs(lastMessageMs)
+            {}
+        };
+
         struct TBasicStats {
-            size_t Rows = 0;
-            size_t Bytes = 0;
+            ui64 Rows = 0;
+            ui64 Bytes = 0;
+            ui64 FirstMessageMs = 0;
+            ui64 LastMessageMs = 0;
             ui32 AffectedShards = 0;
+            std::unordered_map<ui64, TExternalStats> ExternalStats;
         };
 
         struct TProfileStats {
@@ -219,7 +236,6 @@ public:
 
         std::unique_ptr<TBasicStats> BasicStats;
         std::unique_ptr<TProfileStats> ProfileStats;
-
     private:
         class IDataBatchReader: public TScanDataColumnsMeta {
         private:

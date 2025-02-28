@@ -27,6 +27,7 @@ class TTransactionContext;
 class TExecutor;
 struct TPageCollectionTxEnv;
 struct TSeat;
+class TExecutorCounters;
 
 class TTableSnapshotContext : public TThrRefBase, TNonCopyable {
     friend class TExecutor;
@@ -498,7 +499,7 @@ namespace NFlatExecutorSetup {
         virtual void SnapshotComplete(TIntrusivePtr<TTableSnapshotContext> snapContext, const TActorContext &ctx); // would be FAIL in default implementation
         virtual void CompletedLoansChanged(const TActorContext &ctx); // would be no-op in default implementation
         virtual void CompactionComplete(ui32 tableId, const TActorContext &ctx); // would be no-op in default implementation
-        virtual void DataCleanupComplete(const TActorContext& ctx);
+        virtual void DataCleanupComplete(ui64 dataCleanupGeneration, const TActorContext& ctx);
 
         virtual void ScanComplete(NTable::EAbort status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx);
 
@@ -622,6 +623,7 @@ namespace NFlatExecutorSetup {
 
         virtual const TExecutorStats& GetStats() const = 0;
         virtual NMetrics::TResourceMetrics* GetResourceMetrics() const = 0;
+        virtual TExecutorCounters* GetCounters() = 0;
 
         /* This stange looking functionallity probably should be dropped */
 
@@ -632,7 +634,7 @@ namespace NFlatExecutorSetup {
 
         virtual void SetPreloadTablesData(THashSet<ui32> tables) = 0;
 
-        virtual void CleanupData() = 0;
+        virtual void CleanupData(ui64 dataCleanupGeneration) = 0;
 
         ui32 Generation() const { return Generation0; }
         ui32 Step() const { return Step0; }

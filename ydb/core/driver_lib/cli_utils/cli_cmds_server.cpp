@@ -65,7 +65,7 @@ void TClientCommandServer::Config(TConfig& config) {
 void TClientCommandServer::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     InitCfg.ValidateOptions(*config.Opts, *config.ParseResult);
-    InitCfg.Parse(config.ParseResult->GetFreeArgs());
+    InitCfg.Parse(config.ParseResult->GetFreeArgs(), Factories->ConfigSwissKnife.get());
 }
 
 void AddClientCommandServer(TClientCommandTree& parent, std::shared_ptr<TModuleFactories> factories) {

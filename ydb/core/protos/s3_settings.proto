@@ -1,0 +1,57 @@
+import "ydb/public/api/protos/ydb_export.proto";
+
+package NKikimrSchemeOp;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TSecretId {
+    optional string Id = 1;
+    optional string OwnerId = 2;
+}
+
+message TSecretValue {
+    optional string Data = 1;
+}
+
+message TSecretableVariable {
+    oneof Data {
+        TSecretId SecretId = 1;
+        TSecretValue Value = 2;
+    }
+}
+
+message TS3Settings {
+    enum EScheme {
+        HTTP = 0;
+        HTTPS = 1;
+    }
+
+    optional string Endpoint = 1;
+    optional EScheme Scheme = 2 [default = HTTPS];
+    optional string Bucket = 3;
+    optional string ObjectKeyPattern = 4; // dst for backup, src for restore
+    optional string AccessKey = 5;
+    optional string SecretKey = 6;
+    optional Ydb.Export.ExportToS3Settings.StorageClass StorageClass = 7 [default = STANDARD];
+    optional bool VerifySSL = 8;
+    optional string ProxyHost = 9;
+    optional uint32 ProxyPort = 10;
+    optional EScheme ProxyScheme = 11;
+    optional string Region = 12;
+    optional TSecretableVariable SecretableAccessKey = 13;
+    optional TSecretableVariable SecretableSecretKey = 14;
+    optional bool UseVirtualAddressing = 15 [default = true];
+
+    message TLimits {
+        optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB
+        optional uint32 MinWriteBatchSize = 2 [default = 5242880]; // 5 MB
+        reserved 3; // ReadBufferSizeLimit
+    };
+
+    optional TLimits Limits = 100;
+    optional uint32 RequestTimeoutMs = 101;
+    optional uint32 HttpRequestTimeoutMs = 102;
+    optional uint32 ConnectionTimeoutMs = 103;
+
+    optional uint32 ExecutorThreadsCount = 104 [default = 32];
+    optional uint32 MaxConnectionsCount = 105 [default = 32];
+}

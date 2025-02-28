@@ -337,20 +337,29 @@ namespace NKikimr {
 
     // Make a copy of ingress w/o local bits
     TIngress TIngress::CopyWithoutLocal(TBlobStorageGroupType gtype) const {
+        return ReplaceLocal(gtype, NMatrix::TVectorType(0, gtype.TotalPartCount()));
+    }
+
+    TIngress TIngress::ReplaceLocal(TBlobStorageGroupType gtype, NMatrix::TVectorType parts) const {
         switch (IngressMode(gtype)) {
             case EMode::GENERIC: {
                 TIngress res;
                 res.Data = Data;
 
                 SETUP_VECTORS(res.Data, gtype);
-                for (ui32 i = 0; i < totalParts; i++)
-                    local.Clear(i);
+                for (ui32 i = 0; i < totalParts; i++) {
+                    if (parts.Get(i)) {
+                        local.Set(i);
+                    } else {
+                        local.Clear(i);
+                    }
+                }
 
                 return res;
             }
             case EMode::MIRROR3OF4: {
                 const ui64 mask = ((static_cast<ui64>(1) << gtype.TotalPartCount()) - 1) << (62 - gtype.TotalPartCount());
-                return TIngress(Data & ~mask);
+                return TIngress((Data & ~mask) | static_cast<ui64>(parts.Raw()) << (62 - 8));
             }
         }
     }

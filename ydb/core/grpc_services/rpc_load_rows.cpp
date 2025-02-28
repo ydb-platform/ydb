@@ -129,7 +129,7 @@ public:
 
 private:
     void OnBeforeStart(const TActorContext& ctx) override {
-        Request->SetFinishAction([selfId = ctx.SelfID, as = ctx.ExecutorThread.ActorSystem]() {
+        Request->SetFinishAction([selfId = ctx.SelfID, as = ctx.ActorSystem()]() {
             as->Send(selfId, new TEvents::TEvPoison);
         });
     }
@@ -296,7 +296,7 @@ public:
 
 private:
     void OnBeforeStart(const TActorContext& ctx) override {
-        Request->SetFinishAction([selfId = ctx.SelfID, as = ctx.ExecutorThread.ActorSystem]() {
+        Request->SetFinishAction([selfId = ctx.SelfID, as = ctx.ActorSystem()]() {
             as->Send(selfId, new TEvents::TEvPoison);
         });
     }

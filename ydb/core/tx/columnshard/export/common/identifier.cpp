@@ -1,7 +1,6 @@
 #include "identifier.h"
 #include <ydb/core/tx/columnshard/export/protos/task.pb.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NOlap::NExport {

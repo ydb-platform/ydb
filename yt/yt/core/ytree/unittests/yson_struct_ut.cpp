@@ -66,10 +66,9 @@ using TTestSubconfigPtr = TIntrusivePtr<TTestSubconfig>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTestConfig
+struct TTestConfig
     : public TYsonStruct
 {
-public:
     TString MyString;
     TTestSubconfigPtr Subconfig;
     std::vector<TTestSubconfigPtr> SubconfigList;
@@ -1896,10 +1895,9 @@ TEST(TYsonStructTest, UniversalParameterAccessor)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TVirtualInheritanceConfig
+struct TVirtualInheritanceConfig
     : public virtual TYsonStruct
 {
-public:
     int Value;
 
     REGISTER_YSON_STRUCT(TVirtualInheritanceConfig);
@@ -1965,10 +1963,9 @@ TEST(TYsonStructTest, RegisterBaseFieldInDerived)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TClassLevelPostprocessConfig
+struct TClassLevelPostprocessConfig
     : public TYsonStruct
 {
-public:
     int Value;
 
     REGISTER_YSON_STRUCT(TClassLevelPostprocessConfig);
@@ -2003,10 +2000,9 @@ TEST(TYsonStructTest, ClassLevelPostprocess)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRecursiveConfig
+struct TRecursiveConfig
     : public TYsonStruct
 {
-public:
     TIntrusivePtr<TRecursiveConfig> Subconfig;
 
     int Value;

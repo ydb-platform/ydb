@@ -223,4 +223,39 @@ void TDriver::Stop(bool wait) {
     Impl_->Stop(wait);
 }
 
+TDriverConfig TDriver::GetConfig() const {
+    TDriverConfig config;
+
+    config.SetEndpoint(Impl_->DefaultDiscoveryEndpoint_);
+    config.SetNetworkThreadsNum(Impl_->NetworkThreadsNum_);
+    config.SetClientThreadsNum(Impl_->ClientThreadsNum_);
+    config.SetMaxClientQueueSize(Impl_->MaxQueuedResponses_);
+    if (Impl_->SslCredentials_.IsEnabled) {
+        config.UseSecureConnection(Impl_->SslCredentials_.CaCert);
+    }
+    config.UseClientCertificate(Impl_->SslCredentials_.Cert, Impl_->SslCredentials_.PrivateKey);
+    config.SetCredentialsProviderFactory(Impl_->DefaultCredentialsProviderFactory_);
+    config.SetDatabase(Impl_->DefaultDatabase_);
+    config.SetDiscoveryMode(Impl_->DefaultDiscoveryMode_);
+    config.SetMaxQueuedRequests(Impl_->MaxQueuedRequests_);
+    config.SetGrpcMemoryQuota(Impl_->MemoryQuota_);
+    config.SetTcpKeepAliveSettings(
+        Impl_->TcpKeepAliveSettings_.Enabled,
+        Impl_->TcpKeepAliveSettings_.Idle,
+        Impl_->TcpKeepAliveSettings_.Count,
+        Impl_->TcpKeepAliveSettings_.Interval
+    );
+    config.SetDrainOnDtors(Impl_->DrainOnDtors_);
+    config.SetBalancingPolicy(Impl_->BalancingSettings_.Policy, Impl_->BalancingSettings_.PolicyParams);
+    config.SetGRpcKeepAliveTimeout(Impl_->GRpcKeepAliveTimeout_);
+    config.SetGRpcKeepAlivePermitWithoutCalls(Impl_->GRpcKeepAlivePermitWithoutCalls_);
+    config.SetSocketIdleTimeout(Impl_->SocketIdleTimeout_);
+    config.SetMaxInboundMessageSize(Impl_->MaxInboundMessageSize_);
+    config.SetMaxOutboundMessageSize(Impl_->MaxOutboundMessageSize_);
+    config.SetMaxMessageSize(Impl_->MaxMessageSize_);
+    config.Impl_->Log = Impl_->Log;
+    
+    return config;
+}
+
 } // namespace NYdb

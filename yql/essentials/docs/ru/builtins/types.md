@@ -13,7 +13,7 @@ SELECT CAST($foo AS ListType($itemType));  -- каст $foo к типу List<$it
 
 ## FormatType {#formattype}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 FormatType(Type)->String
@@ -24,7 +24,7 @@ FormatType(TypeHandle)->String
 
 ## FormatTypeDiff и FormatTypeDiffPretty {#formattypediff}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 FormatTypeDiff(Type, Type)->String
@@ -38,7 +38,7 @@ FormatTypeDiffPretty(TypeHandle, TypeHandle)->String
 
 ## ParseType {#parsetype}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ParseType(String)->Type
@@ -46,7 +46,7 @@ ParseType(String)->Type
 
 Построение типа по строке с его описанием. [Документация по её формату](../types/type_string.md).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT FormatType(ParseType("List<Int32>"));  -- List<int32>
@@ -54,7 +54,7 @@ SELECT FormatType(ParseType("List<Int32>"));  -- List<int32>
 
 ## TypeOf {#typeof}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 TypeOf(<any expression>)->Type
@@ -62,7 +62,7 @@ TypeOf(<any expression>)->Type
 
 Получение типа значения, переданного в аргумент.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT FormatType(TypeOf("foo"));  -- String
@@ -74,7 +74,7 @@ SELECT FormatType(TypeOf(AsTuple(1, 1u))); -- Tuple<Int32,Uint32>
 
 ## InstanceOf {#instanceof}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 InstanceOf(Type)->объект типа Type
@@ -84,7 +84,7 @@ InstanceOf(Type)->объект типа Type
 InstanceOf можно использовать только в том случае, если результат выражения в котором InstanceOf используется зависит от типа InstanceOf, но не от значения.
 В противном случае операция будет завершена с ошибкой.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT InstanceOf(ParseType("Int32")) + 1.0; -- ошибка (Can't execute InstanceOf): результат зависит от (неопределенного) значения InstanceOf
@@ -96,7 +96,7 @@ SELECT FormatType(TypeOf(
 
 ## DataType {#datatype}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DataType(String, [String, ...])->Type
@@ -105,7 +105,7 @@ DataType(String, [String, ...])->Type
 Возвращает тип для [примитивных типов данных](../types/primitive.md) по его имени.
 Для некоторых типов (например Decimal) необходимо передавать параметры типа в качестве дополнительных аргументов.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT FormatType(DataType("Bool")); -- Bool
@@ -114,7 +114,7 @@ SELECT FormatType(DataType("Decimal","5","1")); -- Decimal(5,1)
 
 ## OptionalType {#optionaltype}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 OptionalType(Type)->опциональный Type
@@ -122,7 +122,7 @@ OptionalType(Type)->опциональный Type
 
 Добавляет в переданный тип возможность содержать `NULL`.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT FormatType(OptionalType(DataType("Bool"))); -- Bool?
@@ -131,7 +131,7 @@ SELECT FormatType(OptionalType(ParseType("List<String?>"))); -- List<String?>?
 
 ## ListType и StreamType {#listtype}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ListType(Type)->тип списка с элементами типа Type
@@ -140,7 +140,7 @@ StreamType(Type)->тип потока с элементами типа Type
 
 Строит тип списка или потока по переданному типу элемента.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT FormatType(ListType(DataType("Bool"))); -- List<Bool>
@@ -148,7 +148,7 @@ SELECT FormatType(ListType(DataType("Bool"))); -- List<Bool>
 
 ## DictType {#dicttype}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictType(Type, Type)->тип словаря
@@ -156,7 +156,7 @@ DictType(Type, Type)->тип словаря
 
 Строит тип словаря по переданным типам ключа (первый аргумент) и значения (второй аргумент).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT FormatType(DictType(
@@ -167,7 +167,7 @@ SELECT FormatType(DictType(
 
 ## TupleType {#tupletype}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 TupleType(Type, ...)->тип кортежа
@@ -175,7 +175,7 @@ TupleType(Type, ...)->тип кортежа
 
 Строит тип кортежа по переданным типам элементов.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT FormatType(TupleType(
@@ -187,7 +187,7 @@ SELECT FormatType(TupleType(
 
 ## StructType {#structtype}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 StructType(Type AS ElementName1, Type AS ElementName2, ...)->тип структуры
@@ -195,7 +195,7 @@ StructType(Type AS ElementName1, Type AS ElementName2, ...)->тип структ
 
 Строит тип структуры по переданным типам элементов. Для указания имен элементов используется стандартный синтаксис именованных аргументов.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT FormatType(StructType(
@@ -206,7 +206,7 @@ SELECT FormatType(StructType(
 
 ## VariantType {#varianttype}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 VariantType(StructType)->тип варианта над структурой
@@ -215,7 +215,7 @@ VariantType(TupleType)->тип варианта над кортежем
 
 Возвращает тип варианта по низлежащему типу (структуры или кортежа).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT FormatType(VariantType(
@@ -225,7 +225,7 @@ SELECT FormatType(VariantType(
 
 ## ResourceType {#resourcetype}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ResourceType(String)->тип ресурса
@@ -233,7 +233,7 @@ ResourceType(String)->тип ресурса
 
 Возвращает тип [ресурса](../types/special.md) по переданной строковой метке.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT FormatType(ResourceType("Foo")); -- Resource<'Foo'>
@@ -241,7 +241,7 @@ SELECT FormatType(ResourceType("Foo")); -- Resource<'Foo'>
 
 ## CallableType {#callabletype}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 CallableType(Uint32, Type, [Type, ...])->тип вызываемого значения
@@ -253,7 +253,7 @@ CallableType(Uint32, Type, [Type, ...])->тип вызываемого знач�
 2. Тип результата.
 3. Все последующие аргументы CallableType трактуются как типы аргументов вызываемого значения со сдвигом на два обязательных (например, третий аргумент CallableType описывает тип первого аргумента вызываемого значения).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT FormatType(CallableType(
@@ -266,7 +266,7 @@ SELECT FormatType(CallableType(
 
 ## GenericType, UnitType и VoidType {#generictype}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 GenericType()->тип
@@ -276,7 +276,7 @@ VoidType()->тип
 
 Возвращают одноименные [специальные типы данных](../types/special.md). Аргументов нет, так как они не параметризуются.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT FormatType(VoidType()); -- Void
@@ -284,7 +284,7 @@ SELECT FormatType(VoidType()); -- Void
 
 ## OptionalItemType, ListItemType и StreamItemType {#optionalitemtype}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 OptionalItemType(OptionalType)->тип элемента опционального типа
@@ -296,7 +296,7 @@ StreamItemType(StreamType)->тип элемента потокового тип�
 
 Если этим функциям передается хендл типа, то выполняют действие, обратное [OptionalTypeHandle](#optionaltypehandle), [ListTypeHandle](#list-stream-typehandle) и [StreamTypeHandle](#list-stream-typehandle) - возвращают хендл типа элемента по хендлу типа соответствующего контейнера.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT FormatType(ListItemType(
@@ -312,7 +312,7 @@ SELECT FormatType(ListItemType(
 
 ## DictKeyType и DictPayloadType {#dictkeytype}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictKetType(DictType)->тип ключа словаря
@@ -321,7 +321,7 @@ DictPayloadType(DictType)->тип значения словаря
 
 Возвращают тип ключа или значения по типу словаря.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT FormatType(DictKeyType(
@@ -331,7 +331,7 @@ SELECT FormatType(DictKeyType(
 
 ## TupleElementType {#tupleelementtype}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 TupleElementType(TupleType, String)->тип элемента кортежа
@@ -339,7 +339,7 @@ TupleElementType(TupleType, String)->тип элемента кортежа
 
 Возвращает тип элемента кортежа по типу кортежа и индексу элемента (индекс с нуля).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT FormatType(TupleElementType(
@@ -349,7 +349,7 @@ SELECT FormatType(TupleElementType(
 
 ## StructMemberType {#structmembertype}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 StructMemberType(StructType, String)->тип элемента структуры
@@ -357,7 +357,7 @@ StructMemberType(StructType, String)->тип элемента структуры
 
 Возвращает тип элемента структуры по типу структуры и имени элемента.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT FormatType(StructMemberType(
@@ -367,7 +367,7 @@ SELECT FormatType(StructMemberType(
 
 ## CallableResultType и CallableArgumentType {#callableresulttype}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 CallableResultType(CallableType)->тип результата вызываемого значения
@@ -376,7 +376,7 @@ CallableArgumentType(CallableType, Uint32)->тип аругмента вызыв
 
 `CallableResultType` возвращает тип результата по типу вызываемого значения, а `CallableArgumentType` — тип аргумента по типу вызываемого значения и его индексу (индекс с нуля).
 
-### Примеры
+#### Примеры
 
 ```yql
 $callable_type = ParseType("(String,Bool)->Double");
@@ -391,7 +391,7 @@ FormatType(CallableArgumentType(
 
 ## VariantUnderlyingType {#variantunderlyingtype}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 VariantUnderlyingType(VariantType)->низлежащий тип варианта
@@ -401,7 +401,7 @@ VariantUnderlyingType(VariantType)->низлежащий тип варианта
 
 Если этой функции передается хендл типа, то она выполняет действие, обратное [VariantTypeHandle](#varianttypehandle) — возвращает хендл низлежащего типа по хендлу типа варианта.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT FormatType(VariantUnderlyingType(

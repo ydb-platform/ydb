@@ -35,6 +35,7 @@ YT_DEFINE_ERROR_ENUM(
     ((RequestInvolvesSequoia)                    (1007))
     ((RequestInvolvesCypress)                    (1008))
     ((BeginCopyDeprecated)                       (1009))
+    ((PrerequisitePathDifferFromExecutionPaths)  (1010))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

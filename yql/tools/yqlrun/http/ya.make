@@ -49,7 +49,7 @@ PEERDIR(
     library/cpp/logger
     library/cpp/yson/node
     library/cpp/openssl/io
-    library/cpp/charset
+    library/cpp/charset/lite
     library/cpp/yson
     library/cpp/json
     library/cpp/string_utils/quote

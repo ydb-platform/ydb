@@ -57,7 +57,7 @@ public:
         }
 
         TString taskId = GenerateId();
-        TTask::TPtr createdTask = MakeTask(request.TaskType, taskId, request.TaskParams, request.SessionId);
+        TTask::TPtr createdTask = MakeTask(request.TaskType, taskId, request.TaskParams, request.SessionId, request.ClusterConnection);
 
         Tasks_[taskId] = TCoordinatorTaskInfo{.Task = createdTask, .TaskStatus = ETaskStatus::Accepted, .OperationId = operationId};
 

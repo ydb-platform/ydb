@@ -37,6 +37,10 @@ NProto::TTaskParams TaskParamsToProto(const TTaskParams& taskParams);
 
 TTaskParams TaskParamsFromProto(const NProto::TTaskParams& protoTaskParams);
 
+NProto::TClusterConnection ClusterConnectionToProto(const TClusterConnection& clusterConnection);
+
+TClusterConnection ClusterConnectionFromProto(const NProto::TClusterConnection& protoClusterConnection);
+
 NProto::TTask TaskToProto(const TTask& task);
 
 TTask TaskFromProto(const NProto::TTask& protoTask);

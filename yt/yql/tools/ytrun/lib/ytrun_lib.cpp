@@ -10,7 +10,10 @@
 #include <yt/yql/providers/yt/gateway/fmr/yql_yt_fmr.h>
 #include <yt/yql/providers/yt/fmr/coordinator/client/yql_yt_coordinator_client.h>
 #include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_coordinator_impl.h>
+#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
 #include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
+#include <yt/yql/providers/yt/fmr/table_data_service/local/table_data_service.h>
+#include <yt/yql/providers/yt/fmr/yt_service/impl/yql_yt_yt_service_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
@@ -197,13 +200,12 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
     }
 
     if (!DisableLocalFmrWorker_) {
-        auto func = [&] (NFmr::TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
-            while (!cancelFlag->load()) {
-                Sleep(TDuration::Seconds(3));
-                return NFmr::ETaskStatus::Completed;
-            }
-            return NFmr::ETaskStatus::Failed;
-        }; // TODO - use function which actually calls Downloader/Uploader based on task params
+        auto tableDataService = MakeLocalTableDataService(NFmr::TLocalTableDataServiceSettings(3));
+        auto fmrYtSerivce = NFmr::MakeFmrYtSerivce();
+
+        auto func = [tableDataService, fmrYtSerivce] (NFmr::TTask::TPtr task, std::shared_ptr<std::atomic<bool>> cancelFlag) mutable {
+            return NFmr::RunJob(task, tableDataService, fmrYtSerivce, cancelFlag);
+        };
 
         NFmr::TFmrJobFactorySettings settings{.Function=func};
         auto jobFactory = MakeFmrJobFactory(settings);

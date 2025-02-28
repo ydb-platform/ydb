@@ -291,7 +291,6 @@ TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap, 
 
 std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos)
 {
-    std::vector<TExprBase> out;
     const auto convertNode = [&ctx, &pos, &argument](const TExprBase& node) -> TMaybeNode<TExprBase> {
         if (node.Maybe<TCoNull>()) {
             return node;
@@ -397,36 +396,27 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
         }
     };
 
-    // Columns & values may be single element
-    TMaybeNode<TExprBase> node = convertNode(nodeIn);
+    if (const auto& list = nodeIn.Maybe<TExprList>()) {
+        const auto& tuple = list.Cast();
+        std::vector<TExprBase> out;
 
-    if (node.IsValid()) {
-        out.emplace_back(std::move(node.Cast()));
-        return out;
-    }
+        out.reserve(tuple.Size());
+        for (ui32 i = 0; i < tuple.Size(); ++i) {
+            TMaybeNode<TExprBase> node = convertNode(tuple.Item(i));
 
-    // Or columns and values can be Tuple
-    if (!nodeIn.Maybe<TExprList>()) {
-        // something unusual found, return empty vector
-        return out;
-    }
+            if (!node.IsValid()) {
+                // Return empty vector
+                return TVector<TExprBase>();
+            }
 
-    auto tuple = nodeIn.Cast<TExprList>();
-
-    out.reserve(tuple.Size());
-
-    for (ui32 i = 0; i < tuple.Size(); ++i) {
-        TMaybeNode<TExprBase> node = convertNode(tuple.Item(i));
-
-        if (!node.IsValid()) {
-            // Return empty vector
-            return TVector<TExprBase>();
+            out.emplace_back(node.Cast());
         }
-
-        out.emplace_back(node.Cast());
+        return out;
+    } else if (const auto& node = convertNode(nodeIn); node.IsValid()) {
+        return {node.Cast()};
+    } else {
+        return {};
     }
-
-    return out;
 }
 
 TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& parameter, const TCoCompare& predicate,
@@ -811,6 +801,10 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             }
             remaining = std::move(remaining2);
         }
+    }
+    
+    if (pushedPredicates.empty()) {
+        return node;
     }
 
     const auto& pushedFilters = TFilterOpsLevels::Merge(pushedPredicates, ctx, node.Pos());

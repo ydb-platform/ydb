@@ -1,56 +1,87 @@
-#include "meta.h"
 #include "checker.h"
-#include <ydb/library/formats/arrow/hash/xx_hash.h>
+#include "meta.h"
+
 #include <ydb/core/formats/arrow/hash/calcer.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
+
+#include <ydb/library/formats/arrow/hash/xx_hash.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 
 namespace NKikimr::NOlap::NIndexes {
 
-TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
-    const ui32 bitsCount = TFixStringBitsStorage::GrowBitsCountToByte(HashesCount * recordsCount / std::log(2));
-    std::vector<bool> filterBits(bitsCount, false);
-    for (ui32 i = 0; i < HashesCount; ++i) {
-        NArrow::NHash::NXX64::TStreamStringHashCalcer_H3 hashCalcer(i);
-        for (reader.Start(); reader.IsCorrect(); reader.ReadNext()) {
-            hashCalcer.Start();
-            for (auto&& i : reader) {
-                NArrow::NHash::TXX64::AppendField(i.GetCurrentChunk(), i.GetCurrentRecordIndex(), hashCalcer);
-            }
-            filterBits[hashCalcer.Finish() % bitsCount] = true;
+TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
+    std::deque<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> dataOwners;
+    ui32 indexHitsCount = 0;
+    for (reader.Start(); reader.IsCorrect();) {
+        AFL_VERIFY(reader.GetColumnsCount() == 1);
+        for (auto&& i : reader) {
+            dataOwners.emplace_back(i.GetCurrentChunk());
+            indexHitsCount += GetDataExtractor()->GetIndexHitsCount(dataOwners.back());
         }
+        reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
+    }
+    const ui32 bitsCount = TFixStringBitsStorage::GrowBitsCountToByte(HashesCount * std::max<ui32>(indexHitsCount, 10) / std::log(2));
+    std::vector<bool> filterBits(bitsCount, false);
+
+    while (dataOwners.size()) {
+        GetDataExtractor()->VisitAll(
+            dataOwners.front(),
+            [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase) {
+                for (ui32 idx = 0; idx < arr->length(); ++idx) {
+                    for (ui32 i = 0; i < HashesCount; ++i) {
+                        NArrow::NHash::NXX64::TStreamStringHashCalcer_H3 hashCalcer(i);
+                        hashCalcer.Start();
+                        if (hashBase) {
+                            hashCalcer.Update((const ui8*)&hashBase, sizeof(hashBase));
+                        }
+                        NArrow::NHash::TXX64::AppendField(arr, idx, hashCalcer);
+                        filterBits[hashCalcer.Finish() % bitsCount] = true;
+                    }
+                }
+            },
+            [&](const std::string_view data, const ui64 hashBase) {
+                for (ui32 i = 0; i < HashesCount; ++i) {
+                    NArrow::NHash::NXX64::TStreamStringHashCalcer_H3 hashCalcer(i);
+                    hashCalcer.Start();
+                    if (hashBase) {
+                        hashCalcer.Update((const ui8*)&hashBase, sizeof(hashBase));
+                    }
+                    hashCalcer.Update((const ui8*)data.data(), data.size());
+                    filterBits[hashCalcer.Finish() % bitsCount] = true;
+                }
+            });
+        dataOwners.pop_front();
     }
 
     return TFixStringBitsStorage(filterBits).GetData();
 }
 
-void TBloomIndexMeta::DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& /*schema*/) const {
+void TBloomIndexMeta::DoFillIndexCheckers(
+    const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& /*schema*/) const {
     for (auto&& branch : info->GetBranches()) {
-        std::map<ui32, std::shared_ptr<arrow::Scalar>> foundColumns;
-        for (auto&& cId : ColumnIds) {
-            auto itEqual = branch->GetEquals().find(cId);
-            if (itEqual == branch->GetEquals().end()) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("warn", "column not found for equal")("id", cId);
-                break;
+        for (auto&& i : branch->GetEquals()) {
+            if (i.first.GetColumnId() != GetColumnId()) {
+                continue;
             }
-            foundColumns.emplace(cId, itEqual->second);
-        }
-        if (foundColumns.size() != ColumnIds.size()) {
-            continue;
-        }
-        std::set<ui64> hashes;
-        for (ui32 i = 0; i < HashesCount; ++i) {
-            NArrow::NHash::NXX64::TStreamStringHashCalcer_H3 calcer(i);
-            calcer.Start();
-            for (auto&& i : foundColumns) {
+            ui64 hashBase = 0;
+            if (!GetDataExtractor()->CheckForIndex(i.first, hashBase)) {
+                continue;
+            }
+            std::set<ui64> hashes;
+            for (ui32 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
+                NArrow::NHash::NXX64::TStreamStringHashCalcer_H3 calcer(hashSeed);
+                calcer.Start();
+                if (hashBase) {
+                    calcer.Update((const ui8*)&hashBase, sizeof(hashBase));
+                }
                 NArrow::NHash::TXX64::AppendField(i.second, calcer);
+                hashes.emplace(calcer.Finish());
             }
-            hashes.emplace(calcer.Finish());
+            branch->MutableIndexes().emplace_back(std::make_shared<TBloomFilterChecker>(GetIndexId(), std::move(hashes)));
         }
-        branch->MutableIndexes().emplace_back(std::make_shared<TBloomFilterChecker>(GetIndexId(), std::move(hashes)));
     }
 }
 

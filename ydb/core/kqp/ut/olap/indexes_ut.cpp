@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             auto alterQuery =
                 TStringBuilder() <<
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["resource_id", "level"], "false_positive_probability" : 0.05}`);
+                    FEATURES=`{"column_names" : ["resource_id"], "false_positive_probability" : 0.05}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -128,6 +128,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             Cerr << csController->GetIndexesSkippingOnSelect().Val() << " / " << csController->GetIndexesApprovedOnSelect().Val() << Endl;
             CompareYson(result, R"([[0u;]])");
             AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0);
+            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() == 0);
             AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val())
             ("approve", csController->GetIndexesApprovedOnSelect().Val())("skip", csController->GetIndexesSkippingOnSelect().Val());
         }
@@ -432,7 +433,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 auto alterQuery =
                     TStringBuilder() << Sprintf(
                         R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["resource_id", "level"], "false_positive_probability" : 0.05, "storage_id" : "%s"}`);
+                    FEATURES=`{"column_names" : ["resource_id"], "false_positive_probability" : 0.05, "storage_id" : "%s"}`);
                 )",
                         StorageId.data());
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -474,7 +475,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
             AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() == 0);
             AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() == 0);
-            csController->WaitCompactions(TDuration::Seconds(25));
+            csController->WaitCompactions(TDuration::Seconds(5));
             // important checker for control compactions (<=21) and control indexes constructed (>=21)
             AFL_VERIFY(csController->GetCompactionStartedCounter().Val() == 3)("count", csController->GetCompactionStartedCounter().Val());
 

@@ -54,6 +54,9 @@ protected:
                 return false;
             }
         }
+        if (!MutableDataExtractor().DeserializeFromProto(bFilter.GetDataExtractor())) {
+            return false;
+        }
         HashesCount = bFilter.GetHashesCount();
         if (!TConstants::CheckHashesCount(HashesCount)) {
             return false;
@@ -69,7 +72,7 @@ protected:
         if (!bFilter.HasColumnId() || !bFilter.GetColumnId()) {
             return false;
         }
-        ColumnIds.emplace(bFilter.GetColumnId());
+        AddColumnId(bFilter.GetColumnId());
         Initialize();
         return true;
     }
@@ -79,19 +82,19 @@ protected:
         AFL_VERIFY(TConstants::CheckFilterSizeBytes(FilterSizeBytes));
         AFL_VERIFY(TConstants::CheckHashesCount(HashesCount));
         AFL_VERIFY(TConstants::CheckRecordsCount(RecordsCount));
-        AFL_VERIFY(ColumnIds.size() == 1);
         filterProto->SetRecordsCount(RecordsCount);
         filterProto->SetNGrammSize(NGrammSize);
         filterProto->SetFilterSizeBytes(FilterSizeBytes);
         filterProto->SetHashesCount(HashesCount);
-        filterProto->SetColumnId(*ColumnIds.begin());
+        filterProto->SetColumnId(GetColumnId());
+        *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
     }
 
 public:
     TIndexMeta() = default;
-    TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const ui32 columnId, const ui32 hashesCount,
+    TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const ui32 columnId, const TReadDataExtractorContainer& dataExtractor, const ui32 hashesCount,
         const ui32 filterSizeBytes, const ui32 nGrammSize, const ui32 recordsCount)
-        : TBase(indexId, indexName, { columnId }, storageId)
+        : TBase(indexId, indexName, columnId, storageId, dataExtractor)
         , NGrammSize(nGrammSize)
         , FilterSizeBytes(filterSizeBytes)
         , RecordsCount(recordsCount)

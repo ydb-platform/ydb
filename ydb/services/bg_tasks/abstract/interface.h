@@ -189,7 +189,7 @@ protected:
 public:
     using TBase::TBase;
 
-    bool Initialize(const TString& className, const bool maybeExists = false) {
+    [[nodiscard]] bool Initialize(const TString& className, const bool maybeExists = false) {
         AFL_VERIFY(maybeExists || !Object)("problem", "initialize for not-empty-object");
         Object.reset(TFactory::Construct(className));
         if (!Object) {

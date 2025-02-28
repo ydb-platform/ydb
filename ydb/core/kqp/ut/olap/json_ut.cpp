@@ -65,9 +65,21 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
     class TSelectCommand: public ICommand {
     private:
-        const TString Command;
-        const TString Compare;
+        TString Command;
+        TString Compare;
+        std::optional<ui64> ExpectIndexSkip;
+        std::optional<ui64> ExpectIndexNoData;
+        std::optional<ui64> ExpectIndexApprove;
+        ui64 IndexSkipStart = 0;
+        ui64 IndexNoDataStart = 0;
+        ui64 IndexApproveStart = 0;
+
         virtual TConclusionStatus DoExecute(TKikimrRunner& kikimr) override {
+            auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
+            AFL_VERIFY(controller);
+            IndexSkipStart = controller->GetIndexesSkippingOnSelect().Val();
+            IndexApproveStart = controller->GetIndexesApprovedOnSelect().Val();
+            IndexNoDataStart = controller->GetIndexesSkippedNoData().Val();
             Cerr << "EXECUTE: " << Command << Endl;
             auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
             auto it = kikimr.GetQueryClient().StreamExecuteQuery(Command, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -78,14 +90,76 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                 Cerr << "OUTPUT: " << output << Endl;
                 CompareYson(output, Compare);
             }
+            const ui32 skip = controller->GetIndexesSkippingOnSelect().Val() - IndexSkipStart;
+            const ui32 noData = controller->GetIndexesSkippedNoData().Val() - IndexNoDataStart;
+            const ui32 approves = controller->GetIndexesApprovedOnSelect().Val() - IndexApproveStart;
+            Cerr << noData << "/" << skip << "/" << approves << Endl;
+            if (ExpectIndexSkip) {
+                AFL_VERIFY(skip == *ExpectIndexSkip)("expect", ExpectIndexSkip)("real", skip)(
+                                     "current", controller->GetIndexesSkippingOnSelect().Val())(
+                                     "pred", IndexSkipStart);
+            }
+            if (ExpectIndexNoData) {
+                AFL_VERIFY(noData == *ExpectIndexNoData)("expect", ExpectIndexNoData)("real", noData)(
+                                       "current", controller->GetIndexesSkippedNoData().Val())(
+                                       "pred", IndexNoDataStart);
+            }
+            if (ExpectIndexApprove) {
+                AFL_VERIFY(approves == *ExpectIndexApprove)("expect", ExpectIndexApprove)("real", approves)(
+                                         "current", controller->GetIndexesApprovedOnSelect().Val())("pred", IndexApproveStart);
+            }
             return TConclusionStatus::Success();
         }
 
     public:
-        TSelectCommand(const TString& command, const TString& compare)
-            : Command(command)
-            , Compare(compare) {
+        bool DeserializeFromString(const TString& info) {
+            auto lines = StringSplitter(info).SplitBySet("\n").ToList<TString>();
+            std::optional<ui32> state;
+            for (auto&& l : lines) {
+                l = Strip(l);
+                if (l.StartsWith("READ:")) {
+                    l = l.substr(5);
+                    state = 0;
+                } else if (l.StartsWith("EXPECTED:")) {
+                    l = l.substr(9);
+                    state = 1;
+                } else if (l.StartsWith("IDX_ND_SKIP_APPROVE:")) {
+                    state = 2;
+                    l = l.substr(20);
+                } else {
+                    AFL_VERIFY(state)("line", l);
+                }
+
+                if (*state == 0) {
+                    Command += l;
+                } else if (*state == 1) {
+                    Compare += l;
+                } else if (*state == 2) {
+                    auto idxExpectations = StringSplitter(l).SplitBySet(" ,.;").SkipEmpty().ToList<TString>();
+                    AFL_VERIFY(idxExpectations.size() == 3)("size", idxExpectations.size())("string", l);
+                    if (idxExpectations[0] != "{}") {
+                        ui32 res;
+                        AFL_VERIFY(TryFromString<ui32>(idxExpectations[0], res))("string", l);
+                        ExpectIndexNoData = res;
+                    }
+                    if (idxExpectations[1] != "{}") {
+                        ui32 res;
+                        AFL_VERIFY(TryFromString<ui32>(idxExpectations[1], res))("string", l);
+                        ExpectIndexSkip = res;
+                    }
+                    if (idxExpectations[2] != "{}") {
+                        ui32 res;
+                        AFL_VERIFY(TryFromString<ui32>(idxExpectations[2], res))("string", l);
+                        ExpectIndexApprove = res;
+                    }
+                } else {
+                    AFL_VERIFY(false)("line", l);
+                }
+            }
+            return true;
         }
+
+        TSelectCommand() = default;
     };
 
     class TStopCompactionCommand: public ICommand {
@@ -167,9 +241,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
     public:
         TScriptExecutor(const std::vector<std::shared_ptr<ICommand>>& commands)
-            : Commands(commands)
-        {
-
+            : Commands(commands) {
         }
         void Execute() {
             NKikimrConfig::TAppConfig appConfig;
@@ -198,23 +270,9 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                 command = command.substr(5);
                 return std::make_shared<TDataCommand>(command);
             } else if (command.StartsWith("READ:")) {
-                auto lines = StringSplitter(command.substr(5)).SplitBySet("\n").ToList<TString>();
-                int step = 0;
-                TString request;
-                TString expectation;
-                for (auto&& i : lines) {
-                    i = Strip(i);
-                    if (i.StartsWith("EXPECTED:")) {
-                        step = 1;
-                        i = i.substr(9);
-                    }
-                    if (step == 0) {
-                        request += i;
-                    } else if (step == 1) {
-                        expectation += i;
-                    }
-                }
-                return std::make_shared<TSelectCommand>(request, expectation);
+                auto result = std::make_shared<TSelectCommand>();
+                AFL_VERIFY(result->DeserializeFromString(command));
+                return result;
             } else if (command.StartsWith("WAIT_COMPACTION")) {
                 return std::make_shared<TWaitCompactionCommand>();
             } else if (command.StartsWith("STOP_COMPACTION")) {
@@ -290,7 +348,6 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             for (auto&& i : Scripts) {
                 i.Execute();
             }
-
         }
     };
 
@@ -636,7 +693,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         )";
         TScriptVariator(script).Execute();
     }
-/*
+
     Y_UNIT_TEST(BloomIndexesVariants) {
         TString script = R"(
             STOP_COMPACTION
@@ -648,7 +705,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                 PRIMARY KEY (Col1)
             )
             PARTITION BY HASH(Col1)
-            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2$$);
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$2$$);
             ------
             SCHEMA:
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
@@ -657,34 +714,56 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
                       `COLUMNS_LIMIT`=`$$0|1|1024$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
             ------
-            SCHEMA:
-            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
-                      `COLUMNS_LIMIT`=`$$0|1|1024$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a.b.c" : "a1"}')), (2u, JsonDocument('{"a.b.c" : "a2"}')), 
+                                                                    (3u, JsonDocument('{"b.c.d" : "b3"}')), (4u, JsonDocument('{"b.c.d" : "b4", "a" : "a4"}'))
             ------
             DATA:
-            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1"}')), (2u, JsonDocument('{"a" : "a2"}')), 
-                                                                    (3u, JsonDocument('{"b" : "b3"}')), (4u, JsonDocument('{"b" : "b4", "a" : "a4"}'))
-            ------
-            DATA:
-            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(11u, JsonDocument('{"a" : "1a1"}')), (12u, JsonDocument('{"a" : "1a2"}')), 
-                                                                    (13u, JsonDocument('{"b" : "1b3"}')), (14u, JsonDocument('{"b" : "1b4", "a" : "a4"}'))
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(11u, JsonDocument('{"a.b.c" : "1a1"}')), (12u, JsonDocument('{"a.b.c" : "1a2"}')), 
+                                                                    (13u, JsonDocument('{"b.c.d" : "1b3"}')), (14u, JsonDocument('{"b.c.d" : "1b4", "a" : "a4"}'))
             ------
             SCHEMA:
             ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=a_index, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["Col2"], "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : "a"}, "false_positive_probability" : 0.05}`)
+                    FEATURES=`{"column_names" : ["Col2"], "false_positive_probability" : 0.01}`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_b, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096, 
+                           "records_count" : 1024, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : "b.c.d"}}`);
             ------
             DATA:
             REPLACE INTO `/Root/ColumnTable` (Col1) VALUES(10u)
             ------
             ONE_ACTUALIZATION
             ------
-            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "1a1" ORDER BY Col1;
-            EXPECTED: [[11u;["{\"a\":\"1a1\"}"]]]
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"a.b.c\"") = "a1" ORDER BY Col1;
+            EXPECTED: [[1u;["{\"a.b.c\":\"a1\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 3, 1
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"a.b.c\"") = "1a1" ORDER BY Col1;
+            EXPECTED: [[11u;["{\"a.b.c\":\"1a1\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 3, 1
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") = "1b4" ORDER BY Col1;
+            EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 3, 1
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") = "1b5" ORDER BY Col1;
+            EXPECTED: []
+            IDX_ND_SKIP_APPROVE: 0, 4, 0
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") like "1b3" ORDER BY Col1;
+            EXPECTED: [[13u;["{\"b.c.d\":\"1b3\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 3, 1
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") like "1b5" ORDER BY Col1;
+            EXPECTED: []
+            IDX_ND_SKIP_APPROVE: 0, 4, 0
             
         )";
         TScriptVariator(script).Execute();
     }
-*/
+
     Y_UNIT_TEST(SwitchAccessorCompactionVariants) {
         TString script = R"(
             STOP_COMPACTION
@@ -765,7 +844,6 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         )";
         TScriptVariator(script).Execute();
     }
-
 }
 
 }   // namespace NKikimr::NKqp

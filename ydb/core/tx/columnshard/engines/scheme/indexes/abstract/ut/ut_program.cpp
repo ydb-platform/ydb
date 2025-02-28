@@ -47,7 +47,8 @@ Y_UNIT_TEST_SUITE(TestProgramBloomCoverage) {
             AFL_VERIFY(coverage);
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("coverage", coverage->DebugString());
             AFL_VERIFY(coverage->GetBranches().size() == 1)("coverage", coverage->DebugString());
-            AFL_VERIFY(coverage->GetBranches().front()->DebugString() == R"({"likes":{"7":{"sequences":["%amet."]}}})")("coverage", coverage->DebugString());
+            AFL_VERIFY(coverage->GetBranches().front()->DebugString() == R"({"likes":{"7":{"sequences":["%amet."]}}})")(
+                "coverage", coverage->DebugString());
         }
     }
 
@@ -162,6 +163,34 @@ Y_UNIT_TEST_SUITE(TestProgramBloomCoverage) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("coverage", coverage->DebugString());
             AFL_VERIFY(coverage->GetBranches().size() == 1);
             AFL_VERIFY(coverage->GetBranches()[0]->DebugString() = R"({"likes":{"9":{"sequences":["%like_string"]},"7":{"sequences":["%like_string"]}},"equals":{"9":"equals_string","7":"equals_string"}})");
+        }
+    }
+
+    Y_UNIT_TEST(JsonSubColumnUsage) {
+        TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
+        NReader::NCommon::TIndexColumnResolver columnResolver(indexInfo);
+
+        TProgramProtoBuilder builder;
+        const auto idPathString1 = builder.AddConstant("json.path1");
+        const auto idPathString2 = builder.AddConstant("json.path2");
+        const auto idColumn = columnResolver.GetColumnIdVerified("json_binary");
+        const auto idJsonValue1 = builder.AddOperation("JsonValue", { idColumn, idPathString1 });
+        const auto idJsonValue2 = builder.AddOperation("JsonValue", { idColumn, idPathString2 });
+
+        const auto idLikeString = builder.AddConstant("like_string");
+        const auto idEqualString = builder.AddConstant("equals_string");
+        const auto idEndsWith1 = builder.AddOperation(NYql::TKernelRequestBuilder::EBinaryOp::EndsWith, { idJsonValue1, idLikeString });
+        const auto idEquals1 = builder.AddOperation(NYql::TKernelRequestBuilder::EBinaryOp::Equals, { idJsonValue2, idEqualString });
+        const auto idFilter1 = builder.AddOperation(NYql::TKernelRequestBuilder::EBinaryOp::And, { idEndsWith1, idEquals1 });
+        builder.AddFilter(idFilter1);
+        {
+            TProgramContainer program;
+            program.Init(columnResolver, builder.FinishProto()).Validate();
+            auto coverage = NOlap::NIndexes::NRequest::TDataForIndexesCheckers::Build(program);
+            AFL_VERIFY(coverage);
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("coverage", coverage->DebugString());
+            AFL_VERIFY(coverage->GetBranches().size() == 1);
+            AFL_VERIFY(coverage->GetBranches().front()->DebugString() == R"({"likes":{"{cId=6;sub=json.path1}":{"sequences":["%like_string"]}},"equals":{"{cId=6;sub=json.path2}":"equals_string"}})");
         }
     }
 }

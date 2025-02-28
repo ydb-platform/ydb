@@ -26,7 +26,7 @@ TConclusionStatus TReadDataExtractorContainer::DeserializeFromJson(const NJson::
 
 bool TReadDataExtractorContainer::DeserializeFromProto(const IReadDataExtractor::TProto& data) {
     if (!data.GetClassName()) {
-        Initialize(TDefaultDataExtractor::GetClassNameStatic());
+        AFL_VERIFY(Initialize(TDefaultDataExtractor::GetClassNameStatic()));
         return true;
     } else {
         return TBase::DeserializeFromProto(data);

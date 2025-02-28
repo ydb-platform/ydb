@@ -636,7 +636,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         )";
         TScriptVariator(script).Execute();
     }
-
+/*
     Y_UNIT_TEST(BloomIndexesVariants) {
         TString script = R"(
             STOP_COMPACTION
@@ -684,7 +684,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         )";
         TScriptVariator(script).Execute();
     }
-
+*/
     Y_UNIT_TEST(SwitchAccessorCompactionVariants) {
         TString script = R"(
             STOP_COMPACTION

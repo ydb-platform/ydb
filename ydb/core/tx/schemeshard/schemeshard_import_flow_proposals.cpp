@@ -291,5 +291,58 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     return propose;
 }
 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    TImportInfo::TItem& item
+) {
+    Y_ABORT_UNLESS(item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size());
+
+    const auto& importChangefeedTopic = item.Changefeeds.GetChangefeeds()[item.NextChangefeedIdx];
+    const auto& topic = importChangefeedTopic.GetTopic();
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto& record = propose->Record;
+    auto& modifyScheme = *record.AddTransaction();
+    modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
+    auto& pqGroup = *modifyScheme.MutableAlterPersQueueGroup();
+
+    const TPath dstPath = TPath::Init(item.DstPathId, ss);
+    const TString changefeedPath = dstPath.PathString() + "/" + importChangefeedTopic.GetChangefeed().name();
+    modifyScheme.SetWorkingDir(changefeedPath);
+    modifyScheme.SetInternal(true);
+
+    pqGroup.SetName("streamImpl");
+
+    NKikimrSchemeOp::TDescribeOptions opts;
+    opts.SetReturnPartitioningInfo(false);
+    opts.SetReturnPartitionConfig(true);
+    opts.SetReturnBoundaries(true);
+    opts.SetReturnIndexTableBoundaries(true);
+    opts.SetShowPrivateTable(true);
+    auto describeSchemeResult = DescribePath(ss, TlsActivationContext->AsActorContext(),changefeedPath + "/streamImpl", opts);
+
+    const auto& response = describeSchemeResult->GetRecord().GetPathDescription();
+    item.StreamImplPathId = {response.GetSelf().GetSchemeshardId(), response.GetSelf().GetPathId()};
+    pqGroup.CopyFrom(response.GetPersQueueGroup());
+
+    pqGroup.ClearTotalGroupCount();
+    pqGroup.MutablePQTabletConfig()->ClearPartitionKeySchema();
+
+    auto* tabletConfig = pqGroup.MutablePQTabletConfig();
+    const auto& pqConfig = AppData()->PQConfig;
+    
+    for (const auto& consumer : topic.consumers()) {
+        auto& addedConsumer = *tabletConfig->AddConsumers();
+        auto consumerName = NPersQueue::ConvertNewConsumerName(consumer.name(), pqConfig);
+        addedConsumer.SetName(consumerName);
+        if (consumer.important()) {
+            addedConsumer.SetImportant(true);
+        }
+    }
+    
+    return propose;
+}
+
 } // NSchemeShard
 } // NKikimr

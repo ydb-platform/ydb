@@ -16,9 +16,43 @@
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <util/generic/bitmap.h>
+#include <util/generic/queue.h>
+
+#if defined LOG_T || \
+    defined LOG_D || \
+    defined LOG_I || \
+    defined LOG_N || \
+    defined LOG_W || \
+    defined LOG_W
+#error log macro redefinition
+#endif
+
+#define LOG_T(stream) LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE, stream)
+#define LOG_D(stream) LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE, stream)
+#define LOG_I(stream) LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE, stream)
+#define LOG_N(stream) LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE, stream)
+#define LOG_W(stream) LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE, stream)
+#define LOG_E(stream) LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE, stream)
 
 namespace NKikimr {
 namespace NNodeBroker {
+
+struct TCacheMiss {
+    TCacheMiss(TActorId requestActor, TInstant deadline)
+        : RequestActor(requestActor)
+        , Deadline(deadline)
+    {
+    }
+
+    struct TCompareByDeadline {
+        bool operator()(const TCacheMiss& a, const TCacheMiss& b) const {
+            return a.Deadline > b.Deadline;
+        }
+    };
+
+    TActorId RequestActor;
+    TInstant Deadline;
+};
 
 struct TDynamicConfig : public TThrRefBase {
     struct TDynamicNodeInfo : public TTableNameserverSetup::TNodeInfo {
@@ -65,6 +99,8 @@ struct TDynamicConfig : public TThrRefBase {
     THashMap<ui32, TDynamicNodeInfo> DynamicNodes;
     THashMap<ui32, TDynamicNodeInfo> ExpiredNodes;
     TEpochInfo Epoch;
+    TActorId NodeBrokerPipe;
+    TPriorityQueue<TCacheMiss, TVector<TCacheMiss>, TCacheMiss::TCompareByDeadline> PendingCacheMisses;
 };
 
 using TDynamicConfigPtr = TIntrusivePtr<TDynamicConfig>;
@@ -104,15 +140,14 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            CFunc(TEvTabletPipe::EvClientDestroyed, ReplyWithErrorAndDie);
+            CFunc(TEvTabletPipe::EvClientDestroyed, HandleClientDestroyed);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvNodeBroker::TEvResolvedNode, Handle);
-            CFunc(TEvents::TSystem::Wakeup, ReplyWithErrorAndDie);
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
         }
     }
 
     void Bootstrap(const TActorContext &ctx);
-    void Die(const TActorContext &ctx) override;
 
     virtual void OnSuccess(const TActorContext &ctx)
     {
@@ -125,9 +160,12 @@ public:
     }
 
 private:
-    void ReplyWithErrorAndDie(const TActorContext &ctx);
+    void ReplyWithErrorAndDie(const TString& error, const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvResolvedNode::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
+    void HandleWakeup(const TActorContext &ctx);
+    void HandleClientDestroyed(const TActorContext &ctx);
+    void OpenPipe(const TActorContext &ctx);
 
 protected:
     TActorId Owner;
@@ -137,8 +175,6 @@ protected:
     TAutoPtr<IEventHandle> OrigRequest;
     const TInstant Deadline;
 
-private:
-    TActorId NodeBrokerPipe;
 };
 
 class TDynamicNodeResolver : public TDynamicNodeResolverBase {
@@ -230,6 +266,7 @@ public:
             HFunc(TEvPrivate::TEvUpdateEpoch, Handle);
             HFunc(NMon::TEvHttpInfo, Handle);
             hFunc(TEvents::TEvUnsubscribe, Handle);
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
 
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
             hFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse, Handle);
@@ -256,8 +293,8 @@ private:
     void UpdateState(const NKikimrNodeBroker::TNodesInfo &rec,
                      const TActorContext &ctx);
 
-    void OnPipeDestroyed(ui32 domain,
-                         const TActorContext &ctx);
+    template<typename TEv>
+    void OnPipeDestroyed(TAutoPtr<TEventHandle<TEv>> &ev, ui32 domain, const TActorContext &ctx);
 
     void Handle(TEvInterconnect::TEvResolveNode::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvResolveAddress::TPtr &ev, const TActorContext &ctx);
@@ -274,6 +311,7 @@ private:
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev);
 
     void Handle(TEvents::TEvUnsubscribe::TPtr ev);
+    void HandleWakeup(const TActorContext &ctx);
 
     void ReplaceNameserverSetup(TIntrusivePtr<TTableNameserverSetup> newStaticConfig);
 
@@ -283,7 +321,6 @@ private:
     TVector<TActorId> ListNodesQueue;
     TIntrusivePtr<TListNodesCache> ListNodesCache;
 
-    std::array<TActorId, DOMAINS_COUNT> NodeBrokerPipes;
     // When ListNodes requests are sent to NodeBroker tablets this
     // bitmap indicates domains which didn't answer yet.
     TBitMap<DOMAINS_COUNT> PendingRequests;

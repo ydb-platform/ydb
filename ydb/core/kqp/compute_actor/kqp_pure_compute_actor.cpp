@@ -283,7 +283,7 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) {
     IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
 
     State = NDqProto::COMPUTE_STATE_FAILURE;
-    ReportStateAndMaybeDie(YdbStatusToDqStatus(status), issues);
+    ReportStateAndMaybeDie(YdbStatusToDqStatus(status, EStatusCompatibilityLevel::WithUnauthorized), issues);
 }
 
 IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask* task,

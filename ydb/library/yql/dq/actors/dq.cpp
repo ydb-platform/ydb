@@ -40,7 +40,7 @@ Ydb::StatusIds::StatusCode DqStatusToYdbStatus(NYql::NDqProto::StatusIds::Status
     }
 }
 
-NYql::NDqProto::StatusIds::StatusCode YdbStatusToDqStatus(Ydb::StatusIds::StatusCode statusCode) {
+NYql::NDqProto::StatusIds::StatusCode YdbStatusToDqStatus(Ydb::StatusIds::StatusCode statusCode, EStatusCompatibilityLevel compatibility) {
     switch(statusCode) {
     case Ydb::StatusIds::STATUS_CODE_UNSPECIFIED:
         return NYql::NDqProto::StatusIds::UNSPECIFIED;
@@ -49,7 +49,9 @@ NYql::NDqProto::StatusIds::StatusCode YdbStatusToDqStatus(Ydb::StatusIds::Status
     case Ydb::StatusIds::BAD_REQUEST:
         return NYql::NDqProto::StatusIds::BAD_REQUEST;
     case Ydb::StatusIds::UNAUTHORIZED:
-        return NYql::NDqProto::StatusIds::UNAUTHORIZED;
+        return compatibility >= EStatusCompatibilityLevel::WithUnauthorized
+            ? NYql::NDqProto::StatusIds::UNAUTHORIZED
+            : NYql::NDqProto::StatusIds::INTERNAL_ERROR;
     case Ydb::StatusIds::INTERNAL_ERROR:
         return NYql::NDqProto::StatusIds::INTERNAL_ERROR;
     case Ydb::StatusIds::ABORTED:

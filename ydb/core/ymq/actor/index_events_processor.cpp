@@ -155,7 +155,7 @@ void TSearchEventsProcessor::OnQueuesListQueryComplete(NKqp::TEvKqp::TEvQueryRes
         auto customName = *parser.ColumnParser(2).GetOptionalUtf8();
         auto createTs = *parser.ColumnParser(3).GetOptionalUint64();
         auto folderId = *parser.ColumnParser(4).GetOptionalUtf8();
-        auto tags = *parser.ColumnParser(5).GetOptionalUtf8();
+        auto tags = parser.ColumnParser(5).GetOptionalUtf8().GetOrElse("{}");
         auto insResult = ExistingQueues.insert(std::make_pair(
                 queueName, TQueueEvent{EQueueEventType::Existed, createTs, customName, cloudId, folderId, tags}
         ));
@@ -197,7 +197,7 @@ void TSearchEventsProcessor::OnEventsListingDone(NKqp::TEvKqp::TEvQueryResponse:
         auto customName = *parser.ColumnParser(3).GetOptionalUtf8();
         auto timestamp = *parser.ColumnParser(4).GetOptionalUint64();
         auto folderId = *parser.ColumnParser(5).GetOptionalUtf8();
-        auto labels = *parser.ColumnParser(6).GetOptionalUtf8();
+        auto labels = parser.ColumnParser(6).GetOptionalUtf8().GetOrElse("{}");
         auto& qEvents = QueuesEvents[queueName];
         auto insResult = qEvents.insert(std::make_pair(
                 timestamp, TQueueEvent{EQueueEventType(evType), timestamp, customName, cloudId, folderId, labels}
@@ -211,7 +211,7 @@ void TSearchEventsProcessor::RunEventsCleanup(const TActorContext& ctx) {
     State = EState::CleanupExecute;
 
     NYdb::TParamsBuilder paramsBuilder;
-    
+
     auto& param = paramsBuilder.AddParam("$Events");
     param.BeginList();
 

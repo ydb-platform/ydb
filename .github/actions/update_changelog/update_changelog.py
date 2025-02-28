@@ -204,7 +204,7 @@ if __name__ == "__main__":
 
     update_changelog(changelog_path, pr_data)
 
-    base_branch_name = f"dev-changelog/{base_branch}-{suffix}"
+    base_branch_name = f"changelog/{base_branch}-{suffix}"
     branch_name = base_branch_name
     index = 1
     while branch_exists(branch_name):

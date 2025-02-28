@@ -15,8 +15,13 @@ using TDbInfo = Ydb::FederationDiscovery::DatabaseInfo;
 
 using TSessionClosedEvent = NTopic::TSessionClosedEvent;
 
+using TAsyncDescribeTopicResult = NTopic::TAsyncDescribeTopicResult;
+using TDescribeTopicSettings = NTopic::TDescribeTopicSettings;
+
+class TDeferredCommit;
 //! Federated partition session.
 struct TFederatedPartitionSession : public TThrRefBase, public TPrintable<TFederatedPartitionSession> {
+    friend TDeferredCommit;
     using TPtr = TIntrusivePtr<TFederatedPartitionSession>;
 
 public:
@@ -212,34 +217,43 @@ struct TReadSessionEvent {
 //! Set of offsets to commit.
 //! Class that could store offsets in order to commit them later.
 //! This class is not thread safe.
-class TDeferredCommit {
+class TDeferredCommit: NTopic::TDeferredCommit {
+    using TBase = NTopic::TDeferredCommit;
 public:
     //! Add message to set.
-    void Add(const TReadSessionEvent::TDataReceivedEvent::TMessage& message);
+    void Add(const TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
+        TBase::Add(message);
+    }
 
     //! Add all messages from dataReceivedEvent to set.
-    void Add(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent);
+    void Add(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent) {
+        for (auto& message: dataReceivedEvent.GetMessages()) {
+            TBase::Add(message);
+        }
+    }
 
     //! Add offsets range to set.
-    void Add(const TFederatedPartitionSession& partitionSession, ui64 startOffset, ui64 endOffset);
+    void Add(const TFederatedPartitionSession& partitionSession, ui64 startOffset, ui64 endOffset) {
+        TBase::Add(partitionSession.PartitionSession, startOffset, endOffset);
+    }
 
     //! Add offset to set.
-    void Add(const TFederatedPartitionSession& partitionSession, ui64 offset);
+    void Add(const TFederatedPartitionSession& partitionSession, ui64 offset) {
+        TBase::Add(partitionSession.PartitionSession, offset);
+    }
 
     //! Commit all added offsets.
-    void Commit();
+    void Commit() {
+        TBase::Commit();
+    }
 
-    TDeferredCommit();
+    TDeferredCommit() {}
     TDeferredCommit(const TDeferredCommit&) = delete;
-    TDeferredCommit(TDeferredCommit&&);
+    TDeferredCommit(TDeferredCommit&&) = default;
     TDeferredCommit& operator=(const TDeferredCommit&) = delete;
-    TDeferredCommit& operator=(TDeferredCommit&&);
+    TDeferredCommit& operator=(TDeferredCommit&&) = default;
 
-    ~TDeferredCommit();
-
-private:
-    class TImpl;
-    std::unique_ptr<TImpl> Impl;
+    ~TDeferredCommit() = default;
 };
 
 //! Event debug string.
@@ -515,6 +529,8 @@ public:
     //! Create write session.
     // std::shared_ptr<NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TFederatedWriteSessionSettings& settings);
     std::shared_ptr<NTopic::IWriteSession> CreateWriteSession(const TFederatedWriteSessionSettings& settings);
+
+    TAsyncDescribeTopicResult DescribeTopic(const std::string& path, const TDescribeTopicSettings& settings = {});
 
 protected:
     void OverrideCodec(NTopic::ECodec codecId, std::unique_ptr<NTopic::ICodec>&& codecImpl);

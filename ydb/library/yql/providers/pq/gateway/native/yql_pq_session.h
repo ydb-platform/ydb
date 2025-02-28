@@ -2,6 +2,7 @@
 
 #include <ydb-cpp-sdk/client/datastreams/datastreams.h>
 #include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
@@ -42,7 +43,7 @@ public:
 
 private:
     const NPq::NConfigurationManager::IClient::TPtr& GetConfigManagerClient(const TString& cluster, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory);
-    NYdb::NTopic::TTopicClient& GetYdbPqClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory);
+    NYdb::NFederatedTopic::TFederatedTopicClient& GetYdbPqClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory);
     NYdb::NDataStreams::V1::TDataStreamsClient& GetDsClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory);
 
 private:
@@ -55,7 +56,7 @@ private:
 
     TMutex Mutex;
     THashMap<TString, NPq::NConfigurationManager::IClient::TPtr> ClusterCmClients; // Cluster -> CM Client.
-    THashMap<TString, NYdb::NTopic::TTopicClient> ClusterYdbPqClients; // Cluster -> Topic Client.
+    THashMap<TString, NYdb::NFederatedTopic::TFederatedTopicClient> ClusterYdbPqClients; // Cluster -> Topic Client.
     THashMap<TString, NYdb::NDataStreams::V1::TDataStreamsClient> ClusterDsClients; // Cluster -> DS Client
 };
 

@@ -15,8 +15,8 @@ NPq::NConfigurationManager::TClientOptions GetCmClientOptions(const NYql::TPqClu
     return opts;
 }
 
-NYdb::NTopic::TTopicClientSettings GetYdbPqClientOptions(const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
-    NYdb::NTopic::TTopicClientSettings opts;
+NYdb::NFederatedTopic::TFederatedTopicClientSettings GetYdbPqClientOptions(const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
+    NYdb::NFederatedTopic::TFederatedTopicClientSettings opts;
     opts
         .DiscoveryEndpoint(cfg.GetEndpoint())
         .Database(database)
@@ -46,12 +46,12 @@ const NPq::NConfigurationManager::IClient::TPtr& TPqSession::GetConfigManagerCli
     return client;
 }
 
-NYdb::NTopic::TTopicClient& TPqSession::GetYdbPqClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
+NYdb::NFederatedTopic::TFederatedTopicClient& TPqSession::GetYdbPqClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
     const auto clientIt = ClusterYdbPqClients.find(cluster);
     if (clientIt != ClusterYdbPqClients.end()) {
         return clientIt->second;
     }
-    return ClusterYdbPqClients.emplace(cluster, NYdb::NTopic::TTopicClient(YdbDriver, GetYdbPqClientOptions(database, cfg, credentialsProviderFactory))).first->second;
+    return ClusterYdbPqClients.emplace(cluster, NYdb::NFederatedTopic::TFederatedTopicClient(YdbDriver, GetYdbPqClientOptions(database, cfg, credentialsProviderFactory))).first->second;
 }
 
 NYdb::NDataStreams::V1::TDataStreamsClient& TPqSession::GetDsClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {

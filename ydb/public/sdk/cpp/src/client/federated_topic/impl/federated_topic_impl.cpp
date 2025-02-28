@@ -5,6 +5,8 @@
 
 namespace NYdb::inline V3::NFederatedTopic {
 
+NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& settings);
+
 std::shared_ptr<IFederatedReadSession>
 TFederatedTopicClient::TImpl::CreateReadSession(const TFederatedReadSessionSettings& settings) {
     InitObserver();
@@ -47,6 +49,51 @@ void TFederatedTopicClient::TImpl::InitObserver() {
         Observer = std::make_shared<TFederatedDbObserver>(Connections, ClientSettings);
         Observer->Start();
     }
+}
+
+IOutputStream& operator<<(IOutputStream& out, NTopic::TTopicClientSettings const& settings) {
+    out << "{"
+        << " Database: " << settings.Database_
+        << " DiscoveryEndpoint: " << settings.DiscoveryEndpoint_
+        << " DiscoveryMode: " << (settings.DiscoveryMode_ ? (int)*settings.DiscoveryMode_ : -1)
+        << " }";
+    return out;
+}
+
+IOutputStream& operator<<(IOutputStream& out, NTopic::TDescribeTopicSettings const& settings) {
+    out << "{"
+        << " TraceId: " << settings.TraceId_
+        << " ClientTimeout: " << settings.ClientTimeout_
+        << " CancelAfter: " << settings.CancelAfter_
+        << " ForgetAfter: " << settings.ForgetAfter_
+        << " OperationTimeout: " << settings.OperationTimeout_
+        << " IncludeLocation: " << settings.IncludeLocation_
+        << " IncludeStats: " << settings.IncludeStats_
+        << " RequestType: " << settings.RequestType_
+        << " }";
+    return out;
+}
+
+TAsyncDescribeTopicResult TFederatedTopicClient::TImpl::DescribeTopic(const std::string& path, const TDescribeTopicSettings& describeSettings) {
+    InitObserver();
+    return Observer->WaitForFirstState().Apply([path, describeSettings, self = this] (const auto &) {
+            NTopic::TTopicClientSettings settings = FromFederated(self->ClientSettings);
+
+            auto state = self->Observer->GetState();
+            for (const auto& db: state->DbInfos) {
+                if (db->status() != TDbInfo::Status::DatabaseInfo_Status_AVAILABLE &&
+                    db->status() != TDbInfo::Status::DatabaseInfo_Status_READ_ONLY) {
+                    continue;
+                }
+                settings
+                    .Database(db->path())
+                    .DiscoveryEndpoint(db->endpoint());
+                Cerr << "Describe " << settings << " / " << describeSettings << " / " << path << Endl;
+                auto subclient = make_shared<NTopic::TTopicClient::TImpl>(self->Connections, settings);
+                return subclient->DescribeTopic(db->path() + "/" + path, describeSettings);
+            }
+            throw yexception();
+        });
 }
 
 auto TFederatedTopicClient::TImpl::GetSubsessionHandlersExecutor() -> NTopic::IExecutor::TPtr {

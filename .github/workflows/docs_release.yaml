@@ -48,11 +48,11 @@ jobs:
       group: release-documentation-${{ github.ref }}
       cancel-in-progress: true
     steps:
-      - name: Extract version
+      - name: Extract version # cut off excessive symbols from the git branch name to create a short version name
         shell: bash
         run: echo "version=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" | sed -e 's|stable-|v|g' -e 's|-|.|g' >> $GITHUB_OUTPUT
         id: extract_version
-      - name: Set update-only-version
+      - name: Set update-only-version # commits to only one branch need to update the default docs revision
         id: set-update-only-version
         run: |
           if [[ "${GITHUB_REF##*/}" == "main" ]]; then

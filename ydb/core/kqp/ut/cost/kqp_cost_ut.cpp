@@ -14,7 +14,6 @@ using namespace NYdb::NTable;
 
 static NKikimrConfig::TAppConfig GetAppConfig(bool scanSourceRead = false, bool streamLookupJoin = false, bool enableOltpSink = false) {
     auto app = NKikimrConfig::TAppConfig();
-    Y_UNUSED(streamLookup);
     app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(scanSourceRead);
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(streamLookupJoin);
     app.MutableTableServiceConfig()->SetEnableOlapSink(true);

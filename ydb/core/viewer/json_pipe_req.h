@@ -286,7 +286,7 @@ protected:
 
     void RequestSchemeCacheNavigate(const TString& path);
     void RequestSchemeCacheNavigate(const TPathId& pathId);
-    void RequestSchemeCacheNavigateWtihParams(const TString& path, ui32 access = NACLib::DescribeSchema, bool showPrivate = false);
+    void RequestSchemeCacheNavigateWithParams(const TString& path, ui32 access = NACLib::DescribeSchema, bool showPrivate = false);
 
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(const TString& path, ui64 cookie = 0);
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(TPathId pathId, ui64 cookie = 0);

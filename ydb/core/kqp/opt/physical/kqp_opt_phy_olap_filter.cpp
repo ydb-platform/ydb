@@ -774,10 +774,10 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     }
 
     if constexpr (NSsa::RuntimeVersion >= 5U) {
-        if (!remaining.empty()) {
-            const auto remainingPredicates = WrapPredicates(remaining, ctx, node.Pos());
+        std::vector<TOLAPPredicateNode> remainingAfterApply;
+        for(const auto& p: remaining) {
             const auto recoveredOptinalIfForNonPushedDownPredicates = Build<TCoOptionalIf>(ctx, node.Pos())
-                .Predicate(remainingPredicates.ExprNode)
+                .Predicate(p.ExprNode)
                 .Value(value)
             .Build();
             TExprNode::TPtr afterPeephole;
@@ -795,12 +795,13 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             predicateTree.ExprNode = predicate.Ptr();
             CollectPredicates(predicate, predicateTree, &lambdaArg, read.Process().Body(), true);
             YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
-            auto [pushableWithApply, remaining2] = SplitForPartialPushdown(predicateTree);
+            auto [pushableWithApply, remaining] = SplitForPartialPushdown(predicateTree);
             for (const auto& p: pushableWithApply) {
                pushedPredicates.emplace_back(PredicatePushdown(TExprBase(p.ExprNode), lambdaArg, ctx, node.Pos()));
             }
-            remaining = std::move(remaining2);
+            remainingAfterApply.insert(remainingAfterApply.end(), remaining.begin(), remaining.end());
         }
+        remaining = std::move(remainingAfterApply);
     }
     
     if (pushedPredicates.empty()) {

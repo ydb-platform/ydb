@@ -276,7 +276,6 @@ class BaseSuiteRunner(object):
             KikimrConfigGenerator(
                 udfs_path=yatest.common.build_path("yql/udfs"),
                 use_in_memory_pdisks=True,
-                disable_iterator_reads=True,
                 extra_feature_flags=["enable_resource_pools"],
                 column_shard_config={
                     'allow_nullable_columns_in_pk': True,

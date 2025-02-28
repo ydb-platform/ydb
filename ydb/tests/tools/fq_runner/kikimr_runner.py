@@ -406,7 +406,6 @@ class YdbTenant(BaseTenant):
             KikimrConfigGenerator(
                 domain_name='local',
                 use_in_memory_pdisks=True,
-                disable_iterator_reads=True,
                 port_allocator=port_allocator,
                 dynamic_storage_pools=[
                     dict(name="dynamic_storage_pool:1",

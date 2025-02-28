@@ -181,7 +181,7 @@ TConclusion<bool> TProgramStepPrepare::DoExecuteInplace(const std::shared_ptr<ID
             source->GetStageData().GetTable()->Remove(i.GetColumnId());
         }
         std::shared_ptr<IKernelFetchLogic> logic;
-        if (customFetchInfo->GetFullRestore()) {
+        if (customFetchInfo->GetFullRestore() || source->GetStageData().GetPortionAccessor().GetColumnChunksPointers(i.GetColumnId()).empty()) {
             logic = std::make_shared<TDefaultFetchLogic>(i.GetColumnId(), source);
         } else {
             AFL_VERIFY(customFetchInfo->GetSubColumns().size());

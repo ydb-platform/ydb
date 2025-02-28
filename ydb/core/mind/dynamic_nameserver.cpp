@@ -19,36 +19,26 @@ static void ResetInterconnectProxyConfig(ui32 nodeId, const TActorContext &ctx)
 
 void TDynamicNodeResolverBase::Bootstrap(const TActorContext &ctx)
 {
-    auto dinfo = AppData(ctx)->DomainsInfo;
+    LOG_D("New cache miss: nodeId=" << NodeId << ", deadline=" << Deadline);
 
-    NTabletPipe::TClientRetryPolicy retryPolicy = {
-        .RetryLimitCount = 12,
-        .MinRetryTime = TDuration::MilliSeconds(50),
-        .MaxRetryTime = TDuration::Seconds(2)
-    };
-
-    auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeNodeBrokerID(), NTabletPipe::TClientConfig(retryPolicy));
-    NodeBrokerPipe = ctx.RegisterWithSameMailbox(pipe);
+    OpenPipe(ctx);
 
     TAutoPtr<TEvNodeBroker::TEvResolveNode> request = new TEvNodeBroker::TEvResolveNode;
     request->Record.SetNodeId(NodeId);
-    NTabletPipe::SendData(ctx, NodeBrokerPipe, request.Release());
+    NTabletPipe::SendData(ctx, Config->NodeBrokerPipe, request.Release());
 
     Become(&TDynamicNodeResolverBase::StateWork);
-    if (Deadline != TInstant::Max()) {
-        Schedule(Deadline, new TEvents::TEvWakeup);
+    bool newEarliestDeadline = Config->PendingCacheMisses.empty() || Config->PendingCacheMisses.top().Deadline > Deadline;
+    if (Deadline != TInstant::Max() && newEarliestDeadline) {
+        LOG_D("Schedule wakeup for new earliest deadline " << Deadline);
+        ctx.Schedule(Deadline, std::make_unique<IEventHandle>(Owner, TActorId(), new TEvents::TEvWakeup));
     }
+    Config->PendingCacheMisses.emplace(SelfId(), Deadline);
 }
 
-void TDynamicNodeResolverBase::Die(const TActorContext &ctx)
+void TDynamicNodeResolverBase::ReplyWithErrorAndDie(const TString& error, const TActorContext &ctx)
 {
-    if (NodeBrokerPipe)
-        NTabletPipe::CloseClient(ctx, NodeBrokerPipe);
-    TBase::Die(ctx);
-}
-
-void TDynamicNodeResolverBase::ReplyWithErrorAndDie(const TActorContext &ctx)
-{
+    LOG_D("Cache miss failed: nodeId=" << NodeId << ", error=" << error);
     OnError(ctx);
     Die(ctx);
 }
@@ -56,6 +46,11 @@ void TDynamicNodeResolverBase::ReplyWithErrorAndDie(const TActorContext &ctx)
 void TDynamicNodeResolverBase::Handle(TEvNodeBroker::TEvResolvedNode::TPtr &ev, const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;
+
+    LOG_D("Handle TEvNodeBroker::TEvResolvedNode("
+        << "nodeId=" << NodeId
+        << ", status=" << rec.GetStatus().GetCode() << ")");
+    
     TDynamicConfig::TDynamicNodeInfo oldNode;
     auto it = Config->DynamicNodes.find(NodeId);
     bool exists = it != Config->DynamicNodes.end();
@@ -71,7 +66,7 @@ void TDynamicNodeResolverBase::Handle(TEvNodeBroker::TEvResolvedNode::TPtr &ev, 
             ResetInterconnectProxyConfig(NodeId, ctx);
             ListNodesCache->Invalidate(); // node was erased
         }
-        ReplyWithErrorAndDie(ctx);
+        ReplyWithErrorAndDie(rec.GetStatus().GetReason(), ctx);
         return;
     }
 
@@ -85,6 +80,7 @@ void TDynamicNodeResolverBase::Handle(TEvNodeBroker::TEvResolvedNode::TPtr &ev, 
         ResetInterconnectProxyConfig(NodeId, ctx);
     Config->DynamicNodes.emplace(NodeId, node);
 
+    LOG_D("Cache miss succeed: nodeId=" << NodeId);
     OnSuccess(ctx);
     Die(ctx);
 }
@@ -92,7 +88,22 @@ void TDynamicNodeResolverBase::Handle(TEvNodeBroker::TEvResolvedNode::TPtr &ev, 
 void TDynamicNodeResolverBase::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx)
 {
     if (ev->Get()->Status != NKikimrProto::OK)
-        ReplyWithErrorAndDie(ctx);
+        ReplyWithErrorAndDie("Pipe failed to connect", ctx);
+}
+
+void TDynamicNodeResolverBase::HandleWakeup(const TActorContext &ctx) {
+    ReplyWithErrorAndDie("Deadline exceeded", ctx);
+}
+
+void TDynamicNodeResolverBase::HandleClientDestroyed(const TActorContext &ctx) {
+    ReplyWithErrorAndDie("Pipe was destroyed", ctx);
+}
+
+void TDynamicNodeResolverBase::OpenPipe(const TActorContext &ctx) {
+    if (!Config->NodeBrokerPipe) {
+        auto pipe = NTabletPipe::CreateClient(Owner, MakeNodeBrokerID());
+        Config->NodeBrokerPipe = ctx.RegisterWithSameMailbox(pipe);
+    }
 }
 
 void TDynamicNodeResolver::OnSuccess(const TActorContext &ctx)
@@ -180,9 +191,9 @@ void TDynamicNameserver::ReplaceNameserverSetup(TIntrusivePtr<TTableNameserverSe
 
 void TDynamicNameserver::Die(const TActorContext &ctx)
 {
-    for (auto &pipe : NodeBrokerPipes) {
-        if (pipe)
-            NTabletPipe::CloseClient(ctx, pipe);
+    for (auto &config : DynamicConfigs) {
+        if (config->NodeBrokerPipe)
+            NTabletPipe::CloseClient(ctx, config->NodeBrokerPipe);
     }
     TBase::Die(ctx);
 }
@@ -190,9 +201,9 @@ void TDynamicNameserver::Die(const TActorContext &ctx)
 void TDynamicNameserver::OpenPipe(ui32 domain,
                                   const TActorContext &ctx)
 {
-    if (!NodeBrokerPipes[domain]) {
+    if (!DynamicConfigs[domain]->NodeBrokerPipe) {
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeNodeBrokerID());
-        NodeBrokerPipes[domain] = ctx.RegisterWithSameMailbox(pipe);
+        DynamicConfigs[domain]->NodeBrokerPipe = ctx.RegisterWithSameMailbox(pipe);
     }
 }
 
@@ -204,7 +215,7 @@ void TDynamicNameserver::RequestEpochUpdate(ui32 domain,
 
     TAutoPtr<TEvNodeBroker::TEvListNodes> request = new TEvNodeBroker::TEvListNodes;
     request->Record.SetMinEpoch(epoch);
-    NTabletPipe::SendData(ctx, NodeBrokerPipes[domain], request.Release());
+    NTabletPipe::SendData(ctx, DynamicConfigs[domain]->NodeBrokerPipe, request.Release());
     EpochUpdates[domain] = epoch;
 }
 
@@ -346,10 +357,10 @@ void TDynamicNameserver::UpdateState(const NKikimrNodeBroker::TNodesInfo &rec,
     }
 }
 
-void TDynamicNameserver::OnPipeDestroyed(ui32 domain,
-                                         const TActorContext &ctx)
+template<typename TEv>
+void TDynamicNameserver::OnPipeDestroyed(TAutoPtr<TEventHandle<TEv>> &ev, ui32 domain, const TActorContext &ctx)
 {
-    NodeBrokerPipes[domain] = TActorId();
+    DynamicConfigs[domain]->NodeBrokerPipe = TActorId();
     PendingRequestAnswered(domain, ctx);
 
     if (EpochUpdates.contains(domain)) {
@@ -357,11 +368,18 @@ void TDynamicNameserver::OnPipeDestroyed(ui32 domain,
                      new TEvPrivate::TEvUpdateEpoch(domain, EpochUpdates.at(domain)));
         EpochUpdates.erase(domain);
     }
+
+    for (const auto &cacheMiss : DynamicConfigs[domain]->PendingCacheMisses.Container()) {
+        Send(cacheMiss.RequestActor, new TEv(*ev->Get()));
+    }
+    DynamicConfigs[domain]->PendingCacheMisses.clear();
 }
 
 void TDynamicNameserver::Handle(TEvInterconnect::TEvResolveNode::TPtr &ev,
                                 const TActorContext &ctx)
 {
+    LOG_D("Handle TEvInterconnect::TEvResolveNode(id=" << ev->Get()->Record.GetNodeId() << ")");
+
     auto& record = ev->Get()->Record;
     const ui32 nodeId = record.GetNodeId();
     const TInstant deadline = record.HasDeadline() ? TInstant::FromValue(record.GetDeadline()) : TInstant::Max();
@@ -391,7 +409,7 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvListNodes::TPtr &ev,
             OpenPipe(domain, ctx);
             TAutoPtr<TEvNodeBroker::TEvListNodes> request = new TEvNodeBroker::TEvListNodes;
             request->Record.SetCachedVersion(DynamicConfigs[domain]->Epoch.Version);
-            NTabletPipe::SendData(ctx, NodeBrokerPipes[domain], request.Release());
+            NTabletPipe::SendData(ctx, DynamicConfigs[domain]->NodeBrokerPipe, request.Release());
             PendingRequests.Set(domain);
         }
     }
@@ -403,6 +421,8 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvListNodes::TPtr &ev,
 
 void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TActorContext &ctx)
 {
+    LOG_D("Handle TEvInterconnect::TEvGetNode(id=" << ev->Get()->NodeId << ")");
+
     ui32 nodeId = ev->Get()->NodeId;
     THolder<TEvInterconnect::TEvNodeInfo> reply(new TEvInterconnect::TEvNodeInfo(nodeId));
     auto config = AppData(ctx)->DynamicNameserviceConfig;
@@ -435,18 +455,21 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TAc
 
 void TDynamicNameserver::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx)
 {
+    LOG_D("Handle TEvTabletPipe::TEvClientDestroyed");
     ui32 domain = AppData()->DomainsInfo->GetDomain()->DomainUid;
-    if (NodeBrokerPipes[domain] == ev->Get()->ClientId)
-        OnPipeDestroyed(domain, ctx);
+    if (DynamicConfigs[domain]->NodeBrokerPipe == ev->Get()->ClientId) {
+        OnPipeDestroyed(ev, domain, ctx);
+    }   
 }
 
 void TDynamicNameserver::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx)
 {
+    LOG_D("Handle TEvTabletPipe::TEvClientConnected(status=" << ev->Get()->Status << ")");
     if (ev->Get()->Status != NKikimrProto::OK) {
         ui32 domain = AppData(ctx)->DomainsInfo->GetDomain()->DomainUid;
-        if (NodeBrokerPipes[domain] == ev->Get()->ClientId) {
-            NTabletPipe::CloseClient(ctx, NodeBrokerPipes[domain]);
-            OnPipeDestroyed(domain, ctx);
+        if (DynamicConfigs[domain]->NodeBrokerPipe == ev->Get()->ClientId) {
+            NTabletPipe::CloseClient(ctx, DynamicConfigs[domain]->NodeBrokerPipe);
+            OnPipeDestroyed(ev, domain, ctx);
         }
     }
 }
@@ -493,6 +516,26 @@ void TDynamicNameserver::Handle(NConsole::TEvConsole::TEvConfigNotificationReque
 
 void TDynamicNameserver::Handle(TEvents::TEvUnsubscribe::TPtr ev) {
     StaticNodeChangeSubscribers.erase(ev->Sender);
+}
+
+void TDynamicNameserver::HandleWakeup(const TActorContext &ctx) {
+    auto now = ctx.Now();
+    LOG_D("HandleWakeup at " << now);
+
+    ui32 domain = AppData()->DomainsInfo->GetDomain()->DomainUid;
+    auto &pendingCacheMisses = DynamicConfigs[domain]->PendingCacheMisses;
+
+    while (!pendingCacheMisses.empty() && pendingCacheMisses.top().Deadline <= now) {
+        const auto &top = pendingCacheMisses.top();
+        Send(top.RequestActor, new TEvents::TEvWakeup);
+        pendingCacheMisses.pop();
+    }
+
+    if (!pendingCacheMisses.empty() && pendingCacheMisses.top().Deadline != TInstant::Max()) {
+        auto deadline = pendingCacheMisses.top().Deadline;
+        LOG_D("Schedule next wakeup at " << deadline);
+        Schedule(deadline, new TEvents::TEvWakeup);
+    }
 }
 
 IActor *CreateDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup> &setup, ui32 poolId) {

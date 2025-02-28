@@ -18,6 +18,7 @@
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/testlib/actors/block_events.h>
 
 #include <google/protobuf/text_format.h>
 #include <library/cpp/malloc/api/malloc.h>
@@ -49,6 +50,7 @@ void SetupLogging(TTestActorRuntime& runtime)
     NActors::NLog::EPriority priority = ENABLE_DETAILED_NODE_BROKER_LOG ? NLog::PRI_TRACE : NLog::PRI_ERROR;
 
     runtime.SetLogPriority(NKikimrServices::NODE_BROKER, priority);
+    runtime.SetLogPriority(NKikimrServices::NAMESERVICE, priority);
 }
 
 THashMap<ui32, TIntrusivePtr<TNodeWardenConfig>> NodeWardenConfigs;
@@ -234,7 +236,8 @@ void Setup(TTestActorRuntime& runtime,
 
     auto scheduledFilter = [](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
         if (event->HasEvent()
-            && event->Type == TDynamicNameserver::TEvPrivate::TEvUpdateEpoch::EventType)
+            && (event->Type == TDynamicNameserver::TEvPrivate::TEvUpdateEpoch::EventType 
+                || event->Type == TEvents::TSystem::Wakeup))
             return false;
         return TTestActorRuntime::DefaultScheduledFilterFunc(runtime, event, delay, deadline);
     };
@@ -591,14 +594,21 @@ void CheckLeaseExtension(TTestActorRuntime &runtime,
     }
 }
 
-void CheckResolveNode(TTestActorRuntime &runtime,
+void AsyncResolveNode(TTestActorRuntime &runtime,
                       TActorId sender,
                       ui32 nodeId,
-                      const TString &addr)
+                      TDuration responseTime = TDuration::Max())
 {
-    TAutoPtr<TEvInterconnect::TEvResolveNode> event = new TEvInterconnect::TEvResolveNode(nodeId);
+    TInstant deadline = TInstant::Max();
+    if (responseTime != TDuration::Max()) {
+        deadline = runtime.GetCurrentTime() + responseTime;
+    }
+    TAutoPtr<TEvInterconnect::TEvResolveNode> event = new TEvInterconnect::TEvResolveNode(nodeId, deadline);
     runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release()));
+}
 
+void CheckAsyncResolveNode(TTestActorRuntime &runtime, ui32 nodeId, const TString &addr)
+{
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvLocalNodeInfo>(handle);
     UNIT_ASSERT(reply);
@@ -607,19 +617,31 @@ void CheckResolveNode(TTestActorRuntime &runtime,
     UNIT_ASSERT_VALUES_EQUAL(reply->Addresses[0].GetAddress(), addr);
 }
 
-void CheckResolveUnknownNode(TTestActorRuntime &runtime,
-                             TActorId sender,
-                             ui32 nodeId)
+void CheckAsyncResolveUnknownNode(TTestActorRuntime &runtime, ui32 nodeId)
 {
-    TAutoPtr<TEvInterconnect::TEvResolveNode> event = new TEvInterconnect::TEvResolveNode(nodeId);
-    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release()));
-
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvLocalNodeInfo>(handle);
     UNIT_ASSERT(reply);
 
     UNIT_ASSERT_VALUES_EQUAL(reply->NodeId, nodeId);
     UNIT_ASSERT(reply->Addresses.empty());
+}
+
+void CheckResolveNode(TTestActorRuntime &runtime,
+                      TActorId sender,
+                      ui32 nodeId,
+                      const TString &addr)
+{
+    AsyncResolveNode(runtime, sender, nodeId);
+    CheckAsyncResolveNode(runtime, nodeId, addr);
+}
+
+void CheckResolveUnknownNode(TTestActorRuntime &runtime,
+                             TActorId sender,
+                             ui32 nodeId)
+{
+    AsyncResolveNode(runtime, sender, nodeId);
+    CheckAsyncResolveUnknownNode(runtime, nodeId);
 }
 
 THolder<TEvInterconnect::TEvNodesInfo> GetNameserverNodesListEv(TTestActorRuntime &runtime, TActorId sender) {
@@ -1757,6 +1779,195 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
 
         // When changes are made, a new ListNodesCache is allocated
         UNIT_ASSERT_VALUES_UNEQUAL(ev2->NodesPtr.Get(), ev3->NodesPtr.Get());
+    }
+
+    Y_UNIT_TEST(CacheMissPipeDisconnect) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // Register a dynamic node in NodeBroker
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.host1.host1", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1);
+
+        // Block cache miss requests
+        TBlockEvents<TEvNodeBroker::TEvResolveNode> block(runtime);
+        
+        // Send an asynchronous node resolve request to DynamicNameserver
+        AsyncResolveNode(runtime, sender, NODE1);
+
+        // Wait until cache miss is blocked
+        runtime.WaitFor("cache miss", [&]{ return block.size() >= 1; });
+        
+        // Reboot NodeBroker to break pipe
+        RebootTablet(runtime, MakeNodeBrokerID(), sender);
+
+        // Stop blocking new cache miss requests
+        block.Stop();
+
+        // Resolve request is failed, because pipe was broken
+        CheckAsyncResolveUnknownNode(runtime, NODE1);
+        
+        // The following requests should be OK
+        CheckResolveNode(runtime, sender, NODE1, "1.2.3.4");
+    }
+
+    Y_UNIT_TEST(CacheMissSimpleDeadline) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // Register dynamic node in NodeBroker
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.host1.host1", "1.2.3.4",
+            1, 2, 3, 4, TStatus::OK, NODE1);
+
+        // Block cache miss requests
+        TBlockEvents<TEvNodeBroker::TEvResolveNode> block(runtime);
+        
+        // Send an asynchronous node resolve request to DynamicNameserver with deadline
+        AsyncResolveNode(runtime, sender, NODE1, TDuration::Seconds(1));
+        
+        // Wait until cache miss is blocked
+        runtime.WaitFor("cache miss", [&]{ return block.size() >= 1; });
+        
+        // Move time to the deadline
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        
+        // Resolve request is failed, because of deadline
+        CheckAsyncResolveUnknownNode(runtime, NODE1);
+    }
+
+    Y_UNIT_TEST(CacheMissSameDeadline) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // Register dynamic nodes in NodeBroker
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.host1.host1", "1.2.3.4",
+            1, 2, 3, 4, TStatus::OK, NODE1);
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.host2.host2", "1.2.3.5",
+            1, 2, 3, 5, TStatus::OK, NODE2);
+
+        // Block cache miss requests
+        TBlockEvents<TEvNodeBroker::TEvResolveNode> block(runtime);
+
+        // Send two asynchronous node resolve requests to DynamicNameserver with same deadline
+        AsyncResolveNode(runtime, sender, NODE1, TDuration::Seconds(1));
+        AsyncResolveNode(runtime, sender, NODE2, TDuration::Seconds(1));
+
+        // Wait until cache misses are blocked
+        runtime.WaitFor("cache miss", [&]{ return block.size() >= 2; });
+
+        // Move time to the deadline
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+            
+        // Resolve requests are failed, because of deadline
+        CheckAsyncResolveUnknownNode(runtime, NODE1);
+        CheckAsyncResolveUnknownNode(runtime, NODE2);
+    }
+
+    Y_UNIT_TEST(CacheMissNoDeadline) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // Register dynamic nodes in NodeBroker
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.host1.host1", "1.2.3.4",
+            1, 2, 3, 4, TStatus::OK, NODE1);
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.host2.host2", "1.2.3.5",
+            1, 2, 3, 5, TStatus::OK, NODE2);
+
+        // Block cache miss requests
+        TBlockEvents<TEvNodeBroker::TEvResolveNode> block(runtime);
+
+        // Send asynchronous node resolve request to DynamicNameserver with no deadline
+        AsyncResolveNode(runtime, sender, NODE1);
+        
+        // Send asynchronous node resolve request to DynamicNameserver with deadline
+        AsyncResolveNode(runtime, sender, NODE2, TDuration::Seconds(1));
+
+        // Wait until cache misses are blocked
+        runtime.WaitFor("cache miss", [&]{ return block.size() >= 2; });
+
+        // Move time to the deadline
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+            
+        // Resolve request is failed, because of deadline
+        CheckAsyncResolveUnknownNode(runtime, NODE2);
+        
+        // Unblock blocked cache misses
+        block.Unblock();
+        
+        // Resolve request with no deadline is OK
+        CheckResolveNode(runtime, sender, NODE1, "1.2.3.4");
+    }
+
+    Y_UNIT_TEST(CacheMissDifferentDeadline) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // Register dynamic nodes in NodeBroker
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.host1.host1", "1.2.3.4",
+            1, 2, 3, 4, TStatus::OK, NODE1);
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.host2.host2", "1.2.3.5",
+            1, 2, 3, 5, TStatus::OK, NODE2);
+
+        // Block cache miss requests
+        TBlockEvents<TEvNodeBroker::TEvResolveNode> block(runtime);
+
+        // Send asynchronous node resolve requests to DynamicNameserver with different deadline
+        AsyncResolveNode(runtime, sender, NODE1, TDuration::Seconds(1));
+        AsyncResolveNode(runtime, sender, NODE2, TDuration::Seconds(2));
+
+        // Wait until cache misses are blocked
+        runtime.WaitFor("cache miss", [&]{ return block.size() >= 2; });
+
+        // Move time to the first deadline
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+            
+        // Resolve request is failed, because of deadline
+        CheckAsyncResolveUnknownNode(runtime, NODE1);
+        
+        // Move time to the second deadline
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        
+        // Resolve request is failed, because of deadline
+        CheckAsyncResolveUnknownNode(runtime, NODE2);
+    }
+
+    Y_UNIT_TEST(CacheMissDifferentDeadlineInverseOrder) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // Register dynamic nodes in NodeBroker
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.host1.host1", "1.2.3.4",
+            1, 2, 3, 4, TStatus::OK, NODE1);
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.host2.host2", "1.2.3.5",
+            1, 2, 3, 5, TStatus::OK, NODE2);
+
+        // Block cache miss requests
+        TBlockEvents<TEvNodeBroker::TEvResolveNode> block(runtime);
+
+        // Send asynchronous node resolve requests to DynamicNameserver with different deadline
+        AsyncResolveNode(runtime, sender, NODE1, TDuration::Seconds(2));
+        AsyncResolveNode(runtime, sender, NODE2, TDuration::Seconds(1));
+
+        // Wait until cache misses are blocked
+        runtime.WaitFor("cache miss", [&]{ return block.size() >= 2; });
+
+        // Move time to the first deadline
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+            
+        // Resolve request is failed, because of deadline
+        CheckAsyncResolveUnknownNode(runtime, NODE2);
+        
+        // Move time to the second deadline
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        
+        // Resolve request is failed, because of deadline
+        CheckAsyncResolveUnknownNode(runtime, NODE1);
     }
 }
 

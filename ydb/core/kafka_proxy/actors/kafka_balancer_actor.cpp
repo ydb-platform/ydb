@@ -80,7 +80,7 @@ void TKafkaBalancerActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const
 
     const auto& record = ev->Get()->Record;
     auto status = record.GetYdbStatus();
-    if (status == ::Ydb::StatusIds_StatusCode::StatusIds_StatusCode_ABORTED && CurrentRetryNumber < FULL_RETRY_MAX_COUNT) {
+    if (status == ::Ydb::StatusIds_StatusCode::StatusIds_StatusCode_ABORTED && CurrentRetryNumber < FULL_REQUEST_RETRY_MAX_COUNT) {
         KAFKA_LOG_I(TStringBuilder() << "Retry after tx aborted. Num of retry# " << static_cast<int>(CurrentRetryNumber));
         RequestFullRetry();
         PassAway();
@@ -145,20 +145,21 @@ void TKafkaBalancerActor::JoinGroupNextStep(
             JoinStepCheckGroupsCount(ev, ctx);
             break;
         }
-        case JOIN_TX0_2_SKIP:
-        case JOIN_TX0_2_ADD_GROUP_OR_UPDATE_EXISTS: {
+        case JOIN_TX0_4_SKIP:
+        case JOIN_TX0_3_ADD_GROUP_OR_UPDATE_EXISTS: {
             JoinStepInsertNewMember(ev, ctx);
             break;
         }
-        case JOIN_TX0_3_INSERT_MEMBER: {
+        case JOIN_TX0_5_INSERT_MEMBER: {
             JoinStepCommitTx(ev, ctx);
             break;
         }
-        case JOIN_TX0_4_COMMIT_TX: {
+        case JOIN_TX0_6_COMMIT_TX: {
             JoinStepWaitJoinsIfMaster(ev, ctx);
             break;
         }
-        case JOIN_TX0_5_WAIT: {
+        case JOIN_TX0_7_WAIT_JOINS:
+        case JOIN_TX1_5_UPDATE_MASTER_HEARTBEAT_AND_WAIT_JOINS: {
             JoinStepBeginTx2(ev, ctx);
             break;
         }
@@ -168,21 +169,29 @@ void TKafkaBalancerActor::JoinGroupNextStep(
         }
         case JOIN_TX1_1_CHECK_STATE_AND_GENERATION: {
             if (IsMaster) {
-                JoinStepSelectWorkerStates(ev, ctx);
+                if (LastSuccessGeneration != std::numeric_limits<ui64>::max()) {
+                    JoinStepSelectPrevMembers(ev, ctx);
+                } else {
+                    JoinStepSelectWorkerStates(ev, ctx);
+                }
             } else {
                 JoinStepWaitProtocolChoosing(ev, ctx);
             }
             break;
         }
-        case JOIN_TX1_1_SET_MASTER_DEAD: {
+        case JOIN_TX1_2_SET_MASTER_DEAD: {
             SendJoinGroupResponseFail(ctx, CorrelationId, LEADER_NOT_AVAILABLE, "Group leader is not available #1");
             break;
         }
-        case JOIN_TX1_3_GET_MEMBERS: {
+        case JOIN_TX1_3_GET_PREV_MEMBERS: {
+            JoinStepCheckPrevGenerationMembers(ev, ctx);
+            break;
+        }
+        case JOIN_TX1_4_GET_CUR_MEMBERS: {
             JoinStepChooseAndSetProtocol(ev, ctx);
             break;
         }
-        case JOIN_TX1_4_COMMIT_TX: {
+        case JOIN_TX1_6_COMMIT_TX: {
             SendJoinGroupResponseOk(ctx, CorrelationId);
             break;
         }
@@ -368,16 +377,19 @@ void TKafkaBalancerActor::JoinStepCheckGroupState(NKqp::TEvKqp::TEvQueryResponse
 }
 
 void TKafkaBalancerActor::JoinStepCreateNewOrJoinGroup(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
-    auto groupStatus = ParseCheckStateAndGeneration(ev);
+    auto groupStatus = ParseGroupState(ev);
+    LastSuccessGeneration = groupStatus->LastSuccessGeneration;
 
     KAFKA_LOG_I(TStringBuilder() << "Check group before join status."
+        "\n memberId: " << MemberId <<
+        "\n instanceId: " << InstanceId <<
         "\n group: " << GroupId <<
         "\n exists: " << groupStatus->Exists <<
         "\n protocolType: " << groupStatus->ProtocolType <<
         "\n protocolName: " << groupStatus->ProtocolName <<
-        "\n rebalanceTimeoutMs: " << groupStatus->RebalanceTimeoutMs <<
         "\n master: " << groupStatus->MasterId <<
         "\n generation: " << groupStatus->Generation <<
+        "\n lastSuccessGeneration: " << groupStatus->LastSuccessGeneration <<
         "\n state: " << groupStatus->State);
 
     if (!groupStatus) {
@@ -404,14 +416,12 @@ void TKafkaBalancerActor::JoinStepCreateNewOrJoinGroup(NKqp::TEvKqp::TEvQueryRes
         yqlRequest = CHECK_GROUPS_COUNT;
     } else if (groupStatus->State != GROUP_STATE_JOIN) {
         newGeneration = groupStatus->Generation + 1;
-        nextStep = JOIN_TX0_2_ADD_GROUP_OR_UPDATE_EXISTS;
+        nextStep = JOIN_TX0_3_ADD_GROUP_OR_UPDATE_EXISTS;
         yqlRequest = UPDATE_GROUP;
-        RebalanceTimeoutMs = groupStatus->RebalanceTimeoutMs;
     } else {
         IsMaster = false;
-        CurrentStep = JOIN_TX0_2_SKIP;
+        CurrentStep = JOIN_TX0_4_SKIP;
         GenerationId = groupStatus->Generation;
-        RebalanceTimeoutMs = groupStatus->RebalanceTimeoutMs;
         JoinGroupNextStep(ev, ctx);
         return;
     }
@@ -436,20 +446,20 @@ void TKafkaBalancerActor::JoinStepCheckGroupsCount(NKqp::TEvKqp::TEvQueryRespons
     }
 
     KqpReqCookie++;
-    CurrentStep = JOIN_TX0_2_ADD_GROUP_OR_UPDATE_EXISTS;
+    CurrentStep = JOIN_TX0_3_ADD_GROUP_OR_UPDATE_EXISTS;
 
     NYdb::TParamsBuilder params = BuildUpdateOrInsertNewGroupParams();
     Kqp->SendYqlRequest(Sprintf(INSERT_NEW_GROUP.c_str(), TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx);
 }
 
 void TKafkaBalancerActor::JoinStepInsertNewMember(NKqp::TEvKqp::TEvQueryResponse::TPtr, const TActorContext& ctx) {
-    if (CurrentStep != JOIN_TX0_2_SKIP) {
+    if (CurrentStep != JOIN_TX0_4_SKIP) {
         IsMaster = true;
         Master = SelfId().ToString();
     }
 
     KqpReqCookie++;
-    CurrentStep  = JOIN_TX0_3_INSERT_MEMBER;
+    CurrentStep  = JOIN_TX0_5_INSERT_MEMBER;
 
     NYdb::TParamsBuilder params = BuildInsertMemberParams();
     Kqp->SendYqlRequest(Sprintf(INSERT_MEMBER.c_str(), TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx);
@@ -457,17 +467,17 @@ void TKafkaBalancerActor::JoinStepInsertNewMember(NKqp::TEvKqp::TEvQueryResponse
 
 void TKafkaBalancerActor::JoinStepCommitTx(NKqp::TEvKqp::TEvQueryResponse::TPtr, const TActorContext& ctx) {
     KqpReqCookie++;
-    CurrentStep  = JOIN_TX0_4_COMMIT_TX;
+    CurrentStep  = JOIN_TX0_6_COMMIT_TX;
     Kqp->CommitTx(KqpReqCookie, ctx);
 }
 
 void TKafkaBalancerActor::JoinStepWaitJoinsIfMaster(NKqp::TEvKqp::TEvQueryResponse::TPtr, const TActorContext& ctx) {
-    CurrentStep = JOIN_TX0_5_WAIT;
+    CurrentStep = JOIN_TX0_7_WAIT_JOINS;
 
     if (IsMaster) {
         auto wakeup = std::make_unique<TEvents::TEvWakeup>(0);
         ctx.ActorSystem()->Schedule(
-            TDuration::MilliSeconds(RebalanceTimeoutMs),
+            TDuration::Seconds(MASTER_WAIT_JOINS_DELAY_SECONDS),
             new IEventHandle(SelfId(), SelfId(), wakeup.release())
         );
     } else {
@@ -492,8 +502,8 @@ void TKafkaBalancerActor::JoinCheckGroupState2(NKqp::TEvKqp::TEvQueryResponse::T
     Kqp->SendYqlRequest(Sprintf(CHECK_GROUP_STATE.c_str(), TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx, commit);
 }
 
-void TKafkaBalancerActor::JoinStepSelectWorkerStates(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
-    auto groupStatus = ParseCheckStateAndGeneration(ev);
+void TKafkaBalancerActor::JoinStepSelectPrevMembers(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
+    auto groupStatus = ParseGroupState(ev);
 
     if (!groupStatus) {
         SendJoinGroupResponseFail(ctx, CorrelationId,
@@ -503,7 +513,7 @@ void TKafkaBalancerActor::JoinStepSelectWorkerStates(NKqp::TEvKqp::TEvQueryRespo
     }
 
     if (!groupStatus->Exists || groupStatus->State != GROUP_STATE_JOIN || groupStatus->Generation != GenerationId) {
-        if (CurrentRetryNumber < FULL_RETRY_MAX_COUNT) {
+        if (CurrentRetryNumber < FULL_REQUEST_RETRY_MAX_COUNT) {
             KAFKA_LOG_I(TStringBuilder() << "Group state changes. Join retry# " << static_cast<int>(CurrentRetryNumber));
             RequestFullRetry();
             PassAway();
@@ -514,14 +524,14 @@ void TKafkaBalancerActor::JoinStepSelectWorkerStates(NKqp::TEvKqp::TEvQueryRespo
     }
 
     KqpReqCookie++;
-    CurrentStep  = JOIN_TX1_3_GET_MEMBERS;
-    NYdb::TParamsBuilder params = BuildSelectWorkerStatesParams();
-    auto sql = Sprintf(SELECT_WORKER_STATES.c_str(), TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str());
+    CurrentStep = JOIN_TX1_3_GET_PREV_MEMBERS;
+    NYdb::TParamsBuilder params = BuildSelectMembersParams(LastSuccessGeneration);
+    auto sql = Sprintf(SELECT_ALIVE_MEMBERS.c_str(), TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str());
     Kqp->SendYqlRequest(sql, params.Build(), KqpReqCookie, ctx);
 }
 
-void TKafkaBalancerActor::JoinStepWaitProtocolChoosing(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
-    auto groupStatus = ParseCheckStateAndGeneration(ev);
+void TKafkaBalancerActor::JoinStepSelectWorkerStates(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
+    auto groupStatus = ParseGroupState(ev);
 
     if (!groupStatus) {
         SendJoinGroupResponseFail(ctx, CorrelationId,
@@ -530,8 +540,8 @@ void TKafkaBalancerActor::JoinStepWaitProtocolChoosing(NKqp::TEvKqp::TEvQueryRes
         return;
     }
 
-    if (!groupStatus->Exists || groupStatus->Generation != GenerationId) {
-        if (CurrentRetryNumber < FULL_RETRY_MAX_COUNT) {
+    if (!groupStatus->Exists || groupStatus->State != GROUP_STATE_JOIN || groupStatus->Generation != GenerationId) {
+        if (CurrentRetryNumber < FULL_REQUEST_RETRY_MAX_COUNT) {
             KAFKA_LOG_I(TStringBuilder() << "Group state changes. Join retry# " << static_cast<int>(CurrentRetryNumber));
             RequestFullRetry();
             PassAway();
@@ -541,9 +551,37 @@ void TKafkaBalancerActor::JoinStepWaitProtocolChoosing(NKqp::TEvKqp::TEvQueryRes
         return;
     }
 
+    KqpReqCookie++;
+    CurrentStep  = JOIN_TX1_4_GET_CUR_MEMBERS;
+    NYdb::TParamsBuilder params = BuildSelectMembersParams(GenerationId);
+    auto sql = Sprintf(SELECT_WORKER_STATES.c_str(), TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str());
+    Kqp->SendYqlRequest(sql, params.Build(), KqpReqCookie, ctx);
+}
+
+void TKafkaBalancerActor::JoinStepWaitProtocolChoosing(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
+    auto groupStatus = ParseGroupState(ev);
+
+    if (!groupStatus) {
+        SendJoinGroupResponseFail(ctx, CorrelationId,
+                    EKafkaErrors::UNKNOWN_SERVER_ERROR,
+                    "Can't get group state");
+        return;
+    }
+
+    if (!groupStatus->Exists || groupStatus->Generation != GenerationId) {
+        if (CurrentRetryNumber < FULL_REQUEST_RETRY_MAX_COUNT) {
+            KAFKA_LOG_I(TStringBuilder() << "Group state changes. Join retry# " << static_cast<int>(CurrentRetryNumber));
+            RequestFullRetry();
+            PassAway();
+        } else {
+            SendJoinGroupResponseFail(ctx, CorrelationId, EKafkaErrors::REBALANCE_IN_PROGRESS, "Group status changed #3. Need rebalance");
+        }
+        return;
+    }
+
     if (groupStatus->State < GROUP_STATE_SYNC) {
-        if (WaitingMasterRetryCount == WAIT_FOR_MASTER_MAX_RETRY_COUNT) {
-            CurrentStep = JOIN_TX1_1_SET_MASTER_DEAD;
+        if (groupStatus->LastHeartbeat + TDuration::Seconds(MASTER_WAIT_JOINS_DELAY_SECONDS * 2) < TInstant::Now()) {
+            CurrentStep = JOIN_TX1_2_SET_MASTER_DEAD;
             KqpReqCookie++;
             Kqp->TxId = "";
 
@@ -552,41 +590,96 @@ void TKafkaBalancerActor::JoinStepWaitProtocolChoosing(NKqp::TEvKqp::TEvQueryRes
             return;
         }
 
-        CurrentStep = JOIN_TX0_5_WAIT;
+        CurrentStep = JOIN_TX0_7_WAIT_JOINS;
         auto wakeup = std::make_unique<TEvents::TEvWakeup>(1);
         ctx.ActorSystem()->Schedule(
-            TDuration::MilliSeconds(RebalanceTimeoutMs + 1000),
+            TDuration::Seconds(MASTER_WAIT_JOINS_DELAY_SECONDS),
             new IEventHandle(SelfId(), SelfId(), wakeup.release())
         );
-        WaitingMasterRetryCount++;
         return;
     }
 
-    CurrentStep = JOIN_TX1_4_COMMIT_TX;
+    CurrentStep = JOIN_TX1_6_COMMIT_TX;
     Protocol = groupStatus->ProtocolName;
     JoinGroupNextStep(ev, ctx);
 }
 
+void TKafkaBalancerActor::JoinStepCheckPrevGenerationMembers(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
+    auto membersCount = PrevGenerationInstanceIdsAndTimeouts.size();
+    if (!ParseMembers(ev, PrevGenerationInstanceIdsAndTimeouts, WorkerStatesPaginationMemberId)) {
+        SendJoinGroupResponseFail(ctx, CorrelationId, EKafkaErrors::INVALID_REQUEST, "Can't get prev generation members");
+        return;
+    }
+
+    KAFKA_LOG_I(TStringBuilder() << "Prev generation members count: " << membersCount);
+
+    KqpReqCookie++;
+    // if pagination ended
+    if (PrevGenerationInstanceIdsAndTimeouts.size() == membersCount) {
+        WorkerStatesPaginationMemberId = "";
+        CurrentStep  = JOIN_TX1_4_GET_CUR_MEMBERS;
+        NYdb::TParamsBuilder params = BuildSelectMembersParams(GenerationId);
+        auto sql = Sprintf(SELECT_WORKER_STATES.c_str(), TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str());
+        Kqp->SendYqlRequest(sql, params.Build(), KqpReqCookie, ctx);
+    } else {
+        NYdb::TParamsBuilder params = BuildSelectMembersParams(LastSuccessGeneration);
+        auto sql = Sprintf(SELECT_ALIVE_MEMBERS.c_str(), TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str());
+        Kqp->SendYqlRequest(sql, params.Build(), KqpReqCookie, ctx);
+    }
+}
+
 void TKafkaBalancerActor::JoinStepChooseAndSetProtocol(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
     auto statesCount = AllWorkerStates.size();
-    if (!ParseWorkerStates(ev, AllWorkerStates, WorkerStatesPaginationMemberId)) {
+    bool duplicateInstanceId = false;
+    if (!ParseWorkerStates(ev, AllWorkerStates, WorkerStatesPaginationMemberId, duplicateInstanceId)) {
         SendJoinGroupResponseFail(ctx, CorrelationId, EKafkaErrors::INVALID_REQUEST, "Can't get workers state");
         return;
     }
 
+    if (duplicateInstanceId) {
+        SendJoinGroupResponseFail(ctx, CorrelationId, EKafkaErrors::FENCED_INSTANCE_ID, "Duplicate instanceId");
+        return;
+    }
+
     KqpReqCookie++;
+    // if pagination ended
     if (AllWorkerStates.size() == statesCount) {
-        if(!ChooseProtocolAndFillStates()) {
+        auto now = TInstant::Now();
+
+        // check all clients have joined or their timeout has expired
+        {
+            for (auto prevGenerationInstancesAndTimeoutsIt = PrevGenerationInstanceIdsAndTimeouts.begin(); prevGenerationInstancesAndTimeoutsIt != PrevGenerationInstanceIdsAndTimeouts.end();) {
+                if (CurrentGenerationInstanceIds.count(prevGenerationInstancesAndTimeoutsIt->first) == 1 || (RebalanceStartTime + TDuration::MilliSeconds(prevGenerationInstancesAndTimeoutsIt->second) < now)) {
+                    prevGenerationInstancesAndTimeoutsIt = PrevGenerationInstanceIdsAndTimeouts.erase(prevGenerationInstancesAndTimeoutsIt);
+                } else {
+                    ++prevGenerationInstancesAndTimeoutsIt;
+                }
+            }
+
+            if (PrevGenerationInstanceIdsAndTimeouts.size() != 0) {
+                PrevGenerationInstanceIdsAndTimeouts.clear();
+                CurrentGenerationInstanceIds.clear();
+                AllWorkerStates.clear();
+                WorkerStatesPaginationMemberId = "";
+
+                CurrentStep = JOIN_TX1_5_UPDATE_MASTER_HEARTBEAT_AND_WAIT_JOINS;
+                NYdb::TParamsBuilder params = BuildUpdateLastHeartbeatsParams();
+                Kqp->SendYqlRequest(Sprintf(UPDATE_LAST_HEARTBEATS.c_str(), TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str(), TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx, true);
+                return;
+            }
+        }
+
+        if (!ChooseProtocolAndFillStates()) {
             SendJoinGroupResponseFail(ctx, CorrelationId, EKafkaErrors::INCONSISTENT_GROUP_PROTOCOL, "Can't choose protocol");
             return;
         }
 
         NYdb::TParamsBuilder params = BuildUpdateGroupStateAndProtocolParams();
-        CurrentStep  = JOIN_TX1_4_COMMIT_TX;
+        CurrentStep  = JOIN_TX1_6_COMMIT_TX;
 
         Kqp->SendYqlRequest(Sprintf(UPDATE_GROUP_STATE_AND_PROTOCOL.c_str(), TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx, true);
     } else {
-        NYdb::TParamsBuilder params = BuildSelectWorkerStatesParams();
+        NYdb::TParamsBuilder params = BuildSelectMembersParams(GenerationId);
         auto sql = Sprintf(SELECT_WORKER_STATES.c_str(), TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str());
         Kqp->SendYqlRequest(sql, params.Build(), KqpReqCookie, ctx);
     }
@@ -608,7 +701,7 @@ void TKafkaBalancerActor::SyncStepCheckGroupState(NKqp::TEvKqp::TEvQueryResponse
 }
 
 void TKafkaBalancerActor::SyncStepBuildAssignmentsIfMaster(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
-    auto groupStatus = ParseCheckStateAndGeneration(ev);
+    auto groupStatus = ParseGroupState(ev);
 
     if (!groupStatus) {
         SendSyncGroupResponseFail(ctx, CorrelationId,
@@ -684,7 +777,7 @@ void TKafkaBalancerActor::SyncStepCheckGroupState2(NKqp::TEvKqp::TEvQueryRespons
 }
 
 void TKafkaBalancerActor::SyncStepWaitAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
-    auto groupStatus = ParseCheckStateAndGeneration(ev);
+    auto groupStatus = ParseGroupState(ev);
 
     if (!groupStatus) {
         SendSyncGroupResponseFail(ctx, CorrelationId,
@@ -707,10 +800,8 @@ void TKafkaBalancerActor::SyncStepWaitAssignments(NKqp::TEvKqp::TEvQueryResponse
         return;
     }
 
-    RebalanceTimeoutMs = groupStatus->RebalanceTimeoutMs;
-
     if (groupStatus->State != GROUP_STATE_WORKING) {
-        if (WaitingMasterRetryCount == WAIT_FOR_MASTER_MAX_RETRY_COUNT) {
+        if (WaitingMasterRetryCount == WAIT_FOR_MASTER_ASSIGNMENTS_MAX_RETRY_COUNT) {
             SendSyncGroupResponseFail(ctx, CorrelationId, LEADER_NOT_AVAILABLE, "Group leader is not available #2");
             return;
         }
@@ -718,14 +809,14 @@ void TKafkaBalancerActor::SyncStepWaitAssignments(NKqp::TEvKqp::TEvQueryResponse
         CurrentStep = SYNC_TX0_3_SET_ASSIGNMENTS_AND_SET_WORKING_STATE;
         auto wakeup = std::make_unique<TEvents::TEvWakeup>(2);
         ctx.ActorSystem()->Schedule(
-            TDuration::MilliSeconds(RebalanceTimeoutMs + 1000),
+            TDuration::Seconds(WAIT_MASTER_ASSIGNMENTS_PER_RETRY_SECONDS),
             new IEventHandle(SelfId(), SelfId(), wakeup.release())
         );
         WaitingMasterRetryCount++;
         return;
     }
 
-    CurrentStep  = SYNC_TX1_2_FETCH_ASSIGNMENTS;
+    CurrentStep = SYNC_TX1_2_FETCH_ASSIGNMENTS;
     KqpReqCookie++;
 
     NYdb::TParamsBuilder params = BuildFetchAssignmentsParams();
@@ -793,7 +884,7 @@ void TKafkaBalancerActor::HeartbeatStepChechGroupState(NKqp::TEvKqp::TEvQueryRes
 }
 
 void TKafkaBalancerActor::HeartbeatStepUpdateHeartbeatDeadlines(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
-    auto groupStatus = ParseCheckStateAndGeneration(ev);
+    auto groupStatus = ParseGroupState(ev);
 
     if (!groupStatus) {
         SendHeartbeatResponseFail(ctx, CorrelationId,
@@ -813,7 +904,7 @@ void TKafkaBalancerActor::HeartbeatStepUpdateHeartbeatDeadlines(NKqp::TEvKqp::TE
     KqpReqCookie++;
 
     NYdb::TParamsBuilder params = BuildUpdateLastHeartbeatsParams();
-    Kqp->SendYqlRequest(Sprintf(UPDATE_LASTHEARTBEATS.c_str(), TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str(), TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx);
+    Kqp->SendYqlRequest(Sprintf(UPDATE_LAST_HEARTBEATS.c_str(), TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str(), TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpReqCookie, ctx);
 }
 
 void TKafkaBalancerActor::HeartbeatStepCommitTx2(NKqp::TEvKqp::TEvQueryResponse::TPtr, const TActorContext& ctx) {
@@ -848,7 +939,7 @@ void TKafkaBalancerActor::LeaveStepCommitTx(NKqp::TEvKqp::TEvQueryResponse::TPtr
     Kqp->CommitTx(KqpReqCookie, ctx);
 }
 
-std::optional<TGroupStatus> TKafkaBalancerActor::ParseCheckStateAndGeneration(
+std::optional<TGroupStatus> TKafkaBalancerActor::ParseGroupState(
     NKqp::TEvKqp::TEvQueryResponse::TPtr ev
 ) {
     if (!ev) {
@@ -860,6 +951,7 @@ std::optional<TGroupStatus> TKafkaBalancerActor::ParseCheckStateAndGeneration(
     auto& record = ev->Get()->Record;
     auto& resp = record.GetResponse();
     if (resp.GetYdbResults().empty()) {
+        result.LastSuccessGeneration = std::numeric_limits<ui64>::max();
         result.Exists = false;
         return result;
     }
@@ -872,11 +964,11 @@ std::optional<TGroupStatus> TKafkaBalancerActor::ParseCheckStateAndGeneration(
 
     result.State = parser.ColumnParser("state").GetOptionalUint64().value_or(0);
     result.Generation = parser.ColumnParser("generation").GetOptionalUint64().value_or(0);
+    result.LastSuccessGeneration = parser.ColumnParser("last_success_generation").GetOptionalUint64().value_or(std::numeric_limits<ui64>::max());
     result.MasterId = parser.ColumnParser("master").GetOptionalUtf8().value_or("");
     result.LastHeartbeat = parser.ColumnParser("last_heartbeat_time").GetOptionalDatetime().value_or(TInstant::Zero());
     result.ProtocolName = parser.ColumnParser("protocol").GetOptionalUtf8().value_or("");
     result.ProtocolType = parser.ColumnParser("protocol_type").GetOptionalUtf8().value_or("");
-    result.RebalanceTimeoutMs = parser.ColumnParser("rebalance_timeout_ms").GetOptionalUint32().value_or(DEFAULT_REBALANCE_TIMEOUT_MS);
     result.Exists = true;
 
     if (parser.TryNextRow()) {
@@ -915,10 +1007,9 @@ bool TKafkaBalancerActor::ParseAssignments(
     return !assignments.empty();
 }
 
-
-bool TKafkaBalancerActor::ParseWorkerStates(
+bool TKafkaBalancerActor::ParseMembers(
     NKqp::TEvKqp::TEvQueryResponse::TPtr ev,
-    std::unordered_map<TString, NKafka::TWorkerState>& workerStates,
+    std::unordered_map<TString, ui32>& membersAndRebalanceTimeouts,
     TString& lastMemberId)
 {
     if (!ev) {
@@ -933,12 +1024,49 @@ bool TKafkaBalancerActor::ParseWorkerStates(
     NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
 
     while (parser.TryNextRow()) {
+        TString memberId = parser.ColumnParser("member_id").GetOptionalUtf8().value_or("");
+        TString instanceId = parser.ColumnParser("instance_id").GetOptionalUtf8().value_or("");
+        ui32 rebalanceTimeoutMs = parser.ColumnParser("rebalance_timeout_ms").GetOptionalUint32().value_or(DEFAULT_REBALANCE_TIMEOUT_MS);
+        membersAndRebalanceTimeouts[instanceId] = rebalanceTimeoutMs;
+
+        lastMemberId = memberId;
+    }
+
+    return true;
+}
+
+bool TKafkaBalancerActor::ParseWorkerStates(
+    NKqp::TEvKqp::TEvQueryResponse::TPtr ev,
+    std::unordered_map<TString, NKafka::TWorkerState>& workerStates,
+    TString& lastMemberId,
+    bool& duplicateInstanceId)
+{
+    if (!ev) {
+        return false;
+    }
+
+    auto& record = ev->Get()->Record;
+    if (record.GetResponse().GetYdbResults().empty()) {
+        return false;
+    }
+
+    NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
+    duplicateInstanceId = false;
+
+    while (parser.TryNextRow()) {
         TString protoStr = parser.ColumnParser("worker_state_proto").GetOptionalString().value_or("");
         TString memberId = parser.ColumnParser("member_id").GetOptionalUtf8().value_or("");
+        TString instanceId = parser.ColumnParser("instance_id").GetOptionalUtf8().value_or("");
 
         NKafka::TWorkerState workerState;
         if (!protoStr.empty() && !workerState.ParseFromString(protoStr)) {
             return false;
+        }
+
+        if (!instanceId.empty()) {
+            if (!CurrentGenerationInstanceIds.insert(instanceId).second) { // savnik передай эту мапу параметром
+                duplicateInstanceId = true;
+            }
         }
 
         workerStates[memberId] = workerState;
@@ -1108,9 +1236,8 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildUpdateOrInsertNewGroupParams() {
     params.AddParam("$State").Uint64(GROUP_STATE_JOIN).Build();
     params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
     params.AddParam("$Master").Utf8(MemberId).Build();
-    params.AddParam("$LastHeartbeat").Datetime(TInstant::Now()).Build();
+    params.AddParam("$LastMasterHeartbeat").Datetime(TInstant::Now()).Build();
     params.AddParam("$ProtocolType").Utf8(ProtocolType).Build();
-    params.AddParam("$RebalanceTimeoutMs").Uint32(RebalanceTimeoutMs).Build();
     params.AddParam("$GroupsCountCheckDeadline").Datetime(TInstant::Now() - TDuration::MilliSeconds(MAX_SESSION_TIMEOUT_MS)).Build();
 
     return params;
@@ -1121,6 +1248,7 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildInsertMemberParams() {
     params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
     params.AddParam("$Generation").Uint64(GenerationId).Build();
     params.AddParam("$MemberId").Utf8(MemberId).Build();
+    params.AddParam("$InstanceId").Utf8(InstanceId).Build();
     params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
     params.AddParam("$HeartbeatDeadline").Datetime(TInstant::Now() + TDuration::MilliSeconds(SessionTimeoutMs)).Build();
     params.AddParam("$SessionTimeoutMs").Uint32(SessionTimeoutMs).Build();
@@ -1146,7 +1274,7 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildAssignmentsParams() {
     params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
     params.AddParam("$Generation").Uint64(GenerationId).Build();
     params.AddParam("$State").Uint64(GROUP_STATE_WORKING).Build();
-    params.AddParam("$LastHeartbeat").Datetime(TInstant::Now()).Build();
+    params.AddParam("$LastMasterHeartbeat").Datetime(TInstant::Now()).Build();
 
     auto& assignmentList = params.AddParam("$Assignments").BeginList();
 
@@ -1165,11 +1293,11 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildAssignmentsParams() {
     return params;
 }
 
-NYdb::TParamsBuilder TKafkaBalancerActor::BuildSelectWorkerStatesParams() {
+NYdb::TParamsBuilder TKafkaBalancerActor::BuildSelectMembersParams(ui64 generationId) {
     NYdb::TParamsBuilder params;
     params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
     params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
-    params.AddParam("$Generation").Uint64(GenerationId).Build();
+    params.AddParam("$Generation").Uint64(generationId).Build();
     params.AddParam("$Limit").Uint64(LIMIT_MEMBERS_PER_REQUEST).Build();
     params.AddParam("$PaginationMemberId").Utf8(WorkerStatesPaginationMemberId).Build();
 
@@ -1182,7 +1310,7 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildUpdateGroupStateAndProtocolParams
     params.AddParam("$State").Uint64(GROUP_STATE_SYNC).Build();
     params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
     params.AddParam("$Protocol").Utf8(Protocol).Build();
-    params.AddParam("$LastHeartbeat").Datetime(TInstant::Now()).Build();
+    params.AddParam("$LastMasterHeartbeat").Datetime(TInstant::Now()).Build();
 
     return params;
 }
@@ -1202,7 +1330,7 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildLeaveGroupParams() {
     params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
     params.AddParam("$MemberId").Utf8(MemberId).Build();
     params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
-    params.AddParam("$LastHeartbeat").Datetime(TInstant::Now() - TDuration::Seconds(1)).Build();
+    params.AddParam("$LastMasterHeartbeat").Datetime(TInstant::Now() - TDuration::Seconds(1)).Build();
 
     return params;
 }
@@ -1214,7 +1342,7 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildUpdateLastHeartbeatsParams() {
     params.AddParam("$Generation").Uint64(GenerationId).Build();
     params.AddParam("$MemberId").Utf8(MemberId).Build();
     params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
-    params.AddParam("$LastHeartbeat").Datetime(now).Build();
+    params.AddParam("$LastMasterHeartbeat").Datetime(now).Build();
     params.AddParam("$HeartbeatDeadline").Datetime(now + TDuration::MilliSeconds(SessionTimeoutMs)).Build();
 
     if (IsMaster) {

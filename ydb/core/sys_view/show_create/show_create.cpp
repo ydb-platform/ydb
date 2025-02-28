@@ -107,7 +107,9 @@ private:
         switch (status) {
             case NKikimrScheme::StatusSuccess: {
                 const auto& pathDescription = record.GetPathDescription();
-                Y_ENSURE(pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeTable);
+                if (pathDescription.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeTable) {
+                    ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "Invalid path type");
+                }
 
                 const auto& tableDesc = pathDescription.GetTable();
 

@@ -32,6 +32,10 @@ protected:
     virtual ui32 DoGetValueRawBytes() const override;
 
 public:
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const override {
+        return std::make_shared<arrow::ChunkedArray>(Array);
+    }
+
     const std::shared_ptr<arrow::Array>& GetArray() const {
         return Array;
     }
@@ -105,6 +109,7 @@ protected:
     }
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
     virtual std::optional<ui64> DoGetRawSize() const override;
+
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {
         auto chunk = GetChunkSlow(index);
         return NArrow::TStatusValidator::GetValid(chunk.GetArray()->GetScalar(chunk.GetAddress().GetLocalIndex(index)));
@@ -116,6 +121,10 @@ protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
 
 public:
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const override {
+        return Array;
+    }
+
     TTrivialChunkedArray(const std::shared_ptr<arrow::ChunkedArray>& data)
         : TBase(data->length(), EType::ChunkedArray, data->type())
         , Array(data) {

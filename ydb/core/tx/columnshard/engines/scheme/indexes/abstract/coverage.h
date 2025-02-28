@@ -1,5 +1,6 @@
 #pragma once
 #include "checker.h"
+#include "common.h"
 #include "like.h"
 
 #include <ydb/core/tx/program/program.h>
@@ -10,21 +11,22 @@ namespace NKikimr::NOlap::NIndexes::NRequest {
 
 class TBranchCoverage {
 private:
-    THashMap<ui32, std::shared_ptr<arrow::Scalar>> Equals;
-    THashMap<ui32, TLikeDescription> Likes;
+    THashMap<TOriginalDataAddress, std::shared_ptr<arrow::Scalar>> Equals;
+    THashMap<TOriginalDataAddress, TLikeDescription> Likes;
     YDB_ACCESSOR_DEF(std::vector<std::shared_ptr<IIndexChecker>>, Indexes);
 
 public:
-    TBranchCoverage(const THashMap<ui32, std::shared_ptr<arrow::Scalar>>& equals, const THashMap<ui32, TLikeDescription>& likes)
+    TBranchCoverage(const THashMap<TOriginalDataAddress, std::shared_ptr<arrow::Scalar>>& equals,
+        const THashMap<TOriginalDataAddress, TLikeDescription>& likes)
         : Equals(equals)
         , Likes(likes) {
     }
 
-    const THashMap<ui32, std::shared_ptr<arrow::Scalar>>& GetEquals() const {
+    const THashMap<TOriginalDataAddress, std::shared_ptr<arrow::Scalar>>& GetEquals() const {
         return Equals;
     }
 
-    const THashMap<ui32, TLikeDescription>& GetLikes() const {
+    const THashMap<TOriginalDataAddress, TLikeDescription>& GetLikes() const {
         return Likes;
     }
 
@@ -34,22 +36,7 @@ public:
         return DebugJson().GetStringRobust();
     }
 
-    NJson::TJsonValue DebugJson() const {
-        NJson::TJsonValue result = NJson::JSON_MAP;
-        if (Equals.size()) {
-            auto& jsonEquals = result.InsertValue("equals", NJson::JSON_MAP);
-            for (auto&& i : Equals) {
-                jsonEquals.InsertValue(::ToString(i.first), i.second ? i.second->ToString() : "NULL");
-            }
-        }
-        if (Likes.size()) {
-            auto& jsonLikes = result.InsertValue("likes", NJson::JSON_MAP);
-            for (auto&& i : Likes) {
-                jsonLikes.InsertValue(::ToString(i.first), i.second.DebugJson());
-            }
-        }
-        return result;
-    }
+    NJson::TJsonValue DebugJson() const;
 };
 
 class TDataForIndexesCheckers {
@@ -70,7 +57,8 @@ public:
         return result;
     }
 
-    void AddBranch(const THashMap<ui32, std::shared_ptr<arrow::Scalar>>& equalsData, const THashMap<ui32, TLikeDescription>& likesData) {
+    void AddBranch(const THashMap<TOriginalDataAddress, std::shared_ptr<arrow::Scalar>>& equalsData,
+        const THashMap<TOriginalDataAddress, TLikeDescription>& likesData) {
         Branches.emplace_back(std::make_shared<TBranchCoverage>(equalsData, likesData));
     }
 

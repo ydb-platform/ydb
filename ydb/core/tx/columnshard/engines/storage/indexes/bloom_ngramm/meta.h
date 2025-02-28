@@ -54,6 +54,9 @@ protected:
                 return false;
             }
         }
+        if (!MutableDataExtractor().DeserializeFromProto(bFilter.GetDataExtractor())) {
+            return false;
+        }
         HashesCount = bFilter.GetHashesCount();
         if (!TConstants::CheckHashesCount(HashesCount)) {
             return false;
@@ -85,13 +88,14 @@ protected:
         filterProto->SetFilterSizeBytes(FilterSizeBytes);
         filterProto->SetHashesCount(HashesCount);
         filterProto->SetColumnId(*ColumnIds.begin());
+        *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
     }
 
 public:
     TIndexMeta() = default;
-    TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const ui32 columnId, const ui32 hashesCount,
+    TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const ui32 columnId, const TReadDataExtractorContainer& dataExtractor, const ui32 hashesCount,
         const ui32 filterSizeBytes, const ui32 nGrammSize, const ui32 recordsCount)
-        : TBase(indexId, indexName, { columnId }, storageId)
+        : TBase(indexId, indexName, columnId, storageId, dataExtractor)
         , NGrammSize(nGrammSize)
         , FilterSizeBytes(filterSizeBytes)
         , RecordsCount(recordsCount)

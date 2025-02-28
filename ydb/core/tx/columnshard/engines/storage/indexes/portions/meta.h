@@ -1,7 +1,9 @@
 #pragma once
-#include <ydb/core/tx/columnshard/splitter/abstract/chunks.h>
+#include "extractor/abstract.h"
+
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/meta.h>
+#include <ydb/core/tx/columnshard/splitter/abstract/chunks.h>
 
 namespace NKikimr::NOlap::NIndexes {
 
@@ -9,9 +11,18 @@ class TIndexByColumns: public IIndexMeta {
 private:
     using TBase = IIndexMeta;
     std::shared_ptr<NArrow::NSerialization::ISerializer> Serializer;
+    TReadDataExtractorContainer DataExtractor;
 
 protected:
     std::set<ui32> ColumnIds;
+
+    const TReadDataExtractorContainer& GetDataExtractor() const {
+        return DataExtractor;
+    }
+
+    TReadDataExtractorContainer& MutableDataExtractor() {
+        return DataExtractor;
+    }
 
     virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const = 0;
 
@@ -23,7 +34,8 @@ protected:
 
 public:
     TIndexByColumns() = default;
-    TIndexByColumns(const ui32 indexId, const TString& indexName, const std::set<ui32>& columnIds, const TString& storageId);
+    TIndexByColumns(const ui32 indexId, const TString& indexName, const ui32 columnId, const TString& storageId,
+        const TReadDataExtractorContainer& extractor);
 };
 
 }   // namespace NKikimr::NOlap::NIndexes

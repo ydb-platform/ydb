@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 
 #include <ydb/library/formats/arrow/switch/switch_type.h>
@@ -49,7 +50,7 @@ protected:
 public:
     TIndexMeta() = default;
     TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const ui32& columnId)
-        : TBase(indexId, indexName, { columnId }, storageId) {
+        : TBase(indexId, indexName, columnId, storageId, std::make_shared<TDefaultDataExtractor>()) {
     }
 
     ui32 GetColumnId() const {

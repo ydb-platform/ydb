@@ -5,3 +5,5 @@ items:
   href: dynamic-config-selectors.md
 - name: Временная конфигурация
   href: dynamic-config-volatile-config.md
+- name: Аутентификация и авторизация узлов баз данных
+  href: node-authorization.md

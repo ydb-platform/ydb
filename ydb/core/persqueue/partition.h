@@ -952,6 +952,7 @@ private:
 
     template <class T> void AddPendingEvent(TAutoPtr<TEventHandle<T>>& ev);
     template <class T> void ProcessPendingEvent(std::unique_ptr<T> ev, const TActorContext& ctx);
+    template <class T> void ProcessPendingEvent(TAutoPtr<TEventHandle<T>>& ev, const TActorContext& ctx);
     void ProcessPendingEvents(const TActorContext& ctx);
 
     TRowVersion LastEmittedHeartbeat;

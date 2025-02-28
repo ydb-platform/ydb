@@ -2052,7 +2052,7 @@ function enableType(element, node, type, tabletName) {
     $(element).css('color', 'gray');
 
     showConfirmationModal(
-        'Are you sure you want to proceed? Resetting maxcount on node <b>' + node + '</b> for tablet type <b>' + type + '</b>.',
+        'Are you sure you want to proceed? Allow starting tablets with type <b>' + tabletName + '</b> on node <b>' + node + '</b>.',
         function () {
             $.ajax({url:'?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&resettype=' + type});
         },
@@ -2066,7 +2066,7 @@ function disableType(element, node, type, tabletName) {
     $(element).css('color', 'gray');
 
     showConfirmationModal(
-        'Are you sure you want to proceed? Setting maxcount=0 on node <b>' + node + '</b> for tablet type <b>' + type + '</b>.',
+        'Are you sure you want to proceed? Prohibit starting tablets with type <b>' + tabletName + '</b> on node <b>' + node + '</b>.',
         function () {
             $.ajax({url:'?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&maxcount=0&changetype=' + type});
         },

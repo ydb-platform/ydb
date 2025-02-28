@@ -1,4 +1,4 @@
-#include "viewer_get_topic_data.h"
+#include "viewer_topic_data.h"
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
 namespace NKikimr::NViewer {
@@ -120,7 +120,7 @@ private:
 };
 
 
-void TGetTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     auto ev_ = std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(ev->Release().Release());
     const auto& result = ev_->Request;
 
@@ -183,7 +183,7 @@ void TGetTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResul
     ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "No such partition in topic"));
 }
 
-void TGetTopicData::SendPQReadRequest() {
+void TTopicData::SendPQReadRequest() {
     const auto& ctx = ActorContext();
     auto pipeClient = ConnectTabletPipe(TabletId);
 
@@ -204,7 +204,7 @@ void TGetTopicData::SendPQReadRequest() {
     NTabletPipe::SendData(ctx, pipeClient, req.Release());
 }
 
-void TGetTopicData::HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev) {
+void TTopicData::HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev) {
     ReadResponse = ev->Release();
     const auto& record = ReadResponse->Record;
     if (record.GetStatus() ==  NMsgBusProxy::MSTATUS_ERROR) {
@@ -233,7 +233,7 @@ void TGetTopicData::HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev) {
                 TMailboxType::HTSwap, AppData()->BatchPoolId);
 }
 
-void TGetTopicData::HandleDataUnpacked(TEvViewerTopicData::TEvTopicDataUnpacked::TPtr& ev) {
+void TTopicData::HandleDataUnpacked(TEvViewerTopicData::TEvTopicDataUnpacked::TPtr& ev) {
     if (!ev->Get()->Status) {
         return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Messages decompression failed"));
     }
@@ -241,7 +241,7 @@ void TGetTopicData::HandleDataUnpacked(TEvViewerTopicData::TEvTopicDataUnpacked:
     RequestDone();
 }
 
-void TGetTopicData::StateRequestedDescribe(TAutoPtr<::NActors::IEventHandle>& ev) {
+void TTopicData::StateRequestedDescribe(TAutoPtr<::NActors::IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleDescribe);
         hFunc(TEvPersQueue::TEvResponse, HandlePQResponse);
@@ -250,7 +250,7 @@ void TGetTopicData::StateRequestedDescribe(TAutoPtr<::NActors::IEventHandle>& ev
     }
 }
 
-bool TGetTopicData::GetIntegerParam(const TString& name, i64& value) {
+bool TTopicData::GetIntegerParam(const TString& name, i64& value) {
     const auto& params(Event->Get()->Request.GetParams());
     if (params.Has(name)) {
         value = FromStringWithDefault<i32>(params.Get(name), -1);
@@ -267,7 +267,7 @@ bool TGetTopicData::GetIntegerParam(const TString& name, i64& value) {
     }
 }
 
-void TGetTopicData::Bootstrap() {
+void TTopicData::Bootstrap() {
     if (NeedToRedirect()) {
         return;
     }
@@ -296,7 +296,7 @@ void TGetTopicData::Bootstrap() {
 
 }
 
-void TGetTopicData::ReplyAndPassAway() {
+void TTopicData::ReplyAndPassAway() {
     if (!Response.IsDefined()) {
         return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Could not get topic data"));
     }

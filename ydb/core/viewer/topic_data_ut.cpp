@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
     TString GetRequestUrl(TString topic, ui32 partition, ui64 offset = 0, ui32 limit = 10) {
         TStringBuilder url;
         CGIUnescape(topic);
-        url << "/viewer/get_topic_data" << "?topic_path=" << topic << "&partition=" << partition << "&offset=" << offset << "&limit=" << limit;
+        url << "/viewer/topic_data" << "?topic_path=" << topic << "&partition=" << partition << "&offset=" << offset << "&limit=" << limit;
         return url;
     }
 
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
         return statusCode;
     }
 
-    Y_UNIT_TEST(GetTopicDataTest) {
+    Y_UNIT_TEST(TopicDataTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);

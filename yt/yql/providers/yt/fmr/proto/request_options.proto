@@ -48,7 +48,6 @@ message TStatistics {}
 message TYtTableRef {
     string Path = 1;
     string Cluster = 2;
-    string TransactionId = 3;
 }
 
 message TFmrTableRef {
@@ -85,12 +84,19 @@ message TTaskParams {
     }
 }
 
+message TClusterConnection {
+    string TransactionId = 1;
+    string YtServerName = 2;
+    optional string Token = 3;
+}
+
 message TTask {
     ETaskType TaskType = 1;
     string TaskId = 2;
     TTaskParams TaskParams = 3;
     string SessionId = 4;
     optional uint32 NumRetries = 5;
+    TClusterConnection ClusterConnection = 6;
 }
 
 message TTaskState {

@@ -54,7 +54,6 @@ struct TError {
 struct TYtTableRef {
     TString Path;
     TString Cluster;
-    TString TransactionId;
 };
 
 struct TFmrTableRef {
@@ -160,11 +159,19 @@ using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeT
 
 using TTaskParamsNew = std::variant<TUploadTaskParamsNew, TDownloadTaskParamsNew, TMergeTaskParamsNew>;
 
+struct TClusterConnection {
+    TString TransactionId;
+    TString YtServerName;
+    TMaybe<TString> Token;
+};
+
+using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams>;
+
 struct TTask: public TThrRefBase {
     TTask() = default;
 
-    TTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, ui32 numRetries = 1)
-        : TaskType(taskType), TaskId(taskId), TaskParams(taskParams), SessionId(sessionId), NumRetries(numRetries)
+    TTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const TClusterConnection& clusterConnection, ui32 numRetries = 1)
+        : TaskType(taskType), TaskId(taskId), TaskParams(taskParams), SessionId(sessionId), ClusterConnection(clusterConnection), NumRetries(numRetries)
     {
     }
 
@@ -172,6 +179,7 @@ struct TTask: public TThrRefBase {
     TString TaskId;
     TTaskParams TaskParams = {};
     TString SessionId;
+    TClusterConnection ClusterConnection = {};
     ui32 NumRetries; // Not supported yet
 
     using TPtr = TIntrusivePtr<TTask>;
@@ -205,7 +213,7 @@ struct TTaskResult: public TThrRefBase {
     using TPtr = TIntrusivePtr<TTaskResult>;
 };
 
-TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId);
+TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const TClusterConnection& clusterConnection = TClusterConnection{});
 
 TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& taskErrorMessage = Nothing());
 

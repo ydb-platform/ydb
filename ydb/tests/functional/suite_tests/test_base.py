@@ -281,7 +281,7 @@ class BaseSuiteRunner(object):
                 column_shard_config={
                     'allow_nullable_columns_in_pk': True,
                 },
-                additional_log_configs={'KQP_EXECUTER': 7}
+                # additional_log_configs={'KQP_YQL': 7}
             )
         )
         cls.cluster.start()

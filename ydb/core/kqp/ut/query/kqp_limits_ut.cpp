@@ -522,8 +522,10 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(TooBigKey) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(TooBigKey, useSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -543,10 +545,15 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
-            [] (const auto& issue) {
-                return issue.GetMessage().contains("exceeds limit");
-        }));
+        UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
+            [&](const auto& issue) {
+                if (useSink) {
+                    return issue.GetMessage().contains("Row key size of")
+                        && issue.GetMessage().contains("bytes is larger than the allowed threshold");
+                } else {
+                    return issue.GetMessage().contains("exceeds limit");
+                }
+        }), result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(TooBigColumn) {

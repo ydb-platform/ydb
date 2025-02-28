@@ -1,0 +1,72 @@
+{
+    "fdate32"="-144169-01-01";
+    "fdatetime64"="-144169-01-01T00:00:00Z";
+    "ftimestamp64"="-144169-01-01T00:00:00.000000Z";
+    "ftzdate32"="-144169-01-02,Europe/Moscow";
+    "ftzdatetime64"="-144169-01-01T02:30:17,Europe/Moscow";
+    "ftztimestamp64"="-144169-01-01T02:30:17.000000,Europe/Moscow";
+    "finterval64"="-PT9223339708799S";
+};
+{
+    "fdate32"="-1-01-01";
+    "fdatetime64"="-1-01-01T23:59:59Z";
+    "ftimestamp64"="-1-01-01T23:59:59.999999Z";
+    "ftzdate32"="-1-01-01,Europe/Moscow";
+    "ftzdatetime64"="-1-01-01T23:59:59,Europe/Moscow";
+    "ftztimestamp64"="-1-01-01T23:59:59.999999,Europe/Moscow";
+    "finterval64"="-PT4611669897600S";
+};
+{
+    "fdate32"="1-01-01";
+    "fdatetime64"="1-01-01T00:00:00Z";
+    "ftimestamp64"="1-01-01T00:00:00.000000Z";
+    "ftzdate32"="1-01-01,Europe/Moscow";
+    "ftzdatetime64"="1-01-01T00:00:00,Europe/Moscow";
+    "ftztimestamp64"="1-01-01T00:00:00.000000,Europe/Moscow";
+    "finterval64"="-P1D";
+};
+{
+    "fdate32"="1969-12-31";
+    "fdatetime64"="1969-12-31T23:59:59Z";
+    "ftimestamp64"="1969-12-31T23:59:59.999999Z";
+    "ftzdate32"="1969-12-31,Europe/Moscow";
+    "ftzdatetime64"="1969-12-31T23:59:59,Europe/Moscow";
+    "ftztimestamp64"="1969-12-31T23:59:59.999999,Europe/Moscow";
+    "finterval64"="P1W1DT1H1M1.000001S";
+};
+{
+    "fdate32"="1970-01-01";
+    "fdatetime64"="1970-01-01T00:00:00Z";
+    "ftimestamp64"="1970-01-01T00:00:00.000000Z";
+    "ftzdate32"="1970-01-01,Europe/Moscow";
+    "ftzdatetime64"="1970-01-01T00:00:00,Europe/Moscow";
+    "ftztimestamp64"="1970-01-01T00:00:00.000000,Europe/Moscow";
+    "finterval64"="P1D";
+};
+{
+    "fdate32"="2025-01-01";
+    "fdatetime64"="2025-01-01T01:02:03Z";
+    "ftimestamp64"="2025-01-01T01:02:03.456789Z";
+    "ftzdate32"="2025-01-01,Europe/Moscow";
+    "ftzdatetime64"="2025-01-01T04:02:03,Europe/Moscow";
+    "ftztimestamp64"="2025-01-01T04:02:03.456789,Europe/Moscow";
+    "finterval64"="P1W2DT3H4M5.678912S";
+};
+{
+    "fdate32"="2106-01-01";
+    "fdatetime64"="2106-01-01T00:00:00Z";
+    "ftimestamp64"="2106-01-01T00:00:00.000000Z";
+    "ftzdate32"="2106-01-01,Europe/Moscow";
+    "ftzdatetime64"="2106-01-01T03:00:00,Europe/Moscow";
+    "ftztimestamp64"="2106-01-01T03:00:00.000000,Europe/Moscow";
+    "finterval64"="PT4611669811199S";
+};
+{
+    "fdate32"="148107-12-31";
+    "fdatetime64"="148107-12-31T23:59:59Z";
+    "ftimestamp64"="148107-12-31T23:59:59.999999Z";
+    "ftzdate32"="148107-12-31,Europe/Moscow";
+    "ftzdatetime64"="148108-01-01T02:59:59,Europe/Moscow";
+    "ftztimestamp64"="148108-01-01T02:59:59.999999,Europe/Moscow";
+    "finterval64"="PT9223339708799S";
+};

@@ -1734,6 +1734,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 UNIT_FAIL("Client backup/restore were not implemented for this index type");
         }
     }
+
+    Y_UNIT_TEST(PrefixedVectorIndex) {
+        TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree);
+    }
 }
 
 Y_UNIT_TEST_SUITE(BackupRestoreS3) {

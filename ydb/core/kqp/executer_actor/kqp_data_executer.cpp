@@ -1713,6 +1713,7 @@ private:
     void ExecuteDatashardTransaction(ui64 shardId, NKikimrTxDataShard::TKqpTransaction& kqpTx, const bool isOlap)
     {
         YQL_ENSURE(!TxManager);
+        YQL_ENSURE(!ReadOnlyTx);
         TShardState shardState;
         shardState.State = ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
         shardState.DatashardState.ConstructInPlace();

@@ -52,6 +52,14 @@ jobs:
         shell: bash
         run: echo "version=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" | sed -e 's|stable-|v|g' -e 's|-|.|g' >> $GITHUB_OUTPUT
         id: extract_version
+      - name: Set update-only-version
+        id: set-update-only-version
+        run: |
+          if [[ "${GITHUB_REF##*/}" == "main" ]]; then
+            echo "update_only_version=false" >> $GITHUB_ENV
+          else
+            echo "update_only_version=true" >> $GITHUB_ENV
+          fi
       - name: Release
         uses: diplodoc-platform/docs-release-action@v2
         with:
@@ -60,3 +68,4 @@ jobs:
           storage-bucket: ${{ secrets.DOCS_PROJECT_NAME }}
           storage-access-key-id: ${{ secrets.DOCS_AWS_KEY_ID }}
           storage-secret-access-key: ${{ secrets.DOCS_AWS_SECRET_ACCESS_KEY }}
+          update-only-version: "${{ env.update_only_version }}"

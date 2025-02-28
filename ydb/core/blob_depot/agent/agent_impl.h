@@ -5,6 +5,8 @@
 
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
+#include <ydb/core/wrappers/abstract.h>
+
 namespace NKikimr::NBlobDepot {
 
 #define ENUMERATE_INCOMING_EVENTS(XX) \
@@ -129,6 +131,7 @@ namespace NKikimr::NBlobDepot {
             TEvBlobDepot::TEvCollectGarbageResult*,
             TEvBlobDepot::TEvCommitBlobSeqResult*,
             TEvBlobDepot::TEvResolveResult*,
+            TEvBlobDepot::TEvPrepareWriteS3Result*,
 
             // underlying DS proxy responses
             TEvBlobStorage::TEvGetResult*,
@@ -233,6 +236,7 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvBlobDepot::TEvCollectGarbageResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvCommitBlobSeqResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvResolveResult, HandleTabletResponse);
+                hFunc(TEvBlobDepot::TEvPrepareWriteS3Result, HandleTabletResponse);
 
                 hFunc(TEvBlobStorage::TEvGetResult, HandleOtherResponse);
                 hFunc(TEvBlobStorage::TEvPutResult, HandleOtherResponse);
@@ -255,6 +259,9 @@ namespace NKikimr::NBlobDepot {
         void PassAway() override {
             ClearPendingEventQueue("BlobDepot agent destroyed");
             NTabletPipe::CloseAndForgetClient(SelfId(), PipeId);
+            if (S3WrapperId) {
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, S3WrapperId, SelfId(), nullptr, 0));
+            }
             TActor::PassAway();
         }
 
@@ -317,6 +324,11 @@ namespace NKikimr::NBlobDepot {
         std::optional<ui32> DecommitGroupId;
         NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColor = {};
         float ApproximateFreeSpaceShare = 0.0f;
+
+        NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
+        std::optional<NKikimrBlobDepot::TS3BackendSettings> S3BackendSettings;
+        TActorId S3WrapperId;
+        TString S3BasePath;
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev);
@@ -446,6 +458,8 @@ namespace NKikimr::NBlobDepot {
         void HandlePendingEventQueueWatchdog();
         void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev);
         void HandleQueryWatchdog();
+
+        void Invoke(std::function<void()> callback) { callback(); }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

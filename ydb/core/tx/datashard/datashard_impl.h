@@ -250,6 +250,7 @@ class TDataShard
     class TTxHandleSafeBuildIndexScan;
     class TTxHandleSafeSampleKScan;
     class TTxHandleSafeLocalKMeansScan;
+    class TTxHandleSafePrefixKMeansScan;
     class TTxHandleSafeReshuffleKMeansScan;
     class TTxHandleSafeStatisticsScan;
 

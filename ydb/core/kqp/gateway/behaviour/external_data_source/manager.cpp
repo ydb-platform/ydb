@@ -122,6 +122,18 @@ TYqlConclusion<std::pair<TString, TString>> SplitPath(const TString& tableName, 
     return TYqlConclusionStatus::Success();
 }
 
+[[nodiscard]] TYqlConclusionStatus CheckAvailableExternalDataSources(const NKikimrSchemeOp::TExternalDataSourceDescription& externaDataSourceDesc, const TExternalDataSourceManager::TInternalModificationContext& context) {
+    auto* actorSystem = context.GetExternalData().GetActorSystem();
+    if (!actorSystem) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. EXTERNAL_DATA_SOURCE creation and drop operations needs an actor system. Please contact internal support");
+    }
+    auto sourceType = externaDataSourceDesc.GetSourceType();
+    if (!AppData(actorSystem)->AvailableExternalDataSources.empty() && !AppData(actorSystem)->AvailableExternalDataSources.contains(sourceType)) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNSUPPORTED, TStringBuilder() << "External data source " << sourceType << " are disabled. Please contact your system administrator to enable it");
+    }
+    return TYqlConclusionStatus::Success();
+}
+
 [[nodiscard]] TYqlConclusionStatus ErrorFromActivityType(TExternalDataSourceManager::EActivityType activityType) {
     using EActivityType = TExternalDataSourceManager::EActivityType;
 
@@ -209,7 +221,13 @@ TYqlConclusionStatus TExternalDataSourceManager::PrepareCreateExternalDataSource
     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalDataSource);
     schemeTx.SetFailedOnAlreadyExists(!settings.GetExistingOk());
 
-    return FillCreateExternalDataSourceDesc(*schemeTx.MutableCreateExternalDataSource(), name, settings);
+    if (auto status = FillCreateExternalDataSourceDesc(*schemeTx.MutableCreateExternalDataSource(), name, settings); status.IsFail()) {
+        return status;
+    }
+    if (auto status = CheckAvailableExternalDataSources(schemeTx.GetCreateExternalDataSource(), context); status.IsFail()) {
+        return status;
+    }
+    return TYqlConclusionStatus::Success(); 
 }
 
 TYqlConclusionStatus TExternalDataSourceManager::PrepareDropExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {

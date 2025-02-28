@@ -251,6 +251,13 @@ public:
         appData->CompactionConfig = Config.GetCompactionConfig();
         appData->BackgroundCleaningConfig = Config.GetBackgroundCleaningConfig();
         appData->DataErasureConfig = Config.GetDataErasureConfig();
+
+        const auto& queryServiceConfig = Config.GetQueryServiceConfig();
+        if (queryServiceConfig.AvailableExternalDataSourcesSize() > 0) {
+            const auto& availableSources = queryServiceConfig.GetAvailableExternalDataSources();
+            TSet<TString> set(availableSources.cbegin(), availableSources.cend());
+            appData->AvailableExternalDataSources = std::move(set);
+        }
     }
 };
 

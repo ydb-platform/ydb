@@ -203,6 +203,8 @@ public:
         return Tables;
     }
 
+    std::optional<TString> GetTempTablePath(const TStringBuf& table) const;
+
     void Reset() {
         Tables.clear();
     }

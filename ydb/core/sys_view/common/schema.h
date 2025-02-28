@@ -51,7 +51,7 @@ constexpr TStringBuf PgClassName = "pg_class";
 
 constexpr TStringBuf ResourcePoolClassifiersName = "resource_pool_classifiers";
 
-constexpr TStringBuf ShowCreateTableName = "show_create_table";
+constexpr TStringBuf ShowCreateName = "show_create";
 
 namespace NAuth {
     constexpr TStringBuf UsersName = "auth_users";
@@ -720,14 +720,16 @@ struct Schema : NIceDb::Schema {
             Config>;
     };
 
-    struct ShowCreateTable: Table<20> {
-        struct Table: Column<1, NScheme::NTypeIds::Utf8> {};
-        struct CreateTableStatement: Column<2, NScheme::NTypeIds::Utf8> {};
+    struct ShowCreate: Table<21> {
+        struct Path: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Statement: Column<2, NScheme::NTypeIds::Utf8> {};
+        struct PathType: Column<3, NScheme::NTypeIds::Utf8> {};
 
-        using TKey = TableKey<Table>;
+        using TKey = TableKey<Path, PathType>;
         using TColumns = TableColumns<
-            Table,
-            CreateTableStatement
+            Path,
+            Statement,
+            PathType
         >;
     };
 };

@@ -233,6 +233,19 @@ const TKikimrTableDescription& TKikimrTablesData::ExistingTable(const TStringBuf
     return *desc;
 }
 
+std::optional<TString> TKikimrTablesData::GetTempTablePath(const TStringBuf& table) const {
+    if (!TempTablesState) {
+        return std::nullopt;
+    }
+
+    auto tempTableInfoIt = TempTablesState->FindInfo(table, false);
+
+    if (tempTableInfoIt != TempTablesState->TempTables.end()) {
+        return NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->SessionId, tempTableInfoIt->first);
+    }
+    return std::nullopt;
+}
+
 bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
     ColumnTypes.clear();
 

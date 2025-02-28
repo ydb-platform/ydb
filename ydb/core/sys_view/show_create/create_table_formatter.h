@@ -6,6 +6,8 @@
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
+#include <yql/essentials/minikql/mkql_alloc.h>
+
 #include <util/generic/hash.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
@@ -61,10 +63,18 @@ public:
         TString Error;
     };
 
-    TCreateTableFormatter() {
+    TCreateTableFormatter()
+    : Alloc(__LOCATION__)
+    {
+        Alloc.Release();
     }
 
-    TResult Format(const NKikimrSchemeOp::TTableDescription& tableDesc);
+    ~TCreateTableFormatter()
+    {
+        Alloc.Acquire();
+    }
+
+    TResult Format(const TString& tablePath, const NKikimrSchemeOp::TTableDescription& tableDesc, bool temporary);
 
 private:
 
@@ -75,6 +85,9 @@ private:
     void Format(const Ydb::Table::PartitioningSettings& partitionSettings);
     void Format(const Ydb::Table::ExplicitPartitions& explicitPartitions);
     void Format(const Ydb::Table::ReadReplicasSettings& readReplicasSettings);
+    void Format(const Ydb::Table::TtlSettings& ttlSettings);
+
+    void Format(ui64 expireAfterSeconds, std::optional<TString> storage = std::nullopt);
 
     void Format(const Ydb::TypedValue& value, bool isPartition = false);
     void FormatValue(NYdb::TValueParser& parser, bool isPartition = false, TString del = "");
@@ -87,6 +100,7 @@ private:
 
 private:
     TStringStream Stream;
+    NMiniKQL::TScopedAlloc Alloc;
 };
 
 } // NSysView

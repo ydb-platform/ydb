@@ -16,7 +16,7 @@
 #include <ydb/core/sys_view/query_stats/query_stats.h>
 #include <ydb/core/sys_view/resource_pool_classifiers/resource_pool_classifiers.h>
 #include <ydb/core/sys_view/sessions/sessions.h>
-#include <ydb/core/sys_view/show_create_table/show_create_table.h>
+#include <ydb/core/sys_view/show_create/show_create.h>
 #include <ydb/core/sys_view/storage/groups.h>
 #include <ydb/core/sys_view/storage/pdisks.h>
 #include <ydb/core/sys_view/storage/storage_pools.h>
@@ -284,8 +284,8 @@ THolder<NActors::IActor> CreateSystemViewScan(
         }
     }
 
-    if (tableId.SysViewInfo == ShowCreateTableName) {
-        return CreateShowCreateTable(ownerId, scanId, tableId, tableRange, columns, database, std::move(userToken));
+    if (tableId.SysViewInfo == ShowCreateName) {
+        return CreateShowCreate(ownerId, scanId, tableId, tableRange, columns, database, std::move(userToken));
     }
 
     return {};

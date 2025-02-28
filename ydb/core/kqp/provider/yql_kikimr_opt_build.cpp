@@ -964,7 +964,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
             TExprNode::TPtr path = ctx.NewCallable(
                 node.Pos(),
                 "String",
-                { ctx.NewAtom(node.Pos(), NKikimr::CanonizePath(NKikimr::JoinPath({TString(database), ".sys/show_create_table"}))) }
+                { ctx.NewAtom(node.Pos(), NKikimr::CanonizePath(NKikimr::JoinPath({TString(database), ".sys/show_create"}))) }
             );
             auto table = ctx.NewList(node.Pos(), {ctx.NewAtom(node.Pos(), "table"), path});
             auto newKey = ctx.NewCallable(node.Pos(), "Key", {table});
@@ -1037,26 +1037,51 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
             }
             YQL_ENSURE(!tablePath.empty(), "Unexpected empty table path for SHOW CREATE TABLE");
 
-            TCoAtom columnTableAtom(ctx.NewAtom(resNode.Pos(), "Table"));
-            auto columnTableArg = Build<TCoArgument>(ctx, resNode.Pos())
-                .Name("_column_table_arg")
+            auto tempTablePath = tablesData->GetTempTablePath(tablePath);
+            if (tempTablePath) {
+                tablePath = tempTablePath.value();
+            }
+
+            auto showCreateArg = Build<TCoArgument>(ctx, resNode.Pos())
+                .Name("_show_create_arg")
                 .Done();
-            auto columnTable = Build<TCoMember>(ctx, resNode.Pos())
-                    .Struct(columnTableArg)
-                    .Name(columnTableAtom)
+
+            TCoAtom columnPathAtom(ctx.NewAtom(resNode.Pos(), "Path"));
+            auto columnPathArg = Build<TCoArgument>(ctx, resNode.Pos())
+                .Name("_column_path_arg")
+                .Done();
+            auto columnPath = Build<TCoMember>(ctx, resNode.Pos())
+                    .Struct(showCreateArg)
+                    .Name(columnPathAtom)
                     .Done().Ptr();
 
-            auto tableCondition = Build<TCoCmpEqual>(ctx, resNode.Pos())
-                .Left(columnTable)
+            auto pathCondition = Build<TCoCmpEqual>(ctx, resNode.Pos())
+                .Left(columnPath)
                 .Right<TCoString>()
                     .Literal().Build(tablePath)
                 .Build()
                 .Done();
 
+            TCoAtom columnPathTypeAtom(ctx.NewAtom(resNode.Pos(), "PathType"));
+            auto columnPathType = Build<TCoMember>(ctx, resNode.Pos())
+                    .Struct(showCreateArg)
+                    .Name(columnPathTypeAtom)
+                    .Done().Ptr();
+
+            auto pathTypeCondition = Build<TCoCmpEqual>(ctx, resNode.Pos())
+                .Left(columnPathType)
+                .Right<TCoString>()
+                    .Literal().Build("Table")
+                .Build()
+                .Done();
+
             auto lambda = Build<TCoLambda>(ctx, resNode.Pos())
-                .Args({columnTableArg})
+                .Args({showCreateArg})
                 .Body<TCoCoalesce>()
-                    .Predicate(tableCondition)
+                    .Predicate<TCoAnd>()
+                        .Add(pathCondition)
+                        .Add(pathTypeCondition)
+                        .Build()
                     .Value<TCoBool>()
                         .Literal().Build("false")
                         .Build()

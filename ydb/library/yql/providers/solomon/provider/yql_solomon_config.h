@@ -9,7 +9,12 @@ namespace NYql {
 
 struct TSolomonSettings {
     using TConstPtr = std::shared_ptr<const TSolomonSettings>;
+
     NCommon::TConfSetting<bool, false> _EnableReading;
+    NCommon::TConfSetting<ui64, false> MetricsQueuePageSize;
+    NCommon::TConfSetting<ui64, false> MetricsQueuePrefetchSize;
+    NCommon::TConfSetting<ui64, false> MetricsQueueBatchCountLimit;
+    NCommon::TConfSetting<TString, false> SolomonClientDefaultReplica;
 };
 
 struct TSolomonConfiguration
@@ -32,6 +37,11 @@ struct TSolomonConfiguration
             const TString authToken = typeCtx->Credentials->FindCredentialContent("cluster:default_" + cluster.GetName(), "default_solomon", cluster.GetToken());
             Tokens[cluster.GetName()] = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
         }
+
+        MetricsQueuePageSize = 1000;
+        MetricsQueuePrefetchSize = 1000;
+        MetricsQueueBatchCountLimit = 100;
+        SolomonClientDefaultReplica = "sas";
 
         this->SetValidClusters(clusters);
 

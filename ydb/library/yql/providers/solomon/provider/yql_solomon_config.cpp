@@ -7,6 +7,10 @@ using namespace NCommon;
 TSolomonConfiguration::TSolomonConfiguration()
 {
     REGISTER_SETTING(*this, _EnableReading);
+    REGISTER_SETTING(*this, MetricsQueuePageSize);
+    REGISTER_SETTING(*this, MetricsQueuePrefetchSize);
+    REGISTER_SETTING(*this, MetricsQueueBatchCountLimit);
+    REGISTER_SETTING(*this, SolomonClientDefaultReplica);
 }
 
 TSolomonSettings::TConstPtr TSolomonConfiguration::Snapshot() const {

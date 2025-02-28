@@ -1,5 +1,5 @@
 #include "dq_solomon_write_actor.h"
-#include "metrics_encoder.h"
+#include "dq_solomon_actors_util.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
@@ -27,7 +27,6 @@
 #include <util/generic/hash.h>
 #include <util/system/compiler.h>
 
-#include <algorithm>
 #include <queue>
 #include <variant>
 

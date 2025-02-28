@@ -13,6 +13,8 @@
 #include <util/generic/set.h>
 #include <util/generic/stack.h>
 #include <util/generic/vector.h>
+#include <yql/essentials/minikql/dom/node.h>
+#include <yql/essentials/utils/parse_double.h>
 
 #include <cmath>
 
@@ -415,17 +417,17 @@ private:
  */
 class TBinaryJsonCallbacks : public TJsonCallbacks {
 public:
-    TBinaryJsonCallbacks(bool throwException)
+    TBinaryJsonCallbacks(bool throwException, EOutOfBoundsHandlingPolicy outOfBoundsHandling)
         : TJsonCallbacks(/* throwException */ throwException)
-    {
+        , OutOfBoundsHandling(outOfBoundsHandling) {
     }
 
-    bool OnNull() override {
+    [[nodiscard]] bool OnNull() override {
         Json.AddEntry(TEntry(EEntryType::Null), /* createTopLevel */ true);
         return true;
     }
 
-    bool OnBoolean(bool value) override {
+    [[nodiscard]] bool OnBoolean(bool value) override {
         auto type = EEntryType::BoolFalse;
         if (value) {
             type = EEntryType::BoolTrue;
@@ -434,54 +436,62 @@ public:
         return true;
     }
 
-    bool OnInteger(long long value) override {
+    [[nodiscard]] bool OnInteger(long long value) override {
         Json.AddEntry(TEntry(EEntryType::Number, Json.InternNumber(static_cast<double>(value))), /* createTopLevel */ true);
         return true;
     }
 
-    bool OnUInteger(unsigned long long value) override {
+    [[nodiscard]] bool OnUInteger(unsigned long long value) override {
         Json.AddEntry(TEntry(EEntryType::Number, Json.InternNumber(static_cast<double>(value))), /* createTopLevel */ true);
         return true;
     }
 
-    bool OnDouble(double value) override {
+    [[nodiscard]] bool OnDouble(double value) override {
         if (Y_UNLIKELY(std::isinf(value))) {
-            if (ThrowException) {
-                ythrow yexception() << "JSON number is infinite";
-            } else {
-                return false;
+            switch (OutOfBoundsHandling) {
+                case EOutOfBoundsHandlingPolicy::REJECT:
+                    if (ThrowException) {
+                        ythrow yexception() << "JSON number is infinite";
+                    } else {
+                        return false;
+                    }
+                case EOutOfBoundsHandlingPolicy::CLIP:
+                    const double clipped = value > 0 ? std::numeric_limits<double>::max() : std::numeric_limits<double>::lowest();
+                    Json.AddEntry(TEntry(EEntryType::Number, Json.InternNumber(clipped)), /* createTopLevel */ true);
+                    return true;
             }
+        } else {
+            Json.AddEntry(TEntry(EEntryType::Number, Json.InternNumber(value)), /* createTopLevel */ true);
+            return true;
         }
-        Json.AddEntry(TEntry(EEntryType::Number, Json.InternNumber(value)), /* createTopLevel */ true);
-        return true;
     }
 
-    bool OnString(const TStringBuf& value) override {
+    [[nodiscard]] bool OnString(const TStringBuf& value) override {
         Json.AddEntry(TEntry(EEntryType::String, Json.InternString(value)), /* createTopLevel */ true);
         return true;
     }
 
-    bool OnOpenMap() override {
+    [[nodiscard]] bool OnOpenMap() override {
         Json.AddContainer(EContainerType::Object);
         return true;
     }
 
-    bool OnMapKey(const TStringBuf& value) override {
+    [[nodiscard]] bool OnMapKey(const TStringBuf& value) override {
         Json.AddEntry(TEntry(EEntryType::String, Json.InternKey(value)));
         return true;
     }
 
-    bool OnCloseMap() override {
+    [[nodiscard]] bool OnCloseMap() override {
         Json.RemoveContainer();
         return true;
     }
 
-    bool OnOpenArray() override {
+    [[nodiscard]] bool OnOpenArray() override {
         Json.AddContainer(EContainerType::Array);
         return true;
     }
 
-    bool OnCloseArray() override {
+    [[nodiscard]] bool OnCloseArray() override {
         Json.RemoveContainer();
         return true;
     }
@@ -492,30 +502,31 @@ public:
 
 private:
     TJsonIndex Json;
+    EOutOfBoundsHandlingPolicy OutOfBoundsHandling;
 };
 
 void DomToJsonIndex(const NUdf::TUnboxedValue& value, TBinaryJsonCallbacks& callbacks) {
     switch (GetNodeType(value)) {
         case ENodeType::String:
-            callbacks.OnString(value.AsStringRef());
+            Y_ABORT_UNLESS(callbacks.OnString(value.AsStringRef()));
             break;
         case ENodeType::Bool:
-            callbacks.OnBoolean(value.Get<bool>());
+            Y_ABORT_UNLESS(callbacks.OnBoolean(value.Get<bool>()));
             break;
         case ENodeType::Int64:
-            callbacks.OnInteger(value.Get<i64>());
+            Y_ABORT_UNLESS(callbacks.OnInteger(value.Get<i64>()));
             break;
         case ENodeType::Uint64:
-            callbacks.OnUInteger(value.Get<ui64>());
+            Y_ABORT_UNLESS(callbacks.OnUInteger(value.Get<ui64>()));
             break;
         case ENodeType::Double:
-            callbacks.OnDouble(value.Get<double>());
+            Y_ABORT_UNLESS(callbacks.OnDouble(value.Get<double>()));
             break;
         case ENodeType::Entity:
-            callbacks.OnNull();
+            Y_ABORT_UNLESS(callbacks.OnNull());
             break;
         case ENodeType::List: {
-            callbacks.OnOpenArray();
+            Y_ABORT_UNLESS(callbacks.OnOpenArray());
 
             if (value.IsBoxed()) {
                 const auto it = value.GetListIterator();
@@ -525,24 +536,24 @@ void DomToJsonIndex(const NUdf::TUnboxedValue& value, TBinaryJsonCallbacks& call
                 }
             }
 
-            callbacks.OnCloseArray();
+            Y_ABORT_UNLESS(callbacks.OnCloseArray());
             break;
         }
         case ENodeType::Dict:
         case ENodeType::Attr: {
-            callbacks.OnOpenMap();
+            Y_ABORT_UNLESS(callbacks.OnOpenMap());
 
             if (value.IsBoxed()) {
                 const auto it = value.GetDictIterator();
                 TUnboxedValue key;
                 TUnboxedValue value;
                 while (it.NextPair(key, value)) {
-                    callbacks.OnMapKey(key.AsStringRef());
+                    Y_ABORT_UNLESS(callbacks.OnMapKey(key.AsStringRef()));
                     DomToJsonIndex(value, callbacks);
                 }
             }
 
-            callbacks.OnCloseMap();
+            Y_ABORT_UNLESS(callbacks.OnCloseMap());
             break;
         }
     }
@@ -560,39 +571,47 @@ template <typename TOnDemandValue>
         case simdjson::ondemand::json_type::string: {
             std::string_view v;
             RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnString(v);
+            Y_ABORT_UNLESS(callbacks.OnString(v));
             break;
         }
         case simdjson::ondemand::json_type::boolean: {
             bool v;
             RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnBoolean(v);
+            Y_ABORT_UNLESS(callbacks.OnBoolean(v));
             break;
         }
         case simdjson::ondemand::json_type::number: {
             switch (value.get_number_type()) {
                 case simdjson::builtin::number_type::floating_point_number: {
                     double v;
-                    RETURN_IF_NOT_SUCCESS(value.get(v));
-                    callbacks.OnDouble(v);
+                    if (const auto& error = value.get(v); Y_UNLIKELY(error != simdjson::SUCCESS)) {
+                        if (!NYql::TryDoubleFromString((std::string_view)value.raw_json_token(), v)) {
+                            return error;
+                        }
+                    };
+                    if (Y_UNLIKELY(!callbacks.OnDouble(v))) {
+                        return simdjson::error_code::NUMBER_ERROR;
+                    }
                     break;
                 }
                 case simdjson::builtin::number_type::signed_integer: {
                     int64_t v;
                     RETURN_IF_NOT_SUCCESS(value.get(v));
-                    callbacks.OnInteger(v);
+                    Y_ABORT_UNLESS(callbacks.OnInteger(v));
                     break;
                 }
                 case simdjson::builtin::number_type::unsigned_integer: {
                     uint64_t v;
                     RETURN_IF_NOT_SUCCESS(value.get(v));
-                    callbacks.OnUInteger(v);
+                    Y_ABORT_UNLESS(callbacks.OnUInteger(v));
                     break;
                 }
                 case simdjson::builtin::number_type::big_integer:
                     double v;
                     RETURN_IF_NOT_SUCCESS(value.get(v));
-                    callbacks.OnDouble(v);
+                    if (Y_UNLIKELY(!callbacks.OnDouble(v))) {
+                        return simdjson::error_code::NUMBER_ERROR;
+                    }
                     break;
             }
             break;
@@ -603,11 +622,11 @@ template <typename TOnDemandValue>
 	    if (Y_UNLIKELY(!is_null.value_unsafe())) {
                 return simdjson::error_code::N_ATOM_ERROR;
             }
-            callbacks.OnNull();
+            Y_ABORT_UNLESS(callbacks.OnNull());
             break;
         }
         case simdjson::ondemand::json_type::array: {
-            callbacks.OnOpenArray();
+            Y_ABORT_UNLESS(callbacks.OnOpenArray());
 
             simdjson::ondemand::array v;
             RETURN_IF_NOT_SUCCESS(value.get(v));
@@ -616,11 +635,11 @@ template <typename TOnDemandValue>
                 RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndex(item.value_unsafe(), callbacks));
             }
 
-            callbacks.OnCloseArray();
+            Y_ABORT_UNLESS(callbacks.OnCloseArray());
             break;
         }
         case simdjson::ondemand::json_type::object: {
-            callbacks.OnOpenMap();
+            Y_ABORT_UNLESS(callbacks.OnOpenMap());
 
             simdjson::ondemand::object v;
             RETURN_IF_NOT_SUCCESS(value.get(v));
@@ -629,11 +648,11 @@ template <typename TOnDemandValue>
                 auto& keyValue = item.value_unsafe();
                 const auto key = keyValue.unescaped_key();
                 RETURN_IF_NOT_SUCCESS(key.error());
-                callbacks.OnMapKey(key.value_unsafe());
+                Y_ABORT_UNLESS(callbacks.OnMapKey(key.value_unsafe()));
                 RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndex(keyValue.value(), callbacks));
             }
 
-            callbacks.OnCloseMap();
+            Y_ABORT_UNLESS(callbacks.OnCloseMap());
             break;
         }
     }
@@ -654,38 +673,38 @@ template <typename TOnDemandValue>
         case simdjson::dom::element_type::STRING: {
             std::string_view v;
             RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnString(v);
+            Y_ABORT_UNLESS(callbacks.OnString(v));
             break;
         }
         case simdjson::dom::element_type::BOOL: {
             bool v;
             RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnBoolean(v);
+            Y_ABORT_UNLESS(callbacks.OnBoolean(v));
             break;
         }
         case simdjson::dom::element_type::INT64: {
             int64_t v;
             RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnInteger(v);
+            Y_ABORT_UNLESS(callbacks.OnInteger(v));
             break;
         }
         case simdjson::dom::element_type::UINT64: {
             uint64_t v;
             RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnUInteger(v);
+            Y_ABORT_UNLESS(callbacks.OnUInteger(v));
             break;
         }
         case simdjson::dom::element_type::DOUBLE: {
             double v;
             RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnDouble(v);
+            Y_ABORT_UNLESS(callbacks.OnDouble(v));
             break;
         }
         case simdjson::dom::element_type::NULL_VALUE:
-            callbacks.OnNull();
+            Y_ABORT_UNLESS(callbacks.OnNull());
             break;
         case simdjson::dom::element_type::ARRAY: {
-            callbacks.OnOpenArray();
+            Y_ABORT_UNLESS(callbacks.OnOpenArray());
 
             simdjson::dom::array v;
             RETURN_IF_NOT_SUCCESS(value.get(v));
@@ -693,20 +712,20 @@ template <typename TOnDemandValue>
                 RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndexImpl(item, callbacks));
             }
 
-            callbacks.OnCloseArray();
+            Y_ABORT_UNLESS(callbacks.OnCloseArray());
             break;
         }
         case simdjson::dom::element_type::OBJECT: {
-            callbacks.OnOpenMap();
+            Y_ABORT_UNLESS(callbacks.OnOpenMap());
 
             simdjson::dom::object v;
             RETURN_IF_NOT_SUCCESS(value.get(v));
             for (const auto& item : v) {
-                callbacks.OnMapKey(item.key);
+                Y_ABORT_UNLESS(callbacks.OnMapKey(item.key));
                 RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndexImpl(item.value, callbacks));
             }
 
-            callbacks.OnCloseMap();
+            Y_ABORT_UNLESS(callbacks.OnCloseMap());
             break;
         }
     }
@@ -715,9 +734,9 @@ template <typename TOnDemandValue>
 }
 }
 
-std::variant<TBinaryJson, TString> SerializeToBinaryJsonImpl(const TStringBuf json) {
+std::variant<TBinaryJson, TString> SerializeToBinaryJsonImpl(const TStringBuf json, const EOutOfBoundsHandlingPolicy outOfBoundsHandling) {
     std::variant<TBinaryJson, TString> res;
-    TBinaryJsonCallbacks callbacks(/* throwException */ false);
+    TBinaryJsonCallbacks callbacks(/* throwException */ false, outOfBoundsHandling);
     const simdjson::padded_string paddedJson(json);
     simdjson::ondemand::parser parser;
     try {
@@ -739,12 +758,12 @@ std::variant<TBinaryJson, TString> SerializeToBinaryJsonImpl(const TStringBuf js
     return res;
 }
 
-std::variant<TBinaryJson, TString> SerializeToBinaryJson(const TStringBuf json) {
-    return SerializeToBinaryJsonImpl(json);
+std::variant<TBinaryJson, TString> SerializeToBinaryJson(const TStringBuf json, const EOutOfBoundsHandlingPolicy infinityHandling) {
+    return SerializeToBinaryJsonImpl(json, infinityHandling);
 }
 
 TBinaryJson SerializeToBinaryJson(const NUdf::TUnboxedValue& value) {
-    TBinaryJsonCallbacks callbacks(/* throwException */ false);
+    TBinaryJsonCallbacks callbacks(/* throwException */ false, EOutOfBoundsHandlingPolicy::REJECT);
     DomToJsonIndex(value, callbacks);
     TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());
     return std::move(serializer).Serialize();

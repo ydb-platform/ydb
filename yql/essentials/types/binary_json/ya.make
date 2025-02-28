@@ -10,6 +10,7 @@ PEERDIR(
     library/cpp/containers/absl_flat_hash
     library/cpp/json
     yql/essentials/minikql/dom
+    yql/essentials/utils
     contrib/libs/simdjson
 )
 

@@ -216,7 +216,7 @@ public:
             if (auto registry = MetricRegistry_.Get()) {
                 std::string statusName = TStringBuilder() << status;
                 std::string sensor = TStringBuilder() << "RetryOperation/" << UnderscoreToUpperCamel(statusName);
-                registry->Rate({ {"database", Database_}, {"sensor", sensor} })->Inc();
+                registry->Rate({ {"database", Database_}, {"ydb_client", ClientType_}, {"sensor", sensor} })->Inc();
             }
         }
 

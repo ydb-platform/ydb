@@ -96,11 +96,11 @@ extern const char* const MatchQueueAttributesQuery = R"__(
                     (And
                         (And
                             (And (Equal (Member queuesRead 'Shards) shards)
-                                 (Equal (Member queuesRead 'Tags) tags))
+                                 (Equal (Coalesce (Member queuesRead 'Tags) (Utf8String '"{}")) tags))
                             (Equal (Member queuesRead 'Partitions) partitions))
                         (Equal (Member queuesRead 'FifoQueue) fifo))
                     (Equal  (Coalesce (Member queuesRead 'DlqName) (Utf8String '"")) dlqName))
-                (Bool 'true)))
+                (Bool 'false)))
 
         (let attrRow '(
             )__" ATTRS_KEYS_PARAM R"__(

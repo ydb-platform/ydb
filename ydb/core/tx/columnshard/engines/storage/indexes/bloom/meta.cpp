@@ -13,7 +13,7 @@
 namespace NKikimr::NOlap::NIndexes {
 
 TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
-    const ui32 bitsCount = TFixStringBitsStorage::GrowBitsCountToByte(HashesCount * recordsCount / std::log(2));
+    const ui32 bitsCount = TFixStringBitsStorage::GrowBitsCountToByte(HashesCount * std::max<ui32>(recordsCount, 10) / std::log(2));
     std::vector<bool> filterBits(bitsCount, false);
     for (reader.Start(); reader.IsCorrect();) {
         AFL_VERIFY(reader.GetColumnsCount() == 1);

@@ -111,6 +111,22 @@ class TDrainNodeRPC: public TRpcRequestActor<TDrainNodeRPC, TEvDrainNode, true> 
     void SendRequest() {
         const auto* request = TBase::GetProtoRequest();
         auto ev = std::make_unique<TEvHive::TEvDrainNode>(request->node_id());
+        ui64 inflight = request->tablet_drain().in_flight();
+        if (inflight) {
+            ev->Record.SetDrainInFlight(inflight);
+        }
+        switch (request->reason()) {
+            case Ydb::Maintenance::DrainNodeRequest::DRAIN_REASON_UNSPECIFIED:
+            default:
+                ev->Record.SetDownPolicy(NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN);
+                break;
+            case Ydb::Maintenance::DrainNodeRequest::DRAIN_REASON_RESTART:
+                ev->Record.SetDownPolicy(NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_KEEP_DOWN_UNTIL_RESTART);
+                break;
+            case Ydb::Maintenance::DrainNodeRequest::DRAIN_REASON_DECOMMIT:
+                ev->Record.SetDownPolicy(NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_KEEP_DOWN);
+                break;
+        }
 
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};

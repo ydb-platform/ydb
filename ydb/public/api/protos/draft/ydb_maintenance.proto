@@ -250,8 +250,24 @@ message ManageActionResponse {
 }
 
 message DrainNodeRequest {
+    enum DrainReason {
+        DRAIN_REASON_UNSPECIFIED = 0;
+        DRAIN_REASON_RESTART = 1;
+        DRAIN_REASON_DECOMMIT = 2;
+    }
+
+    message TabletDrainSettings {
+        uint32 in_flight = 1;
+    }
+
     Ydb.Operations.OperationParams operation_params = 1;
-    uint32 node_id = 2;
+    oneof drain_target {
+        uint32 node_id = 2;
+    }
+    oneof drain_type {
+        TabletDrainSettings tablet_drain = 3;
+    }
+    DrainReason reason = 4;
 }
 
 message DrainNodeResponse {

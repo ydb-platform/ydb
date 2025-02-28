@@ -3,10 +3,7 @@ IF (OS_LINUX)
         UNITTEST_FOR(yql/essentials/udfs/common/python/bindings)
 
         INCLUDE(../ya.make.test.inc)
-        PEERDIR(
-            library/python/type_info
-        )
-        USE_PYTHON3()
+        USE_PYTHON2()
         END()
     ENDIF()
 ENDIF()

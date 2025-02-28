@@ -247,7 +247,7 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
     }
 
     if (settings.StatsCollectPeriod_) {
-        request.set_stats_period_ms((*settings.StatsCollectPeriod_).count());
+        request.set_stats_period_ms(settings.StatsCollectPeriod_->count());
     }
 
     if (txControl.HasTx()) {
@@ -311,6 +311,8 @@ TAsyncExecuteQueryIterator TExecQueryImpl::StreamExecuteQuery(const std::shared_
     auto paramsProto = params
         ? &params->GetProtoMap()
         : nullptr;
+
+        
 
     StreamExecuteQueryImpl(connections, driverState, query, txControl, paramsProto, settings, session)
         .Subscribe(iteratorCallback);

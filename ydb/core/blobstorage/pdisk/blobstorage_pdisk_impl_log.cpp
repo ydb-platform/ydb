@@ -508,7 +508,6 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
         for (ui32 i = 0; i < chunkCount; i++) {
             ChunkState[i].Encrypted = encryptedState[i / 8].IsChunkTrimmed(i % 8);
         }
-        Cerr << " read! " << Endl;
     } else if (!suppressCompatibilityCheck && sysLogRecord->Version != 0) {
         // Sys log is not empty, but it doesn't contain compatibility info record
         TString error;
@@ -787,7 +786,6 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
     SysLogger->LogDataPart(&compatibilityInfoSize, sizeof(compatibilityInfoSize), reqId, traceId);
     SysLogger->LogDataPart(SerializedCompatibilityInfo->data(), compatibilityInfoSize, reqId, traceId);
     SysLogger->LogDataPart(&chunkIsEncryptedSize, sizeof(chunkIsEncryptedSize), reqId, traceId);
-    Cerr << "chunkIsEncryptedSize# " << chunkIsEncryptedSize << Endl;
     SysLogger->LogDataPart(&chunkIsEncrypted[0], chunkIsEncryptedSize, reqId, traceId);
     SysLogger->TerminateLog(reqId, traceId);
     SysLogger->Flush(reqId, traceId, action);

@@ -162,8 +162,5 @@ def test_tenant_auth_groups_access(ydb_endpoint, ydb_root, prepared_test_env, yd
 
         else:
             assert error is not None, result
-
-            # FIXME: status should have been UNAUTHORIZED
-            # assert error.status == ydb.issues.StatusCode.UNAUTHORIZED
-            assert error.status == ydb.issues.StatusCode.INTERNAL_ERROR
+            assert error.status == ydb.issues.StatusCode.UNAUTHORIZED
             assert 'Administrator access is required' in error.message

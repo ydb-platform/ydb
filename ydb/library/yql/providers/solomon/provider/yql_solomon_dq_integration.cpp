@@ -1,5 +1,7 @@
 #include "yql_solomon_dq_integration.h"
 #include "yql_solomon_mkql_compiler.h"
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/protos/actors.pb.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <yql/essentials/utils/log/log.h>
@@ -8,6 +10,7 @@
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/solomon/actors/dq_solomon_metrics_queue.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
 
@@ -114,6 +117,7 @@ public:
             TString from = now1h.ToStringUpToSeconds();
             TString to = now.ToStringUpToSeconds();
             TString program;
+            TString selectors;
             bool downsamplingDisabled = false;
             TString downsamplingAggregation = "AVG";
             TString downsamplingFill = "PREVIOUS";
@@ -145,6 +149,15 @@ public:
                     }
 
                     program = value;
+                    continue;
+                }
+                if (settingsRef.Child(i)->Head().IsAtom("selectors"sv)) {
+                    TStringBuf value;
+                    if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), settingsRef.Child(i)->Head().Content(), ctx, value)) {
+                        return {};
+                    }
+
+                    selectors = value;
                     continue;
                 }
                 if (settingsRef.Child(i)->Head().IsAtom("downsampling.disabled"sv)) {
@@ -212,6 +225,7 @@ public:
                     .LabelNames(soReadObject.LabelNames())
                     .From<TCoAtom>().Build(from)
                     .To<TCoAtom>().Build(to)
+                    .Selectors<TCoAtom>().Build(selectors)
                     .Program<TCoAtom>().Build(program)
                     .DownsamplingDisabled<TCoBool>().Literal().Build(downsamplingDisabled ? "true" : "false").Build()
                     .DownsamplingAggregation<TCoAtom>().Build(downsamplingAggregation)
@@ -249,7 +263,16 @@ public:
         source.SetUseSsl(clusterDesc->GetUseSsl());
         source.SetFrom(TInstant::ParseIso8601(settings.From().StringValue()).Seconds());
         source.SetTo(TInstant::ParseIso8601(settings.To().StringValue()).Seconds());
-        source.SetProgram(settings.Program().StringValue());
+        
+        auto selectors = settings.Selectors().StringValue();
+        if (!selectors.empty()) {
+            source.SetSelectors(selectors);
+        }
+
+        auto program = settings.Program().StringValue();
+        if (!program.empty()) {
+            source.SetProgram(program);
+        }
 
         auto& downsampling = *source.MutableDownsampling();
         const bool isDisabled = FromString<bool>(settings.DownsamplingDisabled().Literal().Value());
@@ -274,6 +297,42 @@ public:
                 throw yexception() << "Column " << columnAsString << " already registered";
             }
             source.AddLabelNames(columnAsString);
+        }
+
+        auto& solomonSettings = State_->Configuration;
+
+        auto metricsQueuePageSize = solomonSettings->MetricsQueuePageSize.Get();
+        source.MutableSettings()->insert({"metricsQueuePageSize", ToString(metricsQueuePageSize)});
+
+        auto metricsQueuePrefetchSize = solomonSettings->MetricsQueuePrefetchSize.Get();
+        source.MutableSettings()->insert({"metricsQueuePrefetchSize", ToString(metricsQueuePrefetchSize)});
+
+        auto metricsQueueBatchCountLimit = solomonSettings->MetricsQueueBatchCountLimit.Get();
+        source.MutableSettings()->insert({"metricsQueueBatchCountLimit", ToString(metricsQueueBatchCountLimit)});
+
+        auto solomonClientDefaultReplica = solomonSettings->SolomonClientDefaultReplica.Get();
+        source.MutableSettings()->insert({"solomonClientDefaultReplica", ToString(solomonClientDefaultReplica)});
+
+        if (!selectors.empty()) {
+            NDq::TDqSolomonReadParams readParams{ .Source = source };
+
+            auto providerFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster));
+            auto credentialsProvider = providerFactory->CreateProvider();
+
+            auto metricsQueueActor = NActors::TActivationContext::ActorSystem()->Register(
+                NDq::CreateSolomonMetricsQueueActor(
+                    1,
+                    readParams,
+                    credentialsProvider
+                )
+            );
+
+            NActorsProto::TActorId protoId;
+            ActorIdToProto(metricsQueueActor, &protoId);
+            TString stringId;
+            google::protobuf::TextFormat::PrintToString(protoId, &stringId);
+
+            source.MutableSettings()->insert({"metricsQueueActor", stringId});
         }
 
         protoSettings.PackFrom(source);

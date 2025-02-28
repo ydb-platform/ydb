@@ -40,6 +40,7 @@ public:
         cluster.SetName(name);
         cluster.SetCluster(properties.Value("location", ""));
         cluster.SetToken(token);
+        cluster.SetUseSsl(true);
         State_->Gateway->AddCluster(cluster);
 
         State_->Configuration->AddValidCluster(name);

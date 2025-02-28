@@ -315,7 +315,6 @@ public:
     NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> QuerySizeHistogram;
     NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> ParamsSizeHistogram;
     NSdkStats::TAtomicCounter<::NMonitoring::TRate> SessionRemovedDueBalancing;
-    NSdkStats::TAtomicCounter<::NMonitoring::TRate> RequestMigrated;
 
 private:
     NSessionPool::TSessionPool SessionPool_;

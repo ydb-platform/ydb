@@ -26,8 +26,8 @@ TTableClient::TImpl::TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, 
         return;
     }
 
-    SetStatCollector(DbDriverState_->StatCollector.GetClientStatCollector());
-    SessionPool_.SetStatCollector(DbDriverState_->StatCollector.GetSessionPoolStatCollector());
+    SetStatCollector(DbDriverState_->StatCollector.GetClientStatCollector("Table"));
+    SessionPool_.SetStatCollector(DbDriverState_->StatCollector.GetSessionPoolStatCollector("Table"));
 }
 
 TTableClient::TImpl::~TImpl() {
@@ -987,7 +987,6 @@ void TTableClient::TImpl::SetStatCollector(const NSdkStats::TStatCollector::TCli
     ParamsSizeHistogram.Set(collector.ParamsSize);
     RetryOperationStatCollector = collector.RetryOperationStatCollector;
     SessionRemovedDueBalancing.Set(collector.SessionRemovedDueBalancing);
-    RequestMigrated.Set(collector.RequestMigrated);
 }
 
 TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings) {

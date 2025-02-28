@@ -679,7 +679,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ONE_ACTUALIZATION
             ------
             READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "1a1" ORDER BY Col1;
-            EXPECTED: [[11u;["{\"a\":\"a1\"}"]]]
+            EXPECTED: [[11u;["{\"a\":\"1a1\"}"]]]
             
         )";
         TScriptVariator(script).Execute();

@@ -38,6 +38,16 @@ void TKafkaConsumerMembersMetaInitializer::DoPrepare(NInitializer::IInitializerI
         }
         {
             auto& column = *request.add_columns();
+            column.set_name("instance_id");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
+        }
+        {
+            auto& column = *request.add_columns();
+            column.set_name("leaved");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::BOOL);
+        }
+        {
+            auto& column = *request.add_columns();
             column.set_name("assignment");
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
         }
@@ -54,6 +64,11 @@ void TKafkaConsumerMembersMetaInitializer::DoPrepare(NInitializer::IInitializerI
         {
             auto& column = *request.add_columns();
             column.set_name("session_timeout_ms");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT32);
+        }
+        {
+            auto& column = *request.add_columns();
+            column.set_name("rebalance_timeout_ms");
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT32);
         }
         {

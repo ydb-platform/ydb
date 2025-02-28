@@ -41,11 +41,6 @@ void TKafkaConsumerGroupsMetaInitializer::DoPrepare(NInitializer::IInitializerIn
         }
         {
             auto& column = *request.add_columns();
-            column.set_name("rebalance_timeout_ms");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT32);
-        }
-        {
-            auto& column = *request.add_columns();
             column.set_name("master");
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
         }
@@ -58,6 +53,11 @@ void TKafkaConsumerGroupsMetaInitializer::DoPrepare(NInitializer::IInitializerIn
             auto& column = *request.add_columns();
             column.set_name("protocol");
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
+        }
+        {
+            auto& column = *request.add_columns();
+            column.set_name("last_success_generation");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT64);
         }
         {
             auto* ttlSettings = request.mutable_ttl_settings();

@@ -1899,7 +1899,7 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         block.Unblock();
         
         // Resolve request with no deadline is OK
-        CheckResolveNode(runtime, sender, NODE1, "1.2.3.4");
+        CheckAsyncResolveNode(runtime, NODE1, "1.2.3.4");
     }
 
     Y_UNIT_TEST(CacheMissDifferentDeadline) {

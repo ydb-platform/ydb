@@ -81,6 +81,7 @@ struct TReadInfo {
     TReadAnswer FormAnswer(
         const TActorContext& ctx,
         const TEvPQ::TEvBlobResponse& response,
+        const ui64 startOffset,
         const ui64 endOffset,
         const TPartitionId& partition,
         TUserInfo* ui,
@@ -93,6 +94,7 @@ struct TReadInfo {
 
     TReadAnswer FormAnswer(
         const TActorContext& ctx,
+        const ui64 startOffset,
         const ui64 endOffset,
         const TPartitionId& partition,
         TUserInfo* ui,
@@ -103,7 +105,7 @@ struct TReadInfo {
         const bool isActive
     ) {
         TEvPQ::TEvBlobResponse response(0, TVector<TRequestedBlob>());
-        return FormAnswer(ctx, response, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode, isActive);
+        return FormAnswer(ctx, response, startOffset, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode, isActive);
     }
 };
 

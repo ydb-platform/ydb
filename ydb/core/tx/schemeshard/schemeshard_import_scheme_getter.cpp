@@ -133,7 +133,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         }
 
         const auto contentLength = result.GetResult().GetContentLength();
-        GetObject(ChecksumKey, std::make_pair(0, contentLength - 1));
+        GetObject(NBackup::ChecksumKey(CurrentObjectKey), std::make_pair(0, contentLength - 1));
     }
 
     void HandleChangefeed(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -197,11 +197,9 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
 
         item.Metadata = NBackup::TMetadata::Deserialize(msg.Body);
 
-        if (!item.Metadata.HasVersion()) {
-            return Reply(false, "Metadata is corrupted: no version");
+        if (item.Metadata.HasVersion() && item.Metadata.GetVersion() == 0) {
+            NeedValidateChecksums = false;
         }
-
-        NeedValidateChecksums = item.Metadata.GetVersion() > 0 && !SkipChecksumValidation;
 
         auto nextStep = [this]() {
             StartDownloadingScheme();
@@ -305,10 +303,10 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         }
 
         TString expectedChecksum = msg.Body.substr(0, msg.Body.find(' '));
-        if (expectedChecksum != Checksum) {
-            return Reply(false, TStringBuilder() << "Checksum mismatch for " << ChecksumKey
+        if (expectedChecksum != CurrentObjectChecksum) {
+            return Reply(false, TStringBuilder() << "Checksum mismatch for " << CurrentObjectKey
                 << " expected# " << expectedChecksum
-                << ", got# " << Checksum);
+                << ", got# " << CurrentObjectChecksum);
         }
 
         ChecksumValidatedCallback();
@@ -506,7 +504,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     }
 
     void DownloadChecksum() {
-        Download(ChecksumKey);
+        Download(NBackup::ChecksumKey(CurrentObjectKey));
     }
 
     void DownloadChangefeeds() {
@@ -536,8 +534,8 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     }
 
     void StartValidatingChecksum(const TString& key, const TString& object, std::function<void()> checksumValidatedCallback) {
-        ChecksumKey = NBackup::ChecksumKey(key);
-        Checksum = NBackup::ComputeChecksum(object);
+        CurrentObjectKey = key;
+        CurrentObjectChecksum = NBackup::ComputeChecksum(object);
         ChecksumValidatedCallback = checksumValidatedCallback;
 
         ResetRetries();
@@ -556,7 +554,7 @@ public:
         , PermissionsKey(PermissionsKeyFromSettings(importInfo->Settings, itemIdx))
         , Retries(importInfo->Settings.number_of_retries())
         , NeedDownloadPermissions(!importInfo->Settings.no_acl())
-        , SkipChecksumValidation(importInfo->Settings.skip_checksum_validation())
+        , NeedValidateChecksums(!importInfo->Settings.skip_checksum_validation())
     {
     }
 
@@ -648,11 +646,10 @@ private:
 
     TActorId Client;
 
-    const bool SkipChecksumValidation = false;
     bool NeedValidateChecksums = true;
 
-    TString Checksum;
-    TString ChecksumKey;
+    TString CurrentObjectChecksum;
+    TString CurrentObjectKey;
     std::function<void()> ChecksumValidatedCallback;
 }; // TSchemeGetter
 

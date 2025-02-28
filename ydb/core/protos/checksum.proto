@@ -1,0 +1,19 @@
+package NKikimrBackup;
+option java_package = "ru.yandex.kikimr.proto";
+
+// Corresponds to the OpenSSL SHA256_CTX structure.
+message TSha256State {
+    repeated uint32 H = 1;
+    optional uint32 Nh = 2;
+    optional uint32 Nl = 3;
+    repeated uint32 Data = 4;
+    optional uint32 Num = 5;
+    optional uint32 MdLen = 6;
+}
+
+// Used to serialize the intermediate state of a checksum.
+message TChecksumState {
+    oneof state {
+        TSha256State Sha256State = 1;
+    }
+}

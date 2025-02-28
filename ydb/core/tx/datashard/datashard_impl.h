@@ -52,6 +52,7 @@
 #include <ydb/core/protos/tx.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
+#include <ydb/core/protos/checksum.pb.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 
@@ -789,9 +790,18 @@ class TDataShard
             struct ProcessedBytes :  Column<4, NScheme::NTypeIds::Uint64> {};
             struct WrittenBytes :    Column<5, NScheme::NTypeIds::Uint64> {};
             struct WrittenRows :     Column<6, NScheme::NTypeIds::Uint64> {};
+            struct ChecksumState :   Column<7, NScheme::NTypeIds::String> { using Type = NKikimrBackup::TChecksumState; };
 
             using TKey = TableKey<TxId>;
-            using TColumns = TableColumns<TxId, SchemeETag, DataETag, ProcessedBytes, WrittenBytes, WrittenRows>;
+            using TColumns = TableColumns<
+                TxId,
+                SchemeETag,
+                DataETag,
+                ProcessedBytes,
+                WrittenBytes,
+                WrittenRows,
+                ChecksumState
+            >;
         };
 
         struct ChangeRecords : Table<17> {

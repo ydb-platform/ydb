@@ -23,7 +23,9 @@ ui64 TMetadata::GetVersion() const {
 
 TString TMetadata::Serialize() const {
     NJson::TJsonMap m;
-    m["version"] = *Version;
+    if (Version.Defined()) {
+        m["version"] = *Version;
+    }
 
     NJson::TJsonArray fullBackups;
     for (auto &[tp, b] : FullBackups) {

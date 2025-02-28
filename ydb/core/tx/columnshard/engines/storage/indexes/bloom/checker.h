@@ -44,15 +44,15 @@ public:
         ui32 count0 = 0;
         for (ui32 i = 0; i < GetSizeBits(); ++i) {
             if (Get(i)) {
-                sb << 1 << " ";
+//                sb << 1 << " ";
                 ++count1;
             } else {
-                sb << 0 << " ";
+//                sb << 0 << " ";
                 ++count0;
             }
-            if (i % 20 == 0) {
-                sb << i << " ";
-            }
+//            if (i % 20 == 0) {
+//                sb << i << " ";
+//            }
         }
         sb << GetSizeBits() << "=" << count0 << "[0]+" << count1 << "[1]";
         return sb;

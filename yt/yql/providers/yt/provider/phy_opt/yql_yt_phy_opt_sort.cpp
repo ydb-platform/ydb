@@ -667,10 +667,59 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
         const size_t index = FromString(input.Cast<TYtOutput>().OutIndex().Value());
         TYtOutTableInfo outTable(op.Output().Item(index));
         if (builder) {
+            YQL_ENSURE(!builder->NeedMap());
             builder->FillRowSpecSort(*outTable.RowSpec);
         }
         outTable.RowSpec->SetConstraints(assume.Ref().GetConstraintSet());
         outTable.SetUnique(assume.Ref().GetConstraint<TDistinctConstraintNode>(), assume.Pos(), ctx);
+
+        if (op.Maybe<TYtMap>() || op.Maybe<TYtReduce>()) {
+            TExprNode::TPtr lambda;
+            size_t childToReplace = 0;
+            if (auto map = op.Maybe<TYtMap>()) {
+                lambda = map.Cast().Mapper().Ptr();
+                childToReplace = TYtMap::idx_Mapper;
+            } else if (auto reduce = op.Maybe<TYtReduce>()) {
+                lambda = reduce.Cast().Reducer().Ptr();
+                childToReplace = TYtReduce::idx_Reducer;
+            } else {
+                YQL_ENSURE(false, "unexpected operation");
+            }
+
+            auto actualLambdaOutputType = TCoLambda(lambda).Body().Ref().GetTypeAnn();
+            auto expectedLambdaOutputType = outTable.RowSpec->GetExtendedType(ctx);
+            if (!IsSameAnnotation(*actualLambdaOutputType, *expectedLambdaOutputType)) {
+                // Drop aux columns that are not expected after row spec rebuild
+
+                auto excludeLambda = Build<TCoLambda>(ctx, lambda->Pos())
+                    .Args({"stream"})
+                    .Body<TCoOrderedMap>()
+                        .Input("stream")
+                        .Lambda<TCoLambda>()
+                            .Args({"struct"})
+                            .Body<TCoCastStruct>()
+                                .Struct("struct")
+                                .Type(ExpandType(lambda->Pos(), *expectedLambdaOutputType, ctx))
+                            .Build()
+                        .Build()
+                    .Build()
+                    .Done();
+
+                lambda = Build<TCoLambda>(ctx, lambda->Pos())
+                    .Args({"stream"})
+                    .Body<TExprApplier>()
+                        .Apply(excludeLambda)
+                        .With<TExprApplier>(0)
+                            .Apply(TCoLambda(lambda))
+                            .With(0, "stream")
+                        .Build()
+                    .Build()
+                    .Done()
+                    .Ptr();
+
+                newOp = ctx.ChangeChild(*newOp, childToReplace, std::move(lambda));
+            }
+        }
 
         TVector<TYtOutTable> outputs;
         for (size_t i = 0; i < op.Output().Size(); ++i) {

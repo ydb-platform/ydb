@@ -298,7 +298,7 @@ public:
     STATEFN(FinalizeState) {
         try {
             switch(ev->GetTypeRewrite()) {
-                hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(TEvKqp::TEvAbortExecution, HandleFinalize);
                 hFunc(TEvKqpBuffer::TEvResult, HandleFinalize);
                 hFunc(TEvents::TEvUndelivered, HandleFinalize);
 
@@ -323,6 +323,14 @@ public:
             InternalError(e.what());
         }
         ReportEventElapsedTime();
+    }
+
+    void HandleFinalize(TEvKqp::TEvAbortExecution::TPtr& ev) {
+        if (IsCancelAfterAllowed(ev)) {
+            TBase::HandleAbortExecution(ev);
+        } else {
+            LOG_D("Got TEvAbortExecution from : " << ev->Sender << " but cancelation is not alowed");
+        }
     }
 
     void HandleFinalize(TEvKqpBuffer::TEvResult::TPtr& ev) {
@@ -1712,7 +1720,7 @@ private:
 
     void ExecuteDatashardTransaction(ui64 shardId, NKikimrTxDataShard::TKqpTransaction& kqpTx, const bool isOlap)
     {
-        YQL_ENSURE(!TxManager);
+        YQL_ENSURE(ReadOnlyTx || !TxManager);
         TShardState shardState;
         shardState.State = ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
         shardState.DatashardState.ConstructInPlace();

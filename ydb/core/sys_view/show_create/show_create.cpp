@@ -62,7 +62,7 @@ private:
             }
 
             if (cellsFrom[0].AsBuf() != cellsTo[0].AsBuf() || cellsFrom[1].AsBuf() != cellsTo[1].AsBuf()) {
-                ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "Invalid table range " << cellsTo[0].AsBuf() << " " << cellsTo[1].AsBuf());
+                ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, "Invalid table range");
             }
         }
 

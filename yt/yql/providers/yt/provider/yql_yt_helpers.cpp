@@ -2260,6 +2260,12 @@ bool IsYtTableSuitableForArrowInput(NNodes::TExprBase tableNode, std::function<v
         return false;
     }
 
+    auto rowSpec = TYtTableBaseInfo::GetRowSpec(tableNode);
+    if (rowSpec && !rowSpec->StrictSchema) {
+        unsupportedHandler("can't use arrow input on tables with non-strict schema");
+        return false;
+    }
+
     return true;
 }
 

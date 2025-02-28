@@ -450,8 +450,10 @@ protected:
         // It is now possible as we don't use datashard transactions for reads in data queries.
         bool pushLeftStage = AllowFuseJoinInputs(node);
         bool shuffleEliminationWithMap = KqpCtx.Config->OptShuffleEliminationWithMap.Get().GetOrElse(false);
+        bool rightCollectStage = !KqpCtx.Config->AllowMultiBroadcasts;
         TExprBase output = DqBuildJoin(node, ctx, optCtx, *getParents(), IsGlobal,
-            pushLeftStage, KqpCtx.Config->GetHashJoinMode(), false, KqpCtx.Config->UseGraceJoinCoreForMap.Get().GetOrElse(false), KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(false), shuffleEliminationWithMap
+            pushLeftStage, KqpCtx.Config->GetHashJoinMode(), false, KqpCtx.Config->UseGraceJoinCoreForMap.Get().GetOrElse(false), KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(false), shuffleEliminationWithMap,
+            rightCollectStage
         );
         DumpAppliedRule("BuildJoin", node.Ptr(), output.Ptr(), ctx);
         return output;

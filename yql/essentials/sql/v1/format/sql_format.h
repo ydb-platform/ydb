@@ -25,9 +25,6 @@ public:
     virtual ~ISqlFormatter() = default;
 };
 
-//FIXME remove
-ISqlFormatter::TPtr MakeSqlFormatter(const NSQLTranslation::TTranslationSettings& settings = {});
-
 ISqlFormatter::TPtr MakeSqlFormatter(const NSQLTranslationV1::TLexers& lexers,
     const NSQLTranslationV1::TParsers& parsers,
     const NSQLTranslation::TTranslationSettings& settings = {});

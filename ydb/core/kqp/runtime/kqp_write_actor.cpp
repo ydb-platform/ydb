@@ -239,12 +239,12 @@ public:
         , Counters(counters)
         , TableWriteActorSpan(TWilsonKqp::TableWriteActor, NWilson::TTraceId(traceId), "TKqpTableWriteActor")
     {
+        AFL_ENSURE(MessageSettings.InFlightMemoryLimitPerActorBytes >= MessageSettings.MemoryLimitPerMessageBytes);
         LogPrefix = TStringBuilder() << "Table: `" << TablePath << "` (" << TableId << "), " << "SessionActorId: " << sessionActorId;
         ShardedWriteController = CreateShardedWriteController(
             TShardedWriteControllerSettings {
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
                 .MemoryLimitPerMessage = MessageSettings.MemoryLimitPerMessageBytes,
-                .MaxBatchesPerMessage = MessageSettings.MaxBatchesPerMessage,
             },
             TypeEnv,
             Alloc);
@@ -2581,11 +2581,21 @@ public:
         Process();
     }
 
-    void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64 dataSize) override {
+    void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64) override {
         if (State != EState::PREPARING) {
             return;
         }
-        Y_UNUSED(preparedInfo, dataSize);
+        if (!preparedInfo.Coordinator || (TxManager->GetCoordinator() && preparedInfo.Coordinator != TxManager->GetCoordinator())) {
+            CA_LOG_E("Handle TEvWriteResult: unable to select coordinator. Tx canceled, actorId: " << SelfId()
+                << ", previously selected coordinator: " << TxManager->GetCoordinator()
+                << ", coordinator selected at propose result: " << preparedInfo.Coordinator);
+
+            TxProxyMon->TxResultAborted->Inc();
+            ReplyErrorAndDie(NYql::NDqProto::StatusIds::CANCELLED,
+                NKikimrIssues::TIssuesIds::TX_DECLINED_IMPLICIT_COORDINATOR,
+                "Unable to choose coordinator.");
+            return;
+        }
         if (TxManager->ConsumePrepareTransactionResult(std::move(preparedInfo))) {
             OnOperationFinished(Counters->BufferActorPrepareLatencyHistogram);
             TxManager->StartExecute();
@@ -2596,11 +2606,10 @@ public:
         Process();
     }
 
-    void OnCommitted(ui64 shardId, ui64 dataSize) override {
+    void OnCommitted(ui64 shardId, ui64) override {
         if (State != EState::COMMITTING) {
             return;
         }
-        Y_UNUSED(dataSize);
         if (TxManager->ConsumeCommitResult(shardId)) {
             CA_LOG_D("Committed TxId=" << TxId.value_or(0));
             OnOperationFinished(Counters->BufferActorCommitLatencyHistogram);
@@ -2615,8 +2624,7 @@ public:
         }
     }
 
-    void OnMessageAcknowledged(ui64 dataSize) override {
-        Y_UNUSED(dataSize);
+    void OnMessageAcknowledged(ui64) override {
         Process();
     }
 
@@ -2641,7 +2649,7 @@ public:
         ReplyErrorAndDie(statusCode, std::move(issues));
     }
 
-    void ReplyErrorAndDie(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::EYqlIssueCode id, const TString& message, const NYql::TIssues& subIssues = {}) {
+    void ReplyErrorAndDie(NYql::NDqProto::StatusIds::StatusCode statusCode, auto id, const TString& message, const NYql::TIssues& subIssues = {}) {
         BufferWriteActorState.EndError(message);
         BufferWriteActor.EndError(message);
 

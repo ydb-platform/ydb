@@ -71,7 +71,6 @@ ydb/core/persqueue/ut [*/*] chunk chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tablet_flat/ut TSharedPageCache.Compaction_BTreeIndex
-ydb/core/tablet_flat/ut TSharedPageCache.ThreeLeveledLRU
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
@@ -80,6 +79,7 @@ ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQCon
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlter-PQConfigTransactionsAtSchemeShard-true
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlterDropPqGroupWithReboots-PQConfigTransactionsAtSchemeShard-true
 ydb/core/tx/schemeshard/ut_restore TImportWithRebootsTests.ShouldSucceedOnSingleChangefeed
+ydb/core/tx/schemeshard/ut_restore [*/*] chunk chunk
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
 ydb/core/viewer/tests test.py.test_viewer_nodes
 ydb/core/viewer/tests test.py.test_viewer_sysinfo
@@ -105,7 +105,6 @@ ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/fq/control_plane_storage [*/*] chunk chunk
 ydb/tests/fq/control_plane_storage [*/*]+chunk+chunk
 ydb/tests/fq/generic/analytics sole chunk chunk
-ydb/tests/fq/generic/analytics test_join.py.TestJoinAnalytics.test_simple[v1-2-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming sole chunk chunk
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_simple[v1-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-0-True-3-fq_client0-mvp_external_ydb_endpoint0]
@@ -115,6 +114,9 @@ ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-4-True-3-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-5-True-3-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-6-True-3-fq_client0-mvp_external_ydb_endpoint0]
+ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-7-True-3-fq_client0-mvp_external_ydb_endpoint0]
+ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-8-True-3-fq_client0-mvp_external_ydb_endpoint0]
+ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-9-True-3-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/mem_alloc sole chunk chunk
 ydb/tests/fq/mem_alloc sole+chunk+chunk
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
@@ -145,6 +147,9 @@ ydb/tests/functional/serializable test.py.test_local
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/join2.test]
+ydb/tests/functional/tenants test_auth_system_views.py.test_tenant_auth_groups_access[clusteruser-False]
+ydb/tests/functional/tenants test_auth_system_views.py.test_tenant_auth_groups_access[dbadmin-True]
+ydb/tests/functional/tenants test_auth_system_views.py.test_tenant_auth_groups_access[ordinaryuser-False]
 ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_the_same_tenant2[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_the_same_tenant2[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--false]
@@ -162,6 +167,11 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[36]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[67]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[86]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[9]
+ydb/tests/olap sole chunk chunk
+ydb/tests/olap test_quota_exhaustion.py.TestYdbWorkload.test_delete
+ydb/tests/olap/column_family/compression alter_compression.py.TestAlterCompression.test_all_supported_compression
+ydb/tests/olap/column_family/compression alter_compression.py.TestAlterCompression.test_availability_data
+ydb/tests/olap/column_family/compression sole chunk chunk
 ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
@@ -173,8 +183,6 @@ ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_data_unchanged_
 ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_ttl_delete
 ydb/tests/olap/ttl_tiering ttl_unavailable_s3.py.TestUnavailableS3.test
 ydb/tests/olap/ttl_tiering unstable_connection.py.TestUnstableConnection.test
-ydb/tests/olap sole chunk chunk
-ydb/tests/olap test_quota_exhaustion.py.TestYdbWorkload.test_delete
 ydb/tests/postgres_integrations/go-libpq [docker_wrapper_test.py] chunk chunk
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayValueBackend]
@@ -257,6 +265,7 @@ ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_pool_class
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-False]
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-True]
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_size_limit
+ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_delete_s3_tiering
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[column]
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[row]
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

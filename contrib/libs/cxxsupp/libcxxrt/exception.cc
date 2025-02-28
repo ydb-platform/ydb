@@ -287,44 +287,69 @@ namespace std
 
 using namespace ABI_NAMESPACE;
 
-static void bt_terminate_handler() {
-    __cxa_eh_globals* globals = __cxa_get_globals();
-    __cxa_exception* thrown_exception = globals->caughtExceptions;
+/**
+ * Callback function used with _Unwind_Backtrace().
+ *
+ * Prints a stack trace.  Used only for debugging help.
+ *
+ * Note: As of FreeBSD 8.1, dladd() still doesn't work properly, so this only
+ * correctly prints function names from public, relocatable, symbols.
+ */
+static _Unwind_Reason_Code trace(struct _Unwind_Context *context, void *c)
+{
+	Dl_info myinfo;
+	int mylookup =
+		dladdr(reinterpret_cast<void *>(__cxa_current_exception_type), &myinfo);
+	void *ip = reinterpret_cast<void*>(_Unwind_GetIP(context));
+	Dl_info info;
+	if (dladdr(ip, &info) != 0)
+	{
+		if (mylookup == 0 || strcmp(info.dli_fname, myinfo.dli_fname) != 0)
+		{
+			printf("%p:%s() in %s\n", ip, info.dli_sname, info.dli_fname);
+		}
+	}
+	return _URC_CONTINUE_UNWIND;
+}
 
-    if (!thrown_exception) {
-        abort();
-    }
+static void terminate_with_diagnostics() {
+    __cxa_eh_globals *globals = __cxa_get_globals();
+    __cxa_exception *ex = globals->caughtExceptions;
 
-    fprintf(stderr, "uncaught exception:\n    address -> %p\n", (void*)thrown_exception);
-    thrown_exception = realExceptionFromException(thrown_exception);
+    if (ex != nullptr) {
+		fprintf(stderr, "uncaught exception:\n    address -> %p\n", (void*)ex);
+		ex = realExceptionFromException(ex);
 
-    const __class_type_info *e_ti = static_cast<const __class_type_info*>(&typeid(std::exception));
-    const __class_type_info *throw_ti = dynamic_cast<const __class_type_info*>(thrown_exception->exceptionType);
+		const __class_type_info *e_ti = 
+			static_cast<const __class_type_info*>(&typeid(std::exception));
+		const __class_type_info *throw_ti = 
+			dynamic_cast<const __class_type_info*>(ex->exceptionType);
 
-    if (throw_ti) {
-        void* ptr = thrown_exception + 1;
+		if (throw_ti) {
+			void* ptr = ex + 1;
 
-        if (throw_ti->__do_upcast(e_ti, &ptr)) {
-            std::exception* e = static_cast<std::exception*>(ptr);
+			if (throw_ti->__do_upcast(e_ti, &ptr)) {
+				std::exception* e = static_cast<std::exception*>(ptr);
 
-            if (e) {
-                fprintf(stderr, "    what() -> \"%s\"\n", e->what());
-            }
-        }
-    }
+				if (e) {
+					fprintf(stderr, "    what() -> \"%s\"\n", e->what());
+				}
+			}
+		}
 
-    size_t bufferSize = 128;
-    char *demangled = static_cast<char*>(malloc(bufferSize));
-    const char *mangled = thrown_exception->exceptionType->name();
-    int status;
-    demangled = __cxa_demangle(mangled, demangled, &bufferSize, &status);
-    fprintf(stderr, "    type -> %s\n", status == 0 ? demangled : mangled);
-    if (status == 0) { free(demangled); }
+		size_t bufferSize = 128;
+		char *demangled = static_cast<char*>(malloc(bufferSize));
+		const char *mangled = ex->exceptionType->name();
+		int status;
+		demangled = __cxa_demangle(mangled, demangled, &bufferSize, &status);
+		fprintf(stderr, "    type -> %s\n", status == 0 ? demangled : mangled);
+		if (status == 0) { free(demangled); }
+	}
     abort();
 }
 
 /** The global termination handler. */
-static atomic<terminate_handler> terminateHandler = bt_terminate_handler;
+static atomic<terminate_handler> terminateHandler = terminate_with_diagnostics;
 /** The global unexpected exception handler. */
 static atomic<unexpected_handler> unexpectedHandler = std::terminate;
 
@@ -757,31 +782,6 @@ void __cxa_free_dependent_exception(void *thrown_exception)
 		releaseException(realExceptionFromException(reinterpret_cast<__cxa_exception*>(ex)));
 	}
 	free_exception(reinterpret_cast<char*>(thrown_exception) - dependent_exception_size - backtrace_buffer_size);
-}
-
-/**
- * Callback function used with _Unwind_Backtrace().
- *
- * Prints a stack trace.  Used only for debugging help.
- *
- * Note: As of FreeBSD 8.1, dladd() still doesn't work properly, so this only
- * correctly prints function names from public, relocatable, symbols.
- */
-static _Unwind_Reason_Code trace(struct _Unwind_Context *context, void *c)
-{
-	Dl_info myinfo;
-	int mylookup =
-		dladdr(reinterpret_cast<void *>(__cxa_current_exception_type), &myinfo);
-	void *ip = reinterpret_cast<void*>(_Unwind_GetIP(context));
-	Dl_info info;
-	if (dladdr(ip, &info) != 0)
-	{
-		if (mylookup == 0 || strcmp(info.dli_fname, myinfo.dli_fname) != 0)
-		{
-			printf("%p:%s() in %s\n", ip, info.dli_sname, info.dli_fname);
-		}
-	}
-	return _URC_CONTINUE_UNWIND;
 }
 
 /**

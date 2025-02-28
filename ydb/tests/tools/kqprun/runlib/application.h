@@ -16,8 +16,10 @@
 namespace NKikimrRun {
 
 class TMainBase : public TMainClassArgs {
-#ifdef PROFILE_MEMORY_ALLOCATIONS
 public:
+    TMainBase();
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
     static void FinishProfileMemoryAllocations();
 #endif
 
@@ -25,8 +27,6 @@ protected:
     void RegisterKikimrOptions(NLastGetopt::TOpts& options, TServerSettings& settings);
 
     virtual void RegisterLogOptions(NLastGetopt::TOpts& options);
-
-    void FillLogConfig(NKikimrConfig::TLogConfig& config) const;
 
     static IOutputStream* GetDefaultOutput(const TString& file);
 
@@ -36,11 +36,11 @@ protected:
     inline static NColorizer::TColors CoutColors = NColorizer::AutoColors(Cout);
     inline static IOutputStream* ProfileAllocationsOutput = nullptr;
 
-private:
-    inline static std::vector<std::unique_ptr<TFileOutput>> FileHolders;
-
     std::optional<NActors::NLog::EPriority> DefaultLogPriority;
     std::unordered_map<NKikimrServices::EServiceKikimr, NActors::NLog::EPriority> LogPriorities;
+
+private:
+    inline static std::vector<std::unique_ptr<TFileOutput>> FileHolders;
 
     TString UdfsDirectory;
     TVector<TString> UdfsPaths;

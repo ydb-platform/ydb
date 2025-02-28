@@ -1,0 +1,33 @@
+(
+(let config (DataSource 'config))
+(let res_sink (DataSink 'result))
+
+(let list (AsList
+    (AsStruct '('key (Uint32 '1)) '('value (Uint32 '2)))
+    (AsStruct '('key (Uint32 '2)) '('value (Uint32 '3)))
+))
+
+(let res (Aggregate list '('key 'value) '() '()))
+(let res (Map res (lambda '(item)
+    (AsStruct
+        '('composite (AsStruct
+            '('k (Member item 'key))
+            '('v (Member item 'value))
+        ))
+        '('key (Member item 'key))
+        '('value (Member item 'value))
+    )
+)))
+(let res (Take res (Uint64 '0)))
+(let res (FlatMap res (lambda '(item)
+    (Just (AsStruct
+        '('packed (StablePickle (Member item 'composite)))
+        '('composite (Member item 'composite))
+        '('key (Member item 'key))
+        '('value (Member item 'value))
+    ))
+)))
+(let world (Write! world res_sink (Key) res '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

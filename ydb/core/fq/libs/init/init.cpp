@@ -88,14 +88,21 @@ void Init(
     const auto clientCounters = yqCounters->GetSubgroup("subsystem", "ClientMetrics");
 
     if (protoConfig.GetControlPlaneStorage().GetEnabled()) {
+        const auto counters = yqCounters->GetSubgroup("subsystem", "ControlPlaneStorage");
         auto controlPlaneStorage = protoConfig.GetControlPlaneStorage().GetUseInMemory()
-            ? NFq::CreateInMemoryControlPlaneStorageServiceActor(protoConfig.GetControlPlaneStorage())
+            ? NFq::CreateInMemoryControlPlaneStorageServiceActor(
+                protoConfig.GetControlPlaneStorage(),
+                protoConfig.GetGateways().GetS3(),
+                protoConfig.GetCommon(),
+                protoConfig.GetCompute(),
+                counters,
+                tenant)
             : NFq::CreateYdbControlPlaneStorageServiceActor(
                 protoConfig.GetControlPlaneStorage(),
                 protoConfig.GetGateways().GetS3(),
                 protoConfig.GetCommon(),
                 protoConfig.GetCompute(),
-                yqCounters->GetSubgroup("subsystem", "ControlPlaneStorage"),
+                counters,
                 yqSharedResources,
                 NKikimr::CreateYdbCredentialsProviderFactory,
                 tenant);

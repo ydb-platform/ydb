@@ -141,6 +141,14 @@ TTargetTransfer::TTargetTransfer(TReplication* replication, ui64 id, const IConf
 {
 }
 
+void TTargetTransfer::UpdateConfig(const NKikimrReplication::TReplicationConfig& cfg) {
+    auto& t = cfg.GetTransferSpecific().GetTargets(0);
+    Config = std::make_shared<TTargetTransfer::TTransferConfig>(
+        GetConfig()->GetSrcPath(),
+        GetConfig()->GetDstPath(),
+        t.GetTransformLambda());
+}
+
 TString TTargetTransfer::BuildStreamPath() const {
     return CanonizePath(GetSrcPath());
 }

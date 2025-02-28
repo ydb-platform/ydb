@@ -45,12 +45,17 @@ private:
 
 
 TDownloadTaskParams downloadTaskParams{
-    .Input = TYtTableRef{"Path","Cluster","TransactionId"},
+    .Input = TYtTableRef{"Path","Cluster"},
     .Output = TFmrTableRef{"TableId"}
 };
 
 TStartOperationRequest CreateOperationRequest(ETaskType taskType = ETaskType::Download, TTaskParams taskParams = downloadTaskParams) {
-    return TStartOperationRequest{.TaskType = taskType, .TaskParams = taskParams, .SessionId = "SessionId", .IdempotencyKey = "IdempotencyKey"};
+    return TStartOperationRequest{
+        .TaskType = taskType,
+        .TaskParams = taskParams,
+        .IdempotencyKey = "IdempotencyKey",
+        .ClusterConnection = TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}
+    };
 }
 
 std::vector<TStartOperationRequest> CreateSeveralOperationRequests(
@@ -59,7 +64,10 @@ std::vector<TStartOperationRequest> CreateSeveralOperationRequests(
     std::vector<TStartOperationRequest> startOperationRequests(numRequests);
     for (int i = 0; i < numRequests; ++i) {
         startOperationRequests[i] = TStartOperationRequest{
-            .TaskType = taskType, .TaskParams = taskParams, .IdempotencyKey = "IdempotencyKey_" + ToString(i)
+            .TaskType = taskType,
+            .TaskParams = taskParams,
+            .IdempotencyKey = "IdempotencyKey_" + ToString(i),
+            .ClusterConnection = TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn", .Token = "token"}
         };
     }
     return startOperationRequests;

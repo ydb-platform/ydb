@@ -1102,6 +1102,9 @@ class StaticConfigGenerator(object):
                     if "SharedWithOs" in pool_kind.filter_properties:
                         pdisk_filter.Property.add(SharedWithOs=pool_kind.filter_properties["SharedWithOs"])
 
+                    if "kind" in pool_kind.filter_properties:
+                        pdisk_filter.Property.add(Kind=pool_kind.filter_properties["kind"])
+
     def _get_base_statestorage(self, domains_cfg, ss):
         ssid = ss.get("ssid", None)
         if ssid is None and ssid not in (1, 33):

@@ -2766,13 +2766,14 @@ private:
 
         // error
         LOG_T("Updating channels after the creation of compute actors");
+        Y_ENSURE(Planner);
         THashMap<TActorId, THashSet<ui64>> updates;
         for (ui64 taskId : ComputeTasks) {
             auto& task = TasksGraph.GetTask(taskId);
             if (task.ComputeActorId)
-                CollectTaskChannelsUpdates(task, updates);
+                Planner->CollectTaskChannelsUpdates(task, updates);
         }
-        PropagateChannelsUpdates(updates);
+        Planner->PropagateChannelsUpdates(updates);
     }
 
     void ExecuteTopicTabletTransactions(TTopicTabletTxs& topicTxs) {

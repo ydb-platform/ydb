@@ -2862,7 +2862,12 @@ private:
 
             // Check all counsumers are known
             auto& processed = ProcessedCalculateColumnGroups[writer];
-            if (processed.size() == readers.size() && AllOf(readers, [&processed](const auto& item) { return processed.contains(std::get<0>(item)->UniqueId()); })) {
+            if (processed.size() == readers.size() &&
+                AllOf(readers, [&processed](const auto& item) {
+                    // Always reprocess ops with merge/copy readers
+                    return !TYtCopy::Match(std::get<0>(item)) && !TYtMerge::Match(std::get<0>(item)) && processed.contains(std::get<0>(item)->UniqueId());
+                })
+            ) {
                 continue;
             }
             processed.clear();

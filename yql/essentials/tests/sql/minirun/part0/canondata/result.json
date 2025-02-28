@@ -195,6 +195,20 @@
             "uri": "https://{canondata_backend}/1775319/5ca29359a027472a1be524a83343d503bb8612ac/resource.tar.gz#test.test_aggr_factory-multi_list_nulls-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[bigdate-date_tz_bounds_scale-default.txt-Debug]": [
+        {
+            "checksum": "7c3321778e9b3d987012a3db4b5c543f",
+            "size": 2195,
+            "uri": "https://{canondata_backend}/995452/d75b3fef2c2936a3787295c659edce4b671679fc/resource.tar.gz#test.test_bigdate-date_tz_bounds_scale-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[bigdate-date_tz_bounds_scale-default.txt-Results]": [
+        {
+            "checksum": "27d2bfc3ef714803f4cfcf0febebb488",
+            "size": 8420,
+            "uri": "https://{canondata_backend}/995452/d75b3fef2c2936a3787295c659edce4b671679fc/resource.tar.gz#test.test_bigdate-date_tz_bounds_scale-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[bigdate-input_date32-default.txt-Debug]": [
         {
             "checksum": "3697f94ae078bc6ebce40104eaef5799",
@@ -682,6 +696,20 @@
             "checksum": "17aee04ea0bd46eb335559527a9a3e34",
             "size": 703,
             "uri": "https://{canondata_backend}/995452/c22e7d9867fa56e2ee0c270fded39566aaa63a48/resource.tar.gz#test.test_flexible_types-group_by2-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[join-eq_over_join_bad_rotate-default.txt-Debug]": [
+        {
+            "checksum": "75bc473eee49f48848cfac6902f99607",
+            "size": 1784,
+            "uri": "https://{canondata_backend}/1946324/fbb1b986a8af3f4a5932aa11a3d24263ba935543/resource.tar.gz#test.test_join-eq_over_join_bad_rotate-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[join-eq_over_join_bad_rotate-default.txt-Results]": [
+        {
+            "checksum": "e8ae895d664f93e239570274b7b66d8d",
+            "size": 7624,
+            "uri": "https://{canondata_backend}/1946324/fbb1b986a8af3f4a5932aa11a3d24263ba935543/resource.tar.gz#test.test_join-eq_over_join_bad_rotate-default.txt-Results_/results.txt"
         }
     ],
     "test.test[json-json_query/common_syntax-default.txt-Debug]": [

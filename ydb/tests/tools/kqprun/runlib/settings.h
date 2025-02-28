@@ -4,6 +4,16 @@
 
 namespace NKikimrRun {
 
+struct TAsyncQueriesSettings {
+    enum class EVerbose {
+        EachQuery,
+        Final,
+    };
+
+    ui64 InFlightLimit = 0;
+    EVerbose Verbose = EVerbose::EachQuery;
+};
+
 struct TServerSettings {
     TString DomainName = "Root";
 

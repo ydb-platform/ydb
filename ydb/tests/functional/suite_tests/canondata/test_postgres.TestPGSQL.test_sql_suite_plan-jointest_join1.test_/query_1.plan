@@ -4,8 +4,8 @@
         "PlanNodeType": "Query",
         "Plans": [
             {
-                "Node Type": "ResultSet_2",
-                "PlanNodeId": 13,
+                "Node Type": "ResultSet_1",
+                "PlanNodeId": 12,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,23 +14,23 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 11
+                                        "ExternalPlanNodeId": 10
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 12,
+                        "PlanNodeId": 11,
                         "Plans": [
                             {
                                 "Node Type": "Merge",
-                                "PlanNodeId": 11,
+                                "PlanNodeId": 10,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "precompute_1_0",
-                                        "Node Type": "TopSort-InnerJoin (MapJoin)-ConstantExpr-Filter-TableRangeScan-ConstantExpr",
+                                        "CTE Name": "precompute_0_0",
+                                        "Node Type": "TopSort-InnerJoin (MapJoin)-ConstantExpr-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -62,35 +62,55 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 4
+                                                        "ExternalPlanNodeId": 8
                                                     }
                                                 ],
                                                 "Name": "Filter",
                                                 "Predicate": "Exist(item.i)"
-                                            },
+                                            }
+                                        ],
+                                        "PlanNodeId": 9,
+                                        "Plans": [
                                             {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 5
-                                                    }
-                                                ],
-                                                "Name": "TableRangeScan",
-                                                "Path": "/Root/postgres_jointest/join1.test_plan/J2_TBL",
-                                                "ReadColumns": [
+                                                "Columns": [
                                                     "i",
                                                     "k"
                                                 ],
+                                                "E-Cost": "No estimate",
+                                                "E-Rows": "No estimate",
+                                                "E-Size": "No estimate",
+                                                "LookupKeyColumns": [
+                                                    "i"
+                                                ],
+                                                "Node Type": "TableLookup",
+                                                "Path": "/Root/postgres_jointest/join1.test_plan/J2_TBL",
+                                                "PlanNodeId": 8,
+                                                "PlanNodeType": "Connection",
+                                                "Plans": [
+                                                    {
+                                                        "CTE Name": "precompute_0_0",
+                                                        "Node Type": "ConstantExpr-Aggregate",
+                                                        "Operators": [
+                                                            {
+                                                                "Inputs": [
+                                                                    {
+                                                                        "InternalOperatorId": 1
+                                                                    }
+                                                                ],
+                                                                "Iterator": "PartitionByKey",
+                                                                "Name": "Iterator"
+                                                            },
+                                                            {
+                                                                "Input": "precompute_0_0",
+                                                                "Inputs": [],
+                                                                "Name": "PartitionByKey"
+                                                            }
+                                                        ],
+                                                        "PlanNodeId": 7
+                                                    }
+                                                ],
                                                 "Table": "postgres_jointest/join1.test_plan/J2_TBL"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Iterator": "precompute_1_0",
-                                                "Name": "Iterator"
                                             }
-                                        ],
-                                        "PlanNodeId": 10,
-                                        "Tables": [
-                                            "postgres_jointest/join1.test_plan/J2_TBL"
                                         ]
                                     }
                                 ],
@@ -102,27 +122,6 @@
                         ]
                     }
                 ]
-            },
-            {
-                "Node Type": "Precompute_1",
-                "Parent Relationship": "InitPlan",
-                "PlanNodeId": 8,
-                "PlanNodeType": "Materialize",
-                "Plans": [
-                    {
-                        "CTE Name": "precompute_0_0",
-                        "Node Type": "Aggregate",
-                        "Operators": [
-                            {
-                                "Input": "precompute_0_0",
-                                "Inputs": [],
-                                "Name": "PartitionByKey"
-                            }
-                        ],
-                        "PlanNodeId": 7
-                    }
-                ],
-                "Subplan Name": "CTE precompute_1_0"
             },
             {
                 "Node Type": "Precompute_0",
@@ -211,7 +210,10 @@
                         "i",
                         "k"
                     ],
-                    "type": "Scan"
+                    "lookup_by": [
+                        "i"
+                    ],
+                    "type": "Lookup"
                 }
             ]
         }

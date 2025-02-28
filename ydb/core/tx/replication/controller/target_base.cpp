@@ -73,6 +73,9 @@ void TTargetBase::SetDstState(const EDstState value) {
         return Replication->AddPendingAlterTarget(Id);
     case EDstState::Done:
         return Replication->RemovePendingAlterTarget(Id);
+    case EDstState::Ready:
+        PendingRemoveWorkers = false;
+        break;
     default:
         break;
     }
@@ -194,6 +197,9 @@ void TTargetBase::Shutdown(const TActorContext& ctx) {
             ctx.Send(actorId, new TEvents::TEvPoison());
         }
     }
+}
+
+void TTargetBase::UpdateConfig(const NKikimrReplication::TReplicationConfig&) {
 }
 
 }

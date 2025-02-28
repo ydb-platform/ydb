@@ -1482,14 +1482,14 @@ public:
             YQL_ENSURE(!Chunks_.empty());
         }
 
-        auto& inputFields = SpecsCache_.GetSpecs().Inputs[TableIndex_]->FieldsVec;
+        auto& decoder = *Specs_.Inputs[TableIndex_];
         Row_ = SpecsCache_.NewRow(TableIndex_, items, true);
 
         auto& [chunkRowIndex, chunkLen, chunk] = Chunks_.front();
-        for (size_t i = 0; i < inputFields.size(); i++) {
-            items[inputFields[i].StructIndex] = SpecsCache_.GetHolderFactory().CreateArrowBlock(std::move(chunk[i]));
+        for (size_t i = 0; i < decoder.StructSize; i++) {
+            items[i] = SpecsCache_.GetHolderFactory().CreateArrowBlock(std::move(chunk[i]));
         }
-        items[inputFields.size()] = SpecsCache_.GetHolderFactory().CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(chunkLen)));
+        items[decoder.StructSize] = SpecsCache_.GetHolderFactory().CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(chunkLen)));
         RowIndex_ = chunkRowIndex;
 
         Chunks_.pop_front();
@@ -1539,7 +1539,7 @@ public:
         YQL_ENSURE(rowIndices || decoder.Dynamic || Specs_.IsTableContent_);
 
         arrow::compute::ExecContext execContext(Pool_);
-        std::vector<arrow::Datum> convertedBatch;
+        std::vector<arrow::Datum> convertedBatch(decoder.StructSize);
         for (size_t i = 0; i < inputFields.size(); i++) {
             auto batchColumn = batch->GetColumnByName(inputFields[i].Name);
             if (!batchColumn) {
@@ -1565,15 +1565,18 @@ public:
                     }
                 } else if (decoder.FillSysColumnIndex == inputFields[i].StructIndex) {
                     convertedColumn = ARROW_RESULT(arrow::MakeArrayFromScalar(arrow::UInt32Scalar(TableIndex_), batch->num_rows()));
+                } else if (inputFields[i].StructIndex == Max<ui32>()) {
+                    // Input field won't appear in the result
+                    continue;
                 } else {
                     YQL_ENSURE(false, "unexpected column: " << inputFields[i].Name);
                 }
 
-                convertedBatch.emplace_back(convertedColumn);
+                convertedBatch[inputFields[i].StructIndex] = std::move(convertedColumn);
                 continue;
             }
 
-            convertedBatch.emplace_back(ColumnConverters_[i]->Convert(batchColumn->data()));
+            convertedBatch[inputFields[i].StructIndex] = ColumnConverters_[i]->Convert(batchColumn->data());
         }
 
         // index of the first row in the block

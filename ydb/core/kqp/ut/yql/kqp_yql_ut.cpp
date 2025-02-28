@@ -202,8 +202,10 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR));
     }
 
-    Y_UNIT_TEST(InsertCV) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(InsertCV, useSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
         TScriptingClient client(kikimr.GetDriver());
 
         auto result = client.ExecuteYqlScript(R"(
@@ -217,8 +219,10 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION));
     }
 
-    Y_UNIT_TEST(InsertCVList) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(InsertCVList, useSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
         TScriptingClient client(kikimr.GetDriver());
 
         auto result = client.ExecuteYqlScript(R"(

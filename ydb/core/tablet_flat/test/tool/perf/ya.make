@@ -7,7 +7,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/tablet_flat/test/libs/table
-    library/cpp/charset
+    library/cpp/charset/lite
     library/cpp/getopt
     ydb/core/tablet_flat
     yql/essentials/sql/pg_dummy

@@ -330,7 +330,6 @@ message TTableServiceConfig {
     message TWriteActorSettings {
         optional uint64 InFlightMemoryLimitPerActorBytes = 1 [ default = 67108864 ];
         optional uint64 MemoryLimitPerMessageBytes = 2 [ default = 67108864 ];
-        optional uint64 MaxBatchesPerMessage = 3 [ default = 1000 ];
 
         optional uint64 StartRetryDelayMs = 4 [ default = 1000 ];
         optional uint64 MaxRetryDelayMs = 5 [ default = 10000 ];
@@ -362,4 +361,6 @@ message TTableServiceConfig {
     optional bool EnableSnapshotIsolationRW = 76 [default = false];
     optional bool EnableStreamWrite = 77 [default = false];
     optional bool EnableBatchUpdates = 78 [default = false];
+
+    optional bool AllowMultiBroadcasts = 79 [default = false];
 };

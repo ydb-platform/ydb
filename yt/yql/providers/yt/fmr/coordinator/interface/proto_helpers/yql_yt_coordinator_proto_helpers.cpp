@@ -68,6 +68,8 @@ NProto::TStartOperationRequest StartOperationRequestToProto(const TStartOperatio
         protoStartOperationRequest.SetIdempotencyKey(*startOperationRequest.IdempotencyKey);
     }
     protoStartOperationRequest.SetNumRetries(startOperationRequest.NumRetries);
+    auto protoClusterConnection = ClusterConnectionToProto(startOperationRequest.ClusterConnection);
+    protoStartOperationRequest.MutableClusterConnection()->Swap(&protoClusterConnection);
     return protoStartOperationRequest;
 }
 
@@ -80,6 +82,7 @@ TStartOperationRequest StartOperationRequestFromProto(const NProto::TStartOperat
         startOperationRequest.IdempotencyKey = protoStartOperationRequest.GetIdempotencyKey();
     }
     startOperationRequest.NumRetries = protoStartOperationRequest.GetNumRetries();
+    startOperationRequest.ClusterConnection = ClusterConnectionFromProto(protoStartOperationRequest.GetClusterConnection());
     return startOperationRequest;
 }
 

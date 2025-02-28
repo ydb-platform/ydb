@@ -459,7 +459,6 @@ public:
                                 }
                             };
                             processor->AddFinishedCallback(std::move(finishedCallback));
-                            // TODO: Add headers for streaming calls.
                             TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
                             responseCb(std::move(status), std::move(processor));
                         } else {
@@ -468,7 +467,6 @@ public:
                             if (grpcStatus.GRpcStatusCode != grpc::StatusCode::CANCELLED) {
                                 dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
                             }
-                            // TODO: Add headers for streaming calls.
                             TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
                             responseCb(std::move(status), nullptr);
                         }
@@ -560,7 +558,6 @@ public:
                                 }
                             };
                             processor->AddFinishedCallback(std::move(finishedCallback));
-                            // TODO: Add headers for streaming calls.
                             TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
                             connectedCallback(std::move(status), std::move(processor));
                         } else {
@@ -569,7 +566,6 @@ public:
                             if (grpcStatus.GRpcStatusCode != grpc::StatusCode::CANCELLED) {
                                 dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
                             }
-                            // TODO: Add headers for streaming calls.
                             TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
                             connectedCallback(std::move(status), nullptr);
                         }

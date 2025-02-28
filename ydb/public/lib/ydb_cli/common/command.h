@@ -110,6 +110,18 @@ public:
         TString Database;
         TString CaCerts;
         TString CaCertsFile;
+        TString ClientCert;
+        TString ClientCertPrivateKey;
+        TString ClientCertPrivateKeyPassword;
+        TString ClientCertFile;
+        TString ClientCertPrivateKeyFile;
+        TString ClientCertPrivateKeyPasswordFile;
+
+        // Client cert initialization.
+        // Parses certificate from dirrefent formats.
+        // Can ask for password if private key is protected with password and it is not set in options.
+        void InitClientCert();
+
         TMap<TString, TVector<TConnectionParam>> ConnectionParams;
         bool EnableSsl = false;
         bool IsNetworkIntensive = false;

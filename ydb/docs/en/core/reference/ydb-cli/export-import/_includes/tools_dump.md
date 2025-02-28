@@ -14,10 +14,7 @@ The `admin cluster dump` command dumps the cluster to the client file system, in
 
 `-o PATH` or `--output PATH`: Path to the directory in the client file system to dump the data to. If such a directory doesn't exist, it will be created. The entire path to it must already exist, however. If the specified directory exists, it must be empty. If the parameter is omitted, a directory with the name `backup_YYYYDDMMTHHMMSS` will be created in the current directory, with YYYYDDMM being the date and HHMMSS: the time when the dump began.
 
-[Cluster configuration](../../../../maintenance/manual/config-overview.md) is dumped separately using the following steps:
-
-1) Copy the static configuration from the nodes' local disks.
-2) Fetch the dynamic configuration using the `{{{ ydb-cli }} admin cluster config fetch` command.
+[Cluster configuration](../../../../maintenance/manual/config-overview.md) is dumped separately using the `{{{ ydb-cli }} admin cluster config fetch` command.
 
 ## Database
 
@@ -33,10 +30,7 @@ The `admin database dump` command dumps the database to the client file system, 
 
 `-o PATH` or `--output PATH`: Path to the directory in the client file system to dump the data to. If such a directory doesn't exist, it will be created. The entire path to it must already exist, however. If the specified directory exists, it must be empty. If the parameter is omitted, a directory with the name `backup_YYYYDDMMTHHMMSS` will be created in the current directory, with YYYYDDMM being the date and HHMMSS: the time when the dump began.
 
-[Database configuration](../../../../maintenance/manual/config-overview.md) is dumped separately using the following steps:
-
-1) Copy the static configuration from the nodes' local disks.
-2) Fetch the dynamic configuration using the `{{{ ydb-cli }} admin database config fetch` command.
+[Database configuration](../../../../maintenance/manual/config-overview.md) is dumped separately using the `{{{ ydb-cli }} admin cluster config fetch` command.
 
 ## Schema objects
 

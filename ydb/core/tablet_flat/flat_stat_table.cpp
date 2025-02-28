@@ -7,7 +7,7 @@
 namespace NKikimr {
 namespace NTable {
 
-bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, ui32 histogramBucketsCount, IPages* env, TBuildStatsYieldHandler yieldHandler) {
+bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, ui32 histogramBucketsCount, IPages* env, TBuildStatsYieldHandler yieldHandler, TBuildStatsLogHandler logHandler) {
     stats.Clear();
 
     bool mixedIndex = false;
@@ -17,9 +17,11 @@ bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, u
         }
     }
 
+    logHandler(TStringBuilder() << "starting for " << (mixedIndex ? "mixed" : "b-tree") << " index");
+
     return mixedIndex
         ? BuildStatsMixedIndex(subset, stats, rowCountResolution, dataSizeResolution, env, yieldHandler)
-        : BuildStatsBTreeIndex(subset, stats, histogramBucketsCount, env, yieldHandler);
+        : BuildStatsBTreeIndex(subset, stats, histogramBucketsCount, env, yieldHandler, logHandler);
 }
 
 void GetPartOwners(const TSubset& subset, THashSet<ui64>& partOwners) {

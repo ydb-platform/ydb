@@ -192,8 +192,10 @@ private:
 };
 
 using TBuildStatsYieldHandler = std::function<void()>;
+using TBuildStatsLogHandler = std::function<void(TString)>;
 
-bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, ui32 histogramBucketsCount, IPages* env, TBuildStatsYieldHandler yieldHandler);
+bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, ui32 histogramBucketsCount, IPages* env, 
+    TBuildStatsYieldHandler yieldHandler, TBuildStatsLogHandler logHandler = [](TString _){});
 void GetPartOwners(const TSubset& subset, THashSet<ui64>& partOwners);
 
 }}

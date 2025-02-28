@@ -520,9 +520,12 @@ private:
 
 }
 
-bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env, TBuildStatsYieldHandler yieldHandler) {
+bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env, 
+    TBuildStatsYieldHandler yieldHandler, TBuildStatsLogHandler logHandler) 
+{
     TTableHistogramBuilderBtreeIndex builder(subset, rowCountResolution, dataSizeResolution, env, yieldHandler);
 
+    Y_UNUSED(logHandler);
     if (!builder.Build(stats)) {
         return false;
     }

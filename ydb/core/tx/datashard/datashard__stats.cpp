@@ -113,7 +113,7 @@ public:
         auto msg = ev->Get();
 
         if (msg->Status != NKikimrProto::OK) {
-            LOG_ERROR_S(GetActorContext(), NKikimrServices::TX_DATASHARD, "Stats build failed at datashard "
+            LOG_ERROR_S(GetActorContext(), NKikimrServices::TX_DATASHARD, "[BuildStats] Failed to build stats at datashard "
                 << TabletId << ", for tableId " << TableId << " requested pages but got " << msg->Status);
             throw TExTableStatsError(ECode::FETCH_PAGE_FAILED, NKikimrProto::EReplyStatus_Name(msg->Status));
         }
@@ -165,11 +165,14 @@ private:
                 ObtainResources();
                 Spent->Alter(true); // resume measurement
             }
+        }, [this](TString message){
+            LOG_DEBUG_S(GetActorContext(), NKikimrServices::TX_DATASHARD, "[BuildStats] Building stats " << TabletId << ", for tableId " << TableId
+            << ": " << message);
         });
         
         Y_DEBUG_ABORT_UNLESS(IndexSize == ev->Stats.IndexSize.Size);
 
-        LOG_DEBUG_S(GetActorContext(), NKikimrServices::TX_DATASHARD, "BuildStats result at datashard " << TabletId << ", for tableId " << TableId
+        LOG_DEBUG_S(GetActorContext(), NKikimrServices::TX_DATASHARD, "[BuildStats] Stats at datashard " << TabletId << ", for tableId " << TableId
             << ": RowCount " << ev->Stats.RowCount << ", DataSize " << ev->Stats.DataSize.Size << ", IndexSize " << ev->Stats.IndexSize.Size << ", PartCount " << ev->PartCount
             << (ev->PartOwners.size() > 1 || ev->PartOwners.size() == 1 && *ev->PartOwners.begin() != TabletId ? ", with borrowed parts" : "")
             << (ev->HasSchemaChanges ? ", with schema changes" : "")
@@ -184,7 +187,7 @@ private:
         switch (const ui32 type = ev->GetTypeRewrite()) {
             case TEvResourceBroker::EvTaskOperationError: {
                 const auto* msg = ev->CastAsLocal<TEvResourceBroker::TEvTaskOperationError>();
-                LOG_ERROR_S(GetActorContext(), NKikimrServices::TX_DATASHARD, "TEvResourceAllocated: " << msg->Status.Message);
+                LOG_ERROR_S(GetActorContext(), NKikimrServices::TX_DATASHARD, "[BuildStats] TEvResourceAllocated: " << msg->Status.Message);
                 throw TExTableStatsError(ECode::RESOURCE_ALLOCATION_FAILED, msg->Status.Message);
             }
 
@@ -361,18 +364,18 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
     ui64 tableId = ev->Get()->TableId;
 
     if (!TableInfos.contains(tableId)) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "BuildStats result dropped at datashard " << TabletID()
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "[BuildStats] Result dropped at datashard " << TabletID()
             << ", built for tableId " << tableId << ", but table is gone (moved ot dropped)");
         return;
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "BuildStats result received at datashard " << TabletID() 
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "[BuildStats] Result received at datashard " << TabletID() 
         << ", for tableId " << tableId);
 
     const TUserTable& tableInfo = *TableInfos[tableId];
 
     if (!tableInfo.StatsUpdateInProgress) { // how can this happen?
-        LOG_ERROR(ctx, NKikimrServices::TX_DATASHARD, "Unexpected async stats update at datashard %" PRIu64, TabletID());
+        LOG_ERROR(ctx, NKikimrServices::TX_DATASHARD, "[BuildStats] Unexpected async stats update at datashard %" PRIu64, TabletID());
     }
 
     tableInfo.Stats.DataStats = std::move(ev->Get()->Stats);
@@ -399,7 +402,7 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
         TStringBuilder names;
         ListTableNames(GetUserTables(), names);
 
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Data size " << tableInfo.Stats.DataStats.DataSize.Size
+        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "[BuildStats] Data size " << tableInfo.Stats.DataStats.DataSize.Size
             << " is higher than threshold of " << (i64)HighDataSizeReportThresholdBytes
             << " at datashard: " << TabletID()
             << " table: " << names
@@ -412,7 +415,7 @@ void TDataShard::Handle(TEvPrivate::TEvTableStatsError::TPtr& ev, const TActorCo
 
     auto msg = ev->Get();
 
-    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Stats rebuilt error '" << msg->Message 
+    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "[BuildStats] Stats rebuilt error '" << msg->Message 
         << "', code: " << ui32(msg->Code) << ", datashard " << TabletID() << ", tableId " << msg->TableId);
 
     auto it = TableInfos.find(msg->TableId);
@@ -493,7 +496,7 @@ public:
                 stats.SearchHeight = searchHeight;
                 stats.HasSchemaChanges = hasSchemaChanges;
 
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "BuildStats skipped at datashard " << Self->TabletID() << ", for tableId " << tableId
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "[BuildStats] Skipped at datashard " << Self->TabletID() << ", for tableId " << tableId
                     << ": RowCount " << stats.DataStats.RowCount << ", DataSize " << stats.DataStats.DataSize.Size << ", IndexSize " << stats.DataStats.IndexSize.Size << ", PartCount " << stats.PartCount
                     << (stats.HasSchemaChanges ? ", with schema changes" : ""));
 
@@ -600,7 +603,7 @@ void TDataShard::UpdateTableStats(const TActorContext &ctx) {
 
     LastDbStatsUpdateTime = now;
 
-    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "UpdateTableStats at datashard %" PRIu64, TabletID());
+    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "[BuildStats] UpdateTableStats at datashard %" PRIu64, TabletID());
 
     Executor()->Execute(new TTxInitiateStatsUpdate(this), ctx);
 }

@@ -4506,7 +4506,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         void Execute() {
             AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
             AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(!IsOlap);
-            AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
             auto settings = TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false);
 
             Kikimr = std::make_unique<TKikimrRunner>(settings);
@@ -5778,7 +5777,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
         appConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
 
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)

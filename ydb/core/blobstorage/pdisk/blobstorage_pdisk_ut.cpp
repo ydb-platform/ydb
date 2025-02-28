@@ -1102,6 +1102,17 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         return nullptr;
     }
 
+    NPDisk::TEvChunkWrite::TPartsPtr GenAlignedPart(size_t size) {
+        if (false) {
+            TRope rope(PrepareData(size));
+            return MakeIntrusive<NPDisk::TEvChunkWrite::TRopeAlignedParts>(std::move(rope), size);
+        } else {
+            static TString data = PrepareData(size);
+            TString copy = data;
+            return MakeIntrusive<NPDisk::TEvChunkWrite::TAlignedParts>(std::move(copy));
+        }
+    }
+
     TString ConvertIPartsToString(NPDisk::TEvChunkWrite::IParts* parts) {
         auto data = TString::Uninitialized(parts->ByteSize());
         char *ptr = data.Detach();
@@ -1155,6 +1166,56 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             }
             UNIT_ASSERT(ConvertIPartsToString(parts.Get()) == res->Data.ToString().Slice());
         }
+    }
+
+    Y_UNIT_TEST(ChunkReadALot) {
+        TActorTestContext testCtx{{}};
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        for (ui32 i = 0; i < 10; ++i) {
+            vdisk.ReserveChunk();
+        }
+        vdisk.CommitReservedChunks();
+        UNIT_ASSERT(vdisk.Chunks[EChunkState::COMMITTED].size() >= 1);
+        const ui32 reservedChunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+
+        auto seed = TInstant::Now().MicroSeconds();
+        Cerr << "seed# " << seed << Endl;
+        TReallyFastRng32 rng(seed);
+
+        size_t size = 2_MB;
+        size_t written = 0;
+        auto duration = TDuration::Seconds(15);
+        TInstant end = TInstant::Now() + duration;
+        while (TInstant::Now() < end) {
+            for (ui32 offset = 0; offset <= vdisk.PDiskParams->ChunkSize - size; offset += size) {
+                NPDisk::TEvChunkWrite::TPartsPtr parts = GenAlignedPart(size);
+                // Cerr << "offset# " << offset << " size# " << size << Endl;
+                testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+                        new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                            reservedChunk, offset, parts, nullptr, false, 0),
+                        NKikimrProto::OK);
+                auto res = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+                        new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                            reservedChunk, offset, size, 0, 0),
+                        NKikimrProto::OK);
+                written += size;
+                //Cerr << ConvertIPartsToString(parts.Get()).size() << " ?= " << res->Data.ToString().size() << Endl;
+                //UNIT_ASSERT_EQUAL(ConvertIPartsToString(parts.Get()).size(), res->Data.ToString().size());
+
+                if (false) {
+                    Cerr << "ConvertIPartsToString(parts.Get())# ";
+                    Cerr << ConvertIPartsToString(parts.Get()).Quote() << Endl;
+                    Cerr << "res->Data.ToString()# ";
+                    auto x = res->Data.ToString();
+                    Cerr << TString(x.data(), x.size()).Quote() << Endl;
+                }
+                //UNIT_ASSERT(ConvertIPartsToString(parts.Get()) == res->Data.ToString().Slice());
+            }
+        }
+        Cerr << " total_speed# " << 2 * written / duration.SecondsFloat() / 1e9 << " GB/s" << Endl;
     }
 
     Y_UNIT_TEST(ChunkWriteBadOffset) {

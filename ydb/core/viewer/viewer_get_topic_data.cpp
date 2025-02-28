@@ -136,40 +136,40 @@ void TGetTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResul
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
                     error << "Got internal schema error  while trying to describe topic: '" << TopicPath << "'";
-                    return ReplyAndPassAwayIfAlive(GetHTTPBADREQUEST("text/plain", error));
+                    return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", error));
 
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
                     error << "Topic not found: '" << TopicPath << "'";
-                    return ReplyAndPassAwayIfAlive(GetHTTPBADREQUEST("text/plain", error));
+                    return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", error));
 
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
                     error << "Access denied to topuc: '" << TopicPath << "'";
-                    return ReplyAndPassAwayIfAlive(GetHTTPFORBIDDEN("text/plain", error));
+                    return ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", error));
 
                 default:
-                    return ReplyAndPassAwayIfAlive(GetHTTPINTERNALERROR("text/plain", "Got unknown error type trying to describe topic"));
+                    return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Got unknown error type trying to describe topic"));
 
             }
         }
         error << "While trying to find topic: '" << TopicPath << "' got error '" << TBase::GetError(ev_) << "'";
-        return ReplyAndPassAwayIfAlive(GetHTTPINTERNALERROR("text/plain", error));
+        return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", error));
     }
     const auto response = result->ResultSet.front();
     if (response.Self->Info.GetPathType() != NKikimrSchemeOp::EPathTypePersQueueGroup) {
         auto error = TStringBuilder() << "No such topic '" << TopicPath << "";
-        return ReplyAndPassAwayIfAlive(GetHTTPBADREQUEST("text/plain", error));
+        return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", error));
     }
     if (AppData(ActorContext())->EnforceUserTokenRequirement || AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
         if (Event->Get()->UserToken.empty()) {
-            return ReplyAndPassAwayIfAlive(GetHTTPFORBIDDEN("text/plain", "Unauthenticated access is forbidden, please provide credentials"));
+            return ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Unauthenticated access is forbidden, please provide credentials"));
         }
         NACLib::TUserToken token(Event->Get()->UserToken);
         if (!response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, token)) {
             TStringBuilder error;
             error << "Access to topic " << TopicPath << " is denied for subject " << token.GetUserSID();
-            return ReplyAndPassAwayIfAlive(GetHTTPFORBIDDEN("text/plain", error));
+            return ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", error));
         }
     }
     const auto& partitions = response.PQGroupInfo->Description.GetPartitions();
@@ -180,7 +180,7 @@ void TGetTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResul
             return SendPQReadRequest();
         }
     }
-    ReplyAndPassAwayIfAlive(GetHTTPBADREQUEST("text/plain", "No such partition in topic"));
+    ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "No such partition in topic"));
 }
 
 void TGetTopicData::SendPQReadRequest() {
@@ -211,10 +211,10 @@ void TGetTopicData::HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev) {
         switch (record.GetErrorCode()) {
             case ::NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET:
             case ::NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET:
-                ReplyAndPassAwayIfAlive(GetHTTPBADREQUEST("text/plain", "Bad offset"), record.GetErrorReason());
+                return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Bad offset"), record.GetErrorReason());
                 break;
             default:
-                ReplyAndPassAwayIfAlive(GetHTTPINTERNALERROR("text/plain", "Error trying to read messages"), record.GetErrorReason());
+                return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Error trying to read messages"), record.GetErrorReason());
         }
         return;
     }
@@ -223,7 +223,7 @@ void TGetTopicData::HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev) {
     if (response.HasCmdReadResult()) {
         const auto& readResult = response.GetCmdReadResult();
         if (readResult.GetReadingFinished()) {
-            ReplyAndPassAwayIfAlive(GetHTTPBADREQUEST("text/plain", "Bad partition-id"));
+            ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Bad partition-id"));
             return;
         }
     } else {
@@ -256,22 +256,15 @@ bool TGetTopicData::GetIntegerParam(const TString& name, i64& value) {
         value = FromStringWithDefault<i32>(params.Get(name), -1);
         if (value == -1) {
             auto error = TStringBuilder() << "field ' "<< name << "' has invalid value, an interger >= 0 is expected";
-            ReplyAndPassAwayIfAlive(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", error));
+            ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", error));
             return false;
         }
         return true;
     } else {
         auto error = TStringBuilder() << "field ' "<< name << "' is required";
-        ReplyAndPassAwayIfAlive(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", error));
+        ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", error));
         return false;
     }
-}
-
-void TGetTopicData::ReplyAndPassAwayIfAlive(TString data, const TString& error) {
-    if (IsDead)
-        return;
-    IsDead = true;
-    TBase::ReplyAndPassAway(data, error);
 }
 
 void TGetTopicData::Bootstrap() {
@@ -283,20 +276,21 @@ void TGetTopicData::Bootstrap() {
     Timeout = std::min(Timeout, 30000u);
 
 
-    GetIntegerParam("partition", PartitionId);
-    GetIntegerParam("offset", Offset);
+    if (!GetIntegerParam("partition", PartitionId))
+        return;
+    if (!GetIntegerParam("offset", Offset))
+        return;
+
     Limit = FromStringWithDefault<ui32>(params.Get("limit"), 10);
     if (Limit > MAX_MESSAGES_LIMIT) {
-        return ReplyAndPassAwayIfAlive(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Too many messages requested"));
+        return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Too many messages requested"));
     }
 
-    if (IsDead)
-        return;
     if (params.Has("topic_path")) {
         TopicPath = params.Get("topic_path");
         RequestSchemeCacheNavigateWithParams(params.Get("topic_path"), NACLib::DescribeSchema, true);
     } else {
-        return ReplyAndPassAwayIfAlive(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'topic_path' is required"));
+        return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'topic_path' is required"));
     }
     Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
 

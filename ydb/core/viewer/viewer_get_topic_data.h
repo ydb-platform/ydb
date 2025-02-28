@@ -41,7 +41,6 @@ private:
     void HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev);
     void HandleDataUnpacked(TEvViewerTopicData::TEvTopicDataUnpacked::TPtr& ev);
 
-    void ReplyAndPassAwayIfAlive(TString data, const TString& error = {});
     bool GetIntegerParam(const TString& name, i64& value);
 
     STATEFN(StateRequestedDescribe);
@@ -62,7 +61,6 @@ private:
     i64 Offset;
     i64 Limit;
     ui32 Timeout = 0;
-    bool IsDead = false;
 
     TAutoPtr<TEvPersQueue::TEvResponse> ReadResponse;
     NJson::TJsonValue Response;

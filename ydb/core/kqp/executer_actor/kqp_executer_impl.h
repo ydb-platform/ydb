@@ -1631,13 +1631,14 @@ protected:
         THashMap<ui64, ui64> assignedShardsCount;
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
+        auto& columnShardHashV1Params = stageInfo.Meta.ColumnShardHashV1Params;
         if (enableShuffleElimination && stageInfo.Meta.ColumnTableInfoPtr) {
             const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
-            stageInfo.Meta.SourceShardCount = tableDesc.GetColumnShardCount();
-            stageInfo.Meta.SourceTableKeyColumnTypes = std::make_shared<TVector<NScheme::TTypeInfo>>();
+            columnShardHashV1Params.SourceShardCount = tableDesc.GetColumnShardCount();
+            columnShardHashV1Params.SourceTableKeyColumnTypes = std::make_shared<TVector<NScheme::TTypeInfo>>();
             for (const auto& column: tableDesc.GetSharding().GetHashSharding().GetColumns()) {
                 auto columnType = stageInfo.Meta.TableConstInfo->Columns.at(column).Type;
-                stageInfo.Meta.SourceTableKeyColumnTypes->push_back(columnType);
+                columnShardHashV1Params.SourceTableKeyColumnTypes->push_back(columnType);
             }
         }
 
@@ -1697,8 +1698,8 @@ protected:
 
             } else if (enableShuffleElimination /* save partitioning for shuffle elimination */) {
                 std::size_t stageInternalTaskId = 0;
-                stageInfo.Meta.TaskIdByHash = std::make_shared<TVector<ui64>>();
-                stageInfo.Meta.TaskIdByHash->resize(stageInfo.Meta.SourceShardCount);
+                columnShardHashV1Params.TaskIdByHash = std::make_shared<TVector<ui64>>();
+                columnShardHashV1Params.TaskIdByHash->resize(columnShardHashV1Params.SourceShardCount);
 
                 for (auto&& pair : nodeShards) {
                     const auto nodeId = pair.first;
@@ -1748,7 +1749,7 @@ protected:
     
                         for (const auto& readInfo: *task.Meta.Reads) {
                             Y_ENSURE(hashByShardId.contains(readInfo.ShardId));
-                            (*stageInfo.Meta.TaskIdByHash)[hashByShardId[readInfo.ShardId]] = stageInternalTaskId;
+                            (*columnShardHashV1Params.TaskIdByHash)[hashByShardId[readInfo.ShardId]] = stageInternalTaskId;
                         }
 
                     }

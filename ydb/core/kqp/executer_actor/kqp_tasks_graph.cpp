@@ -21,6 +21,16 @@ using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
 
+TString KeyTypesToString(const TVector<NScheme::TTypeInfo>& keyColumnTypes) {
+    TVector<TString> stringNames;
+    stringNames.reserve(keyColumnTypes.size());
+    for (const auto& keyColumnType: keyColumnTypes) {
+        stringNames.push_back(NYql::NProto::TypeIds_Name(keyColumnType.GetTypeId()));
+    }
+    return "[" + JoinSeq(",", stringNames) + "]";
+};
+
+
 void LogStage(const NActors::TActorContext& ctx, const TStageInfo& stageInfo) {
     LOG_DEBUG_S(ctx, NKikimrServices::KQP_EXECUTER, stageInfo.DebugString());
 }
@@ -489,16 +499,14 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
             << (spilling ? " with spilling" : " without spilling"));
     };
 
-
     bool hasMap = false;
-    bool isFusedStage = (stageInfo.Meta.TaskIdByHash != nullptr);
+    auto& stageHashParams = stageInfo.Meta.ColumnShardHashV1Params;
+    bool isFusedStage = (stageHashParams.TaskIdByHash != nullptr);
     if (enableShuffleElimination && !isFusedStage) { // taskIdHash can be already set if it is a fused stage, so hashpartition will derive columnv1 parameters from there
         for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
             const auto& input = stage.GetInputs(inputIndex);
-            auto& originStageInfo = tasksGraph.GetStageInfo(NYql::NDq::TStageId(stageInfo.Id.TxId, input.GetStageIndex()));
-            stageInfo.Meta.TaskIdByHash = originStageInfo.Meta.TaskIdByHash;
-            stageInfo.Meta.SourceShardCount = originStageInfo.Meta.SourceShardCount;
-            stageInfo.Meta.SourceTableKeyColumnTypes = originStageInfo.Meta.SourceTableKeyColumnTypes;
+            auto& originStageInfo = tasksGraph.GetStageInfo(NYql::NDq::TStageId(stageInfo.Id.TxId, input.GetStageIndex()));;
+            stageHashParams = originStageInfo.Meta.ColumnShardHashV1Params;
             if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kMap) { 
                 // We want to enforce sourceShardCount from map connection, cause it can be at most one map connection
                 // and ColumnShardHash in Shuffle will use this parameter to shuffle on this map (same with taskIdByHash mapping)
@@ -510,10 +518,10 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
 
     // if it is stage, where we don't inherit parallelism.
     if (enableShuffleElimination && !hasMap && !isFusedStage && stageInfo.Tasks.size() > 0 && stage.InputsSize() > 0) {
-        stageInfo.Meta.SourceShardCount = stageInfo.Tasks.size();
-        stageInfo.Meta.TaskIdByHash = std::make_shared<TVector<ui64>>(stageInfo.Meta.SourceShardCount);
-        for (std::size_t i = 0; i < stageInfo.Meta.SourceShardCount; ++i) {
-            (*stageInfo.Meta.TaskIdByHash)[i] = i;
+        stageHashParams.SourceShardCount = stageInfo.Tasks.size();
+        stageHashParams.TaskIdByHash = std::make_shared<TVector<ui64>>(stageHashParams.SourceShardCount);
+        for (std::size_t i = 0; i < stageHashParams.SourceShardCount; ++i) {
+            (*stageHashParams.TaskIdByHash)[i] = i;
         }
 
         for (auto& input : stage.GetInputs()) {
@@ -531,12 +539,12 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
             // because we didn't save partitioning in the BuildScanTasksFromShards.
 
             auto columnShardHashV1 = hashShuffle.GetColumnShardHashV1();
-            stageInfo.Meta.SourceTableKeyColumnTypes = std::make_shared<TVector<NScheme::TTypeInfo>>();
-            stageInfo.Meta.SourceTableKeyColumnTypes->reserve(columnShardHashV1.KeyColumnTypesSize());
+            stageHashParams.SourceTableKeyColumnTypes = std::make_shared<TVector<NScheme::TTypeInfo>>();
+            stageHashParams.SourceTableKeyColumnTypes->reserve(columnShardHashV1.KeyColumnTypesSize());
             for (const auto& keyColumnType: columnShardHashV1.GetKeyColumnTypes()) {
                 auto typeId = static_cast<NScheme::TTypeId>(keyColumnType);
                 auto typeInfo = NScheme::TTypeInfo{typeId};
-                stageInfo.Meta.SourceTableKeyColumnTypes->push_back(typeInfo);
+                stageHashParams.SourceTableKeyColumnTypes->push_back(typeInfo);
             }
             break;
         }
@@ -546,7 +554,8 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
         ui32 inputIdx = input.GetInputIndex();
         auto& inputStageInfo = tasksGraph.GetStageInfo(TStageId(stageInfo.Id.TxId, input.GetStageIndex()));
         const auto& outputIdx = input.GetOutputIndex();
-
+        Cout << "OUTPUT INDEX: " << outputIdx << Endl;
+        
         switch (input.GetTypeCase()) {
             case NKqpProto::TKqpPhyConnection::kUnionAll:
                 BuildUnionAllChannels(tasksGraph, stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
@@ -560,9 +569,32 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
                     }
                     case NKqpProto::TKqpPhyCnHashShuffle::kColumnShardHashV1: {
                         Y_ENSURE(enableShuffleElimination, "OptShuffleElimination wasn't turned on, but ColumnShardHashV1 detected!");
-                        inputStageInfo.Meta.TaskIdByHash = stageInfo.Meta.TaskIdByHash;
-                        inputStageInfo.Meta.SourceShardCount = stageInfo.Meta.SourceShardCount;
-                        inputStageInfo.Meta.SourceTableKeyColumnTypes = stageInfo.Meta.SourceTableKeyColumnTypes;
+                        auto& inputStageHashParams = inputStageInfo.Meta.ColumnShardHashV1Params;
+                        inputStageHashParams = stageHashParams;
+
+                        if (inputStageHashParams.SourceTableKeyColumnTypes->size() != input.GetHashShuffle().KeyColumnsSize()) {
+                            int a = 2;
+                            Y_UNUSED(a);
+                        }
+            
+                        Y_ENSURE(
+                            inputStageHashParams.SourceTableKeyColumnTypes->size() == input.GetHashShuffle().KeyColumnsSize(), 
+                            TStringBuilder{} 
+                                << "Hashshuffle keycolumns and keytypes args count mismatch during executer stage, types: " 
+                                << KeyTypesToString(*inputStageHashParams.SourceTableKeyColumnTypes) << " for the columns: " 
+                                << "[" << JoinSeq(",", input.GetHashShuffle().GetKeyColumns()) << "]"
+                        );
+
+                        Cout << "EXECUTER: size: " << stage.GetInputs().size() << " ";
+                        Cout << inputStageInfo.Id.TxId << " " << inputStageInfo.Id.StageId << " " << KeyTypesToString(*inputStageHashParams.SourceTableKeyColumnTypes) << " " << "[" << JoinSeq(",", input.GetHashShuffle().GetKeyColumns()) << "]" << Endl;
+
+
+                        for (auto& originTaskId : inputStageInfo.Tasks) {
+                            auto& originTask = tasksGraph.GetTask(originTaskId);
+                            auto& taskOutput = originTask.Outputs[outputIdx];
+                            taskOutput.Meta.ColumnShardHashV1Params = inputStageHashParams;
+                        }
+
                         hashKind = NHashKind::EColumnShardHashV1;
                         break;
                     }
@@ -570,8 +602,17 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
                         Y_ENSURE(false, "undefined type of hash for shuffle");
                     }
                 }
-                BuildHashShuffleChannels(tasksGraph, stageInfo, inputIdx, inputStageInfo, outputIdx,
-                    input.GetHashShuffle().GetKeyColumns(), enableSpilling, log, hashKind);
+                BuildHashShuffleChannels(
+                    tasksGraph, 
+                    stageInfo, 
+                    inputIdx, 
+                    inputStageInfo, 
+                    outputIdx,
+                    input.GetHashShuffle().GetKeyColumns(), 
+                    enableSpilling, 
+                    log, 
+                    hashKind
+                );
                 break;
             }
             case NKqpProto::TKqpPhyConnection::kBroadcast:
@@ -1159,19 +1200,30 @@ void FillOutputDesc(
                     break;
                 }
                 case NHashKind::EColumnShardHashV1: {
-                    Y_ENSURE(stageInfo.Meta.SourceShardCount != 0, "ShardCount for ColumnShardHashV1 Shuffle can't be equal to 0");
-                    Y_ENSURE(stageInfo.Meta.TaskIdByHash != nullptr, "TaskIdByHash for ColumnShardHashV1 wasn't propogated to this stage");
-                    Y_ENSURE(stageInfo.Meta.SourceTableKeyColumnTypes != nullptr, "SourceTableKeyColumnTypes for ColumnShardHashV1 wasn't propogated to this stage");
+                    auto& columnShardHashV1Params = output.Meta.ColumnShardHashV1Params;
+                    Cout << "OK: " << stageInfo.Id.TxId << " " << stageInfo.Id.StageId << " " << KeyTypesToString(*columnShardHashV1Params.SourceTableKeyColumnTypes) << " for the columns: " << "[" << JoinSeq(",", output.KeyColumns) << "]" << Endl;
+                    Y_ENSURE(columnShardHashV1Params.SourceShardCount != 0, "ShardCount for ColumnShardHashV1 Shuffle can't be equal to 0");
+                    Y_ENSURE(columnShardHashV1Params.TaskIdByHash != nullptr, "TaskIdByHash for ColumnShardHashV1 wasn't propogated to this stage");
+                    Y_ENSURE(columnShardHashV1Params.SourceTableKeyColumnTypes != nullptr, "SourceTableKeyColumnTypes for ColumnShardHashV1 wasn't propogated to this stage");
+                    
+                    Y_ENSURE(
+                        columnShardHashV1Params.SourceTableKeyColumnTypes->size() == output.KeyColumns.size(), 
+                        TStringBuilder{} 
+                            << "Hashshuffle keycolumns and keytypes args count mismatch during executer stage, types: " 
+                            << KeyTypesToString(*columnShardHashV1Params.SourceTableKeyColumnTypes) << " for the columns: " 
+                            << "[" << JoinSeq(",", output.KeyColumns) << "]"
+                    );
+                    
                     auto& columnShardHashV1 = *hashPartitionDesc.MutableColumnShardHashV1();
-                    columnShardHashV1.SetShardCount(stageInfo.Meta.SourceShardCount);
+                    columnShardHashV1.SetShardCount(columnShardHashV1Params.SourceShardCount);
 
                     auto* columnTypes = columnShardHashV1.MutableKeyColumnTypes();
-                    for (const auto& type: *stageInfo.Meta.SourceTableKeyColumnTypes) {
+                    for (const auto& type: *columnShardHashV1Params.SourceTableKeyColumnTypes) {
                         columnTypes->Add(type.GetTypeId());
                     }
 
                     auto* taskIdByHash = columnShardHashV1.MutableTaskIdByHash();
-                    for (std::size_t taskID: *stageInfo.Meta.TaskIdByHash) {
+                    for (std::size_t taskID: *columnShardHashV1Params.TaskIdByHash) {
                         taskIdByHash->Add(taskID);
                     }
                     break;

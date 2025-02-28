@@ -700,8 +700,10 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         }
     }
 
-    Y_UNIT_TEST(CancelAfterRwTx) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(CancelAfterRwTx, useSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(appConfig);
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
         {

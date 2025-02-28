@@ -6,7 +6,7 @@ This page provides a detailed description of the code for a [test app](https://g
 
 ## Downloading and starting {#download}
 
-The following execution scenario is based on [Git](https://git-scm.com/downloads) and [Go](https://go.dev/doc/install). Make sure to install the [YDB Go SDK](../../../reference/ydb-sdk/install.md).
+The instructions below assume that [Git](https://git-scm.com/downloads) and [Go](https://go.dev/doc/install) are installed. Make sure to install the [YDB Go SDK](../../../reference/ydb-sdk/install.md).
 
 Create a working directory and use it to run the following command from the command line to clone the GitHub repository:
 
@@ -41,8 +41,8 @@ if err != nil {
   // handle connection error
 }
 
-// You should close the driver when exiting from the program
-defer db.Close(context.Backgroung())
+// You should close the driver when your application finishes its work (for example, when exiting the program).
+defer db.Close(context.Background())
 ```
 
 Method `ydb.Open` returns a driver instance if successful. The driver performs several services, such as {{ ydb-short-name }} cluster discovery and client-side load balancing.
@@ -55,7 +55,7 @@ The ydb.Open method takes two required arguments:
 There are also many connection options available that let you override the default settings.
 
 
-By default, anonymous authorization is used. Connecting to the {{ ydb-short-name }} cluster with an authorization token will look like this:
+By default, anonymous authorization is used. To connect to the {{ ydb-short-name }} cluster using an authorization token, use the following syntax:
 
 ```go
 db, err := ydb.Open(context.Background(), clusterEndpoint,
@@ -64,30 +64,27 @@ db, err := ydb.Open(context.Background(), clusterEndpoint,
 ```
 You can see the full list of auth providers in the [ydb-go-sdk documentation](https://github.com/ydb-platform/ydb-go-sdk?tab=readme-ov-file#credentials-) and on the [recipes page](../../../recipes/ydb-sdk/auth.md).
 
-It is necessary to close driver at the end of the work to cleanup resources. 
+It is necessary to close the driver at the end of work to clean up resources.
 
 ```go
 defer db.Close(ctx)
 ```
 
-Объект `db` является входной точкой для работы со всем функционалом {{ ydb-short-name }}, для запросов к таблицам используется Query-сервис: `db.Query()`:
+The `db` struct is the entry point for working with all {{ ydb-short-name }} functionalities. To query tables, use the query service: `db.Query()`:
 
-The `db` struct is the entry point for working with all {{ ydb-short-name }} functionalities. To query to tables, use the query service: `db.Query()`:
+YQL queries are executed within special objects called `query.Session`. Sessions store the execution context of queries (for example, transactions) and provide server-side load balancing among the {{ ydb-short-name }} cluster nodes.
 
-Выполнение YQL-запросов осуществляется на специальных объектах — сессиях `query.Session`. Сессии хранят контекст выполнения запросов (например, prepared statements и транзакции) и позволяют осуществлять серверную балансировку нагрузки на узлы кластера {{ ydb-short-name }}.
-
-Клиент query-сервиса предоставляет API для выполнения запросов над таблицами:
-
-* Метод `db.Query().Do(ctx, op)` реализует фоновое создание сессий и повторные попытки выполнить пользовательскую операцию `op func(ctx context.Context, s query.Session) error`, в которую пользовательскому коду передаётся подготовленная сессия `query.Session`.
-* Метод `db.Query().DoTx(ctx, op)` принимает пользовательскую операцию `op func(ctx context.Context, tx query.TxActor) error`, в которую пользовательскому коду передаётся подготовленная (заранее открытая) транзакция `query.TxActor`. Автоматическое выполнение `Commit` транзакции происходит, если из пользовательской операции возвращается `nil`. В случае возврата ошибки из пользовательской операции для текущей транзакции автоматически вызывается `Rollback`.
-* Метод `db.Query().Exec` является вспомогательным и предназначен для выполнения единичного запроса **без результата** с автоматическими повторными попытками. Метод `Exec` возвращает `nil` в случае успешного выполнения запроса и ошибку, если операция не удалась.
-* Метод `db.Query().Query` является вспомогательным и предназначен для выполнения единичного запроса с повторными попытками при необходимости. Текст запроса может содержать несколько выражений с результатами. Метод `Query` возвращает, в случае успеха, материализованный результат запроса (все данные уже прочитаны с сервера и доступны из локальной памяти) `query.Result` и позволяет итерироваться по вложенным спискам строк `query.ResultSet`. Для широких SQL-запросов, возвращающих большое количество строк, материализация результата может привести к проблеме [OOM](https://en.wikipedia.org/wiki/Out_of_memory).
-* Метод `db.Query().QueryResultSet` является вспомогательным и предназначен для выполнения единичного запроса с повторными попытками при необходимости. В запросе должно быть ровно одно выражение, возвращающее результат (дополнительно могут присутствовать выражения, не возвращающие результат, например `UPSERT`). Метод `QueryResultSet` возвращает, в случае успеха, материализованный список результатов `query.ResultSet`. Для широких SQL-запросов, возвращающих большое количество строк, материализация результата может привести к проблеме [OOM](https://en.wikipedia.org/wiki/Out_of_memory).
-* Метод `db.Query().QueryRow` является вспомогательным и предназначен для выполнения единичного запроса с повторными попытками при необходимости. Метод `QueryRow` возвращает, в случае успеха, единственную строку `query.Row`.
+The query service client provides an API for executing queries against tables:
+* `db.Query().Do(ctx, op)` creates sessions in the background and automatically retries the provided operation `op func(ctx context.Context, s query.Session) error`. As soon as a session is ready, it is passed to the callback.
+* `db.Query().DoTx(ctx, op)` automatically handles transaction lifecycle. It provides a prepared transaction object `query.TxActor` to the user-defined function `op func(ctx context.Context, tx query.TxActor)` error. If the operation returns without error (nil), the transaction will commit automatically. If it returns any error, the transaction will rollback automatically.
+* `db.Query().Exec` is used to run a single query that returns **no result**, with automatic retry logic on failure. This method returns nil if the execution was successful, or an error otherwise.
+* `db.Query().Query` executes a single query containing one or more statements that return a result. It automatically handles retries. Upon successful execution, it returns a fully materialized result (`query.Result`). All result rows are loaded into memory and available for immediate iteration. For queries returning large datasets, this may lead to an [Out of memory](https://en.wikipedia.org/wiki/Out_of_memory) problem.
+* `db.Query().QueryResultSet` executes a query containing exactly one statement returning results (it may contain other auxiliary statements without results, e.g. `UPSERT`). Like `db.Query().Query`, it automatically retries failed operations and returns a fully materialized result set (`query.ResultSet`). This can also cause an [OOM](https://en.wikipedia.org/wiki/Out_of_memory) error when receiving large datasets.
+* `db.Query().QueryRow` runs queries expected to return exactly one row, with similar automatic retries. On success, it returns a `query.Row` instance.
 
 {% include [steps/02_create_table.md](../_includes/steps/02_create_table.md) %}
 
-Пример создания таблицы (запрос без возвращаемого результата):
+Example of table creation (a query with no returned result):
 
 ```go
 import "github.com/ydb-platform/ydb-go-sdk/v3/query"
@@ -104,15 +101,15 @@ err = db.Query().Exec(ctx, `
  )`, query.WithTxControl(query.NoTx()),
 )
 if err != nil {
-  // обработка ошибки выполнения запроса
+  // handle query execution error
 }
 ```
 
 {% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
 
-Для выполнения YQL-запросов и чтения результатов используются методы `query.Session.Query`, `query.Session.QueryResultSet` и `query.Session.QueryRow`.
+To execute YQL queries and fetch results, use `query.Session` methods: `query.Session.Query`, `query.Session.QueryResultSet`, or `query.Session.QueryRow`.
 
-SDK позволяет явно контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью структуры `query.TxControl`.
+The YDB SDK supports explicit transaction control via the `query.TxControl` structure:
 
 ```go
 readTx := query.TxControl(
@@ -137,15 +134,15 @@ row, err := db.Query().QueryRow(ctx,`
  query.WithTxControl(readTx),
 )
 if err != nil {
-  // обработка ошибки выполнения запроса
+  // handle query execution error
 }
 ```
 
-Для получения данных строки `query.Row` можно использовать следующие методы:
+You can extract row data (`query.Row`) via methods:
 
-* `query.Row.ScanStruct` — по названиям колонок, зафиксированным в тегах структуры.
-* `query.Row.ScanNamed` — по названиям колонок.
-* `query.Row.Scan` — по порядку колонок.
+* `query.Row.ScanStruct` — scans row data into a struct based on struct field tags matching column names.
+* `query.Row.ScanNamed` — scans data into variables via explicitly defined column-variable pairs.
+* `query.Row.Scan` — scans data directly by column order into provided variables.
 
 {% list tabs %}
 
@@ -159,7 +156,7 @@ if err != nil {
   }
   err = row.ScanStruct(&info)
   if err != nil {
-    // обработка ошибки выполнения запроса
+    // handle query execution error
   }
   ```
 
@@ -170,7 +167,7 @@ if err != nil {
   var releaseDate time.Time
   err = row.ScanNamed(query.Named("series_id", &seriesID), query.Named("title", &title), query.Named("release_date", &releaseDate))
   if err != nil {
-    // обработка ошибки выполнения запроса
+    // handle query execution error
   }
   ```
 
@@ -181,7 +178,7 @@ if err != nil {
   var releaseDate time.Time
   err = row.Scan(&seriesID, &title, &releaseDate)
   if err != nil {
-    // обработка ошибки выполнения запроса
+    // handle query execution error
   }
   ```
   
@@ -191,9 +188,9 @@ if err != nil {
 
 {% note warning %}
 
-Если ожидаемый объём данных от запроса велик, не следует пытаться загружать их полностью в оперативную память с помощью вспомогательных методов, таких как `query.Client.Query` и `query.Client.QueryResultSet`. Эти методы отдают уже материализованный результат, где весь результат запроса уже прочитан с сервера в локальную память клиентского приложения. При большом количестве возвращаемых строк материализация результата может привести к проблеме [OOM](https://en.wikipedia.org/wiki/Out_of_memory).
+If the expected query result is very large, avoid loading all data into memory using helper methods like `query.Client.Query` or `query.Client.QueryResultSet`. These methods return completely materialized results, storing all rows from the server in local client memory. Large result sets can cause an [OOM](https://en.wikipedia.org/wiki/Out_of_memory) problem.
 
-Для таких запросов следует пользоваться методами `query.TxActor.Query`/`query.TxActor.QueryResultSet` на сессии или транзакции, которые отдают итератор по результату без полной материализации. Сессия `query.Session` доступна только из метода `query.Client.Do`, реализующего механизмы выполнения повторных попыток при ошибках. Нужно учитывать, что чтение может быть прервано в любой момент, и в таком случае весь процесс выполнения запроса начнётся заново. То есть функция, переданная в `Do`, может вызываться больше одного раза.
+Instead, use `query.TxActor.Query/query.TxActor.QueryResultSet` methods on a transaction or session. These methods return iterators over results without fully materializing them upfront. The `query.Session` object is accessible via the `query.Client.Do` method, which handles automatic retries. Remember that the reading operation can be interrupted at any time, restarting the whole query process. Therefore, the user function passed to `Do` may run multiple times.
 
 {% endnote %}
 
@@ -230,6 +227,6 @@ err = db.Query().Do(ctx,
  query.WithIdempotent(),
 )
 if err != nil {
-  // обработка ошибки выполнения запроса
+  // handle query execution error
 }
 ```

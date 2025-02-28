@@ -2079,9 +2079,9 @@ function disableType(element, node, type, tabletName) {
 function changeDefaultTabletLimit(button, val, tabletTypeName) {
     let text = '';
     if (val.endsWith('0')) {
-        text = 'Prohibit starting tablets of type ' + tabletTypeName + ' on every node';
+        text = 'Prohibit starting tablets of type <b>' + tabletTypeName + '</b> on every node';
     } else {
-        text = 'Allow starting tablets of type ' + tabletTypeName + ' on every node';
+        text = 'Allow starting tablets of type <b>' + tabletTypeName + '</b> on every node';
     }
     applySetting(button, 'DefaultTabletLimit', val, text);
 }

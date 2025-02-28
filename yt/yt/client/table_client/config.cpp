@@ -289,6 +289,10 @@ void TDictionaryCompressionConfig::Register(TRegistrar registrar)
         .Default(0.7)
         .InRange(0, 1);
 
+    registrar.Parameter("elect_random_policy", &TThis::ElectRandomPolicy)
+        .Default(false)
+        .DontSerializeDefault();
+
     registrar.Postprocessor([] (TThis* config) {
         if (config->DesiredSampleCount > config->MaxProcessedSampleCount) {
             THROW_ERROR_EXCEPTION("\"desired_sample_count\" cannot be greater than \"max_processed_sample_count\"");

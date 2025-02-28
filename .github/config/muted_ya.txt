@@ -67,7 +67,6 @@ ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltpNoSink
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
 ydb/core/mind/hive/ut THiveTest.TestReassignUseRelativeSpace
-ydb/core/persqueue/ut [*/*] chunk chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tablet_flat/ut TSharedPageCache.Compaction_BTreeIndex
@@ -76,10 +75,6 @@ ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Ma
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-false
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlter-PQConfigTransactionsAtSchemeShard-true
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlterDropPqGroupWithReboots-PQConfigTransactionsAtSchemeShard-true
-ydb/core/tx/schemeshard/ut_restore TImportWithRebootsTests.ShouldSucceedOnSingleChangefeed
-ydb/core/tx/schemeshard/ut_restore [*/*] chunk chunk
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
 ydb/core/viewer/tests test.py.test_viewer_nodes
 ydb/core/viewer/tests test.py.test_viewer_sysinfo

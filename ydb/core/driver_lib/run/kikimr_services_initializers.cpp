@@ -499,11 +499,17 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     return result;
 }
 
+bool NeedToUseAutoConfig(const NKikimrConfig::TActorSystemConfig& config) {
+    return config.GetUseAutoConfig()
+        || config.HasNodeType()
+        || config.HasCpuCount();
+}
 
 void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                    const NKikimr::TAppData* appData) {
     bool hasASCfg = Config.HasActorSystemConfig();
-    if (!hasASCfg || Config.GetActorSystemConfig().GetUseAutoConfig()) {
+    bool useAutoConfig = !hasASCfg || NeedToUseAutoConfig(Config.GetActorSystemConfig());
+    if (useAutoConfig) {
         bool isDynamicNode = appData->DynamicNameserviceConfig->MinDynamicNodeId <= NodeId;
         NAutoConfigInitializer::ApplyAutoConfig(Config.MutableActorSystemConfig(), isDynamicNode);
     }

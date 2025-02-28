@@ -13,6 +13,8 @@
 #include <library/cpp/yt/error/error.h>
 #include <library/cpp/yt/error/origin_attributes.h>
 
+#include <util/generic/noncopyable.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -86,6 +88,56 @@ struct TSerializerTraits<
     Cond>
 {
     using TSerializer = TErrorSerializer;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+// A fiber-local set of attributes to enrich all errors with.
+class TErrorCodicils
+{
+public:
+    using TGetter = std::function<std::string()>;
+
+    class TGuard
+        : public TNonCopyable
+    {
+    public:
+        ~TGuard();
+
+    private:
+        friend class TErrorCodicils;
+        TGuard(std::string key, TGetter oldGetter);
+        std::string Key_;
+        TGetter OldGetter_;
+    };
+
+    // Call from single-threaded bootstrapping code. Errors will not be enriched otherwise.
+    static void Initialize();
+
+    // Gets or creates an instance for this fiber.
+    static TErrorCodicils& GetOrCreate();
+
+    // Gets the instance for this fiber if one was created previously.
+    static TErrorCodicils* MaybeGet();
+
+    // Evaluates the codicil for the key if one was set.
+    static std::optional<std::string> MaybeEvaluate(const std::string& key);
+
+    // Sets the getter and returns an RAII object to restore the previous value on desctruction.
+    static TGuard Guard(std::string key, TGetter getter);
+
+    // Adds error attributes.
+    void Apply(TError& error) const;
+
+    // Sets the getter (or erases if the getter is empty).
+    void Set(std::string key, TGetter getter);
+
+    // Gets the getter.
+    TGetter Get(const std::string& key) const;
+
+private:
+    THashMap<std::string, TGetter> Getters_;
+    static bool Initialized_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

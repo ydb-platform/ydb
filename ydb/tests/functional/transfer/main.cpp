@@ -6,6 +6,7 @@
 #include <ydb-cpp-sdk/client/topic/client.h>
 #include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb-cpp-sdk/client/draft/ydb_replication.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
@@ -177,6 +178,22 @@ struct MainTestCase {
             SET USING $l;
         )", lambda.data(), TransferName.data()), TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    }
+
+    void DropTransfer() {
+        auto res = Session.ExecuteQuery(Sprintf(R"(
+            DROP TRANSFER `%s`;
+        )", TransferName.data()), TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    }
+
+    auto DescribeTransfer() {
+        NYdb::NReplication::TReplicationClient client(Driver);
+
+        NYdb::NReplication::TDescribeReplicationSettings settings;
+        settings.IncludeStats(true);
+
+        return client.DescribeReplication(TString("/") + GetEnv("YDB_DATABASE") + "/" + TransferName, settings);
     }
 
     void Write(const TMessage& message) {
@@ -766,6 +783,52 @@ Y_UNIT_TEST_SUITE(Transfer)
             }
     
         });
+    }
+
+    Y_UNIT_TEST(DropTransfer)
+    {
+        MainTestCase testCase;
+        testCase.Run({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )",
+
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )",
+
+            .Messages = {{"Message-1"}},
+
+            .Expectations = {{
+                _C("Key", ui64(0)),
+                _C("Message", TString("Message-1")),
+            }}
+        });
+
+        {
+            auto result = testCase.DescribeTransfer().ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+        }
+
+        testCase.DropTransfer();
+
+        {
+            auto result = testCase.DescribeTransfer().ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
+        }
     }
 
 }

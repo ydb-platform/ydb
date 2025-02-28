@@ -44,7 +44,7 @@ void TClientCommandTpchRoot::Config(TConfig& config) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     stream << " [options...] <subcommand>" << Endl << Endl
            << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandsDescription(stream, colors);
+    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors);
     config.Opts->SetCmdLineDescr(stream.Str());
 }
 

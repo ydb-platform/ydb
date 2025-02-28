@@ -83,7 +83,7 @@ TString NewClientCommandsDescription(const TString& name, std::shared_ptr<TModul
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     stream << " [options] <subcommand>" << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    commandsRoot->RenderCommandsDescription(stream, colors);
+    commandsRoot->RenderCommandDescription(stream, false, colors);
     return stream.Str();
 }
 

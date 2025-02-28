@@ -356,10 +356,12 @@ public:
         END
     };
 
-    void RenderOneCommandDescription(
+    virtual void RenderCommandDescription(
         TStringStream& stream,
+        bool renderTree,
         const NColorizer::TColors& colors = NColorizer::TColors(false),
-        RenderEntryType type = BEGIN
+        RenderEntryType type = BEGIN,
+        TString prefix = {}
     );
 
     void Hide();
@@ -394,10 +396,13 @@ public:
     void AddHiddenCommand(std::unique_ptr<TClientCommand> command);
     void AddDangerousCommand(std::unique_ptr<TClientCommand> command);
     virtual void Prepare(TConfig& config) override;
-    void RenderCommandsDescription(
+    void RenderCommandDescription(
         TStringStream& stream,
-        const NColorizer::TColors& colors = NColorizer::TColors(false)
-    );
+        bool renderTree,
+        const NColorizer::TColors& colors = NColorizer::TColors(false),
+        RenderEntryType type = BEGIN,
+        TString prefix = {}
+    ) override;
     virtual void SetFreeArgs(TConfig& config);
     bool HasSelectedCommand() const { return SelectedCommand; }
 

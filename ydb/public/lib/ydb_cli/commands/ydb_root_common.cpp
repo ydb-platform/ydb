@@ -323,7 +323,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     stream << " [options...] <subcommand>" << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandsDescription(stream, colors);
+    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors);
     stream << Endl << Endl << colors.BoldColor() << "Commands in " << colors.Red() << colors.BoldColor() <<  "admin" << colors.OldColor() << colors.BoldColor() << " subtree may treat global flags and profile differently, see corresponding help" << colors.OldColor() << Endl;
     opts.SetCmdLineDescr(stream.Str());
 

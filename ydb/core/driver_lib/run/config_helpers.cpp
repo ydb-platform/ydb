@@ -1,5 +1,9 @@
 #include "config_helpers.h"
 
+#include <ydb/core/base/localdb.h>
+#include <ydb/core/protos/bootstrap.pb.h>
+#include <ydb/core/protos/resource_broker.pb.h>
+
 #include <ydb/library/actors/util/affinity.h>
 
 
@@ -113,5 +117,32 @@ NActors::TSchedulerConfig CreateSchedulerConfig(const NKikimrConfig::TActorSyste
 }
 
 }  // namespace NActorSystemConfigHelpers
+
+namespace NKikimrConfigHelpers {
+
+NMemory::TResourceBrokerConfig CreateMemoryControllerResourceBrokerConfig(const NKikimrConfig::TAppConfig& config) {
+    NMemory::TResourceBrokerConfig resourceBrokerSelfConfig; // for backward compatibility
+    auto mergeResourceBrokerConfigs = [&](const NKikimrResourceBroker::TResourceBrokerConfig& resourceBrokerConfig) {
+        if (resourceBrokerConfig.HasResourceLimit() && resourceBrokerConfig.GetResourceLimit().HasMemory()) {
+            resourceBrokerSelfConfig.LimitBytes = resourceBrokerConfig.GetResourceLimit().GetMemory();
+        }
+        for (const auto& queue : resourceBrokerConfig.GetQueues()) {
+            if (queue.GetName() == NLocalDb::KqpResourceManagerQueue) {
+                if (queue.HasLimit() && queue.GetLimit().HasMemory()) {
+                    resourceBrokerSelfConfig.QueryExecutionLimitBytes = queue.GetLimit().GetMemory();
+                }
+            }
+        }
+    };
+    if (config.HasBootstrapConfig() && config.GetBootstrapConfig().HasResourceBroker()) {
+        mergeResourceBrokerConfigs(config.GetBootstrapConfig().GetResourceBroker());
+    }
+    if (config.HasResourceBrokerConfig()) {
+        mergeResourceBrokerConfigs(config.GetResourceBrokerConfig());
+    }
+    return resourceBrokerSelfConfig;
+}
+
+}  // namespace NKikimrConfigHelpers
 
 }  // namespace NKikimr

@@ -71,6 +71,7 @@ public:
         NActors::TActorId owner,
         TString queryId,
         NYdb::TDriver ydbDriver,
+        const NYql::IPqGateway::TPtr& pqGateway,
         const Fq::Private::TopicConsumer& topicConsumer,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProvider,
         ui64 index
@@ -79,6 +80,7 @@ public:
         , QueryId(std::move(queryId))
         , TopicConsumer(topicConsumer)
         , YdbDriver(std::move(ydbDriver))
+        , PqGateway(pqGateway)
         , TopicClient(YdbDriver, GetTopicClientSettings(std::move(credentialsProvider)))
         , Index(index)
     {
@@ -183,7 +185,7 @@ public:
 
 private:
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProvider) {
-        return NYdb::NTopic::TTopicClientSettings()
+        return PqGateway->GetTopicClientSettings()
             .Database(TopicConsumer.database())
             .DiscoveryEndpoint(TopicConsumer.cluster_endpoint())
             .CredentialsProviderFactory(std::move(credentialsProvider))
@@ -196,6 +198,7 @@ private:
     const TString QueryId;
     const Fq::Private::TopicConsumer TopicConsumer;
     NYdb::TDriver YdbDriver;
+    NYql::IPqGateway::TPtr PqGateway;
     NYdb::NTopic::TTopicClient TopicClient;
     ui64 Index = 0;
     NYdb::NTopic::IRetryPolicy::IRetryState::TPtr RetryState;
@@ -210,12 +213,14 @@ public:
         NActors::TActorId owner,
         TString queryId,
         NYdb::TDriver ydbDriver,
+        const NYql::IPqGateway::TPtr& pqGateway,
         const ::google::protobuf::RepeatedPtrField<Fq::Private::TopicConsumer>& topicConsumers,
         TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials
     )
         : Owner(owner)
         , QueryId(std::move(queryId))
         , YdbDriver(std::move(ydbDriver))
+        , PqGateway(pqGateway)
         , TopicConsumers(VectorFromProto(topicConsumers))
         , Credentials(std::move(credentials))
     {
@@ -232,7 +237,7 @@ public:
         Results.reserve(TopicConsumers.size());
         for (size_t i = 0; i < TopicConsumers.size(); ++i) {
             LOG_D("Create read rule creation actor for `" << TopicConsumers[i].topic_path() << "` [" << i << "]");
-            Children.push_back(Register(new TSingleReadRuleCreator(SelfId(), QueryId, YdbDriver, TopicConsumers[i], Credentials[i], i)));
+            Children.push_back(Register(new TSingleReadRuleCreator(SelfId(), QueryId, YdbDriver, PqGateway, TopicConsumers[i], Credentials[i], i)));
         }
     }
 
@@ -281,6 +286,7 @@ private:
     const NActors::TActorId Owner;
     const TString QueryId;
     NYdb::TDriver YdbDriver;
+    NYql::IPqGateway::TPtr PqGateway;
     const TVector<Fq::Private::TopicConsumer> TopicConsumers;
     const TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> Credentials;
     size_t ResultsGot = 0;
@@ -295,6 +301,7 @@ NActors::IActor* MakeReadRuleCreatorActor(
     NActors::TActorId owner,
     TString queryId,
     NYdb::TDriver ydbDriver,
+    const NYql::IPqGateway::TPtr& pqGateway,
     const ::google::protobuf::RepeatedPtrField<Fq::Private::TopicConsumer>& topicConsumers,
     TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials
 )
@@ -303,6 +310,7 @@ NActors::IActor* MakeReadRuleCreatorActor(
         owner,
         std::move(queryId),
         std::move(ydbDriver),
+        pqGateway,
         topicConsumers,
         std::move(credentials)
     );

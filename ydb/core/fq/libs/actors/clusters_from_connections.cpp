@@ -88,6 +88,19 @@ std::pair<TString, bool> ParseHttpEndpoint(const TString& endpoint) {
     return std::make_pair(ToString(host), scheme != "http");
 }
 
+std::pair<TString, TIpPort> ParseGrpcEndpoint(const TString& endpoint) {
+    TStringBuf scheme;
+    TStringBuf address;
+    TStringBuf uri;
+    NHttp::CrackURL(endpoint, scheme, address, uri);
+
+    TString hostname;
+    TIpPort port;
+    NHttp::CrackAddress(TString(address), hostname, port);
+
+    return {hostname, port};
+}
+
 void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
     const TString& name,
     const TString& authToken,
@@ -230,8 +243,18 @@ void AddClustersFromConnections(
             clusterCfg->SetKind(NYql::EGenericDataSourceKind::YDB);
             clusterCfg->SetProtocol(NYql::EGenericProtocol::NATIVE);
             clusterCfg->SetName(connectionName);
-            clusterCfg->SetDatabaseId(db.database_id());
-            clusterCfg->SetUseSsl(!common.GetDisableSslForGenericDataSources());
+            if (const auto& databaseId = db.database_id()) {
+                clusterCfg->SetDatabaseId(databaseId);
+                clusterCfg->SetUseSsl(!common.GetDisableSslForGenericDataSources());
+            } else {
+                const auto& [host, port] = ParseGrpcEndpoint(db.endpoint());
+
+                auto& endpoint = *clusterCfg->MutableEndpoint();
+                endpoint.set_host(host);
+                endpoint.set_port(port);
+                clusterCfg->SetUseSsl(db.secure());
+                clusterCfg->SetDatabaseName(db.database());
+            }
             FillClusterAuth(*clusterCfg, db.auth(), authToken, accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);
             break;

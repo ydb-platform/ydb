@@ -11,7 +11,6 @@ from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.lib.allure_utils import allure_test_description
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.olap.common.thread_helper import TestThread, TestThreads
 
 
 LOGGER = logging.getLogger()
@@ -82,7 +81,7 @@ class BaseTestSet:
             ScenarioTestHelper(None).remove_path(cls.get_suite_name())
         cls._ydb_instance.stop()
 
-    def test_mt(self, ctx: TestContext):
+    def test_multi(self, ctx: TestContext):
         num_threads = int(get_external_param("num_threads", "20"))
         processes = []
         exit_codes = []

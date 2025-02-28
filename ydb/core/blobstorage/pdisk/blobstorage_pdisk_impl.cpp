@@ -824,7 +824,6 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
     state.CurrentNonce = state.Nonce + (ui64)desiredSectorIdx;
     bool encrypted = state.Encrypted;
 
-
     if (!encrypted) {
         Y_ABORT_UNLESS(evChunkWrite->BytesWritten == pieceShift);
         auto& comp = evChunkWrite->Completion;
@@ -837,16 +836,21 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
         ui64 diskOffset = (ui64)chunkIdx * Format.ChunkSize + AlignDown<ui32>(chunkOffset, Format.SectorSize);
 
         if (count == 1
+                && (intptr_t)(*evChunkWrite->PartsPtr)[0].first % 512 == 0
                 && chunkOffset % FormatSectorSize == 0
                 && size % FormatSectorSize == 0) {
             //
-            P_LOG(PRI_CRIT, BPD01, "Chunk write, use buffer as is");
+            newSize = size;
+            P_LOG(PRI_CRIT, BPD01, "Chunk write, use buffer as is",
+                (bufferOffset, (intptr_t)(*evChunkWrite->PartsPtr)[0].first),
+                (chunkOffset, chunkOffset ) , (size, size)
+            );
         } else {
             newSize = comp->CompactBuffer(chunkOffset % Format.SectorSize);
             P_LOG(PRI_CRIT, BPD01, "Chunk write, compact buffer", (NewSize, newSize));
         }
         buff = comp->GetBuffer();
-        P_LOG(PRI_CRIT, BPD01, "Chunk write", (ChunkIdx, chunkIdx), (format_ChunkSize, Format.ChunkSize),
+        P_LOG(PRI_CRIT, BPD01, "Chunk write", (ChunkIdx, chunkIdx), (Encrypted, encrypted), (format_ChunkSize, Format.ChunkSize),
             (aligndown, AlignDown<ui32>(chunkOffset, Format.SectorSize)),
             (chunkOffset, chunkOffset), (Size, size), (NewSize, newSize),
             (diskOffset, diskOffset), (count, count));
@@ -984,7 +988,6 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
 
     Y_ABORT_UNLESS(sectorsToRead);
 
-
     ui64 firstSector;
     ui64 lastSector;
     ui64 sectorOffset;
@@ -997,7 +1000,7 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
     bool isTheLastPart = read->FirstSector + read->CurrentSector + sectorsToRead > read->LastSector;
 
     size_t diskSize = sectorsToRead * Format.SectorSize;
-    ui64 diskOffset = Format.Offset(read->ChunkIdx, read->FirstSector, 0);
+    ui64 diskOffset = (ui64)read->ChunkIdx * Format.ChunkSize + AlignDown<ui32>(read->Offset, Format.SectorSize);
     P_LOG(PRI_CRIT, BPD01, "Read chunk", (Encrypted, read->ChunkEncrypted), (ChunkIdx, read->ChunkIdx),
         (FirstSector, read->FirstSector), (Offset, read->Offset), (DiskSize, diskSize), (DiskOffset, diskOffset),
         (BytesToRead, bytesToRead), (PieceSizeLimit, pieceSizeLimit));
@@ -1008,7 +1011,7 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
 
         NWilson::TSpan span(TWilson::PDiskBasic, std::move(traceId), "PDisk.CompletionChunkReadPart", NWilson::EFlags::NONE, PCtx->ActorSystem);
         THolder<TCompletionChunkReadPart> completion(new TCompletionChunkReadPart(this, read, diskSize,
-                    0, 0, read->FinalCompletion, isTheLastPart, std::move(span)));
+                    diskSize, 0, read->FinalCompletion, isTheLastPart, std::move(span)));
 
         Y_ABORT_UNLESS(bytesToRead <= completion->GetBuffer()->Size());
         ui8 *data = read->FinalCompletion->GetCommonBuffer()->RawDataPtr(0, diskSize);
@@ -1020,6 +1023,7 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
             completion.Release(),
             read->ReqId,
             &traceId);
+        return ReadPieceResultOk;
     }
 
     ui64 payloadBytesToRead;
@@ -1046,7 +1050,7 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
     AtomicAdd(InFlightChunkRead, (ui64)bytesToRead);
 
     if (isTheLastPart) {
-        Y_ABORT_UNLESS(read->RemainingSize == 0);
+        Y_VERIFY_S(read->RemainingSize == 0, read->RemainingSize << " " <<  payloadBytesToRead << " " <<  sectorsToRead);
     }
 
     ui64 footerTotalSize = sectorsToRead * sizeof(TDataSectorFooter);
@@ -3011,6 +3015,10 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             ownerData.ReadThroughput.Increment(read->Size, PCtx->ActorSystem->Timestamp());
             request->JobKind = NSchLab::JobKindRead;
             read->ChunkEncrypted = state.Encrypted;
+            if (!state.Encrypted) {
+                read->FirstSector = read->Offset / Format.SectorSize;
+                read->LastSector = (read->Offset + read->Size + Format.SectorSize - 1) / Format.SectorSize - 1;
+            }
 
             Y_ABORT_UNLESS(read->FinalCompletion == nullptr);
 

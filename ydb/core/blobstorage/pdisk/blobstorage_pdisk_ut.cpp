@@ -1146,7 +1146,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             Cerr << ConvertIPartsToString(parts.Get()).size() << " ?= " << res->Data.ToString().size() << Endl;
             UNIT_ASSERT_EQUAL(ConvertIPartsToString(parts.Get()).size(), res->Data.ToString().size());
 
-            if (true) {
+            if (false) {
                 Cerr << "ConvertIPartsToString(parts.Get())# ";
                 Cerr << ConvertIPartsToString(parts.Get()).Quote() << Endl;
                 Cerr << "res->Data.ToString()# ";

@@ -109,8 +109,8 @@ public:
         }
     }
 
-    size_t CompactBuffer(size_t headroom) {
-        size_t totalSize = headroom;
+    size_t CompactBuffer(size_t tailroom) {
+        size_t totalSize = tailroom;
         for (size_t i = 0; i < Parts->Size(); ++i) {
             totalSize += (*Parts)[i].second;
         }
@@ -119,18 +119,18 @@ public:
 
         size_t written = 0;
 
-        // head
-        if (headroom) {
-            memset(Buffer->Get() + written, 0, headroom);
-            written += headroom;
-        }
-
         // body
 
         for (size_t i = 0; i < Parts->Size(); ++i) {
             auto [ptr, size] = (*Parts)[i];
             memcpy(Buffer->Get() + written, ptr, size);
             written += size;
+        }
+
+        // tail
+        if (tailroom) {
+            memset(Buffer->Get() + written, 0, tailroom);
+            written += tailroom;
         }
 
         // tail

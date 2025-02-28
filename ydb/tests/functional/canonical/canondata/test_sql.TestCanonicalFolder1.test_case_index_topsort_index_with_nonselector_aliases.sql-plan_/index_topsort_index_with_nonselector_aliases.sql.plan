@@ -13,6 +13,9 @@
                         "Index1B",
                         "Value"
                     ],
+                    "lookup_by": [
+                        "Key1"
+                    ],
                     "type": "Lookup"
                 }
             ]

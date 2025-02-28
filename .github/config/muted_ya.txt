@@ -48,6 +48,7 @@ ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
+ydb/core/kqp/ut/scheme KqpScheme.AlterTransfer
 ydb/core/kqp/ut/scheme [*/*] chunk chunk
 ydb/core/kqp/ut/scheme [*/*]+chunk+chunk
 ydb/core/kqp/ut/service KqpQueryService.ExecuteQueryWithResourcePoolClassifier
@@ -88,6 +89,8 @@ ydb/library/actors/http/ut sole chunk chunk
 ydb/library/actors/http/ut sole+chunk+chunk
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
+ydb/library/yql/dq/opt/ut HypergraphBuild.JoinTopologiesBenchmark
+ydb/library/yql/dq/opt/ut sole chunk chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col2_COL1-kqprun]
 ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_ch_ch-kqprun]
 ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_pg_pg-kqprun]
@@ -265,7 +268,6 @@ ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_pool_class
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-False]
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-True]
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_size_limit
-ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_delete_s3_tiering
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[column]
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[row]
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

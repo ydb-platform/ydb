@@ -1010,9 +1010,7 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
         (FirstSector, read->FirstSector), (Offset, read->Offset), (DiskSize, diskSize), (DiskOffset, diskOffset),
         (BytesToRead, bytesToRead), (PieceSizeLimit, pieceSizeLimit));
     if (!read->ChunkEncrypted) {
-
         Y_VERIFY(isTheFirstPart);
-        //                                  0             +               0              +          128             > 255
         Y_VERIFY_S(isTheLastPart, read->FirstSector << " + " << read->CurrentSector << " + " << sectorsToRead
                 << " > " << read->LastSector);
 
@@ -1020,7 +1018,8 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
         THolder<TCompletionChunkReadPart> completion(new TCompletionChunkReadPart(this, read, diskSize,
                     diskSize, 0, read->FinalCompletion, isTheLastPart, std::move(span)));
 
-        Y_VERIFY_S(bytesToRead <= read->FinalCompletion->GetCommonBuffer()->Size(), read->FinalCompletion->GetCommonBuffer()->Size());
+        auto buf = read->FinalCompletion->GetCommonBuffer();
+        Y_VERIFY_S(bytesToRead <= buf->SizeWithTail(), buf->SizeWithTail());
         ui8 *data = read->FinalCompletion->GetCommonBuffer()->RawDataPtr(0, diskSize);
         //Cerr << "ChunkRead buffer# " << (void*)data << Endl;
         BlockDevice->PreadAsync(

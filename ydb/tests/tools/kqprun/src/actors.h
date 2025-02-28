@@ -4,13 +4,17 @@
 
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
-
+#include <ydb/tests/tools/kqprun/runlib/actors.h>
 
 namespace NKqpRun {
 
 struct TQueryResponse {
     NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr Response;
     std::vector<Ydb::ResultSet> ResultSets;
+
+    bool IsSuccess() const;
+    Ydb::StatusIds::StatusCode GetStatus() const;
+    TString GetError() const;
 };
 
 struct TQueryRequest {
@@ -35,61 +39,11 @@ struct TWaitResourcesSettings {
     TString Database;
 };
 
-struct TEvPrivate {
-    enum EEv : ui32 {
-        EvStartAsyncQuery = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvAsyncQueryFinished,
-        EvFinalizeAsyncQueryRunner,
-
-        EvResourcesInfo,
-
-        EvEnd
-    };
-
-    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
-
-    struct TEvStartAsyncQuery : public NActors::TEventLocal<TEvStartAsyncQuery, EvStartAsyncQuery> {
-        TEvStartAsyncQuery(TQueryRequest request, NThreading::TPromise<void> startPromise)
-            : Request(std::move(request))
-            , StartPromise(startPromise)
-        {}
-
-        TQueryRequest Request;
-        NThreading::TPromise<void> StartPromise;
-    };
-
-    struct TEvAsyncQueryFinished : public NActors::TEventLocal<TEvAsyncQueryFinished, EvAsyncQueryFinished> {
-        TEvAsyncQueryFinished(ui64 requestId, TQueryResponse result)
-            : RequestId(requestId)
-            , Result(std::move(result))
-        {}
-
-        const ui64 RequestId;
-        const TQueryResponse Result;
-    };
-
-    struct TEvFinalizeAsyncQueryRunner : public NActors::TEventLocal<TEvFinalizeAsyncQueryRunner, EvFinalizeAsyncQueryRunner> {
-        explicit TEvFinalizeAsyncQueryRunner(NThreading::TPromise<void> finalizePromise)
-            : FinalizePromise(finalizePromise)
-        {}
-
-        NThreading::TPromise<void> FinalizePromise;
-    };
-
-    struct TEvResourcesInfo : public NActors::TEventLocal<TEvResourcesInfo, EvResourcesInfo> {
-        explicit TEvResourcesInfo(i32 nodeCount)
-            : NodeCount(nodeCount)
-        {}
-
-        const i32 NodeCount;
-    };
-};
-
 using TProgressCallback = std::function<void(ui64 queryId, const NKikimrKqp::TEvExecuterProgress& executerProgress)>;
 
 NActors::IActor* CreateRunScriptActorMock(TQueryRequest request, NThreading::TPromise<TQueryResponse> promise, TProgressCallback progressCallback);
 
-NActors::IActor* CreateAsyncQueryRunnerActor(const TAsyncQueriesSettings& settings);
+NActors::IActor* CreateAsyncQueryRunnerActor(const NKikimrRun::TAsyncQueriesSettings& settings);
 
 NActors::IActor* CreateResourcesWaiterActor(NThreading::TPromise<void> promise, const TWaitResourcesSettings& settings);
 

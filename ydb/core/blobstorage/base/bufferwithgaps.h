@@ -141,6 +141,10 @@ namespace NKikimr {
             return Data.size();
         }
 
+        ui32 SizeWithTail() const {
+            return Data.size() + Data.Tailroom();
+        }
+
         void Swap(TBufferWithGaps& other) {
             std::swap(Data, other.Data);
             Gaps.swap(other.Gaps);

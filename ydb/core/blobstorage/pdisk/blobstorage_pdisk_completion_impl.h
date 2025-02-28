@@ -123,7 +123,11 @@ public:
 
         for (size_t i = 0; i < Parts->Size(); ++i) {
             auto [ptr, size] = (*Parts)[i];
-            memcpy(Buffer->Get() + written, ptr, size);
+            if (ptr) {
+                memcpy(Buffer->Get() + written, ptr, size);
+            } else {
+                memset(Buffer->Get() + written, 0, size);
+            }
             written += size;
         }
 

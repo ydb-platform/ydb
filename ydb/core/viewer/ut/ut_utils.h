@@ -54,3 +54,4 @@ struct THttpRequest : NMonitoring::IHttpRequest {
 void WaitForHttpReady(TKeepAliveHttpClient& client);
 
 } // namespace NKikimr::NViewerTests
+

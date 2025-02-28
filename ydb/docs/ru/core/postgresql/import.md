@@ -80,7 +80,7 @@
 1. Поднять докер-контейнеры с PostgreSQL и {{ ydb-short-name }}:
 
     ```bash
-    docker run --name my_postgres_container \
+    docker run --name postgres_container \
         -e POSTGRES_USER=pgroot -e POSTGRES_PASSWORD=1234 \
         -e POSTGRES_DB=local \
         -p 5433:5433 -d postgres:14 -c 'port=5433'
@@ -94,13 +94,13 @@
 2. Сгенерировать данные через [pgbench](https://www.postgresql.org/docs/current/pgbench.html):
 
     ```bash
-    docker exec my_postgres_container pgbench postgres://pgroot:1234@localhost:5433/local -i
+    docker exec postgres_container pgbench postgres://pgroot:1234@localhost:5433/local -i
     ```
 
 3. Сделать дамп базы через [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html):
 
     ```bash
-    docker exec my_postgres_container pg_dump postgres://pgroot:1234@localhost:5433/local --inserts \
+    docker exec postgres_container pg_dump postgres://pgroot:1234@localhost:5433/local --inserts \
         --column-inserts --encoding=utf_8 --rows-per-insert=1000 > dump.sql
     ```
 

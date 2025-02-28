@@ -162,6 +162,9 @@ void TGetTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResul
         return ReplyAndPassAwayIfAlive(GetHTTPBADREQUEST("text/plain", error));
     }
     if (AppData(ActorContext())->EnforceUserTokenRequirement || AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (Event->Get()->UserToken.empty()) {
+            return ReplyAndPassAwayIfAlive(GetHTTPFORBIDDEN("text/plain", "Unauthenticated access is forbidden, please provide credentials"));
+        }
         NACLib::TUserToken token(Event->Get()->UserToken);
         if (!response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, token)) {
             TStringBuilder error;

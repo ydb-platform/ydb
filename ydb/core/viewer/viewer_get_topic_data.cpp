@@ -23,8 +23,10 @@ private:
         ui64 totalSize = 0;
         const auto& response = ReadResponse->Record.GetPartitionResponse();
         Y_ABORT_UNLESS (response.HasCmdReadResult());
-        const auto& results = response.GetCmdReadResult().GetResult();
-        NJson::TJsonValue jsonResponse{NJson::EJsonValueType::JSON_ARRAY};
+        const auto& cmdRead = response.GetCmdReadResult();
+
+        NJson::TJsonValue fullJsonResponse{NJson::EJsonValueType::JSON_MAP};
+        NJson::TJsonValue jsonMessages{NJson::EJsonValueType::JSON_ARRAY};
 
         auto setData = [&](NJson::TJsonValue& jsonRecord, TString&& data) {
             jsonRecord.InsertValue("OriginalSize", data.size());
@@ -34,8 +36,11 @@ private:
             totalSize += data.size();
             jsonRecord.InsertValue("Message", std::move(data));
         };
+        fullJsonResponse.InsertValue("StartOffset", cmdRead.GetStartOffset());
+        fullJsonResponse.InsertValue("EndOffset", cmdRead.GetEndOffset());
 
-        for (auto& r : results) {
+
+        for (auto& r : cmdRead.GetResult()) {
             if (totalSize >= MaxTotalSize) {
                 break;
             }
@@ -76,10 +81,11 @@ private:
                 }
                 jsonRecord.InsertValue("Metadata", std::move(jsonMetadata));
             }
-            jsonResponse.AppendValue(std::move(jsonRecord));
+            jsonMessages.AppendValue(std::move(jsonRecord));
         }
+        fullJsonResponse.InsertValue("Messages", std::move(jsonMessages));
 
-        Send(Recipient, new TEvViewerTopicData::TEvTopicDataUnpacked(true, std::move(jsonResponse)));
+        Send(Recipient, new TEvViewerTopicData::TEvTopicDataUnpacked(true, std::move(fullJsonResponse)));
         Die(ActorContext());
     }
 
@@ -285,7 +291,7 @@ void TGetTopicData::Bootstrap() {
         return;
     if (params.Has("topic_path")) {
         TopicPath = params.Get("topic_path");
-        RequestSchemeCacheNavigateWtihParams(params.Get("topic_path"), NACLib::DescribeSchema, true);
+        RequestSchemeCacheNavigateWithParams(params.Get("topic_path"), NACLib::DescribeSchema, true);
     } else {
         return ReplyAndPassAwayIfAlive(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'topic_path' is required"));
     }

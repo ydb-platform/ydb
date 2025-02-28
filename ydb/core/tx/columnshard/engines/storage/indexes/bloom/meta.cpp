@@ -12,40 +12,48 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
-TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
-    const ui32 bitsCount = TFixStringBitsStorage::GrowBitsCountToByte(HashesCount * std::max<ui32>(recordsCount, 10) / std::log(2));
-    std::vector<bool> filterBits(bitsCount, false);
+TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
+    std::deque<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> dataOwners;
+    ui32 indexHitsCount = 0;
     for (reader.Start(); reader.IsCorrect();) {
         AFL_VERIFY(reader.GetColumnsCount() == 1);
         for (auto&& i : reader) {
-            GetDataExtractor()->VisitAll(
-                i.GetCurrentChunk(),
-                [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase) {
-                    for (ui32 idx = 0; idx < arr->length(); ++idx) {
-                        for (ui32 i = 0; i < HashesCount; ++i) {
-                            NArrow::NHash::NXX64::TStreamStringHashCalcer_H3 hashCalcer(i);
-                            hashCalcer.Start();
-                            if (hashBase) {
-                                hashCalcer.Update((const ui8*)&hashBase, sizeof(hashBase));
-                            }
-                            NArrow::NHash::TXX64::AppendField(arr, idx, hashCalcer);
-                            filterBits[hashCalcer.Finish() % bitsCount] = true;
-                        }
-                    }
-                },
-                [&](const std::string_view data, const ui64 hashBase) {
+            dataOwners.emplace_back(i.GetCurrentChunk());
+            indexHitsCount += GetDataExtractor()->GetIndexHitsCount(dataOwners.back());
+        }
+        reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
+    }
+    const ui32 bitsCount = TFixStringBitsStorage::GrowBitsCountToByte(HashesCount * std::max<ui32>(indexHitsCount, 10) / std::log(2));
+    std::vector<bool> filterBits(bitsCount, false);
+
+    while (dataOwners.size()) {
+        GetDataExtractor()->VisitAll(
+            dataOwners.front(),
+            [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase) {
+                for (ui32 idx = 0; idx < arr->length(); ++idx) {
                     for (ui32 i = 0; i < HashesCount; ++i) {
                         NArrow::NHash::NXX64::TStreamStringHashCalcer_H3 hashCalcer(i);
                         hashCalcer.Start();
                         if (hashBase) {
                             hashCalcer.Update((const ui8*)&hashBase, sizeof(hashBase));
                         }
-                        hashCalcer.Update((const ui8*)data.data(), data.size());
+                        NArrow::NHash::TXX64::AppendField(arr, idx, hashCalcer);
                         filterBits[hashCalcer.Finish() % bitsCount] = true;
                     }
-                });
-        }
-        reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
+                }
+            },
+            [&](const std::string_view data, const ui64 hashBase) {
+                for (ui32 i = 0; i < HashesCount; ++i) {
+                    NArrow::NHash::NXX64::TStreamStringHashCalcer_H3 hashCalcer(i);
+                    hashCalcer.Start();
+                    if (hashBase) {
+                        hashCalcer.Update((const ui8*)&hashBase, sizeof(hashBase));
+                    }
+                    hashCalcer.Update((const ui8*)data.data(), data.size());
+                    filterBits[hashCalcer.Finish() % bitsCount] = true;
+                }
+            });
+        dataOwners.pop_front();
     }
 
     return TFixStringBitsStorage(filterBits).GetData();

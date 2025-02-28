@@ -24,10 +24,15 @@ private:
     virtual void DoSerializeToProto(TProto& proto) const = 0;
     virtual bool DoDeserializeFromProto(const TProto& proto) = 0;
     virtual bool DoCheckForIndex(const NRequest::TOriginalDataAddress& dataSource, ui64& baseHash) const = 0;
+    virtual ui32 DoGetIndexHitsCount(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray) const = 0;
 
 public:
     virtual TString GetClassName() const = 0;
     virtual ~IReadDataExtractor() = default;
+
+    ui32 GetIndexHitsCount(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray) const {
+        return DoGetIndexHitsCount(dataArray);
+    }
 
     bool CheckForIndex(const NRequest::TOriginalDataAddress& dataSource, ui64& baseHash) const {
         baseHash = 0;

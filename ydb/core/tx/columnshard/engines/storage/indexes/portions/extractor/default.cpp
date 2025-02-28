@@ -49,4 +49,13 @@ bool TDefaultDataExtractor::DoCheckForIndex(const NRequest::TOriginalDataAddress
     return true;
 }
 
+ui32 TDefaultDataExtractor::DoGetIndexHitsCount(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray) const {
+    if (dataArray->GetType() != NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
+        return dataArray->GetRecordsCount();
+    } else {
+        const auto subColumns = std::static_pointer_cast<NArrow::NAccessor::TSubColumnsArray>(dataArray);
+        return subColumns->GetColumnsData().GetStats().GetFilledValuesCount() + subColumns->GetOthersData().GetStats().GetFilledValuesCount();
+    }
+}
+
 }   // namespace NKikimr::NOlap::NIndexes

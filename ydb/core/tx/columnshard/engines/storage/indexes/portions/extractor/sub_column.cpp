@@ -23,4 +23,16 @@ void TSubColumnDataExtractor::DoVisitAll(const std::shared_ptr<NArrow::NAccessor
     }
 }
 
+ui32 TSubColumnDataExtractor::DoGetIndexHitsCount(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray) const {
+    AFL_VERIFY(dataArray->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray);
+    const auto subColumns = std::static_pointer_cast<NArrow::NAccessor::TSubColumnsArray>(dataArray);
+    if (auto idxColumn = subColumns->GetColumnsData().GetStats().GetKeyIndexOptional(SubColumnName)) {
+        return subColumns->GetColumnsData().GetStats().GetColumnRecordsCount(*idxColumn);
+    } else if (auto idxColumn = subColumns->GetOthersData().GetStats().GetKeyIndexOptional(SubColumnName)) {
+        return subColumns->GetOthersData().GetStats().GetColumnRecordsCount(*idxColumn);
+    } else {
+        return 0;
+    }
+}
+
 }   // namespace NKikimr::NOlap::NIndexes

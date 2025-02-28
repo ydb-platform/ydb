@@ -47,7 +47,7 @@ private:
 
     void PushImpl(TDqSerializedBatch&& data) {
         const i64 space = data.Size();
-        const size_t rowCount = data.RowCount();
+        const size_t chunkCount = data.ChunkCount();
         auto inputType = Impl.GetInputType();
         NKikimr::NMiniKQL::TUnboxedValueBatch batch(inputType);
         if (Y_UNLIKELY(PushStats.CollectProfile())) {
@@ -58,7 +58,8 @@ private:
             DataSerializer.Deserialize(std::move(data), inputType, batch);
         }
 
-        YQL_ENSURE(batch.RowCount() == rowCount);
+        // single batch row is chunk and may be Arrow block
+        YQL_ENSURE(batch.RowCount() == chunkCount);
         Impl.AddBatch(std::move(batch), space);
     }
 
@@ -123,7 +124,7 @@ public:
 
     void Push(TDqSerializedBatch&& data) override {
         YQL_ENSURE(!Impl.IsFinished(), "input channel " << PushStats.ChannelId << " already finished");
-        if (Y_UNLIKELY(data.Proto.GetRows() == 0)) {
+        if (Y_UNLIKELY(data.Proto.GetChunks() == 0)) {
             return;
         }
         StoredSerializedBytes += data.Size();

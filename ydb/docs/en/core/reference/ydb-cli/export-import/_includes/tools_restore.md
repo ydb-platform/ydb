@@ -1,5 +1,55 @@
 # Importing data from the file system
 
+## Cluster
+
+The `admin cluster restore` command restores the cluster from a backup on the file system previously exported there with the `admin cluster dump` command or prepared manually as per the rules from the [File structure](../file-structure.md) article:
+
+```bash
+{{ ydb-cli }} [connection options] admin cluster restore -i PATH [options]
+```
+
+{% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
+
+When restoring a cluster, databases and their administrators are created. Refer to [Database](#db) for further details on restoring databases.
+
+Restoring databases requires that dynamic nodes be started for them. Dynamic nodes can be started in advance or while the restore operation is waiting for available nodes. If there are problems with available dynamic nodes, cluster restore can be restarted.
+
+### Required parameters {#mandatory}
+
+`-i PATH` or `--input PATH`: Path to the directory in the client system the data will be imported from.
+
+### Optional parameters {#optional}
+
+`[options]`: Optional parameters of the command:
+
+`--wait-nodes-duration DURATION`: The duration of waiting for available dynamic nodes of the restored databases. If the duration is 0, there is no waiting.
+
+## Database #{db}
+
+The `admin database restore` command restores the database from a backup on the file system previously exported there with the `admin database dump` command or prepared manually as per the rules from the [File structure](../file-structure.md) article:
+
+```bash
+{{ ydb-cli }} [connection options] admin database restore -i PATH [options]
+```
+
+{% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
+
+Restoring database requires that dynamic nodes be started for it. Dynamic nodes can be started in advance or while the restore operation is waiting for available nodes. If there are problems with available dynamic nodes, database restore can be restarted.
+
+Restoring database schema objects is the same as described in [Schema objects](#schema-objects).
+
+### Required parameters {#mandatory}
+
+`-i PATH` or `--input PATH`: Path to the directory in the client system the data will be imported from.
+
+### Optional parameters {#optional}
+
+`[options]`: Optional parameters of the command:
+
+`--wait-nodes-duration DURATION`: The duration of waiting for available dynamic nodes of the restored database. If the duration is 0, there is no waiting.
+
+## Schema objets {#schema-objects}
+
 The `tools restore` command creates the items of the database schema in the database, and populates them with the data previously exported there with the `tools dump` command or prepared manually as per the rules from the [File structure](../file-structure.md) article:
 
 ```bash
@@ -12,13 +62,13 @@ If the table or directory already exists in the database, no changes will be mad
 
 To import data to the table, use the [YQL `REPLACE` command](../../../../yql/reference/syntax/replace_into.md). If the table included any records before the import, the records whose keys are present in the imported files are replaced by the data from the file. The records whose keys are absent in the imported files aren't affected.
 
-## Required parameters {#mandatory}
+### Required parameters {#mandatory}
 
 `-p PATH` or `--path PATH`: Path to the database directory the data will be imported to. To import data to the root directory, specify `.`. All the missing directories along the path will be created.
 
 `-i PATH` or `--input PATH`: Path to the directory in the client system the data will be imported from.
 
-## Optional parameters {#optional}
+### Optional parameters {#optional}
 
 `[options]`: Optional parameters of the command:
 
@@ -58,7 +108,35 @@ Some of the below parameters have default values. This means that the workload w
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
-### Importing to the database root
+### Restoring cluster
+
+From the current file system directory:
+
+```bash
+{{ ydb-cli }} -e <endpoint> admin cluster restore -i .
+```
+
+From the current file system directory:
+
+```bash
+{{ ydb-cli }} -e <endpoint> admin cluster restore -i ~/backup_cluster
+```
+
+### Restoring database
+
+From the current file system directory:
+
+```bash
+{{ ydb-cli }} -e <endpoint> -d <database> admin database restore -i .
+```
+
+From the current file system directory:
+
+```bash
+{{ ydb-cli }} -e <endpoint> -d <database> admin database restore -i ~/backup_db
+```
+
+### Importing schema objets to the database root
 
 From the current file system directory:
 

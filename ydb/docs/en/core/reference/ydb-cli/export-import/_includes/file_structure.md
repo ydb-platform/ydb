@@ -2,6 +2,41 @@
 
 The file structure outlined below is used to export data both to the file system and an S3-compatible object storage. When working with S3, the file path is added to the object key, and the key's prefix specifies the export directory.
 
+## Cluster {#cluster}
+
+{% note info %}
+
+Cluster export is available only to the file system.
+
+{% endnote %}
+
+A cluster corresponds to a directory in the file structure, which contains:
+
+- Directories describing [databases](#db) in the cluster, except:
+  - Database schema objects
+  - Database users and groups that are not administrators
+- The file `permissions.pb`, which describes the cluster root ACL and its owner in [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format
+- The file `create_user.sql`, which describes the cluster users in `SQL` format
+- The file `create_group.sql`, which describes the cluster groups in `SQL` format
+- The file `alter_group.sql`, which describes user membership in the cluster groups in `SQL` format
+
+## Database {#db}
+
+{% note info %}
+
+Export to an S3-compatible object storage exporting only the database schema objects.
+
+{% endnote %}
+
+A database corresponds to a directory in the file structure, which contains:
+
+- Directories describing the database schema objects, for example, [tables](#tables)
+- The file `database.pb`, which describes the database settings in [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format
+- The file `permissions.pb`, which describes the database ACL and its owner in [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format
+- The file `create_user.sql`, which describes the database users in `SQL` format
+- The file `create_group.sql`, which describes the database groups in `SQL` format
+- The file `alter_group.sql`, which describes user membership in the database groups in `SQL` format
+
 ## Directories {#dir}
 
 Each database directory has a corresponding directory in the file structure. Each of them includes a `permissions.pb` file, which describes the directory ACL and owner in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format. The directory hierarchy in the file structure mirrors the hierarchy in the database. If a database directory contains no items (neither tables nor subdirectories), directory in the file structure includes an empty file named `empty_dir`.
@@ -44,6 +79,41 @@ scheme.pb: OK
 ```
 
 ## Examples {#example}
+
+### Cluster {#example-cluster}
+
+When you export a cluster with the nested database `/Root/db`, the system will create the following file structure:
+
+```text
+backup
+├─ Root
+│  └─ db
+│     ├─ alter_group.sql
+│     ├─ create_group.sql
+│     ├─ create_user.sql
+│     ├─ permissions.pb
+│     └─ database.pb
+├─ alter_group.sql
+├─ create_group.sql
+├─ create_user.sql
+└─ permissions.pb
+```
+
+### Database {#example-db}
+
+When you export a database with the nested table `table`, the system will create the following file structure:
+
+```text
+├─ table
+│    ├─ data00.csv
+│    ├─ scheme.pb
+│    └─ permissions.pb
+├─ alter_group.sql
+├─ create_group.sql
+├─ create_user.sql
+├─ permissions.sql
+└─ database.pb
+```
 
 ### Tables {#example-table}
 

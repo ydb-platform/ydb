@@ -1,6 +1,40 @@
 # Exporting data to the file system
 
-The `tools dump` command dumps the database data and objects schema to the client file system, in the format described in the [File system](../file-structure.md):
+## Cluster
+
+The `admin cluster dump` command dumps the cluster to the client file system, in the format described in the [File system](../file-structure.md):
+
+```bash
+{{ ydb-cli }} [connection options] admin cluster dump [options]
+```
+
+{% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
+
+`[options]`: Command parameters:
+
+`-o PATH` or `--output PATH`: Path to the directory in the client file system to dump the data to. If such a directory doesn't exist, it will be created. The entire path to it must already exist, however. If the specified directory exists, it must be empty. If the parameter is omitted, a directory with the name `backup_YYYYDDMMTHHMMSS` will be created in the current directory, with YYYYDDMM being the date and HHMMSS: the time when the dump began.
+
+The cluster configuration is not dumped.
+
+## Database
+
+The `admin database dump` command dumps the database to the client file system, in the format described in the [File system](../file-structure.md):
+
+```bash
+{{ ydb-cli }} [connection options] admin database dump [options]
+```
+
+{% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
+
+`[options]`: Command parameters:
+
+`-o PATH` or `--output PATH`: Path to the directory in the client file system to dump the data to. If such a directory doesn't exist, it will be created. The entire path to it must already exist, however. If the specified directory exists, it must be empty. If the parameter is omitted, a directory with the name `backup_YYYYDDMMTHHMMSS` will be created in the current directory, with YYYYDDMM being the date and HHMMSS: the time when the dump began.
+
+The database configuration is not dumped.
+
+## Schema objects
+
+The `tools dump` command dumps the schema objects to the client file system, in the format described in the [File system](../file-structure.md):
 
 ```bash
 {{ ydb-cli }} [connection options] tools dump [options]
@@ -35,7 +69,33 @@ The `tools dump` command dumps the database data and objects schema to the clien
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
+### Exporting a cluster
+
+With automatic creation of the `backup_...` directory In the current directory:
+
+```bash
+{{ ydb-cli }} -e <endpoint> admin cluster dump
+```
+
+To a specific directory:
+```bash
+{{ ydb-cli }} -e <endpoint> admin cluster dump -o ~/backup_cluster
+```
+
 ### Exporting a database
+
+With automatic creation of the `backup_...` directory In the current directory:
+
+```bash
+{{ ydb-cli }} -e <endpoint> -d <database> admin database dump
+```
+
+To a specific directory:
+```bash
+{{ ydb-cli }} -e <endpoint> -d <database> admin database dump -o ~/backup_db
+```
+
+### Exporting a database schema objects
 
 With automatic creation of the `backup_...` directory In the current directory:
 

@@ -2410,7 +2410,7 @@ public:
                 str << " style='color: red' ";
             }
             str << " onclick='"  << (MaxCount == 0 ? "enableType" : "disableType")
-                << "(this," << NodeId << "," << (ui32)TabletType << "\", " << longTypeName << "\")";
+                << "(this," << NodeId << "," << (ui32)TabletType << ", \"" << longTypeName << "\")";
             str << "'>";
             str << shortTypeName;
             str << " ";

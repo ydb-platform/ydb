@@ -299,7 +299,7 @@ private:
             RegisterSystemView<Schema::AuthPermissions>(EffectivePermissionsName);
         }
 
-        RegisterSystemView<Schema::ShowCreateTable>(ShowCreateTableName);
+        RegisterSystemView<Schema::ShowCreate>(ShowCreateName);
     }
 
 private:

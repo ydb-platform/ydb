@@ -17,7 +17,7 @@ PEERDIR(
     ydb/core/sys_view/resource_pool_classifiers
     ydb/core/sys_view/service
     ydb/core/sys_view/sessions
-    ydb/core/sys_view/show_create_table
+    ydb/core/sys_view/show_create
     ydb/core/sys_view/storage
     ydb/core/sys_view/tablets
     ydb/core/tx/schemeshard

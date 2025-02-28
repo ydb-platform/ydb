@@ -8,7 +8,7 @@
 namespace NKikimr {
 namespace NSysView {
 
-THolder<NActors::IActor> CreateShowCreateTable(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreateShowCreate(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns, const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken);
 
 } // NSysView

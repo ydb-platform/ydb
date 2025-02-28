@@ -1,5 +1,5 @@
 #include "create_table_formatter.h"
-#include "show_create_table.h"
+#include "show_create.h"
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -20,25 +20,21 @@ namespace {
 
 using namespace NActors;
 
-class TShowCreateTable : public TScanActorBase<TShowCreateTable> {
+class TShowCreate : public TScanActorBase<TShowCreate> {
 public:
-    using TBase  = TScanActorBase<TShowCreateTable>;
+    using TBase  = TScanActorBase<TShowCreate>;
 
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 
-    TShowCreateTable(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TShowCreate(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
         : TBase(ownerId, scanId, tableId, tableRange, columns)
         , Database(database)
         , UserToken(std::move(userToken))
     {
-        const auto& cellsFrom = TableRange.From.GetCells();
-        Y_ENSURE(cellsFrom.size() == 1 && !cellsFrom[0].IsNull());
-
-        TablePath = cellsFrom[0].AsBuf();
     }
 
     STFUNC(StateWork) {
@@ -53,19 +49,43 @@ public:
 
 private:
     void StartScan() {
+        const auto& cellsFrom = TableRange.From.GetCells();
+
+        if (cellsFrom.size() != 2 || cellsFrom[0].IsNull() || cellsFrom[1].IsNull()) {
+            ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, "Invalid read key");
+        }
+
+        if (!TableRange.Point && !TableRange.To.GetCells().empty()) {
+            const auto& cellsTo = TableRange.To.GetCells();
+            if (cellsTo.size() != 2 || cellsTo[0].IsNull() || cellsTo[1].IsNull()) {
+                ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, "Invalid table range");
+            }
+
+            if (cellsFrom[0].AsBuf() != cellsTo[0].AsBuf() || cellsFrom[1].AsBuf() != cellsTo[1].AsBuf()) {
+                ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "Invalid table range " << cellsTo[0].AsBuf() << " " << cellsTo[1].AsBuf());
+            }
+        }
+
+        Path = cellsFrom[0].AsBuf();
+        PathType = cellsFrom[1].AsBuf();
+
+        if (PathType != "Table") {
+            ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "Invalid path type: " << PathType);
+        }
+
         std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
         navigateRequest->Record.SetDatabaseName(Database);
         if (UserToken) {
             navigateRequest->Record.SetUserToken(UserToken->GetSerializedToken());
         }
         NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
-        record->SetPath(TablePath);
+        record->SetPath(Path);
         record->MutableOptions()->SetReturnBoundaries(true);
         record->MutableOptions()->SetShowPrivateTable(false);
 
         Send(MakeTxProxyID(), navigateRequest.release());
 
-        Become(&TShowCreateTable::StateWork);
+        Become(&TShowCreate::StateWork);
     }
 
     void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr&) {
@@ -73,7 +93,7 @@ private:
     }
 
     void ProceedToScan() override {
-        Become(&TShowCreateTable::StateWork);
+        Become(&TShowCreate::StateWork);
         if (AckReceived) {
             StartScan();
         }
@@ -82,7 +102,8 @@ private:
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         const auto& record = ev->Get()->GetRecord();
         const auto status = record.GetStatus();
-        std::optional<TString> out;
+        std::optional<TString> path;
+        std::optional<TString> statement;
         switch (status) {
             case NKikimrScheme::StatusSuccess: {
                 const auto& pathDescription = record.GetPathDescription();
@@ -90,10 +111,41 @@ private:
 
                 const auto& tableDesc = pathDescription.GetTable();
 
+                std::pair<TString, TString> pathPair;
+
+                {
+                    TString error;
+                    if (!TrySplitPathByDb(Path, Database, pathPair, error)) {
+                        ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, error);
+                        return;
+                    }
+                }
+
+                auto [_, tablePath] = pathPair;
+                bool temporary = false;
+
+                if (NKqp::IsSessionsDirPath(Database, tablePath)) {
+                    auto pathVecTmp = SplitPath(tablePath);
+                    auto sz = pathVecTmp.size();
+                    Y_ENSURE(sz > 3  && pathVecTmp[0] == ".tmp" && pathVecTmp[1] == "sessions");
+
+                    auto pathTmp = JoinPath(TVector<TString>(pathVecTmp.begin() + 3, pathVecTmp.end()));
+                    std::pair<TString, TString> pathPairTmp;
+                    TString error;
+                    if (!TrySplitPathByDb(pathTmp, Database, pathPairTmp, error)) {
+                        ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, error);
+                        return;
+                    }
+
+                    tablePath = pathPairTmp.second;
+                    temporary = true;
+                }
+
                 TCreateTableFormatter formatter;
-                auto formatterResult = formatter.Format(tableDesc);
+                auto formatterResult = formatter.Format(tablePath, tableDesc, temporary);
                 if (formatterResult.IsSuccess()) {
-                    out = formatterResult.ExtractOut();
+                    path = tablePath;
+                    statement = formatterResult.ExtractOut();
                 } else {
                     ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
                     return;
@@ -119,13 +171,33 @@ private:
             }
         }
 
-        Y_ENSURE(out.has_value());
+        Y_ENSURE(path.has_value());
+        Y_ENSURE(statement.has_value());
 
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
 
         TVector<TCell> cells;
-        cells.emplace_back(TCell(TablePath.data(), TablePath.size()));
-        cells.emplace_back(TCell(out.value().data(), out.value().size()));
+        for (auto column : Columns) {
+            switch (column.Tag) {
+                case Schema::ShowCreate::Path::ColumnId: {
+                    cells.emplace_back(TCell(path.value().data(), path.value().size()));
+                    break;
+                }
+                case Schema::ShowCreate::PathType::ColumnId: {
+                    cells.emplace_back(TCell(PathType.data(), PathType.size()));
+                    break;
+                }
+                case Schema::ShowCreate::Statement::ColumnId: {
+                    cells.emplace_back(TCell(statement.value().data(), statement.value().size()));
+                    break;
+                }
+                default:
+                    ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected column tag");
+                    return;
+            }
+        }
+
+        Y_ENSURE(cells.size() == 3);
         TArrayRef<const TCell> resultRow(cells);
         batch->Rows.emplace_back(TOwnedCellVec::Make(resultRow));
         batch->Finished = true;
@@ -136,15 +208,16 @@ private:
 private:
     TString Database;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    TString TablePath;
+    TString Path;
+    TString PathType;
 };
 
 }
 
-THolder<NActors::IActor> CreateShowCreateTable(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreateShowCreate(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns, const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TShowCreateTable>(ownerId, scanId, tableId, tableRange, columns, database, std::move(userToken));
+    return MakeHolder<TShowCreate>(ownerId, scanId, tableId, tableRange, columns, database, std::move(userToken));
 }
 
 } // NSysView

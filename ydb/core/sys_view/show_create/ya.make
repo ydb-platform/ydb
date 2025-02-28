@@ -3,8 +3,8 @@ LIBRARY()
 SRCS(
     create_table_formatter.cpp
     create_table_formatter.h
-    show_create_table.cpp
-    show_create_table.h
+    show_create.cpp
+    show_create.h
 )
 
 PEERDIR(

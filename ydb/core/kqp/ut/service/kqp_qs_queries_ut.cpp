@@ -2788,7 +2788,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT(!result.GetResultSets().empty());
 
             CompareYson(R"([
-                [["/Root/test_show_create"];["CREATE TABLE `test_show_create` (\n\t`Key` Uint32,\n\t`Value` Uint32,\n\tFAMILY default (COMPRESSION = \"off\"),\n\tPRIMARY KEY (`Key`)\n) WITH (\n\tAUTO_PARTITIONING_BY_SIZE = DISABLED,\n\tAUTO_PARTITIONING_BY_LOAD = DISABLED,\n\tAUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1\n);"]];
+                [["test_show_create"];["Table"];["CREATE TABLE `test_show_create` (\n\t`Key` Uint32,\n\t`Value` Uint32,\n\tFAMILY default (COMPRESSION = \"off\"),\n\tPRIMARY KEY (`Key`)\n) WITH (\n\tAUTO_PARTITIONING_BY_SIZE = DISABLED,\n\tAUTO_PARTITIONING_BY_LOAD = DISABLED,\n\tAUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1\n);"]];
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }

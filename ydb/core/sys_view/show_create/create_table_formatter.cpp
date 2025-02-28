@@ -5,6 +5,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <yql/essentials/ast/yql_ast_escaping.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 
 #include <util/generic/yexception.h>
 
@@ -28,6 +29,7 @@ void TCreateTableFormatter::EscapeBinary(const TString& str) {
 }
 
 void TCreateTableFormatter::FormatValue(NYdb::TValueParser& parser, bool isPartition, TString del) {
+    TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
     switch (parser.GetKind()) {
         case NYdb::TTypeParser::ETypeKind::Primitive: {
             Stream << del;
@@ -68,7 +70,8 @@ void TCreateTableFormatter::FormatValue(NYdb::TValueParser& parser, bool isParti
             auto scale = decimal.DecimalType_.Scale;
             Stream << "CAST(";
             EscapeString(decimal.ToString());
-            Stream << " AS Decimal(" << precision << "," << scale << ")";
+            Stream << " AS Decimal(" << ui32(precision) << "," << ui32(scale) << ")";
+            Stream << ")";
             return;
         }
         default:
@@ -85,88 +88,126 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
             }
             break;
         }
-        case NYdb::EPrimitiveType::Int8:
-            Stream << parser.GetInt8();
-            break;
-        case NYdb::EPrimitiveType::Uint8:
-            Stream << parser.GetUint8();
-            break;
-        case NYdb::EPrimitiveType::Int16:
-            Stream << parser.GetInt16();
-            break;
-        case NYdb::EPrimitiveType::Uint16:
-            Stream << parser.GetUint16();
-            break;
-        case NYdb::EPrimitiveType::Int32:
-            Stream << parser.GetInt32();
-            break;
-        case NYdb::EPrimitiveType::Uint32:
-            Stream << parser.GetUint32();
-            break;
-        case NYdb::EPrimitiveType::Int64:
-            Stream << parser.GetInt64();
-            break;
-        case NYdb::EPrimitiveType::Uint64:
-            Stream << parser.GetUint64();
-            break;
-        case NYdb::EPrimitiveType::Float: {
-            Stream << "CAST(";
-            Stream << parser.GetFloat();
-            Stream << " AS FLOAT)";
+        case NYdb::EPrimitiveType::Int8: {
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int8, NUdf::TUnboxedValuePod(parser.GetInt8()));
+            Y_ENSURE(str.HasValue());
+            Stream << TString(str.AsStringRef());
             break;
         }
-        case NYdb::EPrimitiveType::Double:
-            Stream << parser.GetDouble();
+        case NYdb::EPrimitiveType::Uint8: {
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint8, NUdf::TUnboxedValuePod(parser.GetUint8()));
+            Y_ENSURE(str.HasValue());
+            Stream << TString(str.AsStringRef());
             break;
-        case NYdb::EPrimitiveType::Utf8:
+        }
+        case NYdb::EPrimitiveType::Int16: {
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int16, NUdf::TUnboxedValuePod(parser.GetInt16()));
+            Y_ENSURE(str.HasValue());
+            Stream << TString(str.AsStringRef());
+            break;
+        }
+        case NYdb::EPrimitiveType::Uint16: {
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint16, NUdf::TUnboxedValuePod(parser.GetUint16()));
+            Y_ENSURE(str.HasValue());
+            Stream << TString(str.AsStringRef());
+            break;
+        }
+        case NYdb::EPrimitiveType::Int32: {
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int32, NUdf::TUnboxedValuePod(parser.GetInt32()));
+            Y_ENSURE(str.HasValue());
+            Stream << TString(str.AsStringRef());
+            break;
+        }
+        case NYdb::EPrimitiveType::Uint32: {
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint32, NUdf::TUnboxedValuePod(parser.GetUint32()));
+            Y_ENSURE(str.HasValue());
+            Stream << TString(str.AsStringRef());
+            break;
+        }
+        case NYdb::EPrimitiveType::Int64: {
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int64, NUdf::TUnboxedValuePod(parser.GetInt64()));
+            Y_ENSURE(str.HasValue());
+            Stream << TString(str.AsStringRef());
+            break;
+        }
+        case NYdb::EPrimitiveType::Uint64: {
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint64, NUdf::TUnboxedValuePod(parser.GetUint64()));
+            Y_ENSURE(str.HasValue());
+            Stream << TString(str.AsStringRef());
+            break;
+        }
+        case NYdb::EPrimitiveType::Float: {
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Float, NUdf::TUnboxedValuePod(parser.GetFloat()));
+            Y_ENSURE(str.HasValue());
+            Stream << TString(str.AsStringRef());
+            break;
+        }
+        case NYdb::EPrimitiveType::Double: {
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Double, NUdf::TUnboxedValuePod(parser.GetDouble()));
+            Y_ENSURE(str.HasValue());
+            Stream << TString(str.AsStringRef());
+            break;
+        }
+        case NYdb::EPrimitiveType::Utf8: {
             EscapeString(TString(parser.GetUtf8()));
             break;
+        }
         case NYdb::EPrimitiveType::Date: {
-            Stream << "CAST(";
+            Stream << "DATE(";
             EscapeString(parser.GetDate().FormatGmTime("%Y-%m-%d"));
-            Stream << " AS DATE)";
+            Stream << ")";
             break;
         }
         case NYdb::EPrimitiveType::Datetime: {
-            Stream << "CAST(";
+            Stream << "DATETIME(";
             EscapeString(parser.GetDatetime().ToStringUpToSeconds());
-            Stream << " AS DATETIME)";
+            Stream << ")";
             break;
         }
         case NYdb::EPrimitiveType::Timestamp: {
-            Stream << "CAST(";
+            Stream << "TIMESTAMP(";
             EscapeString(parser.GetTimestamp().ToString());
-            Stream << " AS TIMESTAMP)";
+            Stream << ")";
             break;
         }
         case NYdb::EPrimitiveType::Interval: {
-            Stream << "CAST(";
-            Stream << parser.GetInterval();
-            Stream << " AS INTERVAL)";
+            Stream << "INTERVAL(";
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(parser.GetInterval()));
+            Y_ENSURE(str.HasValue());
+            EscapeString(TString(str.AsStringRef()));
+            Stream << ")";
             break;
         }
         case NYdb::EPrimitiveType::Date32: {
-            Stream << "CAST(";
-            Stream << parser.GetDate32();
-            Stream << " AS DATE32)";
+            Stream << "DATE32(";
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Date32, NUdf::TUnboxedValuePod(parser.GetDate32()));
+            Y_ENSURE(str.HasValue());
+            EscapeString(TString(str.AsStringRef()));
+            Stream << ")";
             break;
         }
         case NYdb::EPrimitiveType::Datetime64: {
-            Stream << "CAST(";
-            Stream << parser.GetDatetime64();
-            Stream << " AS DATETIME64)";
+            Stream << "DATETIME64(";
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Datetime64, NUdf::TUnboxedValuePod(parser.GetDatetime64()));
+            Y_ENSURE(str.HasValue());
+            EscapeString(TString(str.AsStringRef()));
+            Stream << ")";
             break;
         }
         case NYdb::EPrimitiveType::Timestamp64: {
-            Stream << "CAST(";
-            Stream << parser.GetTimestamp64();
-            Stream << " AS TIMESTAMP64)";
+            Stream << "TIMESTAMP64(";
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Timestamp64, NUdf::TUnboxedValuePod(parser.GetTimestamp64()));
+            Y_ENSURE(str.HasValue());
+            EscapeString(TString(str.AsStringRef()));
+            Stream << ")";
             break;
         }
         case NYdb::EPrimitiveType::Interval64: {
-            Stream << "CAST(";
-            Stream << parser.GetInterval64();
-            Stream << " AS INTERVAL64)";
+            Stream << "INTERVAL64(";
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval64, NUdf::TUnboxedValuePod(parser.GetInterval64()));
+            Y_ENSURE(str.HasValue());
+            EscapeString(TString(str.AsStringRef()));
+            Stream << ")";
             break;
         }
         case NYdb::EPrimitiveType::String:
@@ -179,15 +220,15 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
             EscapeString(TString(parser.GetJson()));
             break;
         case NYdb::EPrimitiveType::DyNumber: {
-            Stream << "CAST(";
+            Stream << "DyNumber(";
             EscapeString(TString(parser.GetDyNumber()));
-            Stream << " AS DyNumber)";
+            Stream << ")";
             break;
         }
         case NYdb::EPrimitiveType::Uuid: {
-            Stream << "CAST(";
+            Stream << "UUID(";
             EscapeString(TString(parser.GetUuid().ToString()));
-            Stream << " AS UUID)";
+            Stream << ")";
             break;
         }
         default:
@@ -214,18 +255,18 @@ private:
     TStringStream& Stream;
 };
 
-TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TTableDescription& tableDesc) {
+TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tablePath, const TTableDescription& tableDesc, bool temporary) {
     Stream.Clear();
 
     TStringStreamWrapper wrapper(Stream);
 
     Ydb::Table::CreateTableRequest createRequest;
-    if (tableDesc.GetTemporary()) {
+    if (temporary) {
         Stream << "CREATE TEMPORARY TABLE ";
     } else {
         Stream << "CREATE TABLE ";
     }
-    EscapeName(tableDesc.GetName());
+    EscapeName(tablePath);
     Stream << " (\n";
 
     NKikimrMiniKQL::TType mkqlKeyType;
@@ -238,11 +279,19 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TTableDescrip
     Y_ENSURE(!tableDesc.GetColumns().empty());
     Y_ENSURE(tableDesc.GetColumns().size() == createRequest.columns().size());
 
+    std::map<ui32, const TColumnDescription*> columns;
+
+    for (const auto& column : tableDesc.GetColumns()) {
+        columns[column.GetId()] = &column;
+    }
+
     try {
-        Format(tableDesc.GetColumns(0));
-        for (int i = 1; i < tableDesc.GetColumns().size(); i++) {
+        auto it = columns.cbegin();
+        Format(*it->second);
+        std::advance(it, 1);
+        for (; it != columns.end(); ++it) {
             Stream << ",\n";
-            Format(tableDesc.GetColumns(i));
+            Format(*it->second);
         }
     } catch (const TFormatFail& ex) {
         return TResult(ex.Status, ex.Error);
@@ -291,12 +340,12 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TTableDescrip
         }
     }
 
-    Y_ENSURE(!tableDesc.GetKeyColumnNames().empty());
+    Y_ENSURE(!tableDesc.GetKeyColumnIds().empty());
     Stream << ",\n\tPRIMARY KEY (";
-    EscapeName(tableDesc.GetKeyColumnNames(0));
-    for (int i = 1; i < tableDesc.GetKeyColumnNames().size(); i++) {
+    EscapeName(columns[tableDesc.GetKeyColumnIds(0)]->GetName());
+    for (int i = 1; i < tableDesc.GetKeyColumnIds().size(); i++) {
         Stream << ", ";
-        EscapeName(tableDesc.GetKeyColumnNames(i));
+        EscapeName(columns[tableDesc.GetKeyColumnIds(i)]->GetName());
     }
     Stream << ")\n";
 
@@ -331,6 +380,16 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TTableDescrip
     } else if (createRequest.key_bloom_filter() == Ydb::FeatureFlag::DISABLED) {
         Stream << ",\n";
         Stream << "\tKEY_BLOOM_FILTER = DISABLED";
+    }
+
+    if (createRequest.has_ttl_settings()) {
+        try {
+            Format(createRequest.ttl_settings());
+        } catch (const TFormatFail& ex) {
+            return TResult(ex.Status, ex.Error);
+        } catch (const yexception& e) {
+            return TResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+        }
     }
 
     Stream << "\n);";
@@ -434,7 +493,7 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
                 Stream << "similarity=product";
                 break;
             case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
-                Stream << "similarity=product";
+                Stream << "similarity=cosine";
                 break;
             case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
                 Stream << "distance=cosine";
@@ -456,7 +515,7 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
 
         switch (kMeansTreeSettings->settings().vector_type()) {
             case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT:
-                Stream << del << "vector_type=\"float\"";
+                Stream << del << "vector_type=\"bit\"";
                 break;
             case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
                 Stream << del << "vector_type=\"int8\"";
@@ -465,7 +524,7 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
                 Stream << del << "vector_type=\"uint8\"";
                 break;
             case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
-                Stream << del << "vector_type=\"bit\"";
+                Stream << del << "vector_type=\"float\"";
                 break;
             default:
                 ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::VectorIndexSettings");
@@ -492,7 +551,6 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
 
         Stream << ")";
     }
-    Stream << "\n";
 }
 
 void TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
@@ -594,6 +652,137 @@ void TCreateTableFormatter::Format(const Ydb::Table::ReadReplicasSettings& readR
         }
         default:
             break;
+    }
+}
+
+void TCreateTableFormatter::Format(ui64 expireAfterSeconds, std::optional<TString> storage) {
+    TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
+    Stream << "INTERVAL(";
+    const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(expireAfterSeconds * 1000000));
+    Y_ENSURE(str.HasValue());
+    EscapeString(TString(str.AsStringRef()));
+    Stream << ") ";
+    if (storage) {
+        Stream << "TO EXTERNAL DATA SOURCE ";
+        EscapeName(*storage);
+    } else {
+        Stream << "DELETE";
+    }
+}
+
+void TCreateTableFormatter::Format(const Ydb::Table::TtlSettings& ttlSettings) {
+    Stream << ",\n";
+    Stream << "\tTTL =\n\t  ";
+    bool first = true;
+    std::optional<TString> columnName;
+    std::optional<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit> columnUnit;
+    std::optional<Ydb::Table::TtlTier::ExpressionCase> expressionType;
+    switch (ttlSettings.mode_case()) {
+        case Ydb::Table::TtlSettings::kDateTypeColumn: {
+            const auto& mode = ttlSettings.date_type_column();
+            columnName = mode.column_name();
+            Format(mode.expire_after_seconds());
+            break;
+        }
+        case Ydb::Table::TtlSettings::kValueSinceUnixEpoch: {
+            const auto& mode = ttlSettings.value_since_unix_epoch();
+            columnName = mode.column_name();
+            columnUnit = mode.column_unit();
+            Format(mode.expire_after_seconds());
+            break;
+        }
+        case Ydb::Table::TtlSettings::kTieredTtl: {
+            if (!ttlSettings.tiered_ttl().tiers_size()) {
+                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "No tiers in TTL settings");
+            }
+
+            for (const auto& tier : ttlSettings.tiered_ttl().tiers()) {
+                TString tierColumnName;
+                ui32 expireAfterSeconds;
+                switch (tier.expression_case()) {
+                    case Ydb::Table::TtlTier::kDateTypeColumn: {
+                        const auto& mode = tier.date_type_column();
+                        expireAfterSeconds = mode.expire_after_seconds();
+                        tierColumnName = mode.column_name();
+                        break;
+                    }
+                    case Ydb::Table::TtlTier::kValueSinceUnixEpoch: {
+                        const auto& mode = tier.value_since_unix_epoch();
+                        tierColumnName = mode.column_name();
+                        expireAfterSeconds = mode.expire_after_seconds();
+                        if (columnUnit) {
+                            if (*columnUnit != mode.column_unit()) {
+                                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder()
+                                    << "Unit of the TTL columns must be the same for all tiers: "
+                                    << Ydb::Table::ValueSinceUnixEpochModeSettings::Unit_Name(*columnUnit)
+                                    << " != " << Ydb::Table::ValueSinceUnixEpochModeSettings::Unit_Name(mode.column_unit()));
+                            }
+                        } else {
+                            columnUnit = mode.column_unit();
+                        }
+                        break;
+                    }
+                    case Ydb::Table::TtlTier::EXPRESSION_NOT_SET:
+                        ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Tier expression is undefined");
+                }
+
+                if (columnName) {
+                    if (*columnName != tierColumnName) {
+                        ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "TTL columns must be the same for all tiers: " << *columnName << " != " << tierColumnName);
+                    }
+                } else {
+                    columnName = tierColumnName;
+                }
+
+                if (expressionType) {
+                    if (*expressionType != tier.expression_case()) {
+                        ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Expression type must be the same for all tiers");
+                    }
+                } else {
+                    expressionType = tier.expression_case();
+                }
+
+                if (!first) {
+                    Stream << ", ";
+                }
+
+                switch (tier.action_case()) {
+                    case Ydb::Table::TtlTier::kDelete:
+                        Format(expireAfterSeconds);
+                        break;
+                    case Ydb::Table::TtlTier::kEvictToExternalStorage:
+                        Format(expireAfterSeconds, tier.evict_to_external_storage().storage());
+                        break;
+                    case Ydb::Table::TtlTier::ACTION_NOT_SET:
+                        ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Tier action is undefined");
+                }
+                first = false;
+            }
+        } break;
+
+        case Ydb::Table::TtlSettings::MODE_NOT_SET:
+            ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "TTL mode is undefined");
+    }
+
+    Stream << "\n\t  ON " << columnName;
+    if (columnUnit) {
+        Stream << " AS ";
+        switch (*columnUnit) {
+            case Ydb::Table::ValueSinceUnixEpochModeSettings::UNIT_SECONDS:
+                Stream << "SECONDS";
+                break;
+            case Ydb::Table::ValueSinceUnixEpochModeSettings::UNIT_MILLISECONDS:
+                Stream << "MILLISECONDS";
+                break;
+            case Ydb::Table::ValueSinceUnixEpochModeSettings::UNIT_MICROSECONDS:
+                Stream << "MICROSECONDS";
+                break;
+            case Ydb::Table::ValueSinceUnixEpochModeSettings::UNIT_NANOSECONDS:
+                Stream << "NANOSECONDS";
+                break;
+            default:
+                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unsupported unit");
+        }
     }
 }
 

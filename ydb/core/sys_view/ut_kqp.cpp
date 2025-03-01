@@ -151,7 +151,7 @@ void SetupAuthAccessEnvironment(TTestEnv& env) {
 }
 
 void CheckAuthAdministratorAccessIsRequired(TScanQueryPartIterator& it) {
-    NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, 
+    NKqp::StreamResultToYson(it, false, EStatus::UNAUTHORIZED, 
         "Administrator access is required");
 }
 

@@ -571,6 +571,53 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(reqAlterUser.IsOk());
     }
 
+    Y_UNIT_TEST(CreateUserQoutas) {
+        {
+            auto req = SqlToYql(R"(
+                use plato;
+                CREATE USER user1 PASSWORD passwd;
+            )");
+
+#if ANTLR_VER == 3
+            TString error = "<main>:3:43: Error: Unexpected token 'passwd' : unexpected input : nothing is expected here\n\n";
+#else
+            TString error = "<main>:3:43: Error: mismatched input 'passwd' expecting {NULL, STRING_VALUE}\n";
+#endif
+            UNIT_ASSERT_VALUES_EQUAL(Err2Str(req), error);
+            UNIT_ASSERT(!req.Root);
+        }
+
+        {
+            auto req = SqlToYql(R"(
+                use plato;
+                CREATE USER user2 PASSWORD NULL;
+            )");
+
+            UNIT_ASSERT(req.Root);
+        }
+
+        {
+            auto req = SqlToYql(R"(
+                use plato;
+                CREATE USER user3 PASSWORD '';
+            )");
+
+            UNIT_ASSERT(req.Root);
+        }
+
+
+        {
+            auto req = SqlToYql(R"(
+                use plato;
+                CREATE USER user1 PASSWORD 'password1';
+                CREATE USER user2 PASSWORD 'password2';
+                CREATE USER user3;
+            )");
+
+            UNIT_ASSERT(req.Root);
+        }
+    }
+
     Y_UNIT_TEST(JoinWithoutConcreteColumns) {
         NYql::TAstParseResult res = SqlToYql(
             " use plato;"

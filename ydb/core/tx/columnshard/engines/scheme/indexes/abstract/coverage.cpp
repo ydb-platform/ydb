@@ -85,4 +85,21 @@ std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexChecker> TBranchCoverage::GetAnd
     return std::make_shared<TAndIndexChecker>(Indexes);
 }
 
+NJson::TJsonValue TBranchCoverage::DebugJson() const {
+    NJson::TJsonValue result = NJson::JSON_MAP;
+    if (Equals.size()) {
+        auto& jsonEquals = result.InsertValue("equals", NJson::JSON_MAP);
+        for (auto&& i : Equals) {
+            jsonEquals.InsertValue(i.first.DebugString(), i.second ? i.second->ToString() : "NULL");
+        }
+    }
+    if (Likes.size()) {
+        auto& jsonLikes = result.InsertValue("likes", NJson::JSON_MAP);
+        for (auto&& i : Likes) {
+            jsonLikes.InsertValue(i.first.DebugString(), i.second.DebugJson());
+        }
+    }
+    return result;
+}
+
 }   // namespace NKikimr::NOlap::NIndexes::NRequest

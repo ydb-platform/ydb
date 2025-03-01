@@ -23,6 +23,7 @@ bool TBloomFilterChecker::DoCheckImpl(const std::vector<TString>& blobs) const {
                 break;
             }
         }
+//        Cerr << bits.DebugString() << Endl;
         if (found) {
 //            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("size", bArray.length())("data", bArray.ToString())("index_id", GetIndexId());
             return true;

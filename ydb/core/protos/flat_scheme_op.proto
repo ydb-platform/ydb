@@ -388,9 +388,25 @@ message TOlapColumnDescription {
     optional string ColumnFamilyName = 15;
 }
 
+message TIndexDataExtractor {
+    optional string ClassName = 1;
+    message TDefault {
+    }
+
+    message TSubColumn {
+        optional string SubColumnName = 1;
+    }
+
+    oneof Implementation {
+        TDefault Default = 20;
+        TSubColumn SubColumn = 21;
+    }
+}
+
 message TRequestedBloomFilter {
     optional double FalsePositiveProbability = 1 [default = 0.1];
     repeated string ColumnNames = 3;
+    optional TIndexDataExtractor DataExtractor = 4;
 }
 
 message TRequestedBloomNGrammFilter {
@@ -399,6 +415,7 @@ message TRequestedBloomNGrammFilter {
     optional uint32 HashesCount = 3;
     optional string ColumnName = 4;
     optional uint32 RecordsCount = 5;
+    optional TIndexDataExtractor DataExtractor = 6;
 }
 
 message TRequestedMaxIndex {
@@ -428,6 +445,7 @@ message TBloomFilter {
     optional double FalsePositiveProbability = 1 [default = 0.1];
     optional uint64 MaxBytesCount = 2 [default = 8196];
     repeated uint32 ColumnIds = 3;
+    optional TIndexDataExtractor DataExtractor = 4;
 }
 
 message TBloomNGrammFilter {
@@ -436,6 +454,7 @@ message TBloomNGrammFilter {
     optional uint32 HashesCount = 3;
     optional uint32 ColumnId = 4;
     optional uint32 RecordsCount = 5;
+    optional TIndexDataExtractor DataExtractor = 6;
 }
 
 message TMaxIndex {
@@ -1204,7 +1223,7 @@ message TBackupTask {
 
     // currently available only for s3:
     optional TCompressionOptions Compression = 13;
-    optional bool EnableChecksums = 16; 
+    optional bool EnableChecksums = 16;
     optional bool EnablePermissions = 18;
 }
 

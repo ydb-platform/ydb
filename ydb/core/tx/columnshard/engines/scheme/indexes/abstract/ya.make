@@ -13,6 +13,7 @@ SRCS(
     tree.cpp
     coverage.cpp
     like.cpp
+    common.cpp
 )
 
 PEERDIR(
@@ -22,7 +23,7 @@ PEERDIR(
     ydb/core/formats/arrow/program
 )
 
-GENERATE_ENUM_SERIALIZATION(tree.h)
+GENERATE_ENUM_SERIALIZATION(common.h)
 
 YQL_LAST_ABI_VERSION()
 

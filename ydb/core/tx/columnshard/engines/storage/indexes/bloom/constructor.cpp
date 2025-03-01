@@ -1,11 +1,13 @@
 #include "constructor.h"
 #include "meta.h"
 
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
 namespace NKikimr::NOlap::NIndexes {
 
-std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
+std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
+    const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
     std::set<ui32> columnIds;
     for (auto&& i : ColumnNames) {
         auto* columnInfo = currentSchema.GetColumns().GetByName(i);
@@ -15,7 +17,9 @@ std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TBloomIndexConstructor::Do
         }
         AFL_VERIFY(columnIds.emplace(columnInfo->GetId()).second);
     }
-    return std::make_shared<TBloomIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId), columnIds, FalsePositiveProbability);
+    AFL_VERIFY(columnIds.size() == 1);
+    return std::make_shared<TBloomIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId), *columnIds.begin(),
+        FalsePositiveProbability, std::make_shared<TDefaultDataExtractor>());
 }
 
 NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
@@ -28,12 +32,22 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromJson(const N
     }
     for (auto&& i : *columnNamesArray) {
         if (!i.IsString()) {
-            return TConclusionStatus::Fail("column_names have to be in bloom filter features as array of strings ['column_name_1', ... , 'column_name_N']");
+            return TConclusionStatus::Fail(
+                "column_names have to be in bloom filter features as array of strings ['column_name_1', ... , 'column_name_N']");
         }
         ColumnNames.emplace(i.GetString());
     }
+    if (ColumnNames.size() != 1) {
+        return TConclusionStatus::Fail("column_names count possible only 1 temporary");
+    }
     if (!jsonInfo["false_positive_probability"].IsDouble()) {
         return TConclusionStatus::Fail("false_positive_probability have to be in bloom filter features as double field");
+    }
+    {
+        auto conclusion = DataExtractor.DeserializeFromJson(jsonInfo["data_extractor"]);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
     }
     FalsePositiveProbability = jsonInfo["false_positive_probability"].GetDouble();
     if (FalsePositiveProbability < 0.01 || FalsePositiveProbability >= 1) {
@@ -50,6 +64,9 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromProto(const 
     }
     auto& bFilter = proto.GetBloomFilter();
     FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
+    if (!DataExtractor.DeserializeFromProto(bFilter.GetDataExtractor())) {
+        return TConclusionStatus::Fail("cannot parse data extractor: " + bFilter.GetDataExtractor().DebugString());
+    }
     if (FalsePositiveProbability < 0.01 || FalsePositiveProbability >= 1) {
         const TString errorMessage = "FalsePositiveProbability have to be in interval[0.01, 1)";
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", errorMessage);
@@ -67,6 +84,7 @@ void TBloomIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexReque
     for (auto&& i : ColumnNames) {
         filterProto->AddColumnNames(i);
     }
+    *filterProto->MutableDataExtractor() = DataExtractor.SerializeToProto();
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

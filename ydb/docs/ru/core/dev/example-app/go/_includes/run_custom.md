@@ -5,20 +5,20 @@
 Выполните команду по следующему образцу:
 
 ```bash
-( export <auth_mode_var>="<auth_mode_value>" && cd ydb-go-examples && \
+( export <auth_mode_var>="<auth_mode_value>" && cd ydb-go-sdk/examples && \
 go run ./basic -ydb="<endpoint>?database=<database>" )
 ```
 
-, где
+где
 
 - `<endpoint>` - [эндпоинт](../../../../concepts/connect.md#endpoint).
 - `<database>` - [путь базы данных](../../../../concepts/connect.md#database).
-- `<auth_mode_var`> - [переменная окружения](../../../../reference/ydb-sdk/auth.md#env), определяющая режим аутентификации.
+- `<auth_mode_var>` - [переменная окружения](../../../../reference/ydb-sdk/auth.md#env), определяющая режим аутентификации.
 - `<auth_mode_value>` - значение параметра аутентификации для выбранного режима.
 
 Например:
 
 ```bash
-( export YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." && cd ydb-go-examples && \
-go run ./basic -ydb="grpcs://ydb.example.com:2135?database=/somepath/somelocation" )
+( export YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." && cd ydb-go-sdk/examples && \
+go run ./basic -ydb="grpcs://ydb.example.com:2135/somepath/somelocation" )
 ```

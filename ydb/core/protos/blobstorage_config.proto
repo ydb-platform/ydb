@@ -189,6 +189,7 @@ enum EDriveStatus {
     reserved 4;
     FAULTY = 5; // drive is expected to become BROKEN soon, new groups are not created, old groups are asynchronously moved out from this drive
     TO_BE_REMOVED = 6; // same as INACTIVE, but drive is counted in fault model as not working
+    READONLY_FAULTY = 7;
 }
 
 enum EDecommitStatus {

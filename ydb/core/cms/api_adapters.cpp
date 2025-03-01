@@ -343,6 +343,7 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
         switch (scope.scope_case()) {
         case Ydb::Maintenance::ActionScope::kNodeId:
         case Ydb::Maintenance::ActionScope::kHost:
+        case Ydb::Maintenance::ActionScope::kPdisk:
             return true;
         default:
             Reply(Ydb::StatusIds::BAD_REQUEST, "Unknown scope");
@@ -399,18 +400,36 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
         return true;
     }
 
-    static void ConvertAction(const Ydb::Maintenance::LockAction& action, NKikimrCms::TAction& cmsAction) {
-        cmsAction.SetType(NKikimrCms::TAction::SHUTDOWN_HOST);
+    static void ConvertPDiskId(const Ydb::Maintenance::ActionScope_PDiskId& pdiskId, TString& out) {
+        out = Sprintf("pdisk-%" PRIu32 "-%" PRIu32, pdiskId.node_id(), pdiskId.pdisk_id());
+    }
+
+    static void ConvertAction(NKikimrCms::TPermissionRequest& cmsRequest, const Ydb::Maintenance::LockAction& action, NKikimrCms::TAction& cmsAction) {
         cmsAction.SetDuration(TimeUtil::DurationToMicroseconds(action.duration()));
 
         const auto& scope = action.scope();
         switch (scope.scope_case()) {
         case Ydb::Maintenance::ActionScope::kNodeId:
+            cmsAction.SetType(NKikimrCms::TAction::SHUTDOWN_HOST);
             cmsAction.SetHost(ToString(scope.node_id()));
             break;
         case Ydb::Maintenance::ActionScope::kHost:
+            cmsAction.SetType(NKikimrCms::TAction::SHUTDOWN_HOST);
             cmsAction.SetHost(scope.host());
             break;
+        case Ydb::Maintenance::ActionScope::kPdisk: {
+            cmsAction.SetType(NKikimrCms::TAction::REPLACE_DEVICES);
+            cmsRequest.SetEvictVDisks(true);
+            auto& pdisk = scope.pdisk();
+            if (pdisk.has_pdisk_id()) {
+                ConvertPDiskId(pdisk.pdisk_id(), *cmsAction.add_devices());
+            } else if (pdisk.has_pdisk_location()) {
+                auto& pdiskLocation = pdisk.pdisk_location();
+                cmsAction.SetHost(pdiskLocation.host());
+                *cmsAction.add_devices() = pdiskLocation.path();
+            }
+            break;
+        }
         default:
             Y_ABORT("unreachable");
         }
@@ -441,7 +460,7 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
             Y_ABORT_UNLESS(HasSingleCompositeActionGroup || group.actions().size() == 1);
             for (const auto& action : group.actions()) {
                 if (action.has_lock_action()) {
-                    ConvertAction(action.lock_action(), *cmsRequest.AddActions());
+                    ConvertAction(cmsRequest, action.lock_action(), *cmsRequest.AddActions());
                 } else {
                     Y_ABORT("unreachable");
                 }

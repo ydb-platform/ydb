@@ -22,7 +22,7 @@ public:
         State->CheckConsistency();
         for (const TVSlotId& vslotId : VSlotIds) {
             if (const TVSlotInfo *vslot = State->VSlots.Find(vslotId); vslot && !vslot->IsBeingDeleted()) {
-                Y_ABORT_UNLESS(vslot->Mood == TMood::Donor);
+                Y_ABORT_UNLESS(TMood::IsDonor(vslot->Mood));
                 State->DestroyVSlot(vslotId);
             }
         }

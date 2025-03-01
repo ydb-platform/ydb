@@ -79,10 +79,16 @@ public:
 
     void PersistNodeTenants(TTransactionContext &txc, const TActorContext &ctx);
 
-    using THostMarkers = TEvSentinel::TEvUpdateHostMarkers::THostMarkers;
+    using THostMarkers = TEvSentinel::TEvUpdateMarkers::THostMarkers;
+    using TPDiskMarkers = TEvSentinel::TEvUpdateMarkers::TPDiskMarkers;
+
     TVector<THostMarkers> SetHostMarker(const TString &host, NKikimrCms::EMarker marker, TTransactionContext &txc, const TActorContext &ctx);
     TVector<THostMarkers> ResetHostMarkers(const TString &host, TTransactionContext &txc, const TActorContext &ctx);
-    void SentinelUpdateHostMarkers(TVector<THostMarkers> &&updateMarkers, const TActorContext &ctx);
+
+    TVector<TPDiskMarkers> SetPDiskMarker(const TString &host, const TString &device, NKikimrCms::EMarker marker, TTransactionContext &txc, const TActorContext &ctx);
+    TVector<TPDiskMarkers> ResetPDiskMarkers(const TString &host, const TString &device, TTransactionContext &txc, const TActorContext &ctx);
+    
+    void SentinelUpdateMarkers(TVector<THostMarkers> &&hostMarkers, TVector<TPDiskMarkers> &&pdiskMarkers, const TActorContext &ctx);
 
     static void AddHostState(const TClusterInfoPtr &clusterInfo, const TNodeInfo &node, NKikimrCms::TClusterStateResponse &resp, TInstant timestamp);
 
@@ -322,6 +328,9 @@ private:
     bool CheckActionReplaceDevices(const NKikimrCms::TAction &action,
         const TActionOptions &options,
         TErrorInfo &error) const;
+    bool CheckActionDecomissionDisk(const NKikimrCms::TAction &action,
+        const TActionOptions &options,
+        TErrorInfo &error) const;
     bool CheckSysTabletsNode(const TActionOptions &opts,
         const TNodeInfo &node,
         TErrorInfo &error) const;
@@ -367,6 +376,8 @@ private:
     bool CheckNotificationShutdownHost(const NKikimrCms::TAction &action, TInstant time,
         TErrorInfo &error, const TActorContext &ctx) const;
     bool CheckNotificationReplaceDevices(const NKikimrCms::TAction &action, TInstant time,
+        TErrorInfo &error, const TActorContext &ctx) const;
+    bool CheckNotificationDecomissionDisk(const NKikimrCms::TAction &action, TInstant time,
         TErrorInfo &error, const TActorContext &ctx) const;
     bool IsValidNotificationAction(const NKikimrCms::TAction &action, TInstant time,
         TErrorInfo &error, const TActorContext &ctx) const;

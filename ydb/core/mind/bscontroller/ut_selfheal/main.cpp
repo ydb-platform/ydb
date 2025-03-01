@@ -215,6 +215,62 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
             CheckDiskLocations(active, faulty);
         }
 
+        void RunTestCorrectLocalMovesReadonlyFaulty() {
+            InitCluster();
+            SetBSCSettings(true, std::nullopt, 0);
+
+            Env.Wait(TDuration::Seconds(300));
+
+            TPDiskId disk;
+
+            {
+                std::map<ui32, std::vector<TPDiskId>> disksByGroup;
+
+                const auto conf = RequestBasicConfig();
+                for (const auto& vslot : conf.GetVSlot()) {
+                    auto& slotId = vslot.GetVSlotId();
+                    disksByGroup[vslot.GetGroupId()].emplace_back(slotId.GetNodeId(), slotId.GetPDiskId());
+                }
+
+                auto& vec = disksByGroup.begin()->second;
+
+                NKikimrBlobStorage::TConfigRequest request;
+
+                for (size_t i = 0; i < 4; ++i) {
+                    Env.UpdateDriveStatus(vec[i], NKikimrBlobStorage::INACTIVE, &request);
+                }
+
+                disk = vec[0];
+
+                request.SetIgnoreDisintegratedGroupsChecks(true);
+
+                auto response = Env.Invoke(request);
+                UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            }
+
+            {
+                NKikimrBlobStorage::TConfigRequest request;
+                Env.UpdateDriveStatus(disk, NKikimrBlobStorage::READONLY_FAULTY, &request);
+                auto response = Env.Invoke(request);
+                UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            }
+
+            Env.Wait(TDuration::Seconds(300 * 8));
+
+            {
+                std::map<TPDiskId, std::vector<TVSlotId>> vdisksByPDisk;
+
+                const auto conf = RequestBasicConfig();
+                for (const auto& vslot : conf.GetVSlot()) {
+                    auto& slotId = vslot.GetVSlotId();
+
+                    vdisksByPDisk[{slotId.GetNodeId(), slotId.GetPDiskId()}].push_back(slotId);
+                }
+
+                UNIT_ASSERT(!vdisksByPDisk.count(disk));
+            }
+        }
+
         void RunTestCorrectLocalMovesIfPossibleBroken() {
             InitCluster();
             SetBSCSettings(std::nullopt, true, 4);
@@ -349,5 +405,9 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
 
     Y_UNIT_TEST(TestLocalBrokenRelocation) {
         TTestSelfHeal(3, 4, 3, 4, 3 * 4 * 3 * 4 / 9 * 8, "mirror-3-dc", TBlobStorageGroupType::ErasureMirror3dc).RunTestCorrectLocalMovesIfPossibleBroken();
+    }
+
+    Y_UNIT_TEST(TestLocalSelfHealReadonly) {
+        TTestSelfHeal(3, 4, 3, 4, 3 * 4 * 3 * 4 / 9 * 8, "mirror-3-dc", TBlobStorageGroupType::ErasureMirror3dc).RunTestCorrectLocalMovesReadonlyFaulty();
     }
 }

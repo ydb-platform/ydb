@@ -168,6 +168,11 @@ namespace NKikimr::NBsController {
                         Y_ABORT_UNLESS(!status);
                         break;
 
+                    case TMood::ReadOnlyDonor:
+                        Y_ABORT_UNLESS(!status);
+                        item.SetReadOnly(true);
+                        break;
+
                     case TMood::Normal:
                         if (status) {
                             item.SetEntityStatus(*status);
@@ -197,7 +202,7 @@ namespace NKikimr::NBsController {
 
                     SerializeDonors(&item, vslotInfo, *group, vslotFinder);
                 } else {
-                    Y_ABORT_UNLESS(mood != TMood::Donor);
+                    Y_ABORT_UNLESS(!TMood::IsDonor(mood));
                 }
             }
 
@@ -720,7 +725,7 @@ namespace NKikimr::NBsController {
             // ensure it hasn't started deletion yet
             Y_ABORT_UNLESS(!mutableSlot->IsBeingDeleted());
 
-            if (mutableSlot->Mood == TMood::Donor) {
+            if (TMood::IsDonor(mutableSlot->Mood)) {
                 // this is the donor disk and it is being deleted; here we have to inform the acceptor disk of changed
                 // donor set by simply removing the donor disk
                 const TGroupInfo *group = Groups.Find(mutableSlot->GroupId);
@@ -729,7 +734,7 @@ namespace NKikimr::NBsController {
                 const TVSlotInfo *acceptor = group->VDisksInGroup[orderNumber];
                 Y_ABORT_UNLESS(acceptor);
                 Y_ABORT_UNLESS(!acceptor->IsBeingDeleted());
-                Y_ABORT_UNLESS(acceptor->Mood != TMood::Donor);
+                Y_ABORT_UNLESS(!TMood::IsDonor(acceptor->Mood));
                 Y_ABORT_UNLESS(mutableSlot->GroupId == acceptor->GroupId && mutableSlot->GroupGeneration < acceptor->GroupGeneration &&
                     mutableSlot->GetShortVDiskId() == acceptor->GetShortVDiskId());
 
@@ -797,26 +802,26 @@ namespace NKikimr::NBsController {
                 Y_ABORT_UNLESS(it != vslot.PDisk->VSlotsOnPDisk.end());
                 Y_ABORT_UNLESS(it->second == &vslot);
                 const TGroupInfo *group = Groups.Find(vslot.GroupId);
-                if (!vslot.IsBeingDeleted() && vslot.Mood != TMood::Donor) {
+                if (!vslot.IsBeingDeleted() && !TMood::IsDonor(vslot.Mood)) {
                     Y_ABORT_UNLESS(group);
                     Y_ABORT_UNLESS(vslot.Group == group);
                 } else {
                     Y_ABORT_UNLESS(!vslot.Group);
                 }
-                if (vslot.Mood == TMood::Donor) {
+                if (TMood::IsDonor(vslot.Mood)) {
                     Y_ABORT_UNLESS(vslot.Donors.empty());
                     Y_ABORT_UNLESS(group);
                     const ui32 orderNumber = group->Topology->GetOrderNumber(vslot.GetShortVDiskId());
                     const TVSlotInfo *acceptor = group->VDisksInGroup[orderNumber];
                     Y_ABORT_UNLESS(acceptor);
                     Y_ABORT_UNLESS(!acceptor->IsBeingDeleted());
-                    Y_ABORT_UNLESS(acceptor->Mood != TMood::Donor);
+                    Y_ABORT_UNLESS(!TMood::IsDonor(acceptor->Mood));
                     Y_ABORT_UNLESS(acceptor->Donors.contains(vslotId));
                 }
                 for (const TVSlotId& donorVSlotId : vslot.Donors) {
                     const TVSlotInfo *donor = VSlots.Find(donorVSlotId);
                     Y_ABORT_UNLESS(donor);
-                    Y_ABORT_UNLESS(donor->Mood == TMood::Donor);
+                    Y_ABORT_UNLESS(TMood::IsDonor(donor->Mood));
                     Y_ABORT_UNLESS(donor->GroupId == vslot.GroupId);
                     Y_ABORT_UNLESS(donor->GroupGeneration < vslot.GroupGeneration + GroupContentChanged.count(vslot.GroupId));
                     Y_ABORT_UNLESS(donor->GetShortVDiskId() == vslot.GetShortVDiskId());
@@ -1046,7 +1051,7 @@ namespace NKikimr::NBsController {
                 });
             }
             pb->SetReady(vslot.IsReady);
-            pb->SetReadOnly(vslot.Mood == TMood::ReadOnly);
+            pb->SetReadOnly(TMood::IsReadOnly(vslot.Mood));
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group) {
@@ -1084,7 +1089,7 @@ namespace NKikimr::NBsController {
 
         void TBlobStorageController::SerializeDonors(NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk *vdisk,
                 const TVSlotInfo& vslot, const TGroupInfo& group, const TVSlotFinder& finder) {
-            if (vslot.Mood == TMood::Donor) {
+            if (TMood::IsDonor(vslot.Mood)) {
                 ui32 numFailRealms = 0, numFailDomainsPerFailRealm = 0, numVDisksPerFailDomain = 0;
                 for (const TVSlotInfo *slot : group.VDisksInGroup) {
                     numFailRealms = Max(numFailRealms, slot->RingIdx + 1);

@@ -246,12 +246,12 @@ public:
             DeletedFromStoragePoolId = deletedFromStoragePoolId;
         }
 
-        void MakeDonorFor(TVSlotInfo *newSlot) {
+        void MakeDonorFor(TVSlotInfo *newSlot, bool shouldBeReadonly) {
             Y_ABORT_UNLESS(newSlot);
             Y_ABORT_UNLESS(!IsBeingDeleted());
             Y_ABORT_UNLESS(GroupId == newSlot->GroupId);
             Y_ABORT_UNLESS(GetShortVDiskId() == newSlot->GetShortVDiskId());
-            Mood = TMood::Donor;
+            Mood = shouldBeReadonly ? TMood::ReadOnlyDonor : TMood::Donor;
             Group = nullptr; // we are not part of this group anymore
             Donors.insert(VSlotId);
             Donors.swap(newSlot->Donors);
@@ -470,6 +470,7 @@ public:
 
         bool ShouldBeSettledBySelfHeal() const {
             return Status == NKikimrBlobStorage::EDriveStatus::FAULTY
+                || Status == NKikimrBlobStorage::EDriveStatus::READONLY_FAULTY
                 || Status == NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED
                 || DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT;
         }
@@ -477,6 +478,7 @@ public:
         bool IsSelfHealReasonDecommit() const {
             return DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT &&
                 Status != NKikimrBlobStorage::EDriveStatus::FAULTY &&
+                Status != NKikimrBlobStorage::EDriveStatus::READONLY_FAULTY &&
                 Status != NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED;
         }
 
@@ -487,6 +489,7 @@ public:
 
         bool BadInTermsOfSelfHeal() const {
             return Status == NKikimrBlobStorage::EDriveStatus::FAULTY
+                || Status == NKikimrBlobStorage::EDriveStatus::READONLY_FAULTY
                 || Status == NKikimrBlobStorage::EDriveStatus::INACTIVE;
         }
 
@@ -521,6 +524,7 @@ public:
                 case NKikimrBlobStorage::EDriveStatus::INACTIVE:
                 case NKikimrBlobStorage::EDriveStatus::FAULTY:
                 case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
+                case NKikimrBlobStorage::EDriveStatus::READONLY_FAULTY:
                     return false;
 
                 case NKikimrBlobStorage::EDriveStatus::ACTIVE:
@@ -1660,7 +1664,7 @@ private:
     void ValidateInternalState();
 
     const TVSlotInfo* FindAcceptor(const TVSlotInfo& donor) {
-        Y_ABORT_UNLESS(donor.Mood == TMood::Donor);
+        Y_ABORT_UNLESS(TMood::IsDonor(donor.Mood));
         TGroupInfo *group = FindGroup(donor.GroupId);
         Y_ABORT_UNLESS(group);
         const ui32 orderNumber = group->Topology->GetOrderNumber(donor.GetShortVDiskId());

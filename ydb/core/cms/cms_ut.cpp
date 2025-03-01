@@ -459,6 +459,74 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                               "vdisk-3-1-0-1-0", "vdisk-3-1-0-5-0"));
     }
 
+    Y_UNIT_TEST(RequestReplaceDeviceWithEvictVDisks)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::NO_SUCH_DEVICE,
+                                   MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, "/dev/bad/device/path"));
+
+        auto request1 = env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user", false, false, false).WithEvictVDisks(),
+                    MakeAction(TAction::REPLACE_DEVICES, 1, 60000000, env.PDiskName(0, 1))
+                ),
+            TStatus::DISALLOW_TEMP
+        );
+
+        auto pdiskId = env.PDiskId(0, 1);
+
+        std::set<std::pair<ui32, ui32>> expectedDrives = {
+            std::pair<ui32, ui32>(pdiskId.NodeId, pdiskId.DiskId)
+        };
+
+        env.CheckBSCUpdateDriveRequests(expectedDrives, NKikimrBlobStorage::READONLY_FAULTY);
+
+        // "move" vdisks
+        auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(0)];
+        node.VDisksMoved = true;
+        node.VDiskStateInfo.clear();
+        env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+
+        env.SimulateSleep(TDuration::Minutes(5));
+
+        auto permission1 = env.CheckRequest("user", request1.GetRequestId(), false, TStatus::ALLOW, 1);
+        env.CheckRejectRequest("user", request1.GetRequestId(), false, TStatus::WRONG_REQUEST);
+        env.CheckDonePermission("user", permission1.GetPermissions(0).GetId());
+    }
+
+    Y_UNIT_TEST(RequestReplaceDeviceByPathWithEvictVDisks)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        auto request1 = env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user", false, false, false).WithEvictVDisks(),
+                    MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, "/0/pdisk-1.data")
+                ),
+            TStatus::DISALLOW_TEMP
+        );
+
+        auto pdiskId = env.PDiskId(0, 1);
+
+        std::set<std::pair<ui32, ui32>> expectedDrives = {
+            std::pair<ui32, ui32>(pdiskId.NodeId, pdiskId.DiskId)
+        };
+
+        env.CheckBSCUpdateDriveRequests(expectedDrives, NKikimrBlobStorage::READONLY_FAULTY);
+
+        // "move" vdisks
+        auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(0)];
+        node.VDisksMoved = true;
+        node.VDiskStateInfo.clear();
+        env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+
+        env.SimulateSleep(TDuration::Minutes(5));
+
+        auto permission1 = env.CheckRequest("user", request1.GetRequestId(), false, TStatus::ALLOW, 1);
+        env.CheckDonePermission("user", permission1.GetPermissions(0).GetId());
+    }
+
     Y_UNIT_TEST(RequestReplaceManyDevicesOnOneNode)
     {
         TCmsTestEnv env(16, 3);

@@ -94,6 +94,7 @@ struct TPDiskInfo
     ui32 StatusChangeAttempt = 0;
     ui32 PrevStatusChangeAttempt = 0;
     EIgnoreReason IgnoreReason = NKikimrCms::TPDiskInfo::NOT_IGNORED;
+    THashSet<NKikimrCms::EMarker> Markers;
 
     explicit TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits);
 

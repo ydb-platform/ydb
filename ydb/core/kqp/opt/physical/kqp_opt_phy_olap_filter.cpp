@@ -24,16 +24,30 @@ static const std::unordered_set<std::string> SecondLevelFilters = {
     "ends_with"
 };
 
-static TMaybeNode<TExprBase> CombinePrdicateWithOlapAnd(const TVector<TExprBase>& preds, TExprContext& ctx, TPositionHandle pos) {
-    if (preds.empty()) {
-        return {};
-    } else if (preds.size() == 1) {
-        return preds[0];
+static TMaybeNode<TExprBase> CombinePredicatesWithAnd(const TVector<TExprBase>& conjuncts, TExprContext& ctx, TPositionHandle pos, bool useOlapAnd, bool trueForEmpty) {
+    if (conjuncts.empty()) {
+        return trueForEmpty ? TMaybeNode<TExprBase>{MakeBool<true>(pos, ctx)} : TMaybeNode<TExprBase>{};
+    } else if (conjuncts.size() == 1) {
+        return conjuncts[0];
     } else {
-        return Build<TKqpOlapAnd>(ctx, pos)
-            .Add(preds)
-        .Done();
+        if (useOlapAnd) {
+            return Build<TKqpOlapAnd>(ctx, pos)
+                .Add(conjuncts)
+            .Done();
+        } else {
+            return Build<TCoAnd>(ctx, pos)
+                .Add(conjuncts)
+            .Done();
+        }
     }
+}
+
+static TMaybeNode<TExprBase> CombinePredicatesWithAnd(const TVector<TOLAPPredicateNode>& conjuncts, TExprContext& ctx, TPositionHandle pos, bool useOlapAnd, bool trueForEmpty) {
+    TVector<TExprBase> exprs;
+    for(const auto& c: conjuncts) {
+        exprs.emplace_back(c.ExprNode);
+    }
+    return CombinePredicatesWithAnd(exprs, ctx, pos, useOlapAnd, trueForEmpty);
 }
 
 struct TFilterOpsLevels {
@@ -93,8 +107,8 @@ struct TFilterOpsLevels {
             }
         }
         return {
-            CombinePrdicateWithOlapAnd(predicatesFirstLevel, ctx, pos),
-            CombinePrdicateWithOlapAnd(predicatesSecondLevel, ctx, pos),
+            CombinePredicatesWithAnd(predicatesFirstLevel, ctx, pos, true, false),
+            CombinePredicatesWithAnd(predicatesSecondLevel, ctx, pos, true, false),
         };
     }
 
@@ -682,24 +696,7 @@ TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, const TExprNode& 
     return YqlApplyPushdown(predicate, argument, ctx);
 }
 
-TOLAPPredicateNode WrapPredicates(const std::vector<TOLAPPredicateNode>& predicates, TExprContext& ctx, TPositionHandle pos) {
-    
-    TOLAPPredicateNode result;
-    result.CanBePushed = true;
-    TVector<NNodes::TExprBase> exprNodes;
-    for (const auto& pred : predicates) {
-        exprNodes.emplace_back(pred.ExprNode);
-        result.CanBePushed &= pred.CanBePushed;
-    }
-    if (exprNodes.empty()) {
-        result.ExprNode = MakeBool<true>(pos, ctx);
-    } else {
-        result.ExprNode = CombinePrdicateWithOlapAnd(exprNodes, ctx, pos).Cast().Ptr();
-    }
-    return result;
-}
-
-std::pair<std::vector<TOLAPPredicateNode>, std::vector<TOLAPPredicateNode>> SplitForPartialPushdown(const TOLAPPredicateNode& predicateTree)
+std::pair<TVector<TOLAPPredicateNode>, TVector<TOLAPPredicateNode>> SplitForPartialPushdown(const TOLAPPredicateNode& predicateTree)
 {
     if (predicateTree.CanBePushed) {
         return {{predicateTree}, {}};
@@ -713,8 +710,8 @@ std::pair<std::vector<TOLAPPredicateNode>, std::vector<TOLAPPredicateNode>> Spli
     }
 
     bool isFoundNotStrictOp = false;
-    std::vector<TOLAPPredicateNode> pushable;
-    std::vector<TOLAPPredicateNode> remaining;
+    TVector<TOLAPPredicateNode> pushable;
+    TVector<TOLAPPredicateNode> remaining;
     for (const auto& predicate : predicateTree.Children) {
         if (predicate.CanBePushed && !isFoundNotStrictOp) {
             pushable.emplace_back(predicate);
@@ -774,7 +771,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     }
 
     if constexpr (NSsa::RuntimeVersion >= 5U) {
-        std::vector<TOLAPPredicateNode> remainingAfterApply;
+        TVector<TOLAPPredicateNode> remainingAfterApply;
         for(const auto& p: remaining) {
             const auto recoveredOptinalIfForNonPushedDownPredicates = Build<TCoOptionalIf>(ctx, node.Pos())
                 .Predicate(p.ExprNode)
@@ -808,25 +805,22 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         return node;
     }
 
-    const auto& pushedFilters = TFilterOpsLevels::Merge(pushedPredicates, ctx, node.Pos());
+    const auto& pushedFilter = TFilterOpsLevels::Merge(pushedPredicates, ctx, node.Pos());
 
-    const auto remainingPredicates = WrapPredicates(remaining, ctx, node.Pos());
-    // Temporary fix for https://st.yandex-team.ru/KIKIMR-22560
-    // YQL_ENSURE(pushedFilters.IsValid(), "Pushed predicate should be always valid!");
-
+    const auto remainingFilter = CombinePredicatesWithAnd(remaining, ctx, node.Pos(), false, true);
 
     TMaybeNode<TExprBase> olapFilter;
-    if (pushedFilters.FirstLevelOps.IsValid()) {    
+    if (pushedFilter.FirstLevelOps.IsValid()) {    
         olapFilter = Build<TKqpOlapFilter>(ctx, node.Pos())
             .Input(read.Process().Body())
-            .Condition(pushedFilters.FirstLevelOps.Cast())
+            .Condition(pushedFilter.FirstLevelOps.Cast())
             .Done();
     }
 
-    if (pushedFilters.SecondLevelOps.IsValid()) {
+    if (pushedFilter.SecondLevelOps.IsValid()) {
         olapFilter = Build<TKqpOlapFilter>(ctx, node.Pos())
             .Input(olapFilter.IsValid() ? olapFilter.Cast() : read.Process().Body())
-            .Condition(pushedFilters.SecondLevelOps.Cast())
+            .Condition(pushedFilter.SecondLevelOps.Cast())
             .Done();
     }
 
@@ -870,7 +864,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             .Args({"new_arg"})
             .Body<TCoOptionalIf>()
                 .Predicate<TExprApplier>()
-                    .Apply(TExprBase(remainingPredicates.ExprNode))
+                    .Apply(remainingFilter.Cast())
                     .With(lambda.Args().Arg(0), "new_arg")
                     .Build()
                 .Value<TExprApplier>()

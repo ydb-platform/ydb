@@ -52,7 +52,7 @@ def do_custom_query_check(res, sql_query):
 
 def do_custom_error_check(res, sql_query):
     err_string = None
-    custom_error = re.search(r"/\* custom error:(.*)\*/", sql_query)
+    custom_error = re.search(r"/\* custom error:(.*?)\*/", sql_query, re.DOTALL)
     if custom_error:
         err_string = custom_error.group(1).strip()
     assert err_string, 'Expected custom error check in test.\nTest error: %s' % res.std_err

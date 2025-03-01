@@ -1,0 +1,23 @@
+From 7b33a3cb0a09c6cda952c6209404fcbf5177fc22 Mon Sep 17 00:00:00 2001
+From: Yuriy Chernyshov <thegeorg@yandex-team.com>
+Date: Tue, 25 Feb 2025 11:20:35 +0100
+Subject: [PATCH] Do not use static for a local variable
+
+This looks like a typo
+---
+ src/exception.cc | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/exception.cc b/src/exception.cc
+index 5034809..9bcf903 100644
+--- a/exception.cc
++++ b/exception.cc
+@@ -337,7 +337,7 @@ static void terminate_with_diagnostics() {
+ 	if (ex != nullptr) {
+ 		fprintf(stderr, "Terminating due to uncaught exception %p", static_cast<void*>(ex));
+ 		ex = realExceptionFromException(ex);
+-		static const __class_type_info *e_ti =
++		const __class_type_info *e_ti =
+ 			static_cast<const __class_type_info*>(&typeid(std::exception));
+ 		const __class_type_info *throw_ti =
+ 			dynamic_cast<const __class_type_info*>(ex->exceptionType);

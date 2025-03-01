@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2024-10-14)
+VERSION(2024-10-22)
 
-ORIGINAL_SOURCE(https://github.com/libcxxrt/libcxxrt/archive/76435c4451aeb5e04e9500b090293347a38cef8d.tar.gz)
+ORIGINAL_SOURCE(https://github.com/libcxxrt/libcxxrt/archive/5bf955548df364bc6efe4add80947b8689c74e2a.tar.gz)
 
 PEERDIR(
     contrib/libs/libunwind

@@ -1137,6 +1137,20 @@ class TestFiles:
     # https://a.yandex-team.ru/arcadia/devtools/ya/test/dartfile/__init__.py?rev=r14292146#L10
     KEY2 = 'FILES'
 
+    _GRUT_PREFIX = 'grut'
+    _GRUT_INCLUDE_LINTER_TEST_PATHS = (
+        'grut/libs/bigrt/clients',
+        'grut/libs/bigrt/common',
+        'grut/libs/bigrt/data',
+        'grut/libs/bigrt/event_filter',
+        'grut/libs/bigrt/info_keepers',
+        'grut/libs/bigrt/processor',
+        'grut/libs/bigrt/profile',
+        'grut/libs/bigrt/profiles',
+        'grut/libs/bigrt/queue_info_config',
+        'grut/libs/shooter',
+    )
+
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         data_re = re.compile(r"sbr:/?/?(\d+)=?.*")
@@ -1230,6 +1244,13 @@ class TestFiles:
 
     @classmethod
     def cpp_linter_files(cls, unit, flat_args, spec_args):
+        upath = unit.path()[3:]
+        if upath.startswith(cls._GRUT_PREFIX):
+            for path in cls._GRUT_INCLUDE_LINTER_TEST_PATHS:
+                if os.path.commonpath([upath, path]) == path:
+                    break
+            else:
+                raise DartValueError()
         files_dart = _reference_group_var("ALL_SRCS", consts.STYLE_CPP_ALL_EXTS)
         return {cls.KEY: files_dart, cls.KEY2: files_dart}
 

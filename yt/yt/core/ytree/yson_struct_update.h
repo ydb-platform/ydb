@@ -26,6 +26,11 @@ DECLARE_REFCOUNTED_STRUCT(TRegisteredFieldDirectory);
 struct IFieldRegistrar
     : public TRefCounted
 {
+    virtual void DoValidate(
+        IYsonStructParameterPtr parameter,
+        TYsonStructBase* oldStruct,
+        TYsonStructBase* newStruct) const = 0;
+
     virtual void DoUpdate(
         IYsonStructParameterPtr parameter,
         TYsonStructBase* oldStruct,
@@ -42,6 +47,12 @@ class TFieldRegistrar
     : public IFieldRegistrar
 {
 public:
+    // Registers validator that accepts old and new values as arguments.
+    TFieldRegistrar& Validator(TCallback<void(const TValue&, const TValue&)> validator);
+
+    // Registers validator that accepts only new value as an argument.
+    TFieldRegistrar& Validator(TCallback<void(const TValue&)> validator);
+
     // Registers updater that accepts old and new values as arguments.
     TFieldRegistrar& Updater(TCallback<void(const TValue&, const TValue&)> updater);
 
@@ -58,10 +69,17 @@ public:
         TYsonStructBase* oldStruct,
         TYsonStructBase* newStruct) const override;
 
+    void DoValidate(
+        IYsonStructParameterPtr parameter,
+        TYsonStructBase* oldStruct,
+        TYsonStructBase* newStruct) const override;
+
 private:
-    void VerifyEmpty() const;
+    void VerifyEmptyUpdater() const;
+    void VerifyEmptyValidator() const;
 
     TCallback<void(const TValue&, const TValue&)> Updater_;
+    TCallback<void(const TValue&, const TValue&)> Validator_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -114,11 +132,25 @@ class TSealedConfigurator
 public:
     TSealedConfigurator(TConfigurator<TStruct> configurator);
 
+    void Validate(
+        TIntrusivePtr<TStruct> oldStruct,
+        TIntrusivePtr<TStruct> newStruct) const;
+
     void Update(
         TIntrusivePtr<TStruct> oldStruct,
         TIntrusivePtr<TStruct> newStruct) const;
 
 private:
+    using TFieldRegistrarMethod = void(NDetail::IFieldRegistrar::*)(
+        IYsonStructParameterPtr parameter,
+        TYsonStructBase* oldStruct,
+        TYsonStructBase* newStruct) const;
+
+    void Do(
+        TIntrusivePtr<TStruct> oldStruct,
+        TIntrusivePtr<TStruct> newStruct,
+        TFieldRegistrarMethod fieldMethod) const;
+
     NDetail::TRegisteredFieldDirectoryPtr RegisteredFields_;
 };
 

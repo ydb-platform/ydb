@@ -27,6 +27,8 @@ struct TPyInitializer {
         PrepareYqlModule();
         Py_Initialize();
         InitYqlModule(NYql::NUdf::EPythonFlavor::Arcadia);
+        const auto rc = PyRun_SimpleString(NYql::NUdf::STANDART_STREAM_PROXY_INJECTION_SCRIPT);
+        Y_ENSURE(rc >= 0, "Can't setup module");
     }
     ~TPyInitializer() {
         TermYqlModule();

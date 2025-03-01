@@ -1161,7 +1161,23 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
             ScheduleBalance(ctx);
         }
     } else if (!partition.IsInactive()) {
-        auto delay = std::min<size_t>(1ul << partition.Iteration, Balancer.GetLifetimeSeconds()); // TODO use split/merge time
+        auto now = TInstant::Now();
+
+        auto* partitionInfo = GetPartitionInfo(partitionId);
+        bool hasEndWriteTimestamp = partitionInfo && partitionInfo->Status == NKikimrPQ::ETopicPartitionStatus::Inactive;
+        auto endWriteTimestamp = hasEndWriteTimestamp ? partitionInfo->EndWriteTimestamp : now;
+
+        size_t delay;
+        if (r.GetReadTimestampMs() && hasEndWriteTimestamp) {
+            TInstant readTimestamp = TInstant::MilliSeconds(r.GetReadTimestampMs());
+            if (readTimestamp >= endWriteTimestamp) {
+                delay = 1;
+            } else {
+                delay = (endWriteTimestamp - readTimestamp).Seconds() + 1;
+            }
+        } else {
+            delay = std::min<size_t>(1ul << partition.Iteration, Balancer.GetLifetimeSeconds() - (now - endWriteTimestamp).Seconds() + 1);
+        }
 
         PQ_LOG_D("Reading of the partition " << partitionId << " was finished by " << r.GetConsumer()
                 << ". Scheduled release of the partition for re-reading. Delay=" << delay << " seconds,"

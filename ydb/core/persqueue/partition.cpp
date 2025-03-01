@@ -790,8 +790,11 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
         }
     }
 
+    result.SetPartitionStatus(PartitionConfig->GetStatus());
+
     result.SetStartOffset(StartOffset);
     result.SetEndOffset(EndOffset);
+    result.SetEndWriteTimestampMs(EndWriteTimestamp.MilliSeconds());
 
     if (filterConsumers) {
         for (TString consumer : requiredConsumers) {

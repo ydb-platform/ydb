@@ -52,6 +52,7 @@ def test_select_positive(
     runner_type: str,
     test_case: select_positive_common.TestCase,
 ):
+    assert 1 == 2
     # Let MySQL initialize
     one_time_waiter.wait()
 
@@ -73,6 +74,7 @@ def test_select_datetime(
     runner_type: str,
     test_case: select_positive_common.TestCase,
 ):
+    assert 1 == 2
     # Let MySQL initialize
     one_time_waiter.wait()
 
@@ -96,6 +98,7 @@ def test_select_missing_database(
     runner_type: str,
     test_case: select_missing_database.TestCase,
 ):
+    assert 1 == 2
     # Let MySQL initialize
     one_time_waiter.wait()
 
@@ -119,6 +122,7 @@ def test_select_missing_table(
     runner_type: str,
     test_case: select_missing_table.TestCase,
 ):
+    assert 1 == 2
     # Let MySQL initialize
     one_time_waiter.wait()
 

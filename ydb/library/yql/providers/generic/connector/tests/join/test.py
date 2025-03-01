@@ -29,6 +29,7 @@ def test_join(
     clients: conftest.Clients,
     test_case: TestCase,
 ):
+    assert 1 == 2
     runner = configure_runner(runner_type=runner_type, settings=settings)
     scenario.join(
         test_name=request.node.name,

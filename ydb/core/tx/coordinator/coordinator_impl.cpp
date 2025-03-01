@@ -1,6 +1,6 @@
 #include "coordinator_impl.h"
 #include "coordinator_state.h"
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>

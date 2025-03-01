@@ -16,6 +16,7 @@
 #include <util/generic/guid.h>
 #include <util/string/split.h>
 #include <util/system/yassert.h>
+#include <util/random/random.h>
 
 using namespace NYdbGrpc;
 using namespace Yql::DqsProto;
@@ -68,6 +69,7 @@ ClusterStatusResponse InfoWithReties(TServiceConnection<DqService>& service, ui3
         if (!future.HasException()) {
             break;
         }
+        Sleep(TDuration::MilliSeconds(2000ul + RandomNumber(1000ul)));
     }
     return future.GetValue();
 }

@@ -432,6 +432,7 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     auto it = Indexes.find(indexId);
     AFL_VERIFY(it != Indexes.end());
     auto& index = it->second;
+    TMemoryProfileGuard mpg("IndexConstruction::" + index->GetIndexName());
     std::shared_ptr<IPortionDataChunk> chunk = index->BuildIndex(originalData, recordsCount, *this);
     if (!chunk) {
         return TConclusionStatus::Success();

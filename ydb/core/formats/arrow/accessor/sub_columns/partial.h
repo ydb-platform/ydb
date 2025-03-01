@@ -51,6 +51,10 @@ private:
     NSubColumns::TSettings Settings;
     TString StoreOthersString;
 
+    virtual void DoVisitValues(const TValuesSimpleVisitor& /*visitor*/) const override {
+        AFL_VERIFY(false);
+    }
+
 protected:
     virtual ui32 DoGetNullsCount() const override {
         AFL_VERIFY(false);

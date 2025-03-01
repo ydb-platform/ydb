@@ -22,6 +22,12 @@ private:
 private:
     YDB_READONLY_DEF(std::vector<std::shared_ptr<IChunkedArray>>, Chunks);
 
+    virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const override {
+        for (auto&& i : Chunks) {
+            i->VisitValues(visitor);
+        }
+    }
+
 protected:
     virtual ui32 DoGetNullsCount() const override {
         AFL_VERIFY(false);

@@ -76,7 +76,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 << ", status# " << result.GetStatus()
                 << ", issues# " << result.GetIssues().ToOneLineString());
 
-            if (IsRetryableError(result)) {
+            if (IsRetryableError(result) || NYdb::EStatus::GENERIC_ERROR == result.GetStatus()) {
                 return RetryDescribe(*it);
             } else {
                 Failed.emplace_back(path.first, result);

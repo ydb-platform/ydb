@@ -10,7 +10,7 @@
 
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/feature_flags.h>

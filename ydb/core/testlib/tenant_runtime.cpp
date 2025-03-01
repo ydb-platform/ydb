@@ -859,6 +859,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
     }
 
     app.InitIcb(Config.Nodes.size());
+    app.InitStaticControlBoard(Config.Nodes.size());
 
     for (size_t i = 0; i < Config.Nodes.size(); ++i) {
         AddLocalService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(GetNodeId(i)),

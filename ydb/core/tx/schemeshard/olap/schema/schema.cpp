@@ -49,7 +49,10 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
 
 void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
     NextColumnId = tableSchema.GetNextColumnId();
-    NextColumnFamilyId = tableSchema.GetNextColumnFamilyId();
+    // By default "NextColumnFamilyId" = 1, because zero is reserved for Family "default"
+    if (tableSchema.HasNextColumnFamilyId()) {
+        NextColumnFamilyId = tableSchema.GetNextColumnFamilyId();
+    }
     Version = tableSchema.GetVersion();
 
     ColumnFamilies.Parse(tableSchema);

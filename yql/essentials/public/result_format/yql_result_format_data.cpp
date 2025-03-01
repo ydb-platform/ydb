@@ -56,6 +56,22 @@ template <typename T, void (IDataVisitor::*Func)(T)>
 class TIntegerProcessor : public IDataProcessor {
 public:
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
+        if constexpr (std::is_signed<T>()) {
+            if (dataNode.IsInt64()) {
+                const auto integer = dataNode.AsInt64();
+                CHECK(integer >= i64(std::numeric_limits<T>::min()));
+                CHECK(integer <= i64(std::numeric_limits<T>::max()));
+                return (visitor.*Func)(static_cast<T>(integer));
+            }
+        }
+        if constexpr (std::is_unsigned<T>()) {
+            if (dataNode.IsUint64()) {
+                const auto integer = dataNode.AsUint64();
+                CHECK(integer <= ui64(std::numeric_limits<T>::max()));
+                return (visitor.*Func)(static_cast<T>(integer));
+            }
+        }
+
         CHECK(dataNode.IsString());
         (visitor.*Func)(FromString<T>(dataNode.AsString()));
     }
@@ -65,8 +81,12 @@ template <typename T, T (*Conv)(TStringBuf), void (IDataVisitor::*Func)(T)>
 class TFloatingProcessor : public IDataProcessor {
 public:
     void Process(const NYT::TNode& dataNode, IDataVisitor& visitor) final {
-        CHECK(dataNode.IsString());
-        (visitor.*Func)(Conv(dataNode.AsString()));
+        if (dataNode.IsDouble()) {
+            (visitor.*Func)(static_cast<T>(dataNode.AsDouble()));
+        } else {
+            CHECK(dataNode.IsString());
+            (visitor.*Func)(Conv(dataNode.AsString()));
+        }
     }
 };
 

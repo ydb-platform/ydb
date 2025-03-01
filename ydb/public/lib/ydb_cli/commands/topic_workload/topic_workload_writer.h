@@ -29,7 +29,6 @@ namespace NYdb {
             ui32 WriterIdx;
             ui32 PartitionCount;
             ui32 PartitionSeed;
-            bool Direct;
             ui32 Codec = 0;
             bool UseTransactions = false;
             bool UseAutoPartitioning = false;

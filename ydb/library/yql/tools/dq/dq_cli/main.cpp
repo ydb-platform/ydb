@@ -54,9 +54,6 @@ ClusterStatusResponse InfoWithReties(TServiceConnection<DqService>& service, ui3
                 promise.SetValue(resp);
             } else {
                 Cerr << "Error getting DQ info: code=" << status.GRpcStatusCode << ", message: " << status.Msg << ", details: " << status.Details << Endl;
-                if (retries > 0) {
-                    promise.SetValue(InfoWithReties(service, retries - 1));
-                }
                 promise.SetException("Error getting DQ info");
             }
         };

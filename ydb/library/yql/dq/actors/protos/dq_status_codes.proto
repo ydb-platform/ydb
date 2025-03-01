@@ -22,5 +22,6 @@ message StatusIds {
         SCHEME_ERROR = 14;
         GENERIC_ERROR = 15;
         UNDETERMINED =  16;
+        UNAUTHORIZED =  17;
     }
 }

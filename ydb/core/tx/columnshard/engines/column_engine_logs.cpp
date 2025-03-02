@@ -84,7 +84,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
     }
     if (switchOptimizer) {
         for (auto&& i : GranulesStorage->GetTables()) {
-            i.second->ResetOptimizer(indexInfoActual->GetCompactionPlannerConstructor(), StoragesManager, indexInfoActual->GetPrimaryKey());
+            i.second->ResetOptimizer(indexInfoActual->GetCompactionPlannerConstructor(), StoragesManager, indexInfoActual->GetPrimaryKey(), GranulesStorage->OptimizeCompactionForManyTable());
         }
     }
 }

@@ -124,6 +124,7 @@ struct TTestSchema {
     public:
         std::vector<TStorageTier> Tiers;
         bool WaitEmptyAfter = false;
+        bool UseLegacyCompaction = false;
 
         TTableSpecials() noexcept = default;
 
@@ -142,6 +143,12 @@ struct TTestSchema {
         TTableSpecials WithCodec(const TString& codec) const {
             TTableSpecials out = *this;
             out.SetCodec(codec);
+            return out;
+        }
+
+        TTableSpecials WithLegacyCompactionOptimizer(bool legacy = true) const {
+            TTableSpecials out = *this;
+            out.UseLegacyCompaction = legacy;
             return out;
         }
 
@@ -545,12 +552,13 @@ public:
     }
 };
 
-NOlap::TIndexInfo BuildTableInfo(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const std::vector<NArrow::NTest::TTestColumn>& key);
+NOlap::TIndexInfo BuildTableInfo(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const std::vector<NArrow::NTest::TTestColumn>& key, const bool isStandalone = false);
 
 struct TestTableDescription {
     std::vector<NArrow::NTest::TTestColumn> Schema = NTxUT::TTestSchema::YdbSchema();
     std::vector<NArrow::NTest::TTestColumn> Pk = NTxUT::TTestSchema::YdbPkSchema();
     bool InStore = true;
+    bool UseLegacyCompaction = false;
 
     std::vector<ui32> GetColumnIds(const std::vector<TString>& names) const {
         return NTxUT::TTestSchema::GetColumnIds(Schema, names);

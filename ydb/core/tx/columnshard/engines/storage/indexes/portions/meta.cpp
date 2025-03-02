@@ -16,7 +16,7 @@ TConclusion<std::shared_ptr<IPortionDataChunk>> TIndexByColumns::DoBuildIndexOpt
         if (it == data.end()) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "index_data_absent")("column_id", i)("index_name", GetIndexName())(
                 "index_id", GetIndexId());
-            return TConclusionStatus::Fail("no column for index construct: " + ::ToString(i) + " for index " + GetIndexName());
+            return nullptr;
         }
         columnReaders.emplace_back(it->second, indexInfo.GetColumnLoaderVerified(i));
     }

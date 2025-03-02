@@ -8,7 +8,6 @@ PEERDIR(
     ydb/core/formats/arrow
     yql/essentials/public/udf/service/stub
     yql/essentials/sql/pg_dummy
-    ydb/core/formats/arrow
 )
 
 YQL_LAST_ABI_VERSION()

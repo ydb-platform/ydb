@@ -139,7 +139,7 @@ public:
 
     std::shared_ptr<TGranuleMeta> RegisterTable(
         const ui64 pathId, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex) {
-        auto infoEmplace = Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, *this, counters, versionedIndex));
+        auto infoEmplace = Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, *this, counters, versionedIndex, OptimizeCompactionForManyTable()));
         AFL_VERIFY(infoEmplace.second);
         return infoEmplace.first->second;
     }
@@ -211,6 +211,10 @@ public:
 
     const NColumnShard::TEngineLogsCounters& GetCounters() const {
         return Counters;
+    }
+
+    bool OptimizeCompactionForManyTable() const {
+        return Tables.size() > 16;
     }
 
     std::shared_ptr<TGranuleMeta> GetGranuleForCompaction(const std::shared_ptr<NDataLocks::TManager>& locksManager) const;

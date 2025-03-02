@@ -239,7 +239,7 @@ public:
     }
 
     void ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor,
-        std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema);
+        std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema, const bool optimizeForManyTable);
     void ResetAccessorsManager(const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& constructor,
         const NDataAccessorControl::TManagerConstructionContext& context);
 
@@ -385,7 +385,7 @@ public:
     bool ErasePortion(const ui64 portion);
 
     explicit TGranuleMeta(const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters,
-        const TVersionedIndex& versionedIndex);
+        const TVersionedIndex& versionedIndex, const bool optimizeForManyTables);
 
     bool Empty() const noexcept {
         return Portions.empty();

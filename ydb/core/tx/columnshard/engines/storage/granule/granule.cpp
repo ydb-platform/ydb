@@ -134,7 +134,8 @@ const NKikimr::NOlap::TGranuleAdditiveSummary& TGranuleMeta::GetAdditiveSummary(
 }
 
 TGranuleMeta::TGranuleMeta(
-    const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex)
+    const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters,
+    const TVersionedIndex& versionedIndex, const bool optimizeForManyTables)
     : PathId(pathId)
     , DataAccessorsManager(owner.GetDataAccessorsManager())
     , Counters(counters)
@@ -143,7 +144,7 @@ TGranuleMeta::TGranuleMeta(
     , StoragesManager(owner.GetStoragesManager())
     , PortionsIndex(*this, Counters.GetPortionsIndexCounters()) {
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(
-        PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetPrimaryKey());
+        PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetPrimaryKey(), optimizeForManyTables);
     OptimizerPlanner = versionedIndex.GetLastSchema()->GetIndexInfo().GetCompactionPlannerConstructor()->BuildPlanner(context).DetachResult();
     NDataAccessorControl::TManagerConstructionContext mmContext(DataAccessorsManager->GetTabletActorId(), false);
     ResetAccessorsManager(versionedIndex.GetLastSchema()->GetIndexInfo().GetMetadataManagerConstructor(), mmContext);
@@ -179,11 +180,11 @@ void TGranuleMeta::ResetAccessorsManager(const std::shared_ptr<NDataAccessorCont
 }
 
 void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor,
-    std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema) {
+    std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema, const bool optimizeForManyTable) {
     if (constructor->ApplyToCurrentObject(OptimizerPlanner)) {
         return;
     }
-    NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(PathId, storages, pkSchema);
+    NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(PathId, storages, pkSchema, optimizeForManyTable);
     OptimizerPlanner = constructor->BuildPlanner(context).DetachResult();
     AFL_VERIFY(!!OptimizerPlanner);
     THashMap<ui64, std::shared_ptr<TPortionInfo>> portions;

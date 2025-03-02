@@ -1496,8 +1496,7 @@ IClientPtr TClient::GetParentClient(bool ignoreGlobalTx)
             RawClient_,
             Context_,
             TTransactionId(),
-            ClientRetryPolicy_
-        );
+            ClientRetryPolicy_);
     } else {
         return this;
     }
@@ -1510,15 +1509,10 @@ void TClient::CheckShutdown() const
     }
 }
 
-TClientContext CreateClientContext(
-    const TString& serverName,
-    const TCreateClientOptions& options)
+void SetupClusterContext(
+    TClientContext& context,
+    const TString& serverName)
 {
-    TClientContext context;
-    context.Config = options.Config_ ? options.Config_ : TConfig::Get();
-    context.TvmOnly = options.TvmOnly_;
-    context.ProxyAddress = options.ProxyAddress_;
-
     context.ServerName = serverName;
     ApplyProxyUrlAliasingRules(context.ServerName);
 
@@ -1531,9 +1525,8 @@ TClientContext CreateClientContext(
 
     static constexpr char httpUrlSchema[] = "http://";
     static constexpr char httpsUrlSchema[] = "https://";
-    if (options.UseTLS_) {
-        context.UseTLS = *options.UseTLS_;
-    } else {
+
+    if (!context.UseTLS) {
         context.UseTLS = context.ServerName.StartsWith(httpsUrlSchema);
     }
 
@@ -1555,9 +1548,25 @@ TClientContext CreateClientContext(
     if (context.ServerName.find(':') == TString::npos) {
         context.ServerName = CreateHostNameWithPort(context.ServerName, context);
     }
-    if (options.TvmOnly_) {
+    if (context.TvmOnly) {
         context.ServerName = Format("tvm.%v", context.ServerName);
     }
+}
+
+TClientContext CreateClientContext(
+    const TString& serverName,
+    const TCreateClientOptions& options)
+{
+    TClientContext context;
+    context.Config = options.Config_ ? options.Config_ : TConfig::Get();
+    context.TvmOnly = options.TvmOnly_;
+    context.ProxyAddress = options.ProxyAddress_;
+
+    if (options.UseTLS_) {
+        context.UseTLS = *options.UseTLS_;
+    }
+
+    SetupClusterContext(context, serverName);
 
     if (options.ProxyRole_) {
         context.Config->Hosts = "hosts?role=" + *options.ProxyRole_;

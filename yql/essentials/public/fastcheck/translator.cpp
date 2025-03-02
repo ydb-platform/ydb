@@ -61,6 +61,17 @@ private:
         settings.Antlr4Parser = true;
         settings.AnsiLexer = request.IsAnsiLexer;
         settings.SyntaxVersion = request.SyntaxVersion;
+        settings.Flags.insert({
+            "AnsiOrderByLimitInUnionAll",
+            "DisableCoalesceJoinKeysOnQualifiedAll",
+            "AnsiRankForNullableKeys",
+            "DisableUnorderedSubqueries",
+            "DisableAnsiOptionalAs",
+            "FlexibleTypes",
+            "CompactNamedExprs",
+            "DistinctOverWindow"
+        });
+
         switch (request.Mode) {
         case EMode::Default:
             settings.AlwaysAllowExports = true;

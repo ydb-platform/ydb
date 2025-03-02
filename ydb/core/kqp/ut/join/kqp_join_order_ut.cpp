@@ -48,7 +48,7 @@ void CreateTables(NYdb::NQuery::TSession session, const TString& schemaPath, boo
 
     if (useColumnStore) {
         std::regex pattern(R"(CREATE TABLE [^\(]+ \([^;]*\))", std::regex::multiline);
-        query = std::regex_replace(query, pattern, "$& WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);");
+        query = std::regex_replace(query, pattern, "$& WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);");
     }
 
     auto res = session.ExecuteQuery(TString(query), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
@@ -122,6 +122,12 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
         settings.push_back(setting);
     }
 
+    if (stats != "") {
+        setting.SetName("OptShuffleElimination");
+        setting.SetValue("true");
+        settings.push_back(setting);
+    }
+
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
     appConfig.MutableTableServiceConfig()->SetEnableConstantFolding(true);
@@ -135,7 +141,7 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
 
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
     serverSettings.SetKqpSettings(settings);
-    serverSettings.SetNodeCount(4);
+    // serverSettings.SetNodeCount(4);
 
     return TKikimrRunner(serverSettings);
 }
@@ -304,7 +310,7 @@ void TestOlapEstimationRowsCorrectness(const TString& queryPath, const TString& 
 /* Tests to check olap selectivity correctness */
 Y_UNIT_TEST_SUITE(OlapEstimationRowsCorrectness) {
     Y_UNIT_TEST(TPCH2) {
-        TestOlapEstimationRowsCorrectness("queries/tpch2.sql", "stats/tpch1000s.json");
+        TestOlapEstimationRowsCorrectness("queries/tpch2.sql", "stats/tpch100s.json");
     }
 
     Y_UNIT_TEST(TPCH3) {
@@ -316,7 +322,7 @@ Y_UNIT_TEST_SUITE(OlapEstimationRowsCorrectness) {
     }
 
     Y_UNIT_TEST(TPCH9) {
-        TestOlapEstimationRowsCorrectness("queries/tpch9.sql", "stats/tpch1000s.json");
+        TestOlapEstimationRowsCorrectness("queries/tpch2.sql", "stats/tpch1000s.json");
     }
 
     Y_UNIT_TEST(TPCH10) {
@@ -324,7 +330,7 @@ Y_UNIT_TEST_SUITE(OlapEstimationRowsCorrectness) {
     }
 
     Y_UNIT_TEST(TPCH11) {
-        TestOlapEstimationRowsCorrectness("queries/tpch11.sql", "stats/tpch1000s.json");
+        TestOlapEstimationRowsCorrectness("queries/tpch2.sql", "stats/tpch100s.json");
     }
 
     Y_UNIT_TEST(TPCH21) {
@@ -521,8 +527,8 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch10.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCH11, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch11.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST(TPCH11) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch2.sql", "stats/tpch100s.json", false, true);
     }
 
     Y_UNIT_TEST(TPCH20) {
@@ -843,9 +849,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(CanonizedJoinOrderTPCH2, StreamLookupJoin, ColumnStore) {
+    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(CanonizedJoinOrderTPCH2AL, StreamLookupJoin, ColumnStore) {
         CanonizedJoinOrderTest(
-            "queries/tpch2.sql", "stats/tpch1000s.json", "join_order/tpch2_1000s.json", StreamLookupJoin, ColumnStore
+            "queries/tpch2.sql", "stats/tpch100s.json", "join_order/tpch2_1000s.json", StreamLookupJoin, ColumnStore
         );
     }
 

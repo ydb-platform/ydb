@@ -145,7 +145,7 @@ TOthersData TOthersData::ApplyFilter(const TColumnFilter& filter, const TSetting
                                                       "record_index", itOthersData.GetRecordIndex());
                     const ui32 filteredRecordIndex = itOthersData.GetRecordIndex() - shiftSkippedCount;
                     if (predRecordIndex) {
-                        AFL_VERIFY(*predRecordIndex < filteredRecordIndex);
+                        AFL_VERIFY(*predRecordIndex <= filteredRecordIndex)("pred", predRecordIndex)("index", filteredRecordIndex);
                     }
                     predRecordIndex = filteredRecordIndex;
                     AFL_VERIFY(filteredRecordIndex < resultRecordsCount)("new_record_index", filteredRecordIndex)("count", resultRecordsCount)(

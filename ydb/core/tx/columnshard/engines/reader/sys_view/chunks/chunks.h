@@ -72,6 +72,7 @@ private:
         const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const override;
     virtual ui32 PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const override;
     void AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionDataAccessor& portion) const;
+    bool IsReady(const ui64 portionId) const;
 
     class TAccessorsApplyResult: public IDataTasksProcessor::ITask {
     private:

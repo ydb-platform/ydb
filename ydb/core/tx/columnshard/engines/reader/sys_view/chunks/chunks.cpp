@@ -67,8 +67,7 @@ void TStatsIterator::AppendStats(
         arrow::util::string_view lastColumnName;
         arrow::util::string_view lastTierName;
         for (auto&& r : records) {
-            const TString details =
-                NeedDetails ? *TValidator::CheckNotNull(Details.FindPtr(portionPtr.GetPortionInfo().RestoreBlobRange(r->GetBlobRange()))) : "";
+            const TString details = NeedDetails ? *TValidator::CheckNotNull(Details.FindPtr(portion.RestoreBlobRange(r->GetBlobRange()))) : "";
             NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId());
             NArrow::Append<arrow::StringType>(*builders[1], prodView);
             NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
@@ -176,7 +175,7 @@ bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     ui64 recordsCount = 0;
     while (granule.GetPortions().size()) {
         auto it = FetchedAccessors.find(granule.GetPortions().front()->GetPortionId());
-        if (it == FetchedAccessors.end()) {
+        if (it == FetchedAccessors.end() || !IsReady(it->first)) {
             break;
         }
         recordsCount += it->second.GetRecordsVerified().size() + it->second.GetIndexesVerified().size();
@@ -239,12 +238,17 @@ bool TStatsIterator::IsReadyForBatch() const {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "batch_ready_check")("result", true)("reason", "no_granule_portions");
         return true;
     }
-    if (!FetchedAccessors.contains(IndexGranules.front().GetPortions().front()->GetPortionId())) {
+    return IsReady(IndexGranules.front().GetPortions().front()->GetPortionId());
+}
+
+bool TStatsIterator::IsReady(const ui64 portionId) const {
+    const auto* accessor = FetchedAccessors.FindPtr(portionId);
+    if (!accessor) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "batch_ready_check")("result", false)("reason", "portion_not_fetched");
         return false;
     }
     if (NeedDetails) {
-        for (auto&& r : FetchedAccessors.FindPtr(IndexGranules.front().GetPortions().front()->GetPortionId())->GetRecordsVerified()) {
+        for (auto&& r : accessor->GetRecordsVerified()) {
             const auto& portion = IndexGranules.front().GetPortions().front();
             if (!Details.contains(portion->RestoreBlobRange(r.GetBlobRange()))) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "batch_ready_check")("result", false)("reason", "details_not_ready");

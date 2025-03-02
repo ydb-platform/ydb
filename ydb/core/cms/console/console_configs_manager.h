@@ -216,7 +216,13 @@ private:
             HandleUnauthorized(ev, ctx);
         };
 
-        if (IsAdministrator(AppData(ctx), ev->Get()->Record.GetUserToken())) {
+        bool bypassAuth = false;
+
+        if constexpr (std::is_same_v<typename std::decay_t<decltype(*ev->Get())>, TEvConsole::TEvGetAllConfigsRequest>) {
+            bypassAuth = ev->Get()->Record.GetBypassAuth();
+        }
+
+        if (bypassAuth) {
             Handle(ev, ctx);
         } else {
             if constexpr (HasHandleUnauthorized) {

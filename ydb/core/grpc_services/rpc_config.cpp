@@ -11,6 +11,8 @@
 #include <ydb/core/protos/local.pb.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/base/auth.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -229,6 +231,20 @@ public:
         return NACLib::GenericManage;
     }
 
+    void Bootstrap(const TActorContext &ctx) {
+        TBase::Bootstrap(ctx);
+        auto *self = Self();
+        self->OnBootstrap();
+
+        if (self->Request_->GetDatabaseName()) {
+            SendRequestToConsole();
+            return;
+        }
+
+        self->Become(&TFetchStorageConfigRequest::StateFunc);
+        self->Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvNodeWardenQueryStorageConfig(false));
+    }
+
     void FillDistconfQuery(NStorage::TEvNodeConfigInvokeOnRoot& ev) const {
         auto *record = ev.Record.MutableFetchStorageConfig();
 
@@ -299,6 +315,61 @@ public:
         }
 
         return ev;
+    }
+
+private:
+    TActorId ConsolePipe;
+
+    void SendRequestToConsole() {
+        NTabletPipe::TClientConfig pipeConfig;
+        ConsolePipe = Self()->Register(CreateClient(SelfId(), MakeConsoleID(), GetPipeConfig()));
+
+        auto request = MakeHolder<NConsole::TEvConsole::TEvGetAllConfigsRequest>();
+        request->Record.SetUserToken(Request_->GetSerializedToken());
+        request->Record.SetPeerName(Request_->GetPeerName());
+        if (Request_->GetDatabaseName()) {
+            request->Record.SetIngressDatabase(*Request_->GetDatabaseName());
+        }
+        request->Record.SetBypassAuth(true);
+
+        NTabletPipe::SendData(SelfId(), ConsolePipe, request.Release());
+
+        Become(&TFetchStorageConfigRequest::StateConsoleWork);
+    }
+
+    STFUNC(StateConsoleWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NConsole::TEvConsole::TEvGetAllConfigsResponse, Handle);
+            hFunc(NConsole::TEvConsole::TEvGenericError, HandleConsole);
+            hFunc(TEvTabletPipe::TEvClientDestroyed, HandleConsole);
+            hFunc(TEvTabletPipe::TEvClientConnected, HandleConsole);
+            default:
+                return TBase::StateFuncBase(ev);
+        }
+    }
+
+    void Handle(NConsole::TEvConsole::TEvGetAllConfigsResponse::TPtr& ev) {
+        ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), ActorContext());
+        PassAway();
+    }
+
+    void HandleConsole(NConsole::TEvConsole::TEvGenericError::TPtr& ev) {
+        Reply(ev->Get()->Record.GetYdbStatus(), ev->Get()->Record.GetIssues(), ActorContext());
+        PassAway();
+    }
+
+    void HandleConsole(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
+        Reply(Ydb::StatusIds::UNAVAILABLE, "Connection to console was lost",
+            NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, ActorContext());
+        PassAway();
+    }
+
+    void HandleConsole(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to connect to console",
+                NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, ActorContext());
+            PassAway();
+        }
     }
 };
 
@@ -372,3 +443,4 @@ void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
 }
 
 } // namespace NKikimr::NGRpcService
+

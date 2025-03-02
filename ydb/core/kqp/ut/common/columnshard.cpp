@@ -300,6 +300,11 @@ namespace NKqp {
             str << ", TTL = " << TTLConf->second << " ON " << TTLConf->first;
         }
         str << ");";
+        if (UseLegacyCompaction) {
+            str << "\n";
+            str << "ALTER OBJECT `" << Name << "` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`);";
+            str << "\n";
+        }
         return str;
     }
 

@@ -50,7 +50,32 @@ struct TStageInfoMeta {
     THolder<TKeyDesc> ShardKey;
     NSchemeCache::TSchemeCacheRequest::EKind ShardKind = NSchemeCache::TSchemeCacheRequest::EKind::KindUnknown;
 
-    TColumnShardHashV1Params ColumnShardHashV1Params{};
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    TColumnShardHashV1Params ColumnShardHashV1Params;
+    THashMap<ui32, TColumnShardHashV1Params> HashParamsByOutput;
+
+    TColumnShardHashV1Params& GetColumnShardHashV1Params(ui32 outputIdx) {
+        if (HashParamsByOutput.contains(outputIdx)) {
+            return HashParamsByOutput[outputIdx];
+        }
+        return ColumnShardHashV1Params;
+    }
+
+    const TColumnShardHashV1Params& GetColumnShardHashV1Params(ui32 outputIdx) const {
+        if (HashParamsByOutput.contains(outputIdx)) {
+            return HashParamsByOutput.at(outputIdx);
+        }
+        return ColumnShardHashV1Params;
+    }
+
+    /*
+     * We want to propogate params for hash func through the stages. In default sutiation we do it by only ColumnShardHashV1Params.
+     * But challenges appear when there is CTE in plan. So we must store mapping from the outputStageIdx to params.
+     * Otherwise, we will rewrite ColumnShardHashV1Params, when we will meet the same stage again during propogation.
+     */
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
 
     const NKqpProto::TKqpPhyStage& GetStage(const size_t idx) const {
         auto& txBody = Tx.Body;
@@ -150,7 +175,6 @@ struct TTaskInputMeta {
 struct TTaskOutputMeta {
     NKikimrKqp::TKqpTableSinkSettings* SinkSettings = nullptr;
     THashMap<ui64, const TKeyDesc::TPartitionInfo*> ShardPartitions;
-    TColumnShardHashV1Params ColumnShardHashV1Params;
 };
 
 struct TShardKeyRanges {

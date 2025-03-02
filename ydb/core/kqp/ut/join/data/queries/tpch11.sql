@@ -2,6 +2,7 @@
 -- TPC-H/TPC-R Important Stock Identification Query (Q11)
 -- TPC TPC-H Parameter Substitution (Version 2.17.2 build 0)
 -- using 1680793381 as a seed to the RNG
+PRAGMA ydb.OptShuffleElimination = 'true';
 
 $join1 = (
 select
@@ -47,14 +48,3 @@ group by
     ps_partkey
 );
 
-select
-    v.ps_partkey as ps_partkey,
-    v.value as value
-from
-    $values as v
-cross join
-    $threshold as t
-where
-    v.value > t.threshold
-order by
-    value desc;

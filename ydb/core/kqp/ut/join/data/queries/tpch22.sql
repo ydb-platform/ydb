@@ -1,6 +1,4 @@
--- PRAGMA TablePathPrefix='olap-testing-sas-common/kikimr/pavelvelikhov/tpc/dt64/column/tpch/s1000';
-PRAGMA ydb.OptShuffleElimination = 'true';
-PRAGMA ydb.CostBasedOptimizationLevel='3';
+PRAGMA ydb.CostBasedOptimizationLevel='4';
 pragma warning("disable", "4527");
 
 $z0 = 0;
@@ -60,7 +58,7 @@ from
                     and Substring(CAST (c_phone as String), 0u, 2u) in
                         ('31', '29', '30', '26', '28', '25', '15')
             ) avg_customer
-            left only join 
+            left only join
                 orders
             on orders.o_custkey = customer.c_custkey
         where

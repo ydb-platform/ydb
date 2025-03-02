@@ -501,12 +501,13 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
 
     bool hasMap = false;
     auto& columnShardHashV1Params = stageInfo.Meta.ColumnShardHashV1Params;
-    bool isFusedStage = (columnShardHashV1Params.TaskIdByHash != nullptr);
-    if (enableShuffleElimination && !isFusedStage) { // taskIdHash can be already set if it is a fused stage, so hashpartition will derive columnv1 parameters from there
+    bool isFusedWithScanStage = (stageInfo.Meta.TableConstInfo != nullptr);
+    if (enableShuffleElimination && !isFusedWithScanStage) { // taskIdHash can be already set if it is a fused stage, so hashpartition will derive columnv1 parameters from there
         for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
             const auto& input = stage.GetInputs(inputIndex);
-            auto& originStageInfo = tasksGraph.GetStageInfo(NYql::NDq::TStageId(stageInfo.Id.TxId, input.GetStageIndex()));;
-            columnShardHashV1Params = originStageInfo.Meta.ColumnShardHashV1Params;
+            auto& originStageInfo = tasksGraph.GetStageInfo(NYql::NDq::TStageId(stageInfo.Id.TxId, input.GetStageIndex()));
+            ui32 outputIdx = input.GetOutputIndex();
+            columnShardHashV1Params = originStageInfo.Meta.GetColumnShardHashV1Params(outputIdx);
             if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kMap) {
                 // We want to enforce sourceShardCount from map connection, cause it can be at most one map connection
                 // and ColumnShardHash in Shuffle will use this parameter to shuffle on this map (same with taskIdByHash mapping)
@@ -517,7 +518,7 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
     }
 
     // if it is stage, where we don't inherit parallelism.
-    if (enableShuffleElimination && !hasMap && !isFusedStage && stageInfo.Tasks.size() > 0 && stage.InputsSize() > 0) {
+    if (enableShuffleElimination && !hasMap && !isFusedWithScanStage && stageInfo.Tasks.size() > 0 && stage.InputsSize() > 0) {
         columnShardHashV1Params.SourceShardCount = stageInfo.Tasks.size();
         columnShardHashV1Params.TaskIdByHash = std::make_shared<TVector<ui64>>(columnShardHashV1Params.SourceShardCount);
         for (std::size_t i = 0; i < columnShardHashV1Params.SourceShardCount; ++i) {
@@ -572,8 +573,8 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
                         LOG_DEBUG_S(
                             *TlsActivationContext,
                             NKikimrServices::KQP_EXECUTER,
-                            "Propogating columnhashv1 pararms to stage: "
-                            << "[" << inputStageInfo.Id.TxId << ":" << inputStageInfo.Id.StageId << "]" << " "
+                            "Propogating columnhashv1 pararms to stage"
+                            << "[" << inputStageInfo.Id.TxId << ":" << inputStageInfo.Id.StageId << "]" << ": "
                             << KeyTypesToString(*columnShardHashV1Params.SourceTableKeyColumnTypes) << " "
                             << "[" << JoinSeq(",", input.GetHashShuffle().GetKeyColumns()) << "]";
                         );
@@ -586,13 +587,7 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
                                 << "[" << JoinSeq(",", input.GetHashShuffle().GetKeyColumns()) << "]"
                         );
 
-                        for (auto& originTaskId : inputStageInfo.Tasks) {
-                            auto& originTask = tasksGraph.GetTask(originTaskId);
-                            auto& taskOutput = originTask.Outputs[outputIdx];
-                            taskOutput.Meta.ColumnShardHashV1Params = columnShardHashV1Params;
-                        }
-
-                        inputStageInfo.Meta.ColumnShardHashV1Params = columnShardHashV1Params;
+                        inputStageInfo.Meta.HashParamsByOutput[outputIdx] = columnShardHashV1Params;
                         hashKind = NHashKind::EColumnShardHashV1;
                         break;
                     }
@@ -1176,6 +1171,7 @@ void FillOutputDesc(
     const TKqpTasksGraph& tasksGraph,
     NYql::NDqProto::TTaskOutput& outputDesc,
     const TTaskOutput& output,
+    ui32 outputIdx,
     bool enableSpilling,
     const TStageInfo& stageInfo
 ) {
@@ -1198,13 +1194,13 @@ void FillOutputDesc(
                     break;
                 }
                 case NHashKind::EColumnShardHashV1: {
-                    auto& columnShardHashV1Params = output.Meta.ColumnShardHashV1Params;
+                    auto& columnShardHashV1Params = stageInfo.Meta.GetColumnShardHashV1Params(outputIdx);
                     LOG_DEBUG_S(
                         *TlsActivationContext,
                         NKikimrServices::KQP_EXECUTER,
-                        "Filling columnshardhashv1 params for sending it to runtime: "
+                        "Filling columnshardhashv1 params for sending it to runtime "
                         << "[" << stageInfo.Id.TxId << ":" << stageInfo.Id.StageId << "]"
-                        << " " << KeyTypesToString(*columnShardHashV1Params.SourceTableKeyColumnTypes)
+                        << ": " << KeyTypesToString(*columnShardHashV1Params.SourceTableKeyColumnTypes)
                         << " for the columns: " << "[" << JoinSeq(",", output.KeyColumns) << "]"
                     );
                     Y_ENSURE(columnShardHashV1Params.SourceShardCount != 0, "ShardCount for ColumnShardHashV1 Shuffle can't be equal to 0");
@@ -1403,8 +1399,9 @@ void SerializeTaskToProto(
     if (task.Outputs.size() > 1) {
         enableSpilling = tasksGraph.GetMeta().AllowWithSpilling;
     }
-    for (const auto& output : task.Outputs) {
-        FillOutputDesc(tasksGraph, *result->AddOutputs(), output, enableSpilling, stageInfo);
+    for (ui32 outputIdx = 0; outputIdx < task.Outputs.size(); ++outputIdx) {
+        const auto& output = task.Outputs[outputIdx];
+        FillOutputDesc(tasksGraph, *result->AddOutputs(), output, outputIdx, enableSpilling, stageInfo);
     }
 
     const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);

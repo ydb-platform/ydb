@@ -1,9 +1,41 @@
 #include "chunks.h"
 
 #include <ydb/core/formats/arrow/switch/switch_type.h>
+#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 
 namespace NKikimr::NOlap::NReader::NSysView::NChunks {
+
+void TStatsIterator::TSubColumnHeaderFetchingTask::DoOnDataReady(
+    const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
+    TReadActionsCollection nextRead;
+    NBlobOperations::NRead::TCompositeReadBlobs blobs = ExtractBlobsData();
+    FetchingLogic.OnDataFetched(blobs, nextRead);
+    if (FetchingLogic.IsDone()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "sub_column_headers_fetched");
+        AFL_VERIFY(nextRead.IsEmpty());
+        NActors::TActorContext::AsActorContext().Send(
+            Context->GetScanActorId(), std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
+                                           std::make_shared<TSubColumnStatsApplyResult>(FetchingLogic.ExtractResults())));
+    } else {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "sub_columns_fetching_step");
+        AFL_VERIFY(!nextRead.IsEmpty());
+        std::shared_ptr<TSubColumnHeaderFetchingTask> nextReadTask = std::make_shared<TSubColumnHeaderFetchingTask>(
+            std::move(nextRead), std::move(FetchingLogic), Context, GetTaskCustomer(), GetExternalTaskId());
+        NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(nextReadTask));
+    }
+}
+
+bool TStatsIterator::TSubColumnHeaderFetchingTask::DoOnError(
+    const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("error_on_blob_reading", range.ToString())("scan_actor_id", Context->GetScanActorId())(
+        "status", status.GetErrorMessage())("status_code", status.GetStatus())("storage_id", storageId);
+    NActors::TActorContext::AsActorContext().Send(
+        Context->GetScanActorId(), std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
+                                       TConclusionStatus::Fail("cannot read blob range " + range.ToString())));
+    return false;
+}
 
 void TStatsIterator::AppendStats(
     const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionDataAccessor& portionPtr) const {
@@ -35,6 +67,8 @@ void TStatsIterator::AppendStats(
         arrow::util::string_view lastColumnName;
         arrow::util::string_view lastTierName;
         for (auto&& r : records) {
+            const TString details =
+                NeedDetails ? *TValidator::CheckNotNull(Details.FindPtr(portionPtr.GetPortionInfo().RestoreBlobRange(r->GetBlobRange()))) : "";
             NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId());
             NArrow::Append<arrow::StringType>(*builders[1], prodView);
             NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
@@ -81,6 +115,7 @@ void TStatsIterator::AppendStats(
 
             NArrow::Append<arrow::StringType>(*builders[13], arrow::util::string_view(lastTierName.data(), lastTierName.size()));
             NArrow::Append<arrow::StringType>(*builders[14], ConstantEntityIsColumnView);
+            NArrow::Append<arrow::StringType>(*builders[15], arrow::util::string_view(details.data(), details.size()));
         }
     }
     {
@@ -116,6 +151,7 @@ void TStatsIterator::AppendStats(
             std::string strTierName(tierName.data(), tierName.size());
             NArrow::Append<arrow::StringType>(*builders[13], strTierName);
             NArrow::Append<arrow::StringType>(*builders[14], ConstantEntityIsIndexView);
+            NArrow::Append<arrow::StringType>(*builders[15], "");
         }
     }
 }
@@ -146,6 +182,11 @@ bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
         recordsCount += it->second.GetRecordsVerified().size() + it->second.GetIndexesVerified().size();
         AppendStats(builders, it->second);
         granule.PopFrontPortion();
+        if (NeedDetails) {
+            for (const auto& r : it->second.GetRecordsVerified()) {
+                AFL_VERIFY(Details.erase(it->second.GetPortionInfo().RestoreBlobRange(r.GetBlobRange())));
+            }
+        }
         FetchedAccessors.erase(it);
         if (recordsCount > 10000) {
             break;
@@ -198,11 +239,20 @@ bool TStatsIterator::IsReadyForBatch() const {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "batch_ready_check")("result", true)("reason", "no_granule_portions");
         return true;
     }
-    if (FetchedAccessors.contains(IndexGranules.front().GetPortions().front()->GetPortionId())) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "batch_ready_check")("result", true)("reason", "portion_fetched");
-        return true;
+    if (!FetchedAccessors.contains(IndexGranules.front().GetPortions().front()->GetPortionId())) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "batch_ready_check")("result", false)("reason", "portion_not_fetched");
+        return false;
     }
-    return false;
+    if (NeedDetails) {
+        for (auto&& r : FetchedAccessors.FindPtr(IndexGranules.front().GetPortions().front()->GetPortionId())->GetRecordsVerified()) {
+            const auto& portion = IndexGranules.front().GetPortions().front();
+            if (!Details.contains(portion->RestoreBlobRange(r.GetBlobRange()))) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "batch_ready_check")("result", false)("reason", "details_not_ready");
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 TStatsIterator::TFetchingAccessorAllocation::TFetchingAccessorAllocation(
@@ -222,6 +272,36 @@ void TStatsIterator::TFetchingAccessorAllocation::DoOnAllocationImpossible(const
 
 const std::shared_ptr<const TAtomicCounter>& TStatsIterator::TFetchingAccessorAllocation::DoGetAbortionFlag() const {
     return Context->GetAbortionFlag();
+}
+
+void TStatsIterator::OnAccessorReady(const TPortionDataAccessor& accessor) {
+    AFL_VERIFY(FetchedAccessors.emplace(accessor.GetPortionInfo().GetPortionId(), accessor).second);
+
+    if (NeedDetails) {
+        THashMap<TString, THashMap<NOlap::TBlobRange, NArrow::NAccessor::TChunkConstructionData>> subColumnChunks;
+        const auto& schema = accessor.GetPortionInfo().GetSchema(Context->GetReadMetadata()->GetIndexVersions());
+        for (const auto& record : accessor.GetRecordsVerified()) {
+            const auto& loader = schema->GetColumnLoaderVerified(record.GetColumnId());
+            const TBlobRange blobRange = accessor.GetPortionInfo().RestoreBlobRange(record.GetBlobRange());
+            if (loader->GetAccessorConstructor().GetObjectVerified().GetClassName() ==
+                NArrow::NAccessor::NSubColumns::TConstructor::GetClassNameStatic()) {
+                const TString& storageId = accessor.GetPortionInfo().GetColumnStorageId(record.GetColumnId(), schema->GetIndexInfo());
+                AFL_VERIFY(subColumnChunks[storageId].emplace(blobRange, loader->BuildAccessorContext(0)).second);
+            } else {
+                AFL_VERIFY(Details.emplace(blobRange, "").second);
+            }
+        }
+
+        for (auto&& [storageId, chunks] : subColumnChunks) {
+            NArrow::NAccessor::NSubColumns::THeaderFetchingLogic logic(std::move(chunks), Context->GetStoragesManager()->GetOperator(storageId));
+            TReadActionsCollection reads;
+            logic.Start(reads);
+            AFL_VERIFY(!reads.IsEmpty());
+            NActors::TActivationContext::AsActorContext().Register(
+                new NOlap::NBlobOperations::NRead::TActor(std::make_shared<TSubColumnHeaderFetchingTask>(
+                    std::move(reads), std::move(logic), Context, "SYS_VIEW::CHUNKS", Context->GetReadMetadata()->GetScanIdentifier())));
+        }
+    }
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSysView::NChunks

@@ -844,6 +844,38 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         )";
         TScriptVariator(script).Execute();
     }
+
+    Y_UNIT_TEST(SysView) {
+        TString script = R"(
+            SCHEMA:            
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2|10$$);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
+                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1", "b" : "b1", "c" : "c1"}')), (2u, JsonDocument('{"a" : "a2"}')),
+                                                                    (3u, JsonDocument('{"b" : "b3", "d" : "d3"}')), (4u, JsonDocument('{"b" : "b4asdsasdaa", "a" : "a4"}'))
+            ------
+            READ: SELECT Rows FROM `/Root/ColumnTable/.sys/primary_index_stats`;
+            EXPECTED: [[[4u]];[[4u]]]
+            ------
+            READ: SELECT ChunkIdx, Details FROM `/Root/ColumnTable/.sys/primary_index_stats` ORDER BY ChunkIdx;
+            EXPECTED: [[[""]];[["{\"column\":{\"accessor\":[5,5,5,5],\"size\":[6,15,2,2],\"key_names\":[\"a\",\"b\",\"c\",\"d\"],\"records\":[3,3,1,1]},\"other\":{\"accessor\":[],\"size\":[],\"key_names\":[],\"records\":[]}}"]]]
+            
+        )";
+        TScriptVariator(script).Execute();
+    }
 }
 
 }   // namespace NKikimr::NKqp

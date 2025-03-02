@@ -39,6 +39,7 @@ public:
 
 class TColumnChunkRestoreInfo {
 private:
+    // NArrow::NAccessor::NSubColumns::THeaderFetchingLogic HeaderFetching;  // TODO
     const NArrow::NAccessor::TChunkConstructionData ChunkExternalInfo;
     THashMap<TString, TSubColumnChunkRestoreInfo> Chunks;
     YDB_ACCESSOR_DEF(std::optional<TBlobRange>, HeaderRange);

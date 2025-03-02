@@ -106,32 +106,32 @@ private:
         using TBase = NBlobOperations::NRead::ITask;
         std::shared_ptr<NReader::TReadContext> Context;
         NArrow::NAccessor::NSubColumns::THeaderFetchingLogic FetchingLogic;
+        NColumnShard::TCounterGuard WaitingCountersGuard;
 
         virtual void DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) override;
         virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override;
 
     public:
         TSubColumnHeaderFetchingTask(TReadActionsCollection&& actions, NArrow::NAccessor::NSubColumns::THeaderFetchingLogic&& fetchingLogic,
-            const std::shared_ptr<NReader::TReadContext> context, const TString& taskCustomer, const TString& externalTaskId = "")
-            : TBase(std::move(actions), taskCustomer, externalTaskId)
-            , Context(context)
-            , FetchingLogic(std::move(fetchingLogic)) {
-        }
+            const std::shared_ptr<NReader::TReadContext> context, const TString& taskCustomer, const TString& externalTaskId = "");
     };
 
     class TSubColumnStatsApplyResult: public IDataTasksProcessor::ITask {
     private:
         using TBase = IDataTasksProcessor::ITask;
         THashMap<TBlobRange, NArrow::NAccessor::NSubColumns::TSubColumnsHeader> Headers;
+        NColumnShard::TCounterGuard WaitingCountersGuard;
 
     public:
         TString GetTaskClassIdentifier() const override {
             return "TSubColumnStatsApplyResult";
         }
 
-        TSubColumnStatsApplyResult(THashMap<TBlobRange, NArrow::NAccessor::NSubColumns::TSubColumnsHeader>&& headers)
+        TSubColumnStatsApplyResult(
+            THashMap<TBlobRange, NArrow::NAccessor::NSubColumns::TSubColumnsHeader>&& headers, NColumnShard::TCounterGuard&& countersGuard)
             : TBase(NActors::TActorId())
-            , Headers(std::move(headers)) {
+            , Headers(std::move(headers))
+            , WaitingCountersGuard(std::move(countersGuard)) {
         }
 
         virtual TConclusionStatus DoExecuteImpl() override {

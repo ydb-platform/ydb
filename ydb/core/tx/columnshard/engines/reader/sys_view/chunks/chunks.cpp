@@ -13,13 +13,11 @@ void TStatsIterator::TSubColumnHeaderFetchingTask::DoOnDataReady(
     NBlobOperations::NRead::TCompositeReadBlobs blobs = ExtractBlobsData();
     FetchingLogic.OnDataFetched(blobs, nextRead);
     if (FetchingLogic.IsDone()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "sub_column_headers_fetched");
         AFL_VERIFY(nextRead.IsEmpty());
-        NActors::TActorContext::AsActorContext().Send(
-            Context->GetScanActorId(), std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
-                                           std::make_shared<TSubColumnStatsApplyResult>(FetchingLogic.ExtractResults())));
+        NActors::TActorContext::AsActorContext().Send(Context->GetScanActorId(),
+            std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
+                std::make_shared<TSubColumnStatsApplyResult>(FetchingLogic.ExtractResults(), std::move(WaitingCountersGuard))));
     } else {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "sub_columns_fetching_step");
         AFL_VERIFY(!nextRead.IsEmpty());
         std::shared_ptr<TSubColumnHeaderFetchingTask> nextReadTask = std::make_shared<TSubColumnHeaderFetchingTask>(
             std::move(nextRead), std::move(FetchingLogic), Context, GetTaskCustomer(), GetExternalTaskId());
@@ -35,6 +33,15 @@ bool TStatsIterator::TSubColumnHeaderFetchingTask::DoOnError(
         Context->GetScanActorId(), std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
                                        TConclusionStatus::Fail("cannot read blob range " + range.ToString())));
     return false;
+}
+
+TStatsIterator::TSubColumnHeaderFetchingTask::TSubColumnHeaderFetchingTask(TReadActionsCollection&& actions,
+    NArrow::NAccessor::NSubColumns::THeaderFetchingLogic&& fetchingLogic, const std::shared_ptr<NReader::TReadContext> context,
+    const TString& taskCustomer, const TString& externalTaskId)
+    : TBase(std::move(actions), taskCustomer, externalTaskId)
+    , Context(context)
+    , FetchingLogic(std::move(fetchingLogic))
+    , WaitingCountersGuard(context->GetCounters().GetReadTasksGuard()) {
 }
 
 void TStatsIterator::AppendStats(

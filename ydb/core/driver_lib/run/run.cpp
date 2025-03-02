@@ -243,6 +243,11 @@ public:
             TVector<TString> registerDynamicNodeAllowedSIDs(allowedSids.cbegin(), allowedSids.cend());
             appData->RegisterDynamicNodeAllowedSIDs = std::move(registerDynamicNodeAllowedSIDs);
         }
+        if (securityConfig.BootstrapAllowedSIDsSize() > 0) {
+            const auto& allowedSids = securityConfig.GetBootstrapAllowedSIDs();
+            TVector<TString> bootstrapAllowedSIDs(allowedSids.cbegin(), allowedSids.cend());
+            appData->BootstrapAllowedSIDs = std::move(bootstrapAllowedSIDs);
+        }
 
         appData->InitFeatureFlags(Config.GetFeatureFlags());
         appData->AllowHugeKeyValueDeletes = Config.GetFeatureFlags().GetAllowHugeKeyValueDeletes();

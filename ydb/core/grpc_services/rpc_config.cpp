@@ -10,6 +10,7 @@
 #include <ydb/core/mind/local.h>
 #include <ydb/core/protos/local.pb.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+#include <ydb/core/base/auth.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -320,6 +321,12 @@ void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
             TBase::Bootstrap(ctx);
             Become(&TBootstrapClusterRequest::StateFunc);
 
+            if (!CheckAccess()) {
+                Request().RaiseIssue(NYql::TIssue("Access denied"));
+                Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
+                return;
+            }
+
             const auto& request = *GetProtoRequest();
 
             auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
@@ -349,6 +356,15 @@ void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
                 default:
                     return TBase::StateFuncBase(ev);
             }
+        }
+
+        bool CheckAccess() {
+            if (Request().GetInternalToken()
+            && !(IsAdministrator(AppData(), Request().GetInternalToken().Get()) || IsTokenAllowed(Request().GetInternalToken().Get(), AppData()->BootstrapAllowedSIDs))) {
+                return false;
+            }
+
+            return true;
         }
     };
 

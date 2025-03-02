@@ -1,23 +1,23 @@
-#include "service.h"
+#include "task_distributor_service.h"
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 
 namespace NKikimr::NConveyor {
 
-TDistributor::TDistributor(const TConfig& config, const TString& conveyorName, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals)
+TTaskDistributor::TTaskDistributor(const TConfig& config, const TString& conveyorName, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals)
     : Config(config)
     , ConveyorName(conveyorName)
     , Counters(ConveyorName, conveyorSignals) {
 
 }
 
-void TDistributor::Bootstrap() {
+void TTaskDistributor::Bootstrap() {
     AddProcess(0);
     const ui32 workersCount = Config.GetWorkersCountForConveyor(NKqp::TStagePredictor::GetUsableThreads());
     AFL_NOTICE(NKikimrServices::TX_CONVEYOR)("name", ConveyorName)("action", "conveyor_registered")("config", Config.DebugString())("actor_id", SelfId());
     for (ui32 i = 0; i < workersCount; ++i) {
         const double usage = Config.GetWorkerCPUUsage(i);
-        Workers.emplace_back(Register(new TWorker(ConveyorName, usage, SelfId())));
+        Workers.emplace_back(Register(new TTaskWorker(ConveyorName, usage, SelfId())));
         if (usage < 1) {
             AFL_VERIFY(!SlowWorkerId);
             SlowWorkerId = Workers.back();
@@ -26,10 +26,10 @@ void TDistributor::Bootstrap() {
     Counters.AvailableWorkersCount->Set(Workers.size());
     Counters.WorkersCountLimit->Set(Workers.size());
     Counters.WaitingQueueSizeLimit->Set(Config.GetQueueSizeLimit());
-    Become(&TDistributor::StateMain);
+    Become(&TTaskDistributor::StateMain);
 }
 
-void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev) {
+void TTaskDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev) {
     const auto now = TMonotonic::Now();
     const TDuration dExecution = now - ev->Get()->GetStartInstant();
     Counters.SolutionsRate->Inc();
@@ -47,7 +47,7 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev) {
     Counters.AvailableWorkersCount->Set(Workers.size());
 }
 
-void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {
+void TTaskDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {
     auto it = Processes.find(ev->Get()->GetProcessId());
     if (it == Processes.end()) {
         AddProcess(ev->Get()->GetProcessId());
@@ -57,7 +57,7 @@ void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {
     Counters.ProcessesCount->Set(Processes.size());
 }
 
-void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
+void TTaskDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
     auto it = Processes.find(ev->Get()->GetProcessId());
     AFL_VERIFY(it != Processes.end());
     if (it->second.DecRegistration()) {
@@ -69,14 +69,14 @@ void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
     Counters.ProcessesCount->Set(Processes.size());
 }
 
-void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
+void TTaskDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     Counters.IncomingRate->Inc();
     const ui64 processId = ev->Get()->GetProcessId();
     const TString taskClass = ev->Get()->GetTask()->GetTaskClassIdentifier();
     AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "add_task")("sender", ev->Sender)("task", taskClass);
     auto itSignal = Signals.find(taskClass);
     if (itSignal == Signals.end()) {
-        itSignal = Signals.emplace(taskClass, std::make_shared<TTaskSignals>("Conveyor/" + ConveyorName, taskClass)).first;
+        itSignal = Signals.emplace(taskClass, std::make_shared<TTaskCounters>("Conveyor/" + ConveyorName, taskClass)).first;
     }
 
     TWorkerTask wTask(ev->Get()->GetTask(), itSignal->second, processId);
@@ -105,7 +105,7 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     Counters.AvailableWorkersCount->Set(Workers.size());
 }
 
-void TDistributor::AddProcess(const ui64 processId) {
+void TTaskDistributor::AddProcess(const ui64 processId) {
     ProcessesOrdered.clear();
     AFL_VERIFY(Processes.emplace(processId, TProcess(processId)).second);
     LastAddProcessInstant = TMonotonic::Now();
@@ -117,7 +117,7 @@ void TDistributor::AddProcess(const ui64 processId) {
     }
 }
 
-void TDistributor::AddCPUTime(const ui64 processId, const TDuration d) {
+void TTaskDistributor::AddCPUTime(const ui64 processId, const TDuration d) {
     auto it = Processes.find(processId);
     if (it == Processes.end()) {
         return;
@@ -131,7 +131,7 @@ void TDistributor::AddCPUTime(const ui64 processId, const TDuration d) {
     }
 }
 
-TWorkerTask TDistributor::PopTask() {
+TWorkerTask TTaskDistributor::PopTask() {
     AFL_VERIFY(ProcessesOrdered.size());
     auto it = Processes.find(ProcessesOrdered.begin()->GetProcessId());
     AFL_VERIFY(it != Processes.end());
@@ -143,7 +143,7 @@ TWorkerTask TDistributor::PopTask() {
     return it->second.MutableTasks().pop();
 }
 
-void TDistributor::PushTask(const TWorkerTask& task) {
+void TTaskDistributor::PushTask(const TWorkerTask& task) {
     auto it = Processes.find(task.GetProcessId());
     AFL_VERIFY(it != Processes.end());
     if (it->second.GetTasks().size() == 0) {

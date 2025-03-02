@@ -1,8 +1,10 @@
 LIBRARY()
 
 SRCS(
-    worker.cpp
-    service.cpp
+    actor_distributor_service.cpp
+    actor_worker.cpp
+    task_distributor_service.cpp
+    task_worker.cpp
 )
 
 PEERDIR(

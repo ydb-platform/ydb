@@ -2253,6 +2253,7 @@ message TAppConfig {
     optional TSelfManagementConfig SelfManagementConfig = 86;
     optional NKikimrProto.TDataIntegrityTrailsConfig DataIntegrityTrailsConfig = 87;
     optional TDataErasureConfig DataErasureConfig = 88;
+    optional TConveyorConfig ActorConveyorConfig = 89;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

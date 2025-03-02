@@ -1,8 +1,8 @@
-#include "worker.h"
+#include "task_worker.h"
 
 namespace NKikimr::NConveyor {
 
-void TWorker::ExecuteTask(const TWorkerTask& workerTask) {
+void TTaskWorker::ExecuteTask(const TWorkerTask& workerTask) {
     std::optional<TMonotonic> start;
     if (CPUUsage < 1) {
         start = TMonotonic::Now();
@@ -15,7 +15,7 @@ void TWorker::ExecuteTask(const TWorkerTask& workerTask) {
     }
 }
 
-void TWorker::HandleMain(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
+void TTaskWorker::HandleMain(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
     WaitWakeUp = false;
     if (WaitTask) {
         ExecuteTask(*WaitTask);
@@ -23,7 +23,7 @@ void TWorker::HandleMain(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
     }
 }
 
-void TWorker::HandleMain(TEvInternal::TEvNewTask::TPtr& ev) {
+void TTaskWorker::HandleMain(TEvInternal::TEvNewTask::TPtr& ev) {
     if (!WaitWakeUp) {
         ExecuteTask(ev->Get()->GetTask());
     } else {

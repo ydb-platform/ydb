@@ -8,28 +8,28 @@
 #include <util/string/builder.h>
 
 namespace NKikimr::NConveyor {
-TConclusionStatus ITask::Execute(std::shared_ptr<TTaskSignals> signals, const std::shared_ptr<ITask>& taskPtr) {
+TConclusionStatus ITask::Execute(std::shared_ptr<TTaskCounters> counters, const std::shared_ptr<ITask>& taskPtr) {
     AFL_VERIFY(!ExecutedFlag);
     ExecutedFlag = true;
     const TMonotonic start = TMonotonic::Now();
     try {
         TConclusionStatus result = DoExecute(taskPtr);
         if (result.IsFail()) {
-            if (signals) {
-                signals->Fails->Add(1);
-                signals->FailsDuration->Add((TMonotonic::Now() - start).MicroSeconds());
+            if (counters) {
+                counters->Fails->Add(1);
+                counters->FailsDuration->Add((TMonotonic::Now() - start).MicroSeconds());
             }
         } else {
-            if (signals) {
-                signals->Success->Add(1);
-                signals->SuccessDuration->Add((TMonotonic::Now() - start).MicroSeconds());
+            if (counters) {
+                counters->Success->Add(1);
+                counters->SuccessDuration->Add((TMonotonic::Now() - start).MicroSeconds());
             }
         }
         return result;
     } catch (...) {
-        if (signals) {
-            signals->Fails->Add(1);
-            signals->FailsDuration->Add((TMonotonic::Now() - start).MicroSeconds());
+        if (counters) {
+            counters->Fails->Add(1);
+            counters->FailsDuration->Add((TMonotonic::Now() - start).MicroSeconds());
         }
         return TConclusionStatus::Fail("exception: " + CurrentExceptionMessage());
     }

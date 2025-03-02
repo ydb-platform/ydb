@@ -1,5 +1,5 @@
 #pragma once
-#include "worker.h"
+#include "task_worker.h"
 #include <ydb/core/tx/conveyor/usage/config.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
 #include <ydb/core/tx/columnshard/counters/common/owner.h>
@@ -8,8 +8,6 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-
-#include <queue>
 
 namespace NKikimr::NConveyor {
 
@@ -134,7 +132,7 @@ public:
     }
 };
 
-class TDistributor: public TActorBootstrapped<TDistributor> {
+class TTaskDistributor: public TActorBootstrapped<TTaskDistributor> {
 private:
     const TConfig Config;
     const TString ConveyorName = "common";
@@ -144,7 +142,7 @@ private:
     std::deque<TActorId> Workers;
     std::optional<NActors::TActorId> SlowWorkerId;
     TCounters Counters;
-    THashMap<TString, std::shared_ptr<TTaskSignals>> Signals;
+    THashMap<TString, std::shared_ptr<TTaskCounters>> Signals;
     TMonotonic LastAddProcessInstant = TMonotonic::Now();
 
     void HandleMain(TEvExecution::TEvNewTask::TPtr& ev);
@@ -176,7 +174,7 @@ public:
         }
     }
 
-    TDistributor(const TConfig& config, const TString& conveyorName, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals);
+    TTaskDistributor(const TConfig& config, const TString& conveyorName, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals);
 
     void Bootstrap();
 };

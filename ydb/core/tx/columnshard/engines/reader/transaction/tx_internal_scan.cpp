@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/policy.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
 
 namespace NKikimr::NOlap::NReader {
 
@@ -79,13 +80,11 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     readMetadataRange->OnBeforeStartReading(*Self);
 
     const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index);
-    auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
+
+    NKikimr::NConveyor::TActorServiceOperator::Register(Self->SelfId(), std::unique_ptr<IActor>(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
         Self->DataAccessorsManager.GetObjectPtrVerified(),
         TComputeShardingPolicy(), ScanId, LockId.value_or(0), ScanGen, requestCookie, Self->TabletID(), TDuration::Max(), readMetadataRange,
-        NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters()));
-
-    Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxInternalScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);
+        NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters())), "TTxInternalScan", detailedInfo, requestCookie);
 }
 
 }   // namespace NKikimr::NOlap::NReader

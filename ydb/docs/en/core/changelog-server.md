@@ -60,6 +60,7 @@ Release date: December 24, 2024.
 * Added audit logging for user login events in YDB, session termination events in the user interface, and backup/restore operations.
 * Added a system view with information about sessions installed from the database using a query.
 * Added support literal default values for row-oriented tables. When inserting a new row in YDB Query default values will be assigned to the column if specified.
+* Added the `version()` [built-in function](./yql/reference/builtins/basic.md#version).
 * Added support for `RETURNING` clause in queries.
 * [Added](https://github.com/ydb-platform/ydb/pull/8708) start/end times and authors in the metadata for backup/restore operations from S3-compatible storage.
 * Added support for backup/restore of ACL for tables from/to S3-compatible storage.

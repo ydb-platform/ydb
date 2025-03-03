@@ -51,7 +51,7 @@ Available options:
 
 ### Working with parameterized queries {#parameterized-query}
 
-A brief help is provided below. For a detailed description with examples, see [{#T}](../reference/ydb-cli/parameterized-query-execution.md).
+A brief help is provided below. For a detailed description with examples, see [{#T}](parameterized-query-execution.md).
 
 | Name | Description |
 ---|---

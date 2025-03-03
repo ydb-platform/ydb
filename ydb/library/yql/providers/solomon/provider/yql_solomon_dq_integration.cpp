@@ -82,10 +82,11 @@ public:
     {
     }
 
-    ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings&) override {
+    ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings& settings) override {
         Y_UNUSED(node);
-        Y_UNUSED(partitions);
-        partitions.push_back("zz_partition");
+        for (size_t i = 0; i < settings.MaxPartitions; ++i) {
+            partitions.push_back(TStringBuilder() << "partition" << i);
+        }
         return 0;
     }
 
@@ -244,7 +245,7 @@ public:
         return TSoWrite::Match(&write);
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t, TExprContext&) override {
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t maxPartitions, TExprContext&) override {
         const TDqSource dqSource(&node);
         const auto maybeSettings = dqSource.Settings().Maybe<TSoSourceSettings>();
         if (!maybeSettings) {
@@ -300,18 +301,22 @@ public:
         }
 
         auto& solomonSettings = State_->Configuration;
+        auto& s = *source.MutableSettings();
 
         auto metricsQueuePageSize = solomonSettings->MetricsQueuePageSize.Get();
-        source.MutableSettings()->insert({"metricsQueuePageSize", ToString(metricsQueuePageSize)});
+        s.insert({"metricsQueuePageSize", ToString(metricsQueuePageSize)});
 
         auto metricsQueuePrefetchSize = solomonSettings->MetricsQueuePrefetchSize.Get();
-        source.MutableSettings()->insert({"metricsQueuePrefetchSize", ToString(metricsQueuePrefetchSize)});
+        s.insert({"metricsQueuePrefetchSize", ToString(metricsQueuePrefetchSize)});
 
         auto metricsQueueBatchCountLimit = solomonSettings->MetricsQueueBatchCountLimit.Get();
-        source.MutableSettings()->insert({"metricsQueueBatchCountLimit", ToString(metricsQueueBatchCountLimit)});
+        s.insert({"metricsQueueBatchCountLimit", ToString(metricsQueueBatchCountLimit)});
 
         auto solomonClientDefaultReplica = solomonSettings->SolomonClientDefaultReplica.Get();
-        source.MutableSettings()->insert({"solomonClientDefaultReplica", ToString(solomonClientDefaultReplica)});
+        s.insert({"solomonClientDefaultReplica", ToString(solomonClientDefaultReplica)});
+
+        auto maxInflightDataRequests = solomonSettings->MaxInflightDataRequests.Get();
+        s.insert({"maxInflightDataRequests", ToString(maxInflightDataRequests)});
 
         if (!selectors.empty()) {
             NDq::TDqSolomonReadParams readParams{ .Source = source };
@@ -321,7 +326,7 @@ public:
 
             auto metricsQueueActor = NActors::TActivationContext::ActorSystem()->Register(
                 NDq::CreateSolomonMetricsQueueActor(
-                    1,
+                    maxPartitions,
                     readParams,
                     credentialsProvider
                 )

@@ -34,14 +34,14 @@ public:
     virtual ~ISolomonAccessorClient() = default;
 
     static TPtr Make(
-        NYql::NSo::NProto::TDqSolomonSource source,
+        const NYql::NSo::NProto::TDqSolomonSource& source,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider);
     
     class TListMetricsResult {
     public:
-        TListMetricsResult();
-        TListMetricsResult(const TString& errorMsg);
-        TListMetricsResult(size_t pagesCount, std::vector<TMetric>&& result);
+        explicit TListMetricsResult();
+        explicit TListMetricsResult(const TString& errorMsg);
+        explicit TListMetricsResult(size_t pagesCount, std::vector<TMetric>&& result);
 
     public:
         bool Success;
@@ -52,9 +52,9 @@ public:
 
     class TGetDataResult {
     public:
-        TGetDataResult();
-        TGetDataResult(const TString& errorMsg);
-        TGetDataResult(std::vector<TTimeseries>&& result);
+        explicit TGetDataResult();
+        explicit TGetDataResult(const TString& errorMsg);
+        explicit TGetDataResult(std::vector<TTimeseries>&& result);
 
     public:
         bool Success;

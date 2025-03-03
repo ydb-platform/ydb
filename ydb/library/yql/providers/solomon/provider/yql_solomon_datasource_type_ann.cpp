@@ -90,7 +90,7 @@ public:
         bool hasProgram = !program.Content().empty();
 
         if (hasSelectors && hasProgram) {
-            ctx.AddError(TIssue(ctx.GetPosition(selectors.Pos()), "program or selectors must be specified"));
+            ctx.AddError(TIssue(ctx.GetPosition(selectors.Pos()), "either program or selectors must be specified"));
             return TStatus::Error;
         }
 

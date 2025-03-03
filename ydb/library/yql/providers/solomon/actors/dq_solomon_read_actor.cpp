@@ -102,6 +102,7 @@ public:
         const THolderFactory& holderFactory,
         NKikimr::NMiniKQL::TProgramBuilder& programBuilder,
         TDqSolomonReadParams&& readParams,
+        ui64 maxInflightDataRequests,
         NActors::TActorId metricsQueueActor,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider
@@ -113,6 +114,7 @@ public:
         , ProgramBuilder(programBuilder)
         , LogPrefix(TStringBuilder() << "TxId: " << TxId << ", TDqSolomonReadActor: ")
         , ReadParams(std::move(readParams))
+        , MaxInflightDataRequests(maxInflightDataRequests)
         , MetricsQueueActor(metricsQueueActor)
         , CredentialsProvider(credentialsProvider)
     {
@@ -170,15 +172,17 @@ public:
         auto& batch = metricsBatch->Get()->Record;
         IsMetricsQueueEmpty = batch.GetNoMoreMetrics();
         if (IsMetricsQueueEmpty && !IsConfirmedMetricsQueueFinish) {
-            SINK_LOG_D("HandleMetricsBatch FileQueue empty, sending finish confirmation");
+            SINK_LOG_D("HandleMetricsBatch MetricsQueue empty, sending finish confirmation");
             RequestMetrics();
             IsConfirmedMetricsQueueFinish = true;
         }
 
         auto& metrics = batch.GetMetrics();
-        Metrics.insert(Metrics.end(), metrics.begin(), metrics.end());
 
         SINK_LOG_D("HandleMetricsBatch batch of size " << metrics.size());
+        Metrics.insert(Metrics.end(), metrics.begin(), metrics.end());
+        ListedMetrics += metrics.size();
+
         while (TryRequestData()) {}
 
         if (LastMetricProcessed()) {
@@ -206,6 +210,7 @@ public:
 
     void HandleNewDataBatch(TEvSolomonProvider::TEvNewDataBatch::TPtr& newDataBatch) {
         auto& batch = newDataBatch->Get()->Result;
+        InflightDataRequests--;
 
         if (!batch.Success) {
             TIssues issues { TIssue(batch.ErrorMsg) };
@@ -216,6 +221,8 @@ public:
 
         SINK_LOG_D("HandleNewDataBatch new data batch");
         MetricsData.insert(MetricsData.end(), batch.Result.begin(), batch.Result.end());
+        CompletedMetrics += batch.Result.size();
+
         NotifyComputeActorWithData();
     }
 
@@ -328,7 +335,11 @@ private:
     }
 
     bool LastMetricProcessed() const {
-        return IsConfirmedMetricsQueueFinish && Metrics.empty() && MetricsData.empty(); // TODO worng to do it that way
+        if (UseMetricsQueue) {
+            return IsConfirmedMetricsQueueFinish && MetricsData.empty() && CompletedMetrics == ListedMetrics;
+        } else {
+            return MetricsData.empty() && CompletedMetrics == 1;
+        }
     }
 
     void TryRequestMetrics() {
@@ -348,6 +359,10 @@ private:
             return false;
         }
 
+        if (InflightDataRequests >= MaxInflightDataRequests) {
+            return false;
+        }
+
         RequestData();
         return true;
     }
@@ -364,6 +379,7 @@ private:
         }
 
         auto getDataFuture = SolomonClient->GetData(dataSelectors);
+        InflightDataRequests++;
 
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
         getDataFuture.Subscribe([actorSystem, selfId = SelfId()](
@@ -399,6 +415,7 @@ private:
     NKikimr::NMiniKQL::TProgramBuilder& ProgramBuilder;
     const TString LogPrefix;
     const TDqSolomonReadParams ReadParams;
+    const ui64 MaxInflightDataRequests;
 
     bool UseMetricsQueue;
     NSo::ISolomonAccessorClient::TPtr SolomonClient;
@@ -409,7 +426,10 @@ private:
     bool IsConfirmedMetricsQueueFinish = false;
     std::deque<NSo::MetricQueue::TMetricLabels> Metrics;
     std::deque<NSo::TTimeseries> MetricsData;
-    const ui64 MetricsPerDataQuery = 20;
+    size_t InflightDataRequests = 0;
+    size_t ListedMetrics = 0;
+    size_t CompletedMetrics = 0;
+    const ui64 MetricsPerDataQuery = 25;
 
     TString SourceId;
     std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
@@ -447,6 +467,11 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
         metricsQueueActor = ActorIdFromProto(protoId);
     }
 
+    ui64 maxInflightDataRequests = 1;
+    if (auto it = settings.find("maxInflightDataRequests"); it != settings.end()) {
+        maxInflightDataRequests = FromString<ui64>(it->second);
+    }
+
     auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
     auto credentialsProvider = credentialsProviderFactory->CreateProvider();
 
@@ -458,6 +483,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
         holderFactory,
         programBuilder,
         std::move(params),
+        maxInflightDataRequests,
         metricsQueueActor,
         counters,
         credentialsProvider);

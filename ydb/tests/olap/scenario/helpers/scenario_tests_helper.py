@@ -684,6 +684,7 @@ class ScenarioTestHelper:
             ydb.SchemeEntryType.COLUMN_STORE,
             ydb.SchemeEntryType.EXTERNAL_DATA_SOURCE,
         ]
+
         def kind_order_key_reversed(kind):
             try:
                 return -kind_order.index(kind)

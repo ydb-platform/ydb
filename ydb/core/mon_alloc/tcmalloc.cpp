@@ -596,11 +596,11 @@ class TTcMallocMonitor : public IAllocMonitor {
                 0, MaxPageCacheReleaseRate)
         {}
 
-        void Register(TIntrusivePtr<TControlBoard> icb) {
-            icb->RegisterSharedControl(ProfileSamplingRate, "TCMallocControls.ProfileSamplingRate");
-            icb->RegisterSharedControl(GuardedSamplingRate, "TCMallocControls.GuardedSamplingRate");
-            icb->RegisterSharedControl(PageCacheTargetSize, "TCMallocControls.PageCacheTargetSize");
-            icb->RegisterSharedControl(PageCacheReleaseRate, "TCMallocControls.PageCacheReleaseRate");
+        void Register(TIntrusivePtr<TStaticControlBoard> staticControlBoard) {
+            staticControlBoard->RegisterSharedControl(ProfileSamplingRate, EStaticControlType::TCMallocControlsProfileSamplingRate);
+            staticControlBoard->RegisterSharedControl(GuardedSamplingRate, EStaticControlType::TCMallocControlsGuardedSamplingRate);
+            staticControlBoard->RegisterSharedControl(PageCacheTargetSize, EStaticControlType::TCMallocControlsPageCacheTargetSize);
+            staticControlBoard->RegisterSharedControl(PageCacheReleaseRate, EStaticControlType::TCMallocControlsPageCacheReleaseRate);
         }
     };
     TControls Controls;
@@ -785,8 +785,8 @@ public:
         mon->RegisterActorPage(indexPage, "fragmentation", "Fragmentation", false, actorSystem, actorId);
     }
 
-    void RegisterControls(TIntrusivePtr<TControlBoard> icb) override {
-        Controls.Register(icb);
+    void RegisterControls(TIntrusivePtr<TStaticControlBoard> staticControlBoard) override {
+        Controls.Register(staticControlBoard);
     }
 
     void Update(TDuration interval) override {

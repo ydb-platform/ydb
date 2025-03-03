@@ -20,7 +20,6 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/folder/path.h>
-#include <util/generic/scope.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
 

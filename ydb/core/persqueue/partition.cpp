@@ -20,6 +20,7 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/folder/path.h>
+#include <util/generic/scope.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
 
@@ -2969,6 +2970,7 @@ TPartition::EProcessResult TPartition::PreProcessUserAct(
 void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
     const bool strictCommitOffset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && act.Strict);
     const TString& user = act.ClientId;
+    RemoveUserAct(user);
     const auto& ctx = ActorContext();
     if (!PendingUsersInfo.contains(user) && AffectedUsers.contains(user)) {
         switch (act.Type) {
@@ -3088,7 +3090,6 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
         return;
     }
 
-    RemoveUserAct(act.ClientId);
     return EmulatePostProcessUserAct(act, userInfo, ActorContext());
 }
 

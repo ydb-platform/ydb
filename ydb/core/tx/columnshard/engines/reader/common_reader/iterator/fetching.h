@@ -95,10 +95,6 @@ public:
         Signals.AddBytes(size);
     }
 
-    virtual bool Merge(const std::shared_ptr<const IFetchingStep>& /*nextStep*/) {
-        return false;
-    }
-
     virtual ~IFetchingStep() = default;
 
     [[nodiscard]] TConclusion<bool> ExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {

@@ -715,7 +715,6 @@ void TPartitionFixture::WaitErrorResponse(const TErrorMatcher& matcher)
     }
 
     if (matcher.Error) {
-
         UNIT_ASSERT_VALUES_EQUAL(*matcher.Error, event->Error);
     }
 }
@@ -1801,27 +1800,24 @@ void TPartitionTxTestHelper::WaitTxPredicateReplyImpl(ui64 userActId, bool statu
 
 Y_UNIT_TEST_F(UserActCount, TPartitionFixture)
 {
+    // In the test, we check that the reference count for `UserInfo` decreases in case of errors. To do this,
+    // we send a large number of requests to which the server will respond with an error.
+
     CreatePartition();
 
-    SendCreateSession(4, "client", "session-id", 2, 3);
+    SendCreateSession(1, "client", "session-id", 2, 3);
     WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session="session-id", .Offset=0, .Generation=2, .Step=3}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitProxyResponse({.Cookie=4});
+    WaitProxyResponse({.Cookie=1});
 
-    // static const ui32 MAX_USER_ACTS = 1000
-    for (size_t k = 0; k <= 1000; ++k) {
-        const ui64 cookie = 5 + k;
+    for (ui64 k = 0; k <= MAX_USER_ACTS; ++k) {
+        const ui64 cookie = 2 + k;
         // 1 > EndOffset
         SendSetOffset(cookie, "client", 1, "session-id", true); // strict = true
         WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session="session-id", .Offset=0, .Generation=2, .Step=3}}}});
         SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
         WaitErrorResponse({.Cookie=cookie, .ErrorCode=NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_FUTURE});
     }
-
-    SendSetOffset(1006, "client", 1, "session-id", true);
-    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session="session-id", .Offset=0, .Generation=2, .Step=3}}}});
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitErrorResponse({.Cookie=1006, .ErrorCode=NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_FUTURE});
 }
 
 Y_UNIT_TEST_F(Batching, TPartitionFixture)

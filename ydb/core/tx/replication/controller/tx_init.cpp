@@ -132,9 +132,7 @@ class TController::TTxInit: public TTxBase {
             const auto tid = rowset.GetValue<Schema::SrcStreams::TargetId>();
             const auto name = rowset.GetValue<Schema::SrcStreams::Name>();
             const auto state = rowset.GetValue<Schema::SrcStreams::State>();
-            const auto consumerName = rowset.HaveValue<Schema::SrcStreams::ConsumerName>()
-                ? rowset.GetValue<Schema::SrcStreams::ConsumerName>()
-                : ReplicationConsumerName;
+            const auto consumerName = rowset.GetValueOrDefault<Schema::SrcStreams::ConsumerName>(ReplicationConsumerName);
 
             auto replication = Self->Find(rid);
             Y_VERIFY_S(replication, "Unknown replication: " << rid);

@@ -25,22 +25,15 @@ View the description of this command by calling it with `--help` option:
 || `-hh` | Print complete usage help. Prints some specific options that are not printed with `--help` ||
 || `-s`, `--script` | Script (query) text to execute. ||
 || `-f`, `--file` | Path to a file with query text to execute. Path `-` means reading query text from `stdin`. ||
-|| `--stats` | Statistics mode.
-
-Available options:
-
+|| `--stats` | Statistics mode.<br/>Available options:
 * `none` (default): Do not collect.
 * `basic`: Collect aggregated statistics for updates and deletes per table.
 * `full`: Add execution statistics and plan on top of `basic`.
-* `profile`: Collect detailed execution statistics including statistics for individual tasks and channels.
-
-||
+* `profile`: Collect detailed execution statistics including statistics for individual tasks and channels. ||
 || `--explain` | Execute explain request for the query. Shows query logical plan. The query is not actually executed, thus does not affect database data. ||
 || `--explain-ast` | Same as `--explain`, but in addition to the query logical plan, you an AST (abstract syntax tree) is printed. The AST section contains a representation in the internal miniKQL language. ||
 || `--explain-analyze` | Execute query in `EXPLAIN ANALYZE` mode. Shows query execution plan. Query results are ignored.<br/>**Important note: The query is actually executed, so any changes will be applied to the database**. ||
-|| `--format` | Output format.
-
-Available options:
+|| `--format` | Output format.<br/>Available options:
 
 {% include notitle [format](./_includes/result_format_common.md) %}
 
@@ -67,19 +60,12 @@ Following options are not described in `--help` output. To see its descriptions 
 | Name | Description |
 ---|---
 | `--input-framing` | Input framing format. Defines how parameter sets are delimited on the input.
-
-Available options:
-
-* `no-framing` (default): Data from the input is taken as a single set of parameters.
+<br/>Available options:<br/>* `no-framing` (default): Data from the input is taken as a single set of parameters.
 * `newline-delimited`: Newline character delimits parameter sets on the input and triggers processing in accordance to `--input-batch` option. |
 | `--input-param-name` | Parameter name on the input stream, required/applicable when input format implies values only (i.e. `--input-format raw`). |
 | `--input-columns` | String with column names that replaces CSV/TSV header. Relevant when passing parameters in CSV/TSV format only. It is assumed that there is no header in the file. |
 | `--input-skip-rows` | Number of CSV/TSV header rows to skip in the input data (not including the row of column names, if `--header` option is used). Relevant when passing parameters in CSV/TSV format only. |
-| `--input-batch` | The batch mode applied to parameter sets on `stdin` or `--input-file`.
-
-Available options:
-
-* `iterative` (default): Executes the query for each parameter set (exactly one execution when `no-framing` is specified for `--input-framing`)
+| `--input-batch` | The batch mode applied to parameter sets on `stdin` or `--input-file`.<br/>Available options:<br/>* `iterative` (default): Executes the query for each parameter set (exactly one execution when `no-framing` is specified for `--input-framing`)
 * `full`: Executes the query with all parameter sets wrapped in json list every time EOF is reached on stdin |
 * `adaptive`: Executes the query with a json list of parameter sets every time when its number reaches `--input-batch-max-rows`, or the waiting time reaches `--input-batch-max-delay` |
 | `--input-batch-max-rows` | Maximum size of list for input adaptive batching mode (default: 1000) |

@@ -289,16 +289,16 @@ namespace NTxProxy {
                 return;
             }
 
-            AppData(ctx)->Icb->RegisterSharedControl(PerRequestDataSizeLimit,
-                                                     "TxLimitControls.PerRequestDataSizeLimit");
-            AppData(ctx)->Icb->RegisterSharedControl(PerShardIncomingReadSetSizeLimit,
-                                                     "TxLimitControls.PerShardIncomingReadSetSizeLimit");
-            AppData(ctx)->Icb->RegisterSharedControl(DefaultTimeoutMs,
-                                                     "TxLimitControls.DefaultTimeoutMs");
-            AppData(ctx)->Icb->RegisterSharedControl(MaxShardCount,
-                                                     "TxLimitControls.MaxShardCount");
-            AppData(ctx)->Icb->RegisterSharedControl(MaxReadSetCount,
-                                                     "TxLimitControls.MaxReadSetCount");
+            AppData(ctx)->StaticControlBoard->RegisterSharedControl(PerRequestDataSizeLimit,
+                                                     EStaticControlType::TxLimitControlsPerRequestDataSizeLimit);
+            AppData(ctx)->StaticControlBoard->RegisterSharedControl(PerShardIncomingReadSetSizeLimit,
+                                                     EStaticControlType::TxLimitControlsPerShardIncomingReadSetSizeLimit);
+            AppData(ctx)->StaticControlBoard->RegisterSharedControl(DefaultTimeoutMs,
+                                                     EStaticControlType::TxLimitControlsDefaultTimeoutMs);
+            AppData(ctx)->StaticControlBoard->RegisterSharedControl(MaxShardCount,
+                                                     EStaticControlType::TxLimitControlsMaxShardCount);
+            AppData(ctx)->StaticControlBoard->RegisterSharedControl(MaxReadSetCount,
+                                                     EStaticControlType::TxLimitControlsMaxReadSetCount);
 
             Registered = true;
         }

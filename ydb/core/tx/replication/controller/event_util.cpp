@@ -1,5 +1,5 @@
 #include "event_util.h"
-#include "target_table.h"
+#include "target_transfer.h"
 
 namespace NKikimr::NReplication::NController {
 

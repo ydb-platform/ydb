@@ -2,7 +2,7 @@
 {% note warning %}
 
 Данная страница устарела.
-Актуальная версия: [Выполнение параметризованных запросов](parameterized-query-execution.md). 
+Актуальная версия: [Выполнение параметризованных запросов](parameterized-query-execution.md).
 
 {% endnote %}
 

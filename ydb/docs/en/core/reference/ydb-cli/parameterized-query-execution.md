@@ -28,15 +28,19 @@ Following options are not described in `--help` output. To see its descriptions 
 | Name | Description |
 ---|---
 | `--input-framing` | Input framing format. Defines how parameter sets are delimited on the input.<br/>Available options:<br/>
-* `no-framing` (default): Data from the input is taken as a single set of parameters.
-* `newline-delimited`: Newline character delimits parameter sets on the input and triggers processing in accordance to `--input-batch` option. |
+<ul>
+<li>`no-framing` (default): Data from the input is taken as a single set of parameters.</li>
+<li>`newline-delimited`: Newline character delimits parameter sets on the input and triggers processing in accordance to `--input-batch` option.</li>
+</ul> |
 | `--input-param-name` | Parameter name on the input stream, required/applicable when input format implies values only (i.e. `--input-format raw`). |
 | `--input-columns` | String with column names that replaces CSV/TSV header. Relevant when passing parameters in CSV/TSV format only. It is assumed that there is no header in the file. |
 | `--input-skip-rows` | Number of CSV/TSV header rows to skip in the input data (not including the row of column names, if `--header` option is used). Relevant when passing parameters in CSV/TSV format only. |
 | `--input-batch` | The batch mode applied to parameter sets on `stdin` or `--input-file`.<br/>Available options:<br/>
-* `iterative` (default): Executes the query for each parameter set (exactly one execution when `no-framing` is specified for `--input-framing`)
-* `full`: Executes the query with all parameter sets wrapped in json list every time EOF is reached on stdin |
-* `adaptive`: Executes the query with a json list of parameter sets every time when its number reaches `--input-batch-max-rows`, or the waiting time reaches `--input-batch-max-delay` |
+<ul>
+<li>`iterative` (default): Executes the query for each parameter set (exactly one execution when `no-framing` is specified for `--input-framing`)</li>
+<li>`full`: Executes the query with all parameter sets wrapped in json list every time EOF is reached on stdin</li>
+<li>`adaptive`: Executes the query with a json list of parameter sets every time when its number reaches `--input-batch-max-rows`, or the waiting time reaches `--input-batch-max-delay`</li>
+</ul> |
 | `--input-batch-max-rows` | Maximum size of list for input adaptive batching mode (default: 1000) |
 | `--input-batch-max-delay` | Maximum delay to process first item in the list for `adaptive` batching mode (default: 1s) |
 
@@ -168,8 +172,10 @@ A rule for separating parameter sets from one another (framing) complements the 
 | Name | Description |
 ---|---
 | `--input-framing` | Input framing format. Defines how parameter sets are delimited on the input.<br/>Available options:<br/>
-* `no-framing` (default): Data from the input is taken as a single set of parameters.
-* `newline-delimited`: Newline character delimits parameter sets on the input and triggers processing in accordance to `--input-batch` option. |
+<ul>
+<li>`no-framing` (default): Data from the input is taken as a single set of parameters.</li>
+<li>`newline-delimited`: Newline character delimits parameter sets on the input and triggers processing in accordance to `--input-batch` option.</li>
+</ul> |
 
 {% note warning %}
 
@@ -447,9 +453,11 @@ To use the batching capbilities, define the `List<...>` or `List<Struct<...>>` p
 | Name | Description |
 ---|---
 | `--input-batch` | The batch mode applied to parameter sets on `stdin` or `--input-file`.<br/>Available options:<br/>
-* `iterative` (default): Executes the query for each parameter set (exactly one execution when `no-framing` is specified for `--input-framing`)
-* `full`: Executes the query with all parameter sets wrapped in json list every time EOF is reached on stdin |
-* `adaptive`: Executes the query with a json list of parameter sets every time when its number reaches `--input-batch-max-rows`, or the waiting time reaches `--input-batch-max-delay` |
+<ul>
+<li>`iterative` (default): Executes the query for each parameter set (exactly one execution when `no-framing` is specified for `--input-framing`)</li>
+<li>`full`: Executes the query with all parameter sets wrapped in json list every time EOF is reached on stdin</li>
+<li>`adaptive`: Executes the query with a json list of parameter sets every time when its number reaches `--input-batch-max-rows`, or the waiting time reaches `--input-batch-max-delay`</li>
+</ul> |
 
 In the adaptive batch mode, you can use the following additional parameters:
 

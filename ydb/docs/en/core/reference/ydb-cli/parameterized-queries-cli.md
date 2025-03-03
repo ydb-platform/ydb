@@ -2,7 +2,7 @@
 {% note warning %}
 
 This page is outdated.
-Please refer to [Running parametrized queries](parameterized-query-execution.md) for up-to-date information. 
+Please refer to [Running parametrized queries](parameterized-query-execution.md) for up-to-date information.
 
 {% endnote %}
 

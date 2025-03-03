@@ -79,6 +79,19 @@ items:
       href: parameterized-query-execution.md
     - name: Interactive query execution mode
       href: interactive-cli.md
+# Deprecated commands:
+    - name: Running a script (with streaming support)
+      href: yql.md
+      hidden: true
+    - name: Running a script
+      href: scripting-yql.md
+      hidden: true
+    - name: Running a query
+      href: table-query-execute.md
+      hidden: true
+    - name: Running parameterized queries
+      href: parameterized-queries-cli.md
+      hidden: true
 #  - name: Utilities
 #    items:
     # - name: Backup

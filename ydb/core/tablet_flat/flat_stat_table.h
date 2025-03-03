@@ -7,6 +7,8 @@
 #include <util/generic/hash_set.h>
 
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -192,10 +194,12 @@ private:
 };
 
 using TBuildStatsYieldHandler = std::function<void()>;
-using TBuildStatsLogHandler = std::function<void(TString)>;
+
+#define LOG_BUILD_STATS(stream) LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::TX_DATASHARD, logPrefix << stream)
 
 bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, ui32 histogramBucketsCount, IPages* env, 
-    TBuildStatsYieldHandler yieldHandler, TBuildStatsLogHandler logHandler = [](TString _){});
+    TBuildStatsYieldHandler yieldHandler, const TString& logPrefix = {});
+
 void GetPartOwners(const TSubset& subset, THashSet<ui64>& partOwners);
 
 }}

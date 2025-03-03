@@ -165,10 +165,7 @@ private:
                 ObtainResources();
                 Spent->Alter(true); // resume measurement
             }
-        }, [this](TString message){
-            LOG_DEBUG_S(GetActorContext(), NKikimrServices::TX_DATASHARD, "[BuildStats] Building stats " << TabletId << ", for tableId " << TableId
-            << ": " << message);
-        });
+        }, TStringBuilder() << "[BuildStats] Building stats " << TabletId << ", for tableId " << TableId << ": ");
         
         Y_DEBUG_ABORT_UNLESS(IndexSize == ev->Stats.IndexSize.Size);
 

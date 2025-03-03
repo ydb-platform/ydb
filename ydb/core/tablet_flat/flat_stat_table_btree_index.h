@@ -6,10 +6,10 @@
 namespace NKikimr::NTable {
 
 bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui32 histogramBucketsCount, IPages* env,
-    TBuildStatsYieldHandler yieldHandler, TBuildStatsLogHandler logHandler);
+    TBuildStatsYieldHandler yieldHandler, const TString& logPrefix = "");
 
 bool BuildStatsHistogramsBTreeIndex(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env,
-    TBuildStatsYieldHandler yieldHandler, TBuildStatsLogHandler logHandler);
+    TBuildStatsYieldHandler yieldHandler, const TString& logPrefix = "");
 
 
 }

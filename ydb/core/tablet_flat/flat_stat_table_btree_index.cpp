@@ -109,7 +109,7 @@ void AddBlobsSize(const TPart* part, TChanneledDataSize& stats, const TFrames* f
     }
 }
 
-bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsYieldHandler yieldHandler, TBuildStatsLogHandler logHandler) {
+bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsYieldHandler yieldHandler, const TString& logPrefix) {
     bool ready = true;
 
     if (!part.Slices || part.Slices->empty()) {
@@ -117,7 +117,7 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
     }
 
     auto logAddingGroup = [&](TGroupId groupId){
-        logHandler(TStringBuilder() << "adding group " << groupId << " " << part->IndexPages.GetBTree(groupId).ToString());
+        LOG_BUILD_STATS("adding group " << groupId << " " << part->IndexPages.GetBTree(groupId).ToString());
     };
 
     if (part->GroupsCount) { // main group
@@ -135,16 +135,16 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
             if (ready && endDataSize > beginDataSize) {
                 stats.DataSize.Add(endDataSize - beginDataSize, channel);
             }
-            logHandler(TStringBuilder() << "added slice [" << slice.BeginRowId() << ", " << slice.EndRowId() << ") data size "
+            LOG_BUILD_STATS("added slice [" << slice.BeginRowId() << ", " << slice.EndRowId() << ") data size "
                 << "(" << HumanReadableSize(endDataSize, SF_BYTES) << " - " << HumanReadableSize(beginDataSize, SF_BYTES) << ") => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
 
             if (part->Small) {
                 AddBlobsSize(part.Part.Get(), stats.DataSize, part->Small.Get(), ELargeObj::Outer, slice.BeginRowId(), slice.EndRowId());
-                logHandler(TStringBuilder() << "added small blobs data size => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
+                LOG_BUILD_STATS("added small blobs data size => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
             }
             if (part->Large) {
                 AddBlobsSize(part.Part.Get(), stats.DataSize, part->Large.Get(), ELargeObj::Extern, slice.BeginRowId(), slice.EndRowId());
-                logHandler(TStringBuilder() << "added large blobs data size => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
+                LOG_BUILD_STATS("added large blobs data size => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
             }
         }
     }
@@ -162,7 +162,7 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
             if (ready && endDataSize > beginDataSize) {
                 stats.DataSize.Add(endDataSize - beginDataSize, channel);
             }
-            logHandler(TStringBuilder() << "added slice [" << slice.BeginRowId() << ", " << slice.EndRowId() << ") data size "
+            LOG_BUILD_STATS("added slice [" << slice.BeginRowId() << ", " << slice.EndRowId() << ") data size "
                 << "(" << HumanReadableSize(endDataSize, SF_BYTES) << " - " << HumanReadableSize(beginDataSize, SF_BYTES) << ") => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
         }
     }
@@ -185,7 +185,7 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
             if (ready && endDataSize > beginDataSize) {
                 stats.DataSize.Add(endDataSize - beginDataSize, channel);
             }
-            logHandler(TStringBuilder() << "added slice [" << slice.BeginRowId() << ", " << slice.EndRowId() << ") data size "
+            LOG_BUILD_STATS("added slice [" << slice.BeginRowId() << ", " << slice.EndRowId() << ") data size "
                 << "(" << HumanReadableSize(endDataSize, SF_BYTES) << " - " << HumanReadableSize(beginDataSize, SF_BYTES) << ") => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
             if (readySlice && endRowId > beginRowId) {
                 historicSlices.emplace_back(beginRowId, endRowId);
@@ -206,7 +206,7 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
             if (ready && endDataSize > beginDataSize) {
                 stats.DataSize.Add(endDataSize - beginDataSize, channel);
             }
-            logHandler(TStringBuilder() << "added slice [" << slice.first << ", " << slice.second << ") data size "
+            LOG_BUILD_STATS("added slice [" << slice.first << ", " << slice.second << ") data size "
                 << "(" << HumanReadableSize(endDataSize, SF_BYTES) << " - " << HumanReadableSize(beginDataSize, SF_BYTES) << ") => " << HumanReadableSize(stats.DataSize.Size, SF_BYTES));
         }
     }
@@ -216,15 +216,15 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
 
 }
 
-bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui32 histogramBucketsCount, IPages* env, TBuildStatsYieldHandler yieldHandler, TBuildStatsLogHandler logHandler) {
+bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui32 histogramBucketsCount, IPages* env, TBuildStatsYieldHandler yieldHandler, const TString& logPrefix) {
     stats.Clear();
 
     bool ready = true;
     for (const auto& part : subset.Flatten) {
-        logHandler(TStringBuilder() << "adding part " << part->Label.ToString() << " data size (" << HumanReadableSize(part->DataSize(), SF_BYTES) << " in total)");
+        LOG_BUILD_STATS("adding part " << part->Label.ToString() << " data size (" << HumanReadableSize(part->DataSize(), SF_BYTES) << " in total)");
         stats.IndexSize.Add(part->IndexesRawSize, part->Label.Channel());
         stats.ByKeyFilterSize += part->ByKey ? part->ByKey->Raw.size() : 0;
-        ready &= AddDataSize(part, stats, env, yieldHandler, logHandler);
+        ready &= AddDataSize(part, stats, env, yieldHandler, logPrefix);
     }
 
     if (!ready) {
@@ -233,7 +233,7 @@ bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui32 histogramBu
 
     ready &= BuildStatsHistogramsBTreeIndex(subset, stats, 
         stats.RowCount / histogramBucketsCount, stats.DataSize.Size / histogramBucketsCount, 
-        env, yieldHandler, logHandler);
+        env, yieldHandler, logPrefix);
 
     return ready;
 }

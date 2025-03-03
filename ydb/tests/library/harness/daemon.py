@@ -62,6 +62,7 @@ class Daemon(object):
         stderr_file="/dev/null",
         stderr_on_error_lines=0,
         core_pattern=None,
+        templog_file=None
     ):
         self.__cwd = cwd
         self.__timeout = timeout
@@ -73,6 +74,7 @@ class Daemon(object):
         self.logger = logger.getChild(self.__class__.__name__)
         self.__stdout_file = open(stdout_file, mode='wb')
         self.__stderr_file = open(stderr_file, mode='wb')
+        self.__templog_file = templog_file
 
     @property
     def daemon(self):
@@ -91,6 +93,12 @@ class Daemon(object):
             return os.path.abspath(self.__stderr_file.name)
         else:
             return None
+
+    def __del__(self):
+        self.__stdout_file.close()
+        self.__stderr_file.close()
+        if self.__templog_file is not None:
+            self.__templog_file.close()
 
     def is_alive(self):
         return self.__daemon is not None and self.__daemon.running

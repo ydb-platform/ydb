@@ -89,10 +89,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         )
 
         if configurator.use_log_files:
-            self.__log_file = tempfile.NamedTemporaryFile(dir=self.__working_dir, prefix="logfile_", suffix=".log", delete=False)
+            self.__log_file = tempfile.NamedTemporaryFile(dir=self.__working_dir, prefix="logfile_", suffix=".log", delete=False, delete_on_close=False)
             kwargs = {
                 "stdout_file": os.path.join(self.__working_dir, "stdout"),
-                "stderr_file": os.path.join(self.__working_dir, "stderr")
+                "stderr_file": os.path.join(self.__working_dir, "stderr"),
+                "templog_file": self.__log_file,
                 }
         else:
             self.__log_file = None

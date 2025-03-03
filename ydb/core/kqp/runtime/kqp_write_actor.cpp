@@ -1787,12 +1787,13 @@ public:
             || State == EState::COMMITTING
             || State == EState::ROLLINGBACK;
 
-        if (EnableStreamWrite && outOfMemory) {
+        if (!EnableStreamWrite && outOfMemory) {
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                 NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
                 TStringBuilder() << "Stream write queries aren't allowed.",
                 {});
+            return;
         }
 
         if (needToFlush) {

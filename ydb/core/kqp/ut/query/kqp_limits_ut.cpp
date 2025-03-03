@@ -54,8 +54,15 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(KqpLimits) {
-    Y_UNIT_TEST(QSReplySizeEnsureMemoryLimits) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(QSReplySizeEnsureMemoryLimits, useSink) {
+        auto app = NKikimrConfig::TAppConfig();
+        app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+
+        auto settings = TKikimrSettings()
+            .SetAppConfig(app)
+            .SetWithSampleTables(true);
+
+        TKikimrRunner kikimr(settings);
         CreateLargeTable(kikimr, 1'000, 100, 1'000, 1'000);
 
         auto db = kikimr.GetQueryClient();
@@ -81,6 +88,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
         UNIT_ASSERT(!to_lower(TString{result.GetIssues().ToString()}).Contains("query result"));
+        if (useSink) {
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Stream write queries aren't allowed"));
+        }
     }
 
     Y_UNIT_TEST(KqpMkqlMemoryLimitException) {
@@ -1394,8 +1404,15 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         }
     }
 
-    Y_UNIT_TEST(QSReplySize) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(QSReplySize, useSink) {
+        auto app = NKikimrConfig::TAppConfig();
+        app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+
+        auto settings = TKikimrSettings()
+            .SetAppConfig(app)
+            .SetWithSampleTables(true);
+
+        TKikimrRunner kikimr(settings);
         CreateLargeTable(kikimr, 10'000, 100, 1'000, 1'000);
 
         auto db = kikimr.GetQueryClient();
@@ -1410,6 +1427,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
         UNIT_ASSERT(!to_lower(TString{result.GetIssues().ToString()}).Contains("query result"));
+        if (useSink) {
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Stream write queries aren't allowed"));
+        }
     }
 }
 

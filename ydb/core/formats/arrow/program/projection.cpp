@@ -3,7 +3,8 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusionStatus TProjectionProcessor::DoExecute(const std::shared_ptr<TAccessorsCollection>& resources) const {
+TConclusionStatus TProjectionProcessor::DoExecute(
+    const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& /*context*/) const {
     resources->RemainOnly(TColumnChainInfo::ExtractColumnIds(GetInput()), true);
     return TConclusionStatus::Success();
 }

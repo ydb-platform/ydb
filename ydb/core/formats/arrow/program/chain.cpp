@@ -1,5 +1,6 @@
 #include "chain.h"
 #include "collection.h"
+#include "graph.h"
 
 namespace NKikimr::NArrow::NSSA {
 
@@ -39,7 +40,17 @@ public:
 };
 }   // namespace
 
-TConclusion<TProgramChain> TProgramChain::Build(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, const IColumnResolver& resolver) {
+TConclusion<TProgramChain> TProgramChain::Build(std::vector<std::shared_ptr<IResourceProcessor>>&& processorsExt, const IColumnResolver& resolver) {
+    NOptimization::TGraph graph(std::move(processorsExt), resolver);
+    auto conclusion = graph.Collapse();
+    if (conclusion.IsFail()) {
+        return conclusion;
+    }
+    auto processorsConclusion = graph.BuildChain();
+    if (processorsConclusion.IsFail()) {
+        return processorsConclusion;
+    }
+    auto processors = processorsConclusion.DetachResult();
     THashMap<ui32, TColumnUsage> contextUsage;
     ui32 stepIdx = 0;
     THashSet<ui32> sourceColumns;
@@ -149,7 +160,7 @@ TConclusionStatus TProgramChain::Initialize() {
 
 TConclusionStatus TProgramChain::Apply(const std::shared_ptr<TAccessorsCollection>& resources) const {
     for (auto&& i : Processors) {
-        auto status = i->Execute(resources);
+        auto status = i->Execute(resources, i);
         if (status.IsFail()) {
             return status;
         }

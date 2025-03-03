@@ -23,6 +23,8 @@ ENDIF()
 
 SRCS(
     abstract.cpp
+    graph.cpp
+    original.cpp
     collection.cpp
     functions.cpp
     aggr_keys.cpp
@@ -38,5 +40,7 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(abstract.h)
 GENERATE_ENUM_SERIALIZATION(aggr_common.h)
+
+YQL_LAST_ABI_VERSION()
 
 END()

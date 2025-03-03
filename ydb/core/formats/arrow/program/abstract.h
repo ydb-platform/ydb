@@ -164,7 +164,8 @@ enum class EProcessorType {
     Calculation,
     Projection,
     Filter,
-    Aggregation
+    Aggregation,
+    Original
 };
 
 class TFetchingInfo {
@@ -187,20 +188,53 @@ public:
     }
 };
 
+class TProcessorContext {
+protected:
+    std::vector<TColumnChainInfo> ColumnsToFetch;
+    std::vector<TColumnChainInfo> OriginalColumnsToUse;
+    std::vector<TColumnChainInfo> ColumnsToDrop;
+
+public:
+    const std::vector<TColumnChainInfo>& GetColumnsToFetch() const {
+        return ColumnsToFetch;
+    }
+    const std::vector<TColumnChainInfo>& GetOriginalColumnsToUse() const {
+        return OriginalColumnsToUse;
+    }
+    const std::vector<TColumnChainInfo>& GetColumnsToDrop() const {
+        return ColumnsToDrop;
+    }
+
+    TProcessorContext(
+        std::vector<TColumnChainInfo>&& toFetch, std::vector<TColumnChainInfo>&& originalToUse, std::vector<TColumnChainInfo>&& toDrop)
+        : ColumnsToFetch(std::move(toFetch))
+        , OriginalColumnsToUse(std::move(originalToUse))
+        , ColumnsToDrop(std::move(toDrop)) {
+    }
+};
+
 class IResourceProcessor {
 private:
     YDB_READONLY_DEF(std::vector<TColumnChainInfo>, Input);
     YDB_READONLY_DEF(std::vector<TColumnChainInfo>, Output);
     YDB_READONLY(EProcessorType, ProcessorType, EProcessorType::Unknown);
 
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<TAccessorsCollection>& resources) const = 0;
+    virtual TConclusionStatus DoExecute(const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& context) const = 0;
 
     virtual NJson::TJsonValue DoDebugJson() const {
         return NJson::JSON_MAP;
     }
+    virtual ui64 DoGetWeight() const {
+        return 0;
+    }
 
 public:
-    virtual std::optional<TFetchingInfo> BuildFetchTask(const ui32 columnId, const NAccessor::IChunkedArray::EType arrType, const std::shared_ptr<TAccessorsCollection>& resources) const;
+    ui64 GetWeight() const {
+        return DoGetWeight();
+    }
+
+    virtual std::optional<TFetchingInfo> BuildFetchTask(
+        const ui32 columnId, const NAccessor::IChunkedArray::EType arrType, const std::shared_ptr<TAccessorsCollection>& resources) const;
 
     virtual bool IsAggregation() const = 0;
 
@@ -224,25 +258,21 @@ public:
         , ProcessorType(type) {
     }
 
-    [[nodiscard]] TConclusionStatus Execute(const std::shared_ptr<TAccessorsCollection>& resources) const;
+    [[nodiscard]] TConclusionStatus Execute(const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& context) const;
 };
 
-class TResourceProcessorStep {
+class TResourceProcessorStep: public TProcessorContext {
 private:
-    YDB_READONLY_DEF(std::vector<TColumnChainInfo>, ColumnsToFetch);
-    YDB_READONLY_DEF(std::vector<TColumnChainInfo>, OriginalColumnsToUse);
+    using TBase = TProcessorContext;
     YDB_READONLY_DEF(std::shared_ptr<IResourceProcessor>, Processor);
-    YDB_READONLY_DEF(std::vector<TColumnChainInfo>, ColumnsToDrop);
 
 public:
     NJson::TJsonValue DebugJson() const;
 
     TResourceProcessorStep(std::vector<TColumnChainInfo>&& toFetch, std::vector<TColumnChainInfo>&& originalToUse,
         std::shared_ptr<IResourceProcessor>&& processor, std::vector<TColumnChainInfo>&& toDrop)
-        : ColumnsToFetch(std::move(toFetch))
-        , OriginalColumnsToUse(std::move(originalToUse))
-        , Processor(std::move(processor))
-        , ColumnsToDrop(std::move(toDrop)) {
+        : TBase(std::move(toFetch), std::move(originalToUse), std::move(toDrop))
+        , Processor(std::move(processor)) {
         AFL_VERIFY(Processor);
     }
 

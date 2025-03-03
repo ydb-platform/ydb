@@ -66,7 +66,8 @@ CH::AggFunctionId TWithKeysAggregationOption::GetHouseFunction(const EAggregate 
     return CH::AggFunctionId::AGG_UNSPECIFIED;
 }
 
-TConclusionStatus TWithKeysAggregationProcessor::DoExecute(const std::shared_ptr<TAccessorsCollection>& resources) const {
+TConclusionStatus TWithKeysAggregationProcessor::DoExecute(
+    const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& /*context*/) const {
     CH::GroupByOptions funcOpts;
     funcOpts.assigns.reserve(AggregationKeys.size() + Aggregations.size());
     funcOpts.has_nullable_key = false;

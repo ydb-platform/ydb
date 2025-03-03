@@ -20,13 +20,13 @@ NJson::TJsonValue IResourceProcessor::DebugJson() const {
     return result;
 }
 
-TConclusionStatus IResourceProcessor::Execute(const std::shared_ptr<TAccessorsCollection>& resources) const {
+TConclusionStatus IResourceProcessor::Execute(const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& context) const {
     for (auto&& i : Output) {
         if (resources->HasColumn(i.GetColumnId())) {
             return TConclusionStatus::Fail("column " + ::ToString(i.GetColumnId()) + " has already");
         }
     }
-    return DoExecute(resources);
+    return DoExecute(resources, context);
 }
 
 std::optional<TFetchingInfo> IResourceProcessor::BuildFetchTask(

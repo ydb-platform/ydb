@@ -26,6 +26,8 @@
 
 namespace NYql::NDq {
 
+namespace {
+
 class TDqSolomonMetricsQueueActor : public NActors::TActorBootstrapped<TDqSolomonMetricsQueueActor> {
 public:
     static constexpr char ActorName[] = "DQ_SOLOMON_METRICS_QUEUE_ACTOR";
@@ -75,9 +77,8 @@ public:
         , BatchCountLimit(batchCountLimit)
         , ReadParams(std::move(readParams))
         , CredentialsProvider(credentialsProvider)
-    {
-        SolomonClient = NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider);
-    }
+        , SolomonClient(NSo::ISolomonAccessorClient::Make(readParams.Source, credentialsProvider))
+    {}
 
     void Bootstrap() {
         Schedule(PoisonTimeout, new NActors::TEvents::TEvPoison());
@@ -125,7 +126,7 @@ public:
     STATEFN(AnErrorOccurredState) {
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
-                hFunc(TEvSolomonProvider::TEvGetNextBatch, );
+                hFunc(TEvSolomonProvider::TEvGetNextBatch, HandleGetNextBatchForErrorState);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
                 cFunc(NActors::TEvents::TSystem::Poison, HandlePoison);
                 default:
@@ -171,7 +172,7 @@ private:
     }
 
     void HandleRoundRobinStageTimeout() {
-        LOG_T("TDqSolomonMetricsQueueActor","Handle round robin stage timeout");
+        LOG_T("TDqSolomonMetricsQueueActor", "Handle round robin stage timeout");
         if (!RoundRobinStageFinished) {
             RoundRobinStageFinished = true;
             AnswerPendingRequests();
@@ -189,12 +190,12 @@ private:
     }
 
     void HandleGetNextBatchForEmptyState(TEvSolomonProvider::TEvGetNextBatch::TPtr& ev) {
-        LOG_T("TDqSolomonMetricsQueueActor", "HandleGetNextBatchForEmptyState Giving away rest of Objects");
+        LOG_T("TDqSolomonMetricsQueueActor", "HandleGetNextBatchForEmptyState giving away rest of Objects");
         TrySendMetrics(ev->Sender, ev->Get()->Record.GetTransportMeta());
     }
 
     void HandleGetNextBatchForErrorState(TEvSolomonProvider::TEvGetNextBatch::TPtr& ev) {
-        LOG_D("TDqSolomonMetricsQueueActor", "HandleGetNextBatchForErrorState Sending issues");
+        LOG_D("TDqSolomonMetricsQueueActor", "HandleGetNextBatchForErrorState sending issues");
         Send(ev->Sender, new TEvSolomonProvider::TEvMetricsReadError(*MaybeIssues, ev->Get()->Record.GetTransportMeta()));
         TryFinish(ev->Sender, ev->Get()->Record.GetTransportMeta().GetSeqNo());
     }
@@ -206,7 +207,7 @@ private:
 
     void TransitToErrorState() {
         Y_ENSURE(MaybeIssues.Defined());
-        LOG_I("TDqSolomonMetricsQueueActor", "TransitToErrorState an error occurred sending ");
+        LOG_I("TDqSolomonMetricsQueueActor", "TransitToErrorState an error occurred, sending issues");
         AnswerPendingRequests();
         Metrics.clear();
         Become(&TDqSolomonMetricsQueueActor::AnErrorOccurredState);
@@ -306,15 +307,11 @@ private:
                 }
             }
 
-            bool isEmpty = true;
             for (const auto& [consumer, requests] : PendingRequests) {
                 if (!requests.empty()) {
-                    isEmpty = false;
+                    HasPendingRequests = true;
+                    break;
                 }
-            }
-
-            if (isEmpty) {
-                HasPendingRequests = false;
             }
         }
     }
@@ -372,9 +369,9 @@ private:
 
     void TryFinish(const NActors::TActorId& consumer, ui64 seqNo) {
         LOG_T("TDqSolomonMetricsQueueActor", "TryFinish from consumer " << consumer << ", " << FinishedConsumers.size() << " consumers already finished, seqNo=" << seqNo);
-        if (FinishingConsumerToLastSeqNo.contains(consumer)) {
+        if (auto it = FinishingConsumerToLastSeqNo.find(consumer); it != FinishingConsumerToLastSeqNo.end()) {
             LOG_T("TDqSolomonMetricsQueueActor", "TryFinish FinishingConsumerToLastSeqNo=" << FinishingConsumerToLastSeqNo[consumer]);
-            if (FinishingConsumerToLastSeqNo[consumer] < seqNo || SelfId().NodeId() == consumer.NodeId()) {
+            if (it->second < seqNo || SelfId().NodeId() == consumer.NodeId()) {
                 FinishedConsumers.insert(consumer);
                 if (FinishedConsumers.size() == ConsumersCount) {
                     PassAway();
@@ -395,29 +392,32 @@ private:
     THashSet<NActors::TActorId> FinishedConsumers;
     THashMap<NActors::TActorId, ui64> FinishingConsumerToLastSeqNo;
 
-    NSo::ISolomonAccessorClient::TPtr SolomonClient;
     TMaybe<NThreading::TFuture<NSo::ISolomonAccessorClient::TListMetricsResult>> ListingFuture;
     bool HasPendingRequests;
     THashMap<NActors::TActorId, TDeque<NDqProto::TMessageTransportMeta>> PendingRequests;
     std::vector<NSo::MetricQueue::TMetricLabels> Metrics;
     TMaybe<TString> MaybeIssues;
-
+    
     ui64 PageSize;
     ui64 PrefetchSize;
     ui64 BatchCountLimit;
     const TDqSolomonReadParams ReadParams;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
+    const NSo::ISolomonAccessorClient::TPtr SolomonClient;
 
     static constexpr TDuration PoisonTimeout = TDuration::Hours(3);
     static constexpr TDuration RoundRobinStageTimeout = TDuration::Seconds(3);
 };
+
+
+} // namespace
 
 NActors::IActor* CreateSolomonMetricsQueueActor(
     ui64 consumersCount,
     TDqSolomonReadParams readParams,
     std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
 {
-    auto& settings = readParams.Source.settings();
+    const auto& settings = readParams.Source.settings();
 
     ui64 pageSize = 0;
     if (auto it = settings.find("metricsQueuePageSize"); it != settings.end()) {

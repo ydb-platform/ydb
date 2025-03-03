@@ -36,7 +36,7 @@ struct TEvSolomonProvider {
                 metrics.begin(), 
                 metrics.end());
             Record.SetNoMoreMetrics(noMoreMetrics);
-            Record.MutableTransportMeta()->CopyFrom(transportMeta);
+            *Record.MutableTransportMeta() = transportMeta;
         }
     };
 
@@ -44,9 +44,9 @@ struct TEvSolomonProvider {
         public NActors::TEventPB<TEvMetricsReadError, NSo::MetricQueue::TEvMetricsReadError, EvMetricsReadError> {
         
         TEvMetricsReadError() = default;
-        TEvMetricsReadError(const TString &issues, const NDqProto::TMessageTransportMeta& transportMeta) {
+        TEvMetricsReadError(const TString& issues, const NDqProto::TMessageTransportMeta& transportMeta) {
             Record.SetIssues(issues);
-            Record.MutableTransportMeta()->CopyFrom(transportMeta);
+            *Record.MutableTransportMeta() = transportMeta;
         }
     };
 

@@ -87,8 +87,6 @@ struct TMetricsInflight {
     ui64 BodySize = 0;
 };
 
-} // namespace
-
 TString GetSolomonUrl(const TString& endpoint, bool useSsl, const TString& project, const TString& cluster, const TString& service, const ::NYql::NSo::NProto::ESolomonClusterType& type) {
     TUrlBuilder builder((useSsl ? "https://" : "http://") + endpoint);
 
@@ -500,6 +498,9 @@ private:
     std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
     ui64 Cookie = 0;
 };
+
+
+} // namespace
 
 std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolomonWriteActor(
     NYql::NSo::NProto::TDqSolomonShard&& settings,

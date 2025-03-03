@@ -365,7 +365,7 @@ ISolomonAccessorClient::Make(
     const NYql::NSo::NProto::TDqSolomonSource& source,
     std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
 {
-    auto& settings = source.settings();
+    const auto& settings = source.settings();
 
     TString defaultReplica = "sas";
     if (auto it = settings.find("solomonClientDefaultReplica"); it != settings.end()) {

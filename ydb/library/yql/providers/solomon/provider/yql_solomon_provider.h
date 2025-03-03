@@ -28,6 +28,7 @@ public:
     ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     TSolomonConfiguration::TPtr Configuration = MakeIntrusive<TSolomonConfiguration>();
     THolder<IDqIntegration> DqIntegration;
+    ui32 ExecutorPoolId = 0;
 };
 
 TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr, bool supportRtmrMode = true);

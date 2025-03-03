@@ -40,21 +40,21 @@
 #include <util/generic/hash.h>
 #include <util/system/compiler.h>
 
-#define SINK_LOG_T(s) \
+#define SOURCE_LOG_T(s) \
     LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_D(s) \
+#define SOURCE_LOG_D(s) \
     LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_I(s) \
+#define SOURCE_LOG_I(s) \
     LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_W(s) \
+#define SOURCE_LOG_W(s) \
     LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_N(s) \
+#define SOURCE_LOG_N(s) \
     LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_E(s) \
+#define SOURCE_LOG_E(s) \
     LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_C(s) \
+#define SOURCE_LOG_C(s) \
     LOG_CRIT_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG(prio, s) \
+#define SOURCE_LOG(prio, s) \
     LOG_LOG_S(*NActors::TlsActivationContext, prio, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
 
 namespace NYql::NDq {
@@ -87,9 +87,6 @@ auto RetryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetExponentialBackoffPolic
         return ERetryErrorClass::ShortRetry;
     });
 
-} // namespace
-
-
 class TDqSolomonReadActor : public NActors::TActorBootstrapped<TDqSolomonReadActor>, public IDqComputeActorAsyncInput {
 public:
     static constexpr char ActorName[] = "DQ_SOLOMON_READ_ACTOR";
@@ -117,21 +114,21 @@ public:
         , MaxInflightDataRequests(maxInflightDataRequests)
         , MetricsQueueActor(metricsQueueActor)
         , CredentialsProvider(credentialsProvider)
+        , SolomonClient(NSo::ISolomonAccessorClient::Make(readParams.Source, credentialsProvider))
     {
         Y_UNUSED(counters);
-        SINK_LOG_D("Init");
+        SOURCE_LOG_D("Init");
         IngressStats.Level = statsLevel;
 
-        SolomonClient = NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider);
         UseMetricsQueue = ReadParams.Source.HasSelectors();
 
         auto stringType = ProgramBuilder.NewDataType(NYql::NUdf::TDataType<char*>::Id);
         DictType = ProgramBuilder.NewDictType(stringType, stringType, false);
 
-        FillSystemColumnPositionindex();
+        FillSystemColumnPositionIndex();
     }
 
-    void FillSystemColumnPositionindex() {
+    void FillSystemColumnPositionIndex() {
         std::vector<TString> names(ReadParams.Source.GetSystemColumns().begin(), ReadParams.Source.GetSystemColumns().end());
         names.insert(names.end(), ReadParams.Source.GetLabelNames().begin(), ReadParams.Source.GetLabelNames().end());
         std::sort(names.begin(), names.end());
@@ -172,21 +169,21 @@ public:
         auto& batch = metricsBatch->Get()->Record;
         IsMetricsQueueEmpty = batch.GetNoMoreMetrics();
         if (IsMetricsQueueEmpty && !IsConfirmedMetricsQueueFinish) {
-            SINK_LOG_D("HandleMetricsBatch MetricsQueue empty, sending finish confirmation");
+            SOURCE_LOG_D("HandleMetricsBatch MetricsQueue empty, sending finish confirmation");
             RequestMetrics();
             IsConfirmedMetricsQueueFinish = true;
         }
 
         auto& metrics = batch.GetMetrics();
 
-        SINK_LOG_D("HandleMetricsBatch batch of size " << metrics.size());
+        SOURCE_LOG_D("HandleMetricsBatch batch of size " << metrics.size());
         Metrics.insert(Metrics.end(), metrics.begin(), metrics.end());
         ListedMetrics += metrics.size();
 
         while (TryRequestData()) {}
 
         if (LastMetricProcessed()) {
-            Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+            NotifyComputeActorWithData();
         }
     }
 
@@ -197,13 +194,13 @@ public:
 
         IsMetricsQueueEmpty = true;
         if (!IsConfirmedMetricsQueueFinish) {
-            SINK_LOG_D("HandleMetricsReadError sending finish confirmation to MetricsQueue");
+            SOURCE_LOG_D("HandleMetricsReadError sending finish confirmation to MetricsQueue");
             RequestMetrics();
             IsConfirmedMetricsQueueFinish = true;
         }
 
         TIssues issues { TIssue(metricsReadError->Get()->Record.GetIssues()) };
-        SINK_LOG_W("Got " << "error response[" << metricsReadError->Cookie << "] from solomon: " << issues.ToOneLineString());
+        SOURCE_LOG_W("Got " << "error response[" << metricsReadError->Cookie << "] from solomon: " << issues.ToOneLineString());
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
         return;
     }
@@ -214,12 +211,12 @@ public:
 
         if (!batch.Success) {
             TIssues issues { TIssue(batch.ErrorMsg) };
-            SINK_LOG_W("Got " << "error response[" << newDataBatch->Cookie << "] from solomon: " << issues.ToOneLineString());
+            SOURCE_LOG_W("Got " << "error response[" << newDataBatch->Cookie << "] from solomon: " << issues.ToOneLineString());
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
             return;
         }
 
-        SINK_LOG_D("HandleNewDataBatch new data batch");
+        SOURCE_LOG_D("HandleNewDataBatch new data batch");
         MetricsData.insert(MetricsData.end(), batch.Result.begin(), batch.Result.end());
         CompletedMetrics += batch.Result.size();
 
@@ -227,22 +224,22 @@ public:
     }
 
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {
-        SINK_LOG_D("Handle MetricsQueue retry");
+        SOURCE_LOG_D("Handle MetricsQueue retry");
         MetricsQueueEvents.Retry();
     }
 
     void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-        SINK_LOG_D("Handle MetricsQueue disconnected " << ev->Get()->NodeId);
+        SOURCE_LOG_D("Handle MetricsQueue disconnected " << ev->Get()->NodeId);
         MetricsQueueEvents.HandleNodeDisconnected(ev->Get()->NodeId);
     }
 
     void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev) {
-        SINK_LOG_D("Handle MetricsQueue connected " << ev->Get()->NodeId);
+        SOURCE_LOG_D("Handle MetricsQueue connected " << ev->Get()->NodeId);
         MetricsQueueEvents.HandleNodeConnected(ev->Get()->NodeId);
     }
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        SINK_LOG_D("Handle MetricsQueue undelivered ");
+        SOURCE_LOG_D("Handle MetricsQueue undelivered");
         if (MetricsQueueEvents.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::WrongSession) {
             TIssues issues{TIssue{TStringBuilder() << "MetricsQueue was lost"}};
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::UNAVAILABLE));
@@ -252,7 +249,7 @@ public:
     i64 GetAsyncInputData(TUnboxedValueBatch& buffer, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         Y_UNUSED(freeSpace);
         YQL_ENSURE(!buffer.IsWide(), "Wide stream is not supported");
-        SINK_LOG_D("GetAsyncInputData sending data");
+        SOURCE_LOG_D("GetAsyncInputData sending data");
 
         for (const auto& data : MetricsData) {
             auto& labels = data.Labels;
@@ -323,7 +320,7 @@ public:
 private:
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
-        SINK_LOG_D("PassAway");
+        SOURCE_LOG_D("PassAway");
         TActor<TDqSolomonReadActor>::PassAway();
     }
 
@@ -418,7 +415,6 @@ private:
     const ui64 MaxInflightDataRequests;
 
     bool UseMetricsQueue;
-    NSo::ISolomonAccessorClient::TPtr SolomonClient;
     TRetryEventsQueue MetricsQueueEvents;
     NActors::TActorId MetricsQueueActor;
     bool IsWaitingMetricsQueueResponse = false;
@@ -433,10 +429,14 @@ private:
 
     TString SourceId;
     std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
+    NSo::ISolomonAccessorClient::TPtr SolomonClient;
     TType* DictType = nullptr;
     std::vector<size_t> SystemColumnPositionIndex;
     THashMap<TString, size_t> Index;
 };
+
+
+} // namespace
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolomonReadActor(
     NYql::NSo::NProto::TDqSolomonSource&& source,

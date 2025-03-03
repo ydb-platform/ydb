@@ -329,7 +329,9 @@ public:
                     maxPartitions,
                     readParams,
                     credentialsProvider
-                )
+                ),
+                NActors::TMailboxType::HTSwap,
+                State_->ExecutorPoolId
             );
 
             NActorsProto::TActorId protoId;

@@ -1,11 +1,10 @@
+#include "event_util.h"
 #include "logging.h"
 #include "private_events.h"
 #include "stream_creator.h"
 #include "stream_remover.h"
 #include "target_with_stream.h"
 #include "util.h"
-
-#include "event_util.h"
 
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>

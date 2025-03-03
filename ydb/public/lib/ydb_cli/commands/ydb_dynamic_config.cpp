@@ -81,7 +81,7 @@ void TCommandConfigFetch::Config(TConfig& config) {
     config.Opts->AddLongOption("output-directory", "Directory to save config(s)")
         .RequiredArgument("[directory]").StoreResult(&OutDir);
     config.Opts->AddLongOption("strip-metadata", "Strip metadata from config")
-        .NoArgument().SetFlag(&StripMetadata);
+        .StoreTrue(&StripMetadata);
     config.Opts->AddLongOption("dedicated-storage-section", "Fetch dedicated storage section")
         .StoreTrue(&DedicatedStorageSection);
     config.Opts->AddLongOption("dedicated-cluster-section", "Fetch dedicated cluster section")
@@ -194,13 +194,13 @@ void TCommandConfigReplace::Config(TConfig& config) {
     config.Opts->AddLongOption('f', "filename", "Filename of the file containing configuration")
         .Required().RequiredArgument("[config.yaml]").StoreResult(&Filename);
     config.Opts->AddLongOption("ignore-local-validation", "Ignore local config applicability checks")
-        .NoArgument().SetFlag(&IgnoreCheck);
+        .StoreTrue(&IgnoreCheck);
     config.Opts->AddLongOption("dry-run", "Check config applicability")
-        .NoArgument().SetFlag(&DryRun);
+        .StoreTrue(&DryRun);
     config.Opts->AddLongOption("allow-unknown-fields", "Allow fields not present in config")
-        .NoArgument().SetFlag(&AllowUnknownFields);
+        .StoreTrue(&AllowUnknownFields);
     config.Opts->AddLongOption("force", "Ignore metadata on config replacement")
-        .NoArgument().SetFlag(&Force);
+        .StoreTrue(&Force);
     config.AllowEmptyDatabase = AllowEmptyDatabase;
     config.SetFreeArgsNum(0);
 }
@@ -281,10 +281,10 @@ TCommandConfigResolve::TCommandConfigResolve()
 void TCommandConfigResolve::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption("all", "Resolve for all combinations")
-        .NoArgument().SetFlag(&All);
+        .StoreTrue(&All);
     config.Opts->AddLongOption("label", "Labels for this node")
         .Optional().RequiredArgument("[LABEL=VALUE]")
-        .KVHandler([this](TString key, TString val) {
+        .GetOpt().KVHandler([this](TString key, TString val) {
             Labels[key] = val;
         });
     config.Opts->AddLongOption('f', "filename", "Filename of the file containing configuration to resolve")
@@ -294,13 +294,13 @@ void TCommandConfigResolve::Config(TConfig& config) {
     config.Opts->AddLongOption("output-directory", "Directory to save config(s)")
         .Optional().RequiredArgument("[directory]").StoreResult(&OutDir);
     config.Opts->AddLongOption("from-cluster", "Fetch current config from cluster instead of the local file")
-        .NoArgument().SetFlag(&FromCluster);
+        .StoreTrue(&FromCluster);
     config.Opts->AddLongOption("remote-resolve", "Use resolver on cluster instead of built-in resolver")
-        .NoArgument().SetFlag(&RemoteResolve);
+        .StoreTrue(&RemoteResolve);
     config.Opts->AddLongOption("node-id", "Take labels from node with the specified id")
         .Optional().RequiredArgument("[node]").StoreResult(&NodeId);
     config.Opts->AddLongOption("skip-volatile", "Ignore volatile configs")
-        .NoArgument().SetFlag(&SkipVolatile);
+        .StoreTrue(&SkipVolatile);
     config.SetFreeArgsNum(0);
 }
 
@@ -558,9 +558,9 @@ void TCommandConfigVolatileAdd::Config(TConfig& config) {
     config.Opts->AddLongOption('f', "filename", "filename to set")
         .Required().RequiredArgument("[config.yaml]").StoreResult(&Filename);
     config.Opts->AddLongOption("ignore-local-validation", "Ignore local config applicability checks")
-        .NoArgument().SetFlag(&IgnoreCheck);
+        .StoreTrue(&IgnoreCheck);
     config.Opts->AddLongOption("dry-run", "Check config applicability")
-        .NoArgument().SetFlag(&DryRun);
+        .StoreTrue(&DryRun);
     config.SetFreeArgsNum(0);
 
 }
@@ -619,7 +619,7 @@ void TCommandConfigVolatileDrop::Config(TConfig& config) {
         .Optional().RequiredArgument("[ui64]")
         .InsertTo(&Ids);
     config.Opts->AddLongOption("all", "Remove all volatile configs")
-        .NoArgument().SetFlag(&All);
+        .StoreTrue(&All);
     config.Opts->AddLongOption('f', "filename", "Filename of the file containing configuration to remove")
         .RequiredArgument("[String]").DefaultValue("").StoreResult(&Filename);
     config.Opts->AddLongOption("cluster", "Cluster name")
@@ -627,7 +627,7 @@ void TCommandConfigVolatileDrop::Config(TConfig& config) {
     config.Opts->AddLongOption("version", "Config version")
         .RequiredArgument("[ui64]").StoreResult(&Version);
     config.Opts->AddLongOption("force", "Ignore version and cluster check")
-        .NoArgument().SetFlag(&Force);
+        .StoreTrue(&Force);
     config.Opts->AddLongOption("directory", "Directory with volatile configs")
         .Optional().RequiredArgument("[directory]").StoreResult(&Dir);
 }
@@ -715,11 +715,11 @@ void TCommandConfigVolatileFetch::Config(TConfig& config) {
     config.Opts->AddLongOption("id", "Volatile config id")
         .Optional().RequiredArgument("[ui64]").InsertTo(&Ids);
     config.Opts->AddLongOption("all", "Fetch all volatile configs")
-        .NoArgument().SetFlag(&All);
+        .StoreTrue(&All);
     config.Opts->AddLongOption("output-directory", "Directory to save config(s)")
         .RequiredArgument("[directory]").StoreResult(&OutDir);
     config.Opts->AddLongOption("strip-metadata", "Strip metadata from config(s)")
-        .NoArgument().SetFlag(&StripMetadata);
+        .StoreTrue(&StripMetadata);
     config.SetFreeArgsNum(0);
     config.Opts->MutuallyExclusive("output-directory", "strip-metadata");
 }

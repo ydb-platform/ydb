@@ -36,7 +36,6 @@ public:
     void Config(TConfig& config) override;
     void ExtractParams(TConfig& config) override;
     void Parse(TConfig& config) override;
-    void ParseAddress(TConfig& config) override;
     void ParseCredentials(TConfig& config) override;
     void Validate(TConfig& config) override;
     int Run(TConfig& config) override;
@@ -46,17 +45,15 @@ protected:
 
 private:
     void ValidateSettings();
-    bool GetCredentialsFromProfile(std::shared_ptr<IProfile> profile, TConfig& config, bool explicitOption);
 
     void ParseProfile();
-    void ParseDatabase(TConfig& config);
+    void ParseAddress(TConfig&) override {}
     void ParseIamEndpoint(TConfig& config);
     void ParseCaCerts(TConfig& config) override;
     void ParseClientCert(TConfig& config) override;
-    void GetAddressFromString(TConfig& config, TString* result = nullptr);
-    bool ParseProtocolNoConfig(TString& message);
-    void GetCaCerts(TConfig& config);
-    void GetClientCert(TConfig& config);
+    void ParseStaticCredentials(TConfig& config);
+    static TString GetAddressFromString(const TString& address, bool* enableSsl = nullptr, std::vector<TString>* errors = nullptr);
+    static bool ParseProtocolNoConfig(TString& address, bool* enableSsl, TString& message);
     bool TryGetParamFromProfile(const TString& name, const std::shared_ptr<IProfile>& profile, bool explicitOption,
                                 std::function<bool(const TString&, const TString&, bool)> callback);
 
@@ -80,24 +77,14 @@ private:
 
     TString UserName;
     TString PasswordFile;
+    TString Password;
+    // Password from separate option
+    TString PasswordFileOption;
+    TString PasswordOption;
     bool DoNotAskForPassword = false;
 
-    bool UseMetadataCredentials = false;
-    TString YCToken;
-    TString YCTokenFile;
-    TString SaKeyFile;
-    TString IamEndpoint;
     const TClientSettings& Settings;
     TVector<TString> MisuseErrors;
-
-    TString Oauth2KeyFile;
-
-    bool IsAddressSet = false;
-    bool IsDatabaseSet = false;
-    bool IsIamEndpointSet = false;
-    bool IsCaCertsFileSet = false;
-    bool IsClientCertFileSet = false;
-    bool IsAuthSet = false;
 };
 
 }

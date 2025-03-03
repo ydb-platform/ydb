@@ -32,7 +32,7 @@ void TClientCommandTpchRoot::Config(TConfig& config) {
         .StoreResult(&Database);
     config.Opts->AddLongOption('p', "path", "Path to TPC-H tables (relative)")
         .Required()
-        .Handler1T<TStringBuf>([this](TStringBuf arg) {
+        .Handler([this](const TString& arg) {
             if (arg.StartsWith('/')) {
                 ythrow NLastGetopt::TUsageException() << "Path must be relative";
             }

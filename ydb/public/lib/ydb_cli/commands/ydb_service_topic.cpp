@@ -549,7 +549,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("starting-message-timestamp", "'Written_at' timestamp from which read is allowed. " TIMESTAMP_FORMAT_OPTION_DESCRIPTION)
             .RequiredArgument("TIMESTAMP")
             .Optional()
-            .Handler1T<TString>(TimestampOptionHandler(&StartingMessageTimestamp_));
+            .Handler(TimestampOptionHandler(&StartingMessageTimestamp_));
         config.Opts->AddLongOption("important", "Is consumer important")
             .Optional()
             .DefaultValue(false)
@@ -802,15 +802,14 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&Limit_);
         config.Opts->AddLongOption('w', "wait", "Wait indefinitely for a first message received. If not specified, command exits on empty topic returning no data to the output.")
             .Optional()
-            .NoArgument()
-            .StoreValue(&Wait_, true);
+            .StoreTrue(&Wait_);
         config.Opts->AddLongOption("timestamp", "'Written_at' timestamp from which messages will be read. If not specified, messages are read from the last commit point for the chosen consumer. " TIMESTAMP_FORMAT_OPTION_DESCRIPTION)
             .RequiredArgument("TIMESTAMP")
             .Optional()
-            .Handler1T<TString>(TimestampOptionHandler(&Timestamp_));
+            .Handler(TimestampOptionHandler(&Timestamp_));
         config.Opts->AddLongOption("partition-ids", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions.")
             .Optional()
-            .SplitHandler(&PartitionIds_, ',');
+            .GetOpt().SplitHandler(&PartitionIds_, ',');
 
         AddAllowedMetadataFields(config);
         AddTransform(config);
@@ -895,7 +894,7 @@ namespace NYdb::NConsoleClient {
                                      << "limit less and equal '0' or more than '500': '" << *Limit_ << "' was given";
         }
 
-        // validate partitions ids are specified, if no consumer is provided. no-consumer mode will be used. 
+        // validate partitions ids are specified, if no consumer is provided. no-consumer mode will be used.
         if (!Consumer_ && !PartitionIds_) {
             throw TMisuseException() << "Please specify either --consumer or --partition-ids to read without consumer";
         }

@@ -164,7 +164,8 @@ enum class EProcessorType {
     Calculation,
     Projection,
     Filter,
-    Aggregation
+    Aggregation,
+    Original
 };
 
 class TFetchingInfo {
@@ -198,8 +199,15 @@ private:
     virtual NJson::TJsonValue DoDebugJson() const {
         return NJson::JSON_MAP;
     }
+    virtual ui64 DoGetWeight() const {
+        return 0;
+    }
 
 public:
+    ui64 GetWeight() const {
+        return DoGetWeight();
+    }
+
     virtual std::optional<TFetchingInfo> BuildFetchTask(const ui32 columnId, const NAccessor::IChunkedArray::EType arrType, const std::shared_ptr<TAccessorsCollection>& resources) const;
 
     virtual bool IsAggregation() const = 0;

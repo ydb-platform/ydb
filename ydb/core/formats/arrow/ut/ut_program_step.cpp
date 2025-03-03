@@ -501,6 +501,74 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         AFL_VERIFY(resources->GetRecordsCountVerified() == 2);
     }
 
+    Y_UNIT_TEST(TestValueFromNull) {
+        arrow::UInt32Builder sb;
+        sb.AppendNulls(10).ok();
+        auto arr = std::dynamic_pointer_cast<arrow::UInt32Array>(*sb.Finish());
+        AFL_VERIFY(arr->Value(0) == 0)("val", arr->Value(0));
+    }
+
+    Y_UNIT_TEST(SplitFilterSimple) {
+        std::vector<std::string> data = { "aa", "aaa", "aaaa", "bbbbb" };
+        arrow::StringBuilder sb;
+        sb.AppendValues(data).ok();
+
+        auto schema = std::make_shared<arrow::Schema>(
+            std::vector{ std::make_shared<arrow::Field>("int", arrow::int64()), std::make_shared<arrow::Field>("string", arrow::utf8()) });
+        auto batch = arrow::RecordBatch::Make(schema, 4, std::vector{ NumVecToArray(arrow::int64(), { 64, 5, 1, 43 }), *sb.Finish() });
+        UNIT_ASSERT(batch->ValidateFull().ok());
+
+        TSchemaColumnResolver resolver(schema);
+        TProgramChain::TBuilder builder(resolver);
+        builder.Add(std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(56), 3));
+
+        {
+            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({2}), TColumnChainInfo(1001), std::make_shared<TSimpleFunction>(EOperation::MatchSubstring)).DetachResult();
+            proc->SetYqlOperationId((ui32)NYql::TKernelRequestBuilder::EBinaryOp::StringContains);
+            builder.Add(proc);
+        }
+        {
+            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1001, 3}), TColumnChainInfo(1101), std::make_shared<TSimpleFunction>(EOperation::Equal)).DetachResult();
+            proc->SetYqlOperationId((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce);
+            builder.Add(proc);
+        }
+        {
+            auto proc =
+                TCalculationProcessor::Build(TColumnChainInfo::BuildVector({2}), TColumnChainInfo(1002), std::make_shared<TSimpleFunction>(EOperation::StartsWith)).DetachResult();
+            proc->SetYqlOperationId((ui32)NYql::TKernelRequestBuilder::EBinaryOp::StartsWith);
+            builder.Add(proc);
+        }
+        {
+            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1002, 3}), TColumnChainInfo(1102), std::make_shared<TSimpleFunction>(EOperation::Equal)).DetachResult();
+            proc->SetYqlOperationId((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce);
+            builder.Add(proc);
+        }
+        {
+            auto proc =
+                TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1, 3}), TColumnChainInfo(1003), std::make_shared<TSimpleFunction>(EOperation::Equal)).DetachResult();
+            proc->SetYqlOperationId((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Equals);
+            builder.Add(proc);
+        }
+        {
+            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1003, 3}), TColumnChainInfo(1103), std::make_shared<TSimpleFunction>(EOperation::Equal)).DetachResult();
+            proc->SetYqlOperationId((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce);
+            builder.Add(proc);
+        }
+
+        auto andOperator1 = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1101, 1102}), TColumnChainInfo(1104), std::make_shared<TSimpleFunction>(EOperation::And)).DetachResult();
+        andOperator1->SetYqlOperationId(0);
+        builder.Add(andOperator1);
+
+        auto andOperator2 = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1104, 1103}), TColumnChainInfo(1105), std::make_shared<TSimpleFunction>(EOperation::And)).DetachResult();
+        andOperator2->SetYqlOperationId(0);
+        builder.Add(andOperator2);
+        builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo::BuildVector({ 1105 }), true));
+        builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 1, 2 })));
+        auto chain = builder.Finish().DetachResult();
+        Cerr << chain->DebugJson() << Endl;
+        AFL_VERIFY(chain->DebugString() == R"({"processors":[{"processor":{"internal":{},"type":"Const","output":"3"}},{"processor":{"internal":{},"type":"Calculation","input":"1,3","output":"1003"},"fetch":"1","drop":"3"},{"processor":{"internal":{},"type":"Filter","input":"1003"},"drop":"1003"},{"processor":{"internal":{},"type":"Calculation","input":"2","output":"1002"},"fetch":"2"},{"processor":{"internal":{},"type":"Filter","input":"1002"},"drop":"1002"},{"processor":{"internal":{},"type":"Calculation","input":"2","output":"1001"}},{"processor":{"internal":{},"type":"Filter","input":"1001"},"drop":"1001"},{"processor":{"internal":{},"type":"Projection","input":"1,2"}}]})");
+    }
+
     Y_UNIT_TEST(Projection) {
         auto schema = std::make_shared<arrow::Schema>(
             std::vector{ std::make_shared<arrow::Field>("x", arrow::int64()), std::make_shared<arrow::Field>("y", arrow::boolean()) });

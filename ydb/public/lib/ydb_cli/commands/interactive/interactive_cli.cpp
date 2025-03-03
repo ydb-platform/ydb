@@ -193,8 +193,7 @@ void TInteractiveCLI::Run() {
         }
     }
 
-    std::cout << std::endl
-                << "Bye" << std::endl;
+    std::cout << std::endl << "Bye" << std::endl;
 }
 
 } // namespace NYdb::NConsoleClient

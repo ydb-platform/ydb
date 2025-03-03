@@ -6,6 +6,7 @@ PEERDIR(
     library/cpp/containers/absl_flat_hash
     library/cpp/monlib/service/pages
     library/cpp/threading/hot_swap
+    library/cpp/monlib/service/pages
 )
 
 GENERATE_ENUM_SERIALIZATION_WITH_HEADER(defs.h)

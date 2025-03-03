@@ -49,16 +49,21 @@ public:
 
 private:
     void StartScan() {
+        if (!AppData()->FeatureFlags.GetEnableShowCreate()) {
+            ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, 
+                TStringBuilder() << "Sys view is not supported: " << ShowCreateName);
+        }
+
         const auto& cellsFrom = TableRange.From.GetCells();
 
         if (cellsFrom.size() != 2 || cellsFrom[0].IsNull() || cellsFrom[1].IsNull()) {
             ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, "Invalid read key");
         }
 
-        if (!TableRange.Point && !TableRange.To.GetCells().empty()) {
+        if (!TableRange.To.GetCells().empty()) {
             const auto& cellsTo = TableRange.To.GetCells();
             if (cellsTo.size() != 2 || cellsTo[0].IsNull() || cellsTo[1].IsNull()) {
-                ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, "Invalid table range");
+                ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, "Invalid read key");
             }
 
             if (cellsFrom[0].AsBuf() != cellsTo[0].AsBuf() || cellsFrom[1].AsBuf() != cellsTo[1].AsBuf()) {

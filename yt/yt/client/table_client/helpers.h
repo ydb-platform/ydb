@@ -377,6 +377,7 @@ struct TUnversionedValueRangeTruncationOptions
     //! Otherwise, all values of primitive (not string-like) types are preserved and the remaining size
     //! is uniformely distributed between truncated versions of the remaining string-like values.
     bool ClipAfterOverflow = false;
+    bool UseOriginalDataWeightInSamples = false;
     //! Limits the total size of the resulting value range.
     //! See value-preservation rules described above.
     i64 MaxTotalSize = NTableClient::MaxSampleSize;

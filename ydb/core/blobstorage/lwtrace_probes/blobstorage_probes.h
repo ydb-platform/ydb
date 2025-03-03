@@ -281,7 +281,7 @@ struct TEventTypeField {
     PROBE(DSProxyPutReply, GROUPS("DSProxy"), TYPES(TString, TString, TString), NAMES("blobId", "status", "errorReason")) \
     PROBE(DSProxyPutResumeBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(DSProxyPutPauseBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \
-    PROBE(DSProxyScheduleAccelerate, GROUPS("DSProxy"), TYPES(double), NAMES("timeBeforeAccelerationMs")) \
+    PROBE(DSProxyScheduleAccelerate, GROUPS("DSProxy"), TYPES(double, TString), NAMES("timeBeforeAccelerationMs", "reqType")) \
     PROBE(DSProxyStartTransfer, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(VDiskStartProcessing, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(VDiskReply, GROUPS("DSProxy"), TYPES(), NAMES()) \

@@ -3,6 +3,10 @@
 
 #include <library/cpp/json/writer/json_value.h>
 
+namespace NKikimr::NArrow::NSSA {
+class TCalculationProcessor;
+}
+
 namespace NKikimr::NArrow::NSSA::NOptimization {
 
 class TGraphNode {
@@ -14,12 +18,11 @@ private:
     private:
         const ui32 ColumnId;
         const i64 NodeId;
+
     public:
         TAddress(const ui32 columnId, const i64 nodeId)
             : ColumnId(columnId)
-            , NodeId(nodeId)
-        {
-
+            , NodeId(nodeId) {
         }
 
         TAddress AnotherNodeId(const i64 nodeId) const {
@@ -64,8 +67,7 @@ public:
     }
 
     TGraphNode(const std::shared_ptr<IResourceProcessor>& processor)
-        : Processor(processor)
-    {
+        : Processor(processor) {
         AFL_VERIFY(Processor);
     }
 
@@ -114,6 +116,9 @@ private:
         AFL_VERIFY(it != Producers.end());
         return it->second;
     }
+    TConclusion<bool> OptimizeFilter(TGraphNode* filterNode);
+    TConclusion<bool> OptimizeFilterWithCoalesce(TGraphNode* filterNode, TGraphNode* filterArg, const std::shared_ptr<TCalculationProcessor>& calc);
+    TConclusion<bool> OptimizeFilterWithAnd(TGraphNode* filterNode, TGraphNode* filterArg, const std::shared_ptr<TCalculationProcessor>& calc);
 
     void RemoveNode(TGraphNode* node);
     void DetachNode(TGraphNode* node);
@@ -131,6 +136,7 @@ private:
         }
         return result;
     }
+
 public:
     TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, const IColumnResolver& resolver);
 
@@ -138,4 +144,4 @@ public:
 
     TConclusion<std::vector<std::shared_ptr<IResourceProcessor>>> BuildChain();
 };
-}   // namespace NKikimr::NArrow::NSSA
+}   // namespace NKikimr::NArrow::NSSA::NOptimization

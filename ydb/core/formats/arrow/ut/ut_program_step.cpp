@@ -521,6 +521,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         TSchemaColumnResolver resolver(schema);
         TProgramChain::TBuilder builder(resolver);
         builder.Add(std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(56), 3));
+        builder.Add(std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(0), 4));
 
         {
             auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({2}), TColumnChainInfo(1001), std::make_shared<TSimpleFunction>(EOperation::MatchSubstring)).DetachResult();
@@ -528,7 +529,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
             builder.Add(proc);
         }
         {
-            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1001, 3}), TColumnChainInfo(1101), std::make_shared<TSimpleFunction>(EOperation::Equal)).DetachResult();
+            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1001, 4}), TColumnChainInfo(1101), std::make_shared<TSimpleFunction>(EOperation::Add)).DetachResult();
             proc->SetYqlOperationId((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce);
             builder.Add(proc);
         }
@@ -539,7 +540,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
             builder.Add(proc);
         }
         {
-            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1002, 3}), TColumnChainInfo(1102), std::make_shared<TSimpleFunction>(EOperation::Equal)).DetachResult();
+            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1002, 4}), TColumnChainInfo(1102), std::make_shared<TSimpleFunction>(EOperation::Add)).DetachResult();
             proc->SetYqlOperationId((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce);
             builder.Add(proc);
         }
@@ -550,7 +551,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
             builder.Add(proc);
         }
         {
-            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1003, 3}), TColumnChainInfo(1103), std::make_shared<TSimpleFunction>(EOperation::Equal)).DetachResult();
+            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1003, 4}), TColumnChainInfo(1103), std::make_shared<TSimpleFunction>(EOperation::Add)).DetachResult();
             proc->SetYqlOperationId((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce);
             builder.Add(proc);
         }

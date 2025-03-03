@@ -270,6 +270,8 @@ struct TEventTypeField {
     PROBE(DSProxyGetBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(DSProxyGetHandle, GROUPS("DSProxy", "LWTrackStart"), TYPES(), NAMES()) \
     PROBE(DSProxyGetReply, GROUPS("DSProxy"), TYPES(), NAMES()) \
+    PROBE(DSProxyVGetSent, GROUPS("DSProxy"), TYPES(TString, ui32, ui32), NAMES("vDiskId", "vdiskOrderNum", "count")) \
+    PROBE(DSProxyGetRequest, GROUPS("DSProxy", "LWTrackStart"), TYPES(ui32, TString, TString), NAMES("groupId", "deviceType", "handleClass")) \
     PROBE(DSProxyPutEnqueue, GROUPS("DSProxy", "LWTrackStart"), TYPES(), NAMES()) \
     PROBE(DSProxyPutHandle, GROUPS("DSProxyRequest", "DSProxy", "LWTrackStart"), TYPES(), NAMES()) \
     PROBE(DSProxyPutBootstrapStart, GROUPS("DSProxy"), TYPES(), NAMES()) \
@@ -279,7 +281,7 @@ struct TEventTypeField {
     PROBE(DSProxyPutReply, GROUPS("DSProxy"), TYPES(TString, TString, TString), NAMES("blobId", "status", "errorReason")) \
     PROBE(DSProxyPutResumeBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(DSProxyPutPauseBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \
-    PROBE(DSProxyScheduleAccelerate, GROUPS("DSProxy"), TYPES(double), NAMES("timeBeforeAccelerationMs")) \
+    PROBE(DSProxyScheduleAccelerate, GROUPS("DSProxy"), TYPES(double, TString), NAMES("timeBeforeAccelerationMs", "reqType")) \
     PROBE(DSProxyStartTransfer, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(VDiskStartProcessing, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(VDiskReply, GROUPS("DSProxy"), TYPES(), NAMES()) \

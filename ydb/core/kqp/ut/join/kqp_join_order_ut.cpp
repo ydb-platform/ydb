@@ -802,8 +802,8 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST(RandomStaff) {
-        auto [plan, _] =  ExecuteJoinOrderTestGenericQueryWithStats("queries/random_staff.sql", "stats/tpch100s.json", false, true);
+    Y_UNIT_TEST(TPCH9_100) {
+        auto [plan, _] =  ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch9.sql", "stats/tpch100s.json", false, true);
         auto joinFinder = TFindJoinWithLabels(plan);
         auto join = joinFinder.Find({"nation"}, TFindJoinWithLabels::PartialMatch);
         UNIT_ASSERT_C(join.Join == "InnerJoin (MapJoin)", join.Join);

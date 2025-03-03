@@ -389,6 +389,24 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         ScheduleSendTabletMetrics(ctx);
     }
 
+    void StartPromotion(TTabletId tabletId, TOnlineTabletEntry& followerEntry, ui32 suggestedGen, TInstant now) {
+        TTabletId leaderId = LeaderId(tabletId);
+        TTabletEntry& leaderEntry = InbootTablets[leaderId];
+        followerEntry.IsPromoting = true;
+        leaderEntry = followerEntry;
+        leaderEntry.From = now;
+        leaderEntry.BootMode = NKikimrLocal::EBootMode::BOOT_MODE_LEADER;
+        leaderEntry.Generation = suggestedGen;
+        leaderEntry.PromotingFromFollower = tabletId.second;
+    }
+
+    void FinishPromotion(TTabletId tabletId, TTabletEntry& entry) {
+        TTabletId promotedTablet{tabletId.first, entry.PromotingFromFollower};
+        OnlineTablets.erase(promotedTablet);
+        entry.IsPromoting = false;
+        entry.PromotingFromFollower = 0;
+    }
+
     void Handle(TEvLocal::TEvBootTablet::TPtr &ev, const TActorContext &ctx) {
         NKikimrLocal::TEvBootTablet &record = ev->Get()->Record;
         TIntrusivePtr<TTabletStorageInfo> info(TabletStorageInfoFromProto(record.GetInfo()));
@@ -431,20 +449,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             if (it != OnlineTablets.end()) {
                 if (it->second.BootMode == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER
                         && record.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_LEADER) {
-                    // promote to leader
-                    it->second.BootMode = NKikimrLocal::EBootMode::BOOT_MODE_LEADER;
-                    it->second.Generation = suggestedGen;
-                    TTabletId leaderId = LeaderId(tabletId);
-                    TTabletEntry &entry = InbootTablets[leaderId];
-                    entry = it->second;
-                    entry.From = ctx.Now();
-                    entry.BootMode = NKikimrLocal::EBootMode::BOOT_MODE_LEADER;
-                    entry.Generation = suggestedGen;
-                    entry.IsPromoting = true;
-                    entry.PromotingFromFollower = tabletId.second;
-                    ctx.Send(entry.Tablet, new TEvTablet::TEvPromoteToLeader(suggestedGen, info));
+                    StartPromotion(tabletId, it->second, suggestedGen, ctx.Now());
+                    ctx.Send(it->second.Tablet, new TEvTablet::TEvPromoteToLeader(suggestedGen, info));
                     MarkDeadTablet(it->first, 0, TEvLocal::TEvTabletStatus::StatusSupersededByLeader, TEvTablet::TEvTabletDead::ReasonError, ctx);
-                    it->second.IsPromoting = true;
                     LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
                         "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet follower tablet " << tabletId << " promoted to leader");
                     return;
@@ -725,10 +732,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                     << generation);
         NTabletPipe::SendData(ctx, HivePipeClient, new TEvLocal::TEvTabletStatus(TEvLocal::TEvTabletStatus::StatusOk, tabletId, generation));
         if (inbootIt->second.IsPromoting) {
-            TTabletId promotedTablet{tabletId.first, inbootIt->second.PromotingFromFollower};
-            OnlineTablets.erase(promotedTablet);
-            inbootIt->second.IsPromoting = false;
-            inbootIt->second.PromotingFromFollower = 0;
+            FinishPromotion(tabletId, inbootIt->second);
         }
         OnlineTablets.emplace(tabletId, inbootIt->second);
         InbootTablets.erase(inbootIt);

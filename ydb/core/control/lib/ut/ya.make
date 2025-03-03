@@ -5,6 +5,7 @@ FORK_SUBTESTS()
 SIZE(MEDIUM)
 
 PEERDIR(
+    ydb/library/actors/actor_type
     library/cpp/testing/unittest
     util
 )

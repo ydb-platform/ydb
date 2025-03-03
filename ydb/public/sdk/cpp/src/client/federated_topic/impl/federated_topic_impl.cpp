@@ -90,7 +90,7 @@ TAsyncDescribeTopicResult TFederatedTopicClient::TImpl::DescribeTopic(const std:
                     .DiscoveryEndpoint(db->endpoint());
                 Cerr << "Describe " << settings << " / " << describeSettings << " / " << path << Endl;
                 auto subclient = make_shared<NTopic::TTopicClient::TImpl>(self->Connections, settings);
-                return subclient->DescribeTopic(db->path() + "/" + path, describeSettings);
+                return subclient->DescribeTopic(!path.empty() && path[0] == '/' ? path : db->path() + "/" + path, describeSettings);
             }
             throw yexception();
         });

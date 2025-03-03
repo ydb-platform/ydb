@@ -64,7 +64,7 @@ public:
     };
 
     TCreateTableFormatter()
-    : Alloc(__LOCATION__)
+        : Alloc(__LOCATION__)
     {
         Alloc.Release();
     }

@@ -111,16 +111,24 @@ def _ydb_database(cluster, database_path_base, unique_name):
     with ydb_database_ctx(cluster, database):
         yield database
 
+
 @pytest.fixture(scope='function')
 def ydb_database(ydb_cluster, ydb_root, ydb_safe_test_name):
-    yield from _ydb_database(ydb_cluster, ydb_root, ydb_safe_test_name)
+    # FIXME: PY2 syntax compatibility quirk: "yield from" emulation
+    # Can't use py3 syntax here cause there are nasty dependencies on
+    # tests/library/harness from some py2-only code in some other repositories
+    for i in _ydb_database(ydb_cluster, ydb_root, ydb_safe_test_name):
+        yield i
 
 
 @pytest.fixture(scope='module')
 def ydb_database_module_scope(ydb_cluster, ydb_root, request):
     # make unique database name from the test module name, ensuring that
     # it does not contains the dots
-    yield from _ydb_database(ydb_cluster, ydb_root, request.module.__name__.split('.')[-1])
+    unique_name = request.module.__name__.split('.')[-1]
+    # FIXME: PY2 syntax compatibility quirk: "yield from" emulation
+    for i in _ydb_database(ydb_cluster, ydb_root, unique_name):
+        yield i
 
 
 @pytest.fixture(scope='module')

@@ -4,6 +4,7 @@ PEERDIR(
     util
     library/cpp/deprecated/atomic
     library/cpp/containers/absl_flat_hash
+    library/cpp/monlib/service/pages
 )
 
 SRCS(

@@ -26,31 +26,32 @@ TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui3
     const ui32 bitsCount = TFixStringBitsStorage::GrowBitsCountToByte(HashesCount * std::max<ui32>(indexHitsCount, 10) / std::log(2));
     std::vector<bool> filterBits(bitsCount, false);
 
+    const auto predNoBase = [&](const ui64 hash, const ui32 /*idx*/) {
+        filterBits[hash % bitsCount] = true;
+    };
     while (dataOwners.size()) {
         GetDataExtractor()->VisitAll(
             dataOwners.front(),
             [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase) {
-                for (ui32 idx = 0; idx < arr->length(); ++idx) {
-                    for (ui32 i = 0; i < HashesCount; ++i) {
-                        NArrow::NHash::NXX64::TStreamStringHashCalcer_H3 hashCalcer(i);
-                        hashCalcer.Start();
-                        if (hashBase) {
-                            hashCalcer.Update((const ui8*)&hashBase, sizeof(hashBase));
-                        }
-                        NArrow::NHash::TXX64::AppendField(arr, idx, hashCalcer);
-                        filterBits[hashCalcer.Finish() % bitsCount] = true;
+                for (ui64 i = 0; i < HashesCount; ++i) {
+                    if (hashBase) {
+                        const auto predWithBase = [&](const ui64 hash, const ui32 /*idx*/) {
+                            filterBits[CombineHashes(hashBase, hash) % bitsCount] = true;
+                        };
+                        NArrow::NHash::TXX64::CalcForAll(arr, i, predWithBase);
+                    } else {
+                        NArrow::NHash::TXX64::CalcForAll(arr, i, predNoBase);
                     }
                 }
             },
             [&](const std::string_view data, const ui64 hashBase) {
-                for (ui32 i = 0; i < HashesCount; ++i) {
-                    NArrow::NHash::NXX64::TStreamStringHashCalcer_H3 hashCalcer(i);
-                    hashCalcer.Start();
+                for (ui64 i = 0; i < HashesCount; ++i) {
+                    const ui64 hash = NArrow::NHash::TXX64::CalcSimple(data, i);
                     if (hashBase) {
-                        hashCalcer.Update((const ui8*)&hashBase, sizeof(hashBase));
+                        filterBits[CombineHashes(hashBase, hash) % bitsCount] = true;
+                    } else {
+                        filterBits[hash % bitsCount] = true;
                     }
-                    hashCalcer.Update((const ui8*)data.data(), data.size());
-                    filterBits[hashCalcer.Finish() % bitsCount] = true;
                 }
             });
         dataOwners.pop_front();
@@ -71,14 +72,16 @@ void TBloomIndexMeta::DoFillIndexCheckers(
                 continue;
             }
             std::set<ui64> hashes;
-            for (ui32 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
-                NArrow::NHash::NXX64::TStreamStringHashCalcer_H3 calcer(hashSeed);
-                calcer.Start();
-                if (hashBase) {
-                    calcer.Update((const ui8*)&hashBase, sizeof(hashBase));
+            if (hashBase) {
+                for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
+                    const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(i.second, hashSeed);
+                    hashes.emplace(CombineHashes(hashBase, hash));
                 }
-                NArrow::NHash::TXX64::AppendField(i.second, calcer);
-                hashes.emplace(calcer.Finish());
+            } else {
+                for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
+                    const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(i.second, hashSeed);
+                    hashes.emplace(hash);
+                }
             }
             branch->MutableIndexes().emplace_back(std::make_shared<TBloomFilterChecker>(GetIndexId(), std::move(hashes)));
         }

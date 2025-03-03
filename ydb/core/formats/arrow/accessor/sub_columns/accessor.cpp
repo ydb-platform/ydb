@@ -24,7 +24,10 @@ TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(const std:
     for (ui32 i = 0; i < reader.GetRecordsCount();) {
         auto address = reader.GetReadChunk(i);
         storage.emplace_back(address.GetArray());
-        adapter->AddDataToBuilders(address.GetArray(), builder);
+        auto conclusion = adapter->AddDataToBuilders(address.GetArray(), builder);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
         i += address.GetArray()->length();
         AFL_VERIFY(i <= reader.GetRecordsCount());
     }

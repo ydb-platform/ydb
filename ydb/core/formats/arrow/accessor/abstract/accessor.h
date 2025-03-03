@@ -47,6 +47,8 @@ public:
         SubColumnsPartialArray
     };
 
+    using TValuesSimpleVisitor = std::function<void(std::shared_ptr<arrow::Array>)>;
+
     class TCommonChunkAddress {
     private:
         YDB_READONLY(ui64, StartPosition, 0);
@@ -192,6 +194,8 @@ public:
         TCommonChunkAddress Address;
 
     public:
+        void Reallocate();
+
         const TCommonChunkAddress& GetAddress() const {
             return Address;
         }
@@ -254,6 +258,7 @@ private:
     virtual ui32 DoGetNullsCount() const = 0;
     virtual ui32 DoGetValueRawBytes() const = 0;
     virtual std::shared_ptr<IChunkedArray> DoApplyFilter(const TColumnFilter& filter) const;
+    virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const = 0;
 
 protected:
     std::shared_ptr<arrow::Schema> GetArraySchema() const {
@@ -322,6 +327,14 @@ protected:
 
 public:
     std::shared_ptr<IChunkedArray> ApplyFilter(const TColumnFilter& filter, const std::shared_ptr<IChunkedArray>& selfPtr) const;
+
+    virtual void Reallocate() {
+
+    }
+
+    void VisitValues(const TValuesSimpleVisitor& visitor) const {
+        DoVisitValues(visitor);
+    }
 
     template <class TResult, class TActor>
     static std::optional<TResult> VisitDataOwners(const std::shared_ptr<IChunkedArray>& arr, const TActor& actor) {
@@ -416,16 +429,7 @@ public:
         return *result;
     }
 
-    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const {
-        std::vector<std::shared_ptr<arrow::Array>> chunks;
-        std::optional<TFullDataAddress> address;
-        for (ui32 position = 0; position < GetRecordsCount();) {
-            address = GetChunk(address, position);
-            chunks.emplace_back(address->GetArray());
-            position += address->GetArray()->length();
-        }
-        return std::make_shared<arrow::ChunkedArray>(chunks, GetDataType());
-    }
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const;
     virtual ~IChunkedArray() = default;
 
     std::shared_ptr<arrow::ChunkedArray> Slice(const ui32 offset, const ui32 count) const;

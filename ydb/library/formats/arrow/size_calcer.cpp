@@ -56,6 +56,17 @@ ui32 TRowSizeCalculator::GetRowBytesSize(const ui32 row) const {
     return result;
 }
 
+ui64 GetArrayMemorySize(const std::shared_ptr<arrow::ChunkedArray>& data) {
+    if (!data) {
+        return 0;
+    }
+    ui64 result = 0;
+    for (auto&& i : data->chunks()) {
+        result += GetArrayMemorySize(i->data());
+    }
+    return result;
+}
+
 ui64 GetArrayMemorySize(const std::shared_ptr<arrow::ArrayData>& data) {
     if (!data) {
         return 0;

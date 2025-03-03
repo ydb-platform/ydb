@@ -16,7 +16,7 @@ private:
 public:
     virtual ~IDataAdapter() = default;
 
-    TConclusionStatus AddDataToBuilders(const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const noexcept;
+    [[nodiscard]] TConclusionStatus AddDataToBuilders(const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const noexcept;
 };
 
 class TFirstLevelSchemaData: public IDataAdapter {

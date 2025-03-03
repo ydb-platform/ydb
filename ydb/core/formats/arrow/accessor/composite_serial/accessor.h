@@ -34,23 +34,19 @@ public:
             , DataBuffer(dataBuffer) {
         }
 
-        std::shared_ptr<IChunkedArray> GetArrayVerified(const std::shared_ptr<TColumnLoader>& loader) const {
-            if (PredefinedArray) {
-                return PredefinedArray;
-            }
-            if (!!Data) {
-                return loader->ApplyVerified(Data, RecordsCount);
-            } else {
-                AFL_VERIFY(!!DataBuffer);
-                return loader->ApplyVerified(TString(DataBuffer.data(), DataBuffer.size()), RecordsCount);
-            }
-        }
+        std::shared_ptr<IChunkedArray> GetArrayVerified(const std::shared_ptr<TColumnLoader>& loader) const;
     };
 
 private:
     std::shared_ptr<TColumnLoader> Loader;
     std::vector<TChunk> Chunks;
     const bool ForLazyInitialization = false;
+
+    virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const override {
+        for (auto&& i : Chunks) {
+            i.GetArrayVerified(Loader)->VisitValues(visitor);
+        }
+    }
 
 protected:
     virtual ui32 DoGetNullsCount() const override {

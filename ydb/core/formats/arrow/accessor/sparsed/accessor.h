@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -51,8 +52,14 @@ private:
     };
 
     std::vector<TInternalChunkInfo> RemapExternalToInternal;
+    std::shared_ptr<arrow::Array> DefaultsArray;
 
 public:
+    void VisitValues(const IChunkedArray::TValuesSimpleVisitor& visitor) const {
+        visitor(ColValue);
+        visitor(DefaultsArray);
+    }
+
     ui32 GetFinishPosition() const {
         return RecordsCount;
     }
@@ -101,6 +108,10 @@ private:
     TSparsedArrayChunk Record;
     friend class TSparsedArrayChunk;
 
+    virtual void DoVisitValues(const IChunkedArray::TValuesSimpleVisitor& visitor) const override {
+        Record.VisitValues(visitor);
+    }
+
 protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
 
@@ -148,6 +159,8 @@ protected:
         const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount);
 
 public:
+    virtual void Reallocate() override;
+
     static std::shared_ptr<TSparsedArray> Make(const IChunkedArray& defaultArray, const std::shared_ptr<arrow::Scalar>& defaultValue);
 
     TSparsedArray(const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount)

@@ -63,7 +63,7 @@ public:
         const bool deserialize = source->IsSourceInMemory();
         if (!!OthersBlobs) {
             source->GetContext()->GetCommonContext()->GetCounters().GetSubColumns()->GetOtherCounters().OnRead(OthersBlobs->size());
-            PartialArray->InitOthers(*OthersBlobs, ChunkExternalInfo, deserialize);
+            PartialArray->InitOthers(*OthersBlobs, ChunkExternalInfo, applyFilter, !!applyFilter || deserialize);
             OthersBlobs.reset();
         }
 

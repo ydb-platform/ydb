@@ -63,6 +63,10 @@ protected:
     }
 
 public:
+    virtual void DoVisitValues(const std::function<void(std::shared_ptr<arrow::Array>)>& /*visitor*/) const override {
+        AFL_VERIFY(false);
+    }
+
     void StoreSourceString(const TString& sourceDeserializationString) {
         AFL_VERIFY(!SourceDeserializationString);
         SourceDeserializationString = sourceDeserializationString;

@@ -138,7 +138,8 @@ TConclusion<NKikimr::NOlap::TPredicateContainer> TPredicateContainer::BuildPredi
                     break;
                 }
             }
-            AFL_VERIFY(countSortingFields == object->Batch->num_columns())("count", countSortingFields)("object", object->Batch->num_columns());
+            AFL_VERIFY(countSortingFields == object->Batch->num_columns())("count", countSortingFields)("object", object->Batch->num_columns())(
+                                               "schema", pkSchema->ToString())("object", JoinSeq(",", cNames));
         }
         return TPredicateContainer(object, pkSchema ? ExtractKey(*object, pkSchema) : nullptr);
     }

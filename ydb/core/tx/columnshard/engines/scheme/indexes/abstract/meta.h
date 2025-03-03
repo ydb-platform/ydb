@@ -33,7 +33,8 @@ private:
     YDB_READONLY(TString, StorageId, IStoragesManager::DefaultStorageId);
 
 protected:
-    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data,
+    virtual TConclusion<std::shared_ptr<IPortionDataChunk>> DoBuildIndexOptional(
+        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data,
         const ui32 recordsCount, const TIndexInfo& indexInfo) const = 0;
     virtual void DoFillIndexCheckers(
         const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const = 0;
@@ -74,9 +75,9 @@ public:
 
     virtual ~IIndexMeta() = default;
 
-    std::shared_ptr<IPortionDataChunk> BuildIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data,
+    TConclusion<std::shared_ptr<IPortionDataChunk>> BuildIndexOptional(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data,
         const ui32 recordsCount, const TIndexInfo& indexInfo) const {
-        return DoBuildIndex(data, recordsCount, indexInfo);
+        return DoBuildIndexOptional(data, recordsCount, indexInfo);
     }
 
     void FillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const {

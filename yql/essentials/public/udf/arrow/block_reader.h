@@ -424,6 +424,48 @@ private:
     TFixedSizeBlockReader<ui16, /* Nullable */false> TimezoneReader_;
 };
 
+// NOTE: For any singular type we use arrow::null() data type.
+// This data type DOES NOT support bit mask so for optional type
+// we have to use |TExternalOptional| wrapper.
+class TSingularTypeBlockReader: public IBlockReader {
+public:
+    TSingularTypeBlockReader() = default;
+
+    ~TSingularTypeBlockReader() override = default;
+
+    TBlockItem GetItem(const arrow::ArrayData& data, size_t index) override {
+        Y_UNUSED(data, index);
+        return TBlockItem::Zero();
+    }
+
+    TBlockItem GetScalarItem(const arrow::Scalar& scalar) override {
+        Y_UNUSED(scalar);
+        return TBlockItem::Zero();
+    }
+
+    ui64 GetDataWeight(const arrow::ArrayData& data) const override {
+        Y_UNUSED(data);
+        return 0;
+    }
+
+    ui64 GetDataWeight(TBlockItem item) const override {
+        Y_UNUSED(item);
+        return 0;
+    }
+
+    ui64 GetDefaultValueWeight() const override {
+        return 0;
+    }
+
+    void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const override {
+        Y_UNUSED(index, data, out);
+    }
+
+    void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const override {
+        Y_UNUSED(scalar, out);
+    }
+};
+
 class TExternalOptionalBlockReader final : public IBlockReader {
 public:
     TExternalOptionalBlockReader(std::unique_ptr<IBlockReader>&& inner)
@@ -498,6 +540,7 @@ struct TReaderTraits {
     using TResource = TResourceBlockReader<Nullable>;
     template<typename TTzDate, bool Nullable>
     using TTzDateReader = TTzDateBlockReader<TTzDate, Nullable>;
+    using TSingularType = TSingularTypeBlockReader;
 
     constexpr static bool PassType = false;
 
@@ -516,6 +559,10 @@ struct TReaderTraits {
         } else {
             return std::make_unique<TResource<false>>();
         }
+    }
+
+    static std::unique_ptr<TResult> MakeSingular() {
+        return std::make_unique<TSingularType>();
     }
 
     template<typename TTzDate>
@@ -592,6 +639,10 @@ inline void UpdateBlockItemSerializeProps(const ITypeInfoHelper& typeInfoHelper,
             props.IsFixed = false;
         }
 
+        return;
+    }
+
+    if (IsSingularType(typeInfoHelper, type)) {
         return;
     }
 

@@ -220,7 +220,7 @@
         {
             "checksum": "02e80809d3cbf91101d09d4ac1e87aa0",
             "size": 623,
-            "uri": "https://{canondata_backend}/1917492/b01930df0710eb10e4ce2d35cddca6be33ac8a9f/resource.tar.gz#test.test_blocks-as_tuple-default.txt-Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1130705/f9eb075ce8fc54a57832e4ee918669601325c133/resource.tar.gz#test.test_blocks-as_tuple-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-as_tuple-default.txt-Results]": [

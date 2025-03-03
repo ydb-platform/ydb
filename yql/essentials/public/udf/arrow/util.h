@@ -12,6 +12,9 @@
 
 #include <functional>
 
+#include <yql/essentials/public/udf/udf_type_inspection.h>
+#include <yql/essentials/public/udf/udf_types.h>
+
 namespace NYql {
 namespace NUdf {
 
@@ -234,6 +237,18 @@ inline void SetMemoryContext(void* ptr, void* ctx) {
 
 inline void ZeroMemoryContext(void* ptr) {
     SetMemoryContext(ptr, nullptr);
+}
+
+inline bool IsSingularType(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
+    auto kind = typeInfoHelper.GetTypeKind(type);
+    return kind == ETypeKind::Null ||
+           kind == ETypeKind::Void ||
+           kind == ETypeKind::EmptyDict ||
+           kind == ETypeKind::EmptyList;
+}
+
+inline bool NeedWrapWithExternalOptional(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
+    return TPgTypeInspector(typeInfoHelper, type) || IsSingularType(typeInfoHelper, type);
 }
 
 } // namespace NUdf

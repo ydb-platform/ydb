@@ -520,7 +520,19 @@ TExprBase DqOptimizeEquiJoinWithCosts(
         YQL_CLOG(TRACE, CoreDq) << str.str();
     }
 
+    auto start = std::chrono::high_resolution_clock::now();
+
+    // Вызов вашей функции
     joinTree = opt.JoinSearch(joinTree, hints);
+
+    // Запоминаем время окончания
+    auto end = std::chrono::high_resolution_clock::now();
+
+    // Вычисляем разницу во времени
+    std::chrono::duration<double, std::milli> duration = end - start;
+
+    // Вывод информации в стандартный вывод
+    std::cout << "Function opt.JoinSearch executed in " << duration.count() << " ms" << std::endl;
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         std::stringstream str;

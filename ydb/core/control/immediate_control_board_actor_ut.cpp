@@ -101,7 +101,7 @@ static void Run(i64 instances = 1) {
 
         // ICB Actor creation
         TActorId IcbActorId = MakeIcbId(setup->NodeId);
-        TActorSetupCmd testSetup(CreateImmediateControlActor(appData.Icb, Counters), TMailboxType::Revolving, 0);
+        TActorSetupCmd testSetup(CreateImmediateControlActor(appData.Icb, appData.StaticControlBoard, Counters), TMailboxType::Revolving, 0);
         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(IcbActorId, std::move(testSetup)));
 
 

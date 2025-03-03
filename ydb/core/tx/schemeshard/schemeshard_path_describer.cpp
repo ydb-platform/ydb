@@ -1308,6 +1308,29 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     return DescribePath(self, ctx, pathId, options);
 }
 
+THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+    TSchemeShard* self,
+    const TActorContext& ctx,
+    const TString& path,
+    const NKikimrSchemeOp::TDescribeOptions& opts
+) {
+    NKikimrSchemeOp::TDescribePath params;
+    params.SetPath(path);
+    params.MutableOptions()->CopyFrom(opts);
+
+    return TPathDescriber(self, std::move(params)).Describe(ctx);
+}
+
+THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+    TSchemeShard* self,
+    const TActorContext& ctx,
+    const TString& path
+) {
+    NKikimrSchemeOp::TDescribeOptions options;
+    options.SetShowPrivateTable(true);
+    return DescribePath(self, ctx, path, options);
+}
+
 void TSchemeShard::DescribeTable(
         const TTableInfo& tableInfo,
         const NScheme::TTypeRegistry* typeRegistry,

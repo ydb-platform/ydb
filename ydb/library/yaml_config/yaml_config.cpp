@@ -97,4 +97,25 @@ void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig:
     }
 }
 
+class TDefaultConfigSwissKnife : public IConfigSwissKnife {
+public:
+    bool VerifyReplaceRequest(const Ydb::Config::ReplaceConfigRequest&, Ydb::StatusIds::StatusCode&, NYql::TIssues&) const override {
+        return true;
+    }
+
+    bool VerifyMainConfig(const TString&) const override {
+        return true;
+    };
+
+    bool VerifyStorageConfig(const TString&) const override {
+        return true;
+    }
+};
+
+
+std::unique_ptr<IConfigSwissKnife> CreateDefaultConfigSwissKnife() {
+    return std::make_unique<TDefaultConfigSwissKnife>();
+}
+
+
 } // namespace NKikimr::NYamlConfig

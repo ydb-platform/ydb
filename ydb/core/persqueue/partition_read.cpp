@@ -372,7 +372,6 @@ ui64 GetFirstHeaderOffset(const TKey& key, const TString& blob)
 TReadAnswer TReadInfo::FormAnswer(
     const TActorContext& ctx,
     const TEvPQ::TEvBlobResponse& blobResponse,
-    const ui64 startOffset,
     const ui64 endOffset,
     const TPartitionId& partition,
     TUserInfo* userInfo,
@@ -399,9 +398,7 @@ TReadAnswer TReadInfo::FormAnswer(
     res.SetErrorCode(NPersQueue::NErrorCode::OK);
     auto readResult = res.MutablePartitionResponse()->MutableCmdReadResult();
     readResult->SetWaitQuotaTimeMs(WaitQuotaTime.MilliSeconds());
-    readResult->SetStartOffset(startOffset);
     readResult->SetMaxOffset(endOffset);
-    readResult->SetEndOffset(endOffset);
     readResult->SetRealReadOffset(Offset);
     ui64 realReadOffset = Offset;
     readResult->SetReadFromTimestampMs(ReadTimestampMs);
@@ -465,7 +462,6 @@ TReadAnswer TReadInfo::FormAnswer(
             SizeEstimate = answerSize;
             readResult->SetSizeEstimate(SizeEstimate);
             readResult->SetLastOffset(LastOffset);
-            readResult->SetStartOffset(startOffset);
             readResult->SetEndOffset(endOffset);
             return {answerSize, std::move(answer)};
         }
@@ -499,7 +495,7 @@ TReadAnswer TReadInfo::FormAnswer(
                 continue;
 
 
-            PQ_LOG_D("FormAnswer processing batch offset " << (offset - header.GetCount()) <<  " totakecount " << count << " count " << header.GetCount()
+            PQ_LOG_D("FormAnswer processing batch offset " << (offset - header.GetCount()) <<  " totakecount " << count << " count " << header.GetCount() 
                     << " size " << header.GetPayloadSize() << " from pos " << pos << " cbcount " << batch.Blobs.size());
 
             for (size_t i = pos; i < batch.Blobs.size(); ++i) {
@@ -572,7 +568,6 @@ TReadAnswer TReadInfo::FormAnswer(
     SizeEstimate = answerSize;
     readResult->SetSizeEstimate(SizeEstimate);
     readResult->SetLastOffset(LastOffset);
-    readResult->SetStartOffset(startOffset);
     readResult->SetEndOffset(endOffset);
 
     return {answerSize, std::move(answer)};
@@ -583,7 +578,7 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     if (!res)
         return;
     TReadAnswer answer(res->FormAnswer(
-            ctx, StartOffset, res->Offset, Partition, nullptr, res->Destination, 0, Tablet, Config.GetMeteringMode(), IsActive()
+            ctx, res->Offset, Partition, nullptr, res->Destination, 0, Tablet, Config.GetMeteringMode(), IsActive()
     ));
     ctx.Send(Tablet, answer.Event.Release());
     PQ_LOG_D(" waiting read cookie " << ev->Get()->Cookie
@@ -1033,7 +1028,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
         PQ_LOG_D("Reading cookie " << cookie << ". All data is from uncompacted head.");
 
         TReadAnswer answer = info.FormAnswer(
-            ctx, StartOffset, EndOffset, Partition, &UsersInfoStorage->GetOrCreate(info.User, ctx),
+            ctx, EndOffset, Partition, &UsersInfoStorage->GetOrCreate(info.User, ctx),
             info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode(), IsActive()
         );
         const auto* ev = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get());

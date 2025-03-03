@@ -12,7 +12,6 @@
 #include "viewer_describe.h"
 #include "viewer_describe_topic.h"
 #include "viewer_feature_flags.h"
-#include "viewer_topic_data.h"
 #include "viewer_graph.h"
 #include "viewer_healthcheck.h"
 #include "viewer_hiveinfo.h"
@@ -190,10 +189,6 @@ void InitViewerTopicInfoJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/topicinfo", new TJsonHandler<TJsonTopicInfo>(TJsonTopicInfo::GetSwagger()));
 }
 
-void InitViewerTopicDataJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/topic_data", new TJsonHandler<TTopicData>(TTopicData::GetSwagger()));
-}
-
 void InitViewerPQConsumerInfoJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/pqconsumerinfo", new TJsonHandler<TJsonPQConsumerInfo>(TJsonPQConsumerInfo::GetSwagger()));
 }
@@ -308,7 +303,6 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerConfigJsonHandler(jsonHandlers);
     InitViewerCountersJsonHandler(jsonHandlers);
     InitViewerTopicInfoJsonHandler(jsonHandlers);
-    InitViewerTopicDataJsonHandler(jsonHandlers);
     InitViewerPQConsumerInfoJsonHandler(jsonHandlers);
     InitViewerTabletCountersJsonHandler(jsonHandlers);
     InitViewerStorageJsonHandler(jsonHandlers);

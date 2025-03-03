@@ -173,7 +173,7 @@ void MergePartition(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, const
 auto DescribeTopic(TTestBasicRuntime& runtime, TString path = "/MyRoot/USER_1/Topic1", ui64 ss = TTestTxConfig::SchemeShard) {
     {
         TAtomic unused;
-        runtime.GetAppData().Icb->SetValue("SchemeShard_FillAllocatePQ", true, unused);
+        runtime.GetAppData().StaticControlBoard->SetValue(EStaticControlType::SchemeShardFillAllocatePQ, true, unused);
     }
 
     return DescribePath(runtime, ss, path, true, true, true).GetPathDescription().GetPersQueueGroup();

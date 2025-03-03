@@ -870,8 +870,8 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             READ: SELECT Rows FROM `/Root/ColumnTable/.sys/primary_index_stats`;
             EXPECTED: [[[4u]];[[4u]]]
             ------
-            READ: SELECT ChunkIdx, Details FROM `/Root/ColumnTable/.sys/primary_index_stats` ORDER BY ChunkIdx;
-            EXPECTED: [[[""]];[["{\"column\":{\"accessor\":[5,5,5,5],\"size\":[6,15,2,2],\"key_names\":[\"a\",\"b\",\"c\",\"d\"],\"records\":[3,3,1,1]},\"other\":{\"accessor\":[],\"size\":[],\"key_names\":[],\"records\":[]}}"]]]
+            READ: SELECT EntityName, Details FROM `/Root/ColumnTable/.sys/primary_index_stats` ORDER BY EntityName;
+            EXPECTED: [[["Col1"];[""]];[["Col2"];["{\"column\":{\"accessor\":[5,5,5,5],\"size\":[6,15,2,2],\"key_names\":[\"a\",\"b\",\"c\",\"d\"],\"records\":[3,3,1,1]},\"other\":{\"accessor\":[],\"size\":[],\"key_names\":[],\"records\":[]}}"]]]
             
         )";
         TScriptVariator(script).Execute();

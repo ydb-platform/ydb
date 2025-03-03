@@ -16,7 +16,7 @@ void TStatsIterator::TSubColumnHeaderFetchingTask::DoOnDataReady(
         AFL_VERIFY(nextRead.IsEmpty());
         NActors::TActorContext::AsActorContext().Send(Context->GetScanActorId(),
             std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
-                std::make_shared<TSubColumnStatsApplyResult>(FetchingLogic.ExtractResults(), std::move(WaitingCountersGuard))));
+                std::make_shared<TSubColumnStatsApplyResult>(std::move(FetchingLogic).ExtractResults(), std::move(WaitingCountersGuard))));
     } else {
         AFL_VERIFY(!nextRead.IsEmpty());
         std::shared_ptr<TSubColumnHeaderFetchingTask> nextReadTask = std::make_shared<TSubColumnHeaderFetchingTask>(

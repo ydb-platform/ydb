@@ -94,8 +94,8 @@ public:
     void Start(NOlap::TReadActionsCollection& nextRead) {
         auto reading = StorageOperator->StartReadingAction(NOlap::NBlobOperations::EConsumer::SCAN);
         reading->SetIsBackgroundProcess(false);
-        for (const auto& [range, _] : Chunks) {
-            Chunks.FindPtr(range)->StartReading(reading);
+        for (auto& [_, info] : Chunks) {
+            info.StartReading(reading);
         }
         nextRead.Add(reading);
     }
@@ -118,7 +118,7 @@ public:
         return Chunks.empty();
     }
 
-    THashMap<NOlap::TBlobRange, TSubColumnsHeader>&& ExtractResults() {
+    THashMap<NOlap::TBlobRange, TSubColumnsHeader>&& ExtractResults() && {
         AFL_VERIFY(IsDone());
         return std::move(ReadyChunks);
     }

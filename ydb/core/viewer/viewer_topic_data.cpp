@@ -161,10 +161,11 @@ void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
         auto error = TStringBuilder() << "No such topic '" << TopicPath << "";
         return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", error));
     }
-    if (AppData(ActorContext())->EnforceUserTokenRequirement || AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
-        if (Event->Get()->UserToken.empty()) {
+    if (Event->Get()->UserToken.empty()) {
+        if (AppData(ActorContext())->EnforceUserTokenRequirement || AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
             return ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Unauthenticated access is forbidden, please provide credentials"));
         }
+    } else {
         NACLib::TUserToken token(Event->Get()->UserToken);
         if (!response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, token)) {
             TStringBuilder error;

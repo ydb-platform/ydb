@@ -212,13 +212,19 @@ TConclusion<std::vector<std::shared_ptr<IResourceProcessor>>> TGraph::BuildChain
     if (readyNodeIds.size() != Nodes.size()) {
         std::set<ui32> notCoveredIds;
         TStringBuilder sb;
+        ui32 count = 0;
         for (auto&& [id, n] : Nodes) {
             if (!readyNodeIds.contains(id)) {
+                if (n->GetProcessor()->GetProcessorType() != EProcessorType::Const) {
+                    ++count;
+                }
                 sb << n->DebugJson().GetStringRobust() << "/" << n->GetProcessor()->DebugJson().GetStringRobust() << Endl;
             }
         }
-        return TConclusionStatus::Fail(
-            "not found final nodes: " + ::ToString(readyNodeIds.size()) + " covered from " + ::ToString(Nodes.size()) + ": details = " + sb);
+        if (count) {
+            return TConclusionStatus::Fail(
+                "not found final nodes: " + ::ToString(readyNodeIds.size()) + " covered from " + ::ToString(Nodes.size()) + ": details = " + sb);
+        }
     }
     std::vector<std::shared_ptr<IResourceProcessor>> result;
     for (auto&& c : nodeChains) {

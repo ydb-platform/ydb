@@ -60,9 +60,8 @@ private:
     arrow::Status VisitImpl(const TArray& array) {
         AFL_VERIFY(Started);
         for (ui32 i = 0; i < array.length(); ++i) {
-            const bool columnValue = !array.IsNull(i) && (bool)array.Value(i);
             const ui32 currentIdx = CursorIdx++;
-            FiltersMerged[currentIdx] = FiltersMerged[currentIdx] && columnValue;
+            FiltersMerged[currentIdx] = FiltersMerged[currentIdx] && !array.IsNull(i) && (bool)array.Value(i);
         }
         AFL_VERIFY(CursorIdx <= FiltersMerged.size());
         return arrow::Status::OK();

@@ -6,13 +6,13 @@
 
 namespace NYdb::NConsoleClient {
 
-    class ILineReader {
-    public:
-        virtual std::optional<std::string> ReadLine() = 0;
+class ILineReader {
+public:
+    virtual std::optional<std::string> ReadLine() = 0;
 
-        virtual ~ILineReader() = default;
-    };
+    virtual ~ILineReader() = default;
+};
 
-    std::unique_ptr<ILineReader> CreateLineReader(std::string prompt, std::string historyFilePath);
+std::unique_ptr<ILineReader> CreateLineReader(std::string prompt, std::string historyFilePath);
 
 } // namespace NYdb::NConsoleClient

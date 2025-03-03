@@ -48,7 +48,7 @@ void CreateTables(NYdb::NQuery::TSession session, const TString& schemaPath, boo
 
     if (useColumnStore) {
         std::regex pattern(R"(CREATE TABLE [^\(]+ \([^;]*\))", std::regex::multiline);
-        query = std::regex_replace(query, pattern, "$& WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);");
+        query = std::regex_replace(query, pattern, "$& WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);");
     }
 
     auto res = session.ExecuteQuery(TString(query), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
@@ -122,11 +122,9 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
         settings.push_back(setting);
     }
 
-    if (stats != "") {
-        setting.SetName("OptShuffleElimination");
-        setting.SetValue("true");
-        settings.push_back(setting);
-    }
+    setting.SetName("OptShuffleElimination");
+    setting.SetValue("true");
+    settings.push_back(setting);
 
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
@@ -141,7 +139,7 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
 
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
     serverSettings.SetKqpSettings(settings);
-    // serverSettings.SetNodeCount(4);
+    serverSettings.SetNodeCount(4);
 
     return TKikimrRunner(serverSettings);
 }
@@ -310,7 +308,7 @@ void TestOlapEstimationRowsCorrectness(const TString& queryPath, const TString& 
 /* Tests to check olap selectivity correctness */
 Y_UNIT_TEST_SUITE(OlapEstimationRowsCorrectness) {
     Y_UNIT_TEST(TPCH2) {
-        TestOlapEstimationRowsCorrectness("queries/tpch2.sql", "stats/tpch100s.json");
+        TestOlapEstimationRowsCorrectness("queries/tpch2.sql", "stats/tpch1000s.json");
     }
 
     Y_UNIT_TEST(TPCH3) {
@@ -322,7 +320,7 @@ Y_UNIT_TEST_SUITE(OlapEstimationRowsCorrectness) {
     }
 
     Y_UNIT_TEST(TPCH9) {
-        TestOlapEstimationRowsCorrectness("queries/tpch2.sql", "stats/tpch1000s.json");
+        TestOlapEstimationRowsCorrectness("queries/tpch9.sql", "stats/tpch1000s.json");
     }
 
     Y_UNIT_TEST(TPCH10) {
@@ -330,7 +328,7 @@ Y_UNIT_TEST_SUITE(OlapEstimationRowsCorrectness) {
     }
 
     Y_UNIT_TEST(TPCH11) {
-        TestOlapEstimationRowsCorrectness("queries/tpch2.sql", "stats/tpch100s.json");
+        TestOlapEstimationRowsCorrectness("queries/tpch11.sql", "stats/tpch1000s.json");
     }
 
     Y_UNIT_TEST(TPCH21) {
@@ -527,16 +525,20 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch10.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
     }
 
-    Y_UNIT_TEST(TPCH11) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch2.sql", "stats/tpch100s.json", false, true);
+    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCH11, StreamLookupJoin, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch11.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
     }
 
-    Y_UNIT_TEST(TPCH20) {
+    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCH20, StreamLookupJoin, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch20.sql", "stats/tpch1000s.json", false, true);
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCH21, StreamLookupJoin, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch21.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
+    }
+
+    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCH22, StreamLookupJoin, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch22.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS16, StreamLookupJoin, ColumnStore) {
@@ -643,9 +645,16 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             bool RhsShuffled;
         };
 
-        TJoin Find(const TVector<TString>& labels) {
-            Labels = labels;
-            std::sort(Labels.begin(), Labels.end());
+        enum ESearchSettings : ui32 {
+            ExactMatch = 0, // We search join tree with full exact match of labels
+            PartialMatch = 1 // We search the first join tree, which labels overlap provided.
+        };
+
+        TJoin Find(const TVector<TString>& labels, ESearchSettings settings = ExactMatch) {
+            RequestedLabels = labels;
+            Settings = settings;
+
+            std::sort(RequestedLabels.begin(), RequestedLabels.end());
             TVector<TString> dummy;
             auto res = FindImpl(Plan, dummy);
             UNIT_ASSERT_C(!res.Join.empty(), "Join wasn't found.");
@@ -682,12 +691,32 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
 
         bool AreRequestedLabels(TVector<TString> labels) {
-            std::sort(labels.begin(), labels.end());
-            return Labels == labels;
+            switch (Settings) {
+                case ExactMatch: {
+                    std::sort(labels.begin(), labels.end());
+                    return RequestedLabels == labels;
+                }
+                case PartialMatch: {
+                    if (labels.size() < RequestedLabels.size()) {
+                        return false;
+                    }
+
+                    for (const auto& requestedLabel: RequestedLabels) {
+                        if (std::find(labels.begin(), labels.end(), requestedLabel) == labels.end()) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                default: {
+                    Y_ENSURE(false, "No such setting.");
+                }
+            }
         }
 
+        ESearchSettings Settings;
         NJson::TJsonValue Plan;
-        TVector<TString> Labels;
+        TVector<TString> RequestedLabels;
     };
 
     Y_UNIT_TEST(ShuffleEliminationOneJoin) {
@@ -773,6 +802,13 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
+    Y_UNIT_TEST(RandomStaff) {
+        auto [plan, _] =  ExecuteJoinOrderTestGenericQueryWithStats("queries/random_staff.sql", "stats/tpch100s.json", false, true);
+        auto joinFinder = TFindJoinWithLabels(plan);
+        auto join = joinFinder.Find({"nation"}, TFindJoinWithLabels::PartialMatch);
+        UNIT_ASSERT_C(join.Join == "InnerJoin (MapJoin)", join.Join);
+    }
+
     Y_UNIT_TEST(OltpJoinTypeHintCBOTurnOFF) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/oltp_join_type_hint_cbo_turnoff.sql", "stats/basic.json", false, false, false);
         auto joinFinder = TFindJoinWithLabels(plan);
@@ -849,9 +885,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(CanonizedJoinOrderTPCH2AL, StreamLookupJoin, ColumnStore) {
+    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(CanonizedJoinOrderTPCH2, StreamLookupJoin, ColumnStore) {
         CanonizedJoinOrderTest(
-            "queries/tpch2.sql", "stats/tpch100s.json", "join_order/tpch2_1000s.json", StreamLookupJoin, ColumnStore
+            "queries/tpch2.sql", "stats/tpch1000s.json", "join_order/tpch2_1000s.json", StreamLookupJoin, ColumnStore
         );
     }
 

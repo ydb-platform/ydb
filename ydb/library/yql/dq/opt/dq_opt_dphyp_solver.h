@@ -6,6 +6,15 @@
 
 namespace NYql::NDq {
 
+TString GetJoinOrderString(const std::shared_ptr<IBaseOptimizerNode>& node) {
+    if (node->Kind == EOptimizerNodeKind::RelNodeType) {
+        return node->Labels()[0];
+    }
+
+    auto joinNode = std::static_pointer_cast<TJoinOptimizerNodeInternal>(node);
+    return  "(" + GetJoinOrderString(joinNode->LeftArg) + "," + GetJoinOrderString(joinNode->RightArg) + ")";
+}
+
 /*
  * DPHyp (Dynamic Programming with Hypergraph) is a graph-aware
  * join eumeration algorithm that only considers CSGs (Connected Sub-Graphs) of
@@ -130,14 +139,6 @@ public:
 
     std::shared_ptr<IBaseOptimizerNode> GetLowestCostTree(const TNodeSet& nodes) {
         Y_ASSERT(DpTable_.contains(nodes));
-
-        Cout << "SIZE IS: " << DpTable_[nodes].size() << '\n';
-        for (const auto& tree: DpTable_[nodes]) {
-            std::stringstream ss;
-            tree->Print(ss);
-            Cout << "COST: " << tree->Stats.Cost << '\n';
-            Cout << ss.str() << '\n';
-        }
 
         auto minCost = std::min_element(
             DpTable_[nodes].begin(),
@@ -961,27 +962,21 @@ inline void AddNodeToDpTableEntries(
     std::shared_ptr<IBaseOptimizerNode>&& node,
     std::vector<std::shared_ptr<IBaseOptimizerNode>>& dpTableEntries
 ) {
-    // bool wasFound = false;
+    bool wasFound = false;
 
-    // for (auto& entry: dpTableEntries) {
-        // if (entry->LogicalOrderings.IsSubsetOf(node->LogicalOrderings)) {
-            // if (entry->Stats.Cost < node->Stats.Cost) {
-            //     entry = std::move(node);
-            //     return;
-            // }
+    for (auto& entry: dpTableEntries) {
+        if (entry->LogicalOrderings.IsSubsetOf(node->LogicalOrderings)) {
+            if (node->Stats.Cost < entry->Stats.Cost) {
+                entry = std::move(node);
+                return;
+            }
 
-            // wasFound = true;
-        // }
-    // }
-
-
-    if (dpTableEntries.empty()) {
-        dpTableEntries.push_back(std::move(node));
-    } else if (dpTableEntries.back()->Stats.Cost < node->Stats.Cost) {
-        dpTableEntries.back() = std::move(node);
+            wasFound = true;
+        }
     }
-    // if (wasFound) { return; }
-    // dpTableEntries.push_back(std::move(node));
+
+    if (wasFound) { return; }
+    dpTableEntries.push_back(std::move(node));
 }
 
 /*

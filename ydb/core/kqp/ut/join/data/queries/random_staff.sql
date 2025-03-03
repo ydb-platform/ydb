@@ -1,6 +1,4 @@
--- JoinOrder(orders (lineitem ((supplier nation) (partsupp part))))
--- JoinOrder(orders (lineitem ((partsupp part) (supplier nation))))
-PRAGMA ydb.OptShuffleElimination="false";
+PRAGMA ydb.OptShuffleElimination="true";
 
 $z1_12 = 1;
 $p = (select p_partkey, p_name

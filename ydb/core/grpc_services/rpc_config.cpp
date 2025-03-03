@@ -216,6 +216,7 @@ class TFetchStorageConfigRequest : public TBSConfigRequestGrpc<TFetchStorageConf
 public:
     using TBase = TBSConfigRequestGrpc<TFetchStorageConfigRequest, TEvFetchStorageConfigRequest, Ydb::Config::FetchConfigResult>;
     using TBase::TBase;
+    using TRpcBase = TRpcOperationRequestActor<TFetchStorageConfigRequest, TEvFetchStorageConfigRequest>;
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) override {
         const auto& request = *GetProtoRequest();
@@ -231,19 +232,20 @@ public:
         return NACLib::GenericManage;
     }
 
-    void Bootstrap(const TActorContext &ctx) {
-        TBase::Bootstrap(ctx);
-        auto *self = Self();
-        self->OnBootstrap();
+    // void Bootstrap(const TActorContext &ctx) {
+    //     TRpcBase::Bootstrap(ctx);
+    //     auto *self = Self();
+    //     self->OnBootstrap();
 
-        if (self->Request_->GetDatabaseName()) {
-            SendRequestToConsole();
-            return;
-        }
+    //     if (self->Request_->GetDatabaseName()) {
+    //         SendRequestToConsole();
+    //         Cerr << "SendRequestToConsole" << Endl;
+    //         return;
+    //     }
 
-        self->Become(&TFetchStorageConfigRequest::StateFunc);
-        self->Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvNodeWardenQueryStorageConfig(false));
-    }
+    //     self->Become(&TFetchStorageConfigRequest::StateFunc);
+    //     self->Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvNodeWardenQueryStorageConfig(false));
+    // }
 
     void FillDistconfQuery(NStorage::TEvNodeConfigInvokeOnRoot& ev) const {
         auto *record = ev.Record.MutableFetchStorageConfig();
@@ -322,19 +324,25 @@ private:
 
     void SendRequestToConsole() {
         NTabletPipe::TClientConfig pipeConfig;
-        ConsolePipe = Self()->Register(CreateClient(SelfId(), MakeConsoleID(), GetPipeConfig()));
+        pipeConfig.RetryPolicy = {
+            .RetryLimitCount = 10,
+        };
+        auto pipe = NTabletPipe::CreateClient(SelfId(), MakeConsoleID(), pipeConfig);
+        ConsolePipe = RegisterWithSameMailbox(pipe);
+        Cerr << "ConsolePipe created" << Endl;
 
         auto request = MakeHolder<NConsole::TEvConsole::TEvGetAllConfigsRequest>();
         request->Record.SetUserToken(Request_->GetSerializedToken());
         request->Record.SetPeerName(Request_->GetPeerName());
         if (Request_->GetDatabaseName()) {
+            Cerr << "IngressDatabase: " << *Request_->GetDatabaseName() << Endl;
             request->Record.SetIngressDatabase(*Request_->GetDatabaseName());
         }
         request->Record.SetBypassAuth(true);
 
         NTabletPipe::SendData(SelfId(), ConsolePipe, request.Release());
-
-        Become(&TFetchStorageConfigRequest::StateConsoleWork);
+        Cerr << "Request sent" << Endl;
+        Self()->Become(&TFetchStorageConfigRequest::StateConsoleWork);
     }
 
     STFUNC(StateConsoleWork) {

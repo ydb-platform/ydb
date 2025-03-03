@@ -134,6 +134,9 @@ TConclusion<bool> TGraph::OptimizeFilterWithCoalesce(
     DetachNode(filterArg);
     RemoveNode(filterNode);
     RemoveNode(filterArg);
+    if (argNode->GetDataFrom().empty() && argNode->GetDataTo().empty()) {
+        RemoveNode(argNode);
+    }
     return true;
 }
 
@@ -193,10 +196,8 @@ TConclusion<std::vector<std::shared_ptr<IResourceProcessor>>> TGraph::BuildChain
         }
     }
     std::sort(nodeChains.begin(), nodeChains.end());
-    ui32 foundCount = 0;
     for (auto&& [_, i] : Nodes) {
         if (i->GetProcessor()->GetProcessorType() != EProcessorType::Filter && i->GetProcessor()->GetOutput().empty()) {
-            ++foundCount;
             std::vector<const TGraphNode*> chain = i->GetFetchingChain();
             std::vector<const TGraphNode*> actualChain;
             for (auto&& c : chain) {
@@ -208,8 +209,16 @@ TConclusion<std::vector<std::shared_ptr<IResourceProcessor>>> TGraph::BuildChain
             nodeChains.emplace_back(std::move(actualChain));
         }
     }
-    if (!foundCount) {
-        return TConclusionStatus::Fail("not found projection node");
+    if (readyNodeIds.size() != Nodes.size()) {
+        std::set<ui32> notCoveredIds;
+        TStringBuilder sb;
+        for (auto&& [id, n] : Nodes) {
+            if (!readyNodeIds.contains(id)) {
+                sb << n->DebugJson().GetStringRobust() << "/" << n->GetProcessor()->DebugJson().GetStringRobust() << Endl;
+            }
+        }
+        return TConclusionStatus::Fail(
+            "not found final nodes: " + ::ToString(readyNodeIds.size()) + " covered from " + ::ToString(Nodes.size()) + ": details = " + sb);
     }
     std::vector<std::shared_ptr<IResourceProcessor>> result;
     for (auto&& c : nodeChains) {

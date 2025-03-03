@@ -41,7 +41,7 @@ size_t FilterTest(const std::vector<std::shared_ptr<arrow::Array>>& args, const 
     TProgramChain::TBuilder builder(resolver);
     builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1, 2}), TColumnChainInfo(4), std::make_shared<TSimpleFunction>(op1)).DetachResult());
     builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({4, 3}), TColumnChainInfo(5), std::make_shared<TSimpleFunction>(op2)).DetachResult());
-    builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo::BuildVector({ 5 }), true));
+    builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo::BuildVector({ 5 })));
     builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 4, 5 })));
     auto chain = builder.Finish().DetachResult();
     auto resources = std::make_shared<NAccessor::TAccessorsCollection>();
@@ -61,7 +61,7 @@ size_t FilterTestUnary(std::vector<std::shared_ptr<arrow::Array>> args, const EO
     TProgramChain::TBuilder builder(resolver);
     builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1}), TColumnChainInfo(4), std::make_shared<TSimpleFunction>(op1)).DetachResult());
     builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({2, 4}), TColumnChainInfo(5), std::make_shared<TSimpleFunction>(op2)).DetachResult());
-    builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo::BuildVector({ 5 }), true));
+    builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo::BuildVector({ 5 })));
     builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 4, 5 })));
     auto chain = builder.Finish().DetachResult();
     auto resources = std::make_shared<NAccessor::TAccessorsCollection>();
@@ -488,7 +488,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         TProgramChain::TBuilder builder(resolver);
         builder.Add(std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(56), 3));
         builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1, 3}), TColumnChainInfo(4), std::make_shared<TSimpleFunction>(EOperation::Add)).DetachResult());
-        builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo::BuildVector({ 2 }), true));
+        builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo::BuildVector({ 2 })));
         builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 2, 4 })));
         auto chain = builder.Finish().DetachResult();
         auto resources = std::make_shared<NAccessor::TAccessorsCollection>();
@@ -563,7 +563,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         auto andOperator2 = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1104, 1103}), TColumnChainInfo(1105), std::make_shared<TSimpleFunction>(EOperation::And)).DetachResult();
         andOperator2->SetYqlOperationId(0);
         builder.Add(andOperator2);
-        builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo::BuildVector({ 1105 }), true));
+        builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo::BuildVector({ 1105 })));
         builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 1, 2 })));
         auto chain = builder.Finish().DetachResult();
         Cerr << chain->DebugJson() << Endl;

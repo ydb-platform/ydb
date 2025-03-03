@@ -156,11 +156,12 @@ void TColumnShardScan::HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/) {
                                              "gen", ScanGen)("tablet", TabletId)("debug", ScanIterator->DebugString())(
                                              "counters", ScanCountersPool.DebugString());
     if (TMonotonic::Now() >= GetDeadline()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("fi", FinishInstant)("si", !!ScanIterator)("has_more", ChunksLimiter.HasMore())("in_waiting", ScanCountersPool.InWaiting())
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("HAS_ACK", !!AckReceivedInstant)("fi", FinishInstant)("si", !!ScanIterator)(
+            "has_more", ChunksLimiter.HasMore())("in_waiting", ScanCountersPool.InWaiting())
             ("counters_waiting", ScanCountersPool.DebugString())("scan_actor_id", ScanActorId)(
             "tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)("debug", ScanIterator ? ScanIterator->DebugString() : Default<TString>());
-        SendScanError("ColumnShard scanner timeout: HAS_ACK=" + ::ToString(!!AckReceivedInstant));
-        Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
+//        SendScanError("ColumnShard scanner timeout: HAS_ACK=" + ::ToString(!!AckReceivedInstant));
+//        Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
     } else {
         ScheduleWakeup(GetDeadline());
     }

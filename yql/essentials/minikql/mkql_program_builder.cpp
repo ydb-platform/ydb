@@ -20,6 +20,8 @@ using namespace std::string_view_literals;
 namespace NKikimr {
 namespace NMiniKQL {
 
+static_assert(RuntimeVersion >= 10);
+
 namespace {
 
 struct TDataFunctionFlags {
@@ -1397,9 +1399,6 @@ TRuntimeNode TProgramBuilder::Iterator(TRuntimeNode list, const TArrayRef<const 
 
 TRuntimeNode TProgramBuilder::EmptyIterator(TType* streamType) {
     MKQL_ENSURE(streamType->IsStream() || streamType->IsFlow(), "Expected stream or flow.");
-    if (RuntimeVersion < 7U && streamType->IsFlow()) {
-        return ToFlow(EmptyIterator(NewStreamType(AS_TYPE(TFlowType, streamType)->GetItemType())));
-    }
     TCallableBuilder callableBuilder(Env, __func__, streamType);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
@@ -1435,11 +1434,6 @@ TRuntimeNode TProgramBuilder::LazyList(TRuntimeNode list) {
 TRuntimeNode TProgramBuilder::ForwardList(TRuntimeNode stream) {
     const auto type = stream.GetStaticType();
     MKQL_ENSURE(type->IsStream() || type->IsFlow(), "Expected flow or stream.");
-    if constexpr (RuntimeVersion < 10U) {
-        if (type->IsFlow()) {
-            return ForwardList(FromFlow(stream));
-        }
-    }
     TCallableBuilder callableBuilder(Env, __func__, NewListType(type->IsFlow() ? AS_TYPE(TFlowType, stream)->GetItemType() : AS_TYPE(TStreamType, stream)->GetItemType()));
     callableBuilder.Add(stream);
     return TRuntimeNode(callableBuilder.Build(), false);
@@ -2054,29 +2048,7 @@ TRuntimeNode TProgramBuilder::Lookup(TRuntimeNode dict, TRuntimeNode key) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::DictItems(TRuntimeNode dict, EDictItems mode) {
-    const auto dictTypeChecked = AS_TYPE(TDictType, dict.GetStaticType());
-    TType* itemType;
-    switch (mode) {
-        case EDictItems::Both: {
-            const std::array<TType*, 2U> tupleTypes = {{ dictTypeChecked->GetKeyType(), dictTypeChecked->GetPayloadType() }};
-            itemType = NewTupleType(tupleTypes);
-            break;
-        }
-        case EDictItems::Keys: itemType = dictTypeChecked->GetKeyType(); break;
-        case EDictItems::Payloads: itemType = dictTypeChecked->GetPayloadType(); break;
-    }
-
-    TCallableBuilder callableBuilder(Env, __func__, NewListType(itemType));
-    callableBuilder.Add(dict);
-    callableBuilder.Add(NewDataLiteral((ui32)mode));
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
 TRuntimeNode TProgramBuilder::DictItems(TRuntimeNode dict) {
-    if constexpr (RuntimeVersion < 6U) {
-        return DictItems(dict, EDictItems::Both);
-    }
     const auto dictTypeChecked = AS_TYPE(TDictType, dict.GetStaticType());
     const auto itemType = NewTupleType({ dictTypeChecked->GetKeyType(), dictTypeChecked->GetPayloadType() });
     TCallableBuilder callableBuilder(Env, __func__, NewListType(itemType));
@@ -2085,9 +2057,6 @@ TRuntimeNode TProgramBuilder::DictItems(TRuntimeNode dict) {
 }
 
 TRuntimeNode TProgramBuilder::DictKeys(TRuntimeNode dict) {
-    if constexpr (RuntimeVersion < 6U) {
-        return DictItems(dict, EDictItems::Keys);
-    }
     const auto dictTypeChecked = AS_TYPE(TDictType, dict.GetStaticType());
     TCallableBuilder callableBuilder(Env, __func__, NewListType(dictTypeChecked->GetKeyType()));
     callableBuilder.Add(dict);
@@ -2095,9 +2064,6 @@ TRuntimeNode TProgramBuilder::DictKeys(TRuntimeNode dict) {
 }
 
 TRuntimeNode TProgramBuilder::DictPayloads(TRuntimeNode dict) {
-    if constexpr (RuntimeVersion < 6U) {
-        return DictItems(dict, EDictItems::Payloads);
-    }
     const auto dictTypeChecked = AS_TYPE(TDictType, dict.GetStaticType());
     TCallableBuilder callableBuilder(Env, __func__, NewListType(dictTypeChecked->GetPayloadType()));
     callableBuilder.Add(dict);
@@ -4019,10 +3985,6 @@ TRuntimeNode TProgramBuilder::BuildFilter(const std::string_view& callableName, 
 
 TRuntimeNode TProgramBuilder::BuildFilter(const std::string_view& callableName, TRuntimeNode list, TRuntimeNode limit, const TUnaryLambda& handler, TType* resultType)
 {
-    if constexpr (RuntimeVersion < 4U) {
-        return Take(BuildFilter(callableName, list, handler, resultType), limit);
-    }
-
     const auto listType = list.GetStaticType();
     MKQL_ENSURE(listType->IsFlow() || listType->IsList() || listType->IsStream(), "Expected flow, list or stream.");
     MKQL_ENSURE(limit.GetStaticType()->IsData(), "Expected data");
@@ -4322,15 +4284,12 @@ TRuntimeNode TProgramBuilder::Apply(TRuntimeNode callableNode, const TArrayRef<c
                                    << " with static " << arg.GetStaticType()->GetKindAsStr());
     }
 
-    TCallableBuilder callableBuilder(Env, RuntimeVersion >= 8 ? "Apply2" : "Apply", callableType->GetReturnType());
+    TCallableBuilder callableBuilder(Env, "Apply2", callableType->GetReturnType());
     callableBuilder.Add(callableNode);
     callableBuilder.Add(NewDataLiteral<ui32>(dependentCount));
-
-    if constexpr (RuntimeVersion >= 8) {
-        callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(file));
-        callableBuilder.Add(NewDataLiteral(row));
-        callableBuilder.Add(NewDataLiteral(column));
-    }
+    callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(file));
+    callableBuilder.Add(NewDataLiteral(row));
+    callableBuilder.Add(NewDataLiteral(column));
 
     for (const auto& arg: args) {
         callableBuilder.Add(arg);
@@ -4983,10 +4942,6 @@ TRuntimeNode TProgramBuilder::CombineCore(TRuntimeNode stream,
     const TBinaryLambda& finish,
     ui64 memLimit)
 {
-    if constexpr (RuntimeVersion < 3U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     const bool isStream = stream.GetStaticType()->IsStream();
     const auto itemType = isStream ? AS_TYPE(TStreamType, stream)->GetItemType() : AS_TYPE(TFlowType, stream)->GetItemType();
 
@@ -5083,13 +5038,6 @@ TRuntimeNode TProgramBuilder::GroupingCore(TRuntimeNode stream,
 TRuntimeNode TProgramBuilder::Chopper(TRuntimeNode flow, const TUnaryLambda& keyExtractor, const TBinaryLambda& groupSwitch, const TBinaryLambda& groupHandler) {
     const auto flowType = flow.GetStaticType();
     MKQL_ENSURE(flowType->IsFlow() || flowType->IsStream(), "Expected flow or stream.");
-
-
-    if constexpr (RuntimeVersion < 9U) {
-        return FlatMap(GroupingCore(flow, groupSwitch, keyExtractor),
-            [&](TRuntimeNode item) -> TRuntimeNode { return groupHandler(Nth(item, 0U), Nth(item, 1U)); }
-        );
-    }
 
     const bool isStream = flowType->IsStream();
     const auto itemType = isStream ? AS_TYPE(TStreamType, flow)->GetItemType() : AS_TYPE(TFlowType, flow)->GetItemType();
@@ -5564,11 +5512,9 @@ TRuntimeNode TProgramBuilder::Replicate(TRuntimeNode item, TRuntimeNode count, c
     TCallableBuilder callableBuilder(Env, __func__, listType);
     callableBuilder.Add(item);
     callableBuilder.Add(count);
-    if constexpr (RuntimeVersion >= 2) {
-        callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(file));
-        callableBuilder.Add(NewDataLiteral(row));
-        callableBuilder.Add(NewDataLiteral(column));
-    }
+    callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(file));
+    callableBuilder.Add(NewDataLiteral(row));
+    callableBuilder.Add(NewDataLiteral(column));
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }

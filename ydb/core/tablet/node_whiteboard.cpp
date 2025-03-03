@@ -721,6 +721,9 @@ protected:
         auto& endpoint = *SystemStateInfo.AddEndpoints();
         endpoint.SetName(ev->Get()->Name);
         endpoint.SetAddress(ev->Get()->Address);
+        std::sort(SystemStateInfo.MutableEndpoints()->begin(), SystemStateInfo.MutableEndpoints()->end(), [](const auto& a, const auto& b) {
+            return a.GetName() < b.GetName();
+        });
         SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
     }
 

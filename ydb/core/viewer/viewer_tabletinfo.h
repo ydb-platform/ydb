@@ -72,7 +72,7 @@ class TJsonTabletInfo : public TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletSt
     using TThis = TJsonTabletInfo;
     THashMap<ui64, NKikimrTabletBase::TTabletTypes::EType> Tablets;
     std::unordered_map<ui64, TString> EndOfRangeKeyPrefix;
-    TTabletId HiveId;
+    TTabletId HiveId = 0;
     bool IsBase64Encode = true;
     NKikimr::TSubDomainKey FilterTenantId;
 
@@ -315,6 +315,8 @@ public:
                     if (domainDescription.GetProcessingParams().HasHive()) {
                         Tablets[pathDescription.GetDomainDescription().GetProcessingParams().GetHive()] = NKikimrTabletBase::TTabletTypes::Hive;
                         HiveId = domainDescription.GetProcessingParams().GetHive();
+                    } else {
+                        HiveId = domainDescription.GetSharedHive();
                     }
                     if (domainDescription.GetProcessingParams().HasGraphShard()) {
                         Tablets[pathDescription.GetDomainDescription().GetProcessingParams().GetGraphShard()] = NKikimrTabletBase::TTabletTypes::GraphShard;
@@ -383,6 +385,9 @@ public:
                     deadTablet->SetState(NKikimrWhiteboard::TTabletStateInfo::Dead);
                     deadTablet->SetType(tablet.second);
                     deadTablet->SetHiveId(HiveId);
+                    if (FilterTenantId) {
+                        deadTablet->MutableTenantId()->CopyFrom(FilterTenantId);
+                    }
                 }
             }
             result.SetResponseTime(response.GetResponseTime());

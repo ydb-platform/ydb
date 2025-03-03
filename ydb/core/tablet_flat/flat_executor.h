@@ -293,10 +293,10 @@ struct TExecutorStatsImpl : public TExecutorStats {
 };
 
 struct TTransactionWaitPad : public TPrivatePageCacheWaitPad {
-    THolder<TSeat> Seat;
+    TSeat* Seat;
     NWilson::TSpan WaitingSpan;
 
-    TTransactionWaitPad(THolder<TSeat> seat);
+    TTransactionWaitPad(TSeat* seat);
     ~TTransactionWaitPad();
 
     NWilson::TTraceId GetWaitingTraceId() const noexcept;
@@ -331,6 +331,7 @@ class TExecutor
             EvActivateCompactionChanges,
             EvBrokenTransaction,
             EvLeaseExtend,
+            EvActivateLowExecution,
 
             EvEnd
         };
@@ -338,12 +339,19 @@ class TExecutor
         static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "enum range overrun");
 
         struct TEvActivateExecution : public TEventLocal<TEvActivateExecution, EvActivateExecution> {};
+        struct TEvActivateLowExecution : public TEventLocal<TEvActivateLowExecution, EvActivateLowExecution> {};
         struct TEvUpdateCounters : public TEventLocal<TEvUpdateCounters, EvUpdateCounters> {};
         struct TEvCheckYellow : public TEventLocal<TEvCheckYellow, EvCheckYellow> {};
         struct TEvUpdateCompactions : public TEventLocal<TEvUpdateCompactions, EvUpdateCompactions> {};
         struct TEvActivateCompactionChanges : public TEventLocal<TEvActivateCompactionChanges, EvActivateCompactionChanges> {};
         struct TEvBrokenTransaction : public TEventLocal<TEvBrokenTransaction, EvBrokenTransaction> {};
         struct TEvLeaseExtend : public TEventLocal<TEvLeaseExtend, EvLeaseExtend> {};
+    };
+
+    enum class ETxMode {
+        Execute,
+        Enqueue,
+        LowPriority,
     };
 
     const TIntrusivePtr<ITimeProvider> Time = nullptr;
@@ -391,13 +399,17 @@ class TExecutor
     TList<TLeaseCommit> LeaseCommits;
     std::multimap<TMonotonic, TLeaseCommit*> LeaseCommitsByEnd;
 
-    using TActivationQueue = TOneOneQueueInplace<TSeat *, 64>;
-    THolder<TActivationQueue, TActivationQueue::TPtrCleanDestructor> ActivationQueue;
-    THolder<TActivationQueue, TActivationQueue::TPtrCleanDestructor> PendingQueue;
+    // TSeat's UniqID to an owned pointer
+    absl::flat_hash_map<ui64, std::unique_ptr<TSeat>> Transactions;
+
+    using TSeatList = TIntrusiveList<TSeat>;
+    TSeatList ActivationQueue;
+    TSeatList ActivationLowQueue;
+    TSeatList PendingQueue;
 
     bool CompactionChangesActivating = false;
 
-    TMap<TSeat*, TAutoPtr<TSeat>> PostponedTransactions;
+    TSeatList PostponedTransactions;
     THashMap<ui64, THolder<TScanSnapshot>> ScanSnapshots;
     ui64 ScanSnapshotId = 1;
 
@@ -407,6 +419,8 @@ class TExecutor
     bool BrokenTransaction = false;
     ui32 ActivateTransactionWaiting = 0;
     ui32 ActivateTransactionInFlight = 0;
+    ui32 ActivateLowTransactionWaiting = 0;
+    ui32 ActivateLowTransactionInFlight = 0;
 
     using TWaitingSnaps = THashMap<TTableSnapshotContext *, TIntrusivePtr<TTableSnapshotContext>>;
 
@@ -470,6 +484,7 @@ class TExecutor
     ui64 StickyPagesMemory = 0;
     ui64 TransactionPagesMemory = 0;
 
+    TActorContext SelfCtx() const;
     TActorContext OwnerCtx() const;
 
     TControlWrapper LogFlushDelayOverrideUsec;
@@ -502,12 +517,15 @@ class TExecutor
 
     void TranscriptBootOpResult(ui32 res, const TActorContext &ctx);
     void TranscriptFollowerBootOpResult(ui32 res, const TActorContext &ctx);
-    void ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ctx);
-    void CommitTransactionLog(TAutoPtr<TSeat>, TPageCollectionTxEnv&, TAutoPtr<NTable::TChange>,
-                              THPTimer &bookkeepingTimer, const TActorContext &ctx);
+    std::unique_ptr<TSeat> RemoveTransaction(ui64 id);
+    void FinishCancellation(TSeat* seat, bool activateMore = true);
+    void ExecuteTransaction(TSeat* seat);
+    void CommitTransactionLog(std::unique_ptr<TSeat>, TPageCollectionTxEnv&, TAutoPtr<NTable::TChange>,
+                              THPTimer &bookkeepingTimer);
     void UnpinTransactionPages(TSeat &seat);
-    void ReleaseTxData(TSeat &seat, ui64 requested, const TActorContext &ctx);
-    void PostponeTransaction(TAutoPtr<TSeat>, TPageCollectionTxEnv&, TAutoPtr<NTable::TChange>, THPTimer &bookkeepingTimer, const TActorContext &ctx);
+    void ReleaseTxData(TSeat &seat, ui64 requested);
+    void PostponeTransaction(TSeat*, TPageCollectionTxEnv&, TAutoPtr<NTable::TChange>, THPTimer &bookkeepingTimer);
+    void EnqueueActivation(TSeat* seat, bool activate);
     void PlanTransactionActivation();
     void MakeLogSnapshot();
     void ActivateWaitingTransactions(TPrivatePageCache::TPage::TWaitQueuePtr waitPadsQueue);
@@ -543,6 +561,7 @@ class TExecutor
     void Handle(TEvPrivate::TEvLeaseExtend::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvActivateExecution::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvActivateLowExecution::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvBrokenTransaction::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvents::TEvFlushLog::TPtr &ev);
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr&);
@@ -615,9 +634,11 @@ public:
     void Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) override;
     void Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx) override;
     void DetachTablet(const TActorContext &ctx) override;
-    void DoExecute(TAutoPtr<ITransaction> transaction, bool allowImmediate, const TActorContext &ctx);
+    ui64 DoExecute(TAutoPtr<ITransaction> transaction, ETxMode mode);
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) override;
-    void Enqueue(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) override;
+    ui64 Enqueue(TAutoPtr<ITransaction> transaction) override;
+    ui64 EnqueueLowPriority(TAutoPtr<ITransaction> transaction) override;
+    bool CancelTransaction(ui64 id) override;
 
     TLeaseCommit* AttachLeaseCommit(TLogCommit* commit, bool force = false);
     TLeaseCommit* EnsureReadOnlyLease(TMonotonic at);

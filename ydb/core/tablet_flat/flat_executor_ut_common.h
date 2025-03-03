@@ -16,6 +16,32 @@ namespace NTabletFlatExecutor {
 
     struct TMyEnvBase : public NFake::TRunner {
 
+        class TPipe {
+        public:
+            TPipe(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex, const NKikimr::NTabletPipe::TClientConfig& pipeConfig)
+                : Runtime(runtime)
+                , Sender(sender)
+                , NodeIndex(nodeIndex)
+                , Pipe(Runtime.ConnectToPipe(tabletId, Sender, NodeIndex, pipeConfig))
+            {
+            }
+
+            ~TPipe() {
+                Runtime.ClosePipe(Pipe, Sender, NodeIndex);
+            }
+
+            TPipe& Send(IEventBase* payload, ui64 cookie = 0) {
+                Runtime.SendToPipe(Pipe, Sender, payload, NodeIndex, cookie);
+                return *this;
+            }
+
+        private:
+            TTestActorRuntime& Runtime;
+            const TActorId Sender;
+            const ui32 NodeIndex;
+            const TActorId Pipe;
+        };
+
         TMyEnvBase()
             : Edge(Env.AllocateEdgeActor())
         {
@@ -56,6 +82,10 @@ namespace NTabletFlatExecutor {
             if (wait) {
                 WaitFor<NFake::TEvReady>();
             }
+        }
+
+        TPipe Pipe(bool retry = false) {
+            return TPipe(Env, Tablet, Edge, 0, retry ? PipeCfgRetries() : NTabletPipe::TClientConfig());
         }
 
         void SendSync(IEventBase *event, bool retry = false, bool gone = false)

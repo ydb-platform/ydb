@@ -1059,12 +1059,12 @@ namespace NKikimr::NDataShard {
 
     void TVolatileTxManager::ScheduleCommitTx(TVolatileTxInfo* info) {
         Y_DEBUG_ABORT_UNLESS(info && info->State == EVolatileTxState::Committed);
-        Self->EnqueueExecute(new TDataShard::TTxVolatileTxCommit(Self, info));
+        Self->Enqueue(new TDataShard::TTxVolatileTxCommit(Self, info));
     }
 
     void TVolatileTxManager::ScheduleAbortTx(TVolatileTxInfo* info) {
         Y_DEBUG_ABORT_UNLESS(info && info->State == EVolatileTxState::Aborting);
-        Self->EnqueueExecute(new TDataShard::TTxVolatileTxAbort(Self, info));
+        Self->Enqueue(new TDataShard::TTxVolatileTxAbort(Self, info));
     }
 
     bool TVolatileTxManager::RemoveFromCommitOrder(TVolatileTxInfo* info) {

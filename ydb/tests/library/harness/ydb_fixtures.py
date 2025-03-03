@@ -3,6 +3,8 @@ import contextlib
 import logging
 import os
 
+import six
+
 import pytest
 
 from ydb import Driver, DriverConfig, SessionPool
@@ -113,14 +115,24 @@ def _ydb_database(cluster, database_path_base, unique_name):
 
 @pytest.fixture(scope='function')
 def ydb_database(ydb_cluster, ydb_root, ydb_safe_test_name):
-    yield from _ydb_database(ydb_cluster, ydb_root, ydb_safe_test_name)
+    if six.PY3:
+        yield from _ydb_database(ydb_cluster, ydb_root, ydb_safe_test_name)
+    else:  # PY2
+        gen = _ydb_database(ydb_cluster, ydb_root, ydb_safe_test_name)
+        for i in next(gen):
+            yield i
 
 
 @pytest.fixture(scope='module')
 def ydb_database_module_scope(ydb_cluster, ydb_root, request):
     # make unique database name from the test module name, ensuring that
     # it does not contains the dots
-    yield from _ydb_database(ydb_cluster, ydb_root, request.module.__name__.split('.')[-1])
+    unique_name = request.module.__name__.split('.')[-1]
+    if six.PY3:
+        yield from _ydb_database(ydb_cluster, ydb_root, unique_name)
+    else:  # PY2
+        for i in _ydb_database(ydb_cluster, ydb_root, unique_name):
+            yield i
 
 
 @pytest.fixture(scope='module')

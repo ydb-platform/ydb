@@ -2972,6 +2972,242 @@
             "TotalNodes": "1"
         }
     },
+    "test.test_viewer_nodes_issue_14992": {
+        "response_group": {
+            "FieldsAvailable": "0000000110111110111111100000111",
+            "FieldsRequired": "0000000001000000010000000000101",
+            "FoundNodes": "3",
+            "MaximumDisksPerNode": "1",
+            "Nodes": [
+                {
+                    "CpuUsage": "not-zero-number",
+                    "DiskSpaceUsage": "not-zero-number",
+                    "NodeId": 1,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {
+                            "DataCenter": "1",
+                            "Rack": "1",
+                            "Unit": "1"
+                        },
+                        "MaxDiskUsage": "not-zero-number",
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 1,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "TotalSessions": 0
+                    },
+                    "UptimeSeconds": "number"
+                },
+                {
+                    "CpuUsage": "not-zero-number",
+                    "Database": "/Root/shared_db",
+                    "NodeId": 50001,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {},
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 50001,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "Tenants": [
+                            "/Root/shared_db"
+                        ],
+                        "TotalSessions": 0
+                    },
+                    "UptimeSeconds": "number"
+                },
+                {
+                    "CpuUsage": "not-zero-number",
+                    "Database": "/Root/dedicated_db",
+                    "NodeId": 50000,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {},
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 50000,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "Tenants": [
+                            "/Root/dedicated_db"
+                        ],
+                        "TotalSessions": 0
+                    },
+                    "UptimeSeconds": "number"
+                }
+            ],
+            "TotalNodes": "3"
+        },
+        "response_group_by": {
+            "FieldsAvailable": "0000000110111110111111100000111",
+            "FieldsRequired": "0000000001000000010000000000101",
+            "FoundNodes": "3",
+            "MaximumDisksPerNode": "1",
+            "NodeGroups": [
+                {
+                    "GroupName": "up <10m",
+                    "NodeCount": "3"
+                }
+            ],
+            "TotalNodes": "3"
+        }
+    },
     "test.test_viewer_pdiskinfo": {
         "PDiskStateInfo": [
             {

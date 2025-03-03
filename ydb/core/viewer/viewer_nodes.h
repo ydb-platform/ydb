@@ -206,7 +206,7 @@ class TJsonNodes : public TViewerPipeClient {
         bool HasDisks = false;
         bool GotDatabaseFromDatabaseBoardInfo = false;
         bool GotDatabaseFromResourceBoardInfo = false;
-        int UptimeSeconds = 0;
+        std::optional<int> UptimeSeconds = 0;
         ui32 Connections = 0;
         ui64 SendThroughput = 0;
         ui64 ReceiveThroughput = 0;
@@ -460,11 +460,19 @@ class TJsonNodes : public TViewerPipeClient {
             return TInstant::MilliSeconds(SystemState.GetDisconnectTime());
         }
 
-        int GetUptimeSeconds(TInstant now) const {
+        std::optional<int> GetUptimeSeconds(TInstant now) const {
             if (Disconnected) {
-                return static_cast<int>(GetDisconnectTime().Seconds()) - static_cast<int>(now.Seconds()); // negative for disconnected nodes
+                if (SystemState.HasDisconnectTime()) {
+                    return static_cast<int>(GetDisconnectTime().Seconds()) - static_cast<int>(now.Seconds()); // negative for disconnected nodes
+                } else {
+                    return std::nullopt;
+                }
             } else {
-                return static_cast<int>(now.Seconds()) - static_cast<int>(GetStartTime().Seconds());
+                if (SystemState.HasStartTime()) {
+                    return static_cast<int>(now.Seconds()) - static_cast<int>(GetStartTime().Seconds());
+                } else {
+                    return std::nullopt;
+                }
             }
         }
 
@@ -538,38 +546,41 @@ class TJsonNodes : public TViewerPipeClient {
         }
 
         TString GetUptimeForGroup() const {
-            if (!Disconnected && UptimeSeconds >= 0) {
-                if (UptimeSeconds < 60 * 10) {
-                    return "up <10m";
-                }
-                if (UptimeSeconds < 60 * 60) {
-                    return "up <1h";
-                }
-                if (UptimeSeconds < 60 * 60 * 24) {
-                    return "up <24h";
-                }
-                if (UptimeSeconds < 60 * 60 * 24 * 7) {
-                    return "up 24h+";
-                }
-                return "up 1 week+";
-            } else {
-                if (SystemState.HasDisconnectTime()) {
-                    if (UptimeSeconds > -60 * 10) {
+            if (UptimeSeconds) {
+                if (*UptimeSeconds >= 0) {
+                    if (*UptimeSeconds < 60 * 10) {
+                        return "up <10m";
+                    }
+                    if (*UptimeSeconds < 60 * 60) {
+                        return "up <1h";
+                    }
+                    if (*UptimeSeconds < 60 * 60 * 24) {
+                        return "up <24h";
+                    }
+                    if (*UptimeSeconds < 60 * 60 * 24 * 7) {
+                        return "up 24h+";
+                    }
+                    return "up 1 week+";
+                } else {
+                    if (*UptimeSeconds > -60 * 10) {
                         return "down <10m";
                     }
-                    if (UptimeSeconds > -60 * 60) {
+                    if (*UptimeSeconds > -60 * 60) {
                         return "down <1h";
                     }
-                    if (UptimeSeconds > -60 * 60 * 24) {
+                    if (*UptimeSeconds > -60 * 60 * 24) {
                         return "down <24h";
                     }
-                    if (UptimeSeconds > -60 * 60 * 24 * 7) {
+                    if (*UptimeSeconds > -60 * 60 * 24 * 7) {
                         return "down 24h+";
                     }
                     return "down 1 week+";
-                } else {
-                    return "disconnected";
                 }
+            }
+            if (Disconnected) {
+                return "disconnected";
+            } else {
+                return "unknown";
             }
         }
 
@@ -682,7 +693,7 @@ class TJsonNodes : public TViewerPipeClient {
                 case ENodeFields::Missing:
                     return MissingDisks;
                 case ENodeFields::Uptime:
-                    return UptimeSeconds;
+                    return UptimeSeconds.value_or(0);
                 case ENodeFields::SystemState:
                     return static_cast<int>(GetOverall());
                 case ENodeFields::ConnectStatus:
@@ -937,6 +948,9 @@ public:
             FilterGroup = params.Get("filter_group");
             FilterGroupBy = ParseENodeFields(params.Get("filter_group_by"));
             FieldsRequired.set(+FilterGroupBy);
+            if (FilterGroupBy == ENodeFields::Uptime) {
+                FieldsRequired.set(+ENodeFields::DisconnectTime);
+            }
         }
 
         OffloadMerge = FromStringWithDefault<bool>(params.Get("offload_merge"), OffloadMerge);
@@ -1034,6 +1048,9 @@ public:
             NeedGroup = true;
             GroupBy = ParseENodeFields(group);
             FieldsRequired.set(+GroupBy);
+            if (GroupBy == ENodeFields::Uptime) {
+                FieldsRequired.set(+ENodeFields::DisconnectTime);
+            }
             NeedSort = false;
             NeedLimit = false;
         }
@@ -1094,7 +1111,7 @@ public:
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto* domain = domains->GetDomain();
         DomainPath = "/" + domain->Name;
-        if (ProblemNodesOnly || GroupBy == ENodeFields::Uptime) {
+        if (ProblemNodesOnly || FieldsRequired.test(+ENodeFields::Uptime) || FieldsRequired.test(+ENodeFields::DisconnectTime)) {
             FieldsRequired.set(+ENodeFields::SystemState);
             TTabletId rootHiveId = domains->GetHive();
             HivesToAsk.push_back(rootHiveId);
@@ -1294,7 +1311,7 @@ public:
             if (UptimeSeconds > 0 && FieldsAvailable.test(+ENodeFields::SystemState)) {
                 TNodeView nodeView;
                 for (TNode* node : NodeView) {
-                    if (node->UptimeSeconds < UptimeSeconds) {
+                    if (node->UptimeSeconds.value_or(0) < UptimeSeconds) {
                         nodeView.push_back(node);
                     }
                 }
@@ -1446,7 +1463,7 @@ public:
                     NeedSort = false;
                     break;
                 case ENodeFields::Uptime:
-                    SortCollection(NodeView, [](const TNode* node) { return node->UptimeSeconds; }, ReverseSort);
+                    SortCollection(NodeView, [](const TNode* node) { return node->UptimeSeconds.value_or(0); }, ReverseSort);
                     NeedSort = false;
                     break;
                 case ENodeFields::Memory:
@@ -3126,7 +3143,7 @@ public:
                     jsonNode.SetDatabase(node->Database);
                 }
                 if (node->UptimeSeconds) {
-                    jsonNode.SetUptimeSeconds(node->UptimeSeconds);
+                    jsonNode.SetUptimeSeconds(*(node->UptimeSeconds));
                 }
                 if (node->Disconnected) {
                     jsonNode.SetDisconnected(node->Disconnected);

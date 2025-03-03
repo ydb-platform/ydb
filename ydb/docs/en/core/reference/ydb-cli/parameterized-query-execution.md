@@ -21,7 +21,7 @@ To provide parameters for a single query execution, you can use command line, JS
 
 If values are specified for all the parameters [in the `DECLARE` clause](../../yql/reference/syntax/declare.md), the query will be executed on the server. If a value is absent for at least one parameter, the command fails with the "Missing value for parameter" message.
 
-#### More specific options for input parameters {#specific-param-options}
+### More specific options for input parameters {#specific-param-options}
 
 Following options are not described in `--help` output. To see its descriptions use `-hh` option instead.
 
@@ -343,10 +343,10 @@ When using a newline character as a separator between the parameter sets, make s
   Command output:
 
   ```text
-  a	b
-  10	20
-  15	25
-  35	48
+  a  b
+  10 20
+  15 25
+  35 48
   ```
 
   Let's execute the query by passing the content of this file to `stdin`, formatting the output as TSV:

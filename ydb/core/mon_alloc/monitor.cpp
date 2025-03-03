@@ -337,7 +337,7 @@ namespace NKikimr {
                     false, ctx.ActorSystem(), ctx.SelfID);
 
                 AllocMonitor->RegisterPages(mon, ctx.ActorSystem(), ctx.SelfID);
-                AllocMonitor->RegisterControls(AppData(ctx)->Icb);
+                AllocMonitor->RegisterControls(AppData(ctx)->StaticControlBoard);
 
                 Become(&TThis::StateWork);
                 ctx.Schedule(Interval, new TEvents::TEvWakeup());

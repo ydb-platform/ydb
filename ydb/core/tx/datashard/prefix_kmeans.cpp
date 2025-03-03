@@ -340,6 +340,33 @@ class TPrefixKMeansScan final: public TPrefixKMeansScanBase, private TCalculatio
     };
     std::vector<TAggregatedCluster> AggregatedClusters;
 
+
+    bool MoveToNextKey() {
+        if (!HasNextKey) {
+            if (UploadStatus.IsNone()) {
+                UploadStatus.StatusCode = Ydb::StatusIds::SUCCESS;
+            }
+            return false;
+        }
+        Parent = Child + K;
+        ++Child;
+        Round = 0;
+        K = InitK;
+        State = EState::SAMPLE;
+        Lead.To(Key.GetCells(), NTable::ESeek::Upper);
+        Key = {};
+        MaxProbability = std::numeric_limits<ui64>::max();
+        MaxRows.clear();
+        Clusters.clear();
+        ClusterSizes.clear();
+        TargetTypes = InitTargetTypes;
+        NextTypes = InitNextTypes;
+        CurrTable = TargetTable;
+        HasNextKey = false;
+        AggregatedClusters.clear();
+        return true;
+    }
+
 public:
     TPrefixKMeansScan(const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvPrefixKMeansRequest& request,
                       const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvPrefixKMeansResponse>&& response)
@@ -361,43 +388,24 @@ public:
                 Upload(false);
                 return EScan::Sleep;
             }
-            if (!HasNextKey) {
-                if (UploadStatus.IsNone()) {
-                    UploadStatus.StatusCode = Ydb::StatusIds::SUCCESS;
-                }
-                return EScan::Final;
+            if (MoveToNextKey()) {
+                return EScan::Reset;
             }
-
-            Parent = Child + K;
-            ++Child;
-            Round = 0;
-            K = InitK;
-            State = EState::SAMPLE;
-            Lead.To(Key.GetCells(), NTable::ESeek::Upper);
-            Key = {};
-            MaxProbability = std::numeric_limits<ui64>::max();
-            MaxRows.clear();
-            Clusters.clear();
-            ClusterSizes.clear();
-            TargetTypes = InitTargetTypes;
-            NextTypes = InitNextTypes;
-            CurrTable = TargetTable;
-            HasNextKey = false;
-            AggregatedClusters.clear();
+            return EScan::Final;
         }
 
         lead = Lead;
         if (State == EState::SAMPLE) {
             lead.SetTags({&KMeansScan, 1});
-            if (seq == 0) {
+            if (seq == 0 && !HasNextKey) {
                 return EScan::Feed;
             }
             State = EState::KMEANS;
             if (!InitAggregatedClusters()) {
                 // We don't need to do anything,
                 // because this datashard doesn't have valid embeddings for this parent
-                if (UploadStatus.IsNone()) {
-                    UploadStatus.StatusCode = Ydb::StatusIds::SUCCESS;
+                if (MoveToNextKey()) {
+                    return EScan::Reset;
                 }
                 return EScan::Final;
             }
@@ -421,13 +429,11 @@ public:
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final
     {
         LOG_T("Feed " << Debug());
-        if (!TCellVectorsEquals{}(Key.GetCells().subspan(0, PrefixColulmns), key.subspan(0, PrefixColulmns))) {
-            if (!Key) {
-                Key = TSerializedCellVec{key};
-            } else {
-                HasNextKey = true;
-                return EScan::Reset;
-            }
+        if (!Key) {
+            Key = TSerializedCellVec{key};
+        } else if (!TCellVectorsEquals{}(Key.GetCells().subspan(0, PrefixColulmns), key.subspan(0, PrefixColulmns))) {
+            HasNextKey = true;
+            return EScan::Reset;
         }
         ++ReadRows;
         ReadBytes += CountBytes(key, row);
@@ -436,15 +442,12 @@ public:
                 return FeedSample(row);
             case EState::KMEANS:
                 return FeedKMeans(row);
-            case EState::UPLOAD_MAIN_TO_BUILD:
-                return FeedUploadMain2Build(key, row);
-            case EState::UPLOAD_MAIN_TO_POSTING:
-                return FeedUploadMain2Posting(key, row);
             case EState::UPLOAD_BUILD_TO_BUILD:
                 return FeedUploadBuild2Build(key, row);
             case EState::UPLOAD_BUILD_TO_POSTING:
                 return FeedUploadBuild2Posting(key, row);
             default:
+                Y_ASSERT(false);
                 return EScan::Final;
         }
     }
@@ -564,33 +567,13 @@ private:
         return EScan::Feed;
     }
 
-    EScan FeedUploadMain2Build(TArrayRef<const TCell> key, const TRow& row) noexcept
-    {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos > K) {
-            return EScan::Feed;
-        }
-        AddRowMain2Build(ReadBuf, Child + pos, key, row);
-        return FeedUpload();
-    }
-
-    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept
-    {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos > K) {
-            return EScan::Feed;
-        }
-        AddRowMain2Posting(ReadBuf, Child + pos, key, row, DataPos);
-        return FeedUpload();
-    }
-
     EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, const TRow& row) noexcept
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
             return EScan::Feed;
         }
-        AddRowBuild2Build(ReadBuf, Child + pos, key, row);
+        AddRowBuild2Build(ReadBuf, Child + pos, key, row, PrefixColulmns);
         return FeedUpload();
     }
 
@@ -600,7 +583,7 @@ private:
         if (pos > K) {
             return EScan::Feed;
         }
-        AddRowBuild2Posting(ReadBuf, Child + pos, key, row, DataPos);
+        AddRowBuild2Posting(ReadBuf, Child + pos, key, row, DataPos, PrefixColulmns);
         return FeedUpload();
     }
 };
@@ -695,6 +678,11 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
 
     if (!IsStateActive()) {
         badRequest(TStringBuilder() << "Shard " << TabletID() << " is not ready for requests");
+        return;
+    }
+
+    if (record.GetK() < 1) {
+        badRequest("Should be requested at least single cluster");
         return;
     }
 

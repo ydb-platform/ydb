@@ -47,21 +47,23 @@ void AddRowMain2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TAr
                   TSerializedCellVec::Serialize((*row).Slice(dataPos)));
 }
 
-void AddRowBuild2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row) {
-    std::array<TCell, 1> cells;
-    cells[0] = TCell::Make(parent);
-    auto pk = TSerializedCellVec::Serialize(cells);
-    TSerializedCellVec::UnsafeAppendCells(key.Slice(1), pk);
-    buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(*row));
-}
-
-void AddRowBuild2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
-                         ui32 dataPos)
+void AddRowBuild2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
+                       ui32 prefixColumns)
 {
     std::array<TCell, 1> cells;
     cells[0] = TCell::Make(parent);
     auto pk = TSerializedCellVec::Serialize(cells);
-    TSerializedCellVec::UnsafeAppendCells(key.Slice(1), pk);
+    TSerializedCellVec::UnsafeAppendCells(key.Slice(prefixColumns), pk);
+    buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(*row));
+}
+
+void AddRowBuild2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
+                         ui32 dataPos, ui32 prefixColumns)
+{
+    std::array<TCell, 1> cells;
+    cells[0] = TCell::Make(parent);
+    auto pk = TSerializedCellVec::Serialize(cells);
+    TSerializedCellVec::UnsafeAppendCells(key.Slice(prefixColumns), pk);
     buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)},
                   TSerializedCellVec::Serialize((*row).Slice(dataPos)));
 }

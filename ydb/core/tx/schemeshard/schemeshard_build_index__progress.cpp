@@ -538,7 +538,7 @@ private:
         auto ev = MakeHolder<TEvDataShard::TEvSampleKRequest>();
         ev->Record.SetId(ui64(BuildId));
 
-        if (buildInfo.KMeans.Parent == 0) {
+        if (buildInfo.KMeans.Level == 1) {
             buildInfo.TablePathId.ToProto(ev->Record.MutablePathId());
         } else {
             auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
@@ -569,7 +569,7 @@ private:
         ev->Record.SetId(ui64(BuildId));
 
         auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
-        if (buildInfo.KMeans.Parent == 0) {
+        if (buildInfo.KMeans.Level == 1) {
             buildInfo.TablePathId.ToProto(ev->Record.MutablePathId());
         } else {
             path.Dive(buildInfo.KMeans.ReadFrom())->PathId.ToProto(ev->Record.MutablePathId());
@@ -613,7 +613,7 @@ private:
         ev->Record.SetId(ui64(BuildId));
 
         auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
-        if (buildInfo.KMeans.Parent == 0) {
+        if (buildInfo.KMeans.Level == 1) {
             buildInfo.TablePathId.ToProto(ev->Record.MutablePathId());
         } else {
             path.Dive(buildInfo.KMeans.ReadFrom())->PathId.ToProto(ev->Record.MutablePathId());
@@ -660,26 +660,24 @@ private:
 
     void SendPrefixKMeansRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         Y_ASSERT(buildInfo.IsBuildPrefixedVectorIndex());
-        Y_ASSERT(buildInfo.KMeans.Parent == 1);
+        Y_ASSERT(buildInfo.KMeans.Parent == 0);
+        Y_ASSERT(buildInfo.KMeans.Level == 2);
 
         auto ev = MakeHolder<TEvDataShard::TEvPrefixKMeansRequest>();
         ev->Record.SetId(ui64(BuildId));
 
         auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
-        if (buildInfo.KMeans.Parent == 0) {
-            buildInfo.TablePathId.ToProto(ev->Record.MutablePathId());
-        } else {
-            path.Dive(buildInfo.KMeans.ReadFrom())->PathId.ToProto(ev->Record.MutablePathId());
-            path.Rise();
-        }
+        path.Dive(buildInfo.KMeans.ReadFrom())->PathId.ToProto(ev->Record.MutablePathId());
+        path.Rise();
         *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
             buildInfo.SpecializedIndexDescription).GetSettings().settings();
+        ev->Record.SetK(buildInfo.KMeans.K);
         ev->Record.SetUpload(buildInfo.KMeans.GetUpload());
 
         ev->Record.SetNeedsRounds(3); // TODO(mbkkt) should be configurable
 
         const auto shardIndex = buildInfo.Shards.at(shardIdx).Index;
-        ev->Record.SetChild(buildInfo.KMeans.ParentBegin + (1 + TableSize) * shardIndex);
+        ev->Record.SetChild(buildInfo.KMeans.ChildBegin + (1 + TableSize) * shardIndex);
 
         ev->Record.SetPostingName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
         path.Rise().Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
@@ -935,31 +933,35 @@ private:
 
     bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         if (buildInfo.IsBuildPrefixedVectorIndex() && buildInfo.KMeans.Level == 1) {
+            LOG_D("FillIndex::Prefixed::Level1::Start " << buildInfo.KMeansTreeToDebugStr());
             if (!FillTable(buildInfo)) {
                 return false;
             }
-            const ui64 doneShards = buildInfo.DoneShards.size();
 
             ClearDoneShards(txc, buildInfo);
-            buildInfo.KMeans.PrefixTableDone(TableSize, doneShards);
+            ++buildInfo.KMeans.Level;
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
             Self->PersistBuildIndexUploadReset(db, buildInfo);
+            LOG_D("FillIndex::Prefixed::Level1::Done " << buildInfo.KMeansTreeToDebugStr());
             ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
             Progress(BuildId);
             return false;
         }
 
         if (buildInfo.IsBuildPrefixedVectorIndex() && buildInfo.KMeans.Level == 2) {
+            LOG_D("FillIndex::Prefixed::Level2::Start " << buildInfo.KMeansTreeToDebugStr());
             if (!FillPrefixKMeans(buildInfo)) {
                 return false;
             }
+            const ui64 doneShards = buildInfo.DoneShards.size();
 
             ClearDoneShards(txc, buildInfo);
-            const bool needsAnotherLevel = buildInfo.KMeans.NextLevel();
+            const bool needsAnotherLevel = buildInfo.KMeans.PrefixTableDone(TableSize, doneShards);
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
             Self->PersistBuildIndexUploadReset(db, buildInfo);
+            LOG_D("FillIndex::Prefixed::Level2::Done " << buildInfo.KMeansTreeToDebugStr());
             if (!needsAnotherLevel) {
                 return true;
             }
@@ -1034,9 +1036,9 @@ private:
     }
 
     bool FillIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
-        // About Parent == 0, for now build index impl tables don't need snapshot,
+        // About Level == 1, for now build index impl tables don't need snapshot,
         // because they're used only by build index
-        if (buildInfo.KMeans.Parent == 0 && !buildInfo.SnapshotTxId) {
+        if (buildInfo.KMeans.Level == 1 && !buildInfo.SnapshotTxId) {
             Y_ABORT_UNLESS(!buildInfo.SnapshotStep);
             Y_ABORT_UNLESS(Self->TablesWithSnapshots.contains(buildInfo.TablePathId));
             Y_ABORT_UNLESS(Self->TablesWithSnapshots.at(buildInfo.TablePathId) == buildInfo.InitiateTxId);
@@ -1298,7 +1300,7 @@ public:
         Y_ASSERT(buildInfo.DoneShards.empty());
 
         TTableInfo::TPtr table;
-        if (buildInfo.KMeans.Parent == 0) {
+        if (buildInfo.KMeans.Level == 1) {
             table = Self->Tables.at(buildInfo.TablePathId);
         } else {
             auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
@@ -1863,17 +1865,17 @@ public:
 
 struct TSchemeShard::TIndexBuilder::TTxReplyPrefixKMeans: public TSchemeShard::TIndexBuilder::TTxReply {
 private:
-    TEvDataShard::TEvPrefixKMeansResponse::TPtr Local;
+    TEvDataShard::TEvPrefixKMeansResponse::TPtr Prefix;
 
 public:
-    explicit TTxReplyPrefixKMeans(TSelf* self, TEvDataShard::TEvPrefixKMeansResponse::TPtr& local)
+    explicit TTxReplyPrefixKMeans(TSelf* self, TEvDataShard::TEvPrefixKMeansResponse::TPtr& prefix)
         : TTxReply(self)
-        , Local(local)
+        , Prefix(prefix)
     {
     }
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
-        auto& record = Local->Get()->Record;
+        auto& record = Prefix->Get()->Record;
 
         LOG_I("TTxReply : TEvPrefixKMeansResponse, id# " << record.GetId());
 
@@ -2621,8 +2623,8 @@ ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvLocalKMeansResponse::
     return new TIndexBuilder::TTxReplyLocalKMeans(this, local);
 }
 
-ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvPrefixKMeansResponse::TPtr& local) {
-    return new TIndexBuilder::TTxReplyPrefixKMeans(this, local);
+ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvPrefixKMeansResponse::TPtr& prefix) {
+    return new TIndexBuilder::TTxReplyPrefixKMeans(this, prefix);
 }
 
 ITransaction* TSchemeShard::CreateTxReply(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload) {

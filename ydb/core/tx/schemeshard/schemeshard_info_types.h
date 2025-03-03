@@ -3155,13 +3155,17 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                 return false;
             }
             State = Sample;
-            NextLevel(ParentCount());
+            NextLevel(ChildCount());
             return true;
         }
 
-        void PrefixTableDone(ui64 tableSize, ui64 shards) {
+        bool PrefixTableDone(ui64 tableSize, ui64 shards) {
+            if (!NeedsAnotherLevel()) {
+                return false;
+            }
             State = MultiLocal;
             NextLevel((1 + tableSize) * shards);
+            return true;
         }
 
         void Set(ui32 level, NTableIndex::TClusterId parent, ui32 state) {
@@ -3176,7 +3180,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         }
 
         NKikimrTxDataShard::TEvLocalKMeansRequest::EState GetUpload() const {
-            if (Parent == 0) {
+            if (Level == 1) {
                 if (NeedsAnotherLevel()) {
                     return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_BUILD;
                 } else {
@@ -3200,7 +3204,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             return name;
         }
         TString ReadFrom() const {
-            Y_ASSERT(Parent != 0);
+            Y_ASSERT(Level > 1);
             using namespace NTableIndex::NTableVectorKmeansTreeIndex;
             TString name = PostingTable;
             name += Level % 2 != 0 ? BuildSuffix1 : BuildSuffix0;
@@ -3255,10 +3259,10 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         }
 
     private:
-        void NextLevel(ui64 parentCount) noexcept {
+        void NextLevel(ui64 childCount) noexcept {
             ParentBegin = ChildBegin;
             Parent = ParentBegin;
-            ChildBegin = ParentBegin + parentCount * K;
+            ChildBegin = ParentBegin + childCount;
             Child = ChildBegin;
             ++Level;
         }

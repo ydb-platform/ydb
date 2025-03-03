@@ -1520,7 +1520,7 @@ namespace TEvDataShard {
     struct TEvPrefixKMeansRequest
         : public TEventPB<TEvPrefixKMeansRequest,
                           NKikimrTxDataShard::TEvPrefixKMeansRequest,
-                          TEvDataShard::EvLocalKMeansRequest> {
+                          TEvDataShard::EvPrefixKMeansRequest> {
     };
 
     struct TEvPrefixKMeansResponse

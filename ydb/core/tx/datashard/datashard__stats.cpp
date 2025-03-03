@@ -165,15 +165,16 @@ private:
                 ObtainResources();
                 Spent->Alter(true); // resume measurement
             }
-        }, TStringBuilder() << "[BuildStats] Building stats " << TabletId << ", for tableId " << TableId << ": ");
+        }, TStringBuilder() << "[BuildStats] Building stats at datashard " << TabletId << ", for tableId " << TableId << ": ");
         
         Y_DEBUG_ABORT_UNLESS(IndexSize == ev->Stats.IndexSize.Size);
 
-        LOG_DEBUG_S(GetActorContext(), NKikimrServices::TX_DATASHARD, "[BuildStats] Stats at datashard " << TabletId << ", for tableId " << TableId
-            << ": RowCount " << ev->Stats.RowCount << ", DataSize " << ev->Stats.DataSize.Size << ", IndexSize " << ev->Stats.IndexSize.Size << ", PartCount " << ev->PartCount
+        LOG_DEBUG_S(GetActorContext(), NKikimrServices::TX_DATASHARD, "[BuildStats] Stats at datashard " << TabletId << ", for tableId " << TableId << ": "
+            << ev->Stats.ToString()
+            << " PartCount: " << ev->PartCount
             << (ev->PartOwners.size() > 1 || ev->PartOwners.size() == 1 && *ev->PartOwners.begin() != TabletId ? ", with borrowed parts" : "")
             << (ev->HasSchemaChanges ? ", with schema changes" : "")
-            << ", LoadedSize " << PagesSize << ", " << NFmt::Do(*Spent) << ", HistogramKeys " << ev->Stats.DataSizeHistogram.size());
+            << ", LoadedSize " << PagesSize << ", " << NFmt::Do(*Spent));
 
         Send(ReplyTo, ev.Release());
 
@@ -367,7 +368,7 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
     }
 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "[BuildStats] Result received at datashard " << TabletID() 
-        << ", for tableId " << tableId);
+        << ", for tableId " << tableId << ": " << ev->Get()->Stats.ToString());
 
     const TUserTable& tableInfo = *TableInfos[tableId];
 
@@ -493,8 +494,8 @@ public:
                 stats.SearchHeight = searchHeight;
                 stats.HasSchemaChanges = hasSchemaChanges;
 
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "[BuildStats] Skipped at datashard " << Self->TabletID() << ", for tableId " << tableId
-                    << ": RowCount " << stats.DataStats.RowCount << ", DataSize " << stats.DataStats.DataSize.Size << ", IndexSize " << stats.DataStats.IndexSize.Size << ", PartCount " << stats.PartCount
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "[BuildStats] Skipped at datashard " << Self->TabletID() << ", for tableId " << tableId << ": "
+                    << stats.DataStats.ToString() << " PartCount " << stats.PartCount
                     << (stats.HasSchemaChanges ? ", with schema changes" : ""));
 
                 continue;

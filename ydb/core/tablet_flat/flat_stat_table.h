@@ -125,6 +125,16 @@ struct TStats {
         RowCountHistogram.swap(other.RowCountHistogram);
         DataSizeHistogram.swap(other.DataSizeHistogram);
     }
+
+    TString ToString() const noexcept {
+        return TStringBuilder() 
+            << "RowCount: " << RowCount
+            << " DataSize: " << DataSize.Size
+            << " IndexSize: " << IndexSize.Size
+            << " ByKeyFilterSize: " << ByKeyFilterSize
+            << " RowCountHistogram: " << RowCountHistogram.size()
+            << " DataSizeHistogram: " << DataSizeHistogram.size();
+    }
 };
 
 class TKeyAccessSample {

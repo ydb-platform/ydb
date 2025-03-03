@@ -16,6 +16,8 @@ Ydb::StatusIds::StatusCode DqStatusToYdbStatus(NYql::NDqProto::StatusIds::Status
         return Ydb::StatusIds::ABORTED;
     case NYql::NDqProto::StatusIds::UNAVAILABLE:
         return Ydb::StatusIds::UNAVAILABLE;
+    case NYql::NDqProto::StatusIds::UNDETERMINED:
+        return Ydb::StatusIds::UNDETERMINED;
     case NYql::NDqProto::StatusIds::BAD_REQUEST:
         return Ydb::StatusIds::BAD_REQUEST;
     case NYql::NDqProto::StatusIds::PRECONDITION_FAILED:
@@ -58,6 +60,8 @@ NYql::NDqProto::StatusIds::StatusCode YdbStatusToDqStatus(Ydb::StatusIds::Status
         return NYql::NDqProto::StatusIds::ABORTED;
     case Ydb::StatusIds::UNAVAILABLE:
         return NYql::NDqProto::StatusIds::UNAVAILABLE;
+    case Ydb::StatusIds::UNDETERMINED:
+        return NYql::NDqProto::StatusIds::UNDETERMINED;
     case Ydb::StatusIds::OVERLOADED:
         return NYql::NDqProto::StatusIds::OVERLOADED;
     case Ydb::StatusIds::TIMEOUT:

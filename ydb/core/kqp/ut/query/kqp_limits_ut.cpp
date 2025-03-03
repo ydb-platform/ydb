@@ -230,11 +230,16 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         Cerr << stats->ToString(true) << Endl;
     }
 
-    Y_UNIT_TEST(DatashardProgramSize) {
+    Y_UNIT_TEST_TWIN(DatashardProgramSize, useSink) {
         auto app = NKikimrConfig::TAppConfig();
+        app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
 
-        TKikimrRunner kikimr(app);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(app)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
         CreateLargeTable(kikimr, 0, 0, 0);
 
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SLOW_LOG, NActors::NLog::PRI_ERROR);
@@ -269,9 +274,12 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             SELECT * FROM AS_TABLE($rows);
         )"), TTxControl::BeginTx().CommitTx(), paramsBuilder.Build()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
-        // UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ABORTED);
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NKikimrIssues::TIssuesIds::SHARD_PROGRAM_SIZE_EXCEEDED));
+        if (useSink) {
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ABORTED);
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NKikimrIssues::TIssuesIds::SHARD_PROGRAM_SIZE_EXCEEDED));
+        }
     }
 
     Y_UNIT_TEST(DatashardReplySize) {
@@ -371,13 +379,22 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         }
     }
 
-    Y_UNIT_TEST(OutOfSpaceYQLUpsertFail) {
-        TKikimrRunner kikimr(NFake::TStorage{
-            .UseDisk = false,
-            .SectorSize = 4096,
-            .ChunkSize = 32_MB,
-            .DiskSize = 8_GB
-        });
+    Y_UNIT_TEST_TWIN(OutOfSpaceYQLUpsertFail, useSink) {
+        auto app = NKikimrConfig::TAppConfig();
+        app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
+
+        auto settings = TKikimrSettings()
+            .SetAppConfig(app)
+            .SetWithSampleTables(false)
+            .SetStorage(NFake::TStorage{
+                .UseDisk = false,
+                .SectorSize = 4096,
+                .ChunkSize = 32_MB,
+                .DiskSize = 8_GB
+            });
+
+        TKikimrRunner kikimr(settings);
 
         kikimr.GetTestClient().CreateTable("/Root", R"(
             Name: "LargeTable"
@@ -427,10 +444,13 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             }
             if (result.GetStatus() != EStatus::SUCCESS) {
                 result.GetIssues().PrintTo(Cerr);
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAVAILABLE, result.GetIssues().ToString());
-                if (result.GetIssues().ToString().contains("OUT_OF_SPACE")) {
+                UNIT_ASSERT_C(result.GetStatus() == EStatus::UNAVAILABLE, result.GetIssues().ToString());
+                if (result.GetIssues().ToString().contains("OUT_OF_SPACE")
+                        || result.GetIssues().ToString().contains("DISK_SPACE_EXHAUSTED")) {
                     getOutOfSpace = true;
-                } else if (result.GetIssues().ToString().contains("WRONG_SHARD_STATE")) {
+                } else if (result.GetIssues().ToString().contains("WRONG_SHARD_STATE")
+                        || result.GetIssues().ToString().contains("wrong shard state")
+                        || result.GetIssues().ToString().contains("can't deliver message to tablet")) {
                     // shards are allowed to split
                     continue;
                 }
@@ -438,7 +458,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             }
             ++batchIdx;
         }
-        UNIT_ASSERT_C(getOutOfSpace, "Successfully inserted " << rowsPerBatch << " x " << batchCount << " lines, each of size " << dataTextSize << "bytes");
+        UNIT_ASSERT_C(getOutOfSpace, "Successfully inserted " << rowsPerBatch << " x " << batchIdx << " lines, each of size " << dataTextSize << "bytes");
     }
 
     Y_UNIT_TEST_TWIN(TooBigQuery, useSink) {

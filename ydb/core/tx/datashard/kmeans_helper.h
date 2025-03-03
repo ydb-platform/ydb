@@ -217,7 +217,8 @@ TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,
 
 std::shared_ptr<NTxProxy::TUploadTypes>
 MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansRequest::EState uploadState,
-                const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data);
+                const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
+                ui32 prefixColumns = 0);
 
 void MakeScan(auto& record, const auto& createScan, const auto& badRequest)
 {

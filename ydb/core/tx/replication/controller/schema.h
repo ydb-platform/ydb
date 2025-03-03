@@ -58,9 +58,10 @@ struct TControllerSchema: NIceDb::Schema {
         struct TargetId: Column<2, NScheme::NTypeIds::Uint64> {};
         struct Name: Column<3, NScheme::NTypeIds::Utf8> {};
         struct State: Column<4, NScheme::NTypeIds::Uint8> { using Type = TReplication::EStreamState; };
+        struct ConsumerName: Column<5, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<ReplicationId, TargetId>;
-        using TColumns = TableColumns<ReplicationId, TargetId, Name, State>;
+        using TColumns = TableColumns<ReplicationId, TargetId, Name, State, ConsumerName>;
     };
 
     struct TxIds: Table<5> {

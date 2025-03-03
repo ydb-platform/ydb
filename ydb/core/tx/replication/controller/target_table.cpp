@@ -33,7 +33,7 @@ class TTableWorkerRegistar: public TActorBootstrapped<TTableWorkerRegistar> {
 
             auto ev = MakeRunWorkerEv(
                 ReplicationId, TargetId, Config, partition.GetPartitionId(),
-                ConnectionParams, ConsistencySettings, SrcStreamPath, DstPathId);
+                ConnectionParams, ConsistencySettings, SrcStreamPath, SrcStreamConsumerName, DstPathId);
             Send(Parent, std::move(ev));
         }
 
@@ -58,6 +58,7 @@ public:
             ui64 rid,
             ui64 tid,
             const TString& srcStreamPath,
+            const TString& srcStreamConsumerName,
             const TPathId& dstPathId,
             const TReplication::ITarget::IConfig::TPtr& config)
         : Parent(parent)
@@ -67,6 +68,7 @@ public:
         , ReplicationId(rid)
         , TargetId(tid)
         , SrcStreamPath(srcStreamPath)
+        , SrcStreamConsumerName(srcStreamConsumerName)
         , DstPathId(dstPathId)
         , LogPrefix("TableWorkerRegistar", ReplicationId, TargetId)
         , Config(config)
@@ -94,6 +96,7 @@ private:
     const ui64 ReplicationId;
     const ui64 TargetId;
     const TString SrcStreamPath;
+    const TString SrcStreamConsumerName;
     const TPathId DstPathId;
     const TActorLogPrefix LogPrefix;
     const TReplication::ITarget::IConfig::TPtr Config;
@@ -111,7 +114,7 @@ IActor* TTargetTableBase::CreateWorkerRegistar(const TActorContext& ctx) const {
     const auto& config = replication->GetConfig();
     return new TTableWorkerRegistar(ctx.SelfID, replication->GetYdbProxy(),
         config.GetSrcConnectionParams(), config.GetConsistencySettings(),
-        replication->GetId(), GetId(), BuildStreamPath(), GetDstPathId(), GetConfig());
+        replication->GetId(), GetId(), BuildStreamPath(), GetStreamConsumerName(), GetDstPathId(), GetConfig());
 }
 
 TTargetTable::TTargetTable(TReplication* replication, ui64 id, const IConfig::TPtr& config)

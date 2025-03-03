@@ -56,6 +56,8 @@ public:
 
     const TString& GetStreamName() const override;
     void SetStreamName(const TString& value) override;
+    const TString& GetStreamConsumerName() const override;
+    void SetStreamConsumerName(const TString& value) override;
 
     EStreamState GetStreamState() const override;
     void SetStreamState(EStreamState value) override;
@@ -81,6 +83,7 @@ private:
     EDstState DstState = EDstState::Creating;
     TPathId DstPathId;
     TString StreamName;
+    TString StreamConsumerName;
     EStreamState StreamState = EStreamState::Ready;
     TString Issue;
 

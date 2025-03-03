@@ -4,6 +4,8 @@
 
 namespace NKikimr::NReplication::NController {
 
+extern const TString ReplicationConsumerName;
+
 class TController::TTxAssignStreamName: public TTxBase {
     TEvPrivate::TEvAssignStreamName::TPtr Ev;
     TReplication::TPtr Replication;
@@ -49,9 +51,15 @@ public:
 
         target->SetStreamName(CreateGuidAsString());
 
+        TString consumerName = Replication->GetConfig().HasTransferSpecific()
+            ? CreateGuidAsString()
+            : ReplicationConsumerName;
+        target->SetStreamConsumerName(consumerName);
+
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::SrcStreams>().Key(rid, tid).Update(
-            NIceDb::TUpdate<Schema::SrcStreams::Name>(target->GetStreamName())
+            NIceDb::TUpdate<Schema::SrcStreams::Name>(target->GetStreamName()),
+            NIceDb::TUpdate<Schema::SrcStreams::ConsumerName>(target->GetStreamConsumerName())
         );
 
         CLOG_N(ctx, "Stream name assigned"

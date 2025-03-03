@@ -31,6 +31,7 @@ SRCS(
     replication.cpp
     secret_resolver.cpp
     session_info.cpp
+    stream_consumer_remover.cpp
     stream_creator.cpp
     stream_remover.cpp
     sys_params.cpp

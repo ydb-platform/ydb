@@ -1,6 +1,6 @@
 #include "logging.h"
 #include "private_events.h"
-#include "stream_remover.h"
+#include "stream_consumer_remover.h"
 #include "util.h"
 
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
@@ -10,7 +10,7 @@
 
 namespace NKikimr::NReplication::NController {
 
-class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
+class TStreamConsumerRemover: public TActorBootstrapped<TStreamConsumerRemover> {
     void RequestPermission() {
         Send(Parent, new TEvPrivate::TEvRequestDropStream());
         Become(&TThis::StateRequestPermission);
@@ -26,33 +26,26 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
 
     void Handle(TEvPrivate::TEvAllowDropStream::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
-        DropStream();
+        DropStreamConsumer();
     }
 
-    void DropStream() {
-        switch (Kind) {
-        case TReplication::ETargetKind::Table:
-        case TReplication::ETargetKind::IndexTable:
-            Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
-                .AppendDropChangefeeds(StreamName)));
-            break;
-        case TReplication::ETargetKind::Transfer:
-            Y_ABORT("Unreachable");
-        }
+    void DropStreamConsumer() {
+        Send(YdbProxy, new TEvYdbProxy::TEvAlterTopicRequest(SrcPath, NYdb::NTopic::TAlterTopicSettings()
+            .AppendDropConsumers(ConsumerName)));
 
         Become(&TThis::StateWork);
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvYdbProxy::TEvAlterTableResponse, Handle);
-            sFunc(TEvents::TEvWakeup, DropStream);
+            hFunc(TEvYdbProxy::TEvAlterTopicResponse, Handle);
+            sFunc(TEvents::TEvWakeup, DropStreamConsumer);
         default:
             return StateBase(ev);
         }
     }
 
-    void Handle(TEvYdbProxy::TEvAlterTableResponse::TPtr& ev) {
+    void Handle(TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
         auto& result = ev->Get()->Result;
 
@@ -79,22 +72,22 @@ public:
         return NKikimrServices::TActivity::REPLICATION_CONTROLLER_STREAM_REMOVER;
     }
 
-    explicit TStreamRemover(
+    explicit TStreamConsumerRemover(
             const TActorId& parent,
             const TActorId& proxy,
             ui64 rid,
             ui64 tid,
             TReplication::ETargetKind kind,
             const TString& srcPath,
-            const TString& streamName)
+            const TString& consumerName)
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
         , TargetId(tid)
         , Kind(kind)
         , SrcPath(srcPath)
-        , StreamName(streamName)
-        , LogPrefix("StreamRemover", ReplicationId, TargetId)
+        , ConsumerName(consumerName)
+        , LogPrefix("StreamConsumerRemover", ReplicationId, TargetId)
     {
     }
 
@@ -102,9 +95,9 @@ public:
         switch (Kind) {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
-            return RequestPermission();
-        case TReplication::ETargetKind::Transfer:
             Y_ABORT("Unreachable");
+        case TReplication::ETargetKind::Transfer:
+            return RequestPermission();
         }
     }
 
@@ -121,22 +114,22 @@ private:
     const ui64 TargetId;
     const TReplication::ETargetKind Kind;
     const TString SrcPath;
-    const TString StreamName;
+    const TString ConsumerName;
     const TActorLogPrefix LogPrefix;
 
 }; // TStreamRemover
 
-IActor* CreateStreamRemover(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
+IActor* CreateStreamConsumerRemover(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
-    return CreateStreamRemover(ctx.SelfID, replication->GetYdbProxy(),
-        replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetStreamName());
+    return CreateStreamConsumerRemover(ctx.SelfID, replication->GetYdbProxy(),
+        replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetStreamConsumerName());
 }
 
-IActor* CreateStreamRemover(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
-        TReplication::ETargetKind kind, const TString& srcPath, const TString& streamName)
+IActor* CreateStreamConsumerRemover(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
+        TReplication::ETargetKind kind, const TString& srcPath, const TString& consumerName)
 {
-    return new TStreamRemover(parent, proxy, rid, tid, kind, srcPath, streamName);
+    return new TStreamConsumerRemover(parent, proxy, rid, tid, kind, srcPath, consumerName);
 }
 
 }

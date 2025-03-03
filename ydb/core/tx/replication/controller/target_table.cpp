@@ -1,5 +1,6 @@
 #include "event_util.h"
 #include "logging.h"
+#include "stream_consumer_remover.h"
 #include "target_table.h"
 #include "util.h"
 
@@ -150,6 +151,37 @@ void TTargetTransfer::UpdateConfig(const NKikimrReplication::TReplicationConfig&
         GetConfig()->GetSrcPath(),
         GetConfig()->GetDstPath(),
         t.GetTransformLambda());
+}
+
+void TTargetTransfer::Progress(const TActorContext& ctx) {
+    auto replication = GetReplication();
+
+    switch (GetStreamState()) {
+    case EStreamState::Removing:
+        if (GetWorkers()) {
+            RemoveWorkers(ctx);
+        } else if (!StreamConsumerRemover) {
+            StreamConsumerRemover = ctx.Register(CreateStreamConsumerRemover(replication, GetId(), ctx));
+        }
+        return;
+    case EStreamState::Creating:
+    case EStreamState::Ready:
+    case EStreamState::Removed:
+    case EStreamState::Error:
+        break;
+    }
+
+    TTargetWithStream::Progress(ctx);
+}
+
+void TTargetTransfer::Shutdown(const TActorContext& ctx) {
+    for (auto* x : TVector<TActorId*>{&StreamConsumerRemover}) {
+        if (auto actorId = std::exchange(*x, {})) {
+            ctx.Send(actorId, new TEvents::TEvPoison());
+        }
+    }
+
+    TTargetWithStream::Shutdown(ctx);
 }
 
 TString TTargetTransfer::BuildStreamPath() const {

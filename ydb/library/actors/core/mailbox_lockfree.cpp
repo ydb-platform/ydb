@@ -1,6 +1,7 @@
 #include "mailbox_lockfree.h"
 #include "actor.h"
 #include "executor_pool.h"
+#include "executor_thread.h"
 
 namespace NActors {
 
@@ -416,7 +417,7 @@ namespace NActors {
         logOut << "Send "
 	    << ev->GetRecipientRewrite() << " "
             << ev->Sender << " "
-            << (void*)ev.Get() << " "
+            << (void*)ev << " "
             << TInstant::Now().ToString() << " "
             << getThreadNameWithoutSpace() << "\n";
         Cerr << logOut.Str();
@@ -577,7 +578,7 @@ namespace NActors {
         logOut << "Send "
 	    << ev->GetRecipientRewrite() << " "
             << ev->Sender << " "
-            << (void*)ev.Get() << " "
+            << (void*)ev << " "
             << TInstant::Now().ToString() << " "
             << getThreadNameWithoutSpace() << "\n";
         Cerr << logOut.Str();

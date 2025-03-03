@@ -2853,6 +2853,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             .SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_DEBUG);
+
         auto db = kikimr.GetTableClient();
         auto session = DoCreateTableForPrefixedVectorIndex(db, false);
         {
@@ -2896,6 +2898,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             .SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_DEBUG);
+
         auto db = kikimr.GetTableClient();
         auto session = DoCreateTableForPrefixedVectorIndex(db, false);
         {
@@ -2939,6 +2943,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             .SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_DEBUG);
+
         auto db = kikimr.GetTableClient();
         auto session = DoCreateTableForPrefixedVectorIndex(db, true);
         {
@@ -2982,6 +2988,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             .SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_DEBUG);
+
         auto db = kikimr.GetTableClient();
         auto session = DoCreateTableForPrefixedVectorIndex(db, true);
         {
@@ -3025,6 +3033,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             .SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_DEBUG);
+
         auto db = kikimr.GetTableClient();
         auto session = DoCreateTableForPrefixedVectorIndex(db, false);
         {
@@ -3068,6 +3078,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             .SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_DEBUG);
+
         auto db = kikimr.GetTableClient();
         auto session = DoCreateTableForPrefixedVectorIndex(db, false);
         {
@@ -3111,6 +3123,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             .SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_DEBUG);
+
         auto db = kikimr.GetTableClient();
         auto session = DoCreateTableForPrefixedVectorIndex(db, true);
         {
@@ -3154,6 +3168,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             .SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_DEBUG);
+
         auto db = kikimr.GetTableClient();
         auto session = DoCreateTableForPrefixedVectorIndex(db, true);
         {

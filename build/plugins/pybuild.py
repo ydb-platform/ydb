@@ -170,6 +170,7 @@ def add_python_lint_checks(unit, py_ver, files):
             "passport/backend/oauth/",  # PASSP-35982
             "sdg/sdc/contrib/",  # SDC contrib
             "sdg/sdc/third_party/",  # SDC contrib
+            "smart_devices/third_party/",  # smart_devices contrib
             "yt/yt/",  # YT-20053
             "yt/python/",  # YT-20053
             "yt/python_py2/",

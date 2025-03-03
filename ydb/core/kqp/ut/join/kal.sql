@@ -1,7 +1,8 @@
 
--- TPC-H/TPC-R Important Stock Identification Query (Q11)
--- TPC TPC-H Parameter Substitution (Version 2.17.2 build 0)
--- using 1680793381 as a seed to the RNG
+
+PRAGMA ydb.OptShuffleElimination = 'false';
+PRAGMA TablePathPrefix='olap-testing-sas-common/kikimfdsr/pavelvelikhov/tpc/dt64/column/tpch/s10';
+
 
 $join1 = (
 select
@@ -10,9 +11,9 @@ select
     ps.ps_availqty as ps_availqty,
     s.s_nationkey as s_nationkey
 from
-    `/Root/partsupp` as ps
+    partsupp as ps
 join
-    `/Root/supplier` as s
+    supplier as s
 on
     ps.ps_suppkey = s.s_suppkey
 );
@@ -25,7 +26,7 @@ select
 from
     $join1 as j
 join
-    `/Root/nation` as n
+    nation as n
 on
     n.n_nationkey = j.s_nationkey
 where
@@ -47,14 +48,3 @@ group by
     ps_partkey
 );
 
-select
-    v.ps_partkey as ps_partkey,
-    v.value as value
-from
-    $values as v
-cross join
-    $threshold as t
-where
-    v.value > t.threshold
-order by
-    value desc;

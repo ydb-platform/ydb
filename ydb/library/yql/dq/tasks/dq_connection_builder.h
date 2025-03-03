@@ -113,7 +113,7 @@ void BuildHashShuffleChannels(TGraph& graph, const typename TGraph::TStageInfoTy
 
         taskOutput.Type = TTaskOutputType::HashPartition;
         taskOutput.HashKind = hashKind;
-        
+
         for (const auto& keyColumn : keyColumns) {
             taskOutput.KeyColumns.push_back(keyColumn);
         }
@@ -138,9 +138,6 @@ void BuildHashShuffleChannels(TGraph& graph, const typename TGraph::TStageInfoTy
 
             logFunc(channel.Id, originTask.Id, targetTask.Id, "Shuffle/HashPartition", !channel.InMemory);
         }
-        
-        Cout << "SHIT: ";
-        Cout << "[" << JoinSeq(",", taskOutput.KeyColumns) << "]" << Endl;
     }
 }
 

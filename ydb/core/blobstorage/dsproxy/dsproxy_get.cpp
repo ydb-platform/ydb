@@ -374,6 +374,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                 TDuration timeToAccelerate = TDuration::MicroSeconds(timeToAccelerateUs);
                 TMonotonic now = TActivationContext::Monotonic();
                 TMonotonic nextAcceleration = RequestStartTime + timeToAccelerate;
+                LWTRACK(DSProxyScheduleAccelerate, Orbit, nextAcceleration > now ? (nextAcceleration - now).MicroSeconds() / 1000.0 : 0.0);
                 if (nextAcceleration > now) {
                     ui64 causeIdx = RootCauseTrack.RegisterAccelerate();
                     Schedule(nextAcceleration - now, new TEvAcceleratePut(causeIdx));
@@ -483,6 +484,13 @@ public:
 
         LWTRACK(DSProxyGetBootstrap, Orbit);
 
+        LWTRACK(
+            DSProxyGetRequest, Orbit,
+            Info->GroupID.GetRawId(),
+            DeviceTypeStr(Info->GetDeviceType(), true),
+            NKikimrBlobStorage::EGetHandleClass_Name(GetImpl.GetHandleClass())
+        );
+
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
         GetImpl.GenerateInitialRequests(LogCtx, vGets);
@@ -490,12 +498,6 @@ public:
         TryScheduleGetAcceleration();
 
         Y_ABORT_UNLESS(RequestsSent > ResponsesReceived);
-        LWTRACK(
-            DSProxyGetRequest, Orbit,
-            Info->GroupID.GetRawId(),
-            DeviceTypeStr(Info->GetDeviceType(), true),
-            NKikimrBlobStorage::EGetHandleClass_Name(GetImpl.GetHandleClass())
-        );
         Become(&TBlobStorageGroupGetRequest::StateWait);
         SanityCheck(); // May Die
     }

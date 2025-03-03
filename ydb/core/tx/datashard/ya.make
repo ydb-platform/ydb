@@ -181,6 +181,7 @@ SRCS(
     operation.cpp
     operation.h
     plan_queue_unit.cpp
+    prefix_kmeans.cpp
     prepare_data_tx_in_rs_unit.cpp
     prepare_distributed_erase_tx_in_rs_unit.cpp
     prepare_kqp_data_tx_in_rs_unit.cpp

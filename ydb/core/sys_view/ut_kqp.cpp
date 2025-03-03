@@ -762,6 +762,14 @@ R"(CREATE TABLE `test_show_create` (
                 PRIMARY KEY (Key)
             );
         )", "test_show_create");
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Decimal(35, 10) DEFAULT CAST("110.111" AS Decimal(35, 10)),
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
     }
 
     Y_UNIT_TEST(ShowCreateTablePartitionAtKeys) {
@@ -1102,7 +1110,8 @@ R"(CREATE TEMPORARY TABLE `test_show_create` (
                 DatetimeValue Datetime,
                 TimestampValue Timestamp,
                 IntervalValue Interval,
-                DecimalValue Decimal(22,9),
+                DecimalValue1 Decimal(22,9),
+                DecimalValue2 Decimal(35,10),
                 JsonValue Json,
                 YsonValue Yson,
                 JsonDocumentValue JsonDocument,

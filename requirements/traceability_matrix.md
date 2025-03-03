@@ -136,26 +136,6 @@
 
 ## 
 
-### Compression
-#### [ISSUE-13626](https://github.com/ydb-platform/ydb/issues/13626): Test Suite: cs/compression
-[![TO%20DO](https://img.shields.io/badge/TO%20DO-0%2F11:0%25-rgb(224%2C%20250%2C%20227%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-13626-test-suite-cscompression)
-
-**Description**: Сжатие (в широком смысле, напр., dictionary encoding), sparse, column_family
-
-| Case ID | Name | Description | Issues |  Status |
-|---------|------|-------------|--------|:--------|
-| #13627 | Test cs column family. Create multiple/maximum column family for one table | Создать несколько/максимальное количество `Column Family` в одной таблице. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13627)](https://github.com/ydb-platform/ydb/issues/13627) | Pending |
-| #13640 | Test cs column family. Check all supported compression | Проверить включения/измнения всех алгоримов сжатия и проверить размеры данных через sys после включения/измнения сжатия для `Column Family` | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13640)](https://github.com/ydb-platform/ydb/issues/13640) | Pending |
-| #13642 | Test cs column family. Check all supported compression with S3 | Проверить включения/измнения всех алгоримов сжатия c вытеснением в S3 и проверять, что сжатие применялось | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13642)](https://github.com/ydb-platform/ydb/issues/13642) | Pending |
-| #13643 | Test cs column family. Check availability of all data after alter family | При записи данных в таблицу, создавать новые или задавать существующие `Column family` у столбца с контролем данных | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13643)](https://github.com/ydb-platform/ydb/issues/13643) | Pending |
-| #13644 | Test cs column family. Check availability of all data after alter compression in Column family | При записи данных в таблицу, изменять свойства сжатия у `Column Family` и проверять доступность старых и новых данных в столбцах, которые принадлежат измененному `Column Family`. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13644)](https://github.com/ydb-platform/ydb/issues/13644) | Pending |
-| #13645 | Test cs column family. Check supported data type for column family | Проверить работоспособность column family на столбцах со всеми типами данных (Лучше сделать, чтобы все существующие тесты работали со всеми поддерживаемыми типами данных) | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13645)](https://github.com/ydb-platform/ydb/issues/13645) | Pending |
-| #13646 | Test cs column family. Check create table with PK column from columns in different column families | Проверяем, что можно создать первичный ключ из колонок разных column family  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13646)](https://github.com/ydb-platform/ydb/issues/13646) | Pending |
-| #13647 | Test cs column family. Test column with NULL in column family | Проверить работоспоность column family с NULL столбцами | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13647)](https://github.com/ydb-platform/ydb/issues/13647) | Pending |
-| #13648 | Test cs column family. Column family with data types: text, string, json, jsondocument | Проверяем, что поддерживаются типы данных максимальной длины (text, string, json, jsondocument), условная запись 1 MB данных в ячейку | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13648)](https://github.com/ydb-platform/ydb/issues/13648) | Pending |
-| #13650 | Test cs column family. Zip-bomba | Выполняем запись в колонку 1 млн строк одной длинной, но одинаковой строки (в пределе из одного символа) (zip-бомба), проверяем, что запись и чтение выполняется | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13650)](https://github.com/ydb-platform/ydb/issues/13650) | Pending |
-| #13651 | Test cs column family. Write highly randomized data | Выполняем запись сильнорандомизированных данных (после сжатия размер должен вырасти), проверяем, что запись и чтение выполняется  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13651)](https://github.com/ydb-platform/ydb/issues/13651) | Pending |
-
 ### TTL
 #### [ISSUE-13526](https://github.com/ydb-platform/ydb/issues/13526): Test Suite: cs/tiering+ttl
 [![PROGRESS](https://img.shields.io/badge/PROGRESS-4%2F12:33%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-13526-test-suite-cstieringttl)
@@ -188,9 +168,84 @@
 | #14691 | Columns with types Timestamp, Datetime, Date can be specified as TTL (only the first column of PK) |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14691)](https://github.com/ydb-platform/ydb/issues/14691) | Pending |
 | #14692 | TTL deletes data at a sufficient rate (must exceed the insertion rate) |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14692)](https://github.com/ydb-platform/ydb/issues/14692) | Pending |
 
+### Compression
+#### [ISSUE-13626](https://github.com/ydb-platform/ydb/issues/13626): Test Suite: cs/compression
+[![PROGRESS](https://img.shields.io/badge/PROGRESS-2%2F11:18%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-13626-test-suite-cscompression)
+
+**Description**: Сжатие (в широком смысле, напр., dictionary encoding), sparse, column_family
+
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
+| #13627 | Test cs column family. Create multiple/maximum column family for one table | Создать несколько/максимальное количество `Column Family` в одной таблице. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13627)](https://github.com/ydb-platform/ydb/issues/13627) | Pending |
+| #13640 | Test cs column family. Check all supported compression | Проверить включения/измнения всех алгоримов сжатия и проверить размеры данных через sys после включения сжатия через `Column Family` | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13640)](https://github.com/ydb-platform/ydb/issues/13640) | Pending |
+| #13642 | Test cs column family. Check all supported compression with S3 | Проверить включения/измнения всех алгоримов сжатия c вытеснением в S3 и проверять, что сжатие применялось | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13642)](https://github.com/ydb-platform/ydb/issues/13642) | Pending |
+| #13643 | Test cs column family. Check availability of all data after alter family | При записи данных в таблицу задавать другие `Column family` у столбца с контролем данных | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13643)](https://github.com/ydb-platform/ydb/issues/13643) | Pending |
+| #13644 | Test cs column family. Check availability of all data after alter compression in Column family | При записи данных в таблицу, изменять свойства сжатия у `Column Family` и проверять доступность старых и новых данных в столбцах, которые принадлежат измененному `Column Family`. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13644)](https://github.com/ydb-platform/ydb/issues/13644) | Pending |
+| #13645 | Test cs column family. Check supported data type for column family | Проверить работоспособность column family на столбцах со всеми типами данных (Лучше сделать, чтобы все существующие тесты работали со всеми поддерживаемыми типами данных) | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13645)](https://github.com/ydb-platform/ydb/issues/13645) | Pending |
+| #13646 | Test cs column family. Check create table with PK column from columns in different column families | Проверяем, что можно создать первичный ключ из колонок разных column family  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13646)](https://github.com/ydb-platform/ydb/issues/13646) | Pending |
+| #13647 | Test cs column family. Test column with NULL in column family | Проверить работоспоность column family с NULL столбцами | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13647)](https://github.com/ydb-platform/ydb/issues/13647) | Pending |
+| #13648 | Test cs column family. Column family with data types: text, string, json, jsondocument | Проверяем, что поддерживаются типы данных максимальной длины (text, string, json, jsondocument), условная запись 1 MB данных в ячейку | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13648)](https://github.com/ydb-platform/ydb/issues/13648) | Pending |
+| #13650 | Test cs column family. Zip-bomba | Выполняем запись в колонку 1 млн строк одной длинной, но одинаковой строки (в пределе из одного символа) (zip-бомба), проверяем, что запись и чтение выполняется | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13650)](https://github.com/ydb-platform/ydb/issues/13650) | Pending |
+| #13651 | Test cs column family. Write highly randomized data | Выполняем запись сильнорандомизированных данных (после сжатия размер должен вырасти), проверяем, что запись и чтение выполняется  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13651)](https://github.com/ydb-platform/ydb/issues/13651) | Pending |
+
 ## Non-functional Requirements
 
 ### Performance
+#### REQ-PERF-001: Ensure the system handles aggregate functions efficiently across various data sizes.
+**Description**: Verify that aggregate functions maintain performance standards at increasing data volumes, ensuring response times are within acceptable limits.
+
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
+| REQ-PERF-001-1.1 | COUNT Function Performance - 1GB | Validate performance with a dataset of 1GB. |  | Pending |
+| REQ-PERF-001-1.2 | COUNT Function Performance - 10GB | Validate performance with a dataset of 10GB. |  | Pending |
+| REQ-PERF-001-1.3 | COUNT Function Performance - 100GB | Validate performance with a dataset of 100GB. |  | Pending |
+| REQ-PERF-001-1.4 | COUNT Function Performance - 1TB | Validate performance with a dataset of 1TB. |  | Pending |
+| REQ-PERF-001-1.5 | COUNT Function Performance - 10TB | Validate performance with a dataset of 10TB. |  | Pending |
+
+#### REQ-PERF-002: Ensure system can efficiently compute distinct counts at scale.
+**Description**: Evaluate the ability to perform COUNT(DISTINCT) operations with acceptable overhead across increasing data volumes.
+
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
+| REQ-PERF-002-2.1 | COUNT DISTINCT Performance - 1GB | Measure distinct count efficiency at 1GB. |  | Pending |
+| REQ-PERF-002-2.2 | COUNT DISTINCT Performance - 10GB | Measure distinct count efficiency at 10GB. |  | Pending |
+
+#### REQ-PERF-003: Validate efficiency of SUM operations over large datasets.
+**Description**: Ensure SUM functions execute with optimal performance metrics at different data scales.
+
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
+| REQ-PERF-003-3.1 | SUM Function Performance - 1GB | Validate SUM operation efficiency with 1GB of data. |  | Pending |
+| REQ-PERF-003-3.2 | SUM Function Performance - 10GB | Validate SUM operation efficiency with 10GB of data. |  | Pending |
+
+#### REQ-PERF-004: Ensure system maintains average calculation efficiency.
+**Description**: Verify AVG functions sustain performance as data sizes increase.
+
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
+| REQ-PERF-004-4.1 | AVG Function Performance - 1GB | Performance metrics for AVG operation on 1GB of data. |  | Pending |
+
+#### REQ-PERF-005: Efficient computation of MIN/MAX operations.
+**Description**: Confirm that minimum and maximum functions perform within the expected time frames across various datasets.
+
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
+| REQ-PERF-005-5.1 | MIN/MAX Performance - 1GB | Validate performance of MIN/MAX operations with 1GB. |  | Pending |
+
+#### REQ-PERF-006: TPC-H benchmark testing on scalability.
+**Description**: Evaluate system performance using TPC-H benchmark tests at different dataset volumes.
+
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
+| REQ-PERF-006-6.1 | TPC-H Performance - 10GB | Validate TPC-H benchmark performance with 10GB. |  | Pending |
+
+#### REQ-PERF-007: ClickBench benchmark to test efficiency under different conditions.
+**Description**: Assess system capabilities using ClickBench, targeting different data sizes.
+
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
+| REQ-PERF-007-7.1 | ClickBench Performance - 1GB | Evaluate with ClickBench on 1GB of data. |  | Pending |
+
 #### REQ-PERF-001: Ensure system operations meet expected performance benchmarks.
 **Description**: Maintain performance standards across operations, ensuring response times and throughput align with requirements.
 
@@ -260,60 +315,4 @@ Issues:
 |---------|------|-------------|--------|:--------|
 | REQ-COMP-001-5.1 | Upgrade 24-3 to 24-4 | Test upgrade compatibility from version 24-3 to 24-4. |  | Pending |
 | REQ-COMP-001-5.2 | Upgrade 24-4 to 25-1 | Test upgrade compatibility from version 24-4 to 25-1. |  | Pending |
-
-### Performance
-#### REQ-PERF-001: Ensure the system handles aggregate functions efficiently across various data sizes.
-**Description**: Verify that aggregate functions maintain performance standards at increasing data volumes, ensuring response times are within acceptable limits.
-
-| Case ID | Name | Description | Issues |  Status |
-|---------|------|-------------|--------|:--------|
-| REQ-PERF-001-1.1 | COUNT Function Performance - 1GB | Validate performance with a dataset of 1GB. |  | Pending |
-| REQ-PERF-001-1.2 | COUNT Function Performance - 10GB | Validate performance with a dataset of 10GB. |  | Pending |
-| REQ-PERF-001-1.3 | COUNT Function Performance - 100GB | Validate performance with a dataset of 100GB. |  | Pending |
-| REQ-PERF-001-1.4 | COUNT Function Performance - 1TB | Validate performance with a dataset of 1TB. |  | Pending |
-| REQ-PERF-001-1.5 | COUNT Function Performance - 10TB | Validate performance with a dataset of 10TB. |  | Pending |
-
-#### REQ-PERF-002: Ensure system can efficiently compute distinct counts at scale.
-**Description**: Evaluate the ability to perform COUNT(DISTINCT) operations with acceptable overhead across increasing data volumes.
-
-| Case ID | Name | Description | Issues |  Status |
-|---------|------|-------------|--------|:--------|
-| REQ-PERF-002-2.1 | COUNT DISTINCT Performance - 1GB | Measure distinct count efficiency at 1GB. |  | Pending |
-| REQ-PERF-002-2.2 | COUNT DISTINCT Performance - 10GB | Measure distinct count efficiency at 10GB. |  | Pending |
-
-#### REQ-PERF-003: Validate efficiency of SUM operations over large datasets.
-**Description**: Ensure SUM functions execute with optimal performance metrics at different data scales.
-
-| Case ID | Name | Description | Issues |  Status |
-|---------|------|-------------|--------|:--------|
-| REQ-PERF-003-3.1 | SUM Function Performance - 1GB | Validate SUM operation efficiency with 1GB of data. |  | Pending |
-| REQ-PERF-003-3.2 | SUM Function Performance - 10GB | Validate SUM operation efficiency with 10GB of data. |  | Pending |
-
-#### REQ-PERF-004: Ensure system maintains average calculation efficiency.
-**Description**: Verify AVG functions sustain performance as data sizes increase.
-
-| Case ID | Name | Description | Issues |  Status |
-|---------|------|-------------|--------|:--------|
-| REQ-PERF-004-4.1 | AVG Function Performance - 1GB | Performance metrics for AVG operation on 1GB of data. |  | Pending |
-
-#### REQ-PERF-005: Efficient computation of MIN/MAX operations.
-**Description**: Confirm that minimum and maximum functions perform within the expected time frames across various datasets.
-
-| Case ID | Name | Description | Issues |  Status |
-|---------|------|-------------|--------|:--------|
-| REQ-PERF-005-5.1 | MIN/MAX Performance - 1GB | Validate performance of MIN/MAX operations with 1GB. |  | Pending |
-
-#### REQ-PERF-006: TPC-H benchmark testing on scalability.
-**Description**: Evaluate system performance using TPC-H benchmark tests at different dataset volumes.
-
-| Case ID | Name | Description | Issues |  Status |
-|---------|------|-------------|--------|:--------|
-| REQ-PERF-006-6.1 | TPC-H Performance - 10GB | Validate TPC-H benchmark performance with 10GB. |  | Pending |
-
-#### REQ-PERF-007: ClickBench benchmark to test efficiency under different conditions.
-**Description**: Assess system capabilities using ClickBench, targeting different data sizes.
-
-| Case ID | Name | Description | Issues |  Status |
-|---------|------|-------------|--------|:--------|
-| REQ-PERF-007-7.1 | ClickBench Performance - 1GB | Evaluate with ClickBench on 1GB of data. |  | Pending |
 

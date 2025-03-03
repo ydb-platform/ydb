@@ -195,7 +195,12 @@ private:
 
 using TBuildStatsYieldHandler = std::function<void()>;
 
-#define LOG_BUILD_STATS(stream) LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::TX_DATASHARD, logPrefix << stream)
+#define LOG_BUILD_STATS(stream) \
+    if (auto actorContext = NActors::TlsActivationContext; actorContext) { \
+        LOG_DEBUG_S(*actorContext, NKikimrServices::TX_DATASHARD, logPrefix << stream); \
+    } else { \
+        Cerr << logPrefix << stream << Endl; \
+    }
 
 bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, ui32 histogramBucketsCount, IPages* env, 
     TBuildStatsYieldHandler yieldHandler, const TString& logPrefix = {});

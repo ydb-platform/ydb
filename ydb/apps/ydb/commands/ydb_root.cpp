@@ -45,6 +45,10 @@ void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
             if (config.UseMetadataCredentials) {
                 return CreateIamCredentialsProviderFactory();
             }
+            if (config.SaKeyParams) {
+                return CreateIamJwtParamsCredentialsProviderFactory(
+                    { {.Endpoint = config.IamEndpoint}, config.SaKeyParams });
+            }
             if (config.SaKeyFile) {
                 return CreateIamJwtFileCredentialsProviderFactory(
                     { {.Endpoint = config.IamEndpoint}, config.SaKeyFile });
@@ -77,8 +81,7 @@ namespace {
 void TYdbClientCommandRoot::Config(TConfig& config) {
     TClientCommandRoot::Config(config);
 
-    NLastGetopt::TOpts& opts = *config.Opts;
-    RemoveOption(opts, "svnrevision");
+    RemoveOption(config.Opts->GetOpts(), "svnrevision");
 }
 
 int TYdbClientCommandRoot::Run(TConfig& config) {

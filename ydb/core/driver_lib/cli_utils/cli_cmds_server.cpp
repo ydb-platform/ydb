@@ -55,16 +55,16 @@ void TClientCommandServer::Config(TConfig& config) {
     TClientCommand::Config(config);
 
     NConfig::AddProtoConfigOptions(DepsRecorder->GetDeps().ProtoConfigFileProvider);
-    InitCfg.RegisterCliOptions(*config.Opts);
-    ProtoConfigFileProvider->RegisterCliOptions(*config.Opts);
+    InitCfg.RegisterCliOptions(config.Opts->GetOpts());
+    ProtoConfigFileProvider->RegisterCliOptions(config.Opts->GetOpts());
     config.SetFreeArgsMin(0);
 
-    config.Opts->AddHelpOption('h');
+    config.Opts->GetOpts().AddHelpOption('h');
 }
 
 void TClientCommandServer::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    InitCfg.ValidateOptions(*config.Opts, *config.ParseResult);
+    InitCfg.ValidateOptions(config.Opts->GetOpts(), config.ParseResult->GetCommandLineParseResult());
     InitCfg.Parse(config.ParseResult->GetFreeArgs(), Factories->ConfigSwissKnife.get());
 }
 

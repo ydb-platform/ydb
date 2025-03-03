@@ -18,7 +18,7 @@ TClientCommandRootKikimrBase::TClientCommandRootKikimrBase(const TString& name)
 
 void TClientCommandRootKikimrBase::Config(TConfig& config) {
     TClientCommandRootBase::Config(config);
-    NLastGetopt::TOpts& opts = *config.Opts;
+    NLastGetopt::TOpts& opts = config.Opts->GetOpts();
     opts.AddLongOption('d', "dump", "Dump requests to error log").NoArgument().Hidden().SetFlag(&DumpRequests);
 
     TStringBuilder tokenHelp;

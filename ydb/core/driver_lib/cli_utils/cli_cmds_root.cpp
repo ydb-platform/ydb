@@ -31,8 +31,8 @@ public:
     }
 
     void Config(TConfig& config) override {
-        NLastGetopt::TOpts& opts = *config.Opts;
-        HideOptions(*config.Opts);
+        TClientCommandOptions& opts = *config.Opts;
+        HideOptions(config.Opts->GetOpts());
         opts.AddLongOption('k', "token", "security token").RequiredArgument("TOKEN").StoreResult(&Token);
         opts.AddLongOption('s', "server", "server address to connect")
             .RequiredArgument("HOST[:PORT]").StoreResult(&Address);

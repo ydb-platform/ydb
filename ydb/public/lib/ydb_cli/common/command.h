@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.h"
+#include "client_command_options.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
@@ -34,7 +35,7 @@ public:
     bool Dangerous = false;
     bool OnlyExplicitProfile = false;
     const TClientCommand* Parent;
-    NLastGetopt::TOpts Opts;
+    TClientCommandOptions Opts;
     TString Argument;
     TMap<ui32, TString> Args;
 
@@ -97,8 +98,8 @@ public:
         char** ArgV;
         int InitialArgC;
         char** InitialArgV;
-        NLastGetopt::TOpts* Opts;
-        const NLastGetopt::TOptsParseResult* ParseResult;
+        TClientCommandOptions* Opts = nullptr;
+        const TOptionsParseResult* ParseResult;
         TVector<TString> Tokens;
         TString SecurityToken;
         TList<TCommandInfo> ParentCommands;
@@ -126,6 +127,7 @@ public:
         bool EnableSsl = false;
         bool IsNetworkIntensive = false;
         TString Oauth2KeyFile;
+        TString Oauth2KeyParams;
 
         EVerbosityLevel VerbosityLevel = EVerbosityLevel::NONE;
         size_t HelpCommandVerbosiltyLevel = 1; // No options -h or one - 1, -hh - 2, -hhh - 3 etc
@@ -143,6 +145,7 @@ public:
         TString YCToken;
         bool UseMetadataCredentials = false;
         TString SaKeyFile;
+        TString SaKeyParams;
         TString IamEndpoint;
         TString YScope;
         TString ChosenAuthMethod;
@@ -259,7 +262,7 @@ public:
         }
 
         void PrintHelpAndExit() {
-            NLastGetopt::TOptsParser parser(Opts, ArgC, ArgV);
+            NLastGetopt::TOptsParser parser(&Opts->GetOpts(), ArgC, ArgV);
             parser.PrintUsage(Cerr);
             throw TMisuseWithHelpException();
         }
@@ -291,9 +294,9 @@ public:
                         while (*end != '\0' && *end != '\'' && *end != '\"') {
                             ++end;
                         }
-                        opt = Opts->FindLongOption(TString(pos + 1, end));
+                        opt = Opts->GetOpts().FindLongOption(TString(pos + 1, end));
                     } else {
-                        opt = Opts->FindCharOption(*pos);
+                        opt = Opts->GetOpts().FindCharOption(*pos);
                     }
                     if (opt && opt->GetHasArg() == NLastGetopt::NO_ARGUMENT) {
                         optionArgument = false;
@@ -326,7 +329,10 @@ public:
         }
     };
 
-    class TOptsParseOneLevelResult : public NLastGetopt::TOptsParseResult {
+    class TOptsParseOneLevelResult : public TOptionsParseResult {
+        TOptsParseOneLevelResult(TConfig& config, std::pair<int, const char**> argv);
+        static std::pair<int, const char**> GetArgv(TConfig& config);
+
     public:
         TOptsParseOneLevelResult(TConfig& config);
     };
@@ -379,7 +385,7 @@ protected:
     virtual void SetCustomUsage(TConfig& config);
 
 protected:
-    std::shared_ptr<NLastGetopt::TOptsParseResult> ParseResult;
+    std::shared_ptr<TOptionsParseResult> ParseResult;
 
 private:
     void HideOption(const TString& name);

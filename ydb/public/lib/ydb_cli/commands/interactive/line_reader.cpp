@@ -10,27 +10,26 @@
 
 #include <contrib/restricted/patched/replxx/include/replxx.hxx>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
-namespace
-{
+namespace {
 
-class FileHandlerLockGuard
-{
+class FileHandlerLockGuard {
 public:
-    FileHandlerLockGuard(TFileHandle * handle)
+    FileHandlerLockGuard(TFileHandle* handle)
         : Handle(handle)
-    {}
+    {
+    }
 
     ~FileHandlerLockGuard() {
         Handle->Flock(LOCK_UN);
     }
+
 private:
-    TFileHandle * Handle = nullptr;
+    TFileHandle* Handle = nullptr;
 };
 
-std::optional<FileHandlerLockGuard> LockFile(TFileHandle & fileHandle) {
+std::optional<FileHandlerLockGuard> LockFile(TFileHandle& fileHandle) {
     if (fileHandle.Flock(LOCK_EX) != 0) {
         return {};
     }
@@ -42,15 +41,14 @@ replxx::Replxx::Color ReplxxColorOf(NSQLComplete::ECandidateKind /* kind */) {
     return replxx::Replxx::Color::DEFAULT;
 }
 
-class TLineReader : public ILineReader
-{
+class TLineReader: public ILineReader {
 public:
     TLineReader(std::string prompt, std::string historyFilePath);
 
     std::optional<std::string> ReadLine() override;
 
 private:
-    void AddToHistory(const std::string & line);
+    void AddToHistory(const std::string& line);
 
     std::string Prompt;
     std::string HistoryFilePath;
@@ -67,7 +65,7 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath)
 {
     Rx.install_window_change_handler();
 
-    auto completion_callback = [this](const std::string & prefix, size_t contextLen) {
+    auto completion_callback = [this](const std::string& prefix, size_t contextLen) {
         auto completion = CompletionEngine->Complete({
             .Text = prefix,
             .CursorPosition = prefix.length(),
@@ -114,18 +112,20 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath)
 
 std::optional<std::string> TLineReader::ReadLine() {
     while (true) {
-        const auto * status = Rx.input(Prompt.c_str());
+        const auto* status = Rx.input(Prompt.c_str());
 
         if (status == nullptr) {
-            if (errno == EAGAIN)
+            if (errno == EAGAIN) {
                 continue;
+            }
 
             return {};
         }
 
         std::string line = status;
-        while (!line.empty() && std::isspace(line.back()))
+        while (!line.empty() && std::isspace(line.back())) {
             line.pop_back();
+        }
 
         AddToHistory(line);
 
@@ -133,7 +133,7 @@ std::optional<std::string> TLineReader::ReadLine() {
     }
 }
 
-void TLineReader::AddToHistory(const std::string & line) {
+void TLineReader::AddToHistory(const std::string& line) {
     Rx.history_add(line);
 
     auto fileLockGuard = LockFile(HistoryFileHandle);
@@ -147,11 +147,10 @@ void TLineReader::AddToHistory(const std::string & line) {
     }
 }
 
-}
+} // namespace
 
 std::unique_ptr<ILineReader> CreateLineReader(std::string prompt, std::string historyFilePath) {
     return std::make_unique<TLineReader>(std::move(prompt), std::move(historyFilePath));
 }
 
-}
-}
+} // namespace NYdb::NConsoleClient

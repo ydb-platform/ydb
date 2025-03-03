@@ -172,17 +172,21 @@ class YdbCluster:
         return cls._ydb_driver
 
     @classmethod
-    def list_directory(cls, root_path: str, rel_path: str) -> List[ydb.SchemeEntry]:
+    def list_directory_tree(cls, root_path: str, rel_path: str, kind_order_key = None) -> List[ydb.SchemeEntry]:
+        """
+        kind_order_key: Optional[SchemeEntryType -> int]
+        """
         path = f'{root_path}/{rel_path}' if root_path else rel_path
         LOGGER.info(f'list {path}')
         result = []
-        for child in cls.get_ydb_driver().scheme_client.list_directory(path).children:
+        entries = cls.get_ydb_driver().scheme_client.list_directory(path).children
+        for child in sorted(entries, key=lambda x: kind_order_key(x.type)):
             if child.name == '.sys':
                 continue
             child.name = f'{rel_path}/{child.name}'
             result.append(child)
             if child.is_directory() or child.is_column_store():
-                result += cls.list_directory(root_path, child.name)
+                result += cls.list_directory_tree(root_path, child.name, kind_order_key)
         return result
 
     @classmethod

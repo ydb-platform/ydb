@@ -657,7 +657,7 @@ class ScenarioTestHelper:
         )
 
     @allure.step('List path {path}')
-    def list_path(self, path: str, folder: str) -> List[ydb.SchemeEntry]:
+    def list_path_tree(self, path: str, folder: str) -> List[ydb.SchemeEntry]:
         """Recursively describe the path in the database under test.
 
         If the path is a directory or TableStore, then all subpaths are included in the description.
@@ -679,8 +679,19 @@ class ScenarioTestHelper:
         if self_descr is None:
             return []
 
+        kind_order = [
+            ydb.SchemeEntryType.COLUMN_TABLE,
+            ydb.SchemeEntryType.COLUMN_STORE,
+            ydb.SchemeEntryType.EXTERNAL_DATA_SOURCE,
+        ]
+        def kind_order_key_reversed(kind):
+            try:
+                return -kind_order.index(kind)
+            except ValueError:
+                return -len(kind_order)
+
         if self_descr.is_directory():
-            return list(reversed(YdbCluster.list_directory(root_path, path))) + [self_descr]
+            return list(reversed(YdbCluster.list_directory_tree(root_path, path, kind_order_key_reversed))) + [self_descr]
         else:
             return self_descr
 
@@ -701,7 +712,7 @@ class ScenarioTestHelper:
         import ydb.tests.olap.scenario.helpers.drop_helper as dh
 
         root_path = self.get_full_path(folder)
-        for e in self.list_path(path, folder):
+        for e in self.list_path_tree(path, folder):
             if e.is_any_table():
                 self.execute_scheme_query(dh.DropTable(os.path.join(folder, e.name)))
             elif e.is_column_store():

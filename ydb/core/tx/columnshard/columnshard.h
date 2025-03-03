@@ -137,7 +137,9 @@ namespace TEvColumnShard {
             Record.SetTxId(txId);
             Record.SetTxBody(std::move(txBody));
             Record.SetFlags(flags);
-            Record.SetSubDomainPathId(subDomainPathId);
+            if (subDomainPathId != 0) {
+                Record.SetSubDomainPathId(subDomainPathId);
+            }
         }
 
         TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, ui64 ssId, const TActorId& source,

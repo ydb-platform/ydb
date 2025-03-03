@@ -692,7 +692,7 @@ class ScenarioTestHelper:
                 return -len(kind_order)
 
         if self_descr.is_directory():
-            return list(reversed(YdbCluster.list_directory_tree(root_path, path, kind_order_key_reversed))) + [self_descr]
+            return list(reversed(YdbCluster.list_directory(root_path, path, kind_order_key_reversed))) + [self_descr]
         else:
             return self_descr
 

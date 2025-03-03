@@ -497,11 +497,11 @@ void TTxCoordinator::SendViaSession(const TActorId& sessionId, const TActorId& t
 
 void TTxCoordinator::IcbRegister() {
     if (!IcbRegistered) {
-        AppData()->Icb->RegisterSharedControl(EnableLeaderLeases, "CoordinatorControls.EnableLeaderLeases");
-        AppData()->Icb->RegisterSharedControl(MinLeaderLeaseDurationUs, "CoordinatorControls.MinLeaderLeaseDurationUs");
-        AppData()->Icb->RegisterSharedControl(VolatilePlanLeaseMs, "CoordinatorControls.VolatilePlanLeaseMs");
-        AppData()->Icb->RegisterSharedControl(PlanAheadTimeShiftMs, "CoordinatorControls.PlanAheadTimeShiftMs");
-        AppData()->Icb->RegisterSharedControl(MinPlanResolutionMs, "CoordinatorControls.MinPlanResolutionMs");
+        AppData()->StaticControlBoard->RegisterSharedControl(EnableLeaderLeases, EStaticControlType::CoordinatorControlsEnableLeaderLeases);
+        AppData()->StaticControlBoard->RegisterSharedControl(MinLeaderLeaseDurationUs, EStaticControlType::CoordinatorControlsMinLeaderLeaseDurationUs);
+        AppData()->StaticControlBoard->RegisterSharedControl(VolatilePlanLeaseMs, EStaticControlType::CoordinatorControlsVolatilePlanLeaseMs);
+        AppData()->StaticControlBoard->RegisterSharedControl(PlanAheadTimeShiftMs, EStaticControlType::CoordinatorControlsPlanAheadTimeShiftMs);
+        AppData()->StaticControlBoard->RegisterSharedControl(MinPlanResolutionMs, EStaticControlType::CoordinatorControlsMinPlanResolutionMs);
         IcbRegistered = true;
     }
 }

@@ -2,6 +2,7 @@ import logging
 import inspect
 import pytest
 import time
+from multiprocessing import Process
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import TestContext, ScenarioTestHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
@@ -80,7 +81,23 @@ class BaseTestSet:
             ScenarioTestHelper(None).remove_path(cls.get_suite_name())
         cls._ydb_instance.stop()
 
+    def test_multi(self, ctx: TestContext):
+        num_threads = int(get_external_param("num_threads", "20"))
+        processes = []
+        exit_codes = []
+        for p in range(num_threads):
+            processes.append(Process(target=self.test_suffix, args=(ctx, str(p))))
+        for p in processes:
+            p.start()
+        for p in processes:
+            p.join()
+            exit_codes.append(p.exitcode)
+        assert exit_codes == [0] * num_threads, exit_codes
+
     def test(self, ctx: TestContext):
+        self.test_suffix(ctx, get_external_param("table_suffix", ""))
+
+    def test_suffix(self, ctx: TestContext, table_suffix: str):
         test_path = ctx.test + get_external_param("table_suffix", "")
         ScenarioTestHelper(None).remove_path(test_path, ctx.suite)
         start_time = time.time()

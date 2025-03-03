@@ -19,7 +19,6 @@ declare -A top_dirs=(
     [yql/]=1,
     [vendor/]=1,
     [devtools/]=1,
-    [requirements/]=1,
 )
 
 cd $GIT_URL

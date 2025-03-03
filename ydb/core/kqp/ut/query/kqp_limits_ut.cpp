@@ -601,8 +601,10 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         }), result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(TooBigColumn) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(TooBigColumn, useSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -619,11 +621,15 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         )"), TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
 
         result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        if (!useSink) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
-            [] (const auto& issue) {
-                return issue.GetMessage().contains("larger than the allowed threshold");
-        }));
+                [] (const auto& issue) {
+                    return issue.GetMessage().contains("larger than the allowed threshold");
+            }));
     }
 
     Y_UNIT_TEST(AffectedShardsLimit) {

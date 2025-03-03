@@ -125,6 +125,7 @@ void SetupAuthAccessEnvironment(TTestEnv& env) {
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
     env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
     env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("user1rootadmin");
+    env.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableDatabaseAdmin(true);
     env.GetClient().SetSecurityToken("root@builtin");
     CreateTenantsAndTables(env, true);
 
@@ -132,18 +133,33 @@ void SetupAuthAccessEnvironment(TTestEnv& env) {
     env.GetClient().CreateUser("/Root", "user2", "password2");
     env.GetClient().CreateUser("/Root/Tenant1", "user3", "password3");
     env.GetClient().CreateUser("/Root/Tenant1", "user4", "password4");
+    env.GetClient().CreateUser("/Root/Tenant2", "user5", "password5");
+
+    // Note: in real scenarios user6tenant1admin should be created in /Root/Tenant1
+    // but it isn't supported by test framework
+    env.GetClient().CreateUser("/Root", "user6tenant1admin", "password6");
+    env.GetClient().ModifyOwner("/Root", "Tenant1", "user6tenant1admin");
 
     {
         NACLib::TDiffACL acl;
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1rootadmin");
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user2");
+        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user6tenant1admin");
+        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull, "root@builtin");
         env.GetClient().ModifyACL("", "Root", acl.SerializeAsString());
     }
 }
 
 void CheckAuthAdministratorAccessIsRequired(TScanQueryPartIterator& it) {
-    NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, 
+    NKqp::StreamResultToYson(it, false, EStatus::UNAUTHORIZED, 
         "Administrator access is required");
+}
+
+void CheckEmpty(TScanQueryPartIterator& it) {
+    auto expected = R"([
+
+    ])";
+    NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
 }
 
 class TYsonFieldChecker {
@@ -2242,21 +2258,40 @@ Y_UNIT_TEST_SUITE(SystemView) {
         SetupAuthAccessEnvironment(env);
         TTableClient client(env.GetDriver());
 
+        // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant1").DebugString() << Endl;
+
         { // anonymous login doesn't give administrative access as `AdministrationAllowedSIDs` isn't empty
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint());
             auto driver = TDriver(driverConfig);
             TTableClient client(driver);
 
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Sid
-                FROM `Root/.sys/auth_users`
-            )").GetValueSync();
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/.sys/auth_users`
+                )").GetValueSync();
 
-            auto expected = R"([
+                CheckEmpty(it);
+            }
 
-            ])";
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant1/.sys/auth_users`
+                )").GetValueSync();
+
+                CheckEmpty(it);
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant2/.sys/auth_users`
+                )").GetValueSync();
+
+                CheckEmpty(it);
+            }
         }
         
         { // user1rootadmin is /Root admin
@@ -2278,6 +2313,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 auto expected = R"([
                     [["user1rootadmin"]];
                     [["user2"]];
+                    [["user6tenant1admin"]];
                 ])";
                 NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
             }
@@ -2291,6 +2327,18 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 auto expected = R"([
                     [["user3"]];
                     [["user4"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant2/.sys/auth_users`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["user5"]];
                 ])";
                 NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
             }
@@ -2324,15 +2372,63 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     FROM `Root/Tenant1/.sys/auth_users`
                 )").GetValueSync();
 
-                auto expected = R"([
+                CheckEmpty(it);
+            }
 
-                ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant2/.sys/auth_users`
+                )").GetValueSync();
+
+                CheckEmpty(it);
             }
         }
 
-        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
-        // and test tenant user and tenant admin
+        { // user6tenant1admin is /Root/Tenant1 admin
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user6tenant1admin",
+                    .Password = "password6",
+                }));
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/.sys/auth_users`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["user6tenant1admin"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant1/.sys/auth_users`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["user3"]];
+                    [["user4"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant2/.sys/auth_users`
+                )").GetValueSync();
+
+                CheckEmpty(it);
+            }
+        }
     }
 
     Y_UNIT_TEST(AuthUsers_ResultOrder) {
@@ -2564,6 +2660,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         env.GetClient().CreateGroup("/Root", "group2");
         env.GetClient().CreateGroup("/Root/Tenant1", "group3");
         env.GetClient().CreateGroup("/Root/Tenant1", "group4");
+        env.GetClient().CreateGroup("/Root/Tenant2", "group5");
 
         { // anonymous login doesn't give administrative access as `AdministrationAllowedSIDs` isn't empty
             auto driverConfig = TDriverConfig()
@@ -2571,12 +2668,32 @@ Y_UNIT_TEST_SUITE(SystemView) {
             auto driver = TDriver(driverConfig);
             TTableClient client(driver);
 
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Sid
-                FROM `Root/.sys/auth_groups`
-            )").GetValueSync();
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/.sys/auth_groups`
+                )").GetValueSync();
 
-            CheckAuthAdministratorAccessIsRequired(it);
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant1/.sys/auth_groups`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant2/.sys/auth_groups`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
         }
 
         { // user1rootadmin is /Root admin
@@ -2614,6 +2731,18 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 ])";
                 NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
             }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant2/.sys/auth_groups`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["group5"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
         }
 
         { // user2 isn't /Root admin
@@ -2643,10 +2772,58 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
                 CheckAuthAdministratorAccessIsRequired(it);
             }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant2/.sys/auth_groups`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
         }
 
-        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
-        // and test tenant user and tenant admin
+        { // user6tenant1admin is /Root/Tenant1 admin
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user6tenant1admin",
+                    .Password = "password6",
+                }));
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/.sys/auth_groups`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant1/.sys/auth_groups`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["group3"]];
+                    [["group4"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant2/.sys/auth_groups`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
+        }
     }
 
     Y_UNIT_TEST(AuthGroups_ResultOrder) {
@@ -2799,11 +2976,13 @@ Y_UNIT_TEST_SUITE(SystemView) {
         env.GetClient().CreateGroup("/Root", "group2");
         env.GetClient().CreateGroup("/Root/Tenant1", "group3");
         env.GetClient().CreateGroup("/Root/Tenant1", "group4");
+        env.GetClient().CreateGroup("/Root/Tenant2", "group5");
 
         env.GetClient().AddGroupMembership("/Root", "group1", "user1rootadmin");
         env.GetClient().AddGroupMembership("/Root", "group2", "user2");
         env.GetClient().AddGroupMembership("/Root/Tenant1", "group3", "user3");
         env.GetClient().AddGroupMembership("/Root/Tenant1", "group4", "user4");
+        env.GetClient().AddGroupMembership("/Root/Tenant2", "group5", "user5");
 
         { // anonymous login doesn't give administrative access as `AdministrationAllowedSIDs` isn't empty
             auto driverConfig = TDriverConfig()
@@ -2811,12 +2990,32 @@ Y_UNIT_TEST_SUITE(SystemView) {
             auto driver = TDriver(driverConfig);
             TTableClient client(driver);
 
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_group_members`
-            )").GetValueSync();
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/.sys/auth_group_members`
+                )").GetValueSync();
 
-            CheckAuthAdministratorAccessIsRequired(it);
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/Tenant1/.sys/auth_group_members`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/Tenant2/.sys/auth_group_members`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
         }
 
         { // user1rootadmin is /Root admin
@@ -2854,6 +3053,18 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 ])";
                 NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
             }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/Tenant2/.sys/auth_group_members`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["group5"];["user5"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
         }
 
         { // user2 isn't /Root admin
@@ -2883,10 +3094,58 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
                 CheckAuthAdministratorAccessIsRequired(it);
             }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/Tenant2/.sys/auth_group_members`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
         }
 
-        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
-        // and test tenant user and tenant admin
+        { // user6tenant1admin is /Root/Tenant1 admin
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user6tenant1admin",
+                    .Password = "password6",
+                }));
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/.sys/auth_group_members`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/Tenant1/.sys/auth_group_members`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["group3"];["user3"]];
+                    [["group4"];["user4"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/Tenant2/.sys/auth_group_members`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
+        }
     }
 
     Y_UNIT_TEST(AuthGroupMembers_ResultOrder) {
@@ -3294,7 +3553,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 )").GetValueSync();
 
                 auto expected = R"([
-                    [["/Root/Tenant1"];["root@builtin"]];
+                    [["/Root/Tenant1"];["user6tenant1admin"]];
                     [["/Root/Tenant1/Dir3"];["user3"]];
                     [["/Root/Tenant1/Dir4"];["root@builtin"]];
                     [["/Root/Tenant1/Table1"];["root@builtin"]]
@@ -3333,9 +3592,6 @@ Y_UNIT_TEST_SUITE(SystemView) {
             ])";
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
-
-        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
-        // and test tenant user and tenant admin
     }
 
     Y_UNIT_TEST(AuthOwners_ResultOrder) {
@@ -3827,8 +4083,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
             )").GetValueSync();
 
             auto expected = R"([
+                [["/Root"];["ydb.generic.full"];["root@builtin"]];
                 [["/Root"];["ydb.generic.use"];["user1rootadmin"]];
                 [["/Root"];["ydb.generic.use"];["user2"]];
+                [["/Root"];["ydb.generic.use"];["user6tenant1admin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
@@ -3858,8 +4116,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 )").GetValueSync();
 
                 auto expected = R"([
+                    [["/Root"];["ydb.generic.full"];["root@builtin"]];
                     [["/Root"];["ydb.generic.use"];["user1rootadmin"]];
                     [["/Root"];["ydb.generic.use"];["user2"]];
+                    [["/Root"];["ydb.generic.use"];["user6tenant1admin"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
@@ -3906,8 +4166,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
             )").GetValueSync();
 
             auto expected = R"([
+                [["/Root"];["ydb.generic.full"];["root@builtin"]];
                 [["/Root"];["ydb.generic.use"];["user1rootadmin"]];
                 [["/Root"];["ydb.generic.use"];["user2"]];
+                [["/Root"];["ydb.generic.use"];["user6tenant1admin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
@@ -3918,9 +4180,6 @@ Y_UNIT_TEST_SUITE(SystemView) {
             ])";
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
-
-        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
-        // and test tenant user and tenant admin
     }
 
     Y_UNIT_TEST(AuthPermissions_ResultOrder) {

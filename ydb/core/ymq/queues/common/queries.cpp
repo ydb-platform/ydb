@@ -122,7 +122,7 @@ extern const char* const MatchQueueAttributesQuery = R"__(
                                 (Equal (Member attrRead 'MessageRetentionPeriod) retention)))
                         (Equal (Member attrRead 'VisibilityTimeout) visibility))
                     (Equal (Coalesce (Member attrRead 'MaxReceiveCount) (Uint64 '0)) maxReceiveCount))
-                (Bool 'true)))
+                (Bool 'false)))
 
         (let sameVersion
             (Equal currentVersion expectedVersion))

@@ -630,18 +630,27 @@ void CheckAsyncResolveUnknownNode(TTestActorRuntime &runtime, ui32 nodeId)
 void CheckResolveNode(TTestActorRuntime &runtime,
                       TActorId sender,
                       ui32 nodeId,
-                      const TString &addr)
+                      const TString &addr,
+                      TDuration responseTime = TDuration::Max())
 {
-    AsyncResolveNode(runtime, sender, nodeId);
+    AsyncResolveNode(runtime, sender, nodeId, responseTime);
     CheckAsyncResolveNode(runtime, nodeId, addr);
 }
 
 void CheckResolveUnknownNode(TTestActorRuntime &runtime,
                              TActorId sender,
-                             ui32 nodeId)
+                             ui32 nodeId,
+                             TDuration responseTime = TDuration::Max())
 {
-    AsyncResolveNode(runtime, sender, nodeId);
+    AsyncResolveNode(runtime, sender, nodeId, responseTime);
     CheckAsyncResolveUnknownNode(runtime, nodeId);
+}
+
+void CheckNoPendingCacheMissesLeft(TTestActorRuntime &runtime, ui32 nodeIndex)
+{
+    const auto* nameserver = dynamic_cast<TDynamicNameserver*>(runtime.FindActor(GetNameserviceActorId(), nodeIndex));
+    UNIT_ASSERT(nameserver != nullptr);
+    UNIT_ASSERT_VALUES_EQUAL(nameserver->GetTotalPendingCacheMissesSize(), 0);
 }
 
 THolder<TEvInterconnect::TEvNodesInfo> GetNameserverNodesListEv(TTestActorRuntime &runtime, TActorId sender) {
@@ -1639,6 +1648,9 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         CheckGetNode(runtime, sender, NODE2, true);
         // Get unknown dynamic node.
         CheckGetNode(runtime, sender, 1057, false);
+
+        // No pending cache miss requests are left
+        CheckNoPendingCacheMissesLeft(runtime, 0);
     }
 
     Y_UNIT_TEST(TestCacheUsage)
@@ -1748,6 +1760,9 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         CheckResolveUnknownNode(runtime, sender, NODE1);
         CheckResolveNode(runtime, sender, NODE2, "1.2.3.5");
         UNIT_ASSERT_VALUES_EQUAL(resolveRequests.size(), 3);
+
+        // No pending cache miss requests are left
+        CheckNoPendingCacheMissesLeft(runtime, 0);
     }
 
     Y_UNIT_TEST(ListNodesCacheWhenNoChanges) {
@@ -1810,6 +1825,9 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         
         // The following requests should be OK
         CheckResolveNode(runtime, sender, NODE1, "1.2.3.4");
+
+        // No pending cache miss requests are left
+        CheckNoPendingCacheMissesLeft(runtime, 0);
     }
 
     Y_UNIT_TEST(CacheMissSimpleDeadline) {
@@ -1835,6 +1853,9 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         
         // Resolve request is failed, because of deadline
         CheckAsyncResolveUnknownNode(runtime, NODE1);
+
+        // No pending cache miss requests are left
+        CheckNoPendingCacheMissesLeft(runtime, 0);
     }
 
     Y_UNIT_TEST(CacheMissSameDeadline) {
@@ -1864,6 +1885,9 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         // Resolve requests are failed, because of deadline
         CheckAsyncResolveUnknownNode(runtime, NODE1);
         CheckAsyncResolveUnknownNode(runtime, NODE2);
+
+        // No pending cache miss requests are left
+        CheckNoPendingCacheMissesLeft(runtime, 0);
     }
 
     Y_UNIT_TEST(CacheMissNoDeadline) {
@@ -1900,6 +1924,9 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         
         // Resolve request with no deadline is OK
         CheckAsyncResolveNode(runtime, NODE1, "1.2.3.4");
+
+        // No pending cache miss requests are left
+        CheckNoPendingCacheMissesLeft(runtime, 0);
     }
 
     Y_UNIT_TEST(CacheMissDifferentDeadline) {
@@ -1934,6 +1961,9 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         
         // Resolve request is failed, because of deadline
         CheckAsyncResolveUnknownNode(runtime, NODE2);
+
+        // No pending cache miss requests are left
+        CheckNoPendingCacheMissesLeft(runtime, 0);
     }
 
     Y_UNIT_TEST(CacheMissDifferentDeadlineInverseOrder) {
@@ -1968,6 +1998,9 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         
         // Resolve request is failed, because of deadline
         CheckAsyncResolveUnknownNode(runtime, NODE1);
+
+        // No pending cache miss requests are left
+        CheckNoPendingCacheMissesLeft(runtime, 0);
     }
 }
 

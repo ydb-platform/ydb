@@ -141,17 +141,6 @@ namespace NKikimr {
                 , VersionInfo(std::move(versionInfo))
             {}
 
-            TEvClientConnected(const TEvClientConnected& other)
-                : TabletId(other.TabletId)
-                , Status(other.Status)
-                , ClientId(other.ClientId)
-                , ServerId(other.ServerId)
-                , Leader(other.Leader)
-                , Dead(other.Dead)
-                , Generation(other.Generation)
-                , VersionInfo(other.VersionInfo)
-            {}
-
             const ui64 TabletId;
             const NKikimrProto::EReplyStatus Status;
             const TActorId ClientId;
@@ -182,12 +171,6 @@ namespace NKikimr {
                 : TabletId(tabletId)
                 , ClientId(clientId)
                 , ServerId(serverId)
-            {}
-
-            TEvClientDestroyed(const TEvClientDestroyed& other)
-                : TabletId(other.TabletId)
-                , ClientId(other.ClientId)
-                , ServerId(other.ServerId)
             {}
 
             const ui64 TabletId;

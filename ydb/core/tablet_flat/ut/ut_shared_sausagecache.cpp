@@ -798,6 +798,16 @@ Y_UNIT_TEST(Compaction_ZeroCache_BTreeIndex) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 400);
+
+    RestartAndClearCache(env);
+    LogCounters(counters);
+    retried = {};
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 100, 100, 100}));
+    LogCounters(counters);
 }
 
 Y_UNIT_TEST(Compaction_ZeroCache_FlatIndex) {
@@ -848,6 +858,16 @@ Y_UNIT_TEST(Compaction_ZeroCache_FlatIndex) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 100);
+
+    RestartAndClearCache(env);
+    LogCounters(counters);
+    retried = {};
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100}));
+    LogCounters(counters);
 }
 
 }

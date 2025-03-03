@@ -287,6 +287,8 @@ const TSharedData* TPrivatePageCache::Lookup(TPageId pageId, TInfo *info) {
     if (page->Empty()) {
         ToLoad.PushBack(page);
         Stats.CurrentCacheMisses++;
+
+        Y_ABORT_IF(info->GetPageType(page->Id) == EPage::FlatIndex, "Shouldn't load flat index pages");
     }
     return nullptr;
 }

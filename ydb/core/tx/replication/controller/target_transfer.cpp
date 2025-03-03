@@ -1,15 +1,9 @@
-#include "event_util.h"
-#include "logging.h"
 #include "stream_consumer_remover.h"
 #include "target_transfer.h"
-#include "util.h"
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/scheme/scheme_pathid.h>
-#include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
-
+#include <ydb/core/tx/replication/service/service.h>
+#include <ydb/library/actors/core/events.h>
 namespace NKikimr::NReplication::NController {
     TTargetTransfer::TTargetTransfer(TReplication* replication, ui64 id, const IConfig::TPtr& config)
     : TTargetWithStream(replication, ETargetKind::Transfer, id, config)

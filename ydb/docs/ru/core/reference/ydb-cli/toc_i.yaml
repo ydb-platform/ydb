@@ -75,14 +75,10 @@ items:
     items:
     - name: Обзор
       href: yql-query-overview.md
-    - name: Выполнение скрипта (с поддержкой стриминга)
-      href: yql.md
-    - name: Выполнение скрипта
-      href: scripting-yql.md
     - name: Выполнение запроса
-      href: table-query-execute.md
+      href: sql.md
     - name: Выполнение параметризованных запросов
-      href: parameterized-queries-cli.md
+      href: parameterized-query-execution.md
     - name: Интерактивный режим выполнения запросов
       href: interactive-cli.md
 #  - name: Утилиты

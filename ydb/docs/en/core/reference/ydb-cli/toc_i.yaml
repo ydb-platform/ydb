@@ -73,14 +73,10 @@ items:
     items:
     - name: Overview
       href: yql-query-overview.md
-    - name: Running a script (with streaming support)
-      href: yql.md
-    - name: Running a script
-      href: scripting-yql.md
-    - name: Running a query
-      href: table-query-execute.md
+    - name: Query execution
+      href: sql.md
     - name: Running parameterized queries
-      href: parameterized-queries-cli.md
+      href: parameterized-query-execution.md
     - name: Interactive query execution mode
       href: interactive-cli.md
 #  - name: Utilities

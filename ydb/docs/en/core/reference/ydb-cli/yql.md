@@ -1,3 +1,11 @@
+
+{% note warning %}
+
+This command is deprecated.
+The preferred way to run queries in {{ ydb-short-name }} CLI is to use the [`{{ ydb-cli }} sql`](sql.md) command. 
+
+{% endnote %}
+
 # Running a script (with streaming support)
 
 You can use the `yql` subcommand to run a YQL script. The script can include queries of different types. Unlike `scripting yql`, the `yql` subcommand establishes a streaming connection and retrieves data through it. With the in-stream query execution, no limit is imposed on the amount of data read.
@@ -87,4 +95,3 @@ Command output:
 ```
 
 You can find examples of passing parameters to scripts in the [article on how to pass parameters to YQL execution commands](parameterized-queries-cli.md).
-

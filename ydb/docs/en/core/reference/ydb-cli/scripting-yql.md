@@ -1,3 +1,11 @@
+
+{% note warning %}
+
+This command is deprecated.
+The preferred way to run queries in {{ ydb-short-name }} CLI is to use the [`{{ ydb-cli }} sql`](sql.md) command. 
+
+{% endnote %}
+
 # Running a script
 
 You can use the `scripting yql` subcommand to run a YQL script. The script can include queries of different types. Unlike `yql`, the `scripting yql` command has a limit on the number of returned rows and accessed data.

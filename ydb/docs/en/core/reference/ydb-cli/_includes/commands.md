@@ -52,15 +52,16 @@ Any command can be run from the command line with the `--help` option to get hel
 | [scheme permissions clear-inheritance](../commands/scheme-permissions.md#clear-inheritance) | Disable permission inheritance |
 | [scheme permissions set-inheritance](../commands/scheme-permissions.md#set-inheritance) | Enable permission inheritance |
 | [scheme rmdir](../commands/dir.md#rmdir) | Deleting a directory |
-| [scripting yql](../scripting-yql.md) | Executing a YQL script |
+| [scripting yql](../scripting-yql.md) | Executing a YQL script (deprecated, use [`ydb sql`](../sql.md)) |
+| [sql](../sql.md) | Execute any query |
 | table attribute add | Adding a table attribute |
 | table attribute drop | Deleting a table attribute |
 | [table drop](../table-drop.md) | Deleting a table |
 | [table index add global-async](../commands/secondary_index.md#add) | Adding an asynchronous index |
 | [table index add global-sync](../commands/secondary_index.md#add) | Adding a synchronous index |
 | [table index drop](../commands/secondary_index.md#drop) | Deleting an index |
-| [table query execute](../table-query-execute.md) | Executing a YQL query |
-| [table query explain](../commands/explain-plan.md) | YQL query execution plan |
+| [table query execute](../table-query-execute.md) | Executing a YQL query (deprecated, use [`ydb sql`](../sql.md)) |
+| [table query explain](../commands/explain-plan.md) | YQL query execution plan (deprecated, use [`ydb sql --explain`](../sql.md)) |
 | [table read](../commands/readtable.md) | Streaming table reads |
 | [table ttl set](../table-ttl-set.md) | Setting TTL parameters |
 | [table ttl reset](../table-ttl-reset.md) | Resetting TTL parameters |
@@ -77,8 +78,8 @@ Any command can be run from the command line with the `--help` option to get hel
 | [topic read](../topic-read.md) | Reading messages from a topic |
 | [topic write](../topic-write.md) | Writing messages to a topic |
 {% if ydb-cli == "ydb" %}
-[update](../commands/service.md) | Update the {{ ydb-short-name }} CLI
-[version](../commands/service.md) | Output details about the {{ ydb-short-name }} CLI version
+| [update](../commands/service.md) | Update the {{ ydb-short-name }} CLI |
+| [version](../commands/service.md) | Output details about the {{ ydb-short-name }} CLI version |
 {% endif %}
-[workload](../commands/workload/index.md) | Generate the workload
-[yql](../yql.md) | Execute a YQL script (with streaming support)
+| [workload](../commands/workload/index.md) | Generate the workload |
+| [yql](../yql.md) | Execute a YQL script (deprecated, use [`ydb sql`](../sql.md)) |

@@ -177,7 +177,7 @@ class YdbCluster:
         LOGGER.info(f'list {path}')
         result = []
         entries = cls.get_ydb_driver().scheme_client.list_directory(path).children
-        if kind_order_key:
+        if kind_order_key is not None:
             entries = sorted(entries, key=lambda x: kind_order_key(x.type))
         for child in entries:
             if child.name == '.sys':

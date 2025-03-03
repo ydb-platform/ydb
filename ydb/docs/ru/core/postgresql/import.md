@@ -91,6 +91,17 @@
         ghcr.io/ydb-platform/local-ydb:latest
     ```
 
+    Информация по поднимаемым docker-контейнерам:
+
+    #|
+    || База данных | PostgreSQL | YDB ||
+    || Имя контейнера | postgres_container | ydb-postgres ||
+    || Адрес | postgres://pgroot:1234@localhost:5433/local | postgresql://ydbroot:4321@localhost:5432/local ||
+    || Порт | 5433 | 5432 ||
+    || Имя пользователя | pgroot | ydbroot ||
+    || Пароль | 1234 | 4321 ||
+    |#
+
 2. Сгенерировать данные через [pgbench](https://www.postgresql.org/docs/current/pgbench.html):
 
     ```bash
@@ -109,3 +120,5 @@
     ```bash
     ydb tools pg-convert --ignore-unsupported -i dump.sql | psql postgresql://ydbroot:4321@localhost:5432/local
     ```
+
+    Эта команда использует {{ ydb-short-name }} CLI для преобразования файла `dump.sql` в формат, поддерживаемый {{ ydb-short-name }} в режиме совместимости с PostgreSQL. Затем преобразованный файл перенаправляется в утилиту `psql` для загрузки данных в {{ ydb-short-name }} по протоколу PostgreSQL.

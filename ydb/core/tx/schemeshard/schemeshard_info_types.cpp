@@ -158,7 +158,6 @@ bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
         // they are not accounted for when we make a decision to change the state of the subdomain.
         ui64 totalUsage = TotalDiskSpaceUsage();
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD, "Total usage: " << totalUsage << " soft quota: " << quotas.SoftQuota << " hard quota: " << quotas.HardQuota);
         // If a quota is equal to zero, then it sets no limit on the disk space usage.
         const bool isHardQuotaExceeded = quotas.HardQuota && totalUsage > quotas.HardQuota;
         const bool isTotalUsageBelowSoftQuota = !quotas.SoftQuota || totalUsage < quotas.SoftQuota;

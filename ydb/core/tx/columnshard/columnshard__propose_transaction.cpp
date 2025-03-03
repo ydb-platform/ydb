@@ -60,6 +60,8 @@ public:
                     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "propose")("subdomain_id", subDomainPathId);
                     Self->SpaceWatcher->PersistSubDomainPathId(subDomainPathId, txc);
                     Self->SpaceWatcher->StartWatchingSubDomainPathId();
+                } else {
+                    Self->SpaceWatcher->StartFindSubDomainPathId();
                 }
             }
         }

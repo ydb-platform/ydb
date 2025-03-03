@@ -94,15 +94,16 @@ public:
             TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
 
             if (shard.TabletType == ETabletType::ColumnShard) {
+                const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId;
                 auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
                     NKikimrTxColumnShard::TX_KIND_SCHEMA,
                     context.SS->TabletID(),
                     context.Ctx.SelfID,
                     ui64(OperationId.GetTxId()),
                     columnShardTxBody, seqNo,
-                    context.SS->SelectProcessingParams(txState->TargetPathId));
-                const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId;
-                event->Record.SetSubDomainPathId(subDomainPathId);
+                    context.SS->SelectProcessingParams(txState->TargetPathId),
+                    0,
+                    subDomainPathId);
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
             } else {

@@ -131,12 +131,13 @@ public:
     std::shared_ptr<IBaseOptimizerNode> GetLowestCostTree(const TNodeSet& nodes) {
         Y_ASSERT(DpTable_.contains(nodes));
 
-        Cout << "SIZE IS: " << DpTable_[nodes].size() << Endl;
-        // for (const auto& tree: DpTable_[nodes]) {
-        //     std::stringstream ss;
-        //     tree->Print(ss);
-        //     Cout << ss.str() << Endl;
-        // }
+        Cout << "SIZE IS: " << DpTable_[nodes].size() << '\n';
+        for (const auto& tree: DpTable_[nodes]) {
+            std::stringstream ss;
+            tree->Print(ss);
+            Cout << "COST: " << tree->Stats.Cost << '\n';
+            Cout << ss.str() << '\n';
+        }
 
         auto minCost = std::min_element(
             DpTable_[nodes].begin(),
@@ -518,6 +519,8 @@ template<typename TNodeSet,  typename TDerived> std::shared_ptr<TJoinOptimizerNo
     for (size_t i = 0; i < NNodes_; ++i) {
         allNodes[i] = 1;
     }
+
+    Cout << Endl;
     auto minCostTree = Derived.GetLowestCostTree(allNodes);
     return std::static_pointer_cast<TJoinOptimizerNodeInternal>(minCostTree);
 }
@@ -961,18 +964,24 @@ inline void AddNodeToDpTableEntries(
     // bool wasFound = false;
 
     // for (auto& entry: dpTableEntries) {
-    //     if (entry->LogicalOrderings.IsSubsetOf(node->LogicalOrderings)) {
-    //         if (entry->Stats.Cost < node->Stats.Cost) {
-    //             entry = std::move(node);
-    //             return;
-    //         }
+        // if (entry->LogicalOrderings.IsSubsetOf(node->LogicalOrderings)) {
+            // if (entry->Stats.Cost < node->Stats.Cost) {
+            //     entry = std::move(node);
+            //     return;
+            // }
 
-    //         wasFound = true;
-    //     }
+            // wasFound = true;
+        // }
     // }
 
+
+    if (dpTableEntries.empty()) {
+        dpTableEntries.push_back(std::move(node));
+    } else if (dpTableEntries.back()->Stats.Cost < node->Stats.Cost) {
+        dpTableEntries.back() = std::move(node);
+    }
     // if (wasFound) { return; }
-    dpTableEntries.push_back(std::move(node));
+    // dpTableEntries.push_back(std::move(node));
 }
 
 /*

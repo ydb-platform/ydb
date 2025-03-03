@@ -247,7 +247,7 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
     }
 
     if (settings.StatsCollectPeriod_) {
-        request.set_stats_period_ms((*settings.StatsCollectPeriod_).count());
+        request.set_stats_period_ms(settings.StatsCollectPeriod_->count());
     }
 
     if (txControl.HasTx()) {

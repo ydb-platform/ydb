@@ -18,7 +18,7 @@ Restoring databases requires that dynamic nodes be started for them. Dynamic nod
 
 [Cluster configuration](../../../../maintenance/manual/config-overview.md) is restored separately using the following steps:
 
-1) Load the saved dynamic configuration using the `{{{ ydb-cli }} admin cluster config replace` command.
+1) Load the saved configuration using the `{{{ ydb-cli }} admin cluster config replace` command.
 2) Restart the cluster nodes.
 
 ### Required parameters {#mandatory}
@@ -47,7 +47,7 @@ Restoring database schema objects is the same as described in [Schema objects](#
 
 [Database configuration](../../../../maintenance/manual/config-overview.md) is restored separately using the following steps:
 
-1) Load the saved dynamic configuration using the `{{{ ydb-cli }} admin database config replace` command.
+1) Load the saved configuration using the `{{{ ydb-cli }} admin database config replace` command.
 2) Restart the database nodes.
 
 ### Required parameters {#mandatory}

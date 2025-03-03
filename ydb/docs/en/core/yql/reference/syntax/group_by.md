@@ -268,7 +268,7 @@ LIMIT 3;
 
 Group the table by the values of the specified columns or expressions and the time window.
 
-If GROUP BY is present in the query, then when selecting columns (between `SELECT STREAM ... FROM`) you can **only** use the following constructs:
+If GROUP BY is present in the query, then when selecting columns (between `SELECT ... FROM`) you can **only** use the following constructs:
 
 1. Columns by which grouping is performed (they are included in the `GROUP BY` argument).
 2. Aggregate functions (see the next section). Columns by which **no** grouping is made can only be included as arguments for an aggregate function.
@@ -299,34 +299,6 @@ The **tumbling window** known in other systems is a special case of a **hopping 
 
 ## Examples
 
-{% if select_command == "SELECT STREAM" %}
-
-```yql
-SELECT STREAM
-    key,
-    COUNT(*)
-FROM my_stream
-GROUP BY
-    HOP(CAST(subkey AS Timestamp), "PT10S", "PT1M", "PT30S"),
-    key;
--- hop = 10 seconds
--- interval = 1 minute
--- delay = 30 seconds
-```
-
-```yql
-SELECT STREAM
-    double_key,
-    HOP_END() as time,
-    COUNT(*) as count
-FROM my_stream
-GROUP BY
-    key + key AS double_key,
-    HOP(ts, "PT1M", "PT1M", "PT1M");
-```
-
-{% else %}
-
 ```yql
 SELECT
     key,
@@ -350,33 +322,17 @@ GROUP BY
     key + key AS double_key,
     HOP(ts, "PT1M", "PT1M", "PT1M");
 ```
-
-{% endif %}
 
 ## HAVING {#having}
 
-Filtering a {% if select_command != "SELECT STREAM" %}`SELECT`{% else %}`SELECT STREAM`{% endif %} based on the calculation results of [aggregate functions](../builtins/aggregation.md). The syntax is similar to [WHERE](select/where.md).
+Filtering a `SELECT` based on the calculation results of [aggregate functions](../builtins/aggregation.md). The syntax is similar to [WHERE](select/where.md).
 
 ### Example
 
-{% if select_command == "SELECT STREAM" %}
-
 ```yql
-SELECT STREAM
+SELECT
     key
 FROM my_table
 GROUP BY key
 HAVING COUNT(value) > 100;
 ```
-
-{% else %}
-
-```yql
-SELECT STREAM
-    key
-FROM my_table
-GROUP BY key
-HAVING COUNT(value) > 100;
-```
-
-{% endif %}

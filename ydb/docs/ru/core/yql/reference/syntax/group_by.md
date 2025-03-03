@@ -263,7 +263,7 @@ LIMIT 3;
 
 Сгруппировать таблицу по значениям указанных столбцов или выражений, а также окну времени.
 
-Если GROUP BY присутствует в запросе, то при выборке столбцов (между {% if select_command == "SELECT STREAM" %}`SELECT STREAM ... FROM`{% else %}`SELECT ... FROM`{% endif %}) допустимы **только** следующие конструкции:
+Если GROUP BY присутствует в запросе, то при выборке столбцов (между `SELECT ... FROM`) допустимы **только** следующие конструкции:
 
 1. Столбцы, по которым производится группировка (присутствующие в аргументе `GROUP BY`).
 2. Агрегатные функции (см. следующий раздел). Столбцы, по которым **не** идет группировка, можно включать только в качестве аргументов агрегатной функции.
@@ -294,34 +294,6 @@ HOP(time_extractor, hop, interval, delay)
 
 ### Примеры
 
-{% if select_command == "SELECT STREAM" %}
-
-```yql
-SELECT STREAM
-    key,
-    COUNT(*)
-FROM my_stream
-GROUP BY
-    HOP(CAST(subkey AS Timestamp), "PT10S", "PT1M", "PT30S"),
-    key;
--- hop = 10 секунд
--- interval = 1 минута
--- delay = 30 секунд
-```
-
-```yql
-SELECT STREAM
-    double_key,
-    HOP_END() as time,
-    COUNT(*) as count
-FROM my_stream
-GROUP BY
-    key + key AS double_key,
-    HOP(ts, "PT1М", "PT1M", "PT1M");
-```
-
-{% else %}
-
 ```yql
 SELECT
     key,
@@ -346,25 +318,12 @@ GROUP BY
     HOP(ts, "PT1М", "PT1M", "PT1M");
 ```
 
-{% endif %}
 ## HAVING {#having}
 
-Фильтрация выборки {% if select_command != "SELECT STREAM" %}`SELECT`{% else %}`SELECT STREAM`{% endif %} по результатам вычисления [агрегатных функций](../builtins/aggregation.md). Синтаксис аналогичен конструкции [`WHERE`](select/where.md).
+Фильтрация выборки `SELECT` по результатам вычисления [агрегатных функций](../builtins/aggregation.md). Синтаксис аналогичен конструкции [`WHERE`](select/where.md).
 
 ### Пример
 
-{% if select_command == "SELECT STREAM" %}
-
-```yql
-SELECT STREAM
-    key
-FROM my_table
-GROUP BY key
-HAVING COUNT(value) > 100;
-```
-
-{% else %}
-
 ```yql
 SELECT
     key
@@ -372,6 +331,3 @@ FROM my_table
 GROUP BY key
 HAVING COUNT(value) > 100;
 ```
-
-{% endif %}
-

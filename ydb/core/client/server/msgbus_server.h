@@ -289,6 +289,7 @@ IActor* CreateMessageBusBlobStorageLoadRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusBlobStorageGetRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusHiveLookupTablet(TBusMessageContext &msg);
 IActor* CreateMessageBusBlobStorageConfig(TBusMessageContext &msg);
+IActor* CreateMessageBusBlobStorageDescribe(TBusMessageContext &msg);
 IActor* CreateMessageBusDrainNode(TBusMessageContext &msg);
 IActor* CreateMessageBusFillNode(TBusMessageContext &msg);
 IActor* CreateMessageBusResolveNode(TBusMessageContext &msg);

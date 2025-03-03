@@ -88,6 +88,8 @@ enum {
     MTYPE_CLIENT_DS_LOAD_REQUEST = 10482, // deprecated
     MTYPE_CLIENT_DS_LOAD_RESPONSE = 10483, // deprecated
     /*MTYPE_CLIENT_LOGIN_REQUEST*/ MTYPE_CLIENT_DEPRECATED_10484 = 10484,
+    MTYPE_CLIENT_BLOB_STORAGE_DESCRIBE_REQUEST = 10485,
+    MTYPE_CLIENT_BLOB_STORAGE_DESCRIBE_RESPONSE = 10486,
 };
 
 template <typename InstanceType, class TBufferRecord, int MType>
@@ -121,6 +123,8 @@ struct TBusSchemeDescribe : TBusMessage<TBusSchemeDescribe, NKikimrClient::TSche
 struct TBusOldFlatDescribeRequest : TBusMessage<TBusOldFlatDescribeRequest, NKikimrClient::TSchemeDescribe, MTYPE_CLIENT_OLD_FLAT_DESCRIBE_REQUEST> {};
 struct TBusOldFlatDescribeResponse : TBusMessage<TBusOldFlatDescribeResponse, NKikimrClient::TFlatDescribeResponse, MTYPE_CLIENT_OLD_FLAT_DESCRIBE_RESPONSE> {};
 struct TBusBlobStorageConfigRequest : TBusMessage<TBusBlobStorageConfigRequest, NKikimrClient::TBlobStorageConfigRequest, MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST> {};
+struct TBusBlobStorageDescribeRequest : TBusMessage<TBusBlobStorageDescribeRequest, NKikimrClient::TBlobStorageDescribeRequest, MTYPE_CLIENT_BLOB_STORAGE_DESCRIBE_REQUEST> {};
+struct TBusBlobStorageDescribeResponse : TBusMessage<TBusBlobStorageDescribeResponse, NKikimrClient::TBlobStorageDescribeResponse, MTYPE_CLIENT_BLOB_STORAGE_DESCRIBE_RESPONSE> {};
 struct TBusDrainNode : TBusMessage<TBusDrainNode, NKikimrClient::TDrainNodeRequest, MTYPE_CLIENT_DRAIN_NODE> {};
 struct TBusFillNode : TBusMessage<TBusFillNode, NKikimrClient::TFillNodeRequest, MTYPE_CLIENT_FILL_NODE> {};
 struct TBusResolveNode : TBusMessage<TBusResolveNode, NKikimrClient::TResolveNodeRequest, MTYPE_CLIENT_RESOLVE_NODE> {};

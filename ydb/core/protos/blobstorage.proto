@@ -1320,6 +1320,47 @@ message TEvRequestBSControllerInfo {
     optional uint32 GroupId = 1;
 }
 
+message TDescribeRequest {
+    message TTarget {
+        oneof Target {
+            NKikimrBlobStorage.TVDiskID VDiskId = 1;
+            NKikimrBlobStorage.TPDiskId PDiskId = 2;
+            uint32 GroupId = 3;
+        }
+    }
+
+    repeated TTarget Targets = 1;
+}
+
+message TDescribeResponse {
+    message TVDiskResponse {
+        optional string Result = 1;
+    }
+    message TPDiskResponse {
+        optional string Result = 1;
+    }
+    message TGroupResponse {
+        optional string Result = 1;
+    }
+    message TResponse {
+        oneof Response {
+            TVDiskResponse VDiskResponse = 1;
+            TPDiskResponse PDiskResponse = 2;
+            TGroupResponse GroupResponse = 3;
+        }
+    }
+
+    repeated TResponse Results = 1;
+}
+
+message TEvControllerDescribeRequest {
+    optional TDescribeRequest Request = 1;
+}
+
+message TEvControllerDescribeResponse {
+    optional TDescribeResponse Response = 1;
+}
+
 message TEvResponseBSControllerInfo {
     message TVDiskInfo {
         optional NKikimrBlobStorage.TVDiskID VDiskId = 1;

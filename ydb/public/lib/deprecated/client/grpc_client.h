@@ -26,6 +26,7 @@ namespace NKikimr {
         using TNodeRegistrationResponseCallback = TCallback<NKikimrClient::TNodeRegistrationResponse>;
         using TCmsResponseCallback = TCallback<NKikimrClient::TCmsResponse>;
         using TConsoleResponseCallback = TCallback<NKikimrClient::TConsoleResponse>;
+        using TBlobStorageDescribeResponseCallback = TCallback<NKikimrClient::TBlobStorageDescribeResponse>;
 
         using TFinishCallback = std::function<void (const TGrpcError*)>;
 
@@ -65,6 +66,7 @@ namespace NKikimr {
             /////////////////////////////////////////////////////////////////////////////////////////////////
             void SchemeInitRoot(const NKikimrClient::TSchemeInitRoot& request, TResponseCallback callback);
             void BlobStorageConfig(const NKikimrClient::TBlobStorageConfigRequest& request, TResponseCallback callback);
+            void BlobStorageDescribe(const NKikimrClient::TBlobStorageDescribeRequest& request, TBlobStorageDescribeResponseCallback callback);
 
             void ResolveNode(const NKikimrClient::TResolveNodeRequest& request, TResponseCallback callback);
 

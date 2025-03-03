@@ -180,6 +180,14 @@ public:
         }
     }
 
+    void Reply(const NKikimrClient::TBlobStorageDescribeResponse& resp) override {
+        try {
+            Finish(dynamic_cast<const TOut&>(resp), 0);
+        } catch (const std::bad_cast&) {
+            Y_ABORT("unexpected response type generated");
+        }
+    }
+
     void Reply(const NKikimrClient::TSqsResponse& resp) override {
         try {
             Finish(dynamic_cast<const TOut&>(resp), 0);
@@ -218,6 +226,10 @@ public:
     static void GenerateErrorResponse(NKikimrClient::TCmsResponse& resp, const TString& reason) {
         resp.MutableStatus()->SetCode(NKikimrCms::TStatus::ERROR);
         resp.MutableStatus()->SetReason(reason);
+    }
+
+    static void GenerateErrorResponse(NKikimrClient::TBlobStorageDescribeResponse& resp, const TString&) {
+        resp.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
     }
 
     static void GenerateErrorResponse(NKikimrClient::TJSON& resp, const TString& reason) {
@@ -468,6 +480,12 @@ void TGRpcService::SetupIncomingRequests() {
     ADD_REQUEST(CmsRequest, TCmsRequest, TCmsResponse, {
         NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_CMS_REQUEST));
         RegisterRequestActor(CreateMessageBusCmsRequest(msg));
+    })
+
+    // BSC describe request
+    ADD_REQUEST(BlobStorageDescribe, TBlobStorageDescribeRequest, TBlobStorageDescribeResponse, {
+        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_BLOB_STORAGE_DESCRIBE_REQUEST));
+        RegisterRequestActor(CreateMessageBusBlobStorageDescribe(msg));
     })
 
     // Console request

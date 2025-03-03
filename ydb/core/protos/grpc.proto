@@ -44,6 +44,7 @@ service TGRpcServer {
 
     // Blob storage configuration manipulation/query interface
     rpc BlobStorageConfig(TBlobStorageConfigRequest) returns (TResponse);
+    rpc BlobStorageDescribe(TBlobStorageDescribeRequest) returns (TBlobStorageDescribeResponse);
 
     /////////////////////////////////////////////////////////////////////////////////////////////////
     // KV-TABLET INTERNAL INTERFACE

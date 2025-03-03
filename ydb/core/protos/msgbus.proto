@@ -13,6 +13,7 @@ import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/msgbus_pq.proto";
 import "ydb/core/protos/scheme_log.proto";
 import "ydb/core/protos/tablet.proto";
+import "ydb/core/protos/blobstorage.proto";
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/node_broker.proto";
 import "ydb/core/protos/cms.proto";
@@ -460,6 +461,17 @@ message TBlobStorageConfigRequest {
     optional uint32 Domain = 1;
     optional NKikimrBlobStorage.TConfigRequest Request = 2;
     optional string SecurityToken = 3;
+}
+
+message TBlobStorageDescribeRequest {
+    optional uint32 Domain = 1;
+    optional NKikimrBlobStorage.TDescribeRequest Request = 2;
+    optional string SecurityToken = 3;
+}
+
+message TBlobStorageDescribeResponse {
+    optional NKikimrBlobStorage.TDescribeResponse Response = 1;
+    optional uint32 Status = 2; // EResponseStatus from ydb/core/client/base/msgbus.h
 }
 
 message TDrainNodeRequest {

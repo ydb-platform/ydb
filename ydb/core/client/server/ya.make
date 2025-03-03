@@ -5,6 +5,7 @@ SRCS(
     http_ping.cpp
     http_ping.h
     msgbus_blobstorage_config.cpp
+    msgbus_blobstorage_describe.cpp
     msgbus_http_server.h
     msgbus_http_server.cpp
     msgbus_server.cpp

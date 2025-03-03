@@ -8,7 +8,7 @@ private:
     using TBase = IResourceProcessor;
     YDB_READONLY_DEF(std::shared_ptr<arrow::Scalar>, ScalarConstant);
 
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<TAccessorsCollection>& resources) const override;
+    virtual TConclusionStatus DoExecute(const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& context) const override;
 
     virtual bool IsAggregation() const override {
         return false;

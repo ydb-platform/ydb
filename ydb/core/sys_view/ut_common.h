@@ -22,6 +22,7 @@ struct TTestEnvSettings {
     ui32 PqTabletsN = 0;
     bool EnableSVP = false;
     bool EnableForceFollowers = false;
+    bool ShowCreateTable = false;
 };
 
 class TTestEnv {
@@ -30,7 +31,7 @@ public:
     static TDisableSourcesTag DisableSourcesTag;
 
 public:
-    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 4, const TTestEnvSettings& settings = {}, bool showCreateTable = false);
+    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 4, const TTestEnvSettings& settings = {});
 
     ~TTestEnv();
 

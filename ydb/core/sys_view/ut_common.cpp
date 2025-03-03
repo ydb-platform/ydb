@@ -26,7 +26,7 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(const TString 
     return subdomain;
 }
 
-TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& settings, bool showCreateTable) {
+TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& settings) {
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
 
@@ -68,7 +68,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     Server = new Tests::TServer(*Settings);
     Server->EnableGRpc(grpcPort);
 
-    if (showCreateTable) {
+    if (settings.ShowCreateTable) {
         this->Server->SetupDefaultProfiles();
     }
 
@@ -89,7 +89,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     }
 
     Endpoint = "localhost:" + ToString(grpcPort);
-    if (showCreateTable) {
+    if (settings.ShowCreateTable) {
         DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint).SetDatabase("/Root");
     } else {
         DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);

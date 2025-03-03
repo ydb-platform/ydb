@@ -22,8 +22,7 @@ public:
         Ydb::StatusIds::StatusCode Status;
         TString Error;
 
-        TFormatFail(Ydb::StatusIds::StatusCode status,
-            TString error = {})
+        TFormatFail(Ydb::StatusIds::StatusCode status, TString error = {})
             : Status(status)
             , Error(std::move(error))
         {}
@@ -64,7 +63,7 @@ public:
     };
 
     TCreateTableFormatter()
-    : Alloc(__LOCATION__)
+        : Alloc(__LOCATION__)
     {
         Alloc.Release();
     }

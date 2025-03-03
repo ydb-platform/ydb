@@ -244,7 +244,7 @@ void TCreateTableFormatter::Format(const Ydb::TypedValue& value, bool isPartitio
 class TStringStreamWrapper {
 public:
     TStringStreamWrapper(TStringStream& stream)
-    : Stream(stream)
+        : Stream(stream)
     {}
 
     ~TStringStreamWrapper() {

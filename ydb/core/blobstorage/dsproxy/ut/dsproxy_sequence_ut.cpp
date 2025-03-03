@@ -1386,6 +1386,7 @@ Y_UNIT_TEST(TestBlock42CheckLwtrack) {
     for (auto i = 13; i < 15; ++i) {
         const auto& p = r.GetEvents(i);
         UNIT_ASSERT_VALUES_EQUAL("DSProxyScheduleAccelerate", p.GetName());
+         UNIT_ASSERT_VALUES_EQUAL("Get", p.GetParams(1).GetStrValue());
     }
 
     for (auto i = 15; i < 17; ++i) {

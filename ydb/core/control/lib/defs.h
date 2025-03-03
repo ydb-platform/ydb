@@ -66,6 +66,11 @@ namespace NKikimr {
         ColumnShardControlsGranuleIndexedPortionsSizeLimit  /* "ColumnShardControls.GranuleIndexedPortionsSizeLimit" */,
         ColumnShardControlsGranuleIndexedPortionsCountLimit /* "ColumnShardControls.GranuleIndexedPortionsCountLimit" */,
         BlobCacheMaxCacheDataSize                           /* "BlobCache.MaxCacheDataSize" */,
-        BlobCacheMaxInFlightDataSize                        /* "BlobCache.MaxInFlightDataSize" */
+        BlobCacheMaxInFlightDataSize                        /* "BlobCache.MaxInFlightDataSize" */,
+        CoordinatorControlsEnableLeaderLeases               /* "CoordinatorControls.EnableLeaderLeases" */,
+        CoordinatorControlsMinLeaderLeaseDurationUs         /* "CoordinatorControls.MinLeaderLeaseDurationUs" */,
+        CoordinatorControlsVolatilePlanLeaseMs              /* "CoordinatorControls.VolatilePlanLeaseMs" */,
+        CoordinatorControlsPlanAheadTimeShiftMs             /* "CoordinatorControls.PlanAheadTimeShiftMs" */,
+        CoordinatorControlsMinPlanResolutionMs              /* "CoordinatorControls.MinPlanResolutionMs" */
     };
 } // NKikimr

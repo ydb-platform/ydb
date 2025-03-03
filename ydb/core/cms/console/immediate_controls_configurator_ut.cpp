@@ -198,19 +198,19 @@ void CompareControls(TTenantTestRuntime &runtime,
 
     TControlWrapper wrapper;
 
-    icb->RegisterSharedControl(wrapper, "DataShardControls.MaxTxInFly");
+    staticControlBoard->RegisterSharedControl(wrapper, EStaticControlType::DataShardControlsMaxTxInFly);
     UNIT_ASSERT_VALUES_EQUAL((ui64)(i64)wrapper, cfg.GetDataShardControls().GetMaxTxInFly());
     icb->RegisterSharedControl(wrapper, "DataShardControls.DisableByKeyFilter");
     UNIT_ASSERT_VALUES_EQUAL((ui64)(i64)wrapper, cfg.GetDataShardControls().GetDisableByKeyFilter());
-    icb->RegisterSharedControl(wrapper, "DataShardControls.MaxTxLagMilliseconds");
+    staticControlBoard->RegisterSharedControl(wrapper, EStaticControlType::DataShardControlsMaxTxLagMilliseconds);
     UNIT_ASSERT_VALUES_EQUAL((ui64)(i64)wrapper, cfg.GetDataShardControls().GetMaxTxLagMilliseconds());
-    icb->RegisterSharedControl(wrapper, "DataShardControls.CanCancelROWithReadSets");
+    staticControlBoard->RegisterSharedControl(wrapper, EStaticControlType::DataShardControlsCanCancelROWithReadSets);
     UNIT_ASSERT_VALUES_EQUAL((ui64)(i64)wrapper, cfg.GetDataShardControls().GetCanCancelROWithReadSets());
-    icb->RegisterSharedControl(wrapper, "TxLimitControls.PerRequestDataSizeLimit");
+    staticControlBoard->RegisterSharedControl(wrapper, EStaticControlType::TxLimitControlsPerRequestDataSizeLimit);
     UNIT_ASSERT_VALUES_EQUAL((ui64)(i64)wrapper, cfg.GetTxLimitControls().GetPerRequestDataSizeLimit());
-    icb->RegisterSharedControl(wrapper, "TxLimitControls.PerShardReadSizeLimit");
+    staticControlBoard->RegisterSharedControl(wrapper, EStaticControlType::TxLimitControlsPerShardReadSizeLimit);
     UNIT_ASSERT_VALUES_EQUAL((ui64)(i64)wrapper, cfg.GetTxLimitControls().GetPerShardReadSizeLimit());
-    icb->RegisterSharedControl(wrapper, "TxLimitControls.PerShardIncomingReadSetSizeLimit");
+    staticControlBoard->RegisterSharedControl(wrapper, EStaticControlType::TxLimitControlsPerShardIncomingReadSetSizeLimit);
     UNIT_ASSERT_VALUES_EQUAL((ui64)(i64)wrapper, cfg.GetTxLimitControls().GetPerShardIncomingReadSetSizeLimit());
 }
 

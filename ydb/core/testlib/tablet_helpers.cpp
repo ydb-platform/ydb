@@ -670,13 +670,13 @@ namespace NKikimr {
 
     i64 SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val) {
         TAtomic prev;
-        runtime->GetAppData().Icb->SetValue("SchemeShard_SplitMergePartCountLimit", val, prev);
+        runtime->GetAppData().StaticControlBoard->SetValue(EStaticControlType::SchemeShardSplitMergePartCountLimit, val, prev);
         return prev;
     }
 
     bool SetAllowServerlessStorageBilling(TTestActorRuntime* runtime, bool isAllow) {
         TAtomic prev;
-        runtime->GetAppData().Icb->SetValue("SchemeShard_AllowServerlessStorageBilling", isAllow, prev);
+        runtime->GetAppData().StaticControlBoard->SetValue(EStaticControlType::SchemeShardAllowServerlessStorageBilling, isAllow, prev);
         return prev;
     }
 

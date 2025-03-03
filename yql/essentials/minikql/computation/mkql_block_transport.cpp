@@ -13,7 +13,7 @@ namespace {
 using NYql::TChunkedBuffer;
 
 TChunkedBuffer MakeChunkedBufferAndUntrack(const std::shared_ptr<const arrow::Buffer>& owner, const char* data, size_t size) {
-    MKQLArrowUntrack(owner->data());
+    MKQLArrowUntrack(owner->data(), owner->capacity());
     return TChunkedBuffer(TStringBuf{data, size}, owner);
 }
 

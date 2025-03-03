@@ -195,13 +195,14 @@ private:
                     i.InitReading(reading, SubColumns);
                     i.MutableHeaderFetching().reset();
                 }
-            }
-            if (!!i.GetOthersReadData()) {
-                i.SetOthersBlob(blobs.Extract(*StorageId, *i.GetOthersReadData()));
-            }
-            for (auto&& [subColName, chunkData] : i.MutableChunks()) {
-                if (!!chunkData.GetBlobRangeOptional()) {
-                    chunkData.SetBlobData(blobs.Extract(*StorageId, *chunkData.GetBlobRangeOptional()));
+            } else {
+                if (!!i.GetOthersReadData()) {
+                    i.SetOthersBlob(blobs.Extract(*StorageId, *i.GetOthersReadData()));
+                }
+                for (auto&& [subColName, chunkData] : i.MutableChunks()) {
+                    if (!!chunkData.GetBlobRangeOptional()) {
+                        chunkData.SetBlobData(blobs.Extract(*StorageId, *chunkData.GetBlobRangeOptional()));
+                    }
                 }
             }
         }

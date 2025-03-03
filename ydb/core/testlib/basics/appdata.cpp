@@ -79,7 +79,7 @@ namespace NKikimr {
                         NKikimrProto::TKeyConfig();
         };
 
-        return { app, Mine.Release(), keyGenerator, std::move(Icb) };
+        return { app, Mine.Release(), keyGenerator, std::move(Icb), std::move(StaticControlBoard) };
     }
 
     void TAppPrepare::AddDomain(TDomainsInfo::TDomain* domain)

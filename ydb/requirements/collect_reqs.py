@@ -245,6 +245,14 @@ def generate_summary(requirements, output_path):
         file.write("# Summary\n\n")
         section = ''
         subsection = ''
+        total = 0
+        completed = 0
+        for req in requirements:
+            if req.get('sub_issues_summary'):
+                total += req['sub_issues_summary']['total']
+                completed += req['sub_issues_summary']['completed']
+        file.write(f"**Completed tests: {completed}/{total}: {round(completed*100/total,2) if total > 0 else 0 }%**\n\n")
+        file.write(f"## {req['section']}\n\n")
         for req in requirements:
             if req.get('sub_issues_summary'):
                 if section != req['section']:

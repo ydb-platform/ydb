@@ -1,5 +1,9 @@
 # Summary
 
+**Completed tests: 2/11: 18.18%**
+
+## 
+
 ### Compression
 #### [ISSUE-13626](https://github.com/ydb-platform/ydb/issues/13626): Test Suite: cs/compression
 **Description**: Сжатие (в широком смысле, напр., dictionary encoding), sparse, column_family

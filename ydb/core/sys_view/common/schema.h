@@ -444,6 +444,7 @@ struct Schema : NIceDb::Schema {
         struct Activity : Column<13, NScheme::NTypeIds::Uint8> {};
         struct TierName: Column<14, NScheme::NTypeIds::Utf8> {};
         struct EntityType: Column<15, NScheme::NTypeIds::Utf8> {};
+        struct Details : Column<16, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<PathId, TabletId, PortionId, InternalEntityId, ChunkIdx>;
         using TColumns = TableColumns<
@@ -461,7 +462,8 @@ struct Schema : NIceDb::Schema {
             BlobRangeSize,
             Activity,
             TierName,
-            EntityType
+            EntityType,
+            Details
             >;
     };
 

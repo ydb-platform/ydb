@@ -78,6 +78,13 @@ public:
         return OthersSize;
     }
 
+    NJson::TJsonValue DebugJson() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("column", ColumnStats.DebugJson());
+        result.InsertValue("other", OtherStats.DebugJson());
+        return result;
+    }
+
     TSubColumnsHeader(
         TDictStats&& columnStats, TDictStats&& otherStats, NKikimrArrowAccessorProto::TSubColumnsAccessor&& proto, const ui32 headerSize)
         : ColumnStats(std::move(columnStats))

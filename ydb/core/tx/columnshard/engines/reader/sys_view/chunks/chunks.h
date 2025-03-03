@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/formats/arrow/accessor/sub_columns/fetching.h>
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/iterator.h>
@@ -58,9 +59,11 @@ private:
     mutable THashMap<ui32, TViewContainer> ColumnNamesById;
     mutable THashMap<NPortion::EProduced, TViewContainer> PortionType;
     mutable THashMap<TString, THashMap<ui32, TViewContainer>> EntityStorageNames;
+    mutable THashMap<TBlobRange, TString> Details;
     std::shared_ptr<NGroupedMemoryManager::TProcessGuard> ProcessGuard;
     std::shared_ptr<NGroupedMemoryManager::TScopeGuard> ScopeGuard;
     std::vector<std::shared_ptr<NGroupedMemoryManager::TGroupGuard>> GroupGuards;
+    bool NeedDetails;
 
     using TBase = NAbstract::TStatsIterator<NKikimr::NSysView::Schema::PrimaryIndexStats>;
 
@@ -69,22 +72,22 @@ private:
         const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const override;
     virtual ui32 PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const override;
     void AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionDataAccessor& portion) const;
+    bool IsReady(const ui64 portionId) const;
 
-    class TApplyResult: public IDataTasksProcessor::ITask {
+    class TAccessorsApplyResult: public IDataTasksProcessor::ITask {
     private:
         using TBase = IDataTasksProcessor::ITask;
         YDB_READONLY_DEF(std::vector<TPortionDataAccessor>, Accessors);
         NColumnShard::TCounterGuard WaitingCountersGuard;
     public:
         TString GetTaskClassIdentifier() const override {
-            return "TApplyResult";
+            return "TAccessorsApplyResult";
         }
 
-        TApplyResult(const std::vector<TPortionDataAccessor>& accessors, NColumnShard::TCounterGuard&& waitingCountersGuard)
+        TAccessorsApplyResult(const std::vector<TPortionDataAccessor>& accessors, NColumnShard::TCounterGuard&& waitingCountersGuard)
             : TBase(NActors::TActorId())
             , Accessors(accessors)
-            , WaitingCountersGuard(std::move(waitingCountersGuard))
-        {
+            , WaitingCountersGuard(std::move(waitingCountersGuard)) {
         }
 
         virtual TConclusionStatus DoExecuteImpl() override {
@@ -94,6 +97,54 @@ private:
         virtual bool DoApply(IDataReader& /*indexedDataRead*/) const override {
             AFL_VERIFY(false);
             return false;
+        }
+    };
+
+    class TSubColumnHeaderFetchingTask: public NBlobOperations::NRead::ITask,
+                                        public NColumnShard::TMonitoringObjectsCounter<TSubColumnHeaderFetchingTask> {
+    private:
+        using TBase = NBlobOperations::NRead::ITask;
+        std::shared_ptr<NReader::TReadContext> Context;
+        NArrow::NAccessor::NSubColumns::THeaderFetchingLogic FetchingLogic;
+        NColumnShard::TCounterGuard WaitingCountersGuard;
+
+        virtual void DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) override;
+        virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override;
+
+    public:
+        TSubColumnHeaderFetchingTask(TReadActionsCollection&& actions, NArrow::NAccessor::NSubColumns::THeaderFetchingLogic&& fetchingLogic,
+            const std::shared_ptr<NReader::TReadContext> context, const TString& taskCustomer, const TString& externalTaskId = "");
+    };
+
+    class TSubColumnStatsApplyResult: public IDataTasksProcessor::ITask {
+    private:
+        using TBase = IDataTasksProcessor::ITask;
+        THashMap<TBlobRange, NArrow::NAccessor::NSubColumns::TSubColumnsHeader> Headers;
+        NColumnShard::TCounterGuard WaitingCountersGuard;
+
+    public:
+        TString GetTaskClassIdentifier() const override {
+            return "TSubColumnStatsApplyResult";
+        }
+
+        TSubColumnStatsApplyResult(
+            THashMap<TBlobRange, NArrow::NAccessor::NSubColumns::TSubColumnsHeader>&& headers, NColumnShard::TCounterGuard&& countersGuard)
+            : TBase(NActors::TActorId())
+            , Headers(std::move(headers))
+            , WaitingCountersGuard(std::move(countersGuard)) {
+        }
+
+        virtual TConclusionStatus DoExecuteImpl() override {
+            AFL_VERIFY(false)("event", "not applicable");
+            return TConclusionStatus::Success();
+        }
+        virtual bool DoApply(IDataReader& /*indexedDataRead*/) const override {
+            AFL_VERIFY(false);
+            return false;
+        }
+
+        THashMap<TBlobRange, NArrow::NAccessor::NSubColumns::TSubColumnsHeader>&& ExtractResult() {
+            return std::move(Headers);
         }
     };
 
@@ -124,7 +175,7 @@ private:
                 AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
                 NActors::TActivationContext::AsActorContext().Send(
                     OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
-                                 std::make_shared<TApplyResult>(result.ExtractPortionsVector(), std::move(WaitingCountersGuard))));
+                                 std::make_shared<TAccessorsApplyResult>(result.ExtractPortionsVector(), std::move(WaitingCountersGuard))));
             }
         }
 
@@ -136,16 +187,28 @@ private:
         if (IndexGranules.empty()) {
             return;
         }
-        auto result = std::dynamic_pointer_cast<TApplyResult>(task);
-        AFL_VERIFY(result);
-        AFL_VERIFY(result->GetAccessors().size() == 1);
-        FetchedAccessors.emplace(result->GetAccessors().front().GetPortionInfo().GetPortionId(), result->GetAccessors().front());
+        if (auto result = std::dynamic_pointer_cast<TAccessorsApplyResult>(task)) {
+            AFL_VERIFY(result->GetAccessors().size() == 1);
+            OnAccessorReady(result->GetAccessors().front());
+        } else if (auto result = std::dynamic_pointer_cast<TSubColumnStatsApplyResult>(task)) {
+            for (auto&& [range, result] : result->ExtractResult()) {
+                AFL_VERIFY(Details.emplace(range, result.DebugJson().GetStringRobust()).second);
+            }
+        } else {
+            AFL_VERIFY(false);
+        }
     }
 
     virtual TConclusionStatus Start() override;
 
+    void OnAccessorReady(const TPortionDataAccessor& accessor);
+
 public:
-    using TBase::TBase;
+    TStatsIterator(const std::shared_ptr<NReader::TReadContext>& context)
+        : TBase(context)
+        , NeedDetails(std::find(ReadMetadata->ReadColumnIds.begin(), ReadMetadata->ReadColumnIds.end(),
+                          NKikimr::NSysView::Schema::PrimaryIndexStats::Details::ColumnId) != ReadMetadata->ReadColumnIds.end()) {
+    }
 };
 
 class TStoreSysViewPolicy: public NAbstract::ISysViewPolicy {

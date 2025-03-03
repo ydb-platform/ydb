@@ -13,7 +13,6 @@ TChunkConstructionData::TChunkConstructionData(const ui32 recordsCount, const st
     , ColumnType(columnType)
     , DefaultSerializer(defaultSerializer) {
     AFL_VERIFY(ColumnType);
-    AFL_VERIFY(RecordsCount);
     AFL_VERIFY(!NotNullRecordsCount || *NotNullRecordsCount <= RecordsCount)("records", RecordsCount)("not_null", NotNullRecordsCount);
     AFL_VERIFY(!!DefaultSerializer);
 }

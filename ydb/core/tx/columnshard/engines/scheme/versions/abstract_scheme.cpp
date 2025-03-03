@@ -181,7 +181,7 @@ std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnIdVerified(const 
 
 std::shared_ptr<NArrow::NAccessor::TColumnLoader> ISnapshotSchema::GetColumnLoaderVerified(const ui32 columnId) const {
     auto result = GetColumnLoaderOptional(columnId);
-    AFL_VERIFY(result);
+    AFL_VERIFY(result)("schema", DebugString());
     return result;
 }
 

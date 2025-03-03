@@ -1,50 +1,126 @@
-PRAGMA ydb.OptShuffleElimination="true";
+PRAGMA ydb.OptShuffleElimination = 'false';
+PRAGMA ydb.OptShuffleEliminationWithMap = 'true';
 
-$z1_12 = 1;
-$p = (select p_partkey, p_name
+$r = (
+select
+    r_regionkey
 from
-    part
-where p_name like '%green%');
-$j1 = (select ps_partkey, ps_suppkey, ps_supplycost
-from
-    partsupp as ps
-join $p as p
-on ps.ps_partkey = p.p_partkey);
-$j2 = (select l_suppkey, l_partkey, l_orderkey, l_extendedprice, l_discount, ps_supplycost, l_quantity
-from
-    lineitem as l
-join $j1 as j
-on l.l_suppkey = j.ps_suppkey AND l.l_partkey = j.ps_partkey);
-$j3 = (select l_orderkey, s_nationkey, l_extendedprice, l_discount, ps_supplycost, l_quantity
-from
-    supplier as s
-join $j2 as j
-on j.l_suppkey = s.s_suppkey);
-$j4 = (select o_orderdate, l_extendedprice, l_discount, ps_supplycost, l_quantity, s_nationkey
-from
-    orders as o
-join $j3 as j
-on o.o_orderkey = j.l_orderkey);
-$j5 = (select n_name, o_orderdate, l_extendedprice, l_discount, ps_supplycost, l_quantity
+    region
+where
+    r_name='EUROPE'
+);
+$n = (
+select
+    n_name,
+    n_nationkey
 from
     nation as n
-join $j4 as j
-on j.s_nationkey = n.n_nationkey
+left semi join
+    $r as r
+on
+    n.n_regionkey = r.r_regionkey
 );
-$profit = (select
-    n_name as nation,
-    DateTime::GetYear(cast(o_orderdate as timestamp)) as o_year,
-    l_extendedprice * ($z1_12 - l_discount) - ps_supplycost * l_quantity as amount
-from $j5);
+$s1 = (
 select
-    nation,
-    o_year,
-    sum(amount) as sum_profit
-from $profit
+    s_suppkey
+from
+    supplier as s
+left semi join
+    $n as n
+on
+    s.s_nationkey = n.n_nationkey
+);
+$min_ps_supplycost = (
+select
+    min(ps_supplycost) as min_ps_supplycost,
+    ps.ps_partkey as ps_partkey
+from
+    partsupp as ps
+left semi join
+    $s1 as s
+on
+    ps.ps_suppkey = s.s_suppkey
 group by
-    nation,
-    o_year
+    ps.ps_partkey
+);
+$p = (
+select
+    p_partkey,
+    p_mfgr
+from
+    part
+where
+    p_size = 15
+    and p_type like '%BRASS'
+);
+$ps = (
+select
+    ps.ps_partkey as ps_partkey,
+    p.p_mfgr as p_mfgr,
+    ps.ps_supplycost as ps_supplycost,
+    ps.ps_suppkey as ps_suppkey
+from
+    partsupp as ps
+join
+    $p as p
+on
+    p.p_partkey = ps.ps_partkey
+);
+$s2 = (
+select
+    s_acctbal,
+    s_name,
+    s_address,
+    s_phone,
+    s_comment,
+    s_suppkey,
+    n_name
+from
+    supplier as s
+join
+    $n as n
+on
+    s.s_nationkey = n.n_nationkey
+);
+$jp =(
+select
+    ps_partkey,
+    ps_supplycost,
+    p_mfgr,
+    s_acctbal,
+    s_name,
+    s_address,
+    s_phone,
+    s_comment,
+    n_name
+from
+    $ps as ps
+join
+    $s2 as s
+on
+    ps.ps_suppkey = s.s_suppkey
+);
+select
+    s_acctbal,
+    s_name,
+    n_name,
+    jp.ps_partkey as p_partkey,
+    p_mfgr,
+    s_address,
+    s_phone,
+    s_comment
+from
+    $jp as jp
+join
+    $min_ps_supplycost as m
+on
+    jp.ps_partkey = m.ps_partkey
+where
+    min_ps_supplycost = ps_supplycost
 order by
-    nation,
-    o_year desc;
+    s_acctbal desc,
+    n_name,
+    s_name,
+    p_partkey
+limit 100;
 

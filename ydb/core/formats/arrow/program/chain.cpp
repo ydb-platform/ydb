@@ -160,7 +160,7 @@ TConclusionStatus TProgramChain::Initialize() {
 
 TConclusionStatus TProgramChain::Apply(const std::shared_ptr<TAccessorsCollection>& resources) const {
     for (auto&& i : Processors) {
-        auto status = i->Execute(resources);
+        auto status = i->Execute(resources, i);
         if (status.IsFail()) {
             return status;
         }

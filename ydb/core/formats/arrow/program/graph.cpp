@@ -193,13 +193,10 @@ TConclusion<std::vector<std::shared_ptr<IResourceProcessor>>> TGraph::BuildChain
         }
     }
     std::sort(nodeChains.begin(), nodeChains.end());
-    bool found = false;
+    ui32 foundCount = 0;
     for (auto&& [_, i] : Nodes) {
-        if (i->GetProcessor()->GetProcessorType() == EProcessorType::Projection) {
-            if (found) {
-                return TConclusionStatus::Fail("detected projections duplication");
-            }
-            found = true;
+        if (i->GetProcessor()->GetProcessorType() != EProcessorType::Filter && i->GetProcessor()->GetOutput().empty()) {
+            ++foundCount;
             std::vector<const TGraphNode*> chain = i->GetFetchingChain();
             std::vector<const TGraphNode*> actualChain;
             for (auto&& c : chain) {
@@ -211,7 +208,7 @@ TConclusion<std::vector<std::shared_ptr<IResourceProcessor>>> TGraph::BuildChain
             nodeChains.emplace_back(std::move(actualChain));
         }
     }
-    if (!found) {
+    if (!foundCount) {
         return TConclusionStatus::Fail("not found projection node");
     }
     std::vector<std::shared_ptr<IResourceProcessor>> result;

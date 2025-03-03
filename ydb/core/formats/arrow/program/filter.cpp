@@ -69,12 +69,13 @@ private:
     }
 };
 
-TConclusionStatus TFilterProcessor::DoExecute(const std::shared_ptr<TAccessorsCollection>& resources) const {
+TConclusionStatus TFilterProcessor::DoExecute(const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& context) const {
     std::vector<std::shared_ptr<IChunkedArray>> inputColumns;
-    if (ReuseColumns) {
-        inputColumns = resources->GetAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
-    } else {
+    AFL_VERIFY(context.GetColumnsToDrop().size() <= 1)("size", context.GetColumnsToDrop().size());
+    if (context.GetColumnsToDrop().size() && GetInputColumnIdOnce() == context.GetColumnsToDrop().front()) {
         inputColumns = resources->ExtractAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
+    } else {
+        inputColumns = resources->GetAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
     }
     TFilterVisitor filterVisitor(inputColumns.front()->GetRecordsCount());
     for (auto& arr : inputColumns) {

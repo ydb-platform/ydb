@@ -12,7 +12,8 @@ private:
     YDB_ACCESSOR(ui32, ColumnId, 0);
     YDB_ACCESSOR_DEF(TString, ColumnName);
 
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<TAccessorsCollection>& /*resources*/) const override {
+    virtual TConclusionStatus DoExecute(
+        const std::shared_ptr<TAccessorsCollection>& /*resources*/, const TProcessorContext& /*context*/) const override {
         AFL_VERIFY(false);
         return TConclusionStatus::Success();
     }

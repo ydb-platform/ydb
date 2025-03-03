@@ -1,7 +1,7 @@
 RECURSE(
     actors
-    expr_nodes
     events
+    expr_nodes
     gateway
     provider
     scheme

@@ -75,7 +75,7 @@ items:
     items:
     - name: Обзор
       href: yql-query-overview.md
-    - name: Выполнение запроса
+    - name: Выполнение запросов
       href: sql.md
     - name: Выполнение параметризованных запросов
       href: parameterized-query-execution.md
@@ -91,7 +91,7 @@ items:
     - name: Выполнение запроса
       href: table-query-execute.md
       hidden: true
-    - name: Выполнение параметризованных запросов
+    - name: Выполнение запросов с параметрами
       href: parameterized-queries-cli.md
       hidden: true
 #  - name: Утилиты

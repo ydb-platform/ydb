@@ -75,7 +75,7 @@ items:
       href: yql-query-overview.md
     - name: Query execution
       href: sql.md
-    - name: Running parameterized queries
+    - name: Parameterized query execution
       href: parameterized-query-execution.md
     - name: Interactive query execution mode
       href: interactive-cli.md

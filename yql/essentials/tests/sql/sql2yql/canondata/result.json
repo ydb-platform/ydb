@@ -1378,6 +1378,34 @@
             "uri": "https://{canondata_backend}/1917492/7dd4bc86433f6173a26b62397e1ef41fa9471945/resource.tar.gz#test_sql2yql.test_blocks-agg_by_key_only_distinct_/sql.yql"
         }
     ],
+    "test_sql2yql.test[blocks-agg_singular_type_key]": [
+        {
+            "checksum": "7cae7f556775597a0b451a875e77a1df",
+            "size": 7636,
+            "uri": "https://{canondata_backend}/1784117/5ff6ff6c0808bf39612567f492af1bc2db36da20/resource.tar.gz#test_sql2yql.test_blocks-agg_singular_type_key_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[blocks-agg_singular_type_key_optional]": [
+        {
+            "checksum": "a3f91d7949791561f4972eafc1610499",
+            "size": 7678,
+            "uri": "https://{canondata_backend}/1781765/9e1dc7f8aa95db55a59c09f397a0634224d08363/resource.tar.gz#test_sql2yql.test_blocks-agg_singular_type_key_optional_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[blocks-agg_singular_type_value]": [
+        {
+            "checksum": "cd58c3714a9d215fd1f4bea4e36f37a2",
+            "size": 3634,
+            "uri": "https://{canondata_backend}/1781765/9e1dc7f8aa95db55a59c09f397a0634224d08363/resource.tar.gz#test_sql2yql.test_blocks-agg_singular_type_value_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[blocks-agg_singular_type_value_optional]": [
+        {
+            "checksum": "5ae70db766241594bfea9edd5e5dec34",
+            "size": 3676,
+            "uri": "https://{canondata_backend}/1781765/0dce37dc71c65fe553d73ed7cf98a62bdee9ddee/resource.tar.gz#test_sql2yql.test_blocks-agg_singular_type_value_optional_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[blocks-and]": [
         {
             "checksum": "e22a52b51ef20174c3b832acb09df01b",
@@ -1410,7 +1438,7 @@
         {
             "checksum": "601f02d489707b615a9ff16a4fe1d3f5",
             "size": 1304,
-            "uri": "https://{canondata_backend}/1900335/c447765ddbde200b8fe3ee8091f4d625b36b6bc6/resource.tar.gz#test_sql2yql.test_blocks-as_tuple_/sql.yql"
+            "uri": "https://{canondata_backend}/1784826/bb2033aff3202d2b68e04361e6d1bacbf4cbbed6/resource.tar.gz#test_sql2yql.test_blocks-as_tuple_/sql.yql"
         }
     ],
     "test_sql2yql.test[blocks-coalesce]": [
@@ -8297,6 +8325,26 @@
     "test_sql_format.test[blocks-agg_by_key_only_distinct]": [
         {
             "uri": "file://test_sql_format.test_blocks-agg_by_key_only_distinct_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-agg_singular_type_key]": [
+        {
+            "uri": "file://test_sql_format.test_blocks-agg_singular_type_key_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-agg_singular_type_key_optional]": [
+        {
+            "uri": "file://test_sql_format.test_blocks-agg_singular_type_key_optional_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-agg_singular_type_value]": [
+        {
+            "uri": "file://test_sql_format.test_blocks-agg_singular_type_value_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-agg_singular_type_value_optional]": [
+        {
+            "uri": "file://test_sql_format.test_blocks-agg_singular_type_value_optional_/formatted.sql"
         }
     ],
     "test_sql_format.test[blocks-and]": [

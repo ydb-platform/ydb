@@ -755,10 +755,6 @@ private:
             }
         }
 
-        if (resultLeft == EFetchResult::Yield || resultRight == EFetchResult::Yield) {
-            return EFetchResult::Yield;
-        }
-
         if (resultLeft == EFetchResult::Finish ) {
             *HaveMoreLeftRows = false;
         }
@@ -766,6 +762,14 @@ private:
 
         if (resultRight == EFetchResult::Finish ) {
             *HaveMoreRightRows = false;
+        }
+
+        if (!*HaveMoreLeftRows && !*HaveMoreRightRows) {
+            return EFetchResult::Finish;
+        }
+
+        if ((resultLeft == EFetchResult::Yield || !*HaveMoreLeftRows) && (resultRight == EFetchResult::Yield || !*HaveMoreRightRows)) {
+            return EFetchResult::Yield;
         }
 
         return EFetchResult::Finish;

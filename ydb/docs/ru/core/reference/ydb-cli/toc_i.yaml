@@ -70,7 +70,7 @@ items:
     - name: Запись в топик
       href: topic-write.md
     - name: Конвейерная обработка сообщений
-      href: topic-pipeline.md    
+      href: topic-pipeline.md
   - name: Выполнение YQL
     items:
     - name: Обзор

@@ -86,10 +86,33 @@ void CreateTuplePrimaryTable(TSession& session, const TString& name = "TestTable
     auto result = session.ExecuteQuery(TStringBuilder() << R"(
         UPSERT INTO `/Root/)" << name << R"(` (Group, Name, Age, Amount) VALUES
                 (1u, "Anna", 23ul, 3500ul),
+                (1u, "Cake", 31ul, 274ul),
                 (2u, "Paul", 36ul, 300ul),
                 (3u, "Tony", 81ul, 7200ul),
+                (3u, "Dan", 8ul, 430ul),
                 (4u, "John", 11ul, 10ul),
                 (5u, "Lena", 3ul, 0ul);
+    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+void CreateTuplePrimaryReorderTable(TSession& session, const TString& name = "TestTable") {
+    UNIT_ASSERT(session.ExecuteQuery(TStringBuilder() << R"(
+        CREATE TABLE `)" << name << R"(` (
+            Col1 Int32,
+            Col2 Int64,
+            Col3 Int64,
+            Col4 Int64,
+            PRIMARY KEY (Col2, Col1)
+        );)", NYdb::NQuery::TTxControl::NoTx()).GetValueSync().IsSuccess());
+
+    auto result = session.ExecuteQuery(TStringBuilder() << R"(
+        UPSERT INTO `/Root/)" << name << R"(` (Col1, Col2, Col3, Col4) VALUES
+                (1u, NULL, 1, 0),
+                (NULL, 2u, 2, -1),
+                (NULL, 1u, 3, -2),
+                (2u, NULL, 4, -3),
+                (3u, NULL, 5, -4);
     )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
@@ -408,12 +431,33 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
 
             CompareYson(R"([
                 [[23u];[1000u];[1u];["Anna"]];
+                [[31u];[274u];[1u];["Cake"]];
                 [[36u];[300u];[2u];["Paul"]];
+                [[8u];[1000u];[3u];["Dan"]];
                 [[81u];[7200u];[3u];["Tony"]];
                 [[11u];[1000u];[4u];["John"]];
                 [[3u];[1000u];[5u];["Lena"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
+    }
+
+    Y_UNIT_TEST(UpdateTuplePrimaryReorder) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTuplePrimaryReorderTable(session);
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE TestTable SET Col3 = 0 WHERE Col4 >= 0;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        // todo ditimizhev
     }
 
     Y_UNIT_TEST(UpdateTuplePrimaryMulti) {
@@ -443,7 +487,9 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
 
             CompareYson(R"([
                 [[23u];[3500u];[1u];["Anna"]];
+                [[0u];[0u];[1u];["Cake"]];
                 [[0u];[0u];[2u];["Paul"]];
+                [[8u];[430u];[3u];["Dan"]];
                 [[81u];[7200u];[3u];["Tony"]];
                 [[11u];[10u];[4u];["John"]];
                 [[3u];[0u];[5u];["Lena"]]
@@ -478,7 +524,9 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
 
             CompareYson(R"([
                 [[23u];[25u];[1u];["Anna"]];
+                [[31u];[25u];[1u];["Cake"]];
                 [[36u];[25u];[2u];["Paul"]];
+                [[8u];[25u];[3u];["Dan"]];
                 [[81u];[25u];[3u];["Tony"]];
                 [[11u];[10u];[4u];["John"]];
                 [[3u];[0u];[5u];["Lena"]]
@@ -513,10 +561,12 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
 
             CompareYson(R"([
                 [[23u];[0u];[1u];["Anna"]];
+                [[31u];[274u];[1u];["Cake"]];
                 [[36u];[300u];[2u];["Paul"]];
+                [[8u];[430u];[3u];["Dan"]];
                 [[81u];[7200u];[3u];["Tony"]];
                 [[11u];[10u];[4u];["John"]];
-                [[3u];[0u];[5u];["Lena"]];
+                [[3u];[0u];[5u];["Lena"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
@@ -889,8 +939,9 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             CompareYson(R"([
+                [[31u];[274u];[1u];["Cake"]];
                 [[36u];[300u];[2u];["Paul"]];
-                [[81u];[7200u];[3u];["Tony"]]
+                [[81u];[7200u];[3u];["Tony"]];
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
@@ -922,6 +973,7 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
 
             CompareYson(R"([
                 [[23u];[3500u];[1u];["Anna"]];
+                [[8u];[430u];[3u];["Dan"]];
                 [[81u];[7200u];[3u];["Tony"]];
                 [[11u];[10u];[4u];["John"]];
                 [[3u];[0u];[5u];["Lena"]]
@@ -993,6 +1045,25 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
         //         [[3u];[0u];[5u];["Lena"]]
         //     ])", FormatResultSetYson(result.GetResultSet(0)));
         // }
+    }
+
+    Y_UNIT_TEST(DeleteTuplePrimaryReorder) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTuplePrimaryReorderTable(session);
+
+        {
+            auto query = Q_(R"(
+                BATCH DELETE FROM TestTable WHERE Col4 >= 0;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        // todo ditimizhev
     }
 
     Y_UNIT_TEST(DeleteMultiTable_1) {

@@ -103,7 +103,9 @@ namespace NActors {
             TlsThreadContext->IsCurrentRecipientAService = ev->Recipient.IsService();
         }
 
-        if (TMailbox* mailbox = MailboxTable->Get(ev->GetRecipientRewrite().Hint())) {
+        TMailbox* mailbox = MailboxTable->Get(ev->GetRecipientRewrite().Hint());
+        // Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " mailbox# " << (void*)mailbox << " ev# " << (void*)ev.Get() << Endl);
+        if (mailbox) {
             switch (mailbox->Push(ev)) {
                 case EMailboxPush::Pushed:
                     return true;
@@ -129,7 +131,9 @@ namespace NActors {
             TlsThreadContext->IsCurrentRecipientAService = ev->Recipient.IsService();
         }
 
-        if (TMailbox* mailbox = MailboxTable->Get(ev->GetRecipientRewrite().Hint())) {
+        TMailbox* mailbox = MailboxTable->Get(ev->GetRecipientRewrite().Hint());
+        // Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " mailbox# " << (void*)mailbox << " ev# " << (void*)ev.Get() << Endl);
+        if (mailbox) {
             switch (mailbox->Push(ev)) {
                 case EMailboxPush::Pushed:
                     return true;
@@ -199,6 +203,8 @@ namespace NActors {
         AtomicIncrement(ActorRegistrations);
 
         TMailbox* mailbox = cache ? cache.Allocate() : MailboxTable->Allocate();
+
+        mailbox->SetExecutorPool(this);
 
         // Free mailboxes are not executing, lock to a normal state
         mailbox->LockFromFree();

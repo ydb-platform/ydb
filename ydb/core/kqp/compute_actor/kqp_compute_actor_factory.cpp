@@ -140,8 +140,8 @@ public:
                 inputChannelsCount += i.ChannelsSize();
             }
 
-            memoryLimits.ChannelBufferSize = std::numeric_limits<ui64>::max();
-            // memoryLimits.ChannelBufferSize = std::max<ui32>(estimation.ChannelBufferMemoryLimit / std::max<ui32>(1, inputChannelsCount), MinChannelBufferSize.load());
+            memoryLimits.ChannelBufferSize = std::max<ui32>(estimation.ChannelBufferMemoryLimit / std::max<ui32>(1, inputChannelsCount), MinChannelBufferSize.load());
+            memoryLimits.ChannelBufferSize *= 5;
             memoryLimits.OutputChunkMaxSize = args.OutputChunkMaxSize;
             AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "channel_info")
                 ("ch_size", estimation.ChannelBufferMemoryLimit)

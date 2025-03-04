@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package NKqpRun;
+
+message TStorageMeta {
+    message TTenant {
+        enum EType {
+            DEDICATED = 0;
+            SHARED = 1;
+            SERVERLESS = 2;
+        }
+
+        EType Type = 1;
+        uint32 NodesCount = 2;
+        string SharedTenant = 3;  // Only for serverless tenants
+    }
+
+    uint64 StorageGeneration = 1;
+    uint64 StorageSize = 2;
+    string DomainName = 3;
+    map<string, TTenant> Tenants = 4;
+}

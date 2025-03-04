@@ -26,6 +26,7 @@ struct TPqGatewayServices {
     ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     ::NPq::NConfigurationManager::IConnections::TPtr CmConnections;
     NYdb::TDriver YdbDriver;
+    TMaybe<NYdb::NTopic::TTopicClientSettings> CommonTopicClientSettings;
 
     TPqGatewayServices(
         NYdb::TDriver driver,
@@ -33,17 +34,21 @@ struct TPqGatewayServices {
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         TPqGatewayConfigPtr config,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        IMetricsRegistryPtr metrics = nullptr)
+        IMetricsRegistryPtr metrics = nullptr,
+        TMaybe<NYdb::NTopic::TTopicClientSettings> commonTopicClientSettings = Nothing())
         : FunctionRegistry(functionRegistry)
         , Config(std::move(config))
         , Metrics(std::move(metrics))
         , CredentialsFactory(std::move(credentialsFactory))
         , CmConnections(std::move(cmConnections))
         , YdbDriver(std::move(driver))
+        , CommonTopicClientSettings(commonTopicClientSettings)
     {
     }
 };
 
 IPqGateway::TPtr CreatePqNativeGateway(const TPqGatewayServices& services);
+
+IPqGatewayFactory::TPtr CreatePqNativeGatewayFactory(const NYql::TPqGatewayServices& services);
 
 } // namespace NYql

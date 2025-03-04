@@ -20,7 +20,6 @@ namespace NActors {
         }
 
         TMonotonic GetMonotonicDeadline(const TActorContext& ctx) const;
-        TString ToString() const override;
     };
 
     // node info

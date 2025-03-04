@@ -153,14 +153,16 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
             ctx.Send(request->Sender, response.Release());
         };
 
-        if (request->Offset < EndOffset) {
-            sendResponse(GetSizeLag(request->Offset), false);
-        } else if (!IsActive()) {
+        if (!IsActive()) {
             if (request->ReadTimestamp && *request->ReadTimestamp <= EndWriteTimestamp) {
+                sendResponse(GetSizeLag(request->Offset), false);
+            } else if (!request->ReadTimestamp && request->Offset < EndOffset) {
                 sendResponse(GetSizeLag(request->Offset), false);
             } else {
                 sendResponse(0, true);
             }
+        } else if (request->Offset < EndOffset) {
+            sendResponse(GetSizeLag(request->Offset), false);
         } else {
             break;
         }
@@ -201,10 +203,10 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
         ctx.Send(sender, response.Release());
     };
 
-    if (InitDone && EndOffset > (ui64)record.GetOffset()) { //already has data, answer right now
-        sendResponse(GetSizeLag(record.GetOffset()), false);
-    } else if (InitDone && !IsActive()) {
+    if (InitDone && !IsActive()) {
         if (readTimestamp && *readTimestamp <= EndWriteTimestamp) {
+            sendResponse(GetSizeLag(record.GetOffset()), false);
+        } else if (!readTimestamp && EndOffset > (ui64)record.GetOffset()) {
             sendResponse(GetSizeLag(record.GetOffset()), false);
         } else {
             auto& userInfo = UsersInfoStorage->GetOrCreate(record.GetClientId(), ctx);
@@ -212,6 +214,8 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
 
             sendResponse(0, true);
         }
+    } else if (InitDone && EndOffset > (ui64)record.GetOffset()) { //already has data, answer right now
+        sendResponse(GetSizeLag(record.GetOffset()), false);
     } else {
         THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
                         record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp};

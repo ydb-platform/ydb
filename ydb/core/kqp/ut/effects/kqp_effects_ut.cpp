@@ -31,6 +31,37 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(ReturningWorks) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, true);
+
+        auto qdb = kikimr.GetQueryClient();
+        auto qSession = qdb.GetSession().GetValueSync().GetSession();
+        auto result = qSession.ExecuteQuery(R"(
+            UPSERT INTO `/Root/SecondaryKeys`  (Key, Fk, Value) VALUES (1,    1,    "Payload1") RETURNING *;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ReturningWorksV2) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, true);
+
+        auto qdb = kikimr.GetQueryClient();
+        auto qSession = qdb.GetSession().GetValueSync().GetSession();
+        auto result = qSession.ExecuteQuery(R"(
+            $v1 = (SELECT Key + 100 as Key, Fk + 100 as Fk, Value FROM `/Root/SecondaryKeys`);
+            $v2 = (SELECT Key + 105 as Key, Fk + 105 as Fk, Value FROM `/Root/SecondaryKeys`);
+            UPSERT INTO `/Root/SecondaryKeys`
+            SELECT * FROM (SELECT * FROM $v1 UNION ALL SELECT * FROM $v2) RETURNING *;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(InsertAbort_Literal_Duplicates) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();

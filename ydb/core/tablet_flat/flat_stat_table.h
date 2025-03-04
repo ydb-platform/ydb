@@ -207,7 +207,7 @@ using TBuildStatsYieldHandler = std::function<void()>;
 
 #define LOG_BUILD_STATS(stream) \
     if (auto actorContext = NActors::TlsActivationContext; actorContext) { \
-        LOG_DEBUG_S(*actorContext, NKikimrServices::DATASHARD_STATS_BUILDER, logPrefix << stream); \
+        LOG_TRACE_S(*actorContext, NKikimrServices::TABLET_STATS_BUILDER, logPrefix << stream); \
     } else { \
         Cerr << logPrefix << stream << Endl; \
     }

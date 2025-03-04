@@ -81,7 +81,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         auto sender = runtime.AllocateEdgeActor();
         bool bTreeIndex = runtime.GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_STATS_BUILDER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_STATS_BUILDER, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
@@ -143,7 +144,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         auto sender = runtime.AllocateEdgeActor();
         bool bTreeIndex = runtime.GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_STATS_BUILDER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_STATS_BUILDER, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 
@@ -203,7 +205,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         auto sender = runtime.AllocateEdgeActor();
         bool bTreeIndex = runtime.GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_STATS_BUILDER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_STATS_BUILDER, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 
@@ -269,7 +272,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         auto sender = runtime.AllocateEdgeActor();
         bool bTreeIndex = runtime.GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_STATS_BUILDER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_STATS_BUILDER, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 
@@ -340,7 +344,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_STATS_BUILDER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_STATS_BUILDER, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
@@ -389,7 +394,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_STATS_BUILDER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_STATS_BUILDER, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
@@ -462,7 +468,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_STATS_BUILDER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_STATS_BUILDER, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
@@ -506,7 +513,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
         
-        //runtime.SetLogPriority(NKikimrServices::DATASHARD_STATS_BUILDER, NLog::PRI_TRACE);
+        //runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        // runtime.SetLogPriority(NKikimrServices::TABLET_STATS_BUILDER, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 
@@ -553,7 +561,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
         
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_STATS_BUILDER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_STATS_BUILDER, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 
@@ -640,7 +649,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_STATS_BUILDER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_STATS_BUILDER, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 
@@ -681,7 +691,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_STATS_BUILDER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_STATS_BUILDER, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 
@@ -735,7 +746,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_STATS_BUILDER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_STATS_BUILDER, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 
@@ -778,7 +790,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_STATS_BUILDER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_STATS_BUILDER, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 

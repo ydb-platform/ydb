@@ -276,8 +276,10 @@ void TQueryData::ValidateParameter(const TString& name, const NKikimrMiniKQL::TT
 void TQueryData::PrepareParameters(const TKqpPhyTxHolder::TConstPtr& tx, const TPreparedQueryHolder::TConstPtr& preparedQuery,
     NMiniKQL::TTypeEnvironment& txTypeEnv)
 {
-    for (const auto& paramDesc : preparedQuery->GetParameters()) {
-        ValidateParameter(paramDesc.GetName(), paramDesc.GetType(), txTypeEnv);
+    if (preparedQuery) {
+        for (const auto& paramDesc : preparedQuery->GetParameters()) {
+            ValidateParameter(paramDesc.GetName(), paramDesc.GetType(), txTypeEnv);
+        }
     }
 
     if (tx) {

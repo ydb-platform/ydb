@@ -1193,10 +1193,11 @@ private:
         CpuTime += GetCpuTimeDelta();
 
         auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << Path, std::move(Issues));
-        if (issues)
+        if (issues) {
             Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(issues), FatalCode));
-        else
+        } else {
             Send(ParentActorId, new TEvS3Provider::TEvFileFinished(PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), RetryStuff->SizeLimit));
+        }
     }
 
     void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) {
@@ -1872,7 +1873,7 @@ private:
     }
 
     bool ConsumedEnoughRows() const noexcept {
-        return Blocks.empty() && RowsRemained && *RowsRemained == 0;
+        return RowsRemained && *RowsRemained == 0;
     }
 
     const TS3ReadActorFactoryConfig ReadActorFactoryCfg;

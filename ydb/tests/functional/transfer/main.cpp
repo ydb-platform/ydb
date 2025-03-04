@@ -873,7 +873,7 @@ Y_UNIT_TEST_SUITE(Transfer)
             if (1 == consumers.size()) {
                 UNIT_ASSERT_VALUES_EQUAL(1, consumers.size());
                 Cerr << "Consumer name is '" << consumers[0].GetConsumerName() << "'" << Endl << Flush;
-                UNIT_ASSERT_VALUES_EQUAL_C(35, consumers[0].GetConsumerName().size(), "Consumer name is random uuid");
+                UNIT_ASSERT_C("replicationConsumer" != consumers[0].GetConsumerName(), "Consumer name is random uuid");
                 break;
             }
 

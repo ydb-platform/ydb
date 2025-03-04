@@ -139,7 +139,7 @@ public:
         AtomicCas(&StartInstant, TMonotonic::Now().MicroSeconds(), 0);
     }
 
-    TString DebugString() const;
+    TString DebugString(const bool onlyLongSteps = true) const;
 
     const std::shared_ptr<IFetchingStep>& GetStep(const ui32 index) const {
         AFL_VERIFY(index < Steps.size());
@@ -222,6 +222,11 @@ private:
     YDB_READONLY_DEF(TColumnsSetIds, AddedFetchingColumns);
     YDB_READONLY_DEF(TColumnsSetIds, AddedAssembleColumns);
 
+    TFetchingScriptBuilder(const ISnapshotSchema::TPtr& schema, const std::shared_ptr<TColumnsSetIds>& guaranteeNotOptional)
+        : GuaranteeNotOptional(guaranteeNotOptional)
+        , FullSchema(schema) {
+    }
+
 private:
     void AddAllocation(const std::set<ui32>& entityIds, const EStageFeaturesIndexes stage, const EMemType mType);
 
@@ -247,6 +252,10 @@ public:
 
     void AddFetchingStep(const TColumnsSetIds& columns, const EStageFeaturesIndexes stage);
     void AddAssembleStep(const TColumnsSetIds& columns, const TString& purposeId, const EStageFeaturesIndexes stage, const bool sequential);
+
+    static TFetchingScriptBuilder MakeForTests(ISnapshotSchema::TPtr schema, std::shared_ptr<TColumnsSetIds> guaranteeNotOptional = nullptr) {
+        return TFetchingScriptBuilder(schema, guaranteeNotOptional ? guaranteeNotOptional : std::make_shared<TColumnsSetIds>());
+    }
 };
 
 class TFetchingScriptCursor {

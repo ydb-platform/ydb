@@ -72,11 +72,11 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
     return true;
 }
 
-TString TFetchingScript::DebugString() const {
+TString TFetchingScript::DebugString(const bool onlyLongSteps) const {
     TStringBuilder sb;
     TStringBuilder sbBranch;
     for (auto&& i : Steps) {
-        if (i->GetSumDuration() > TDuration::MilliSeconds(10)) {
+        if (!onlyLongSteps || i->GetSumDuration() > TDuration::MilliSeconds(10)) {
             sbBranch << "{" << i->DebugString() << "};";
         }
     }
@@ -128,8 +128,7 @@ TString IFetchingStep::DebugString() const {
 }
 
 TFetchingScriptBuilder::TFetchingScriptBuilder(const TSpecialReadContext& context)
-    : GuaranteeNotOptional(context.GetMergeColumns())
-    , FullSchema(context.GetReadMetadata()->GetResultSchema()) {
+    : TFetchingScriptBuilder(context.GetReadMetadata()->GetResultSchema(), context.GetMergeColumns()) {
 }
 
 void TFetchingScriptBuilder::AddFetchingStep(const TColumnsSetIds& columns, const EStageFeaturesIndexes stage) {

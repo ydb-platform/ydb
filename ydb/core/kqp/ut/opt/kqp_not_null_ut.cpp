@@ -653,7 +653,6 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(!result.IsSuccess());
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE), result.GetIssues().ToString());
-            Cerr << "TEST:: >> " << result.GetIssues().ToString() << Endl;
             if (useSink) {
                 UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(),
                     "<main>: Error: Tried to insert NULL value into NOT NULL column: Value, code: 2031\n");

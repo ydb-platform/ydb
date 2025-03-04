@@ -10,6 +10,16 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
+TConclusion<bool> IFetchingStep::DoExecuteInplace(
+    const std::shared_ptr<NCommon::IDataSource>& sourceExt, const TFetchingScriptCursor& step) const {
+    const auto source = std::static_pointer_cast<IDataSource>(sourceExt);
+    return DoExecuteInplace(source, step);
+}
+
+ui64 IFetchingStep::GetProcessingDataSize(const std::shared_ptr<NCommon::IDataSource>& source) const {
+    return GetProcessingDataSize(std::static_pointer_cast<IDataSource>(source));
+}
+
 TConclusion<bool> TIndexBlobsFetchingStep::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     return !source->StartFetchingIndexes(source, step, Indexes);

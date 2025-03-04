@@ -49,8 +49,8 @@ Method `ydb.Open` returns a driver instance if successful. The driver performs s
 
 The ydb.Open method takes two required arguments:
 
-* a context;
-* a connection string to {{ ydb-short-name }}.
+* a context
+* a {{ ydb-short-name }} connection string
 
 There are also many connection options available that let you override the default settings.
 

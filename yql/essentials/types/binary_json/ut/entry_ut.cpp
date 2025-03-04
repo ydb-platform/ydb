@@ -17,6 +17,7 @@ public:
         UNIT_TEST(TestGetContainer);
         UNIT_TEST(TestGetString);
         UNIT_TEST(TestGetNumber);
+        UNIT_TEST(TestOutOfBounds);
     UNIT_TEST_SUITE_END();
 
     void TestGetType() {
@@ -88,6 +89,29 @@ public:
         for (const auto& testCase : testCases) {
             const auto binaryJson = std::get<TBinaryJson>(SerializeToBinaryJson(testCase.first));
             const auto reader = TBinaryJsonReader::Make(binaryJson);
+            const auto container = reader->GetRootCursor();
+
+            UNIT_ASSERT_VALUES_EQUAL(container.GetElement(0).GetNumber(), testCase.second);
+        }
+    }
+
+    void TestOutOfBounds() {
+        const TVector<std::pair<TString, double>> testCases = {
+            {"1e100000000", std::numeric_limits<double>::max()},
+            {"-1e100000000", std::numeric_limits<double>::lowest()},
+            {"1.797693135e+308", std::numeric_limits<double>::max()},
+            {"-1.797693135e+308", std::numeric_limits<double>::lowest()},
+        };
+
+        for (const auto& testCase : testCases) {
+            const auto serialized = SerializeToBinaryJson(testCase.first);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TString>(serialized), "NUMBER_ERROR: Problem while parsing a number");
+        }
+
+        for (const auto& testCase : testCases) {
+            const auto serialized = SerializeToBinaryJson(testCase.first, NKikimr::NBinaryJson::EOutOfBoundsHandlingPolicy::CLIP);
+            UNIT_ASSERT_C(std::get<TBinaryJson>(serialized), std::get<TString>(serialized));
+            const auto reader = TBinaryJsonReader::Make(std::get<TBinaryJson>(serialized));
             const auto container = reader->GetRootCursor();
 
             UNIT_ASSERT_VALUES_EQUAL(container.GetElement(0).GetNumber(), testCase.second);

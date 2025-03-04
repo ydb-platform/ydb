@@ -1,28 +1,28 @@
 #pragma once
 
 #include <ydb/core/actorlib_impl/long_timer.h>
-
-#include <ydb/core/tx/long_tx_service/public/events.h>
-#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/path.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/converter.h>
+#include <ydb/core/formats/arrow/size_calcer.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/io_formats/arrow/scheme/scheme.h>
-#include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/base/path.h>
-#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/columnshard/counters/common/owner.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/upload_rows_counters.h>
-#include <ydb/core/formats/arrow/size_calcer.h>
-
-#include <library/cpp/monlib/dynamic_counters/counters.h>
-#include <ydb/core/tx/columnshard/counters/common/owner.h>
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
@@ -267,7 +267,7 @@ protected:
 
         ui32 keySize = KeyColumnPositions.size(); // YdbSchema contains keys first
         TRowWriter writer(out, keySize);
-        NArrow::TArrowToYdbConverter batchConverter(YdbSchema, writer);
+        NArrow::TArrowToYdbConverter batchConverter(YdbSchema, writer, GetInfinityHandlingPolicy());
         if (!batchConverter.Process(*batch, errorMessage)) {
             return {};
         }
@@ -351,6 +351,18 @@ private:
             ok = NArrow::TArrowToYdbConverter::NeedConversion(type1, type2);
         }
         return ok;
+    }
+
+    NBinaryJson::EOutOfBoundsHandlingPolicy GetInfinityHandlingPolicy() const {
+        if (TableKind != NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
+            return NBinaryJson::EOutOfBoundsHandlingPolicy::REJECT;
+        }
+        switch (AppDataVerified().ColumnShardConfig.GetOutOfRangeHandling()) {
+            case NKikimrConfig::TColumnShardConfig_TJsonNumberOutOfRangeHandlingPolicy_REJECT:
+                return NBinaryJson::EOutOfBoundsHandlingPolicy::REJECT;
+            case NKikimrConfig::TColumnShardConfig_TJsonNumberOutOfRangeHandlingPolicy_CLIP:
+                return NBinaryJson::EOutOfBoundsHandlingPolicy::CLIP;
+        }
     }
 
     bool BuildSchema(const NActors::TActorContext& ctx, TString& errorMessage, bool makeYqbSchema) {

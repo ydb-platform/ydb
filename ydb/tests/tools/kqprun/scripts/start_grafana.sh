@@ -31,7 +31,7 @@ docker container ls --filter name=$CONTAINER_NAME
 
 echo "Wait grafana is up"
 
-bash -ceux "while ! nc -v -z -w 1 localhost $2 ; do sleep 2 ; done"
+(set -eux; while ! nc -v -z -w 1 localhost $2; do sleep 2; done)
 
 echo "Initialization of datasource and dashboards"
 
@@ -40,9 +40,9 @@ GRAFANA_API="http://admin:admin@localhost:$2/api"
 curl -X POST -H "Content-Type: application/json" ${GRAFANA_API}/datasources --data-ascii "{ \"name\": \"prometheus_datasource_$1\", \"type\": \"prometheus\", \"url\": \"http://localhost:$1\", \"access\": \"proxy\" }"
 curl -X POST -H "Content-Type: application/json" ${GRAFANA_API}/folders --data-ascii '{ "uid": "ydb", "title": "YDB" }'
 
-for DASHBOARDS_PATH in $DASHBOARDS_DIRS; do
-    for DASH in $(ls $DASHBOARDS_PATH); do
-        cat $DASHBOARDS_PATH/${DASH} | jq '{ folderUid: "ydb", dashboard: . }' | curl -X POST -H "Content-Type: application/json" ${GRAFANA_API}/dashboards/db -d @-
+for DASHBOARDS_DIR in $DASHBOARDS_DIRS; do
+    for DASH in "$DASHBOARDS_DIR"/*; do
+        jq '{ folderUid: "ydb", dashboard: . }' < "$DASH" | curl -X POST -H "Content-Type: application/json" ${GRAFANA_API}/dashboards/db -d @-
     done
 done
 

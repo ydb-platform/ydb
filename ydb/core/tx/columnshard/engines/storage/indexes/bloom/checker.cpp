@@ -1,6 +1,6 @@
 #include "checker.h"
 #include <ydb/core/formats/arrow/serializer/abstract.h>
-#include <ydb/library/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
@@ -23,6 +23,7 @@ bool TBloomFilterChecker::DoCheckImpl(const std::vector<TString>& blobs) const {
                 break;
             }
         }
+//        Cerr << bits.DebugString() << Endl;
         if (found) {
 //            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("size", bArray.length())("data", bArray.ToString())("index_id", GetIndexId());
             return true;

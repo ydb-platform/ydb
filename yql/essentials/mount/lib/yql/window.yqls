@@ -368,8 +368,8 @@
 # list_type:type
 # doesn't support optional values
 (let hyperloglog_traits_factory_raw (lambda '(list_type n) (block '(
-    (let init (lambda '(value parent) (NamedApply (Udf 'HyperLogLog.Create) '((Apply (Udf 'Digest.MurMurHash) (Pickle value)) n) (AsStruct) (DependsOn parent))))
-    (let update (lambda '(value state parent) (NamedApply (Udf 'HyperLogLog.AddValue) '(state (Apply (Udf 'Digest.MurMurHash) (Pickle value))) (AsStruct) (DependsOn parent))))
+    (let init (lambda '(value parent) (NamedApply (Udf 'HyperLogLog.Create) '((Apply (Udf 'Digest.MurMurHash) (StablePickle value)) n) (AsStruct) (DependsOn parent))))
+    (let update (lambda '(value state parent) (NamedApply (Udf 'HyperLogLog.AddValue) '(state (Apply (Udf 'Digest.MurMurHash) (StablePickle value))) (AsStruct) (DependsOn parent))))
     (let shift (lambda '(value state) (Void)))
     (let current (lambda '(state) (Apply (Udf 'HyperLogLog.GetResult) state)))
     (return (WindowTraits (ListItemType list_type) init update shift current (Null)))

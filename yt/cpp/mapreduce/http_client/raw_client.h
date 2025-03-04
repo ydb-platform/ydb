@@ -337,6 +337,10 @@ public:
 
     IRawBatchRequestPtr CreateRawBatchRequest() override;
 
+    IRawClientPtr Clone() override;
+
+    IRawClientPtr Clone(const TClientContext& context) override;
+
 private:
     const TClientContext Context_;
 };

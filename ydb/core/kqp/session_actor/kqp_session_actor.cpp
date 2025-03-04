@@ -13,9 +13,11 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/events/workload_service.h>
 #include <ydb/core/kqp/common/simple/query_ast.h>
+#include <ydb/core/kqp/common/batch/params.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/executer_actor/kqp_locks_helper.h>
+#include <ydb/core/kqp/executer_actor/kqp_partitioned_executer.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
@@ -94,6 +96,25 @@ void FillColumnsMeta(const NKqpProto::TKqpPhyQuery& phyQuery, NKikimrKqp::TQuery
         auto ydbRes = resp.AddYdbResults();
         ydbRes->mutable_columns()->CopyFrom(binding.GetResultSetMeta().columns());
     }
+}
+
+bool FillTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings& settings, const TKqpPhyTxHolder::TConstPtr& tx) {
+    for (const auto& stage : tx->GetStages()) {
+        if (stage.SinksSize() != 1) {
+            continue;
+        }
+        for (auto& sink : stage.GetSinks()) {
+            return sink.GetInternalSink().GetSettings().UnpackTo(&settings);
+        }
+    }
+
+    return false;
+}
+
+bool IsBatchQuery(const TKqpPhyTxHolder::TConstPtr& tx) {
+    NKikimrKqp::TKqpTableSinkSettings settings;
+    auto isFilledSettings = FillTableSinkSettings(settings, tx);
+    return isFilledSettings && settings.GetIsBatch();
 }
 
 class TRequestFail : public yexception {
@@ -1249,6 +1270,22 @@ public:
                     YQL_ENSURE(false, "Unexpected physical tx type in data query: " << (ui32)tx->GetType());
             }
 
+            for (const auto& paramDesc : QueryState->PreparedQuery->GetParameters()) {
+                if (!paramDesc.GetName().StartsWith(NBatchParams::Header)) {
+                    continue;
+                }
+
+                NKikimrMiniKQL::TType protoType = paramDesc.GetType();
+                NKikimr::NMiniKQL::TType* paramType = ImportTypeFromProto(protoType, txCtx.TxAlloc->TypeEnv);
+
+                NUdf::TUnboxedValue value = MakeDefaultValueByType(paramType);
+                if (paramDesc.GetName() == NBatchParams::IsFirstQuery || paramDesc.GetName() == NBatchParams::IsLastQuery) {
+                    value = NUdf::TUnboxedValuePod(true);
+                }
+
+                QueryState->QueryData->AddUVParam(paramDesc.GetName(), paramType, value);
+            }
+
             try {
                 QueryState->QueryData->PrepareParameters(tx, QueryState->PreparedQuery, txCtx.TxAlloc->TypeEnv);
             } catch (const yexception& ex) {
@@ -1384,6 +1421,22 @@ public:
         request.ResourceManager_ = ResourceManager_;
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
+        if (!request.Transactions.empty()) {
+            auto isBatch = IsBatchQuery(request.Transactions.front().Body);
+
+            if (Settings.TableService.GetEnableOltpSink() && isBatch) {
+                if (!Settings.TableService.GetEnableBatchUpdates()) {
+                    ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                            "Batch updates and deletes are disabled at current time.");
+                }
+
+                SendToPartitionedExecuter(txCtx, std::move(request));
+                return;
+            }
+
+            YQL_ENSURE(!isBatch || Settings.TableService.GetEnableBatchUpdates());
+        }
+
         if (Settings.TableService.GetEnableOltpSink() && !txCtx->TxManager) {
             txCtx->TxManager = CreateKqpTransactionManager();
             txCtx->TxManager->SetAllowVolatile(AppData()->FeatureFlags.GetEnableDataShardVolatileTransactions());
@@ -1427,6 +1480,17 @@ public:
             YQL_ENSURE(!ExecuterId);
         }
         ExecuterId = exId;
+    }
+
+    void SendToPartitionedExecuter(TKqpTransactionContext* txCtx, IKqpGateway::TExecPhysicalRequest&& request) {
+        auto executerActor = CreateKqpPartitionedExecuter(std::move(request), SelfId(), Settings.Database,
+            QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(), Counters,
+            RequestCounters, Settings.TableService, AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr,
+            QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
+            QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings, txCtx->ShardIdToTableInfo);
+
+        ExecuterId = RegisterWithSameMailbox(executerActor);
+        LOG_D("Created new KQP partitioned executer: " << ExecuterId);
     }
 
 
@@ -1579,7 +1643,7 @@ public:
             switch (status) {
                 case Ydb::StatusIds::ABORTED: {
                     if (QueryState->TxCtx->TxManager && QueryState->TxCtx->TxManager->BrokenLocks()) {
-                        issues.AddIssue(*QueryState->TxCtx->TxManager->GetLockIssue());
+                        YQL_ENSURE(!issues.Empty());
                     } else if (ev->BrokenLockPathId) {
                         YQL_ENSURE(!QueryState->TxCtx->TxManager);
                         issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx, *ev->BrokenLockPathId));

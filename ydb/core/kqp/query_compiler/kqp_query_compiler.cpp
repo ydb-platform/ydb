@@ -23,6 +23,7 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_type_helpers.h>
 
 
 namespace NKikimr {
@@ -904,6 +905,7 @@ private:
             i.MutableProgram()->MutableSettings()->SetLevelDataPrediction(rPredictor.GetLevelDataVolume(i.GetProgram().GetSettings().GetStageLevel()));
         }
 
+        txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(false));
         txProto.SetHasEffects(hasEffectStage);
 
         for (const auto& paramBinding : tx.ParamBindings()) {
@@ -1201,9 +1203,15 @@ private:
             if (const auto inconsistentWrite = settings.InconsistentWrite().Cast(); inconsistentWrite.StringValue() == "true") {
                 settingsProto.SetInconsistentTx(true);
             }
+          
             if (const auto streamWrite = settings.StreamWrite().Cast(); streamWrite.StringValue() == "true") {
                 settingsProto.SetEnableStreamWrite(true);
             }
+          
+            if (const auto isBatch = settings.IsBatch().Cast(); isBatch.StringValue() == "true") {
+                settingsProto.SetIsBatch(true);
+            }
+            
             settingsProto.SetIsOlap(settings.TableType().Cast().StringValue() == "olap");
             settingsProto.SetPriority(FromString<i64>(settings.Priority().Cast().StringValue()));
 
@@ -1277,10 +1285,46 @@ private:
         }
 
         if (auto maybeShuffle = connection.Maybe<TDqCnHashShuffle>()) {
+            const auto& shuffle = maybeShuffle.Cast();
             auto& shuffleProto = *connectionProto.MutableHashShuffle();
-            for (const auto& keyColumn : maybeShuffle.Cast().KeyColumns()) {
+            for (const auto& keyColumn : shuffle.KeyColumns()) {
                 shuffleProto.AddKeyColumns(TString(keyColumn));
             }
+
+            if (Config->OptShuffleElimination.Get().GetOrElse(false)) {
+                auto& columnHashV1 = *shuffleProto.MutableColumnShardHashV1();
+
+                const auto& outputType = NYql::NDq::GetDqConnectionType(connection, ctx);
+                auto structType = outputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                for (const auto& column: shuffle.KeyColumns().Ptr()->Children()) {
+                    auto ty = NYql::NDq::GetColumnType(connection, *structType, column->Content(), column->Pos(), ctx);
+                    NYql::NUdf::EDataSlot slot;
+                    switch (ty->GetKind()) {
+                        case ETypeAnnotationKind::Data: {
+                            slot = ty->Cast<TDataExprType>()->GetSlot();
+                            break;
+                        }
+                        case ETypeAnnotationKind::Optional: {
+                            auto optionalType = ty->Cast<TOptionalExprType>()->GetItemType();
+                            Y_ENSURE(
+                                optionalType->GetKind() == ETypeAnnotationKind::Data, 
+                                TStringBuilder{} << "Can't retrieve type from optional" << static_cast<std::int64_t>(optionalType->GetKind()) << "for ColumnHashV1 Shuffling"
+                            );
+                            slot = optionalType->Cast<TDataExprType>()->GetSlot();
+                            break;
+                        }
+                        default: {
+                            Y_ENSURE(false, TStringBuilder{} << "Can't get type for ColumnHashV1 Shuffling: " << static_cast<std::int64_t>(ty->GetKind()));
+                        }
+                    }
+
+                    auto typeId = GetDataTypeInfo(slot).TypeId;
+                    columnHashV1.AddKeyColumnTypes(typeId);
+                }
+            } else {
+                shuffleProto.MutableHashV1();
+            }
+
             return;
         }
 

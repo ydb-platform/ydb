@@ -4,6 +4,7 @@
 #include "rpc_parameters_serialization.h"
 
 #include <yt/cpp/mapreduce/common/helpers.h>
+#include <yt/cpp/mapreduce/common/retry_lib.h>
 
 #include <yt/cpp/mapreduce/http/helpers.h>
 #include <yt/cpp/mapreduce/http/http.h>
@@ -18,6 +19,8 @@
 #include <yt/cpp/mapreduce/io/helpers.h>
 
 #include <library/cpp/yson/node/node_io.h>
+
+#include <library/cpp/yt/yson_string/string.h>
 
 namespace NYT::NDetail {
 
@@ -674,14 +677,7 @@ void THttpRawClient::InsertRows(
     const TNode::TListType& rows,
     const TInsertRowsOptions& options)
 {
-    TMutationId mutationId;
-    THttpHeader header("PUT", "insert_rows");
-    header.SetInputFormat(TFormat::YsonBinary());
-    header.MergeParameters(NRawClient::SerializeParametersForInsertRows(Context_.Config->Prefix, path, options));
-    auto body = NodeListToYsonString(rows);
-    TRequestConfig config;
-    config.IsHeavy = true;
-    RequestWithoutRetry(Context_, mutationId, header, body, config)->GetResponse();
+    NRawClient::InsertRows(Context_, path, rows, options);
 }
 
 void THttpRawClient::TrimRows(
@@ -705,30 +701,7 @@ TNode::TListType THttpRawClient::LookupRows(
     const TNode::TListType& keys,
     const TLookupRowsOptions& options)
 {
-    TMutationId mutationId;
-    THttpHeader header("PUT", "lookup_rows");
-    header.AddPath(AddPathPrefix(path, Context_.Config->ApiVersion));
-    header.SetInputFormat(TFormat::YsonBinary());
-    header.SetOutputFormat(TFormat::YsonBinary());
-
-    header.MergeParameters(BuildYsonNodeFluently().BeginMap()
-        .DoIf(options.Timeout_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("timeout").Value(static_cast<i64>(options.Timeout_->MilliSeconds()));
-        })
-        .Item("keep_missing_rows").Value(options.KeepMissingRows_)
-        .DoIf(options.Versioned_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("versioned").Value(*options.Versioned_);
-        })
-        .DoIf(options.Columns_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("column_names").Value(*options.Columns_);
-        })
-    .EndMap());
-
-    auto body = NodeListToYsonString(keys);
-    TRequestConfig config;
-    config.IsHeavy = true;
-    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, body, config);
-    return NodeFromYsonString(responseInfo->GetResponse(), ::NYson::EYsonType::ListFragment).AsList();
+    return NRawClient::LookupRows(Context_, path, keys, options);
 }
 
 TNode::TListType THttpRawClient::SelectRows(
@@ -828,15 +801,7 @@ void THttpRawClient::DeleteRows(
     const TNode::TListType& keys,
     const TDeleteRowsOptions& options)
 {
-    TMutationId mutationId;
-    THttpHeader header("PUT", "delete_rows");
-    header.SetInputFormat(TFormat::YsonBinary());
-    header.MergeParameters(NRawClient::SerializeParametersForDeleteRows(Context_.Config->Prefix, path, options));
-
-    auto body = NodeListToYsonString(keys);
-    TRequestConfig config;
-    config.IsHeavy = true;
-    RequestWithoutRetry(Context_, mutationId, header, body, config)->GetResponse();
+    NRawClient::DeleteRows(Context_, path, keys, options);
 }
 
 void THttpRawClient::FreezeTable(
@@ -931,6 +896,16 @@ ui64 THttpRawClient::GenerateTimestamp()
 IRawBatchRequestPtr THttpRawClient::CreateRawBatchRequest()
 {
     return MakeIntrusive<NRawClient::THttpRawBatchRequest>(Context_, /*retryPolicy*/ nullptr);
+}
+
+IRawClientPtr THttpRawClient::Clone()
+{
+    return ::MakeIntrusive<THttpRawClient>(Context_);
+}
+
+IRawClientPtr THttpRawClient::Clone(const TClientContext& context)
+{
+    return ::MakeIntrusive<THttpRawClient>(context);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

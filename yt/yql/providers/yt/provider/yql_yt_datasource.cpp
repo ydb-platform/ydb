@@ -5,6 +5,7 @@
 #include "yql_yt_op_settings.h"
 #include "yql_yt_dq_integration.h"
 #include "yql_yt_dq_optimize.h"
+#include "yql_yt_ytflow_optimize.h"
 
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
@@ -546,6 +547,14 @@ public:
 
     IDqOptimization* GetDqOptimization() override {
         return DqOptimizer_.Get();
+    }
+
+    IYtflowIntegration* GetYtflowIntegration() override {
+        return State_->YtflowIntegration_.Get();
+    }
+
+    IYtflowOptimization* GetYtflowOptimization() override {
+        return State_->YtflowOptimization_.Get();
     }
 
 private:

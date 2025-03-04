@@ -4,6 +4,8 @@
 #include "client_method_options.h"
 #include "operation.h"
 
+#include <yt/cpp/mapreduce/http/context.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -198,6 +200,7 @@ public:
         const TGetJobTraceOptions& options = {}) = 0;
 
     // Files
+
     virtual std::unique_ptr<IInputStream> ReadFile(
         const TTransactionId& transactionId,
         const TRichYPath& path,
@@ -331,6 +334,12 @@ public:
     // Batch
 
     virtual IRawBatchRequestPtr CreateRawBatchRequest() = 0;
+
+    // Other
+
+    virtual IRawClientPtr Clone() = 0;
+
+    virtual IRawClientPtr Clone(const TClientContext& context) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

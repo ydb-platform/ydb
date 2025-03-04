@@ -50,6 +50,9 @@ def create_tables(pool, table_path):
                 `previous_state` Utf8,
                 `state_change_date` Date,
                 `days_in_state` Uint64,
+                `previous_mute_state` Uint32,
+                `mute_state_change_date` Date,
+                `days_in_mute_state` Uint64,
                 `previous_state_filtered` Utf8,
                 `state_change_date_filtered` Date,
                 `days_in_state_filtered` Uint64,
@@ -90,6 +93,9 @@ def bulk_upsert(table_client, table_path, rows):
         .add_column("previous_state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("state_change_date", ydb.OptionalType(ydb.PrimitiveType.Date))
         .add_column("days_in_state", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+        .add_column("previous_mute_state", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+        .add_column("days_in_mute_state", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+        .add_column("mute_state_change_date", ydb.OptionalType(ydb.PrimitiveType.Date))
         .add_column("previous_state_filtered", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("state_change_date_filtered", ydb.OptionalType(ydb.PrimitiveType.Date))
         .add_column("days_in_state_filtered", ydb.OptionalType(ydb.PrimitiveType.Uint64))
@@ -105,6 +111,11 @@ def process_test_group(name, group, last_day_data, default_start_date):
     previous_state_list = []
     state_change_date_list = []
     days_in_state_list = []
+
+    previous_mute_state_list = []
+    mute_state_change_date_list = []
+    days_in_mute_state_list = []
+
     previous_state_filtered_list = []
     state_change_date_filtered_list = []
     days_in_state_filtered_list = []
@@ -115,28 +126,42 @@ def process_test_group(name, group, last_day_data, default_start_date):
         prev_state = last_day_data[last_day_data['full_name'] == name]['state'].iloc[0]
         prev_date = last_day_data[last_day_data['full_name'] == name]['state_change_date'].iloc[0]
         current_days_in_state = last_day_data[last_day_data['full_name'] == name]['days_in_state'].iloc[0]
+        
+        prev_mute_state = last_day_data[last_day_data['full_name'] == name]['is_muted'].iloc[0]
+        prev_mute_date = last_day_data[last_day_data['full_name'] == name]['mute_state_change_date'].iloc[0]
+        current_days_in_mute_state = last_day_data[last_day_data['full_name'] == name]['days_in_mute_state'].iloc[0]
+        
         prev_state_filtered = last_day_data[last_day_data['full_name'] == name]['state_filtered'].iloc[0]
         prev_date_filtered = last_day_data[last_day_data['full_name'] == name]['state_change_date_filtered'].iloc[0]
         current_days_in_state_filtered = last_day_data[last_day_data['full_name'] == name][
             'days_in_state_filtered'
         ].iloc[0]
+
         saved_prev_state = last_day_data[last_day_data['full_name'] == name]['previous_state'].iloc[0]
+        saved_prev_mute_state= last_day_data[last_day_data['full_name'] == name]['previous_mute_state'].iloc[0]
         saved_prev_state_filtered = last_day_data[last_day_data['full_name'] == name]['previous_state_filtered'].iloc[0]
     else:
         prev_state = 'no_runs'
         prev_date = datetime.datetime(default_start_date.year, default_start_date.month, default_start_date.day)
         current_days_in_state = 0
+        
+        prev_mute_state = 0
+        prev_mute_date = datetime.datetime(default_start_date.year, default_start_date.month, default_start_date.day)
+        current_days_in_mute_state = 0
+
         state_filtered = ''
         prev_state_filtered = 'no_runs'
         prev_date_filtered = datetime.datetime(
             default_start_date.year, default_start_date.month, default_start_date.day
         )
         current_days_in_state_filtered = 0
+        
         saved_prev_state = prev_state
+        saved_prev_mute_state = prev_mute_state
         saved_prev_state_filtered = prev_state_filtered
 
     for index, row in group.iterrows():
-
+        # Process prev state
         current_days_in_state += 1
         if row['state'] != prev_state:
             saved_prev_state = prev_state
@@ -146,6 +171,19 @@ def process_test_group(name, group, last_day_data, default_start_date):
         previous_state_list.append(saved_prev_state)
         state_change_date_list.append(prev_date)
         days_in_state_list.append(current_days_in_state)
+        
+        # Process prev mute state
+
+        current_days_in_mute_state += 1
+        if row['is_muted'] != prev_mute_state:
+            saved_prev_mute_state = prev_mute_state
+            prev_mute_state = row['is_muted']
+            prev_mute_date = row['date_window']
+            current_days_in_mute_state = 1
+
+        previous_mute_state_list.append(saved_prev_mute_state)
+        mute_state_change_date_list.append(prev_mute_date)
+        days_in_mute_state_list.append(current_days_in_mute_state)
 
         # Process filtered states
 
@@ -170,6 +208,9 @@ def process_test_group(name, group, last_day_data, default_start_date):
         'previous_state': previous_state_list,
         'state_change_date': state_change_date_list,
         'days_in_state': days_in_state_list,
+        'previous_mute_state': previous_mute_state_list,
+        'mute_state_change_date': mute_state_change_date_list,
+        'days_in_mute_state': days_in_mute_state_list,
         'previous_state_filtered': previous_state_filtered_list,
         'state_change_date_filtered': state_change_date_filtered_list,
         'days_in_state_filtered': days_in_state_filtered_list,
@@ -182,25 +223,25 @@ def determine_state(row):
     is_muted = row['is_muted']
 
     if is_muted == 1:
-        if 'mute' in history_class:
+        if 'mute' in history_class or 'failure' in history_class:
             return 'Muted Flaky'
-        elif 'pass' in history_class:
+        elif 'pass' in history_class and not 'failure' in history_class and not 'mute' in history_class :
             return 'Muted Stable'
-        elif 'skipped' in history_class or not history_class:
+        elif 'skipped' in history_class:
             return 'Skipped'
         else:
-            return history_class
+            return 'no_runs'
     else:
         if 'failure' in history_class and 'mute' not in history_class:
             return 'Flaky'
         elif 'mute' in history_class:
             return 'Muted'
-        elif 'skipped' in history_class or not history_class:
-            return 'Skipped'
         elif 'pass' in history_class:
             return 'Passed'
+        elif 'skipped' in history_class:
+            return 'Skipped'
         else:
-            return history_class
+            return 'no_runs'
 
 
 def calculate_success_rate(row):
@@ -284,9 +325,9 @@ def main():
         tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=False)
         table_client = ydb.TableClient(driver, tc_settings)
         base_date = datetime.datetime(1970, 1, 1)
-        default_start_date = datetime.date(2024, 8, 1)
+        default_start_date = datetime.date(2024, 11, 1)
         today = datetime.date.today()
-        table_path = f'test_results/analytics/tests_monitor_test_with_filtered_states'
+        table_path = f'test_results/analytics/tests_monitor'
 
         # Get last existing day
         print("Geting date of last collected monitor data")
@@ -367,6 +408,9 @@ def main():
                             'previous_state': row['previous_state'],
                             'state_change_date': base_date + datetime.timedelta(days=row['state_change_date']),
                             'days_in_state': row['days_in_state'],
+                            'previous_mute_state': row['previous_mute_state'],
+                            'mute_state_change_date': base_date + datetime.timedelta(days=row['mute_state_change_date']),
+                            'days_in_mute_state': row['days_in_mute_state'],
                             'previous_state_filtered': row['previous_state_filtered'],
                             'state_change_date_filtered': base_date
                             + datetime.timedelta(days=row['state_change_date_filtered']),
@@ -518,6 +562,10 @@ def main():
                     'state',
                     'previous_state',
                     'state_change_date',
+                    'is_muted',
+                    'days_in_mute_state',
+                    'previous_mute_state',
+                    'mute_state_change_date',
                     'days_in_state_filtered',
                     'state_change_date_filtered',
                     'previous_state_filtered',
@@ -563,6 +611,9 @@ def main():
                     df.loc[group.index, 'previous_state'] = results[i]['previous_state']
                     df.loc[group.index, 'state_change_date'] = results[i]['state_change_date']
                     df.loc[group.index, 'days_in_state'] = results[i]['days_in_state']
+                    df.loc[group.index, 'previous_mute_state'] = results[i]['previous_mute_state']
+                    df.loc[group.index, 'mute_state_change_date'] = results[i]['mute_state_change_date']
+                    df.loc[group.index, 'days_in_mute_state'] = results[i]['days_in_mute_state']
                     df.loc[group.index, 'previous_state_filtered'] = results[i]['previous_state_filtered']
                     df.loc[group.index, 'state_change_date_filtered'] = results[i]['state_change_date_filtered']
                     df.loc[group.index, 'days_in_state_filtered'] = results[i]['days_in_state_filtered']
@@ -572,6 +623,9 @@ def main():
             previous_state_list = []
             state_change_date_list = []
             days_in_state_list = []
+            previous_mute_state_list = []
+            mute_state_change_date_list = []
+            days_in_mute_state_list = []
             previous_state_filtered_list = []
             state_change_date_filtered_list = []
             days_in_state_filtered_list = []
@@ -581,6 +635,9 @@ def main():
                 previous_state_list = previous_state_list + result['previous_state']
                 state_change_date_list = state_change_date_list + result['state_change_date']
                 days_in_state_list = days_in_state_list + result['days_in_state']
+                previous_mute_state_list = previous_mute_state_list + result['previous_mute_state']
+                mute_state_change_date_list = mute_state_change_date_list + result['mute_state_change_date']
+                days_in_mute_state_list = days_in_mute_state_list + result['days_in_mute_state']
                 previous_state_filtered_list = previous_state_filtered_list + result['previous_state_filtered']
                 state_change_date_filtered_list = state_change_date_filtered_list + result['state_change_date_filtered']
                 days_in_state_filtered_list = days_in_state_filtered_list + result['days_in_state_filtered']
@@ -595,6 +652,9 @@ def main():
             df['previous_state'] = previous_state_list
             df['state_change_date'] = state_change_date_list
             df['days_in_state'] = days_in_state_list
+            df['previous_mute_state'] = previous_mute_state_list
+            df['mute_state_change_date'] = mute_state_change_date_list
+            df['days_in_mute_state'] = days_in_mute_state_list
             df['previous_state_filtered'] = previous_state_filtered_list
             df['state_change_date_filtered'] = state_change_date_filtered_list
             df['days_in_state_filtered'] = days_in_state_filtered_list
@@ -604,9 +664,12 @@ def main():
         print(f'Saving computed result in dataframe: {end_time - start_time}')
         start_time = time.time()
 
-        df['state_change_date'] = df['state_change_date'].dt.date
         df['date_window'] = df['date_window'].dt.date
+        df['state_change_date'] = df['state_change_date'].dt.date
         df['days_in_state'] = df['days_in_state'].astype(int)
+        df['previous_mute_state'] = df['previous_mute_state'].astype(int)
+        df['mute_state_change_date'] = df['mute_state_change_date'].dt.date
+        df['days_in_mute_state'] = df['days_in_mute_state'].astype(int)
         df['state_change_date_filtered'] = df['state_change_date_filtered'].dt.date
         df['days_in_state_filtered'] = df['days_in_state_filtered'].astype(int)
 
@@ -637,6 +700,9 @@ def main():
                 'previous_state',
                 'state_change_date',
                 'days_in_state',
+                'previous_mute_state',
+                'mute_state_change_date',
+                'days_in_mute_state',
                 'previous_state_filtered',
                 'state_change_date_filtered',
                 'days_in_state_filtered',

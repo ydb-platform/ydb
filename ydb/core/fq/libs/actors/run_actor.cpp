@@ -571,6 +571,7 @@ private:
                         SelfId(),
                         Params.QueryId,
                         Params.YqSharedResources->UserSpaceYdbDriver,
+                        Params.PqGatewayFactory->CreatePqGateway(),
                         Params.Resources.topic_consumers(),
                         PrepareReadRuleCredentials()
                     )
@@ -1435,6 +1436,7 @@ private:
                 SelfId(),
                 Params.QueryId,
                 Params.YqSharedResources->UserSpaceYdbDriver,
+                Params.PqGatewayFactory->CreatePqGateway(),
                 Params.Resources.topic_consumers(),
                 PrepareReadRuleCredentials()
             )
@@ -1970,14 +1972,8 @@ private:
         }
 
         {
-            NYql::TPqGatewayServices pqServices(
-                Params.YqSharedResources->UserSpaceYdbDriver,
-                Params.PqCmConnections,
-                Params.CredentialsFactory,
-                std::make_shared<NYql::TPqGatewayConfig>(gatewaysConfig.GetPq()),
-                Params.FunctionRegistry
-            );
-            const auto pqGateway = NYql::CreatePqNativeGateway(pqServices);
+            auto pqGateway = Params.PqGatewayFactory->CreatePqGateway();
+            pqGateway->UpdateClusterConfigs(std::make_shared<NYql::TPqGatewayConfig>(gatewaysConfig.GetPq()));
             dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver));
         }
 
@@ -1997,7 +1993,7 @@ private:
         NSQLTranslation::TTranslationSettings sqlSettings;
         sqlSettings.ClusterMapping = clusters;
         sqlSettings.SyntaxVersion = 1;
-        sqlSettings.Antlr4Parser = false;
+        sqlSettings.Antlr4Parser = true;
         sqlSettings.PgParser = (Params.QuerySyntax == FederatedQuery::QueryContent::PG);
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         sqlSettings.Flags.insert({ "DqEngineEnable", "DqEngineForce", "DisableAnsiOptionalAs", "FlexibleTypes", "AnsiInForEmptyOrNullableItemsCollections" });

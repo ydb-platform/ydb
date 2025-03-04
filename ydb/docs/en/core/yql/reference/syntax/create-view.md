@@ -20,6 +20,8 @@ AS <query>
 
   * `security_invoker` (Bool) causes the underlying base relations to be checked against the privileges of the user of the view rather than the view owner. {#security_invoker}
 
+{% include [object naming rules](../../../concepts/datamodel/_includes/object-naming-rules.md#object-naming-rules) %}
+
 ## Notes {#notes}
 
 The `security_invoker` option must always be set to true because the default behavior for views is to execute the query on behalf of the view's creator, which is not supported yet.

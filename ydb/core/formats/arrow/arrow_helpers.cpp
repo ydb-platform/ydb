@@ -1,27 +1,29 @@
 #include "arrow_helpers.h"
-#include "switch/switch_type.h"
 #include "permutations.h"
+
 #include "common/adapter.h"
-#include "serializer/native.h"
 #include "serializer/abstract.h"
+#include "serializer/native.h"
 #include "serializer/stream.h"
+#include "switch/switch_type.h"
 
-#include <ydb/library/formats/arrow/common/validation.h>
-#include <ydb/library/formats/arrow/simple_arrays_cache.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/replace_key.h>
-#include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <util/system/yassert.h>
-#include <util/string/join.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <ydb/library/actors/core/log.h>
+#include <util/string/join.h>
+#include <util/system/yassert.h>
+
 #include <memory>
 
 #define Y_VERIFY_OK(status) Y_ABORT_UNLESS(status.ok(), "%s", status.ToString().c_str())
@@ -82,7 +84,8 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeIn
     }
 }
 
-arrow::Result<arrow::FieldVector> MakeArrowFields(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns, const std::set<std::string>& notNullColumns) {
+arrow::Result<arrow::FieldVector> MakeArrowFields(
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns, const std::set<std::string>& notNullColumns) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     fields.reserve(columns.size());
     TVector<TString> errors;
@@ -101,7 +104,8 @@ arrow::Result<arrow::FieldVector> MakeArrowFields(const std::vector<std::pair<TS
     return arrow::Status::TypeError(JoinSeq(", ", errors));
 }
 
-arrow::Result<std::shared_ptr<arrow::Schema>> MakeArrowSchema(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::set<std::string>& notNullColumns) {
+arrow::Result<std::shared_ptr<arrow::Schema>> MakeArrowSchema(
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::set<std::string>& notNullColumns) {
     const auto fields = MakeArrowFields(ydbColumns, notNullColumns);
     if (fields.ok()) {
         return std::make_shared<arrow::Schema>(fields.ValueUnsafe());
@@ -130,21 +134,19 @@ TString SerializeBatchNoCompression(const std::shared_ptr<arrow::RecordBatch>& b
     return SerializeBatch(batch, writeOptions);
 }
 
-std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const std::shared_ptr<arrow::Schema>& schema)
-{
+std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const std::shared_ptr<arrow::Schema>& schema) {
     auto result = NSerialization::TNativeSerializer().Deserialize(blob, schema);
     if (result.ok()) {
         return *result;
     } else {
-        AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_parse")("message", result.status().ToString())
-            ("schema_columns_count", schema->num_fields())("schema_columns", JoinSeq(",", schema->field_names()));
+        AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_parse")("message", result.status().ToString())(
+            "schema_columns_count", schema->num_fields())("schema_columns", JoinSeq(",", schema->field_names()));
         return nullptr;
     }
 }
 
-void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
-                      const std::shared_ptr<arrow::Schema>& sortingKey,
-                      std::vector<std::shared_ptr<arrow::RecordBatch>>& out) {
+void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey,
+    std::vector<std::shared_ptr<arrow::RecordBatch>>& out) {
     if (batch->num_rows() < 2) {
         out.push_back(batch);
         return;
@@ -179,8 +181,7 @@ void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
     Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(out.back(), sortingKey));
 }
 
-bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch,
-              const std::shared_ptr<arrow::Schema>& sortingKey, bool desc) {
+bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, bool desc) {
     auto keyBatch = TColumnOperator().Adapt(batch, sortingKey).DetachResult();
     if (desc) {
         return IsSelfSorted<true, false>(keyBatch);
@@ -189,8 +190,7 @@ bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch,
     }
 }
 
-bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch,
-                       const std::shared_ptr<arrow::Schema>& sortingKey, bool desc) {
+bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, bool desc) {
     auto keyBatch = TColumnOperator().Adapt(batch, sortingKey).DetachResult();
     if (desc) {
         return IsSelfSorted<true, true>(keyBatch);
@@ -209,8 +209,8 @@ std::shared_ptr<arrow::RecordBatch> SortBatch(
     }
 }
 
-std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey,
-    const bool andUnique) {
+std::shared_ptr<arrow::RecordBatch> SortBatch(
+    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique) {
     auto sortPermutation = MakeSortPermutation(batch, sortingKey, andUnique);
     if (sortPermutation) {
         return Reorder(batch, sortPermutation, andUnique);
@@ -240,4 +240,28 @@ std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table
     return NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batches));
 }
 
+std::shared_ptr<arrow::ChunkedArray> ReallocateArray(const std::shared_ptr<arrow::ChunkedArray>& original, arrow::MemoryPool* pool) {
+    if (!original) {
+        return original;
+    }
+    auto f = std::make_shared<arrow::Field>("1", original->type());
+    auto table = arrow::Table::Make(std::make_shared<arrow::Schema>(arrow::FieldVector({ f })), { original }, original->length());
+    table = ReallocateBatch(table, pool);
+    AFL_VERIFY(table->num_columns() == 1);
+    return table->column(0);
 }
+
+std::shared_ptr<arrow::Array> ReallocateArray(
+    const std::shared_ptr<arrow::Array>& arr, arrow::MemoryPool* pool /*= arrow::default_memory_pool()*/) {
+    if (!arr) {
+        return arr;
+    }
+    if (arr->length() == 0) {
+        return arr;
+    }
+    auto cArray = NArrow::ReallocateArray(std::make_shared<arrow::ChunkedArray>(arr), pool);
+    AFL_VERIFY(cArray->num_chunks() == 1);
+    return cArray->chunk(0);
+}
+
+}   // namespace NKikimr::NArrow

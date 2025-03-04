@@ -11,5 +11,7 @@ RECURSE(
     udf_dep_stub
     udf_probe
     udf_resolver
+    yql_complete
     yql_facade_run
+    yql_linter
 )

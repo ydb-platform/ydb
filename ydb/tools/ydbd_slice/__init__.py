@@ -13,10 +13,10 @@ import library.python.resource as rs
 from urllib3.exceptions import HTTPWarning
 
 from ydb.tools.cfg.walle import NopHostsInformationProvider
-from ydb.tools.ydbd_slice import nodes, handlers, cluster_description
+from ydb.tools.ydbd_slice import nodes, handlers, cluster_description, yaml_configurator
 from ydb.tools.ydbd_slice.kube import handlers as kube_handlers, docker
 
-warnings.filterwarnings("ignore", category=DeprecationWarning)
+# warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=HTTPWarning)
 
 
@@ -39,6 +39,9 @@ Guide for ad-hoc Kubernetes operations could be found here
 
 \033[95msample-config\033[94m - get sample configuration for cluster:
     %(prog)s sample-config --cluster-type=block-4-2-8-nodes --output-file=cluster.yaml
+
+\033[95mdynconfig-generator\033[94m - generate simple dynamic configuration for cluster:
+    %(prog)s dynconfig-generator --yaml-config=config.yaml --output-file=dynconfig.yaml
 
 \033[95minstall\033[94m - full install process from scratch:
     %(prog)s install cluster.yaml --arcadia
@@ -254,9 +257,9 @@ class Terminate(BaseException):
         raise Terminate(signum, frame)
 
 
-def safe_load_cluster_details(cluster_yaml, walle_provider):
+def safe_load_cluster_details(cluster_yaml, walle_provider, validator=None):
     try:
-        cluster_details = cluster_description.ClusterDetails(cluster_yaml, walle_provider)
+        cluster_details = cluster_description.ClusterDetails(cluster_yaml, walle_provider, validator=validator)
     except IOError as io_err:
         print('', file=sys.stderr)
         print("unable to open YAML params as a file, check args", file=sys.stderr)
@@ -310,8 +313,7 @@ def deduce_components_from_args(args, cluster_details):
     return result
 
 
-def deduce_nodes_from_args(args, walle_provider, ssh_user):
-    cluster_hosts = safe_load_cluster_details(args.cluster, walle_provider).hosts_names
+def deduce_nodes_from_args(args, cluster_hosts, ssh_user, ssh_key_path):
     result = cluster_hosts
 
     if args.nodes is not None:
@@ -326,7 +328,7 @@ def deduce_nodes_from_args(args, walle_provider, ssh_user):
         sys.exit("unable to deduce hosts")
 
     logger.info("use nodes '%s'", result)
-    return nodes.Nodes(result, args.dry_run, ssh_user=ssh_user, queue_size=args.cmd_queue_size)
+    return nodes.Nodes(result, args.dry_run, ssh_user=ssh_user, ssh_key_path=ssh_key_path, queue_size=args.cmd_queue_size)
 
 
 def ya_build(arcadia_root, artifact, opts, dry_run):
@@ -514,6 +516,12 @@ def ssh_args():
         help="user for ssh interaction with slice. Default value is $USER "
         "(which equals {user} now)".format(user=current_user),
     )
+    args.add_argument(
+        "--ssh-key-path",
+        metavar="SSH_KEY_PATH",
+        help="Path to ssh private key"
+        "(which equals {user} now)".format(user=current_user),
+    )
     return args
 
 
@@ -538,6 +546,19 @@ def databases_config_path_args():
         required=False,
         help="Path to file with databases configuration",
     )
+    return args
+
+
+def yaml_config_path_args():
+    args = argparse.ArgumentParser(add_help=False)
+    args.add_argument(
+        "--yaml-config",
+        metavar="YAML_CONFIG",
+        default="",
+        required=False,
+        help="Path to file with config.yaml configuration",
+    )
+
     return args
 
 
@@ -622,37 +643,63 @@ def dispatch_run(func, args, walle_provider, need_confirmation=False):
 
     logger.debug("run func '%s' with cmd args is '%s'", func.__name__, args)
 
-    cluster_details = safe_load_cluster_details(args.cluster, walle_provider)
-    components = deduce_components_from_args(args, cluster_details)
-
-    nodes = deduce_nodes_from_args(args, walle_provider, args.ssh_user)
-
     temp_dir = deduce_temp_dir_from_args(args)
+    kikimr_bin, kikimr_compressed_bin = deduce_kikimr_bin_from_args(args)
     clear_tmp = not args.dry_run and args.temp_dir is None
 
-    kikimr_bin, kikimr_compressed_bin = deduce_kikimr_bin_from_args(args)
+    if args.yaml_config:
+        configurator = yaml_configurator.YamlConfigurator(
+            args.cluster,
+            temp_dir,
+            kikimr_bin,
+            kikimr_compressed_bin,
+            args.yaml_config
+        )
+        cluster_details = configurator.cluster_description
+    else:
+        cluster_details = safe_load_cluster_details(args.cluster, walle_provider)
+        configurator = cluster_description.Configurator(
+            cluster_details,
+            out_dir=temp_dir,
+            kikimr_bin=kikimr_bin,
+            kikimr_compressed_bin=kikimr_compressed_bin,
+            walle_provider=walle_provider
+        )
 
-    configurator = cluster_description.Configurator(
-        cluster_details,
-        out_dir=temp_dir,
-        kikimr_bin=kikimr_bin,
-        kikimr_compressed_bin=kikimr_compressed_bin,
-        walle_provider=walle_provider
-    )
+    components = deduce_components_from_args(args, cluster_details)
 
     v = vars(args)
     clear_logs = v.get('clear_logs')
     yav_version = v.get('yav_version')
+
+    nodes = deduce_nodes_from_args(args, configurator.hosts_names, args.ssh_user, args.ssh_key_path)
     slice = handlers.Slice(
         components,
         nodes,
         cluster_details,
-        configurator,
+        kikimr_bin,
+        kikimr_compressed_bin,
         clear_logs,
         yav_version,
         walle_provider,
+        configurator,
     )
     func(slice)
+
+    # used only for configurator and will be removed soon
+    save_raw_cfg = v.get('save_raw_cfg')
+    if save_raw_cfg and configurator:
+        logger.debug("save raw cfg to '%s'", save_raw_cfg)
+        for root, dirs, files in os.walk(temp_dir):
+            for dir in dirs:
+                os.makedirs(os.path.join(save_raw_cfg, dir), 0o755, exist_ok=True)
+
+            for file in files:
+                src = os.path.join(root, file)
+                dst = os.path.join(save_raw_cfg, os.path.relpath(src, temp_dir))
+                with open(src, 'r') as src_f:
+                    with open(dst, 'w') as dst_f:
+                        dst_f.write(src_f.read())
 
     if clear_tmp:
         logger.debug("remove temp dirs '%s'", temp_dir)
@@ -693,6 +740,7 @@ def add_install_mode(modes, walle_provider):
         parents=[
             direct_nodes_args(),
             cluster_description_args(),
+            yaml_config_path_args(),
             binaries_args(),
             component_args(),
             log_args(),
@@ -702,6 +750,13 @@ def add_install_mode(modes, walle_provider):
         ],
         description="Full installation of the cluster from scratch. "
         "You can use --hosts to specify particular hosts. But it is tricky.",
+    )
+    mode.add_argument(
+        "--save-raw-cfg",
+        metavar="DIR",
+        required=False,
+        default="",
+        help="Directory to save all static configuration files generated by configuration.create_static_cfg and configuration.create_dynamic_cfg",
     )
     mode.set_defaults(handler=_run)
 
@@ -716,6 +771,7 @@ def add_update_mode(modes, walle_provider):
         parents=[
             direct_nodes_args(),
             cluster_description_args(),
+            yaml_config_path_args(),
             binaries_args(),
             component_args(),
             log_args(),
@@ -753,7 +809,14 @@ def add_stop_mode(modes, walle_provider):
 
     mode = modes.add_parser(
         "stop",
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
+        parents=[
+            direct_nodes_args(),
+            cluster_description_args(),
+            yaml_config_path_args(),
+            binaries_args(),
+            component_args(),
+            ssh_args()
+        ],
         description="Stop ydbd static instances at the nodes. "
                     "If option components specified, try to stop particular component. "
                     "Use --hosts to specify particular hosts."
@@ -767,7 +830,14 @@ def add_start_mode(modes, walle_provider):
 
     mode = modes.add_parser(
         "start",
-        parents=[direct_nodes_args(), cluster_description_args(), binaries_args(), component_args(), ssh_args()],
+        parents=[
+            direct_nodes_args(),
+            cluster_description_args(),
+            yaml_config_path_args(),
+            binaries_args(),
+            component_args(),
+            ssh_args()
+        ],
         description="Start all ydbd instances at the nodes. "
                     "If option components specified, try to start particular component. "
                     "Otherwise only kikimr-multi-all will be started. "
@@ -785,6 +855,7 @@ def add_clear_mode(modes, walle_provider):
         parents=[
             direct_nodes_args(),
             cluster_description_args(),
+            yaml_config_path_args(),
             binaries_args(),
             component_args(),
             ssh_args(),
@@ -806,6 +877,7 @@ def add_format_mode(modes, walle_provider):
         parents=[
             direct_nodes_args(),
             cluster_description_args(),
+            yaml_config_path_args(),
             binaries_args(),
             component_args(),
             ssh_args(),
@@ -855,28 +927,56 @@ def add_sample_config_mode(modes):
     mode.set_defaults(handler=_run)
 
 
+def add_dynconfig_generator(modes):
+    def _run(args):
+        if args.yaml_config:
+            yaml_config = yaml_configurator.YamlConfig(args.yaml_config)
+
+        if args.output_file is not None and args.output_file:
+            with open(args.output_file, "w") as output:
+                output.write(yaml_config.dynamic_simple)
+
+    mode = modes.add_parser(
+        "dynconfig-generator",
+        parents=[yaml_config_path_args(), output_file()],
+        description="Generate a minimalistic dynconfig.yaml for the provided config.yaml"
+    )
+
+    mode.set_defaults(handler=_run)
+
+
 #
 # docker and kube scenarios
-def build_and_push_docker_image(build_args, docker_package, build_ydbd, image, force_rebuild):
+def build_docker_image(build_args, docker_package, build_ydbd, image, force_rebuild):
     if docker_package is None:
         docker_package = docker.DOCKER_IMAGE_YDBD_PACKAGE_SPEC
 
     logger.debug(f'using docker package spec: {docker_package}')
 
     image_details = docker.docker_inspect(image)
+    output_path = docker.get_image_output_path(image)
 
     if image_details is None:
         logger.debug('ydb image %s is not present on host, building', image)
         root = arcadia_root()
         ya_package_docker(root, build_args, docker_package, image)
+        docker.docker_image_save(image, output_path, True)
     elif force_rebuild:
         logger.debug('ydb image %s is already present on host, rebuilding', image)
         root = arcadia_root()
         ya_package_docker(root, build_args, docker_package, image)
+        docker.docker_image_save(image, output_path, True)
     else:
         logger.debug('ydb image %s is already present on host, using existing image', image)
+        docker.docker_image_save(image, output_path, False)
 
-    docker.docker_push(image)
+
+def push_docker_image(image):
+    image_details = docker.docker_inspect(image)
+    if image_details is not None:
+        docker.docker_push(image)
+    else:
+        logger.error('ydb image %s is not present on host, skip', image)
 
 
 def add_arguments_docker_build_with_remainder(mode, add_force_rebuild=False):
@@ -908,13 +1008,24 @@ def add_arguments_docker_build_with_remainder(mode, add_force_rebuild=False):
     )
 
 
+def add_arguments_docker_push_with_remainder(mode):
+    group = mode.add_argument_group('docker push options')
+    group.add_argument(
+        '-i', '--image',
+        help='Optional: docker image name and tag to push. Conflicts with "-t" argument.',
+    )
+    group.add_argument(
+        '-t', '--tag',
+        help='Optional: docker image tag to push. Conflicts with "-i" argument. Default is {user}-latest.',
+    )
+
+
 def add_docker_build_mode(modes):
     def _run(args):
         logger.debug("starting docker-build cmd with args '%s'", args)
         try:
             image = docker.get_image_from_args(args)
-            build_and_push_docker_image(args.build_args, args.docker_package, False, image, force_rebuild=True)
-
+            build_docker_image(args.build_args, args.docker_package, False, image, True)
             logger.info('docker-build finished')
         except RuntimeError as e:
             logger.error(e.args[0])
@@ -926,6 +1037,26 @@ def add_docker_build_mode(modes):
         description="Build YDB docker image."
     )
     add_arguments_docker_build_with_remainder(mode, add_force_rebuild=False)
+    mode.set_defaults(handler=_run)
+
+
+def add_docker_push_mode(modes):
+    def _run(args):
+        logger.debug("starting docker-push cmd with args '%s'", args)
+        try:
+            image = docker.get_image_from_args(args)
+            push_docker_image(image)
+            logger.info('docker-push finished')
+        except RuntimeError as e:
+            logger.error(e.args[0])
+            sys.exit(1)
+
+    mode = modes.add_parser(
+        "docker-push",
+        parents=[],
+        description="Push YDB docker image."
+    )
+    add_arguments_docker_push_with_remainder(mode)
     mode.set_defaults(handler=_run)
 
 
@@ -989,11 +1120,11 @@ def add_kube_install_mode(modes):
         try:
             image = docker.get_image_from_args(args)
             if not args.use_prebuilt_image:
-                build_and_push_docker_image(args.build_args, args.docker_package, False, image, force_rebuild=args.force_rebuild)
+                build_docker_image(args.build_args, args.docker_package, False, image, args.force_rebuild)
 
             manifests = kube_handlers.get_all_manifests(args.path)
             kube_handlers.manifests_ydb_set_image(args.path, manifests, image)
-            kube_handlers.slice_install(args.path, manifests, args.wait_ready, args.dynamic_config_type)
+            kube_handlers.slice_install(args.path, manifests, args.wait_ready, args.dynamic_config_type, image, args.use_prebuilt_image)
 
             logger.info('kube-install finished')
         except RuntimeError as e:
@@ -1036,12 +1167,12 @@ def add_kube_update_mode(modes):
         try:
             image = docker.get_image_from_args(args)
             if not args.use_prebuilt_image:
-                build_and_push_docker_image(args.build_args, args.docker_package, False, image, force_rebuild=args.force_rebuild)
+                build_docker_image(args.build_args, args.docker_package, False, image, args.force_rebuild)
 
             manifests = kube_handlers.get_all_manifests(args.path)
             manifests = kube_handlers.manifests_ydb_filter_components(args.path, manifests, args.components)
             kube_handlers.manifests_ydb_set_image(args.path, manifests, image)
-            kube_handlers.slice_update(args.path, manifests, args.wait_ready, args.dynamic_config_type)
+            kube_handlers.slice_update(args.path, manifests, args.wait_ready, args.dynamic_config_type, image, args.use_prebuilt_image)
 
             logger.info('kube-update finished')
         except RuntimeError as e:
@@ -1366,8 +1497,10 @@ def main(walle_provider=None):
         add_format_mode(modes, walle_provider)
         add_explain_mode(modes, walle_provider)
         add_sample_config_mode(modes)
+        add_dynconfig_generator(modes)
 
         add_docker_build_mode(modes)
+        add_docker_push_mode(modes)
         add_kube_generate_mode(modes)
         add_kube_install_mode(modes)
         add_kube_update_mode(modes)
@@ -1381,8 +1514,32 @@ def main(walle_provider=None):
 
         args = parser.parse_args()
         logging.root.setLevel(args.log_level.upper())
-        args.handler(args)
 
+        if not hasattr(args, 'handler'):
+            parser.print_help()
+            return
+
+        if not args.yaml_config:
+            warnings.warn(
+                '''
+Using cluster.yaml for cluster configuration is deprecated.
+Only the 'domains' section should be filled with database and slot configurations.
+The config.yaml should be passed as a raw file through the --yaml-config.
+
+Example:
+    ydbd_slice install cluster.yaml all --binary /path/to/ydbd --yaml-config /path/to/config.yaml
+
+To save the resulting configuration files from an old cluster.yaml, use the --save-raw-cfg option.
+
+Example:
+    ydbd_slice install cluster.yaml all --binary /path/to/ydbd --save-raw-cfg /path/to/save
+
+The resulting configuration files will be saved in the /path/to/save directory. You can find config.yaml in the /path/to/save/kikimr-static directory.
+''',
+                DeprecationWarning
+            )
+
+        args.handler(args)
     except KeyboardInterrupt:
         sys.exit('\nStopped by KeyboardInterrupt.')
     except Terminate:

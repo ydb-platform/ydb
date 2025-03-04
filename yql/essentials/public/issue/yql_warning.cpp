@@ -31,10 +31,18 @@ TWarningRule::EParseResult TWarningRule::ParseFrom(const TString& codePattern, c
     return EParseResult::PARSE_OK;
 }
 
+TWarningPolicy::TWarningPolicy(bool isReplay)
+    : IsReplay(isReplay)
+{}
+
 void TWarningPolicy::AddRule(const TWarningRule& rule)
 {
     TString pattern = rule.GetPattern();
     if (pattern.empty()) {
+        return;
+    }
+
+    if (pattern == "*" && IsReplay) {
         return;
     }
 

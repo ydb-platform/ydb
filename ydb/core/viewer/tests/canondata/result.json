@@ -1435,6 +1435,7 @@
         "MapVersions": "not-empty-object",
         "MemoryTotal": "not-zero-number-text",
         "NetworkUtilization": "number",
+        "NetworkWriteThroughput": "text",
         "NodesAlive": 3,
         "NodesTotal": 3,
         "NumberOfCpus": "not-zero-number",
@@ -1504,7 +1505,7 @@
                         "Name": ".metadata",
                         "Owner": "metadata@system",
                         "ParentPathId": "1",
-                        "PathId": "2",
+                        "PathId": "not-zero-number-text",
                         "PathState": 2,
                         "PathType": 1,
                         "SchemeshardId": "72075186232723360"
@@ -1518,7 +1519,7 @@
                         "Name": "dedicated_db",
                         "Owner": "root@builtin",
                         "ParentPathId": "1",
-                        "PathId": "6",
+                        "PathId": "not-zero-number-text",
                         "PathState": 2,
                         "PathType": 10,
                         "SchemeshardId": "72075186232723360"
@@ -1532,7 +1533,7 @@
                         "Name": "serverless_db",
                         "Owner": "root@builtin",
                         "ParentPathId": "1",
-                        "PathId": "8",
+                        "PathId": "not-zero-number-text",
                         "PathState": 3,
                         "PathType": 10,
                         "SchemeshardId": "72075186232723360"
@@ -1546,7 +1547,7 @@
                         "Name": "shared_db",
                         "Owner": "root@builtin",
                         "ParentPathId": "1",
-                        "PathId": "7",
+                        "PathId": "not-zero-number-text",
                         "PathState": 2,
                         "PathType": 10,
                         "SchemeshardId": "72075186232723360"
@@ -1563,7 +1564,7 @@
                 "DomainDescription": {
                     "DiskSpaceUsage": "not-empty-object",
                     "DomainKey": {
-                        "PathId": "1",
+                        "PathId": "not-zero-number-text",
                         "SchemeShard": "72075186232723360"
                     },
                     "PQPartitionsInside": "0",
@@ -1582,7 +1583,7 @@
                         "TimeCastBucketsPerMediator": "2"
                     },
                     "ResourcesDomainKey": {
-                        "PathId": "1",
+                        "PathId": "not-zero-number-text",
                         "SchemeShard": "72075186232723360"
                     },
                     "SchemeShardId_Depricated": "72075186232723360",
@@ -1678,7 +1679,7 @@
                     "Name": "Root",
                     "Owner": "root",
                     "ParentPathId": "1",
-                    "PathId": "1",
+                    "PathId": "not-zero-number-text",
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 1,
@@ -1686,7 +1687,7 @@
                     "SchemeshardId": "72075186232723360"
                 }
             },
-            "PathId": "1",
+            "PathId": "not-zero-number-text",
             "PathOwnerId": "72075186232723360",
             "Source": 1,
             "Status": "StatusSuccess"
@@ -1705,7 +1706,7 @@
                         "Name": ".metadata",
                         "Owner": "metadata@system",
                         "ParentPathId": "1",
-                        "PathId": "2",
+                        "PathId": "not-zero-number-text",
                         "PathState": 3,
                         "PathType": 1,
                         "SchemeshardId": "72075186224037897"
@@ -1722,7 +1723,7 @@
                 "DomainDescription": {
                     "DiskSpaceUsage": "not-empty-object",
                     "DomainKey": {
-                        "PathId": "6",
+                        "PathId": "not-zero-number-text",
                         "SchemeShard": "72075186232723360"
                     },
                     "PQPartitionsInside": "0",
@@ -1749,7 +1750,7 @@
                         "TimeCastBucketsPerMediator": "2"
                     },
                     "ResourcesDomainKey": {
-                        "PathId": "6",
+                        "PathId": "not-zero-number-text",
                         "SchemeShard": "72075186232723360"
                     },
                     "SchemeShardId_Depricated": "72075186232723360",
@@ -1775,7 +1776,7 @@
                     "Name": "Root/dedicated_db",
                     "Owner": "root@builtin",
                     "ParentPathId": "1",
-                    "PathId": "1",
+                    "PathId": "not-zero-number-text",
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 4,
@@ -1783,7 +1784,7 @@
                     "SchemeshardId": "72075186224037897"
                 }
             },
-            "PathId": "1",
+            "PathId": "not-zero-number-text",
             "PathOwnerId": "72075186224037897",
             "Source": 1,
             "Status": "StatusSuccess"
@@ -1805,7 +1806,7 @@
                 "DomainDescription": {
                     "DiskSpaceUsage": "not-empty-object",
                     "DomainKey": {
-                        "PathId": "8",
+                        "PathId": "not-zero-number-text",
                         "SchemeShard": "72075186232723360"
                     },
                     "PQPartitionsInside": "0",
@@ -1828,7 +1829,7 @@
                         "TimeCastBucketsPerMediator": "2"
                     },
                     "ResourcesDomainKey": {
-                        "PathId": "7",
+                        "PathId": "not-zero-number-text",
                         "SchemeShard": "72075186232723360"
                     },
                     "SchemeShardId_Depricated": "72075186232723360",
@@ -1856,7 +1857,7 @@
                     "Name": "Root/serverless_db",
                     "Owner": "root@builtin",
                     "ParentPathId": "1",
-                    "PathId": "1",
+                    "PathId": "not-zero-number-text",
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 4,
@@ -1864,7 +1865,7 @@
                     "SchemeshardId": "72075186224038899"
                 }
             },
-            "PathId": "1",
+            "PathId": "not-zero-number-text",
             "PathOwnerId": "72075186224038899",
             "Source": 1,
             "Status": "StatusSuccess"
@@ -1883,7 +1884,7 @@
                         "Name": ".metadata",
                         "Owner": "metadata@system",
                         "ParentPathId": "1",
-                        "PathId": "2",
+                        "PathId": "not-zero-number-text",
                         "PathState": 3,
                         "PathType": 1,
                         "SchemeshardId": "72075186224038898"
@@ -1900,7 +1901,7 @@
                 "DomainDescription": {
                     "DiskSpaceUsage": "not-empty-object",
                     "DomainKey": {
-                        "PathId": "7",
+                        "PathId": "not-zero-number-text",
                         "SchemeShard": "72075186232723360"
                     },
                     "PQPartitionsInside": "0",
@@ -1927,7 +1928,7 @@
                         "TimeCastBucketsPerMediator": "2"
                     },
                     "ResourcesDomainKey": {
-                        "PathId": "7",
+                        "PathId": "not-zero-number-text",
                         "SchemeShard": "72075186232723360"
                     },
                     "SchemeShardId_Depricated": "72075186232723360",
@@ -1953,7 +1954,7 @@
                     "Name": "Root/shared_db",
                     "Owner": "root@builtin",
                     "ParentPathId": "1",
-                    "PathId": "1",
+                    "PathId": "not-zero-number-text",
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 4,
@@ -1961,7 +1962,7 @@
                     "SchemeshardId": "72075186224038898"
                 }
             },
-            "PathId": "1",
+            "PathId": "not-zero-number-text",
             "PathOwnerId": "72075186224038898",
             "Source": 1,
             "Status": "StatusSuccess"
@@ -2971,6 +2972,242 @@
             "TotalNodes": "1"
         }
     },
+    "test.test_viewer_nodes_issue_14992": {
+        "response_group": {
+            "FieldsAvailable": "0000000110111110111111100000111",
+            "FieldsRequired": "0000000001000000010000000000101",
+            "FoundNodes": "3",
+            "MaximumDisksPerNode": "1",
+            "Nodes": [
+                {
+                    "CpuUsage": "not-zero-number",
+                    "DiskSpaceUsage": "not-zero-number",
+                    "NodeId": 1,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {
+                            "DataCenter": "1",
+                            "Rack": "1",
+                            "Unit": "1"
+                        },
+                        "MaxDiskUsage": "not-zero-number",
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 1,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "TotalSessions": 0
+                    },
+                    "UptimeSeconds": "number"
+                },
+                {
+                    "CpuUsage": "not-zero-number",
+                    "Database": "/Root/shared_db",
+                    "NodeId": 50001,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {},
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 50001,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "Tenants": [
+                            "/Root/shared_db"
+                        ],
+                        "TotalSessions": 0
+                    },
+                    "UptimeSeconds": "number"
+                },
+                {
+                    "CpuUsage": "not-zero-number",
+                    "Database": "/Root/dedicated_db",
+                    "NodeId": 50000,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {},
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 50000,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "Tenants": [
+                            "/Root/dedicated_db"
+                        ],
+                        "TotalSessions": 0
+                    },
+                    "UptimeSeconds": "number"
+                }
+            ],
+            "TotalNodes": "3"
+        },
+        "response_group_by": {
+            "FieldsAvailable": "0000000110111110111111100000111",
+            "FieldsRequired": "0000000001000000010000000000101",
+            "FoundNodes": "3",
+            "MaximumDisksPerNode": "1",
+            "NodeGroups": [
+                {
+                    "GroupName": "up <10m",
+                    "NodeCount": "3"
+                }
+            ],
+            "TotalNodes": "3"
+        }
+    },
     "test.test_viewer_pdiskinfo": {
         "PDiskStateInfo": [
             {
@@ -3567,7 +3804,7 @@
                         "State": 10,
                         "TabletId": "72075186224037888",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 14
@@ -3583,7 +3820,7 @@
                         "State": 10,
                         "TabletId": "72075186224037889",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
@@ -3599,7 +3836,7 @@
                         "State": 10,
                         "TabletId": "72075186224037890",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
@@ -3615,7 +3852,7 @@
                         "State": 10,
                         "TabletId": "72075186224037891",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 32
@@ -3631,7 +3868,7 @@
                         "State": 10,
                         "TabletId": "72075186224037892",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
@@ -3647,7 +3884,7 @@
                         "State": 10,
                         "TabletId": "72075186224037893",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
@@ -3663,7 +3900,7 @@
                         "State": 10,
                         "TabletId": "72075186224037894",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 40
@@ -3679,7 +3916,7 @@
                         "State": 10,
                         "TabletId": "72075186224037895",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
@@ -3695,7 +3932,7 @@
                         "State": 10,
                         "TabletId": "72075186224037896",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
@@ -3711,7 +3948,7 @@
                         "State": 10,
                         "TabletId": "72075186224037897",
                         "TenantId": {
-                            "PathId": "6",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 16
@@ -3734,7 +3971,7 @@
                         "State": 10,
                         "TabletId": "72075186224038899",
                         "TenantId": {
-                            "PathId": "8",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 16
@@ -3750,7 +3987,7 @@
                         "State": 10,
                         "TabletId": "72075186224038900",
                         "TenantId": {
-                            "PathId": "8",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
@@ -3766,7 +4003,7 @@
                         "State": 10,
                         "TabletId": "72075186224038901",
                         "TenantId": {
-                            "PathId": "8",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
@@ -3782,7 +4019,7 @@
                         "State": 10,
                         "TabletId": "72075186224038902",
                         "TenantId": {
-                            "PathId": "8",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
@@ -3798,7 +4035,7 @@
                         "State": 10,
                         "TabletId": "72075186224038903",
                         "TenantId": {
-                            "PathId": "8",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
@@ -3814,7 +4051,7 @@
                         "State": 10,
                         "TabletId": "72075186224038904",
                         "TenantId": {
-                            "PathId": "8",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 32
@@ -3837,7 +4074,7 @@
                         "State": 10,
                         "TabletId": "72075186224038889",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 14
@@ -3853,7 +4090,7 @@
                         "State": 10,
                         "TabletId": "72075186224038890",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 40
@@ -3869,7 +4106,7 @@
                         "State": 10,
                         "TabletId": "72075186224038891",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
@@ -3885,7 +4122,7 @@
                         "State": 10,
                         "TabletId": "72075186224038892",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
@@ -3901,7 +4138,7 @@
                         "State": 10,
                         "TabletId": "72075186224038893",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 32
@@ -3917,7 +4154,7 @@
                         "State": 10,
                         "TabletId": "72075186224038894",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
@@ -3933,7 +4170,7 @@
                         "State": 10,
                         "TabletId": "72075186224038895",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
@@ -3949,7 +4186,7 @@
                         "State": 10,
                         "TabletId": "72075186224038896",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
@@ -3965,7 +4202,7 @@
                         "State": 10,
                         "TabletId": "72075186224038897",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
@@ -3981,7 +4218,7 @@
                         "State": 10,
                         "TabletId": "72075186224038898",
                         "TenantId": {
-                            "PathId": "7",
+                            "PathId": "not-zero-number-text",
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 16
@@ -4129,6 +4366,7 @@
                 "Metrics": {},
                 "Name": "/Root",
                 "NetworkUtilization": "number",
+                "NetworkWriteThroughput": "text",
                 "NodeIds": [
                     1
                 ],
@@ -4175,6 +4413,7 @@
                 "Metrics": "not-empty-object",
                 "Name": "/Root/dedicated_db",
                 "NetworkUtilization": "number",
+                "NetworkWriteThroughput": "text",
                 "NodeIds": [
                     50000
                 ],
@@ -4261,6 +4500,7 @@
                 "Metrics": "not-empty-object",
                 "Name": "/Root/shared_db",
                 "NetworkUtilization": "number",
+                "NetworkWriteThroughput": "text",
                 "NodeIds": [
                     50001
                 ],
@@ -4327,6 +4567,7 @@
                     "Metrics": {},
                     "Name": "/Root",
                     "NetworkUtilization": "number",
+                    "NetworkWriteThroughput": "text",
                     "NodeIds": [
                         1
                     ],
@@ -4377,6 +4618,7 @@
                     "Metrics": "not-empty-object",
                     "Name": "/Root/dedicated_db",
                     "NetworkUtilization": "number",
+                    "NetworkWriteThroughput": "text",
                     "NodeIds": [
                         50000
                     ],
@@ -4470,6 +4712,7 @@
                     "Metrics": "not-empty-object",
                     "Name": "/Root/shared_db",
                     "NetworkUtilization": "number",
+                    "NetworkWriteThroughput": "text",
                     "NodeIds": [
                         50001
                     ],

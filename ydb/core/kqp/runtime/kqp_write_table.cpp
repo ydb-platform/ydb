@@ -44,6 +44,10 @@ public:
         return result;
     }
 
+    std::shared_ptr<void> ExtractBatch() override {
+        return std::dynamic_pointer_cast<void>(Extract());
+    }
+
     explicit TColumnBatch(const TRecordBatchPtr& data)
         : Data(data)
         , Memory(NArrow::GetBatchDataSize(Data)) {
@@ -73,6 +77,11 @@ public:
         Size = 0;
         Rows = 0;
         return {std::move(Cells), std::move(Data)};
+    }
+
+    std::shared_ptr<void> ExtractBatch() override {
+        auto r = std::make_shared<std::pair<std::vector<TCell>, std::vector<TCharVectorPtr>>>(std::move(Extract()));
+        return std::reinterpret_pointer_cast<void>(r);
     }
 
     TRowBatch(std::vector<TCell>&& cells, std::vector<TCharVectorPtr>&& data, i64 size, ui32 rows, ui16 columns)
@@ -204,15 +213,22 @@ public:
             const size_t index,
             const NScheme::TTypeInfo type,
             const NUdf::TUnboxedValuePod& value,
-            const i32 typmod = -1) {
+            const TString& typeMod) {
         CellsInfo[index].Type = type;
         CellsInfo[index].Value = value;
 
-        if (type.GetTypeId() == NScheme::NTypeIds::Pg) {
+        if (type.GetTypeId() == NScheme::NTypeIds::Pg && value) {
             auto typeDesc = type.GetPgTypeDesc();
-            if (typmod != -1 && NPg::TypeDescNeedsCoercion(typeDesc)) {
+            if (!typeMod.empty() && NPg::TypeDescNeedsCoercion(typeDesc)) {
+
+                auto typeModResult = NPg::BinaryTypeModFromTextTypeMod(typeMod, type.GetPgTypeDesc());
+                if (typeModResult.Error) {
+                    ythrow yexception() << "BinaryTypeModFromTextTypeMod error: " << *typeModResult.Error;
+                }
+
+                YQL_ENSURE(typeModResult.Typmod != -1);
                 TMaybe<TString> err;
-                CellsInfo[index].PgBinaryValue = NYql::NCommon::PgValueCoerce(value, NPg::PgTypeIdFromTypeDesc(typeDesc), typmod, &err);
+                CellsInfo[index].PgBinaryValue = NYql::NCommon::PgValueCoerce(value, NPg::PgTypeIdFromTypeDesc(typeDesc), typeModResult.Typmod, &err);
                 if (err) {
                     ythrow yexception() << "PgValueCoerce error: " << *err;
                 }
@@ -274,11 +290,13 @@ private:
             }
         }
 
-        const auto ref = cellInfo.Type.GetTypeId() == NScheme::NTypeIds::Pg
+        const bool isPg = cellInfo.Type.GetTypeId() == NScheme::NTypeIds::Pg;
+
+        const auto ref = isPg
             ? NYql::NUdf::TStringRef(cellInfo.PgBinaryValue)
             : cellInfo.Value.AsStringRef();
 
-        if (TCell::CanInline(ref.Size())) {
+        if (!isPg && TCell::CanInline(ref.Size())) {
             return TCell(ref.Data(), ref.Size());
         } else {
             char* initialPtr = dataPtr;
@@ -302,11 +320,13 @@ private:
             return sizeof(cellInfo.Value.GetInt128());
         }
 
-        if (cellInfo.Type.GetTypeId() == NScheme::NTypeIds::Pg) {
-            return cellInfo.PgBinaryValue.size();
-        }
-        const auto s = cellInfo.Value.AsStringRef().Size();
-        return TCell::CanInline(s) ? 0 : s;
+        const bool isPg = cellInfo.Type.GetTypeId() == NScheme::NTypeIds::Pg;
+
+        const auto ref = isPg
+            ? NYql::NUdf::TStringRef(cellInfo.PgBinaryValue)
+            : cellInfo.Value.AsStringRef();
+
+        return (!isPg && TCell::CanInline(ref.Size())) ? 0 : ref.Size();
     }
 
     TCharVectorPtr Allocate(size_t size) {
@@ -336,7 +356,11 @@ public:
         TRowBuilder rowBuilder(Columns.size());
         data.ForEachRow([&](const auto& row) {
             for (size_t index = 0; index < Columns.size(); ++index) {
-                rowBuilder.AddCell(WriteIndex[index], Columns[index].PType, row.GetElement(index));
+                rowBuilder.AddCell(
+                    WriteIndex[index],
+                    Columns[index].PType,
+                    row.GetElement(index),
+                    Columns[index].PTypeMod);
             }
             auto rowWithData = rowBuilder.Build();
             BatchBuilder.AddRow(TConstArrayRef<TCell>{rowWithData.Cells.begin(), rowWithData.Cells.end()});
@@ -638,7 +662,11 @@ public:
         TRowBuilder rowBuilder(Columns.size());
         data.ForEachRow([&](const auto& row) {
             for (size_t index = 0; index < Columns.size(); ++index) {
-                rowBuilder.AddCell(WriteIndex[index], Columns[index].PType, row.GetElement(index));
+                rowBuilder.AddCell(
+                    WriteIndex[index],
+                    Columns[index].PType,
+                    row.GetElement(index),
+                    Columns[index].PTypeMod);
             }
             auto rowWithData = rowBuilder.Build();
             RowBatcher.AddRow(std::move(rowWithData));
@@ -899,20 +927,21 @@ public:
             return IsClosed() && IsEmpty();
         }
 
-        void MakeNextBatches(i64 maxDataSize, ui64 maxCount) {
+        void MakeNextBatches(i64 maxDataSize, std::optional<ui64> maxCount) {
             YQL_ENSURE(BatchesInFlight == 0);
             YQL_ENSURE(!IsEmpty());
-            YQL_ENSURE(maxCount != 0);
             i64 dataSize = 0;
             // For columnshard batch can be slightly larger than the limit.
-            while (BatchesInFlight < maxCount
+            while ((!maxCount || BatchesInFlight < *maxCount)
                     && BatchesInFlight < Batches.size()
                     && (dataSize + GetBatch(BatchesInFlight).GetMemory() <= maxDataSize || BatchesInFlight == 0)) {
                 dataSize += GetBatch(BatchesInFlight).GetMemory();
                 ++BatchesInFlight;
             }
             YQL_ENSURE(BatchesInFlight != 0);
-            YQL_ENSURE(BatchesInFlight == Batches.size() || BatchesInFlight >= maxCount || dataSize + GetBatch(BatchesInFlight).GetMemory() > maxDataSize);
+            YQL_ENSURE(BatchesInFlight == Batches.size()
+                || (maxCount && BatchesInFlight >= *maxCount)
+                || dataSize + GetBatch(BatchesInFlight).GetMemory() > maxDataSize);
         }
 
         TBatchWithMetadata& GetBatch(size_t index) {
@@ -1423,9 +1452,11 @@ private:
     void BuildBatchesForShard(TShardsInfo::TShardInfo& shard) {
         if (shard.GetBatchesInFlight() == 0) {
             YQL_ENSURE(IsOlap != std::nullopt);
-            shard.MakeNextBatches(
-                Settings.MemoryLimitPerMessage,
-                (*IsOlap) ? 1 : Settings.MaxBatchesPerMessage);
+            if (*IsOlap) {
+                shard.MakeNextBatches(Settings.MemoryLimitPerMessage, 1);
+            } else {
+                shard.MakeNextBatches(Settings.MemoryLimitPerMessage, std::nullopt);
+            }
         }
     }
 

@@ -89,7 +89,7 @@ TEST(TUpdateYsonStructTest, Simple)
 
     std::string updatedPool;
 
-    auto configurator = NYsonStructUpdate::TConfigurator<TSpecWithPool>();
+    auto configurator = TConfigurator<TSpecWithPool>();
     {
         configurator.Field("pool", &TSpecBase::Pool)
             .Updater(BIND([&] (const std::string& newPool) {
@@ -97,7 +97,7 @@ TEST(TUpdateYsonStructTest, Simple)
             }));
     }
 
-    NYsonStructUpdate::Update(configurator, oldSpec, newSpec);
+    std::move(configurator).Seal().Update(oldSpec, newSpec);
 
     EXPECT_EQ(updatedPool, "new_pool");
 }
@@ -109,7 +109,7 @@ TEST(TUpdateYsonStructTest, NonUpdatable)
 
     std::string updatedPool;
 
-    auto configurator = NYsonStructUpdate::TConfigurator<TSpecWithPool>();
+    auto configurator = TConfigurator<TSpecWithPool>();
     {
         configurator.Field("pool", &TSpecBase::Pool)
             .Updater(BIND([&] (const std::string& newPool) {
@@ -118,7 +118,7 @@ TEST(TUpdateYsonStructTest, NonUpdatable)
     }
 
     EXPECT_ANY_THROW({
-        NYsonStructUpdate::Update(configurator, oldSpec, newSpec);
+        std::move(configurator).Seal().Update(oldSpec, newSpec);
     });
 }
 
@@ -130,16 +130,16 @@ TEST(TUpdateYsonStructTest, Inherited)
 
     std::string updatedPool;
 
-    auto configurator = NYsonStructUpdate::TConfigurator<TSpecBase>();
+    auto configurator = TConfigurator<TSpecBase>();
     {
-        NYsonStructUpdate::TConfigurator<TSpecWithPool> parentRegistrar = configurator;
-        parentRegistrar.Field("pool", &TSpecBase::Pool)
+        TConfigurator<TSpecWithPool> parentConfigurator = configurator;
+        parentConfigurator.Field("pool", &TSpecBase::Pool)
             .Updater(BIND([&] (const std::string& newPool) {
                 updatedPool = newPool;
             }));
     }
 
-    NYsonStructUpdate::Update(configurator, oldSpec, newSpec);
+    std::move(configurator).Seal().Update(oldSpec, newSpec);
 
     EXPECT_EQ(updatedPool, "new_pool");
 }
@@ -152,26 +152,59 @@ TEST(TUpdateYsonStructTest, Nested)
     std::string updatedPool;
     std::string updatedCommand;
 
-    auto configurator = NYsonStructUpdate::TConfigurator<TSpecBase>();
+    auto configurator = TConfigurator<TSpecBase>();
     {
-        NYsonStructUpdate::TConfigurator<TSpecWithPool> parentRegistrar = configurator;
-        parentRegistrar.Field("pool", &TSpecBase::Pool)
+        TConfigurator<TSpecWithPool> parentConfigurator = configurator;
+        parentConfigurator.Field("pool", &TSpecBase::Pool)
             .Updater(BIND([&] (const std::string& newPool) {
                 updatedPool = newPool;
             }));
     }
     configurator.Field("mapper", &TSpecBase::Mapper)
-        .NestedUpdater(BIND([&](NYsonStructUpdate::TConfigurator<TMapperSpec> configurator) {
+        .NestedUpdater(BIND([&] () {
+            TConfigurator<TMapperSpec> configurator;
             configurator.Field("command", &TMapperSpec::Command)
                 .Updater(BIND([&] (const std::string& newCommand) {
                     updatedCommand = newCommand;
                 }));
+            return TSealedConfigurator(std::move(configurator));
         }));
 
-    NYsonStructUpdate::Update(configurator, oldSpec, newSpec);
+    std::move(configurator).Seal().Update(oldSpec, newSpec);
 
     EXPECT_EQ(updatedPool, "new_pool");
     EXPECT_EQ(updatedCommand, "sort");
+}
+
+TEST(TUpdateYsonStructTest, Validate)
+{
+    auto oldSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(TString("{pool=pool;}")));
+    auto longPoolSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(TString("{pool=new_pool;}")));
+    auto shortPoolSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(TString("{pool=p;}")));
+
+    std::string updatedPool;
+
+    auto configurator = TConfigurator<TSpecWithPool>();
+    configurator.Field("pool", &TSpecWithPool::Pool)
+        .Validator(BIND([&] (const std::string& newPool) {
+            THROW_ERROR_EXCEPTION_IF(
+                newPool.size() > 4,
+                "Pool name too long");
+        }))
+        .Updater(BIND([&] (const std::string& newPool) {
+            updatedPool = newPool;
+        }));
+
+    auto sealed = std::move(configurator).Seal();
+
+    EXPECT_THROW_WITH_SUBSTRING(
+        sealed.Validate(oldSpec, longPoolSpec),
+        "Pool name too long");
+
+    sealed.Validate(oldSpec, shortPoolSpec);
+    sealed.Update(oldSpec, shortPoolSpec);
+
+    EXPECT_EQ(updatedPool, "p");
 }
 
 } // namespace

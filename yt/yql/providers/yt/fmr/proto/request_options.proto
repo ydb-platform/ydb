@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package NYql.NFmr.NProto;
+
+enum EOperationStatus {
+    OPERATION_UNKNOWN = 0;
+    OPERATION_ACCEPTED = 1;
+    OPERATION_IN_PROGRESS = 2;
+    OPERATION_FAILED = 3;
+    OPERATION_COMPLETED = 4;
+    OPERATION_ABORTED = 5;
+    OPERATION_NOT_FOUND = 6;
+}
+
+enum ETaskStatus {
+    TASK_UNKNOWN = 0;
+    TASK_ACCEPTED = 1;
+    TASK_IN_PROGRESS = 2;
+    TASK_FAILED = 3;
+    TASK_COMPLETED = 4;
+    TASK_ABORTED = 5;
+}
+
+enum ETaskType {
+    TASK_TYPE_UNKNOWN = 0;
+    TASK_TYPE_DOWNLOAD = 1;
+    TASK_TYPE_UPLOAD = 2;
+    TASK_TYPE_MERGE = 3;
+}
+
+enum EFmrComponent {
+    COMPONENT_UNKNOWN = 0;
+    COMPONENT_COORDINATOR = 1;
+    COMPONENT_WORKER = 2;
+    COMPONENT_JOB = 3;
+}
+
+message TFmrError {
+    EFmrComponent Component = 1;
+    string ErrorMessage = 2;
+    optional uint32 WorkerId = 3;
+    optional string TaskId = 4;
+    optional string OperationId = 5;
+}
+
+message TStatistics {}
+
+message TYtTableRef {
+    string Path = 1;
+    string Cluster = 2;
+}
+
+message TFmrTableRef {
+    string TableId = 1;
+}
+
+message TTableRef {
+    oneof TableRef {
+        TYtTableRef YtTableRef = 1;
+        TFmrTableRef FmrTableRef = 2;
+    }
+}
+
+message TUploadTaskParams {
+    TFmrTableRef Input = 1;
+    TYtTableRef Output = 2;
+}
+
+message TDownloadTaskParams {
+    TYtTableRef Input = 1;
+    TFmrTableRef Output = 2;
+}
+
+message TMergeTaskParams {
+    repeated TTableRef Input = 1;
+    TFmrTableRef Output = 2;
+}
+
+message TTaskParams {
+    oneof TaskParams {
+        TUploadTaskParams UploadTaskParams = 1;
+        TDownloadTaskParams DownloadTaskParams = 2;
+        TMergeTaskParams MergeTaskParams = 3;
+    }
+}
+
+message TClusterConnection {
+    string TransactionId = 1;
+    string YtServerName = 2;
+    optional string Token = 3;
+}
+
+message TTask {
+    ETaskType TaskType = 1;
+    string TaskId = 2;
+    TTaskParams TaskParams = 3;
+    string SessionId = 4;
+    optional uint32 NumRetries = 5;
+    TClusterConnection ClusterConnection = 6;
+}
+
+message TTaskState {
+    ETaskStatus TaskStatus = 1;
+    string TaskId = 2;
+    optional TFmrError TaskErrorMessage = 3;
+}
+

@@ -29,6 +29,7 @@ public:
 
     std::optional<std::string> GetPlan() const;
     std::optional<std::string> GetAst() const;
+    std::optional<std::string> GetMeta() const;
 
     TDuration GetTotalDuration() const;
     TDuration GetTotalCpuTime() const;

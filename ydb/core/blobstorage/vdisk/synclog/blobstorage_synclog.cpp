@@ -9,6 +9,7 @@
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_status.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 
 using namespace NKikimrServices;
 using namespace NKikimr::NSyncLog;
@@ -141,7 +142,7 @@ namespace NKikimr {
                     auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(NKikimrProto::RACE, SelfVDiskId,
                         TSyncState(), true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now,
                         SlCtx->CountersMonGroup.VDiskCheckFailedPtr(), nullptr, ev->GetChannel());
-                    SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, SlCtx->VCtx);
+                    SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, SlCtx->VCtx, {});
                     return;
                 }
 
@@ -160,7 +161,7 @@ namespace NKikimr {
                     auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(NKikimrProto::BLOCKED, SelfVDiskId,
                         TSyncState(), true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now,
                         SlCtx->CountersMonGroup.DiskLockedPtr(), nullptr, ev->GetChannel());
-                    SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, SlCtx->VCtx);
+                    SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, SlCtx->VCtx, {});
                     return;
                 }
 
@@ -180,7 +181,7 @@ namespace NKikimr {
                     auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(status, SelfVDiskId, syncState,
                         true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now,
                         SlCtx->CountersMonGroup.UnequalGuidPtr(), nullptr, ev->GetChannel());
-                    SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, SlCtx->VCtx);
+                    SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, SlCtx->VCtx, {});
                     return;
                 }
 
@@ -286,6 +287,10 @@ namespace NKikimr {
                 Die(ctx);
             }
 
+            void Handle(TEvListChunks::TPtr ev, const TActorContext& ctx) {
+                ctx.Send(ev->Forward(KeeperId));
+            }
+
             STRICT_STFUNC(StateFunc,
                 HFunc(TEvSyncLogPut, Handle)
                 HFunc(TEvSyncLogPutSst, Handle)
@@ -299,6 +304,7 @@ namespace NKikimr {
                 HFunc(TEvVGenerationChange, Handle)
                 HFunc(TEvents::TEvCompleted, HandleActorCompletion)
                 HFunc(TEvents::TEvPoisonPill, HandlePoison)
+                HFunc(TEvListChunks, Handle)
             )
 
         public:
@@ -333,4 +339,3 @@ namespace NKikimr {
     }
 
 } // NKikimr
-

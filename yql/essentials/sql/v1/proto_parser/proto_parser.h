@@ -1,6 +1,5 @@
 #pragma once
 
-#include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/parser/proto_ast/common.h>
 #include <yql/essentials/public/issue/yql_warning.h>
 #include <yql/essentials/public/issue/yql_issue_manager.h>
@@ -14,9 +13,15 @@ namespace NSQLTranslation {
 
 namespace NSQLTranslationV1 {
 
-    google::protobuf::Message* SqlAST(const TString& query, const TString& queryName, 
-        NYql::TIssues& err, size_t maxErrors, bool ansiLexer, bool antlr4Parser, bool testAntlr4, google::protobuf::Arena* arena);
-    google::protobuf::Message* SqlAST(const TString& query, const TString& queryName,
-        NProtoAST::IErrorCollector& err, bool ansiLexer, bool antlr4Parser, bool testAntlr4, google::protobuf::Arena* arena);
+    struct TParsers {
+        NSQLTranslation::TParserFactoryPtr Antlr3;
+        NSQLTranslation::TParserFactoryPtr Antlr3Ansi;
+        NSQLTranslation::TParserFactoryPtr Antlr4;
+        NSQLTranslation::TParserFactoryPtr Antlr4Ansi;
+    };
 
+    google::protobuf::Message* SqlAST(const TParsers& parsers, const TString& query, const TString& queryName,
+        NYql::TIssues& err, size_t maxErrors, bool ansiLexer, bool antlr4Parser, google::protobuf::Arena* arena);
+    google::protobuf::Message* SqlAST(const TParsers& parsers, const TString& query, const TString& queryName,
+        NProtoAST::IErrorCollector& err, bool ansiLexer, bool antlr4Parser, google::protobuf::Arena* arena);
 }  // namespace NSQLTranslationV1

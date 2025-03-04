@@ -1,5 +1,14 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr3_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr3/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr3_ansi/proto_parser.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/utils/log/log.h>
 #include <ydb-cpp-sdk/client/proto/accessor.h>
 
@@ -198,7 +207,24 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
             SELECT "foo" / "bar"
         )";
 
-        const auto parsedAst = NSQLTranslation::SqlToYql(queryInView, {});
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
+        lexers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiLexerFactory();
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+        lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+        NSQLTranslationV1::TParsers parsers;
+        parsers.Antlr3 = NSQLTranslationV1::MakeAntlr3ParserFactory();
+        parsers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiParserFactory();
+        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+        parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+
+        NSQLTranslation::TTranslators translators(
+            nullptr,
+            NSQLTranslationV1::MakeTranslator(lexers, parsers),
+            nullptr
+        );
+
+        const auto parsedAst = NSQLTranslation::SqlToYql(translators, queryInView, {});
         UNIT_ASSERT_C(parsedAst.IsOk(), parsedAst.Issues.ToString());
 
         const TString creationQuery = std::format(R"(

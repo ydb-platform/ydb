@@ -80,6 +80,7 @@ sql_stmt_core:
   | alter_transfer_stmt
   | drop_transfer_stmt
   | alter_database_stmt
+  | show_create_table_stmt
 ;
 
 expr:
@@ -396,7 +397,7 @@ reduce_core:
 opt_set_quantifier: (ALL | DISTINCT)?;
 
 select_core:
-  (FROM join_source)? SELECT STREAM? opt_set_quantifier result_column (COMMA result_column)* COMMA? (WITHOUT without_column_list)? (FROM join_source)? (WHERE expr)?
+  (FROM join_source)? SELECT STREAM? opt_set_quantifier result_column (COMMA result_column)* COMMA? (WITHOUT (IF EXISTS)? without_column_list)? (FROM join_source)? (WHERE expr)?
   group_by_clause? (HAVING expr)? window_clause? ext_order_by_clause?
 ;
 
@@ -844,8 +845,9 @@ role_name: an_id_or_type | bind_parameter;
 user_option: authentication_option | login_option;
 
 authentication_option: password_option | hash_option;
-password_option: ENCRYPTED? PASSWORD expr;
-hash_option: HASH expr;
+password_option: ENCRYPTED? PASSWORD password_value;
+password_value: STRING_VALUE | NULL;
+hash_option: HASH STRING_VALUE;
 login_option: LOGIN | NOLOGIN;
 
 grant_permissions_stmt: GRANT permission_name_target ON an_id_schema (COMMA an_id_schema)* TO role_name (COMMA role_name)* COMMA? (WITH GRANT OPTION)?;
@@ -1097,6 +1099,8 @@ alter_sequence_action:
   | RESTART
   | INCREMENT BY? integer
 ;
+
+show_create_table_stmt: SHOW CREATE TABLE simple_table_ref;
 
 // Special rules that allow to use certain keywords as identifiers.
 identifier: ID_PLAIN | ID_QUOTED;

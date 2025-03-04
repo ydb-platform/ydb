@@ -8,7 +8,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/base/feature_flags.h>
 
 namespace NKikimr {
@@ -246,7 +246,6 @@ namespace NKikimr {
         TCostMetricsParametersByMedia CostMetricsParametersByMedia;
 
         ///////////// THROTTLING SETTINGS //////////////////
-        TControlWrapper ThrottlingDeviceSpeed;
         TControlWrapper ThrottlingDryRun;
         TControlWrapper ThrottlingMinLevel0SstCount;
         TControlWrapper ThrottlingMaxLevel0SstCount;

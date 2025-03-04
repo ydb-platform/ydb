@@ -47,7 +47,7 @@ public:
     //! default: 0
     TDriverConfig& SetMaxClientQueueSize(size_t sz);
     //! Enable Ssl.
-    //! caCerts  - The buffer containing the PEM encoding of the server root certificates.
+    //! caCerts  - The buffer containing the PEM encoded root certificates for SSL/TLS connections.
     //!            If this parameter is empty, the default roots will be used.
     TDriverConfig& UseSecureConnection(const std::string& caCerts = std::string());
     TDriverConfig& UseClientCertificate(const std::string& clientCert, const std::string& clientPrivateKey);
@@ -142,6 +142,7 @@ public:
     template<typename TExtension>
     void AddExtension(typename TExtension::TParams params = typename TExtension::TParams());
 
+    TDriverConfig GetConfig() const;
 private:
     std::shared_ptr<TGRpcConnectionsImpl> Impl_;
 };

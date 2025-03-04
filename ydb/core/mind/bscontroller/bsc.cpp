@@ -3,6 +3,8 @@
 #include "self_heal.h"
 #include "sys_view.h"
 #include "console_interaction.h"
+#include "group_geometry_info.h"
+#include "group_layout_checker.h"
 
 #include <library/cpp/streams/zstd/zstd.h>
 
@@ -79,6 +81,25 @@ void TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
             }
         }
         Status.MakeWorst(DeriveStatus(Topology.get(), failed), DeriveStatus(Topology.get(), failed | failedByPDisk));
+    }
+}
+
+void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageController *self,
+        TBlobStorageGroupInfo::TTopology *topology, const std::function<TGroupGeometryInfo()>& getGeom) {
+    LayoutCorrect = true;
+    if (VDisksInGroup) {
+        NLayoutChecker::TGroupLayout layout(*topology);
+        NLayoutChecker::TDomainMapper mapper;
+        auto geom = getGeom();
+
+        for (size_t index = 0; index < VDisksInGroup.size(); ++index) {
+            const TVSlotInfo *slot = VDisksInGroup[index];
+            TPDiskId pdiskId = slot->VSlotId.ComprisingPDiskId();
+            const auto& location = self->HostRecords->GetLocation(pdiskId.NodeId);
+            layout.AddDisk({mapper, location, pdiskId, geom}, index);
+        }
+
+        LayoutCorrect = layout.IsCorrect();
     }
 }
 
@@ -172,7 +193,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         }
 
         ConsoleInteraction->Stop(); // distconf will handle the Console from now on
-    } else {
+    } else if (Loaded) {
         ConsoleInteraction->Start(); // we control the Console now
     }
 
@@ -616,40 +637,6 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
     }
 
     Y_ABORT();
-}
-
-TString TBlobStorageController::CompressYamlConfig(const TYamlConfig& yamlConfig) {
-    TStringStream s;
-    {
-        TZstdCompress zstd(&s);
-        Save(&zstd, yamlConfig);
-    }
-    return s.Str();
-}
-
-TString TBlobStorageController::CompressStorageYamlConfig(const TString& storageYamlConfig) {
-    TStringStream s;
-    {
-        TZstdCompress zstd(&s);
-        Save(&zstd, storageYamlConfig);
-    }
-    return s.Str();
-}
-
-TBlobStorageController::TYamlConfig TBlobStorageController::DecompressYamlConfig(const TString& buffer) {
-    TStringInput s(buffer);
-    TZstdDecompress zstd(&s);
-    TYamlConfig res;
-    Load(&zstd, res);
-    return res;
-}
-
-TString TBlobStorageController::DecompressStorageYamlConfig(const TString& buffer) {
-    TStringInput s(buffer);
-    TZstdDecompress zstd(&s);
-    TString res;
-    Load(&zstd, res);
-    return res;
 }
 
 } // NBsController

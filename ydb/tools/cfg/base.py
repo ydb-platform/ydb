@@ -302,6 +302,7 @@ class ClusterDetailsProvider(object):
         self.http_proxy_config = self.__cluster_description.get("http_proxy_config")
         self.blob_storage_config = self.__cluster_description.get("blob_storage_config")
         self.memory_controller_config = self.__cluster_description.get("memory_controller_config")
+        self.s3_proxy_resolver_config = self.__cluster_description.get("s3_proxy_resolver_config")
         self.channel_profile_config = self.__cluster_description.get("channel_profile_config")
         self.immediate_controls_config = self.__cluster_description.get("immediate_controls_config")
         self.cms_config = self.__cluster_description.get("cms_config")
@@ -621,6 +622,10 @@ class ClusterDetailsProvider(object):
             )
         return domains
 
+    @domains.setter
+    def domains(self, values):
+        self.__cluster_description["domains"] = values
+
     @property
     def domains_config(self):
         domains_config_dict = self.__cluster_description.get("domains_config", {})
@@ -708,12 +713,7 @@ class ClusterDetailsProvider(object):
 
     @property
     def grpc_config(self):
-        grpc_config = merge_with_default(GRPC_DEFAULT_CONFIG, self.__cluster_description.get("grpc", {}))
-        # specifying both `port` and `ssl_port` leads to erroneous behavior in ydbd, half of the incoming
-        # connections use tls, half do not, so this is prohibited
-        if grpc_config.get("ssl_port") is not None:
-            del grpc_config["port"]
-        return grpc_config
+        return merge_with_default(GRPC_DEFAULT_CONFIG, self.__cluster_description.get("grpc", {}))
 
     @property
     def dynamicnameservice_config(self):

@@ -64,5 +64,5 @@ namespace NActors {
         virtual void SetSharedPool(ISharedPool* pool) = 0;
     };
 
-    IHarmonizer* MakeHarmonizer(ui64 ts);
+    std::unique_ptr<IHarmonizer> MakeHarmonizer(ui64 ts);
 }

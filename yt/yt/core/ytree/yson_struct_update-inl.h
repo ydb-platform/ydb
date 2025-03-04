@@ -4,7 +4,7 @@
 #include "yson_struct_update.h"
 #endif
 
-namespace NYT::NYTree::NYsonStructUpdate {
+namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -15,24 +15,24 @@ const IYsonStructMeta* GetYsonStructMeta() {
     return New<TStruct>()->GetMeta();
 }
 
-struct TRegisteredFieldDirectory
+struct TConfiguredFieldDirectory
     : public TRefCounted
 {
     template <class TStruct>
-    static TRegisteredFieldDirectoryPtr Create()
+    static TConfiguredFieldDirectoryPtr Create()
     {
         static auto* meta = GetYsonStructMeta<TStruct>();
 
-        auto directory = New<TRegisteredFieldDirectory>();
+        auto directory = New<TConfiguredFieldDirectory>();
         directory->Meta = meta;
         return directory;
     }
 
-    THashMap<IYsonStructParameterPtr, IFieldRegistrarPtr> ParameterToFieldRegistrar;
+    THashMap<IYsonStructParameterPtr, IFieldConfiguratorPtr> ParameterToFieldConfigurator;
     const IYsonStructMeta* Meta;
 };
 
-DEFINE_REFCOUNTED_TYPE(TRegisteredFieldDirectory);
+DEFINE_REFCOUNTED_TYPE(TConfiguredFieldDirectory);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -49,18 +49,36 @@ struct TUnwrapYsonStructIntrusivePtr<TIntrusivePtr<T>>
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TValue>
-TFieldRegistrar<TValue>& TFieldRegistrar<TValue>::Updater(TCallback<void(const TValue&, const TValue&)> updater)
+TFieldConfigurator<TValue>& TFieldConfigurator<TValue>::Validator(TCallback<void(const TValue&, const TValue&)> validator)
 {
-    VerifyEmpty();
+    VerifyEmptyValidator();
+    Validator_ = validator;
+    return *this;
+}
+
+template <class TValue>
+TFieldConfigurator<TValue>& TFieldConfigurator<TValue>::Validator(TCallback<void(const TValue&)> validator)
+{
+    VerifyEmptyValidator();
+    Validator_ = BIND_NO_PROPAGATE([validator = std::move(validator)] (const TValue& /*oldValue*/, const TValue& newValue) {
+        validator(std::move(newValue));
+    });
+    return *this;
+}
+
+template <class TValue>
+TFieldConfigurator<TValue>& TFieldConfigurator<TValue>::Updater(TCallback<void(const TValue&, const TValue&)> updater)
+{
+    VerifyEmptyUpdater();
     Updater_ = updater;
     return *this;
 }
 
 template <class TValue>
-TFieldRegistrar<TValue>& TFieldRegistrar<TValue>::Updater(TCallback<void(const TValue&)> updater)
+TFieldConfigurator<TValue>& TFieldConfigurator<TValue>::Updater(TCallback<void(const TValue&)> updater)
 {
-    VerifyEmpty();
-    Updater_ = BIND([updater = std::move(updater)] (const TValue& /*oldValue*/, const TValue& newValue) {
+    VerifyEmptyUpdater();
+    Updater_ = BIND_NO_PROPAGATE([updater = std::move(updater)] (const TValue& /*oldValue*/, const TValue& newValue) {
         updater(std::move(newValue));
     });
     return *this;
@@ -82,25 +100,41 @@ TFieldRegistrar<TValue>& TFieldRegistrar<TValue>::Updater(TCallback<void(const T
 // written as TIntrusivePtr<TMyStruct>, so I need to unwrap that to TMyStruct.
 template <class TValue>
 template <CYsonStructDerived TUnwrappedValue>
-TFieldRegistrar<TValue>& TFieldRegistrar<TValue>::NestedUpdater(
-    TCallback<void(TConfigurator<TUnwrappedValue>)> registerCallback)
+TFieldConfigurator<TValue>& TFieldConfigurator<TValue>::NestedUpdater(
+    TCallback<TSealedConfigurator<TUnwrappedValue>()> configureCallback)
 {
     static_assert(
         std::is_same_v<
             TUnwrappedValue,
             typename NDetail::TUnwrapYsonStructIntrusivePtr<TValue>::TStruct>);
 
-    VerifyEmpty();
-    TConfigurator<TUnwrappedValue> registrar;
-    registerCallback(registrar);
-    Updater_ = BIND([registrar = std::move(registrar)] (const TValue& oldValue, const TValue& newValue) {
-        Update(registrar, oldValue, newValue);
+    VerifyEmptyUpdater();
+    auto configurator = configureCallback();
+    Updater_ = BIND_NO_PROPAGATE([configurator = std::move(configurator)] (const TValue& oldValue, const TValue& newValue) {
+        configurator.Update(oldValue, newValue);
     });
     return *this;
 }
 
 template <class TValue>
-void TFieldRegistrar<TValue>::DoUpdate(
+void TFieldConfigurator<TValue>::DoValidate(
+    IYsonStructParameterPtr parameter,
+    TYsonStructBase* oldStruct,
+    TYsonStructBase* newStruct) const
+{
+    if (!Validator_) {
+        return;
+    }
+
+    auto typedParameter = DynamicPointerCast<TYsonStructParameter<TValue>>(parameter);
+    YT_VERIFY(typedParameter);
+    Validator_(
+        typedParameter->GetValue(oldStruct),
+        typedParameter->GetValue(newStruct));
+}
+
+template <class TValue>
+void TFieldConfigurator<TValue>::DoUpdate(
     IYsonStructParameterPtr parameter,
     TYsonStructBase* oldStruct,
     TYsonStructBase* newStruct) const
@@ -117,7 +151,13 @@ void TFieldRegistrar<TValue>::DoUpdate(
 }
 
 template <class TValue>
-void TFieldRegistrar<TValue>::VerifyEmpty() const
+void TFieldConfigurator<TValue>::VerifyEmptyValidator() const
+{
+    YT_VERIFY(!Validator_);
+}
+
+template <class TValue>
+void TFieldConfigurator<TValue>::VerifyEmptyUpdater() const
 {
     YT_VERIFY(!Updater_);
 }
@@ -129,32 +169,32 @@ void TFieldRegistrar<TValue>::VerifyEmpty() const
 ////////////////////////////////////////////////////////////////////////////////
 
 template <CYsonStructDerived TStruct>
-TConfigurator<TStruct>::TConfigurator(NDetail::TRegisteredFieldDirectoryPtr registeredFields)
-    : RegisteredFields_(registeredFields)
+TConfigurator<TStruct>::TConfigurator(NDetail::TConfiguredFieldDirectoryPtr configuredFields)
+    : ConfiguredFields_(configuredFields)
 {
-    // NB: Initialize TRegisteredFieldDirectory with
+    // NB: Initialize TConfiguredFieldDirectory with
     // the youngest child in the hierarchy.
-    if (!registeredFields) {
-        RegisteredFields_ = NDetail::TRegisteredFieldDirectory::Create<TStruct>();
+    if (!configuredFields) {
+        ConfiguredFields_ = NDetail::TConfiguredFieldDirectory::Create<TStruct>();
     }
 }
 
 template <CYsonStructDerived TStruct>
 template <class TValue>
-NDetail::TFieldRegistrar<TValue>& TConfigurator<TStruct>::Field(const TString& name, TYsonStructField<TStruct, TValue> field)
+NDetail::TFieldConfigurator<TValue>& TConfigurator<TStruct>::Field(const std::string& name, TYsonStructField<TStruct, TValue> field)
 {
     IYsonStructParameterPtr parameter;
 
     try {
-        parameter = RegisteredFields_->Meta->GetParameter(name);
+        parameter = ConfiguredFields_->Meta->GetParameter(name);
     } catch (const std::exception& ex) {
         YT_ABORT();
     }
     YT_VERIFY(parameter->HoldsField(CreateTypeErasedYsonStructField(field)));
 
-    auto fieldRegistrar = New<NDetail::TFieldRegistrar<TValue>>();
-    RegisteredFields_->ParameterToFieldRegistrar.emplace(parameter, fieldRegistrar);
-    return *fieldRegistrar;
+    auto fieldConfigurator = New<NDetail::TFieldConfigurator<TValue>>();
+    ConfiguredFields_->ParameterToFieldConfigurator.emplace(parameter, fieldConfigurator);
+    return *fieldConfigurator;
 }
 
 template <CYsonStructDerived TStruct>
@@ -162,32 +202,62 @@ template <class TAncestor>
 TConfigurator<TStruct>::operator TConfigurator<TAncestor>() const
 {
     static_assert(std::derived_from<TStruct, TAncestor> && std::derived_from<TAncestor, TYsonStructBase>);
-    return TConfigurator<TAncestor>(RegisteredFields_);
+    return TConfigurator<TAncestor>(ConfiguredFields_);
+}
+
+template <CYsonStructDerived TStruct>
+TSealedConfigurator<TStruct> TConfigurator<TStruct>::Seal() &&
+{
+    return std::move(*this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TStruct>
-void Update(
-    const TConfigurator<TStruct>& registrar,
+template <CYsonStructDerived TStruct>
+TSealedConfigurator<TStruct>::TSealedConfigurator(TConfigurator<TStruct> configurator)
+    : ConfiguredFields_(std::move(configurator.ConfiguredFields_))
+{ }
+
+template <CYsonStructDerived TStruct>
+void TSealedConfigurator<TStruct>::Validate(
     TIntrusivePtr<TStruct> oldStruct,
-    TIntrusivePtr<TStruct> newStruct)
+    TIntrusivePtr<TStruct> newStruct) const
+{
+    Do(oldStruct, newStruct, &NDetail::IFieldConfigurator::DoValidate);
+}
+
+template <CYsonStructDerived TStruct>
+void TSealedConfigurator<TStruct>::Update(
+    TIntrusivePtr<TStruct> oldStruct,
+    TIntrusivePtr<TStruct> newStruct) const
+{
+    Do(oldStruct, newStruct, &NDetail::IFieldConfigurator::DoUpdate);
+}
+
+template <CYsonStructDerived TStruct>
+void TSealedConfigurator<TStruct>::Do(
+    TIntrusivePtr<TStruct> oldStruct,
+    TIntrusivePtr<TStruct> newStruct,
+    TFieldConfiguratorMethod fieldMethod) const
 {
     const auto* meta = oldStruct->GetMeta();
-    const auto& parameterToFieldRegistrar = registrar.RegisteredFields_->ParameterToFieldRegistrar;
+    YT_VERIFY(meta == newStruct->GetMeta());
+    const auto& parameterToFieldConfigurator = ConfiguredFields_->ParameterToFieldConfigurator;
+    YT_VERIFY(ConfiguredFields_->Meta == meta);
     for (const auto& [name, parameter] : meta->GetParameterMap()) {
         if (parameter->CompareParameter(oldStruct.Get(), newStruct.Get())) {
             continue;
         }
 
-        auto fieldDescIter = parameterToFieldRegistrar.find(parameter);
-        if (fieldDescIter == parameterToFieldRegistrar.end()) {
+        auto fieldDescIter = parameterToFieldConfigurator.find(parameter);
+        if (fieldDescIter == parameterToFieldConfigurator.end()) {
             THROW_ERROR_EXCEPTION("Field %Qv is not marked as updatable, but was changed", name);
+        } else {
+            (*(fieldDescIter->second).*fieldMethod)(parameter, oldStruct.Get(), newStruct.Get());
         }
-        fieldDescIter->second->DoUpdate(parameter, oldStruct.Get(), newStruct.Get());
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NYTree::NYsonStructUpdate
+} // namespace NYT::NYTree

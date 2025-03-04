@@ -81,11 +81,14 @@ THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
 
 } // namespace
 
-TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
+TContext::TContext(const TLexers& lexers, const TParsers& parsers,
+                   const NSQLTranslation::TTranslationSettings& settings,
                    const NSQLTranslation::TSQLHints& hints,
                    TIssues& issues,
                    const TString& query)
-    : ClusterMapping(settings.ClusterMapping)
+    : Lexers(lexers)
+    , Parsers(parsers)
+    , ClusterMapping(settings.ClusterMapping)
     , PathPrefix(settings.PathPrefix)
     , ClusterPathPrefixes(settings.ClusterPathPrefixes)
     , SQLHints(hints)
@@ -97,6 +100,7 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
     , HasPendingErrors(false)
     , DqEngineEnable(Settings.DqDefaultAuto->Allow())
     , AnsiQuotedIdentifiers(settings.AnsiLexer)
+    , WarningPolicy(settings.IsReplay)
     , BlockEngineEnable(Settings.BlockDefaultAuto->Allow())
 {
     for (auto lib : settings.Libraries) {
@@ -349,10 +353,6 @@ void TContext::DeclareVariable(const TString& varName, const TPosition& pos, con
 bool TContext::AddExport(TPosition pos, const TString& name) {
     if (IsAnonymousName(name)) {
         Error(pos) << "Can not export anonymous name " << name;
-        return false;
-    }
-    if (Exports.contains(name)) {
-        Error(pos) << "Duplicate export symbol: " << name;
         return false;
     }
     if (!Scoped->LookupNode(name)) {

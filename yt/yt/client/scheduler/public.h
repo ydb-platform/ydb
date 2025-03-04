@@ -78,6 +78,7 @@ YT_DEFINE_ERROR_ENUM(
     ((CannotUseBothAclAndAco)                 (221))
     ((GangOperationsAllowedOnlyInFifoPools)   (222))
     ((OperationLaunchedInNonexistentPool)     (223))
+    ((OperationHasNoController)               (224))
 );
 
 DEFINE_ENUM(EUnavailableChunkAction,

@@ -177,6 +177,8 @@ namespace NKikimr::NBsController {
 
             THashMap<TEntityId, ui32> NumDisksPerDevice;
 
+            bool Correct = true;
+
             TGroupLayout(const TBlobStorageGroupInfo::TTopology& topology)
                 : Topology(topology)
                 , NumDisksInRealm(Topology.GetTotalFailRealmsNum())
@@ -187,17 +189,19 @@ namespace NKikimr::NBsController {
 
             void UpdateDisk(const TPDiskLayoutPosition& pos, ui32 orderNumber, ui32 value) {
                 NumDisks += value;
-                NumDisksPerRealmGroup[pos.RealmGroup] += value;
+                const ui32 z = NumDisksPerRealmGroup[pos.RealmGroup] += value;
                 const TVDiskIdShort vdisk = Topology.GetVDiskId(orderNumber);
-                NumDisksInRealm[vdisk.FailRealm] += value;
-                NumDisksPerRealm[vdisk.FailRealm][pos.Realm] += value;
-                NumDisksPerRealmTotal[pos.Realm] += value;
+                const ui32 x1 = NumDisksInRealm[vdisk.FailRealm] += value;
+                const ui32 x2 = NumDisksPerRealm[vdisk.FailRealm][pos.Realm] += value;
+                const ui32 x3 = NumDisksPerRealmTotal[pos.Realm] += value;
                 const ui32 domainIdx = Topology.GetFailDomainOrderNumber(vdisk);
-                NumDisksInDomain[domainIdx] += value;
-                NumDisksPerDomain[domainIdx][pos.Domain] += value;
-                NumDisksPerDomainTotal[pos.Domain] += value;
+                const ui32 y1 = NumDisksInDomain[domainIdx] += value;
+                const ui32 y2 = NumDisksPerDomain[domainIdx][pos.Domain] += value;
+                const ui32 y3 = NumDisksPerDomainTotal[pos.Domain] += value;
 
                 NumDisksPerDevice[pos.Device] += value;
+
+                Correct = Correct && x1 == x2 && x2 == x3 && y1 == y2 && y2 == y3 && z == NumDisks;
             }
 
             void AddDisk(const TPDiskLayoutPosition& pos, ui32 orderNumber) {
@@ -233,6 +237,46 @@ namespace NKikimr::NBsController {
                 AddDisk(pos, orderNumber);
                 return score;
             }
+
+            bool IsCorrect() const {
+#ifdef NDEBUG
+                return Correct;
+#endif
+
+                if (NumDisksPerRealmGroup.size() != 1) { // all disks must reside in the same realm group
+                    Y_DEBUG_ABORT_UNLESS(!Correct);
+                    return false;
+                }
+
+                for (size_t i = 0, num = NumDisksInRealm.size(); i < num; ++i) {
+                    for (const auto& [entityId, numDisks] : NumDisksPerRealm[i]) {
+                        Y_DEBUG_ABORT_UNLESS(NumDisksPerRealmTotal.contains(entityId));
+                        if (numDisks != NumDisksInRealm[i] || numDisks != NumDisksPerRealmTotal.at(entityId)) {
+                            // the first case is when group realm contains disks from different real-world realms (DC's)
+                            // -- this is not as bad as it seems, but breaks strict failure model; the second one is a bit
+                            // worse, it means that disks from this real-world realm (DC) are in several realms, which
+                            // may lead to unavailability when DC goes down
+                            Y_DEBUG_ABORT_UNLESS(!Correct);
+                            return false;
+                        }
+                    }
+                }
+
+                // the same code goes for domains
+                for (size_t j = 0, num = NumDisksInDomain.size(); j < num; ++j) {
+                    for (const auto& [entityId, numDisks] : NumDisksPerDomain[j]) {
+                        Y_DEBUG_ABORT_UNLESS(NumDisksPerDomainTotal.contains(entityId));
+                        if (numDisks != NumDisksInDomain[j] || numDisks != NumDisksPerDomainTotal.at(entityId)) {
+                            Y_DEBUG_ABORT_UNLESS(!Correct);
+                            return false;
+                        }
+
+                    }
+                }
+
+                Y_DEBUG_ABORT_UNLESS(Correct);
+                return true;
+            }
         };
 
     } // NLayoutChecker
@@ -244,7 +288,5 @@ namespace NKikimr::NBsController {
             return Candidates.empty();
         }
     };
-
-    TLayoutCheckResult CheckGroupLayout(const TGroupGeometryInfo& geom, const THashMap<TVDiskIdShort, std::pair<TNodeLocation, TPDiskId>>& layout);
 
 } // NKikimr::NBsController

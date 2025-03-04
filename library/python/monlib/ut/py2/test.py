@@ -252,6 +252,16 @@ def test_gauge_sensors():
     assert ig.get() == 5
 
 
+def test_counter():
+    registry = MetricRegistry()
+    c = registry.counter({'a': 'b'})
+
+    assert c.inc() == 1
+    assert c.add(2) == 3
+    c.reset()
+    assert c.get() == 0
+
+
 UNISTAT_DATA = """[
     ["signal1_max", 10],
     ["signal2_hgram", [[0, 100], [50, 200], [200, 300]]],
@@ -402,3 +412,51 @@ def test_reset_and_clear_registry():
     out = dumps(registry, format="json")
     j = json.loads(out)
     assert j == {}
+
+
+def test_mem_only_metrics():
+    registry = MetricRegistry()
+
+    registry.gauge({"some": "gauge"}, mem_only=True)
+    with pytest.raises(Exception):
+        registry.gauge({"some": "gauge"})
+
+    registry.int_gauge({"some": "int_gauge"}, mem_only=True)
+    with pytest.raises(Exception):
+        registry.int_gauge({"some": "int_gauge"})
+
+    registry.counter({"some": "counter"}, mem_only=True)
+    with pytest.raises(Exception):
+        registry.counter({"some": "counter"})
+
+    registry.rate({"some": "rate"}, mem_only=True)
+    with pytest.raises(Exception):
+        registry.rate({"some": "rate"})
+
+    registry.histogram_counter(
+        {"some": "histogram_counter"},
+        HistogramType.Explicit,
+        mem_only=True,
+        buckets=[1, 5, 15, 20, 25]
+    )
+    with pytest.raises(Exception):
+        registry.histogram_counter(
+            {"some": "histogram_counter"},
+            HistogramType.Explicit,
+            buckets=[1, 5, 15, 20, 25],
+        )
+
+    registry.histogram_rate(
+        {"some": "histogram_rate"},
+        HistogramType.Exponential,
+        mem_only=True,
+        bucket_count=5,
+        base=2
+    )
+    with pytest.raises(Exception):
+        registry.histogram_rate(
+            {"some": "histogram_rate"},
+            HistogramType.Exponential,
+            bucket_count=5,
+            base=2
+        )

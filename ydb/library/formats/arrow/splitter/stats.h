@@ -20,15 +20,7 @@ protected:
     ui64 RawBytes = 0;
 public:
     TSimpleSerializationStat() = default;
-    TSimpleSerializationStat(const ui64 bytes, const ui64 recordsCount, const ui64 rawBytes)
-        : SerializedBytes(bytes)
-        , RecordsCount(recordsCount)
-        , RawBytes(rawBytes)
-    {
-        Y_ABORT_UNLESS(SerializedBytes);
-        Y_ABORT_UNLESS(RecordsCount);
-        Y_ABORT_UNLESS(RawBytes);
-    }
+    TSimpleSerializationStat(const ui64 bytes, const ui64 recordsCount, const ui64 rawBytes);
 
     TString DebugString() const {
         return TStringBuilder() << "{"

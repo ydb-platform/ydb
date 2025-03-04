@@ -2,6 +2,8 @@
 
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
+#include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -11,7 +13,7 @@ using namespace NSQLTranslationV1;
 std::pair<TParsedTokenList, NYql::TIssues> Tokenize(ILexer::TPtr& lexer, TString queryUtf8) {
     TParsedTokenList tokens;
     NYql::TIssues issues;
-    Tokenize(*lexer, queryUtf8, "Query", tokens, issues, SQL_MAX_PARSER_ERRORS);
+    Tokenize(*lexer, queryUtf8, "", tokens, issues, SQL_MAX_PARSER_ERRORS);
     return {tokens, issues};
 }
 
@@ -74,8 +76,12 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
             "\"select\"select",
         };
 
-        auto lexer3 = MakeLexer(/* ansi = */ false, /* antlr4 = */ false);
-        auto lexer4 = MakeLexer(/* ansi = */ false, /* antlr4 = */ true);
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+
+        auto lexer3 = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ false);
+        auto lexer4 = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ true);
 
         for (const auto& query : queriesUtf8) {
             auto [tokens3, issues3] = Tokenize(lexer3, query);
@@ -89,7 +95,11 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
     TVector<TString> InvalidQueries();
 
     void TestInvalidTokensSkipped(bool antlr4, const TVector<TVector<TString>>& expected) {
-        auto lexer = MakeLexer(/* ansi = */ false, antlr4);
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+
+        auto lexer = MakeLexer(lexers, /* ansi = */ false, antlr4);
 
         auto input = InvalidQueries();
         UNIT_ASSERT_VALUES_EQUAL(input.size(), expected.size());
@@ -144,8 +154,12 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
     }
 
     Y_UNIT_TEST(IssuesCollected) {
-        auto lexer3 = MakeLexer(/* ansi = */ false, /* antlr4 = */ false);
-        auto lexer4 = MakeLexer(/* ansi = */ false, /* antlr4 = */ true);
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+
+        auto lexer3 = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ false);
+        auto lexer4 = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ true);
 
         for (const auto& query : InvalidQueries()) {
             auto issues3 = GetIssueMessages(lexer3, query);
@@ -157,7 +171,9 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
     }
 
     Y_UNIT_TEST(IssueMessagesAntlr3) {
-        auto lexer3 = MakeLexer(/* ansi = */ false, /* antlr4 = */ false);
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
+        auto lexer3 = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ false);
 
         auto actual = GetIssueMessages(lexer3, "\xF0\x9F\x98\x8A SELECT * FR");
 
@@ -172,7 +188,10 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
     }
 
     Y_UNIT_TEST(IssueMessagesAntlr4) {
-        auto lexer4 = MakeLexer(/* ansi = */ false, /* antlr4 = */ true);
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+
+        auto lexer4 = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ true);
 
         auto actual = GetIssueMessages(lexer4, "\xF0\x9F\x98\x8A SELECT * FR");
 

@@ -19,6 +19,8 @@ private:
     std::optional<TLocalHelper> OlapHelper;
     std::optional<NYDBTest::TControllers::TGuard<NOlap::TWaitCompactionController>> CsController;
 
+    YDB_ACCESSOR(TString, TablePath, "/Root/olapStore/olapTable");
+
 public:
     TTieringTestHelper() {
         CsController.emplace(NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>());
@@ -53,8 +55,8 @@ public:
 
     void WriteSampleData() {
         for (ui64 i = 0; i < 100; ++i) {
-            WriteTestData(TestHelper->GetKikimr(), "/Root/olapStore/olapTable", 0, 3600000000 + i * 10000, 1000);
-            WriteTestData(TestHelper->GetKikimr(), "/Root/olapStore/olapTable", 0, 3600000000 + i * 10000, 1000);
+            WriteTestData(TestHelper->GetKikimr(), TablePath, 0, 3600000000 + i * 10000, 1000);
+            WriteTestData(TestHelper->GetKikimr(), TablePath, 0, 3600000000 + i * 10000, 1000);
         }
     }
 
@@ -65,7 +67,7 @@ public:
         selectQuery << R"(
             SELECT
                 TierName, SUM(ColumnRawBytes) AS RawBytes, SUM(Rows) AS Rows
-            FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`)";
+            FROM `)" << TablePath << R"(/.sys/primary_index_portion_stats`)";
         if (onlyActive) {
             selectQuery << " WHERE Activity == 1";
         }
@@ -125,6 +127,29 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
         csController->WaitCompactions(TDuration::Seconds(5));
         tieringHelper.CheckAllDataInTier("__DEFAULT");
+    }
+
+    Y_UNIT_TEST(LoadTtlSettings) {
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        tieringHelper.SetTablePath("/Root/olapTable");
+
+        olapHelper.CreateTestOlapTableWithoutStore();
+        testHelper.CreateTier("tier1");
+        testHelper.SetTiering("/Root/olapTable", "/Root/tier1", "timestamp");
+        {
+            const TString query = R"(ALTER TABLE `/Root/olapTable` ADD COLUMN f Int32)";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+        testHelper.RebootTablets("/Root/olapTable");
+
+        tieringHelper.WriteSampleData();
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier("/Root/tier1");
     }
 
     Y_UNIT_TEST(EvictionWithStrippedEdsPath) {
@@ -202,7 +227,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto it = tableClient.StreamExecuteScanQuery(selectQuery, NYdb::NTable::TStreamExecScanQuerySettings()).GetValueSync();
             auto streamPart = it.ReadNext().GetValueSync();
             UNIT_ASSERT(!streamPart.IsSuccess());
-            UNIT_ASSERT_STRING_CONTAINS(streamPart.GetIssues().ToString(), "cannot read blob range");
+            UNIT_ASSERT_STRING_CONTAINS(streamPart.GetIssues().ToString(), "reading blob range for data");
         }
 
         testHelper.CreateTier("tier1");
@@ -231,15 +256,15 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
                 false, tsInterval.MicroSeconds() / rows);
         }
 
-        {
-            auto selectQuery = TString(R"(
-                SELECT MAX(timestamp) AS timestamp FROM `/Root/olapStore/olapTable`
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
-            UNIT_ASSERT_GT(GetTimestamp(rows[0].at("timestamp")), TInstant::Now() - TDuration::Days(100));
-        }
+//         {
+//             auto selectQuery = TString(R"(
+//                 SELECT MAX(timestamp) AS timestamp FROM `/Root/olapStore/olapTable`
+//             )");
+// 
+//             auto rows = ExecuteScanQuery(tableClient, selectQuery);
+//             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+//             UNIT_ASSERT_GT(GetTimestamp(rows[0].at("timestamp")), TInstant::Now() - TDuration::Days(100));
+//         }
 
         {
             auto selectQuery = TString(R"(

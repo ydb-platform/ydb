@@ -85,7 +85,7 @@ namespace NKikimr {
         }
 
         void PassAway() override {
-            Send(ParentId, new TEvents::TEvActorDied);
+            Send(ParentId, new TEvents::TEvGone);
             TActorBootstrapped::PassAway();
         }
 

@@ -20,6 +20,8 @@ using namespace std::string_view_literals;
 namespace NKikimr {
 namespace NMiniKQL {
 
+static_assert(RuntimeVersion >= 20);
+
 namespace {
 
 struct TDataFunctionFlags {
@@ -321,6 +323,11 @@ void EnsureDataOrOptionalOfData(TRuntimeNode node) {
         ->GetItemType()->IsData(), "Expected data or optional of data");
 }
 
+std::vector<TType*> ValidateBlockType(const TType* type, bool unwrap) {
+    const auto wideComponents = AS_TYPE(TMultiType, type)->GetElements();
+    return ValidateBlockItems(wideComponents, unwrap);
+}
+
 std::vector<TType*> ValidateBlockStreamType(const TType* streamType, bool unwrap) {
     const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, streamType));
     return ValidateBlockItems(wideComponents, unwrap);
@@ -398,10 +405,6 @@ TRuntimeNode TProgramBuilder::Arg(TType* type) const {
 }
 
 TRuntimeNode TProgramBuilder::WideFlowArg(TType* type) const {
-    if constexpr (RuntimeVersion < 18U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     TCallableBuilder builder(Env, __func__, type, true);
     return TRuntimeNode(builder.Build(), false);
 }
@@ -968,10 +971,6 @@ TRuntimeNode TProgramBuilder::ToList(TRuntimeNode optional) {
 }
 
 TRuntimeNode TProgramBuilder::Iterable(TZeroLambda lambda) {
-    if constexpr (RuntimeVersion < 19U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     const auto itemArg = Arg(NewNull().GetStaticType());
     auto lambdaRes = lambda();
     const auto resultType = NewListType(AS_TYPE(TStreamType, lambdaRes.GetStaticType())->GetItemType());
@@ -1392,9 +1391,6 @@ TRuntimeNode TProgramBuilder::Iterator(TRuntimeNode list, const TArrayRef<const 
 
 TRuntimeNode TProgramBuilder::EmptyIterator(TType* streamType) {
     MKQL_ENSURE(streamType->IsStream() || streamType->IsFlow(), "Expected stream or flow.");
-    if (RuntimeVersion < 7U && streamType->IsFlow()) {
-        return ToFlow(EmptyIterator(NewStreamType(AS_TYPE(TFlowType, streamType)->GetItemType())));
-    }
     TCallableBuilder callableBuilder(Env, __func__, streamType);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
@@ -1430,11 +1426,6 @@ TRuntimeNode TProgramBuilder::LazyList(TRuntimeNode list) {
 TRuntimeNode TProgramBuilder::ForwardList(TRuntimeNode stream) {
     const auto type = stream.GetStaticType();
     MKQL_ENSURE(type->IsStream() || type->IsFlow(), "Expected flow or stream.");
-    if constexpr (RuntimeVersion < 10U) {
-        if (type->IsFlow()) {
-            return ForwardList(FromFlow(stream));
-        }
-    }
     TCallableBuilder callableBuilder(Env, __func__, NewListType(type->IsFlow() ? AS_TYPE(TFlowType, stream)->GetItemType() : AS_TYPE(TStreamType, stream)->GetItemType()));
     callableBuilder.Add(stream);
     return TRuntimeNode(callableBuilder.Build(), false);
@@ -1476,21 +1467,36 @@ TRuntimeNode TProgramBuilder::ToBlocks(TRuntimeNode flow) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::WideToBlocks(TRuntimeNode flow) {
-    TType* outputItemType;
-    {
-        const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
-        std::vector<TType*> outputItems;
-        outputItems.reserve(wideComponents.size());
-        for (size_t i = 0; i < wideComponents.size(); ++i) {
-            outputItems.push_back(NewBlockType(wideComponents[i], TBlockType::EShape::Many));
-        }
-        outputItems.push_back(NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
-        outputItemType = NewMultiType(outputItems);
+TType* TProgramBuilder::BuildWideBlockType(const TArrayRef<TType* const>& wideComponents) {
+    std::vector<TType*> blockItems;
+    blockItems.reserve(wideComponents.size());
+    for (size_t i = 0; i < wideComponents.size(); i++) {
+        blockItems.push_back(NewBlockType(wideComponents[i], TBlockType::EShape::Many));
     }
+    blockItems.push_back(NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
+    return NewMultiType(blockItems);
+}
 
-    TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputItemType));
-    callableBuilder.Add(flow);
+TRuntimeNode TProgramBuilder::WideToBlocks(TRuntimeNode stream) {
+    MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Expected WideStream as input type");
+    if constexpr (RuntimeVersion < 58U) {
+        // Preserve the old behaviour for ABI compatibility.
+        // Emit (FromFlow (WideToBlocks (ToFlow (<stream>)))) to
+        // process the flow in favor to the given stream following
+        // the older MKQL ABI.
+        // FIXME: Drop the branch below, when the time comes.
+        const auto inputFlow = ToFlow(stream);
+        const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, inputFlow.GetStaticType()));
+        TType* outputMultiType = BuildWideBlockType(wideComponents);
+        TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputMultiType));
+        callableBuilder.Add(inputFlow);
+        const auto outputFlow = TRuntimeNode(callableBuilder.Build(), false);
+        return FromFlow(outputFlow);
+    }
+    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, stream.GetStaticType()));
+    TType* outputMultiType = BuildWideBlockType(wideComponents);
+    TCallableBuilder callableBuilder(Env, __func__, NewStreamType(outputMultiType));
+    callableBuilder.Add(stream);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
@@ -2034,29 +2040,7 @@ TRuntimeNode TProgramBuilder::Lookup(TRuntimeNode dict, TRuntimeNode key) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::DictItems(TRuntimeNode dict, EDictItems mode) {
-    const auto dictTypeChecked = AS_TYPE(TDictType, dict.GetStaticType());
-    TType* itemType;
-    switch (mode) {
-        case EDictItems::Both: {
-            const std::array<TType*, 2U> tupleTypes = {{ dictTypeChecked->GetKeyType(), dictTypeChecked->GetPayloadType() }};
-            itemType = NewTupleType(tupleTypes);
-            break;
-        }
-        case EDictItems::Keys: itemType = dictTypeChecked->GetKeyType(); break;
-        case EDictItems::Payloads: itemType = dictTypeChecked->GetPayloadType(); break;
-    }
-
-    TCallableBuilder callableBuilder(Env, __func__, NewListType(itemType));
-    callableBuilder.Add(dict);
-    callableBuilder.Add(NewDataLiteral((ui32)mode));
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
 TRuntimeNode TProgramBuilder::DictItems(TRuntimeNode dict) {
-    if constexpr (RuntimeVersion < 6U) {
-        return DictItems(dict, EDictItems::Both);
-    }
     const auto dictTypeChecked = AS_TYPE(TDictType, dict.GetStaticType());
     const auto itemType = NewTupleType({ dictTypeChecked->GetKeyType(), dictTypeChecked->GetPayloadType() });
     TCallableBuilder callableBuilder(Env, __func__, NewListType(itemType));
@@ -2065,9 +2049,6 @@ TRuntimeNode TProgramBuilder::DictItems(TRuntimeNode dict) {
 }
 
 TRuntimeNode TProgramBuilder::DictKeys(TRuntimeNode dict) {
-    if constexpr (RuntimeVersion < 6U) {
-        return DictItems(dict, EDictItems::Keys);
-    }
     const auto dictTypeChecked = AS_TYPE(TDictType, dict.GetStaticType());
     TCallableBuilder callableBuilder(Env, __func__, NewListType(dictTypeChecked->GetKeyType()));
     callableBuilder.Add(dict);
@@ -2075,9 +2056,6 @@ TRuntimeNode TProgramBuilder::DictKeys(TRuntimeNode dict) {
 }
 
 TRuntimeNode TProgramBuilder::DictPayloads(TRuntimeNode dict) {
-    if constexpr (RuntimeVersion < 6U) {
-        return DictItems(dict, EDictItems::Payloads);
-    }
     const auto dictTypeChecked = AS_TYPE(TDictType, dict.GetStaticType());
     TCallableBuilder callableBuilder(Env, __func__, NewListType(dictTypeChecked->GetPayloadType()));
     callableBuilder.Add(dict);
@@ -2999,10 +2977,6 @@ TRuntimeNode TProgramBuilder::SourceOf(TType* returnType) {
 }
 
 TRuntimeNode TProgramBuilder::Source() {
-    if constexpr (RuntimeVersion < 18U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     TCallableBuilder callableBuilder(Env, __func__, NewFlowType(NewMultiType({})));
     return TRuntimeNode(callableBuilder.Build(), false);
 }
@@ -3177,9 +3151,7 @@ TRuntimeNode TProgramBuilder::QueueCreate(TRuntimeNode initCapacity, TRuntimeNod
     auto resType = AS_TYPE(TResourceType, returnType);
     const auto tag = resType->GetTag();
 
-    if (initCapacity.GetStaticType()->IsVoid()) {
-        MKQL_ENSURE(RuntimeVersion >= 13, "Unbounded queue is not supported in runtime version " << RuntimeVersion);
-    } else {
+    if (!initCapacity.GetStaticType()->IsVoid()) {
         auto initCapacityType = AS_TYPE(TDataType, initCapacity);
         MKQL_ENSURE(initCapacityType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "init capcity must be ui64");
     }
@@ -3233,8 +3205,6 @@ TRuntimeNode TProgramBuilder::QueuePeek(TRuntimeNode resource, TRuntimeNode inde
 }
 
 TRuntimeNode TProgramBuilder::QueueRange(TRuntimeNode resource, TRuntimeNode begin, TRuntimeNode end, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType) {
-    MKQL_ENSURE(RuntimeVersion >= 14, "QueueRange is not supported in runtime version " << RuntimeVersion);
-
     MKQL_ENSURE(returnType->IsList(), "Expected list type as result of QueueRange");
     auto resType = AS_TYPE(TResourceType, resource);
 
@@ -3271,8 +3241,6 @@ TRuntimeNode TProgramBuilder::PreserveStream(TRuntimeNode stream, TRuntimeNode q
 }
 
 TRuntimeNode TProgramBuilder::Seq(const TArrayRef<const TRuntimeNode>& args, TType* returnType) {
-    MKQL_ENSURE(RuntimeVersion >= 15, "Seq is not supported in runtime version " << RuntimeVersion);
-
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     for (auto node : args) {
         callableBuilder.Add(node);
@@ -3718,16 +3686,6 @@ TRuntimeNode TProgramBuilder::BuildFlatMap(const std::string_view& callableName,
 
 TRuntimeNode TProgramBuilder::MultiMap(TRuntimeNode list, const TExpandLambda& handler)
 {
-    if constexpr (RuntimeVersion < 16U) {
-        const auto single = [=](TRuntimeNode item) -> TRuntimeNode {
-            const auto newList = handler(item);
-            const auto retItemType = newList.front().GetStaticType();
-            MKQL_ENSURE(retItemType->IsSameType(*newList.back().GetStaticType()), "Must be same type.");
-            return NewList(retItemType, newList);
-        };
-        return OrderedFlatMap(list, single);
-    }
-
     const auto listType = list.GetStaticType();
     MKQL_ENSURE(listType->IsFlow() || listType->IsList(), "Expected flow, list, stream or optional");
 
@@ -3750,10 +3708,6 @@ TRuntimeNode TProgramBuilder::MultiMap(TRuntimeNode list, const TExpandLambda& h
 }
 
 TRuntimeNode TProgramBuilder::NarrowMultiMap(TRuntimeNode flow, const TWideLambda& handler) {
-    if constexpr (RuntimeVersion < 18U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
 
     TRuntimeNode::TList itemArgs;
@@ -3775,10 +3729,6 @@ TRuntimeNode TProgramBuilder::NarrowMultiMap(TRuntimeNode flow, const TWideLambd
 }
 
 TRuntimeNode TProgramBuilder::ExpandMap(TRuntimeNode flow, const TExpandLambda& handler) {
-    if constexpr (RuntimeVersion < 18U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     const auto itemType = AS_TYPE(TFlowType, flow.GetStaticType())->GetItemType();
     const auto itemArg = Arg(itemType);
     const auto newItems = handler(itemArg);
@@ -3795,10 +3745,6 @@ TRuntimeNode TProgramBuilder::ExpandMap(TRuntimeNode flow, const TExpandLambda& 
 }
 
 TRuntimeNode TProgramBuilder::WideMap(TRuntimeNode flow, const TWideLambda& handler) {
-    if constexpr (RuntimeVersion < 18U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
 
     TRuntimeNode::TList itemArgs;
@@ -3855,10 +3801,6 @@ TRuntimeNode TProgramBuilder::WideChain1Map(TRuntimeNode flow, const TWideLambda
 }
 
 TRuntimeNode TProgramBuilder::NarrowMap(TRuntimeNode flow, const TNarrowLambda& handler) {
-    if constexpr (RuntimeVersion < 18U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
 
     TRuntimeNode::TList itemArgs;
@@ -3876,10 +3818,6 @@ TRuntimeNode TProgramBuilder::NarrowMap(TRuntimeNode flow, const TNarrowLambda& 
 }
 
 TRuntimeNode TProgramBuilder::NarrowFlatMap(TRuntimeNode flow, const TNarrowLambda& handler) {
-    if constexpr (RuntimeVersion < 18U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
 
     TRuntimeNode::TList itemArgs;
@@ -3911,10 +3849,6 @@ TRuntimeNode TProgramBuilder::NarrowFlatMap(TRuntimeNode flow, const TNarrowLamb
 }
 
 TRuntimeNode TProgramBuilder::BuildWideFilter(const std::string_view& callableName, TRuntimeNode flow, const TNarrowLambda& handler) {
-    if constexpr (RuntimeVersion < 18U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
 
     TRuntimeNode::TList itemArgs;
@@ -3999,10 +3933,6 @@ TRuntimeNode TProgramBuilder::BuildFilter(const std::string_view& callableName, 
 
 TRuntimeNode TProgramBuilder::BuildFilter(const std::string_view& callableName, TRuntimeNode list, TRuntimeNode limit, const TUnaryLambda& handler, TType* resultType)
 {
-    if constexpr (RuntimeVersion < 4U) {
-        return Take(BuildFilter(callableName, list, handler, resultType), limit);
-    }
-
     const auto listType = list.GetStaticType();
     MKQL_ENSURE(listType->IsFlow() || listType->IsList() || listType->IsStream(), "Expected flow, list or stream.");
     MKQL_ENSURE(limit.GetStaticType()->IsData(), "Expected data");
@@ -4302,15 +4232,12 @@ TRuntimeNode TProgramBuilder::Apply(TRuntimeNode callableNode, const TArrayRef<c
                                    << " with static " << arg.GetStaticType()->GetKindAsStr());
     }
 
-    TCallableBuilder callableBuilder(Env, RuntimeVersion >= 8 ? "Apply2" : "Apply", callableType->GetReturnType());
+    TCallableBuilder callableBuilder(Env, "Apply2", callableType->GetReturnType());
     callableBuilder.Add(callableNode);
     callableBuilder.Add(NewDataLiteral<ui32>(dependentCount));
-
-    if constexpr (RuntimeVersion >= 8) {
-        callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(file));
-        callableBuilder.Add(NewDataLiteral(row));
-        callableBuilder.Add(NewDataLiteral(column));
-    }
+    callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(file));
+    callableBuilder.Add(NewDataLiteral(row));
+    callableBuilder.Add(NewDataLiteral(column));
 
     for (const auto& arg: args) {
         callableBuilder.Add(arg);
@@ -4345,12 +4272,11 @@ TRuntimeNode TProgramBuilder::Callable(TType* callableType, const TArrayLambda& 
 }
 
 TRuntimeNode TProgramBuilder::NewNull() {
-    if (!UseNullType || RuntimeVersion < 11) {
-        TCallableBuilder callableBuilder(Env, "Null", NewOptionalType(Env.GetVoidLazy()->GetType()));
-        return TRuntimeNode(callableBuilder.Build(), false);
-    } else {
+    if (UseNullType) {
         return TRuntimeNode(Env.GetNullLazy(), true);
     }
+    TCallableBuilder callableBuilder(Env, "Null", NewOptionalType(Env.GetVoidLazy()->GetType()));
+    return TRuntimeNode(callableBuilder.Build(), false);
 }
 
 TRuntimeNode TProgramBuilder::Concat(TRuntimeNode data1, TRuntimeNode data2) {
@@ -4383,18 +4309,10 @@ TRuntimeNode TProgramBuilder::RFind(TRuntimeNode haystack, TRuntimeNode needle, 
 }
 
 TRuntimeNode TProgramBuilder::StartsWith(TRuntimeNode string, TRuntimeNode prefix) {
-    if constexpr (RuntimeVersion < 19U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     return DataCompare(__func__, string, prefix);
 }
 
 TRuntimeNode TProgramBuilder::EndsWith(TRuntimeNode string, TRuntimeNode suffix) {
-    if constexpr (RuntimeVersion < 19U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     return DataCompare(__func__, string, suffix);
 }
 
@@ -4726,10 +4644,6 @@ TRuntimeNode TProgramBuilder::CommonJoinCore(TRuntimeNode flow, EJoinKind joinKi
     ui64 memLimit, std::optional<ui32> sortedTableOrder,
     EAnyJoinSettings anyJoinSettings, const ui32 tableIndexField, TType* returnType) {
 
-    if constexpr (RuntimeVersion < 17U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     MKQL_ENSURE(leftColumns.size() % 2U == 0U, "Expected even count");
     MKQL_ENSURE(rightColumns.size() % 2U == 0U, "Expected even count");
 
@@ -4776,10 +4690,6 @@ TRuntimeNode TProgramBuilder::CommonJoinCore(TRuntimeNode flow, EJoinKind joinKi
 }
 
 TRuntimeNode TProgramBuilder::WideCombiner(TRuntimeNode flow, i64 memLimit, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish) {
-    if constexpr (RuntimeVersion < 18U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     if (memLimit < 0) {
         if constexpr (RuntimeVersion < 46U) {
             THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__ << " with limit " << memLimit;
@@ -4914,10 +4824,6 @@ TRuntimeNode TProgramBuilder::WideLastCombinerWithSpilling(TRuntimeNode flow, co
 }
 
 TRuntimeNode TProgramBuilder::WideCondense1(TRuntimeNode flow, const TWideLambda& init, const TWideSwitchLambda& switcher, const TBinaryWideLambda& update, bool useCtx) {
-    if constexpr (RuntimeVersion < 18U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
 
     TRuntimeNode::TList itemArgs;
@@ -4963,10 +4869,6 @@ TRuntimeNode TProgramBuilder::CombineCore(TRuntimeNode stream,
     const TBinaryLambda& finish,
     ui64 memLimit)
 {
-    if constexpr (RuntimeVersion < 3U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     const bool isStream = stream.GetStaticType()->IsStream();
     const auto itemType = isStream ? AS_TYPE(TStreamType, stream)->GetItemType() : AS_TYPE(TFlowType, stream)->GetItemType();
 
@@ -5017,10 +4919,6 @@ TRuntimeNode TProgramBuilder::GroupingCore(TRuntimeNode stream,
     const TUnaryLambda& keyExtractor,
     const TUnaryLambda& handler)
 {
-    if (handler && RuntimeVersion < 20U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__ << " with handler";
-    }
-
     auto itemType = AS_TYPE(TStreamType, stream)->GetItemType();
 
     TRuntimeNode keyExtractorItemArg = Arg(itemType);
@@ -5064,13 +4962,6 @@ TRuntimeNode TProgramBuilder::Chopper(TRuntimeNode flow, const TUnaryLambda& key
     const auto flowType = flow.GetStaticType();
     MKQL_ENSURE(flowType->IsFlow() || flowType->IsStream(), "Expected flow or stream.");
 
-
-    if constexpr (RuntimeVersion < 9U) {
-        return FlatMap(GroupingCore(flow, groupSwitch, keyExtractor),
-            [&](TRuntimeNode item) -> TRuntimeNode { return groupHandler(Nth(item, 0U), Nth(item, 1U)); }
-        );
-    }
-
     const bool isStream = flowType->IsStream();
     const auto itemType = isStream ? AS_TYPE(TStreamType, flow)->GetItemType() : AS_TYPE(TFlowType, flow)->GetItemType();
 
@@ -5099,10 +4990,6 @@ TRuntimeNode TProgramBuilder::Chopper(TRuntimeNode flow, const TUnaryLambda& key
 TRuntimeNode TProgramBuilder::WideChopper(TRuntimeNode flow, const TWideLambda& extractor, const TWideSwitchLambda& groupSwitch,
     const std::function<TRuntimeNode (TRuntimeNode::TList, TRuntimeNode)>& groupHandler
 ) {
-    if constexpr (RuntimeVersion < 18U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
 
     TRuntimeNode::TList itemArgs, keyArgs;
@@ -5544,11 +5431,9 @@ TRuntimeNode TProgramBuilder::Replicate(TRuntimeNode item, TRuntimeNode count, c
     TCallableBuilder callableBuilder(Env, __func__, listType);
     callableBuilder.Add(item);
     callableBuilder.Add(count);
-    if constexpr (RuntimeVersion >= 2) {
-        callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(file));
-        callableBuilder.Add(NewDataLiteral(row));
-        callableBuilder.Add(NewDataLiteral(column));
-    }
+    callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(file));
+    callableBuilder.Add(NewDataLiteral(row));
+    callableBuilder.Add(NewDataLiteral(column));
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }
@@ -5994,29 +5879,82 @@ TRuntimeNode TProgramBuilder::ScalarApply(const TArrayRef<const TRuntimeNode>& a
     return TRuntimeNode(builder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightStream, EJoinKind joinKind,
-    const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& leftKeyDrops,
-    const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& rightKeyDrops, bool rightAny, TType* returnType
-) {
-    if constexpr (RuntimeVersion < 53U) {
+TRuntimeNode TProgramBuilder::BlockStorage(TRuntimeNode stream, TType* returnType) {
+    if constexpr (RuntimeVersion < 59U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
-    if (RuntimeVersion < 57U && joinKind == EJoinKind::Cross) {
-        THROW yexception() << __func__ << " does not support cross join in runtime version (" << RuntimeVersion << ")";
+
+    ValidateBlockStreamType(stream.GetStaticType());
+
+    MKQL_ENSURE(returnType->IsResource(), "Expected Resource as a result type");
+    auto returnResourceType = AS_TYPE(TResourceType, returnType);
+    MKQL_ENSURE(returnResourceType->GetTag().StartsWith(BlockStorageResourcePrefix), "Expected block storage resource");
+
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(stream);
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BlockMapJoinIndex(TRuntimeNode blockStorage, TType* streamItemType, const TArrayRef<const ui32>& keyColumns, bool any, TType* returnType) {
+    if constexpr (RuntimeVersion < 59U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(blockStorage.GetStaticType()->IsResource(), "Expected Resource as an input type");
+    auto blockStorageType = AS_TYPE(TResourceType, blockStorage.GetStaticType());
+    MKQL_ENSURE(blockStorageType->GetTag().StartsWith(BlockStorageResourcePrefix), "Expected block storage resource");
+
+    ValidateBlockType(streamItemType);
+
+    MKQL_ENSURE(returnType->IsResource(), "Expected Resource as a result type");
+    auto returnResourceType = AS_TYPE(TResourceType, returnType);
+    MKQL_ENSURE(returnResourceType->GetTag().StartsWith(BlockMapJoinIndexResourcePrefix), "Expected block map join index resource");
+
+    TRuntimeNode::TList keyColumnsNodes;
+    keyColumnsNodes.reserve(keyColumns.size());
+    std::transform(keyColumns.cbegin(), keyColumns.cend(),
+        std::back_inserter(keyColumnsNodes), [this](const ui32 idx) {
+            return NewDataLiteral(idx);
+        });
+
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(blockStorage);
+    callableBuilder.Add(TRuntimeNode(streamItemType, true));
+    callableBuilder.Add(NewTuple(keyColumnsNodes));
+    callableBuilder.Add(NewDataLiteral((bool)any));
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightBlockStorage, TType* rightStreamItemType, EJoinKind joinKind,
+    const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& leftKeyDrops,
+    const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& rightKeyDrops, TType* returnType
+) {
+    if constexpr (RuntimeVersion < 59U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(rightBlockStorage.GetStaticType()->IsResource(), "Expected Resource as an input type");
+    auto rightBlockStorageType = AS_TYPE(TResourceType, rightBlockStorage.GetStaticType());
+    if (joinKind != EJoinKind::Cross) {
+        MKQL_ENSURE(rightBlockStorageType->GetTag().StartsWith(BlockMapJoinIndexResourcePrefix), "Expected block map join index resource");
+    } else {
+        MKQL_ENSURE(rightBlockStorageType->GetTag().StartsWith(BlockStorageResourcePrefix), "Expected block storage resource");
     }
 
     MKQL_ENSURE(joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left ||
                 joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly || joinKind == EJoinKind::Cross,
                 "Unsupported join kind");
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
-    if (joinKind == EJoinKind::Cross) {
-        MKQL_ENSURE(leftKeyColumns.empty(), "Specifying key columns is not allowed for cross join");
-    } else {
+    if (joinKind != EJoinKind::Cross) {
         MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+    } else {
+        MKQL_ENSURE(leftKeyColumns.empty(), "Specifying key columns is not allowed for cross join");
     }
 
     ValidateBlockStreamType(leftStream.GetStaticType());
-    ValidateBlockStreamType(rightStream.GetStaticType());
+    ValidateBlockType(rightStreamItemType);
     ValidateBlockStreamType(returnType);
 
     TRuntimeNode::TList leftKeyColumnsNodes;
@@ -6049,13 +5987,13 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntime
 
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(leftStream);
-    callableBuilder.Add(rightStream);
+    callableBuilder.Add(rightBlockStorage);
+    callableBuilder.Add(TRuntimeNode(rightStreamItemType, true));
     callableBuilder.Add(NewDataLiteral((ui32)joinKind));
     callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
     callableBuilder.Add(NewTuple(leftKeyDropsNodes));
     callableBuilder.Add(NewTuple(rightKeyColumnsNodes));
     callableBuilder.Add(NewTuple(rightKeyDropsNodes));
-    callableBuilder.Add(NewDataLiteral((bool)rightAny));
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }

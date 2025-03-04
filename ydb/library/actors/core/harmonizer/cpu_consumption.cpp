@@ -95,14 +95,13 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
             IsStarvedPresent = true;
         }
 
-        bool isNeedy = (pool.IsAvgPingGood() || pool.NewNotEnoughCpuExecutions) && (PoolConsumption[poolIdx].Cpu >= currentThreadCount);
+        bool isNeedy = (pool.IsAvgPingGood() || pool.NewNotEnoughCpuExecutions) && (PoolConsumption[poolIdx].LastSecondCpu >= currentThreadCount);
         IsNeedyByPool.push_back(isNeedy);
         if (isNeedy) {
             NeedyPools.push_back(poolIdx);
         }
 
-        bool isHoggish = IsHoggish(PoolConsumption[poolIdx].Elapsed, currentThreadCount)
-                || IsHoggish(PoolConsumption[poolIdx].LastSecondElapsed, currentThreadCount);
+        bool isHoggish = IsHoggish(PoolConsumption[poolIdx].Elapsed, currentThreadCount);
         if (isHoggish) {
             float freeCpu = std::max(currentThreadCount - PoolConsumption[poolIdx].Elapsed, currentThreadCount - PoolConsumption[poolIdx].LastSecondElapsed);
             HoggishPools.push_back({poolIdx, freeCpu});

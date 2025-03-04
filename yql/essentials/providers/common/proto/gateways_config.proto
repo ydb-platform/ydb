@@ -394,7 +394,7 @@ message TS3GatewayConfig {
     repeated TS3FormatSizeLimit FormatSizeLimit = 6; // Format limits (override FileSizeLimit)
     optional uint64 BlockFileSizeLimit = 10;         // Global limit for block readers (overrides FormatSizeLimit)
     optional uint64 MaxFilesPerQuery = 3;
-    optional uint64 MaxReadSizePerQuery = 4;
+    reserved 4;
     optional uint64 MaxDiscoveryFilesPerQuery = 5;
     optional uint64 MaxInflightListsPerQuery = 7;
     optional uint64 MaxDirectoriesAndFilesPerQuery = 8;
@@ -799,6 +799,13 @@ message TRevisionFilterConfig {
     repeated TRevisionException RevisionException = 1;
 }
 
+///////////////////////////// Ytflow /////////////////////////////
+
+message TYtflowGatewayConfig {
+    optional uint32 GatewayThreads = 1 [default = 1]; // Number of gateway MtpQueue threads. The adaptive MtpQueue will be used for 0 value
+}
+
+
 /////////////////////////////// Root ///////////////////////////////
 
 message TGatewaysConfig {
@@ -825,4 +832,5 @@ message TGatewaysConfig {
     optional TGenericGatewayConfig Generic = 21;
     optional TRevisionFilterConfig RevisionFilter = 22;
     optional TDbResolverConfig DbResolver = 23;
+    optional TYtflowGatewayConfig Ytflow = 24;
 }

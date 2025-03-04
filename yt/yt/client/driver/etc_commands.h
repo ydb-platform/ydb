@@ -230,7 +230,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    NApi::EProxyType Type;
+    NApi::EProxyKind Kind;
     std::string Role;
     NApi::NRpcProxy::EAddressType AddressType;
     std::string NetworkName;

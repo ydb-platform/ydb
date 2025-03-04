@@ -227,6 +227,17 @@ TString TViewerPipeClient::GetError(const std::unique_ptr<TEvStateStorage::TEvBo
     }
 }
 
+bool TViewerPipeClient::IsSuccess(const std::unique_ptr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>& ev) {
+    return ev->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess;
+}
+
+TString TViewerPipeClient::GetError(const std::unique_ptr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>& ev) {
+    if (ev->GetRecord().HasReason()) {
+        return ev->GetRecord().GetReason();
+    }
+    return NKikimrScheme::EStatus_Name(ev->GetRecord().GetStatus());
+}
+
 void TViewerPipeClient::RequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
     THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
@@ -594,6 +605,19 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
     return response;
 }
 
+TViewerPipeClient::TRequestResponse<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>
+    TViewerPipeClient::MakeRequestSchemeShardDescribe(TTabletId schemeShardId, const TString& path, const NKikimrSchemeOp::TDescribeOptions& options, ui64 cookie) {
+    auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>();
+    request->Record.SetSchemeshardId(schemeShardId);
+    request->Record.SetPath(path);
+    request->Record.MutableOptions()->CopyFrom(options);
+    auto response = MakeRequestToTablet<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(schemeShardId, request.release(), cookie);
+    if (response.Span) {
+        response.Span.Attribute("path", path);
+    }
+    return response;
+}
+
 void TViewerPipeClient::RequestTxProxyDescribe(const TString& path) {
     THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
     request->Record.MutableDescribePath()->SetPath(path);
@@ -764,7 +788,7 @@ TString TViewerPipeClient::GetHTTPOKJSON(const NJson::TJsonValue& response, TIns
 
 TString TViewerPipeClient::GetHTTPOKJSON(const google::protobuf::Message& response, TInstant lastModified) {
     TStringStream json;
-    NProtobufJson::Proto2Json(response, json, Proto2JsonConfig);
+    Proto2Json(response, json);
     return GetHTTPOKJSON(json.Str(), lastModified);
 }
 

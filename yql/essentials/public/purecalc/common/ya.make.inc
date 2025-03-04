@@ -37,6 +37,13 @@ PEERDIR(
     yql/essentials/utils/log
     yql/essentials/core
     yql/essentials/core/type_ann
+    yql/essentials/sql
+    yql/essentials/sql/v1
+    yql/essentials/sql/v1/lexer/antlr4
+    yql/essentials/sql/v1/lexer/antlr4_ansi
+    yql/essentials/sql/v1/proto_parser/antlr4
+    yql/essentials/sql/v1/proto_parser/antlr4_ansi
+    yql/essentials/parser/pg_wrapper/interface
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/comp_nodes
     yql/essentials/providers/common/mkql

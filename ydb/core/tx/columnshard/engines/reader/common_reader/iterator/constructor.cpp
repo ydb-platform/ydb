@@ -1,5 +1,6 @@
 #include "constructor.h"
 
+#include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 
@@ -18,7 +19,7 @@ bool TBlobsFetcherTask::DoOnError(const TString& storageId, const TBlobRange& ra
         "storage_id", storageId);
     NActors::TActorContext::AsActorContext().Send(
         Context->GetCommonContext()->GetScanActorId(), std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
-                                                           TConclusionStatus::Fail("cannot read blob range " + range.ToString())));
+                                                           TConclusionStatus::Fail(TStringBuilder{} << "Error reading blob range for data: " << range.ToString() << ", error: " << status.GetErrorMessage() << ", status: " << NKikimrProto::EReplyStatus_Name(status.GetStatus()))));
     return false;
 }
 
@@ -30,6 +31,27 @@ TBlobsFetcherTask::TBlobsFetcherTask(const std::vector<std::shared_ptr<IBlobsRea
     , Step(step)
     , Context(context)
     , Guard(Context->GetCommonContext()->GetCounters().GetFetchBlobsGuard()) {
+}
+
+void TColumnsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
+    NBlobOperations::NRead::TCompositeReadBlobs blobsData = ExtractBlobsData();
+    blobsData.Merge(std::move(ProvidedBlobs));
+    TReadActionsCollection readActions;
+    for (auto&& [_, i] : DataFetchers) {
+        i->OnDataReceived(readActions, blobsData);
+    }
+    if (readActions.IsEmpty()) {
+        for (auto&& i : DataFetchers) {
+            Source->MutableStageData().AddFetcher(i.second);
+        }
+        AFL_VERIFY(Cursor.Next());
+        auto task = std::make_shared<TStepAction>(Source, std::move(Cursor), Source->GetContext()->GetCommonContext()->GetScanActorId());
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task, Source->GetContext()->GetCommonContext()->GetConveyorProcessId());
+    } else {
+        std::shared_ptr<TColumnsFetcherTask> nextReadTask = std::make_shared<TColumnsFetcherTask>(
+            std::move(readActions), DataFetchers, Source, std::move(Cursor), GetTaskCustomer(), GetExternalTaskId());
+        NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(nextReadTask));
+    }
 }
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

@@ -3,7 +3,7 @@
 
 ## DictCreate {#dictcreate}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictCreate(K,V)->Dict<K,V>
@@ -19,7 +19,7 @@ DictCreate(K,V)->Dict<K,V>
 
 [Документация по формату описания типа](../types/type_string.md).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT DictCreate(String, Tuple<String,Double?>);
@@ -35,7 +35,7 @@ SELECT DictCreate(ParseType("Tuple<Int32?,String>"), ParseType("Tuple<String,Dou
 
 ## SetCreate {#setcreate}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SetCreate(T)->Set<T>
@@ -45,7 +45,7 @@ SetCreate(T)->Set<T>
 
 [Документация по формату описания типа](../types/type_string.md).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT SetCreate(String);
@@ -57,7 +57,7 @@ SELECT SetCreate(Tuple<Int32?,String>);
 
 ## DictLength {#dictlength}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictLength(Dict<K,V>)->Uint64
@@ -66,7 +66,7 @@ DictLength(Dict<K,V>?)->Uint64?
 
 Количество элементов в словаре.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT DictLength(AsDict(AsTuple(1, AsList("foo", "bar"))));
@@ -78,7 +78,7 @@ SELECT DictLength(dict_column) FROM my_table;
 
 ## DictHasItems {#dicthasitems}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictHasItems(Dict<K,V>)->Bool
@@ -87,7 +87,7 @@ DictHasItems(Dict<K,V>?)->Bool?
 
 Проверка того, что словарь содержит хотя бы один элемент.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT DictHasItems(AsDict(AsTuple(1, AsList("foo", "bar")))) FROM my_table;
@@ -99,7 +99,7 @@ SELECT DictHasItems(dict_column) FROM my_table;
 
 ## DictItems {#dictitems}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictItems(Dict<K,V>)->List<Tuple<K,V>>
@@ -108,7 +108,7 @@ DictItems(Dict<K,V>?)->List<Tuple<K,V>>?
 
 Получение содержимого словаря в виде списка кортежей с парами ключ-значение (`List<Tuple<key_type,value_type>>`).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT DictItems(AsDict(AsTuple(1, AsList("foo", "bar"))));
@@ -122,7 +122,7 @@ FROM my_table;
 
 ## DictKeys {#dictkeys}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictKeys(Dict<K,V>)->List<K>
@@ -131,7 +131,7 @@ DictKeys(Dict<K,V>?)->List<K>?
 
 Получение списка ключей словаря.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT DictKeys(AsDict(AsTuple(1, AsList("foo", "bar"))));
@@ -145,7 +145,7 @@ FROM my_table;
 
 ## DictPayloads {#dictpayloads}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictPayloads(Dict<K,V>)->List<V>
@@ -154,7 +154,7 @@ DictPayloads(Dict<K,V>?)->List<V>?
 
 Получение списка значений словаря.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT DictPayloads(AsDict(AsTuple(1, AsList("foo", "bar"))));
@@ -168,7 +168,7 @@ FROM my_table;
 
 ## DictLookup {#dictlookup}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictLookup(Dict<K,V>, K)->V?
@@ -179,7 +179,7 @@ DictLookup(Dict<K,V>?, K?)->V?
 
 Получение элемента словаря по ключу.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT DictLookup(AsDict(
@@ -196,7 +196,7 @@ FROM my_table;
 
 ## DictContains {#dictcontains}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictContains(Dict<K,V>, K)->Bool
@@ -207,7 +207,7 @@ DictContains(Dict<K,V>?, K?)->Bool
 
 Проверка наличия элемента в словаре по ключу. Возвращает true или false.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT DictContains(AsDict(
@@ -224,7 +224,7 @@ FROM my_table;
 
 ## DictAggregate {#dictaggregate}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictAggregate(Dict<K,List<V>>, List<V>->T)->Dict<K,T>
@@ -242,7 +242,7 @@ DictAggregate(Dict<K,List<V>>?, List<V>->T)->Dict<K,T>?
 2. [Фабрика агрегационных функций](basic.md#aggregationfactory).
 
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT DictAggregate(AsDict(
@@ -254,7 +254,7 @@ SELECT DictAggregate(AsDict(
 
 ## SetIsDisjoint {#setisjoint}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SetIsDisjoint(Dict<K,V1>, Dict<K,V2>)->Bool
@@ -275,7 +275,7 @@ SetIsDisjoint(Dict<K,V1>?, List<K>?)->Bool?
 * С аргументами `Dict<K,V1>` и `List<K>`;
 * С аргументами `Dict<K,V1>` и `Dict<K,V2>`.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT SetIsDisjoint(ToSet(AsList(1, 2, 3)), AsList(7, 4)); -- true
@@ -284,7 +284,7 @@ SELECT SetIsDisjoint(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- false
 
 ## SetIntersection {#setintersection}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SetIntersection(Dict<K,V1>, Dict<K,V2>)->Set<K>
@@ -305,7 +305,7 @@ SetIntersection(Dict<K,V1>?, Dict<K,V2>?, (K,V1,V2)->U)->Dict<K,U>?
 * Два словаря: `Dict<K,V1>` и `Dict<K,V2>`.
 * Необязательная функция, которая объединяет значения из исходных словарей для построения значений выходного словаря. Если тип такой функции `(K,V1,V2) -> U`, то типом результата будет `Dict<K,U>`. Если функция не задана, типом результата будет `Dict<K,Void>`, а значения из исходных словарей игнорируются.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT SetIntersection(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 3 }
@@ -324,7 +324,7 @@ SELECT SetIntersection(
 
 ## SetIncludes {#setincludes}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SetIncludes(Dict<K,V1>, List<K>)->Bool
@@ -345,7 +345,7 @@ SetIncludes(Dict<K,V1>?, Dict<K,V2>?)->Bool?
 * С аргументами `Dict<K,V1>` и `List<K>`;
 * С аргументами `Dict<K,V1>` и `Dict<K,V2>`.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT SetIncludes(ToSet(AsList(1, 2, 3)), AsList(3, 4)); -- false
@@ -354,7 +354,7 @@ SELECT SetIncludes(ToSet(AsList(1, 2, 3)), ToSet(AsList(2, 3))); -- true
 
 ## SetUnion {#setunion}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SetUnion(Dict<K,V1>, Dict<K,V2>)->Set<K>
@@ -375,7 +375,7 @@ SetUnion(Dict<K,V1>?, Dict<K,V2>?,(K,V1?,V2?)->U)->Dict<K,U>?
 * Два словаря: `Dict<K,V1>` и `Dict<K,V2>`.
 * Необязательная функция, которая объединяет значения из исходных словарей для построения значений выходного словаря. Если тип такой функции `(K,V1?,V2?) -> U`, то типом результата будет `Dict<K,U>`. Если функция не задана, типом результата будет `Dict<K,Void>`, а значения из исходных словарей игнорируются.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT SetUnion(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 1, 2, 3, 4 }
@@ -388,7 +388,7 @@ SELECT SetUnion(
 
 ## SetDifference {#setdifference}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SetDifference(Dict<K,V1>, Dict<K,V2>)->Dict<K,V1>
@@ -399,7 +399,7 @@ SetDifference(Dict<K,V1>?, Dict<K,V2>?)->Dict<K,V1>?
 
 Строит словарь, в котором есть все ключи с соответствующими значениями первого словаря, для которых нет ключа во втором словаре.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT SetDifference(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 1, 2 }
@@ -411,7 +411,7 @@ SELECT SetDifference(
 
 ## SetSymmetricDifference {#setsymmetricdifference}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SetSymmetricDifference(Dict<K,V1>, Dict<K,V2>)->Set<K>
@@ -432,7 +432,7 @@ SetSymmetricDifference(Dict<K,V1>?, Dict<K,V2>?,(K,V1?,V2?)->U)->Dict<K,U>?
 * Два словаря: `Dict<K,V1>` и `Dict<K,V2>`.
 * Необязательная функция, которая объединяет значения из исходных словарей для построения значений выходного словаря. Если тип такой функции `(K,V1?,V2?) -> U`, то типом результата будет `Dict<K,U>`. Если функция не задана, типом результата будет `Dict<K,Void>`, а значения из исходных словарей игнорируются.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT SetSymmetricDifference(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 1, 2, 4 }

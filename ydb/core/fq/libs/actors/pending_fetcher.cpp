@@ -105,6 +105,13 @@ struct TEvPrivate {
 
 constexpr auto CLEANUP_PERIOD = TDuration::Seconds(60);
 
+TDuration GetPendingFetchPeriod(const NFq::NConfig::TPendingFetcherConfig& config) {
+    if (const auto periodMs = config.GetPendingFetchPeriodMs()) {
+        return TDuration::MilliSeconds(periodMs);
+    }
+    return TDuration::Seconds(1);
+}
+
 } // namespace
 
 class TPendingFetcher : public NActors::TActorBootstrapped<TPendingFetcher> {
@@ -157,7 +164,8 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& clientCounters,
         const TString& tenantName,
         NActors::TMon* monitoring,
-        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+        NYql::IPqGatewayFactory::TPtr pqGatewayFactory
         )
         : YqSharedResources(yqSharedResources)
         , CredentialsProviderFactory(credentialsProviderFactory)
@@ -169,6 +177,7 @@ public:
         , ServiceCounters(serviceCounters, "pending_fetcher")
         , GetTaskCounters("GetTask", ServiceCounters.Counters)
         , FailedStatusCodeCounters(MakeIntrusive<TStatusCodeByScopeCounters>("IntermediateFailedStatusCode", ServiceCounters.RootCounters->GetSubgroup("component", "QueryDiagnostic")))
+        , PendingFetchPeriod(GetPendingFetchPeriod(config.GetPendingFetcher()))
         , CredentialsFactory(credentialsFactory)
         , S3Gateway(s3Gateway)
         , ConnectorClient(connectorClient)
@@ -180,6 +189,7 @@ public:
         , Monitoring(monitoring)
         , ComputeConfig(config.GetCompute())
         , S3ActorsFactory(std::move(s3ActorsFactory))
+        , PqGatewayFactory(std::move(pqGatewayFactory))
     {
         Y_ENSURE(GetYqlDefaultModuleResolverWithContext(ModuleResolver));
     }
@@ -472,7 +482,8 @@ private:
             NProtoInterop::CastFromProto(task.result_ttl()),
             std::map<TString, Ydb::TypedValue>(task.parameters().begin(), task.parameters().end()),
             S3ActorsFactory,
-            ComputeConfig.GetWorkloadManagerConfig(task.scope())
+            ComputeConfig.GetWorkloadManagerConfig(task.scope()),
+            PqGatewayFactory
             );
 
         auto runActorId =
@@ -515,7 +526,7 @@ private:
     IModuleResolver::TPtr ModuleResolver;
 
     bool HasRunningRequest = false;
-    const TDuration PendingFetchPeriod = TDuration::Seconds(1);
+    const TDuration PendingFetchPeriod;
 
     TActorId DatabaseResolver;
 
@@ -548,6 +559,7 @@ private:
     NActors::TMon* Monitoring;
     TComputeConfig ComputeConfig;
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
+    NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
 };
 
 
@@ -567,7 +579,8 @@ NActors::IActor* CreatePendingFetcher(
     const ::NMonitoring::TDynamicCounterPtr& clientCounters,
     const TString& tenantName,
     NActors::TMon* monitoring,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory)
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+    NYql::IPqGatewayFactory::TPtr pqGatewayFactory)
 {
     return new TPendingFetcher(
         yqSharedResources,
@@ -585,7 +598,8 @@ NActors::IActor* CreatePendingFetcher(
         clientCounters,
         tenantName,
         monitoring,
-        std::move(s3ActorsFactory));
+        std::move(s3ActorsFactory),
+        std::move(pqGatewayFactory));
 }
 
 TActorId MakePendingFetcherId(ui32 nodeId) {

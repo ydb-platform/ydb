@@ -856,6 +856,12 @@ void TSuspendOperationCommand::Register(TRegistrar registrar)
             return command->Options.AbortRunningJobs;
         })
         .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "reason",
+        [] (TThis* command) -> auto& {
+            return command->Options.Reason;
+        })
+        .Optional();
 }
 
 void TSuspendOperationCommand::DoExecute(ICommandContextPtr context)
@@ -938,6 +944,7 @@ void TGetOperationCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& {
             return command->Options.IncludeRuntime;
         })
+        // COMPAT(ignat): remove this alias.
         .Alias("include_scheduler")
         .Optional(/*init*/ false);
 

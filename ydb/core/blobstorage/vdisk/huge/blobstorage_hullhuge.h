@@ -75,6 +75,7 @@ namespace NKikimr {
         const bool IgnoreBlock;
         const TActorId OrigClient;
         const ui64 OrigCookie;
+        const NKikimrBlobStorage::EPutHandleClass HandleClass;
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
@@ -86,6 +87,7 @@ namespace NKikimr {
                            bool ignoreBlock,
                            const TActorId &origClient,
                            ui64 origCookie,
+                           NKikimrBlobStorage::EPutHandleClass handleClass,
                            std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
                            NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
                            bool rewriteBlob = false)
@@ -96,6 +98,7 @@ namespace NKikimr {
             , IgnoreBlock(ignoreBlock)
             , OrigClient(origClient)
             , OrigCookie(origCookie)
+            , HandleClass(handleClass)
             , Result(std::move(result))
             , RewriteBlob(rewriteBlob)
         {
@@ -243,6 +246,11 @@ namespace NKikimr {
     struct TEvHugeShredNotify : TEventLocal<TEvHugeShredNotify, TEvBlobStorage::EvHugeShredNotify> {
         std::vector<TChunkIdx> ChunksToShred;
         TEvHugeShredNotify(std::vector<TChunkIdx> chunksToShred) : ChunksToShred(std::move(chunksToShred)) {}
+    };
+
+    struct TEvHugeForbiddenChunks : TEventLocal<TEvHugeForbiddenChunks, TEvBlobStorage::EvHugeForbiddenChunks> {
+        THashSet<TChunkIdx> ForbiddenChunks;
+        TEvHugeForbiddenChunks(THashSet<TChunkIdx> forbiddenChunks) : ForbiddenChunks(std::move(forbiddenChunks)) {}
     };
 
     ////////////////////////////////////////////////////////////////////////////

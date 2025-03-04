@@ -233,7 +233,7 @@ std::vector<TK> ExtractKeys(THashMap<TK, TV> const& inputMap) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TBatchInfo::TBatchInfo(const TString& endpoint)
+TBatchInfo::TBatchInfo(const std::string& endpoint)
     : TracesDequeued_(Profiler().WithTag("endpoint", endpoint).Counter("/traces_dequeued"))
     , TracesDropped_(Profiler().WithTag("endpoint", endpoint).Counter("/traces_dropped"))
     , MemoryUsage_(Profiler().WithTag("endpoint", endpoint).Gauge("/memory_usage"))
@@ -446,8 +446,8 @@ void TJaegerTracer::DequeueAll(const TJaegerTracerConfigPtr& config)
         return;
     }
 
-    THashMap<TString, NProto::Batch> batches;
-    auto flushBatch = [&] (TString endpoint) {
+    THashMap<std::string, NProto::Batch> batches;
+    auto flushBatch = [&] (std::string endpoint) {
         auto itBatch = batches.find(endpoint);
         if (itBatch == batches.end()) {
             return;
@@ -459,7 +459,7 @@ void TJaegerTracer::DequeueAll(const TJaegerTracerConfigPtr& config)
 
         auto itInfo = BatchInfo_.find(endpoint);
         if (itInfo == BatchInfo_.end()) {
-            itInfo = BatchInfo_.insert({endpoint, TBatchInfo(endpoint)}).first;
+            itInfo = BatchInfo_.emplace(endpoint, TBatchInfo(endpoint)).first;
         }
         auto& currentInfo = itInfo->second;
 

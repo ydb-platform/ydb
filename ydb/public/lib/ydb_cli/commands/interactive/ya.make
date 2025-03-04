@@ -9,12 +9,15 @@ SRCS(
 
 PEERDIR(
     contrib/restricted/patched/replxx
+    contrib/libs/antlr4_cpp_runtime
     yql/essentials/parser/lexer_common
+    yql/essentials/parser/proto_ast/gen/v1_antlr4
     yql/essentials/sql/v1/lexer
+    yql/essentials/sql/v1/lexer/antlr4
+    yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/settings
     yql/essentials/utils
-    contrib/libs/antlr4_cpp_runtime
-    yql/essentials/parser/proto_ast/gen/v1_antlr4
+    ydb/public/lib/ydb_cli/commands/interactive/complete
     ydb/public/lib/ydb_cli/common
 )
 

@@ -12,8 +12,6 @@ ORIGINAL_SOURCE(https://github.com/mike-lischke/antlr4-c3/archive/refs/tags/cpp-
 
 NO_COMPILER_WARNINGS()
 
-SUBSCRIBER(g:cpp-contrib)
-
 PEERDIR(
     contrib/libs/antlr4_cpp_runtime
 )

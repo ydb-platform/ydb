@@ -327,6 +327,7 @@ class ScenarioTestHelper:
         expected_status: ydb.StatusCode | Set[ydb.StatusCode],
         retriable_status: ydb.StatusCode | Set[ydb.StatusCode] = {},
         n_retries=0,
+        fail_on_error=True,
     ):
         if isinstance(expected_status, ydb.StatusCode):
             expected_status = {expected_status}
@@ -350,9 +351,11 @@ class ScenarioTestHelper:
             if status in expected_status:
                 return result
             if status not in retriable_status:
-                pytest.fail(f'Unexpected status: must be in {repr(expected_status)}, but get {repr(error or status)}')
+                if fail_on_error:
+                    pytest.fail(f'Unexpected status: must be in {repr(expected_status)}, but get {repr(error or status)}')
             sleep(3)
-        pytest.fail(f'Retries exceeded with unexpected status: must be in {repr(expected_status)}, but get {repr(error or status)}')
+        if fail_on_error:
+            pytest.fail(f'Retries exceeded with unexpected status: must be in {repr(expected_status)}, but get {repr(error or status)}')
 
     def _bulk_upsert_impl(
         self, tablename: str, data_generator: ScenarioTestHelper.IDataGenerator, expected_status: ydb.StatusCode | Set[ydb.StatusCode]
@@ -464,7 +467,7 @@ class ScenarioTestHelper:
 
     @allure.step('Execute query')
     def execute_query(
-        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, retries=0
+        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, retries=0, fail_on_error=True
     ):
         """Run a query on the tested database.
 
@@ -480,7 +483,7 @@ class ScenarioTestHelper:
 
         allure.attach(yql, 'request', allure.attachment_type.TEXT)
         with ydb.QuerySessionPool(YdbCluster.get_ydb_driver()) as pool:
-            self._run_with_expected_status(lambda: pool.execute_with_retries(yql, None, ydb.RetrySettings(max_retries=retries)), expected_status)
+            self._run_with_expected_status(lambda: pool.execute_with_retries(yql, None, ydb.RetrySettings(max_retries=retries)), expected_status, fail_on_error=fail_on_error)
 
     def drop_if_exist(self, names: List[str], operation) -> None:
         """Erase entities in the tested database, if it exists.
@@ -676,8 +679,20 @@ class ScenarioTestHelper:
         if self_descr is None:
             return []
 
+        kind_order = [
+            ydb.SchemeEntryType.COLUMN_TABLE,
+            ydb.SchemeEntryType.COLUMN_STORE,
+            ydb.SchemeEntryType.EXTERNAL_DATA_SOURCE,
+        ]
+
+        def kind_order_key_reversed(kind):
+            try:
+                return -kind_order.index(kind)
+            except ValueError:
+                return -len(kind_order)
+
         if self_descr.is_directory():
-            return list(reversed(YdbCluster.list_directory(root_path, path))) + [self_descr]
+            return list(reversed(YdbCluster.list_directory(root_path, path, kind_order_key_reversed))) + [self_descr]
         else:
             return self_descr
 
@@ -703,6 +718,8 @@ class ScenarioTestHelper:
                 self.execute_scheme_query(dh.DropTable(os.path.join(folder, e.name)))
             elif e.is_column_store():
                 self.execute_scheme_query(dh.DropTableStore(os.path.join(folder, e.name)))
+            elif e.is_external_data_source():
+                self.execute_scheme_query(dh.DropExternalDataSource(os.path.join(folder, e.name)))
             elif e.is_directory():
                 self._run_with_expected_status(
                     lambda: YdbCluster.get_ydb_driver().scheme_client.remove_directory(os.path.join(root_path, e.name)),

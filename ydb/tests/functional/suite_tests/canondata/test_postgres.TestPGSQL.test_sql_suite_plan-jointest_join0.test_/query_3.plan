@@ -47,7 +47,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Aggregate-InnerJoin (MapJoin)-Filter-Filter",
+                                        "Node Type": "Aggregate-InnerJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -65,7 +65,7 @@
                                                         "InternalOperatorId": 2
                                                     },
                                                     {
-                                                        "InternalOperatorId": 3
+                                                        "ExternalPlanNodeId": 5
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
@@ -78,15 +78,6 @@
                                                 ],
                                                 "Name": "Filter",
                                                 "Predicate": "Exist(item.hundred)"
-                                            },
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "ExternalPlanNodeId": 5
-                                                    }
-                                                ],
-                                                "Name": "Filter",
-                                                "Predicate": "Exist(item.thousand)"
                                             }
                                         ],
                                         "PlanNodeId": 9,

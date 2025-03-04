@@ -36,6 +36,39 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static constexpr i64 SecondsToMicroCoefficient = 1'000'000;
+static constexpr i64 MilliToMicroCoefficient = 1'000;
+static constexpr i64 MicroToNanoCoefficient = 1'000;
+static constexpr i64 SecondsToMilliCoefficient = 1'000;
+
+////////////////////////////////////////////////////////////////////////////////
+
+i64 SignedSaturationArithmeticMultiply(i64 lhs, i64 rhs)
+{
+    if (lhs == 0 || rhs == 0) {
+        return 0;
+    }
+
+    i64 sign = 1;
+    if (lhs < 0) {
+        sign = -sign;
+    }
+    if (rhs < 0) {
+        sign = -sign;
+    }
+
+    i64 result;
+    if (__builtin_mul_overflow(lhs, rhs, &result)) {
+        if (sign < 0) {
+            return std::numeric_limits<i64>::min();
+        } else {
+            return std::numeric_limits<i64>::max();
+        }
+    } else {
+        return result;
+    }
+}
+
 void ThrowOnError(const arrow::Status& status)
 {
     if (!status.ok()) {
@@ -63,11 +96,43 @@ void CheckArrowTypeMatch(
 {
     switch (columnType) {
         case ESimpleLogicalValueType::Int8:
-        case ESimpleLogicalValueType::Int16:
-        case ESimpleLogicalValueType::Int32:
-        case ESimpleLogicalValueType::Int64:
+            CheckArrowType(
+                columnType,
+                {
+                    arrow::Type::INT8,
+                    arrow::Type::DICTIONARY
+                },
+                arrowTypeName,
+                arrowTypeId);
+            break;
 
-        case ESimpleLogicalValueType::Interval:
+        case ESimpleLogicalValueType::Int16:
+            CheckArrowType(
+                columnType,
+                {
+                    arrow::Type::INT8,
+                    arrow::Type::INT16,
+                    arrow::Type::DICTIONARY
+                },
+                arrowTypeName,
+                arrowTypeId);
+            break;
+        case ESimpleLogicalValueType::Int32:
+            CheckArrowType(
+                columnType,
+                {
+                    arrow::Type::INT8,
+                    arrow::Type::INT16,
+                    arrow::Type::INT32,
+                    arrow::Type::DATE32,
+                    arrow::Type::TIME32,
+                    arrow::Type::DICTIONARY
+                },
+                arrowTypeName,
+                arrowTypeId);
+            break;
+
+        case ESimpleLogicalValueType::Int64:
             CheckArrowType(
                 columnType,
                 {
@@ -86,9 +151,56 @@ void CheckArrowTypeMatch(
                 arrowTypeId);
             break;
 
+        case ESimpleLogicalValueType::Interval:
+            CheckArrowType(
+                columnType,
+                {
+                    arrow::Type::INT8,
+                    arrow::Type::INT16,
+                    arrow::Type::INT32,
+                    arrow::Type::INT64,
+                    arrow::Type::DICTIONARY
+                },
+                arrowTypeName,
+                arrowTypeId);
+            break;
+
         case ESimpleLogicalValueType::Uint8:
+            CheckArrowType(
+                columnType,
+                {
+                    arrow::Type::UINT8,
+                    arrow::Type::DICTIONARY
+                },
+                arrowTypeName,
+                arrowTypeId);
+            break;
+
         case ESimpleLogicalValueType::Uint16:
+            CheckArrowType(
+                columnType,
+                {
+                    arrow::Type::UINT8,
+                    arrow::Type::UINT16,
+                    arrow::Type::DICTIONARY
+                },
+                arrowTypeName,
+                arrowTypeId);
+            break;
+
         case ESimpleLogicalValueType::Uint32:
+            CheckArrowType(
+                columnType,
+                {
+                    arrow::Type::UINT8,
+                    arrow::Type::UINT16,
+                    arrow::Type::UINT32,
+                    arrow::Type::DICTIONARY
+                },
+                arrowTypeName,
+                arrowTypeId);
+            break;
+
         case ESimpleLogicalValueType::Uint64:
             CheckArrowType(
                 columnType,
@@ -104,21 +216,67 @@ void CheckArrowTypeMatch(
             break;
 
         case ESimpleLogicalValueType::Date:
+            CheckArrowType(
+                columnType,
+                {
+                    arrow::Type::UINT32,
+                    arrow::Type::DICTIONARY,
+                    arrow::Type::DATE32,
+                },
+                arrowTypeName,
+                arrowTypeId);
+            break;
+
         case ESimpleLogicalValueType::Datetime:
-        case ESimpleLogicalValueType::Timestamp:
             CheckArrowType(
                 columnType,
                 {
                     arrow::Type::UINT32,
                     arrow::Type::UINT64,
                     arrow::Type::DICTIONARY,
+                    arrow::Type::DATE64,
+                },
+                arrowTypeName,
+                arrowTypeId);
+            break;
+
+        case ESimpleLogicalValueType::Timestamp:
+            CheckArrowType(
+                columnType,
+                {
+                    arrow::Type::UINT64,
+                    arrow::Type::DICTIONARY,
+                    arrow::Type::TIMESTAMP,
                 },
                 arrowTypeName,
                 arrowTypeId);
             break;
 
         case ESimpleLogicalValueType::Date32:
+            CheckArrowType(
+                columnType,
+                {
+                    arrow::Type::INT32,
+                    arrow::Type::DICTIONARY,
+                    arrow::Type::DATE32,
+                },
+                arrowTypeName,
+                arrowTypeId);
+            break;
+
         case ESimpleLogicalValueType::Datetime64:
+            CheckArrowType(
+                columnType,
+                {
+                    arrow::Type::INT32,
+                    arrow::Type::INT64,
+                    arrow::Type::DICTIONARY,
+                    arrow::Type::DATE64,
+                },
+                arrowTypeName,
+                arrowTypeId);
+            break;
+
         case ESimpleLogicalValueType::Timestamp64:
             CheckArrowType(
                 columnType,
@@ -126,6 +284,7 @@ void CheckArrowTypeMatch(
                     arrow::Type::INT32,
                     arrow::Type::INT64,
                     arrow::Type::DICTIONARY,
+                    arrow::Type::TIMESTAMP,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -287,6 +446,81 @@ TStringBuf SerializeDecimalBinary(TStringBuf value, int precision, char* buffer,
 
 ////////////////////////////////////////////////////////////////////////////////
 
+i64 CheckAndTransformDate(i64 arrowValue, i64 minAllowedDate, i64 maxAllowedDate)
+{
+    if (arrowValue < minAllowedDate || arrowValue > maxAllowedDate) {
+        THROW_ERROR_EXCEPTION(
+            "Arrow date32 value %v is incompatible with the YT date type, value should be in range [%v, %v]",
+            arrowValue,
+            minAllowedDate,
+            maxAllowedDate);
+    }
+    return arrowValue;
+}
+
+i64 CheckAndTransformDatetime(i64 arrowValue, i64 minAllowedDate, i64 maxAllowedDate)
+{
+    auto minarrowValue = SignedSaturationArithmeticMultiply(minAllowedDate, SecondsToMilliCoefficient);
+    auto maxarrowValue = SignedSaturationArithmeticMultiply(maxAllowedDate, SecondsToMilliCoefficient);
+    if (arrowValue < minarrowValue || arrowValue > maxarrowValue) {
+        THROW_ERROR_EXCEPTION(
+            "Arrow date64 value %v is incompatible with the YT datetime type, value should be in range [%v, %v]",
+            arrowValue,
+            minarrowValue,
+            maxarrowValue);
+    }
+    // Сonverting from seconds to milliseconds.
+    return arrowValue / SecondsToMilliCoefficient;
+}
+
+i64 CheckAndTransformTimestamp(i64 arrowValue, arrow::TimeUnit::type timeUnit, i64 minAllowedTimestamp, i64 maxAllowedTimestamp)
+{
+    i64 resultValue;
+    i64 minArrowAllowedTimestamp;
+    i64 maxArrowAllowedTimestamp;
+
+    switch (timeUnit) {
+        case arrow::TimeUnit::type::NANO:
+            resultValue = arrowValue / MicroToNanoCoefficient;
+            minArrowAllowedTimestamp = SignedSaturationArithmeticMultiply(minAllowedTimestamp, MicroToNanoCoefficient);
+            maxArrowAllowedTimestamp = SignedSaturationArithmeticMultiply(minAllowedTimestamp, MicroToNanoCoefficient);
+            break;
+
+        case arrow::TimeUnit::type::SECOND:
+            resultValue = SignedSaturationArithmeticMultiply(arrowValue, SecondsToMicroCoefficient);
+            minArrowAllowedTimestamp = minAllowedTimestamp / SecondsToMicroCoefficient;
+            maxArrowAllowedTimestamp = maxAllowedTimestamp /SecondsToMicroCoefficient;
+            break;
+
+        case arrow::TimeUnit::type::MILLI:
+            resultValue = SignedSaturationArithmeticMultiply(arrowValue, MilliToMicroCoefficient);
+            minArrowAllowedTimestamp = minAllowedTimestamp / MilliToMicroCoefficient;
+            maxArrowAllowedTimestamp = maxAllowedTimestamp /MilliToMicroCoefficient;
+            break;
+
+        case arrow::TimeUnit::type::MICRO:
+            resultValue = arrowValue;
+            minArrowAllowedTimestamp = minAllowedTimestamp;
+            maxArrowAllowedTimestamp = maxAllowedTimestamp;
+            break;
+
+        default:
+            THROW_ERROR_EXCEPTION("Unexpected arrow time unit %Qv", static_cast<int>(timeUnit));
+    }
+
+    if (resultValue < minAllowedTimestamp || resultValue > maxAllowedTimestamp) {
+        THROW_ERROR_EXCEPTION(
+            "Arrow timestamp value %v is incompatible with the YT timestamp type, value should be in range [%v, %v]",
+            arrowValue,
+            minArrowAllowedTimestamp,
+            maxArrowAllowedTimestamp);
+    }
+
+    return resultValue;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TArraySimpleVisitor
     : public arrow::TypeVisitor
 {
@@ -337,17 +571,35 @@ public:
 
     arrow::Status Visit(const arrow::Date32Type& /*type*/) override
     {
-        return ParseInt64<arrow::Date32Array>();
+        if (ColumnType_ && *ColumnType_ == ESimpleLogicalValueType::Date32) {
+            return ParseDate32<arrow::Date32Array>();
+        } else if (ColumnType_ && *ColumnType_ == ESimpleLogicalValueType::Date) {
+            return ParseDate<arrow::Date32Array>();
+        } else {
+            return ParseInt64<arrow::Date32Array>();
+        }
     }
 
     arrow::Status Visit(const arrow::Date64Type& /*type*/) override
     {
-        return ParseInt64<arrow::Date64Array>();
+        if (ColumnType_ && *ColumnType_ == ESimpleLogicalValueType::Datetime64) {
+            return ParseDate64<arrow::Date64Array>();
+        } else if (ColumnType_ && *ColumnType_ == ESimpleLogicalValueType::Datetime) {
+            return ParseDatetime<arrow::Date64Array>();
+        } else {
+            return ParseInt64<arrow::Date64Array>();
+        }
     }
 
-    arrow::Status Visit(const arrow::TimestampType& /*type*/) override
+    arrow::Status Visit(const arrow::TimestampType& type) override
     {
-        return ParseInt64<arrow::TimestampArray>();
+        if (ColumnType_ && *ColumnType_ == ESimpleLogicalValueType::Timestamp64) {
+            return ParseTimestamp64<arrow::TimestampArray>(type.unit());
+        } else if (ColumnType_ && *ColumnType_ == ESimpleLogicalValueType::Timestamp) {
+            return ParseTimestamp<arrow::TimestampArray>(type.unit());
+        } else {
+            return ParseInt64<arrow::TimestampArray>();
+        }
     }
 
     // Unsigned int types.
@@ -431,6 +683,72 @@ private:
     std::shared_ptr<arrow::Array> Array_;
     std::shared_ptr<TChunkedOutputStream> BufferForStringLikeValues_;
     TUnversionedRowValues* RowValues_;
+
+    template <typename ArrayType>
+    arrow::Status ParseDate()
+    {
+        auto makeUnversionedValue = [] (i64 value, i64 columnId) {
+            return MakeUnversionedUint64Value(
+                static_cast<ui64>(CheckAndTransformDate(value, /*minAllowedDate*/ 0, DateUpperBound)),
+                columnId);
+        };
+        ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
+        return arrow::Status::OK();
+    }
+
+    template <typename ArrayType>
+    arrow::Status ParseDate32()
+    {
+        auto makeUnversionedValue = [] (i64 value, i64 columnId) {
+            return MakeUnversionedInt64Value(CheckAndTransformDate(value, Date32LowerBound, Date32UpperBound), columnId);
+        };
+        ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
+        return arrow::Status::OK();
+    }
+
+    template <typename ArrayType>
+    arrow::Status ParseDatetime()
+    {
+        auto makeUnversionedValue = [] (i64 value, i64 columnId) {
+            return MakeUnversionedUint64Value(
+                static_cast<ui64>(CheckAndTransformDatetime(value, /*minAllowedDate*/ 0, DatetimeUpperBound)),
+                columnId);
+        };
+        ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
+        return arrow::Status::OK();
+    }
+
+    template <typename ArrayType>
+    arrow::Status ParseDate64()
+    {
+        auto makeUnversionedValue = [] (i64 value, i64 columnId) {
+            return MakeUnversionedInt64Value(CheckAndTransformDatetime(value, Datetime64LowerBound, DatetimeUpperBound), columnId);
+        };
+        ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
+        return arrow::Status::OK();
+    }
+
+    template <typename ArrayType>
+    arrow::Status ParseTimestamp(arrow::TimeUnit::type timeUnit)
+    {
+        auto makeUnversionedValue = [timeUnit] (i64 value, i64 columnId) {
+            return MakeUnversionedUint64Value(
+                static_cast<ui64>(CheckAndTransformTimestamp(value, timeUnit, /*minAllowedTimestamp*/ 0, TimestampUpperBound)),
+                columnId);
+        };
+        ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
+        return arrow::Status::OK();
+    }
+
+    template <typename ArrayType>
+    arrow::Status ParseTimestamp64(arrow::TimeUnit::type timeUnit)
+    {
+        auto makeUnversionedValue = [timeUnit] (i64 value, i64 columnId) {
+            return MakeUnversionedInt64Value(CheckAndTransformTimestamp(value, timeUnit, Timestamp64LowerBound, Timestamp64UpperBound), columnId);
+        };
+        ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
+        return arrow::Status::OK();
+    }
 
     template <typename ArrayType>
     arrow::Status ParseInt64()
@@ -610,19 +928,37 @@ public:
     arrow::Status Visit(const arrow::Date32Type& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
-        return ParseInt64<arrow::Date32Array>();
+        if (YTType_->AsSimpleTypeRef().GetElement() == ESimpleLogicalValueType::Date32) {
+            return ParseDate32<arrow::Date32Array>();
+        } else if (YTType_->AsSimpleTypeRef().GetElement() == ESimpleLogicalValueType::Date) {
+            return ParseDate<arrow::Date32Array>();
+        } else {
+            return ParseInt64<arrow::Date32Array>();
+        }
     }
 
     arrow::Status Visit(const arrow::Date64Type& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
-        return ParseInt64<arrow::Date64Array>();
+        if (YTType_->AsSimpleTypeRef().GetElement()== ESimpleLogicalValueType::Datetime64) {
+            return ParseDate64<arrow::Date64Array>();
+        } else if (YTType_->AsSimpleTypeRef().GetElement() == ESimpleLogicalValueType::Datetime) {
+            return ParseDatetime<arrow::Date64Array>();
+        } else {
+            return ParseInt64<arrow::Date64Array>();
+        }
     }
 
     arrow::Status Visit(const arrow::TimestampType& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), type.id());
-        return ParseInt64<arrow::TimestampArray>();
+        if (YTType_->AsSimpleTypeRef().GetElement() == ESimpleLogicalValueType::Timestamp64) {
+            return ParseTimestamp64<arrow::TimestampArray>(type.unit());
+        } else if (YTType_->AsSimpleTypeRef().GetElement() == ESimpleLogicalValueType::Timestamp) {
+            return ParseTimestamp<arrow::TimestampArray>(type.unit());
+        } else {
+            return ParseInt64<arrow::TimestampArray>();
+        }
     }
 
     // Unsigned integer types.
@@ -809,6 +1145,66 @@ private:
     arrow::Status ParseNull()
     {
         Writer_->WriteEntity();
+        return arrow::Status::OK();
+    }
+
+    template <typename ArrayType>
+    arrow::Status ParseDate()
+    {
+        auto writeNumericValue = [] (NYson::TCheckedInDebugYsonTokenWriter* writer, i64 value) {
+            writer->WriteBinaryUint64(CheckAndTransformDate(value, /*minAllowedDate*/ 0, DateUpperBound));
+        };
+        ParseComplexNumeric<ArrayType, decltype(writeNumericValue)>(writeNumericValue);
+        return arrow::Status::OK();
+    }
+
+    template <typename ArrayType>
+    arrow::Status ParseDate32()
+    {
+        auto writeNumericValue = [] (NYson::TCheckedInDebugYsonTokenWriter* writer, i64 value) {
+            writer->WriteBinaryInt64(CheckAndTransformDate(value, Date32LowerBound, Date32UpperBound));
+        };
+        ParseComplexNumeric<ArrayType, decltype(writeNumericValue)>(writeNumericValue);
+        return arrow::Status::OK();
+    }
+
+    template <typename ArrayType>
+    arrow::Status ParseDatetime()
+    {
+        auto writeNumericValue = [] (NYson::TCheckedInDebugYsonTokenWriter* writer, i64 value) {
+            writer->WriteBinaryUint64(CheckAndTransformDatetime(value, /*minAllowedDate*/ 0, DatetimeUpperBound));
+        };
+        ParseComplexNumeric<ArrayType, decltype(writeNumericValue)>(writeNumericValue);
+        return arrow::Status::OK();
+    }
+
+    template <typename ArrayType>
+    arrow::Status ParseDate64()
+    {
+        auto writeNumericValue = [] (NYson::TCheckedInDebugYsonTokenWriter* writer, i64 value) {
+            writer->WriteBinaryInt64(CheckAndTransformDatetime(value, Datetime64LowerBound, Datetime64UpperBound));
+        };
+        ParseComplexNumeric<ArrayType, decltype(writeNumericValue)>(writeNumericValue);
+        return arrow::Status::OK();
+    }
+
+    template <typename ArrayType>
+    arrow::Status ParseTimestamp(arrow::TimeUnit::type timeUnit)
+    {
+        auto writeNumericValue = [timeUnit] (NYson::TCheckedInDebugYsonTokenWriter* writer, i64 value) {
+            writer->WriteBinaryUint64(CheckAndTransformTimestamp(value, timeUnit, /*minAllowedTimestamp*/ 0, TimestampUpperBound));
+        };
+        ParseComplexNumeric<ArrayType, decltype(writeNumericValue)>(writeNumericValue);
+        return arrow::Status::OK();
+    }
+
+    template <typename ArrayType>
+    arrow::Status ParseTimestamp64(arrow::TimeUnit::type timeUnit)
+    {
+        auto writeNumericValue = [timeUnit] (NYson::TCheckedInDebugYsonTokenWriter* writer, i64 value) {
+            writer->WriteBinaryInt64(CheckAndTransformTimestamp(value, timeUnit, Timestamp64LowerBound, Timestamp64UpperBound));
+        };
+        ParseComplexNumeric<ArrayType, decltype(writeNumericValue)>(writeNumericValue);
         return arrow::Status::OK();
     }
 
@@ -1108,7 +1504,6 @@ void PrepareArray(
                 rowsValues,
                 columnIndex,
                 columnId);
-            break;
 
         case ELogicalMetatype::List:
         case ELogicalMetatype::Dict:
@@ -1127,7 +1522,6 @@ void PrepareArray(
                 rowsValues,
                 columnIndex,
                 columnId);
-            break;
 
         case ELogicalMetatype::Tagged:
             // Denullified type should not contain tagged type.

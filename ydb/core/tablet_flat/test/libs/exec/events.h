@@ -80,7 +80,11 @@ namespace NFake {
         ui64 Table;
     };
 
-    struct TEvDataCleaned : public TEventLocal<TEvDataCleaned, EvDataCleaned> { };
+    struct TEvDataCleaned : public TEventLocal<TEvDataCleaned, EvDataCleaned> {
+        TEvDataCleaned(ui64 dataCleanupGeneration) : DataCleanupGeneration(dataCleanupGeneration) { }
+
+        ui64 DataCleanupGeneration;
+    };
 
     struct TEvCompact : public TEventLocal<TEvCompact, EvCompact> {
         TEvCompact(ui32 table, bool memOnly = false)

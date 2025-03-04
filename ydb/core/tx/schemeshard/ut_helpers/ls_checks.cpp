@@ -968,6 +968,19 @@ TCheckFunc RetentionPeriod(const TDuration& value) {
     };
 }
 
+TCheckFunc ConsumerExist(const TString& name) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        bool isExist = false;
+        for (const auto& consumer : record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetConsumers()) {
+            if (consumer.GetName() == name) {
+                isExist = true;
+                break;
+            }
+        }
+        UNIT_ASSERT(isExist);
+    };
+}
+
 void NoChildren(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     ChildrenCount(0)(record);
 }
@@ -1403,7 +1416,7 @@ TCheckFunc SplitBoundaries(TVector<T>&& expectedBoundaries) {
     };
 }
 
-template TCheckFunc SplitBoundaries<ui32>(TVector<ui32>&&);
+template TCheckFunc SplitBoundaries<ui64>(TVector<ui64>&&);
 
 TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {

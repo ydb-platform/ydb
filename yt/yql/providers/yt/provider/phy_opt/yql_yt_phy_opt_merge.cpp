@@ -446,8 +446,26 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::MergeToCopy(TExprBase n
             return node;
         }
     }
-    TYtOutTableInfo outTableInfo(merge.Output().Item(0));
+
+    const auto outTable = merge.Output().Item(0);
+    TYtOutTableInfo outTableInfo(outTable);
     if (!tableInfo->RowSpec->CompareSortness(*outTableInfo.RowSpec)) {
+        return node;
+    }
+
+    TStringBuf outColGroup;
+    if (auto setting = NYql::GetSetting(outTable.Settings().Ref(), EYtSettingType::ColumnGroups)) {
+        outColGroup = setting->Tail().Content();
+    }
+
+    YQL_ENSURE(path.Table().Maybe<TYtOutput>());
+    TStringBuf inputColGroup;
+    const auto out = path.Table().Cast<TYtOutput>();
+    if (auto setting = NYql::GetSetting(GetOutputOp(out).Output().Item(FromString<ui32>(out.OutIndex().Value())).Settings().Ref(), EYtSettingType::ColumnGroups)) {
+        inputColGroup = setting->Tail().Content();
+    }
+
+    if (outColGroup != inputColGroup) {
         return node;
     }
 

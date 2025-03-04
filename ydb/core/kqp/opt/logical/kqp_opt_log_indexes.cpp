@@ -425,10 +425,10 @@ TExprBase DoRewriteTopSortOverKMeansTree(
 
     // TODO(mbkkt) How to inline construction of these constants to construction of readLevel0?
     auto fromValues = ctx.Builder(pos)
-        .Callable("Uint32").Atom(0, "0", TNodeFlags::Default).Seal()
+        .Callable(NTableIndex::ClusterIdTypeName).Atom(0, "0", TNodeFlags::Default).Seal()
     .Build();
     auto toValues = ctx.Builder(pos)
-        .Callable("Uint32").Atom(0, "1", TNodeFlags::Default).Seal()
+        .Callable(NTableIndex::ClusterIdTypeName).Atom(0, "1", TNodeFlags::Default).Seal()
     .Build();
 
     auto levelLambda = [&] {

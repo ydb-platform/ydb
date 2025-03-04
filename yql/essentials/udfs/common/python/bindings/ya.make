@@ -49,6 +49,9 @@ NO_COMPILER_WARNINGS()
 
 END()
 
-RECURSE_FOR_TESTS(
-    ut3
-)
+IF (NOT EXPORT_CMAKE)
+    RECURSE_FOR_TESTS(
+        ut2
+        ut3
+    )
+ENDIF()

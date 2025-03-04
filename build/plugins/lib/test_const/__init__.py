@@ -181,6 +181,7 @@ NODEJS_RESOURCE = 'NODEJS_RESOURCE_GLOBAL'
 NYC_RESOURCE = 'NYC_RESOURCE_GLOBAL'
 RUFF_RESOURCE = 'RUFF_RESOURCE_GLOBAL'
 CLANG_FORMAT_RESOURCE = 'CLANG_FORMAT_RESOURCE_GLOBAL'
+CLANG_FORMAT_15_RESOURCE = 'CLANG_FORMAT_15_RESOURCE_GLOBAL'
 
 # test_tool resource for host platform.
 # source - build/platform/test_tool/host.ya.make.inc.
@@ -230,6 +231,7 @@ class TestRequirements(Enum):
     Dns = 'dns'
     Kvm = 'kvm'
     Network = 'network'
+    PortoLayers = 'porto_layers'
     Ram = 'ram'
     RamDisk = 'ram_disk'
     SbVault = 'sb_vault'
@@ -448,6 +450,8 @@ class PythonLinterName(Enum):
 
 class CppLinterName(Enum):
     ClangFormat = "clang_format"
+    ClangFormatYT = "clang_format_yt"
+    ClangFormat15 = "clang_format_15"
 
 
 class DefaultLinterConfig(Enum):
@@ -455,8 +459,15 @@ class DefaultLinterConfig(Enum):
     Python = "build/config/tests/py_style/default_configs.json"
 
 
+class LinterConfigsValidationRules(Enum):
+    Cpp = "build/config/tests/cpp_style/configs_validation_rules.json"
+    Python = "build/config/tests/py_style/configs_validation_rules.json"
+
+
 LINTER_CONFIG_TYPES = {
     CppLinterName.ClangFormat: (".clang-format",),
+    CppLinterName.ClangFormat15: (".clang-format",),
+    CppLinterName.ClangFormatYT: (".clang-format",),
     PythonLinterName.Black: ("pyproject.toml",),
     PythonLinterName.Ruff: ("pyproject.toml", "ruff.toml"),
 }

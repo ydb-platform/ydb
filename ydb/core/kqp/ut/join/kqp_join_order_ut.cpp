@@ -97,10 +97,6 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
 
     NKikimrKqp::TKqpSetting setting;
 
-    setting.SetName("EnableKqpDataQueryStreamLookup");
-    setting.SetValue("true");
-    settings.push_back(setting); 
-
     if (stats != "") {
         setting.SetName("OptOverrideStatistics");
         setting.SetValue(stats);

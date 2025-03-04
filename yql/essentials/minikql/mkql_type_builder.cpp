@@ -2650,12 +2650,11 @@ TType* TTypeBuilder::NewVoidType() const {
 }
 
 TType* TTypeBuilder::NewNullType() const {
-    if (!UseNullType || RuntimeVersion < 11) {
-        TCallableBuilder callableBuilder(Env, "Null", NewOptionalType(NewVoidType()));
-        return TRuntimeNode(callableBuilder.Build(), false).GetStaticType();
-    } else {
+    if (UseNullType) {
         return TRuntimeNode(Env.GetNullLazy(), true).GetStaticType();
     }
+    TCallableBuilder callableBuilder(Env, "Null", NewOptionalType(NewVoidType()));
+    return TRuntimeNode(callableBuilder.Build(), false).GetStaticType();
 }
 
 TType* TTypeBuilder::NewEmptyStructType() const {

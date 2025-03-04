@@ -147,6 +147,10 @@ bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorC
             sendResponse(GetSizeLag(request.Offset), false);
         } else {
             sendResponse(0, true);
+
+            auto now = ctx.Now();
+            auto& userInfo = UsersInfoStorage->GetOrCreate(request.ClientId, ctx);
+            userInfo.UpdateReadOffset((i64)EndOffset - 1, now, now, now, true);          
         }
     } else if (request.Offset < EndOffset) {
         sendResponse(GetSizeLag(request.Offset), false);

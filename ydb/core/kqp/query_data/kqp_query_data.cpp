@@ -280,8 +280,10 @@ void TQueryData::PrepareParameters(const TKqpPhyTxHolder::TConstPtr& tx, const T
         ValidateParameter(paramDesc.GetName(), paramDesc.GetType(), txTypeEnv);
     }
 
-    for(const auto& paramBinding: tx->GetParamBindings()) {
-        MaterializeParamValue(true, paramBinding);
+    if (tx) {
+        for(const auto& paramBinding: tx->GetParamBindings()) {
+            MaterializeParamValue(true, paramBinding);
+        }
     }
 }
 

@@ -79,9 +79,9 @@ private:
 
     void Format(const NKikimrSchemeOp::TColumnDescription& columnDesc);
     void Format(const NKikimrSchemeOp::TFamilyDescription& familyDesc);
+    void Format(const NKikimrSchemeOp::TPartitioningPolicy& policy);
 
     void Format(const Ydb::Table::TableIndex& index);
-    void Format(const Ydb::Table::PartitioningSettings& partitionSettings);
     void Format(const Ydb::Table::ExplicitPartitions& explicitPartitions);
     void Format(const Ydb::Table::ReadReplicasSettings& readReplicasSettings);
     void Format(const Ydb::Table::TtlSettings& ttlSettings);
@@ -95,8 +95,6 @@ private:
     void EscapeName(const TString& str);
     void EscapeString(const TString& str);
     void EscapeBinary(const TString& str);
-
-
 private:
     TStringStream Stream;
     NMiniKQL::TScopedAlloc Alloc;

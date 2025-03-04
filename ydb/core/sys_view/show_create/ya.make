@@ -17,6 +17,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/public/api/protos
     ydb/public/lib/json_value
+    ydb/public/lib/ydb_cli/dump/util
     ydb/public/sdk/cpp/src/client/types
     yql/essentials/ast
 )

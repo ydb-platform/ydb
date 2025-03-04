@@ -4,6 +4,8 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
+#include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
+
 #include <yql/essentials/ast/yql_ast_escaping.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
@@ -351,10 +353,13 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
 
     Stream << ")";
 
-    FillPartitioningSettings(createRequest, tableDesc);
-
     Stream << " WITH (\n";
-    Format(createRequest.partitioning_settings());
+
+    if (tableDesc.HasPartitionConfig()) {
+        if (tableDesc.GetPartitionConfig().HasPartitioningPolicy()) {
+            Format(tableDesc.GetPartitionConfig().GetPartitioningPolicy());
+        }
+    }
 
     if (createRequest.partitions_case() == Ydb::Table::CreateTableRequest::kPartitionAtKeys) {
         try {
@@ -393,7 +398,15 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
     }
 
     Stream << "\n);";
-    auto result = TResult(Stream.Str());
+
+    TString statement = Stream.Str();
+    TString formattedStatement;
+    NYql::TIssues issues;
+    if (!NYdb::NDump::Format(statement, formattedStatement, issues)) {
+        return TResult(Ydb::StatusIds::INTERNAL_ERROR, issues.ToString());
+    }
+
+    auto result = TResult(std::move(formattedStatement));
 
     return result;
 }
@@ -595,30 +608,38 @@ void TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
     Stream << ")";
 }
 
-void TCreateTableFormatter::Format(const Ydb::Table::PartitioningSettings& partitionSettings) {
-    if (partitionSettings.partitioning_by_size() == Ydb::FeatureFlag::ENABLED) {
-        Stream << "\tAUTO_PARTITIONING_BY_SIZE = ENABLED,\n";
-        auto partitionBySize = partitionSettings.partition_size_mb();
-        Stream << "\tAUTO_PARTITIONING_PARTITION_SIZE_MB = " << partitionBySize;
-    } else {
-        Stream << "\tAUTO_PARTITIONING_BY_SIZE = DISABLED";
+void TCreateTableFormatter::Format(const NKikimrSchemeOp::TPartitioningPolicy& policy) {
+    TString del = "";
+    if (policy.HasSizeToSplit()) {
+        if (policy.GetSizeToSplit()) {
+            Stream << "\tAUTO_PARTITIONING_BY_SIZE = ENABLED,\n";
+            auto partitionBySize = policy.GetSizeToSplit() / (1 << 20);
+            Stream << "\tAUTO_PARTITIONING_PARTITION_SIZE_MB = " << partitionBySize;
+        } else {
+            Stream << "\tAUTO_PARTITIONING_BY_SIZE = DISABLED";
+        }
+        del = ",\n";
     }
 
-    Stream << ",\n";
-    if (partitionSettings.partitioning_by_load() == Ydb::FeatureFlag::ENABLED) {
-        Stream << "\tAUTO_PARTITIONING_BY_LOAD = ENABLED";
-    } else {
-        Stream << "\tAUTO_PARTITIONING_BY_LOAD = DISABLED";
+    if (policy.HasSplitByLoadSettings()) {
+        Stream << del;
+        if (policy.GetSplitByLoadSettings().GetEnabled()) {
+            Stream << "\tAUTO_PARTITIONING_BY_LOAD = ENABLED";
+        } else {
+            Stream << "\tAUTO_PARTITIONING_BY_LOAD = DISABLED";
+        }
+        del = ",\n";
     }
 
-    if (partitionSettings.min_partitions_count()) {
-        Stream << ",\n";
-        Stream << "\tAUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << partitionSettings.min_partitions_count();
+    if (policy.HasMinPartitionsCount() && policy.GetMinPartitionsCount()) {
+        Stream << del;
+        Stream << "\tAUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << policy.GetMinPartitionsCount();
+        del = ",\n";
     }
 
-    if (partitionSettings.max_partitions_count()) {
-        Stream << ",\n";
-        Stream << "\tAUTO_PARTITIONING_MAX_PARTITIONS_COUNT = " << partitionSettings.max_partitions_count();
+    if (policy.HasMaxPartitionsCount() && policy.GetMaxPartitionsCount()) {
+        Stream << del;
+        Stream << "\tAUTO_PARTITIONING_MAX_PARTITIONS_COUNT = " << policy.GetMaxPartitionsCount();
     }
 }
 

@@ -159,7 +159,7 @@ void SetupAuthAccessEnvironment(TTestEnv& env) {
 }
 
 void CheckAuthAdministratorAccessIsRequired(TScanQueryPartIterator& it) {
-    NKqp::StreamResultToYson(it, false, EStatus::UNAUTHORIZED, 
+    NKqp::StreamResultToYson(it, false, EStatus::UNAUTHORIZED,
         "Administrator access is required");
 }
 
@@ -588,15 +588,13 @@ Y_UNIT_TEST_SUITE(SystemView) {
             );
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
-	`Key` Uint32,
-	`Value` Bool DEFAULT true,
-	FAMILY default (COMPRESSION = "off"),
-	PRIMARY KEY (`Key`)
-) WITH (
-	AUTO_PARTITIONING_BY_SIZE = DISABLED,
-	AUTO_PARTITIONING_BY_LOAD = DISABLED,
-	AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
-);)"
+    `Key` Uint32,
+    `Value` Bool DEFAULT TRUE,
+    FAMILY default (COMPRESSION = 'off'),
+    PRIMARY KEY (`Key`)
+)
+WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+)"
         );
 
         checker.CheckShowCreateTable(
@@ -632,15 +630,13 @@ R"(CREATE TABLE `test_show_create` (
             );
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
-	`Key` Uint32,
-	`Value` Float DEFAULT 4,
-	FAMILY default (COMPRESSION = "off"),
-	PRIMARY KEY (`Key`)
-) WITH (
-	AUTO_PARTITIONING_BY_SIZE = DISABLED,
-	AUTO_PARTITIONING_BY_LOAD = DISABLED,
-	AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
-);)"
+    `Key` Uint32,
+    `Value` Float DEFAULT 4,
+    FAMILY default (COMPRESSION = 'off'),
+    PRIMARY KEY (`Key`)
+)
+WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+)"
         );
 
         checker.CheckShowCreateTable(
@@ -845,21 +841,21 @@ R"(CREATE TABLE `test_show_create` (
             );
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
-	`BoolValue` Bool,
-	`Int32Value` Int32,
-	`Uint32Value` Uint32,
-	`Int64Value` Int64,
-	`Uint64Value` Uint64,
-	`StringValue` String,
-	`Utf8Value` Utf8,
-	FAMILY default (COMPRESSION = "off"),
-	PRIMARY KEY (`BoolValue`, `Int32Value`, `Uint32Value`, `Int64Value`, `Uint64Value`, `StringValue`, `Utf8Value`)
-) WITH (
-	AUTO_PARTITIONING_BY_SIZE = DISABLED,
-	AUTO_PARTITIONING_BY_LOAD = DISABLED,
-	AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5,
-	PARTITION_AT_KEYS = ((false), (false, 1, 2), (true, 1, 1, 1, 1, 'str'), (true, 1, 1, 100, 0, 'str', 'utf'))
-);)",
+    `BoolValue` Bool,
+    `Int32Value` Int32,
+    `Uint32Value` Uint32,
+    `Int64Value` Int64,
+    `Uint64Value` Uint64,
+    `StringValue` String,
+    `Utf8Value` Utf8,
+    FAMILY default (COMPRESSION = 'off'),
+    PRIMARY KEY (`BoolValue`, `Int32Value`, `Uint32Value`, `Int64Value`, `Uint64Value`, `StringValue`, `Utf8Value`)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5,
+    PARTITION_AT_KEYS = ((FALSE), (FALSE, 1, 2), (TRUE, 1, 1, 1, 1, 'str'), (TRUE, 1, 1, 100, 0, 'str', 'utf'))
+);
+)",
         true);
     }
 
@@ -919,16 +915,16 @@ R"(CREATE TABLE `test_show_create` (
             );
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
-	`Key` Uint64 NOT NULL,
-	`Value` String NOT NULL,
-	FAMILY default (COMPRESSION = "off"),
-	PRIMARY KEY (`Key`)
-) WITH (
-	AUTO_PARTITIONING_BY_SIZE = DISABLED,
-	AUTO_PARTITIONING_BY_LOAD = DISABLED,
-	AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
-	READ_REPLICAS_SETTINGS = "ANY_AZ:3"
-);)"
+    `Key` Uint64 NOT NULL,
+    `Value` String NOT NULL,
+    FAMILY default (COMPRESSION = 'off'),
+    PRIMARY KEY (`Key`)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
+    READ_REPLICAS_SETTINGS = 'ANY_AZ:3'
+);
+)"
         );
     }
 
@@ -964,16 +960,16 @@ R"(CREATE TABLE `test_show_create` (
             );
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
-	`Key` Uint64 NOT NULL,
-	`Value` String NOT NULL,
-	FAMILY default (COMPRESSION = "off"),
-	PRIMARY KEY (`Key`)
-) WITH (
-	AUTO_PARTITIONING_BY_SIZE = DISABLED,
-	AUTO_PARTITIONING_BY_LOAD = DISABLED,
-	AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
-	KEY_BLOOM_FILTER = DISABLED
-);)"
+    `Key` Uint64 NOT NULL,
+    `Value` String NOT NULL,
+    FAMILY default (COMPRESSION = 'off'),
+    PRIMARY KEY (`Key`)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
+    KEY_BLOOM_FILTER = DISABLED
+);
+)"
         );
     }
 
@@ -1009,17 +1005,15 @@ R"(CREATE TABLE `test_show_create` (
             );
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
-	`Key` Uint32 NOT NULL,
-	FAMILY default (COMPRESSION = "off"),
-	PRIMARY KEY (`Key`)
-) WITH (
-	AUTO_PARTITIONING_BY_SIZE = DISABLED,
-	AUTO_PARTITIONING_BY_LOAD = DISABLED,
-	AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
-	TTL =
-	  INTERVAL('PT1H') DELETE
-	  ON Key AS SECONDS
-);)"
+    `Key` Uint32 NOT NULL,
+    FAMILY default (COMPRESSION = 'off'),
+    PRIMARY KEY (`Key`)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
+    TTL = INTERVAL('PT1H') DELETE ON Key AS SECONDS
+);
+)"
         );
     }
 
@@ -1041,15 +1035,13 @@ R"(CREATE TABLE `test_show_create` (
             );
         )", "test_show_create",
 R"(CREATE TEMPORARY TABLE `test_show_create` (
-	`Key` Int32 NOT NULL,
-	`Value` String,
-	FAMILY default (COMPRESSION = "off"),
-	PRIMARY KEY (`Key`)
-) WITH (
-	AUTO_PARTITIONING_BY_SIZE = DISABLED,
-	AUTO_PARTITIONING_BY_LOAD = DISABLED,
-	AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
-);)"
+    `Key` Int32 NOT NULL,
+    `Value` String,
+    FAMILY default (COMPRESSION = 'off'),
+    PRIMARY KEY (`Key`)
+)
+WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+)"
         , true);
     }
 
@@ -1139,29 +1131,33 @@ R"(CREATE TEMPORARY TABLE `test_show_create` (
                     DATA = "test1",
                     COMPRESSION = "lz4"
                 )
+            ) WITH (
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000
             );
             ALTER TABLE test_show_create ADD INDEX Index2 GLOBAL ASYNC ON (Key2, Value1, Value2);
             ALTER TABLE test_show_create ADD INDEX Index3 GLOBAL ASYNC ON (Key3, Value2) COVER (Value1, Value3);
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
-	`Key1` Int64 NOT NULL DEFAULT -100,
-	`Key2` Utf8 NOT NULL,
-	`Key3` Serial8 NOT NULL,
-	`Value1` Utf8 FAMILY `Family1`,
-	`Value2` Bool FAMILY `Family2`,
-	`Value3` String FAMILY `Family2`,
-	INDEX `Index1` GLOBAL USING vector_kmeans_tree ON (`Value3`) WITH (distance=cosine, vector_type="uint8", vector_dimension=2, clusters=2, levels=1),
-	INDEX `Index2` GLOBAL ASYNC ON (`Key2`, `Value1`, `Value2`),
-	INDEX `Index3` GLOBAL ASYNC ON (`Key3`, `Value2`) COVER (`Value1`, `Value3`),
-	FAMILY default (COMPRESSION = "off"),
-	FAMILY `Family1` (DATA = "test0", COMPRESSION = "off"),
-	FAMILY `Family2` (DATA = "test1", COMPRESSION = "lz4"),
-	PRIMARY KEY (`Key1`, `Key2`, `Key3`)
-) WITH (
-	AUTO_PARTITIONING_BY_SIZE = DISABLED,
-	AUTO_PARTITIONING_BY_LOAD = DISABLED,
-	AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
-);)"
+    `Key1` Int64 NOT NULL DEFAULT -100,
+    `Key2` Utf8 NOT NULL,
+    `Key3` Serial8 NOT NULL,
+    `Value1` Utf8 FAMILY `Family1`,
+    `Value2` Bool FAMILY `Family2`,
+    `Value3` String FAMILY `Family2`,
+    INDEX `Index1` GLOBAL USING vector_kmeans_tree ON (`Value3`) WITH (distance = cosine, vector_type = 'uint8', vector_dimension = 2, clusters = 2, levels = 1),
+    INDEX `Index2` GLOBAL ASYNC ON (`Key2`, `Value1`, `Value2`),
+    INDEX `Index3` GLOBAL ASYNC ON (`Key3`, `Value2`) COVER (`Value1`, `Value3`),
+    FAMILY default (COMPRESSION = 'off'),
+    FAMILY `Family1` (DATA = 'test0', COMPRESSION = 'off'),
+    FAMILY `Family2` (DATA = 'test1', COMPRESSION = 'lz4'),
+    PRIMARY KEY (`Key1`, `Key2`, `Key3`)
+)
+WITH (
+    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+);
+)"
         );
 
         checker.CheckShowCreateTable(R"(
@@ -1185,28 +1181,27 @@ R"(CREATE TABLE `test_show_create` (
             ALTER TABLE test_show_create ADD INDEX Index1 GLOBAL ASYNC ON (Key2, Value1, Value2) COVER (Value5, Value3);
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
-	`Key1` Int64 NOT NULL DEFAULT -100,
-	`Key2` Utf8 NOT NULL,
-	`Key3` Serial8 NOT NULL,
-	`Value1` Utf8,
-	`Value2` Bool,
-	`Value3` String,
-	`Value4` Timestamp DEFAULT TIMESTAMP('2000-01-02T02:26:50.999900Z'),
-	`Value5` String,
-	INDEX `Index1` GLOBAL ASYNC ON (`Key2`, `Value1`, `Value2`) COVER (`Value5`, `Value3`),
-	INDEX `Index2` GLOBAL USING vector_kmeans_tree ON (`Value5`) COVER (`Value1`, `Value3`) WITH (distance=manhattan, vector_type="float", vector_dimension=2, clusters=2, levels=1),
-	FAMILY default (COMPRESSION = "off"),
-	PRIMARY KEY (`Key1`, `Key2`, `Key3`)
-) WITH (
-	AUTO_PARTITIONING_BY_SIZE = DISABLED,
-	AUTO_PARTITIONING_BY_LOAD = ENABLED,
-	AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4,
-	PARTITION_AT_KEYS = ((10), (100, '123'), (1000, 'cde')),
-	KEY_BLOOM_FILTER = ENABLED,
-	TTL =
-	  INTERVAL('PT1H') DELETE
-	  ON Value4
-);)"
+    `Key1` Int64 NOT NULL DEFAULT -100,
+    `Key2` Utf8 NOT NULL,
+    `Key3` Serial8 NOT NULL,
+    `Value1` Utf8,
+    `Value2` Bool,
+    `Value3` String,
+    `Value4` Timestamp DEFAULT TIMESTAMP('2000-01-02T02:26:50.999900Z'),
+    `Value5` String,
+    INDEX `Index1` GLOBAL ASYNC ON (`Key2`, `Value1`, `Value2`) COVER (`Value5`, `Value3`),
+    INDEX `Index2` GLOBAL USING vector_kmeans_tree ON (`Value5`) COVER (`Value1`, `Value3`) WITH (distance = manhattan, vector_type = 'float', vector_dimension = 2, clusters = 2, levels = 1),
+    FAMILY default (COMPRESSION = 'off'),
+    PRIMARY KEY (`Key1`, `Key2`, `Key3`)
+)
+WITH (
+    AUTO_PARTITIONING_BY_LOAD = ENABLED,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4,
+    PARTITION_AT_KEYS = ((10), (100, '123'), (1000, 'cde')),
+    KEY_BLOOM_FILTER = ENABLED,
+    TTL = INTERVAL('PT1H') DELETE ON Value4
+);
+)"
         );
     }
 

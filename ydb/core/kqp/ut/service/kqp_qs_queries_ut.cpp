@@ -2788,7 +2788,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT(!result.GetResultSets().empty());
 
             CompareYson(R"([
-                [["test_show_create"];["Table"];["CREATE TABLE `test_show_create` (\n\t`Key` Uint32,\n\t`Value` Uint32,\n\tFAMILY default (COMPRESSION = \"off\"),\n\tPRIMARY KEY (`Key`)\n) WITH (\n\tAUTO_PARTITIONING_BY_SIZE = DISABLED,\n\tAUTO_PARTITIONING_BY_LOAD = DISABLED,\n\tAUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1\n);"]];
+                [["test_show_create"];["Table"];["CREATE TABLE `test_show_create` (\n    `Key` Uint32,\n    `Value` Uint32,\n    FAMILY default (COMPRESSION = 'off'),\n    PRIMARY KEY (`Key`)\n)\nWITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);\n"]];
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
@@ -2816,8 +2816,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 SHOW CREATE TABLE `/Root/test_show_create`;
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT(!result.IsSuccess());
-            
-            UNIT_ASSERT_VALUES_EQUAL("<main>: Error: Type annotation, code: 1030\n    <main>:2:35: Error: At function: KiReadTable!\n        <main>:2:35: Error: SHOW CREATE statement is not supported\n", 
+
+            UNIT_ASSERT_VALUES_EQUAL("<main>: Error: Type annotation, code: 1030\n    <main>:2:35: Error: At function: KiReadTable!\n        <main>:2:35: Error: SHOW CREATE statement is not supported\n",
                 result.GetIssues().ToString());
         }
     }

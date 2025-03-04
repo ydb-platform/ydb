@@ -85,6 +85,7 @@ ydb/library/actors/http/ut sole chunk chunk
 ydb/library/actors/http/ut sole+chunk+chunk
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
+ydb/library/yaml_config/ut_transform test_transform.py.TestYamlConfigTransformations.test_basic[args1-dump_ds_init]
 ydb/library/yql/dq/opt/ut HypergraphBuild.JoinTopologiesBenchmark
 ydb/library/yql/dq/opt/ut sole chunk chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col2_COL1-kqprun]
@@ -179,8 +180,8 @@ ydb/tests/olap/ttl_tiering data_correctness.py.TestDataCorrectness.test
 ydb/tests/olap/ttl_tiering data_migration_when_alter_ttl.py.TestDataMigrationWhenAlterTtl.test
 ydb/tests/olap/ttl_tiering sole chunk chunk
 ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_data_unchanged_after_ttl_change
-ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_ttl_delete
 ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_delete_s3_tiering
+ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_ttl_delete
 ydb/tests/olap/ttl_tiering ttl_unavailable_s3.py.TestUnavailableS3.test
 ydb/tests/olap/ttl_tiering unstable_connection.py.TestUnstableConnection.test
 ydb/tests/postgres_integrations/go-libpq [docker_wrapper_test.py] chunk chunk

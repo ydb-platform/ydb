@@ -223,6 +223,10 @@ class YtError(Exception):
         """Already exists."""
         return self.contains_code(501)
 
+    def is_authentication_error(self):
+        """Authentication error."""
+        return self.contains_code(900)
+
     def is_access_denied(self):
         """Access denied."""
         return self.contains_code(901)

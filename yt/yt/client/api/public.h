@@ -84,7 +84,7 @@ DEFINE_ENUM(ETransactionCoordinatorPrepareMode,
     ((Late)             (1))
 );
 
-DEFINE_ENUM(EProxyType,
+DEFINE_ENUM(EProxyKind,
     ((Http) (1))
     ((Rpc)  (2))
     ((Grpc) (3))

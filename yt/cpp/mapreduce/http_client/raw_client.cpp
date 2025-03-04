@@ -903,6 +903,11 @@ IRawClientPtr THttpRawClient::Clone()
     return ::MakeIntrusive<THttpRawClient>(Context_);
 }
 
+IRawClientPtr THttpRawClient::Clone(const TClientContext& context)
+{
+    return ::MakeIntrusive<THttpRawClient>(context);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDetail

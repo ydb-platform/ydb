@@ -141,7 +141,18 @@ def validate_test(unit, kw):
     if valid_kw.get('SCRIPT-REL-PATH') == 'boost.test':
         project_path = valid_kw.get('BUILD-FOLDER-PATH', "")
         if not project_path.startswith(
-            ("contrib", "mail", "maps", "tools/idl", "metrika", "devtools", "mds", "yandex_io", "smart_devices")
+            (
+                "contrib",
+                "mail",
+                "maps",
+                "mobile/geo/maps",
+                "tools/idl",
+                "metrika",
+                "devtools",
+                "mds",
+                "yandex_io",
+                "smart_devices",
+            )
         ):
             errors.append("BOOSTTEST is not allowed here")
 

@@ -342,8 +342,10 @@ DEFINE_ENUM(EObjectType,
     ((ReplicationCardCollocation)                  (1207))
     ((VirtualChaosCellMap)                         (1208))
 
-    // Maintenance tracker stuff
+    // Other cluster components stuff
     ((ClusterProxyNode)                            (1500))
+    ((CypressProxyObject)                          (1501))
+    ((CypressProxyMap)                              (465))
 
     // Zookeeper stuff
     // COMPAT(babenko): drop completely

@@ -1,10 +1,13 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 
+#include <yql/essentials/sql/v1/context.h>
+#include <yql/essentials/sql/v1/sql_translation.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <library/cpp/protobuf/util/simple_reflection.h>
@@ -12,16 +15,32 @@
 using namespace NYql;
 using namespace NKikimr::NUdf;
 using namespace NSQLTranslation;
+using namespace NSQLTranslationV1;
+using namespace NSQLv1Generated;
+
+class TRuleFreqTranslation : public TSqlTranslation
+{
+public:
+    TRuleFreqTranslation(TContext& ctx)
+        : TSqlTranslation(ctx, ctx.Settings.Mode)
+    {}
+};
 
 class TRuleFreqVisitor {
 public:
-    TRuleFreqVisitor() {
+    TRuleFreqVisitor(TContext& ctx)
+        : Translation(ctx)
+    {
     }
 
     void Visit(const NProtoBuf::Message& msg) {
         const NProtoBuf::Descriptor* descr = msg.GetDescriptor();
-        if (descr->name() == "TToken") {
+        if (descr == TToken::GetDescriptor()) {
             return;
+        }
+
+        if (descr == TRule_use_stmt::GetDescriptor()) {
+            VisitUseStmt(dynamic_cast<const TRule_use_stmt&>(msg));
         }
 
         TStringBuf fullName = descr->full_name();
@@ -51,6 +70,17 @@ public:
     }
 
 private:
+    void VisitUseStmt(const TRule_use_stmt& msg) {
+        const auto& cluster = msg.GetRule_cluster_expr2();
+        if (cluster.GetBlock2().Alt_case() == TRule_cluster_expr::TBlock2::kAlt1) {
+            const auto& val = cluster.GetBlock2().GetAlt1().GetRule_pure_column_or_named1();
+            if (val.Alt_case() == TRule_pure_column_or_named::kAltPureColumnOrNamed2) {
+                const auto& id = val.GetAlt_pure_column_or_named2().GetRule_an_id1();
+                Freqs[std::make_pair("USE", Id(id, Translation))] += 1;
+            }
+        }
+    }
+
     void VisitAllFields(const NProtoBuf::Message& msg, const NProtoBuf::Descriptor* descr) {
         for (int i = 0; i < descr->field_count(); ++i) {
             const NProtoBuf::FieldDescriptor* fd = descr->field(i);
@@ -64,6 +94,7 @@ private:
     }
 
     THashMap<std::pair<TString, TString>, ui64> Freqs;
+    TRuleFreqTranslation Translation;
 };
 
 SIMPLE_UDF(TObfuscate, TOptional<char*>(TAutoMap<char*>)) {
@@ -125,7 +156,8 @@ SIMPLE_UDF(TRuleFreq, TOptional<TRuleFreqResult>(TAutoMap<char*>)) {
             return {};
         }
 
-        TRuleFreqVisitor visitor;
+        TContext ctx(lexers, parsers, settings, {}, issues, query);
+        TRuleFreqVisitor visitor(ctx);
         visitor.Visit(*msg);
 
         auto listBuilder = valueBuilder->NewListBuilder();

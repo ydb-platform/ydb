@@ -4,7 +4,8 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusionStatus TCalculationProcessor::DoExecute(const std::shared_ptr<TAccessorsCollection>& resources) const {
+TConclusionStatus TCalculationProcessor::DoExecute(
+    const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& /*context*/) const {
     if (KernelLogic) {
         auto resultKernel = KernelLogic->Execute(GetInput(), GetOutput(), resources);
         if (resultKernel.IsFail()) {

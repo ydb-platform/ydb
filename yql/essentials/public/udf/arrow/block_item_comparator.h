@@ -169,6 +169,24 @@ public:
     }
 };
 
+class TSingularTypeBlockItemComparator: public TBlockItemComparatorBase<TSingularTypeBlockItemComparator, /*Nullable=*/false> {
+public:
+    i64 DoCompare(TBlockItem lhs, TBlockItem rhs) const {
+        Y_UNUSED(lhs, rhs);
+        return 0;
+    }
+
+    bool DoEquals(TBlockItem lhs, TBlockItem rhs) const {
+        Y_UNUSED(lhs, rhs);
+        return true;
+    }
+
+    bool DoLess(TBlockItem lhs, TBlockItem rhs) const {
+        Y_UNUSED(lhs, rhs);
+        return false;
+    }
+};
+
 template<typename TTzType, bool Nullable>
 class TTzDateBlockItemComparator : public TBlockItemComparatorBase<TTzDateBlockItemComparator<TTzType, Nullable>, Nullable> {
     using TLayout = typename TDataType<TTzType>::TLayout;

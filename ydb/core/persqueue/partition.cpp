@@ -2969,6 +2969,7 @@ TPartition::EProcessResult TPartition::PreProcessUserAct(
 void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
     const bool strictCommitOffset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && act.Strict);
     const TString& user = act.ClientId;
+    RemoveUserAct(user);
     const auto& ctx = ActorContext();
     if (!PendingUsersInfo.contains(user) && AffectedUsers.contains(user)) {
         switch (act.Type) {
@@ -3088,7 +3089,6 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
         return;
     }
 
-    RemoveUserAct(act.ClientId);
     return EmulatePostProcessUserAct(act, userInfo, ActorContext());
 }
 

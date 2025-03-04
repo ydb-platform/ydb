@@ -1,5 +1,5 @@
 #include "event_util.h"
-#include "target_table.h"
+#include "target_transfer.h"
 
 namespace NKikimr::NReplication::NController {
 
@@ -16,6 +16,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         replication->GetConfig().GetSrcConnectionParams(),
         replication->GetConfig().GetConsistencySettings(),
         target.GetStreamPath(),
+        target.GetStreamConsumerName(),
         target.GetDstPathId());
 }
 
@@ -27,6 +28,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         const NKikimrReplication::TConnectionParams& connectionParams,
         const NKikimrReplication::TConsistencySettings& consistencySettings,
         const TString& srcStreamPath,
+        const TString& srcStreamConsumerName,
         const TPathId& dstPathId)
 {
     auto ev = MakeHolder<TEvService::TEvRunWorker>();
@@ -41,7 +43,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     readerSettings.MutableConnectionParams()->CopyFrom(connectionParams);
     readerSettings.SetTopicPath(srcStreamPath);
     readerSettings.SetTopicPartitionId(workerId);
-    readerSettings.SetConsumerName(ReplicationConsumerName);
+    readerSettings.SetConsumerName(srcStreamConsumerName);
 
     switch(config->GetKind()) {
         case TReplication::ETargetKind::Table:

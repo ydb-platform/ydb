@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/blobstorage/nodewarden
     ydb/core/blobstorage/pdisk
     ydb/core/client/server
+    ydb/core/control
     ydb/core/formats
     ydb/core/mind
     ydb/core/node_whiteboard

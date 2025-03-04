@@ -29,6 +29,8 @@ void FormatValue(TStringBuilderBase* builder, TErrorCode code, TStringBuf spec)
 
 constexpr TStringBuf ErrorMessageTruncatedSuffix = "...<message truncated>";
 
+TError::TEnricher TError::Enricher_;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TError::TImpl
@@ -275,15 +277,20 @@ TError::TErrorOr(const std::exception& ex)
         *this = TError(NYT::EErrorCode::Generic, TRuntimeFormat{ex.what()});
     }
     YT_VERIFY(!IsOK());
+    Enrich();
 }
 
 TError::TErrorOr(std::string message, TDisableFormat)
     : Impl_(std::make_unique<TImpl>(std::move(message)))
-{ }
+{
+    Enrich();
+}
 
 TError::TErrorOr(TErrorCode code, std::string message, TDisableFormat)
     : Impl_(std::make_unique<TImpl>(code, std::move(message)))
-{ }
+{
+    Enrich();
+}
 
 TError& TError::operator = (const TError& other)
 {
@@ -632,6 +639,20 @@ std::optional<TError> TError::FindMatching(const THashSet<TErrorCode>& codes) co
     });
 }
 
+void TError::RegisterEnricher(TEnricher enricher)
+{
+    // NB: This daisy-chaining strategy is optimal when there's O(1) callbacks. Convert to a vector
+    // if the number grows.
+    if (Enricher_) {
+        Enricher_ = [first = std::move(Enricher_), second = std::move(enricher)] (TError& error) {
+            first(error);
+            second(error);
+        };
+    } else {
+        Enricher_ = std::move(enricher);
+    }
+}
+
 TError::TErrorOr(std::unique_ptr<TImpl> impl)
     : Impl_(std::move(impl))
 { }
@@ -640,6 +661,13 @@ void TError::MakeMutable()
 {
     if (!Impl_) {
         Impl_ = std::make_unique<TImpl>();
+    }
+}
+
+void TError::Enrich()
+{
+    if (Enricher_) {
+        Enricher_(*this);
     }
 }
 

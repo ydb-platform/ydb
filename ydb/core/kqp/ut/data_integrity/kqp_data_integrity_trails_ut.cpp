@@ -1,5 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <regex>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -43,7 +45,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         }
 
         // check executer logs
-        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), LogEnabled ? 1 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), LogEnabled ? 2 : 0);
         // check session actor logs
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), LogEnabled ? 2 : 0);
         // check grpc logs
@@ -142,7 +144,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             // check write actor logs
             UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: WriteActor"), 3);
             // check executer logs
-            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 4);
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 11);
             // check session actor logs
             UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 2);
             // check grpc logs
@@ -203,8 +205,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        // check executer logs (should be empty, because executer only logs modification operations)
-        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 0);
+        // check executer logs (should be 1, because executer only logs result for read actor)
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 1);
         // check session actor logs
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 2);
         // check grpc logs
@@ -213,45 +215,143 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: DataShard"), 0);
     }
 
-    Y_UNIT_TEST_TWIN(UpsertViaLegacyScripting, Streaming) {
+    Y_UNIT_TEST(BrokenReadLock) {
         TStringStream ss;
         {
             TKikimrSettings serverSettings;
             serverSettings.LogStream = &ss;
             TKikimrRunner kikimr(serverSettings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);
-            NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
 
+            std::optional<TTransaction> tx1;
 
-            const auto query = R"(
-                --!syntax_v1
+            {  // tx1: read
+                auto result = session.ExecuteDataQuery(R"(
+                    --!syntax_v1
 
-                UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES
-                    (3u, "Value3"),
-                    (101u, "Value101"),
-                    (201u, "Value201");
-            )";
-
-            if (Streaming) {
-                auto result = client.StreamExecuteYqlScript(query).GetValueSync();        
+                    SELECT * FROM `/Root/KeyValue` WHERE Key = 1u OR Key = 2u;
+                )", TTxControl::BeginTx()).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-                CollectStreamResult(result);
-            } else {
-                auto result = client.ExecuteYqlScript(query).GetValueSync();        
+                CompareYson(R"([
+                    [[1u];["One"]];
+                    [[2u];["Two"]]
+                ])", FormatResultSetYson(result.GetResultSet(0)));
+                tx1 = result.GetTransaction();
+                UNIT_ASSERT(tx1);
+            }
+
+            {  // tx2: write + commit
+                auto result = session.ExecuteDataQuery(R"(
+                    --!syntax_v1
+
+                    UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES
+                        (1u, "NewValue1");
+                )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            {  // tx1: commit
+                auto result = tx1->Commit().ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             }
         }
-            
-        // check executer logs
-        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 1);
-        // check session actor logs (should contain double logs because this query was executed via worker actor)
-        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 4);
-        // check grpc logs
-        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY TRACE: Component: Grpc"), 2);
-        // check datashard logs
-        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: DataShard"), 2);
 
-        Cout << ss.Str() << Endl;
+        auto logRows = SplitString(ss.Str(), "DATA_INTEGRITY");
+        std::string readLock;
+        std::string brokenLock;
+        for (const auto& row : logRows) {
+            // we need to find row with info about read physical tx and extract lock id
+            if (row.Contains("Component: Executer,Type: InputActorResult")) {
+                std::regex lockIdRegex(R"(LockId:\s*(\d+))");
+                std::smatch lockIdMatch;
+                UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract read lock id");
+                readLock = lockIdMatch[1].str();
+            }
+
+            // we need to find row with info about broken locks and extract lock id
+            if (row.Contains("Component: DataShard,Type: Locks")) {
+                std::regex lockIdRegex(R"(BreakLocks:\s*\[(\d+)\s*\])");
+                std::smatch lockIdMatch;
+                UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract broken lock id");
+                brokenLock = lockIdMatch[1].str();
+            } 
+        }
+
+        UNIT_ASSERT_C(!readLock.empty() && readLock == brokenLock, "read lock should be broken");
+    }
+
+    Y_UNIT_TEST(BrokenReadLockAbortedTx) {
+        TStringStream ss;
+        {
+            TKikimrSettings serverSettings;
+            serverSettings.LogStream = &ss;
+            TKikimrRunner kikimr(serverSettings);
+            kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+
+            std::optional<TTransaction> tx1;
+
+            {  // tx1: read
+                auto result = session.ExecuteDataQuery(R"(
+                    --!syntax_v1
+
+                    SELECT * FROM `/Root/KeyValue` WHERE Key = 1u OR Key = 2u;
+                )", TTxControl::BeginTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([
+                    [[1u];["One"]];
+                    [[2u];["Two"]]
+                ])", FormatResultSetYson(result.GetResultSet(0)));
+                tx1 = result.GetTransaction();
+                UNIT_ASSERT(tx1);
+            }
+
+            {  // tx2: write + commit
+                auto result = session.ExecuteDataQuery(R"(
+                    --!syntax_v1
+
+                    UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES
+                        (1u, "NewValue1");
+                )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            {  // tx1: write + commit
+                auto result = session.ExecuteDataQuery(R"(
+                    --!syntax_v1
+
+                    UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES
+                        (1000u, "Value1000");
+                )", TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+            }
+        }
+
+        auto logRows = SplitString(ss.Str(), "DATA_INTEGRITY");
+        std::string readLock;
+        std::string brokenLock;
+        for (const auto& row : logRows) {
+            // we need to find row with info about read physical tx and extract lock id
+            if (row.Contains("Component: Executer,Type: InputActorResult")) {
+                std::regex lockIdRegex(R"(LockId:\s*(\d+))");
+                std::smatch lockIdMatch;
+                UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract read lock id");
+                readLock = lockIdMatch[1].str();
+            }
+
+            // we need to find row with info about broken locks and extract lock id
+            if (row.Contains("Component: DataShard,Type: Locks")) {
+                std::regex lockIdRegex(R"(BreakLocks:\s*\[(\d+)\s*\])");
+                std::smatch lockIdMatch;
+                UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract broken lock id");
+                brokenLock = lockIdMatch[1].str();
+            } 
+        }
+
+        UNIT_ASSERT_C(!readLock.empty() && readLock == brokenLock, "read lock should be broken");
     }
 }
 

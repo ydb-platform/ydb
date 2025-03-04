@@ -10,7 +10,7 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusionStatus TConstProcessor::DoExecute(const std::shared_ptr<TAccessorsCollection>& resources) const {
+TConclusionStatus TConstProcessor::DoExecute(const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& /*context*/) const {
     AFL_VERIFY(GetInput().empty());
     resources->AddConstantVerified(GetOutputColumnIdOnce(), ScalarConstant);
     return TConclusionStatus::Success();

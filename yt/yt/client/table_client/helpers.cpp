@@ -164,7 +164,7 @@ void YTreeNodeToUnversionedValue(
 } // namespace
 
 TUnversionedOwningRow YsonToSchemafulRow(
-    const TString& yson,
+    TStringBuf yson,
     const TTableSchema& tableSchema,
     bool treatMissingAsNull,
     NYson::EYsonType ysonType,
@@ -172,8 +172,7 @@ TUnversionedOwningRow YsonToSchemafulRow(
 {
     auto nameTable = TNameTable::FromSchema(tableSchema);
 
-    auto rowParts = ConvertTo<THashMap<TString, INodePtr>>(
-        TYsonString(yson, ysonType));
+    auto rowParts = ConvertTo<THashMap<TString, INodePtr>>(TYsonString(yson, ysonType));
 
     TUnversionedOwningRowBuilder rowBuilder;
     auto validateAndAddValue = [&rowBuilder, &validateValues] (const TUnversionedValue& value, const TColumnSchema& column) {
@@ -266,7 +265,7 @@ TUnversionedOwningRow YsonToSchemafulRow(
     return rowBuilder.FinishRow();
 }
 
-TUnversionedOwningRow YsonToSchemalessRow(const TString& valueYson)
+TUnversionedOwningRow YsonToSchemalessRow(TStringBuf valueYson)
 {
     TUnversionedOwningRowBuilder builder;
 
@@ -285,8 +284,8 @@ TUnversionedOwningRow YsonToSchemalessRow(const TString& valueYson)
 
 TVersionedRow YsonToVersionedRow(
     const TRowBufferPtr& rowBuffer,
-    const TString& keyYson,
-    const TString& valueYson,
+    TStringBuf keyYson,
+    TStringBuf valueYson,
     const std::vector<TTimestamp>& deleteTimestamps,
     const std::vector<TTimestamp>& extraWriteTimestamps)
 {
@@ -349,8 +348,8 @@ TVersionedRow YsonToVersionedRow(
 }
 
 TVersionedOwningRow YsonToVersionedRow(
-    const TString& keyYson,
-    const TString& valueYson,
+    TStringBuf keyYson,
+    TStringBuf valueYson,
     const std::vector<TTimestamp>& deleteTimestamps,
     const std::vector<TTimestamp>& extraWriteTimestamps)
 {
@@ -360,7 +359,7 @@ TVersionedOwningRow YsonToVersionedRow(
     return TVersionedOwningRow(row);
 }
 
-TUnversionedOwningRow YsonToKey(const TString& yson)
+TUnversionedOwningRow YsonToKey(TStringBuf yson)
 {
     TUnversionedOwningRowBuilder keyBuilder;
     auto keyParts = ConvertTo<std::vector<INodePtr>>(
@@ -1608,13 +1607,16 @@ TUnversionedValueRangeTruncationResult TruncateUnversionedValues(
     std::vector<TUnversionedValue> truncatedValues;
     truncatedValues.reserve(values.size());
 
+    i64 inputSize = 0;
     int truncatableValueCount = 0;
     i64 remainingSize = options.MaxTotalSize;
     for (const auto& value : values) {
+        auto valueSize = EstimateRowValueSize(value);
+        inputSize += valueSize;
         if (IsStringLikeType(value.Type)) {
             ++truncatableValueCount;
         } else {
-            remainingSize -= EstimateRowValueSize(value);
+            remainingSize -= valueSize;
         }
     }
 
@@ -1657,7 +1659,9 @@ TUnversionedValueRangeTruncationResult TruncateUnversionedValues(
         }
     }
 
-    return {MakeSharedRange(std::move(truncatedValues), rowBuffer), resultSize, clipped};
+    auto sampleSize = options.UseOriginalDataWeightInSamples ? inputSize : resultSize;
+
+    return {MakeSharedRange(std::move(truncatedValues), rowBuffer), sampleSize, clipped};
 }
 
 ////////////////////////////////////////////////////////////////////////////////

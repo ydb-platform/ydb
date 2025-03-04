@@ -247,7 +247,7 @@ public:
                         }
                     }
                 }
-                data.WriteLock = options.ReadOnly() ? false : valueNode["WriteLock"].AsBool();
+                data.WriteLock = valueNode["WriteLock"].AsBool();
                 res.Data.push_back(data);
             }
 

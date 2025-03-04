@@ -431,8 +431,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_C(getOutOfSpace, "Successfully inserted " << rowsPerBatch << " x " << batchCount << " lines, each of size " << dataTextSize << "bytes");
     }
 
-    Y_UNIT_TEST(TooBigQuery) {
+    Y_UNIT_TEST_TWIN(TooBigQuery, useSink) {
         auto app = NKikimrConfig::TAppConfig();
+        app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
         app.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(5).MilliSeconds());
 
@@ -468,8 +469,12 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         //UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NKikimrIssues::TIssuesIds::SHARD_PROGRAM_SIZE_EXCEEDED));
+        if (useSink) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NKikimrIssues::TIssuesIds::SHARD_PROGRAM_SIZE_EXCEEDED));
+        }
     }
 
     Y_UNIT_TEST(BigParameter) {
@@ -522,8 +527,10 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(TooBigKey) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(TooBigKey, useSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -543,10 +550,15 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
-            [] (const auto& issue) {
-                return issue.GetMessage().contains("exceeds limit");
-        }));
+        UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
+            [&](const auto& issue) {
+                if (useSink) {
+                    return issue.GetMessage().contains("Row key size of")
+                        && issue.GetMessage().contains("bytes is larger than the allowed threshold");
+                } else {
+                    return issue.GetMessage().contains("exceeds limit");
+                }
+        }), result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(TooBigColumn) {
@@ -700,8 +712,10 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         }
     }
 
-    Y_UNIT_TEST(CancelAfterRwTx) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(CancelAfterRwTx, useSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        TKikimrRunner kikimr(appConfig);
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
         {
@@ -762,9 +776,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/EightShard");
     }
 
-    void DoCancelAfterRo(bool follower, bool streamLookup, bool dependedRead) {
+    void DoCancelAfterRo(bool follower, bool dependedRead) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(streamLookup);
 
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
@@ -879,23 +892,15 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
     Y_UNIT_TEST(CancelAfterRoTx) {
         // false, false has no sense since we use TEvRead to read without followers
-        DoCancelAfterRo(false, true, false);
-    }
-
-    Y_UNIT_TEST(CancelAfterRoTxWithFollowerLegacy) {
-        DoCancelAfterRo(true, false, false);
-    }
-
-    Y_UNIT_TEST(CancelAfterRoTxWithFollowerLegacyDependedRead) {
-        DoCancelAfterRo(true, false, true);
+        DoCancelAfterRo(false, false);
     }
 
     Y_UNIT_TEST(CancelAfterRoTxWithFollowerStreamLookup) {
-        DoCancelAfterRo(true, true, false);
+        DoCancelAfterRo(true, false);
     }
 
     Y_UNIT_TEST(CancelAfterRoTxWithFollowerStreamLookupDepededRead) {
-        DoCancelAfterRo(true, true, true);
+        DoCancelAfterRo(true, true);
     }
 
     Y_UNIT_TEST(QueryExecTimeout) {

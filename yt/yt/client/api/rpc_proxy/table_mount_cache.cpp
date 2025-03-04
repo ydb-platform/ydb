@@ -103,8 +103,8 @@ private:
                     auto indexInfo = TIndexInfo{
                         .TableId = FromProto<NObjectClient::TObjectId>(protoIndexInfo.index_table_id()),
                         .Kind = FromProto<ESecondaryIndexKind>(protoIndexInfo.index_kind()),
-                        .Predicate = YT_PROTO_OPTIONAL(protoIndexInfo, predicate),
-                        .UnfoldedColumn = YT_PROTO_OPTIONAL(protoIndexInfo, unfolded_column),
+                        .Predicate = YT_OPTIONAL_FROM_PROTO(protoIndexInfo, predicate),
+                        .UnfoldedColumn = YT_OPTIONAL_FROM_PROTO(protoIndexInfo, unfolded_column),
                         .Correspondence = protoIndexInfo.has_index_correspondence()
                             ? FromProto<ETableToIndexCorrespondence>(protoIndexInfo.index_correspondence())
                             : ETableToIndexCorrespondence::Unknown,

@@ -125,6 +125,7 @@ void SetupAuthAccessEnvironment(TTestEnv& env) {
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
     env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
     env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("user1rootadmin");
+    env.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableDatabaseAdmin(true);
     env.GetClient().SetSecurityToken("root@builtin");
     CreateTenantsAndTables(env, true);
 
@@ -150,7 +151,7 @@ void SetupAuthAccessEnvironment(TTestEnv& env) {
 }
 
 void CheckAuthAdministratorAccessIsRequired(TScanQueryPartIterator& it) {
-    NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, 
+    NKqp::StreamResultToYson(it, false, EStatus::UNAUTHORIZED, 
         "Administrator access is required");
 }
 
@@ -2408,19 +2409,18 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
             }
 
-            // TODO: make it work
-            // {
-            //     auto it = client.StreamExecuteScanQuery(R"(
-            //         SELECT Sid
-            //         FROM `Root/Tenant1/.sys/auth_users`
-            //     )").GetValueSync();
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant1/.sys/auth_users`
+                )").GetValueSync();
 
-            //     auto expected = R"([
-            //         [["user3"]];
-            //         [["user4"]];
-            //     ])";
-            //     NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-            // }
+                auto expected = R"([
+                    [["user3"]];
+                    [["user4"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
 
             {
                 auto it = client.StreamExecuteScanQuery(R"(
@@ -2804,19 +2804,18 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 CheckAuthAdministratorAccessIsRequired(it);
             }
 
-            // TODO: make it work
-            // {
-            //     auto it = client.StreamExecuteScanQuery(R"(
-            //         SELECT Sid
-            //         FROM `Root/Tenant1/.sys/auth_groups`
-            //     )").GetValueSync();
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant1/.sys/auth_groups`
+                )").GetValueSync();
 
-            //     auto expected = R"([
-            //         [["group3"]];
-            //         [["group4"]];
-            //     ])";
-            //     NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-            // }
+                auto expected = R"([
+                    [["group3"]];
+                    [["group4"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
 
             {
                 auto it = client.StreamExecuteScanQuery(R"(
@@ -3127,19 +3126,18 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 CheckAuthAdministratorAccessIsRequired(it);
             }
 
-            // TODO: make it work
-            // {
-            //     auto it = client.StreamExecuteScanQuery(R"(
-            //         SELECT *
-            //         FROM `Root/Tenant1/.sys/auth_group_members`
-            //     )").GetValueSync();
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/Tenant1/.sys/auth_group_members`
+                )").GetValueSync();
 
-            //     auto expected = R"([
-            //         [["group3"];["user3"]];
-            //         [["group4"];["user4"]];
-            //     ])";
-            //     NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-            // }
+                auto expected = R"([
+                    [["group3"];["user3"]];
+                    [["group4"];["user4"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
 
             {
                 auto it = client.StreamExecuteScanQuery(R"(

@@ -227,20 +227,17 @@ private:
 }
 
 IComputationNode* WrapReplicate(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 2 || callable.GetInputsCount() == 5, "Expected 2 or 5 args");
+    MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
 
     const auto countType = AS_TYPE(TDataType, callable.GetInput(1));
     MKQL_ENSURE(countType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected ui64");
 
     const auto list = LocateNode(ctx.NodeLocator, callable, 0);
     const auto count = LocateNode(ctx.NodeLocator, callable, 1);
-    NUdf::TSourcePosition pos;
-    if (callable.GetInputsCount() == 5) {
-        const TStringBuf file = AS_VALUE(TDataLiteral, callable.GetInput(2))->AsValue().AsStringRef();
-        const ui32 row = AS_VALUE(TDataLiteral, callable.GetInput(3))->AsValue().Get<ui32>();
-        const ui32 column = AS_VALUE(TDataLiteral, callable.GetInput(4))->AsValue().Get<ui32>();
-        pos = NUdf::TSourcePosition(row, column, file);
-    }
+    const TStringBuf file = AS_VALUE(TDataLiteral, callable.GetInput(2))->AsValue().AsStringRef();
+    const ui32 row = AS_VALUE(TDataLiteral, callable.GetInput(3))->AsValue().Get<ui32>();
+    const ui32 column = AS_VALUE(TDataLiteral, callable.GetInput(4))->AsValue().Get<ui32>();
+    const NUdf::TSourcePosition pos = NUdf::TSourcePosition(row, column, file);
 
     return new TReplicateWrapper(ctx.Mutables, list, count, pos);
 }

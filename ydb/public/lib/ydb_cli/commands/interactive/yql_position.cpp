@@ -38,5 +38,5 @@ namespace NYdb {
         {
         }
 
-    }
-}
+    } // namespace NConsoleClient
+} // namespace NYdb

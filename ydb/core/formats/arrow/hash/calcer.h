@@ -66,6 +66,11 @@ public:
         return ColumnNames;
     }
 
+    static void CalcForAll(
+        const std::shared_ptr<arrow::Array>& array, const ui64 seed, const std::function<void(const ui64 hash, const ui32 idx)>& action);
+    static ui64 CalcSimple(const std::string_view data, const ui64 seed);
+    static ui64 CalcSimple(const void* data, const ui32 dataSize, const ui64 seed);
+    static ui64 CalcForScalar(const std::shared_ptr<arrow::Scalar>& scalar, const ui64 seed);
     static void AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NXX64::TStreamStringHashCalcer& hashCalcer);
     static void AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TStreamStringHashCalcer& hashCalcer);
     static void AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NXX64::TStreamStringHashCalcer_H3& hashCalcer);

@@ -60,21 +60,21 @@ private:
     arrow::Status VisitImpl(const TArray& array) {
         AFL_VERIFY(Started);
         for (ui32 i = 0; i < array.length(); ++i) {
-            const bool columnValue = (bool)array.Value(i);
             const ui32 currentIdx = CursorIdx++;
-            FiltersMerged[currentIdx] = FiltersMerged[currentIdx] && columnValue;
+            FiltersMerged[currentIdx] = FiltersMerged[currentIdx] && !array.IsNull(i) && (bool)array.Value(i);
         }
         AFL_VERIFY(CursorIdx <= FiltersMerged.size());
         return arrow::Status::OK();
     }
 };
 
-TConclusionStatus TFilterProcessor::DoExecute(const std::shared_ptr<TAccessorsCollection>& resources) const {
+TConclusionStatus TFilterProcessor::DoExecute(const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& context) const {
     std::vector<std::shared_ptr<IChunkedArray>> inputColumns;
-    if (ReuseColumns) {
-        inputColumns = resources->GetAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
-    } else {
+    AFL_VERIFY(context.GetColumnsToDrop().size() <= 1)("size", context.GetColumnsToDrop().size());
+    if (context.GetColumnsToDrop().size() && GetInputColumnIdOnce() == context.GetColumnsToDrop().front()) {
         inputColumns = resources->ExtractAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
+    } else {
+        inputColumns = resources->GetAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
     }
     TFilterVisitor filterVisitor(inputColumns.front()->GetRecordsCount());
     for (auto& arr : inputColumns) {

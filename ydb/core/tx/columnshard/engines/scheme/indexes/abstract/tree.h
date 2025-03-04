@@ -1,4 +1,5 @@
 #pragma once
+#include "common.h"
 #include "like.h"
 
 #include <ydb/core/formats/arrow/program/abstract.h>
@@ -11,62 +12,6 @@
 #include <yql/essentials/core/arrow_kernels/request/request.h>
 
 namespace NKikimr::NOlap::NIndexes::NRequest {
-
-enum class ENodeType : ui32 {
-    Aggregation,
-    OriginalColumn,
-    Root,
-    Operation,
-    Constant
-};
-
-class TNodeId {
-private:
-    YDB_READONLY(ui32, ColumnId, 0);
-    YDB_READONLY(ui32, GenerationId, 0);
-    YDB_READONLY(ENodeType, NodeType, ENodeType::OriginalColumn);
-
-    static inline TAtomicCounter Counter = 0;
-
-    TNodeId(const ui32 columnId, const ui32 generationId, const ENodeType type)
-        : ColumnId(columnId)
-        , GenerationId(generationId)
-        , NodeType(type) {
-    }
-
-public:
-    bool operator==(const TNodeId& item) const {
-        return ColumnId == item.ColumnId && GenerationId == item.GenerationId && NodeType == item.NodeType;
-    }
-
-    TNodeId BuildCopy() const {
-        return TNodeId(ColumnId, Counter.Inc(), NodeType);
-    }
-
-    TString ToString() const;
-
-    static TNodeId RootNodeId() {
-        return TNodeId(0, 0, ENodeType::Root);
-    }
-
-    static TNodeId Constant(const ui32 columnId) {
-        return TNodeId(columnId, Counter.Inc(), ENodeType::Constant);
-    }
-
-    static TNodeId Original(const ui32 columnId);
-
-    static TNodeId Aggregation() {
-        return TNodeId(0, Counter.Inc(), ENodeType::Aggregation);
-    }
-
-    static TNodeId Operation(const ui32 columnId) {
-        return TNodeId(columnId, Counter.Inc(), ENodeType::Operation);
-    }
-
-    bool operator<(const TNodeId& item) const {
-        return std::tie(ColumnId, GenerationId, NodeType) < std::tie(item.ColumnId, item.GenerationId, item.NodeType);
-    }
-};
 
 class IRequestNode {
 protected:
@@ -211,16 +156,16 @@ protected:
     }
 
 public:
-    TOriginalColumn(const ui32 columnId)
-        : TBase(TNodeId::Original(columnId)) {
+    TOriginalColumn(const ui32 columnId, const TString& subColumnName = "")
+        : TBase(TNodeId::Original(columnId, subColumnName)) {
     }
 };
 
 class TPackAnd: public IRequestNode {
 private:
     using TBase = IRequestNode;
-    THashMap<ui32, std::shared_ptr<arrow::Scalar>> Equals;
-    THashMap<ui32, TLikeDescription> Likes;
+    THashMap<TOriginalDataAddress, std::shared_ptr<arrow::Scalar>> Equals;
+    THashMap<TOriginalDataAddress, TLikeDescription> Likes;
     bool IsEmptyFlag = false;
 
 protected:
@@ -235,32 +180,32 @@ protected:
 public:
     TPackAnd(const TPackAnd&) = default;
 
-    TPackAnd(const ui32 columnId, const std::shared_ptr<arrow::Scalar>& value)
+    TPackAnd(const TOriginalDataAddress& originalDataAddress, const std::shared_ptr<arrow::Scalar>& value)
         : TBase(TNodeId::Aggregation()) {
-        AddEqual(columnId, value);
+        AddEqual(originalDataAddress, value);
     }
 
-    TPackAnd(const ui32 columnId, const TLikePart& part)
+    TPackAnd(const TOriginalDataAddress& originalDataAddress, const TLikePart& part)
         : TBase(TNodeId::Aggregation()) {
-        AddLike(columnId, TLikeDescription(part));
+        AddLike(originalDataAddress, TLikeDescription(part));
     }
 
-    const THashMap<ui32, std::shared_ptr<arrow::Scalar>>& GetEquals() const {
+    const THashMap<TOriginalDataAddress, std::shared_ptr<arrow::Scalar>>& GetEquals() const {
         return Equals;
     }
 
-    const THashMap<ui32, TLikeDescription>& GetLikes() const {
+    const THashMap<TOriginalDataAddress, TLikeDescription>& GetLikes() const {
         return Likes;
     }
 
     bool IsEmpty() const {
         return IsEmptyFlag;
     }
-    void AddEqual(const ui32 columnId, const std::shared_ptr<arrow::Scalar>& value);
-    void AddLike(const ui32 columnId, const TLikeDescription& value) {
-        auto it = Likes.find(columnId);
+    void AddEqual(const TOriginalDataAddress& originalDataAddress, const std::shared_ptr<arrow::Scalar>& value);
+    void AddLike(const TOriginalDataAddress& originalDataAddress, const TLikeDescription& value) {
+        auto it = Likes.find(originalDataAddress);
         if (it == Likes.end()) {
-            Likes.emplace(columnId, value);
+            Likes.emplace(originalDataAddress, value);
         } else {
             it->second.Merge(value);
         }
@@ -303,6 +248,39 @@ public:
         const ui32 columnId, const NYql::TKernelRequestBuilder::EBinaryOp& operation, const std::vector<std::shared_ptr<IRequestNode>>& args)
         : TBase(TNodeId::Operation(columnId))
         , Operation(operation) {
+        for (auto&& i : args) {
+            Attach(i);
+        }
+    }
+};
+
+class TKernelNode: public IRequestNode {
+private:
+    using TBase = IRequestNode;
+    const TString KernelName;
+
+protected:
+    virtual NJson::TJsonValue DoSerializeToJson() const override {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("type", "operation");
+        result.InsertValue("kernel_name", KernelName);
+        return result;
+    }
+
+    virtual bool DoCollapse() override;
+    virtual std::shared_ptr<IRequestNode> DoCopy() const override {
+        std::vector<std::shared_ptr<IRequestNode>> children;
+        return std::make_shared<TKernelNode>(GetNodeId().GetColumnId(), KernelName, children);
+    }
+
+public:
+    const TString GetKernelName() const {
+        return KernelName;
+    }
+
+    TKernelNode(const ui32 columnId, const TString kernelName, const std::vector<std::shared_ptr<IRequestNode>>& args)
+        : TBase(TNodeId::Operation(columnId))
+        , KernelName(kernelName) {
         for (auto&& i : args) {
             Attach(i);
         }

@@ -227,6 +227,17 @@ TString TViewerPipeClient::GetError(const std::unique_ptr<TEvStateStorage::TEvBo
     }
 }
 
+bool TViewerPipeClient::IsSuccess(const std::unique_ptr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>& ev) {
+    return ev->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess;
+}
+
+TString TViewerPipeClient::GetError(const std::unique_ptr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>& ev) {
+    if (ev->GetRecord().HasReason()) {
+        return ev->GetRecord().GetReason();
+    }
+    return NKikimrScheme::EStatus_Name(ev->GetRecord().GetStatus());
+}
+
 void TViewerPipeClient::RequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
     THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
@@ -590,6 +601,19 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
     auto response = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0 /*flags*/, cookie);
     if (response.Span) {
         response.Span.Attribute("path_id", pathId.ToString());
+    }
+    return response;
+}
+
+TViewerPipeClient::TRequestResponse<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>
+    TViewerPipeClient::MakeRequestSchemeShardDescribe(TTabletId schemeShardId, const TString& path, const NKikimrSchemeOp::TDescribeOptions& options, ui64 cookie) {
+    auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>();
+    request->Record.SetSchemeshardId(schemeShardId);
+    request->Record.SetPath(path);
+    request->Record.MutableOptions()->CopyFrom(options);
+    auto response = MakeRequestToTablet<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(schemeShardId, request.release(), cookie);
+    if (response.Span) {
+        response.Span.Attribute("path", path);
     }
     return response;
 }

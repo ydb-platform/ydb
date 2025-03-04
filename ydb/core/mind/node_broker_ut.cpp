@@ -603,7 +603,7 @@ void AsyncResolveNode(TTestActorRuntime &runtime,
     if (responseTime != TDuration::Max()) {
         deadline = runtime.GetCurrentMonotonicTime() + responseTime;
     }
-    TAutoPtr<TEvInterconnect::TEvResolveNodeLocal> event = new TEvInterconnect::TEvResolveNodeLocal(nodeId, deadline);
+    TAutoPtr<TEvInterconnect::TEvResolveNode> event = new TEvInterconnect::TEvResolveNode(nodeId, deadline);
     runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release()));
 }
 

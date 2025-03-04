@@ -6,22 +6,6 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NActors {
-    // resolve node info
-    // DEPRECATED: use TEvInterconnect::TEvResolveNodeLocal
-    struct TEvInterconnect::TEvResolveNode: public TEventPB<TEvInterconnect::TEvResolveNode, NActorsInterconnect::TEvResolveNode, TEvInterconnect::EvResolveNode> {
-        TEvResolveNode() {
-        }
-
-        TEvResolveNode(ui32 nodeId, TInstant deadline = TInstant::Max()) {
-            Record.SetNodeId(nodeId);
-            if (deadline != TInstant::Max()) {
-                Record.SetDeadline(deadline.GetValue());
-            }
-        }
-
-        TMonotonic GetMonotonicDeadline(const TActorContext& ctx) const;
-    };
-
     // node info
     struct TEvInterconnect::TEvNodeAddress: public TEventPB<TEvInterconnect::TEvNodeAddress, NActorsInterconnect::TEvNodeInfo, TEvInterconnect::EvNodeAddress> {
         TEvNodeAddress() {

@@ -186,7 +186,7 @@ namespace NActors {
         << " }";
     }
 
-    TString TEvInterconnect::TEvResolveNodeLocal::ToString() const {
+    TString TEvInterconnect::TEvResolveNode::ToString() const {
         return TStringBuilder() << ToStringHeader() << " {"
             << " NodeId: " << NodeId
             << " Deadline: " << Deadline

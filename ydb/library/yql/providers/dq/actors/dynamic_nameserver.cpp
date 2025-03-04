@@ -119,8 +119,8 @@ namespace NYql::NDqs {
                     const TActorContext& ctx)
         {
             const TEvInterconnect::TEvResolveNode* request = ev->Get();
-            const ui32 nodeId = request->Record.GetNodeId();
-            const TMonotonic deadline = request->GetMonotonicDeadline(ctx);
+            const ui32 nodeId = request->NodeId;
+            const TMonotonic deadline = request->Deadline;
             auto it = NodeTable.find(nodeId);
 
             if (it == NodeTable.end()) {

@@ -282,15 +282,6 @@ void TDynamicNameserver::RequestEpochUpdate(ui32 domain,
     EpochUpdates[domain] = epoch;
 }
 
-void TDynamicNameserver::ResolveNode(ui32 nodeId, TAutoPtr<IEventHandle> ev, TMonotonic deadline, const TActorContext &ctx) {
-    auto config = AppData(ctx)->DynamicNameserviceConfig;
-
-    if (!config || nodeId <= config->MaxStaticNodeId)
-        ResolveStaticNode(nodeId, ev->Sender, deadline, ctx);
-    else
-        ResolveDynamicNode(nodeId, ev, deadline, ctx);
-}
-
 void TDynamicNameserver::ResolveStaticNode(ui32 nodeId, TActorId sender, TMonotonic deadline, const TActorContext &ctx)
 {
     auto it = StaticConfig->StaticNodeTable.find(nodeId);
@@ -453,20 +444,14 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvResolveNode::TPtr &ev,
                                 const TActorContext &ctx)
 {
     LOG_D("Handle " << ev->Get()->ToString());
-    auto& record = ev->Get()->Record;
-    const ui32 nodeId = record.GetNodeId();
-    const TMonotonic deadline = ev->Get()->GetMonotonicDeadline(ctx);
-
-    ResolveNode(nodeId, ev.Release(), deadline, ctx);
-}
-
-void TDynamicNameserver::Handle(TEvInterconnect::TEvResolveNodeLocal::TPtr &ev, const TActorContext &ctx)
-{
-    LOG_D("Handle " << ev->Get()->ToString());
     const ui32 nodeId = ev->Get()->NodeId;
     const TMonotonic deadline = ev->Get()->Deadline;
+    auto config = AppData(ctx)->DynamicNameserviceConfig;
 
-    ResolveNode(nodeId, ev.Release(), deadline, ctx);
+    if (!config || nodeId <= config->MaxStaticNodeId)
+        ResolveStaticNode(nodeId, ev->Sender, deadline, ctx);
+    else
+        ResolveDynamicNode(nodeId, ev.Release(), deadline, ctx);
 }
 
 void TDynamicNameserver::Handle(TEvResolveAddress::TPtr &ev, const TActorContext &ctx) {

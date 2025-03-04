@@ -140,7 +140,6 @@ namespace NActors {
             EvPoisonSession,
             EvTerminate,
             EvForwardDelayed,
-            EvResolveNodeLocal,
             EvEnd
         };
 
@@ -151,7 +150,6 @@ namespace NActors {
 
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_INTERCONNECT), "expect EvEnd < EventSpaceEnd(TEvents::ES_INTERCONNECT)");
 
-        struct TEvResolveNode;
         struct TEvNodeAddress;
 
         struct TEvConnectNode: public TEventLocal<TEvConnectNode, EvConnectNode> {
@@ -255,11 +253,11 @@ namespace NActors {
             TString ToString() const override;
         };
 
-        struct TEvResolveNodeLocal: public TEventLocal<TEvResolveNodeLocal, EvResolveNodeLocal> {
+        struct TEvResolveNode: public TEventLocal<TEvResolveNode, EvResolveNode> {
             ui32 NodeId;
             TMonotonic Deadline;
 
-            TEvResolveNodeLocal(ui32 nodeId, TMonotonic deadline = TMonotonic::Max())
+            TEvResolveNode(ui32 nodeId, TMonotonic deadline = TMonotonic::Max())
                 : NodeId(nodeId)
                 , Deadline(deadline)
             {

@@ -59,9 +59,9 @@ namespace NActors {
 
             for (auto& pending : PendingRequests) {
                 if (pending.Request && pending.Deadline > now) {
-                    LOG_ERROR_IC("ICN06", "Unknown nodeId: %u", pending.Request->Get()->Record.GetNodeId());
+                    LOG_ERROR_IC("ICN06", "Unknown nodeId: %u", pending.Request->Get()->NodeId);
                     auto reply = new TEvLocalNodeInfo;
-                    reply->NodeId = pending.Request->Get()->Record.GetNodeId();
+                    reply->NodeId = pending.Request->Get()->NodeId;
                     ctx.Send(pending.Request->Sender, reply);
                     pending.Request.Reset();
                     compactionCount++;
@@ -123,7 +123,7 @@ namespace NActors {
                 }
                 PendingRequests.emplace_back(std::move(ev), Min(deadline, ctx.Monotonic() + PendingPeriod));
             } else {
-                LOG_ERROR_IC("ICN07", "Unknown nodeId: %u", ev->Get()->Record.GetNodeId());
+                LOG_ERROR_IC("ICN07", "Unknown nodeId: %u", ev->Get()->NodeId);
                 TInterconnectNameserverBase::HandleMissedNodeId(ev, ctx, deadline);
             }
         }
@@ -144,7 +144,7 @@ namespace NActors {
                     node.Address, node.Host, node.ResolveHost, node.Port, node.Location);
 
                 for (auto& pending : PendingRequests) {
-                    if (pending.Request && pending.Request->Get()->Record.GetNodeId() == node.NodeId) {
+                    if (pending.Request && pending.Request->Get()->NodeId == node.NodeId) {
                         LOG_TRACE_IC("ICN05", "Pending nodeId: %u discovered", node.NodeId);
                         RegisterWithSameMailbox(
                             CreateResolveActor(node.NodeId, NodeTable[node.NodeId], pending.Request->Sender, SelfId(), pending.Deadline));

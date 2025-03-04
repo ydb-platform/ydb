@@ -11,6 +11,8 @@
 #include <ydb/library/grpc/server/actors/logger.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
 using namespace NKikimrRun;
 
 namespace NFqRun {

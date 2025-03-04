@@ -18,7 +18,6 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/cost KqpCost.OlapWriteRow
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
-ydb/core/kqp/ut/olap KqpOlapJson.BloomIndexesVariants
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart

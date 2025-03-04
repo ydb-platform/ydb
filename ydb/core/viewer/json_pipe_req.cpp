@@ -227,6 +227,17 @@ TString TViewerPipeClient::GetError(const std::unique_ptr<TEvStateStorage::TEvBo
     }
 }
 
+bool TViewerPipeClient::IsSuccess(const std::unique_ptr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>& ev) {
+    return ev->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess;
+}
+
+TString TViewerPipeClient::GetError(const std::unique_ptr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>& ev) {
+    if (ev->GetRecord().HasReason()) {
+        return ev->GetRecord().GetReason();
+    }
+    return NKikimrScheme::EStatus_Name(ev->GetRecord().GetStatus());
+}
+
 void TViewerPipeClient::RequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
     THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();

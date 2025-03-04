@@ -63,7 +63,7 @@ db, err := ydb.Open(context.Background(), clusterEndpoint,
 )
 ```
 
-Полный список провайдеров авторизации приведен в [документации ydb-go-sdk](https://github.com/ydb-platform/ydb-go-sdk?tab=readme-ov-file#credentials-) и в разделе [рецептов](../../../recipes/ydb-sdk/auth.md).
+Полный список провайдеров аутентификации приведён в [документации ydb-go-sdk](https://github.com/ydb-platform/ydb-go-sdk?tab=readme-ov-file#credentials-) и в разделе [рецептов](../../../recipes/ydb-sdk/auth.md).
 
 В конце работы приложения для очистки ресурсов следует закрыть драйвер:
 

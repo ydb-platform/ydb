@@ -45,7 +45,7 @@ if err != nil {
 defer db.Close(context.Background())
 ```
 
-Method `ydb.Open` returns a driver instance if successful. The driver performs several services, such as {{ ydb-short-name }} cluster discovery and client-side load balancing.
+The `ydb.Open` method returns a driver instance if successful. The driver performs several services, such as {{ ydb-short-name }} cluster discovery and client-side load balancing.
 
 The ydb.Open method takes two required arguments:
 

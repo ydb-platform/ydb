@@ -36,7 +36,8 @@ public:
             bool rightAny,
             bool isCommutative,
             const TVector<TJoinColumn>& leftJoinKeys,
-            const TVector<TJoinColumn>& rightJoinKeys
+            const TVector<TJoinColumn>& rightJoinKeys,
+            bool stripColumnAliases
         )
             : Left(left)
             , Right(right)
@@ -47,9 +48,12 @@ public:
             , LeftJoinKeys(leftJoinKeys)
             , RightJoinKeys(rightJoinKeys)
             , IsReversed(false)
+            , StripColumnAliases_(stripColumnAliases)
         {
             Y_ASSERT(LeftJoinKeys.size() == RightJoinKeys.size());
-            RemoveAttributeAliases();
+            if (stripColumnAliases) {
+                RemoveAttributeAliases();
+            }
         }
 
         void RemoveAttributeAliases() {
@@ -86,9 +90,10 @@ public:
         // JoinKind may not be commutative, so we need to know which edge is original and which is reversed.
         bool IsReversed;
         int64_t ReversedEdgeId = -1;
+        bool StripColumnAliases_;
 
         TEdge CreateReversed(int64_t reversedEdgeId) const { 
-            auto reversedEdge = TEdge(Right, Left, JoinKind, RightAny, LeftAny, IsCommutative, RightJoinKeys, LeftJoinKeys);
+            auto reversedEdge = TEdge(Right, Left, JoinKind, RightAny, LeftAny, IsCommutative, RightJoinKeys, LeftJoinKeys, StripColumnAliases_);
             reversedEdge.IsReversed = true; reversedEdge.ReversedEdgeId = reversedEdgeId;
             std::swap(reversedEdge.LeftJoinKeysShuffleOrderingIdx, reversedEdge.RightJoinKeysShuffleOrderingIdx);
             return reversedEdge;
@@ -423,8 +428,9 @@ private:
     using THyperedge = typename TJoinHypergraph<TNodeSet>::TEdge;
 
 public:
-    TTransitiveClosureConstructor(TJoinHypergraph<TNodeSet>& graph)
+    TTransitiveClosureConstructor(TJoinHypergraph<TNodeSet>& graph, bool stripColumnAliases)
         : Graph_(graph)
+        , StripColumnAliases_(stripColumnAliases)
     {}
 
     void Construct() {
@@ -505,7 +511,7 @@ private:
                         continue;
                     }
 
-                    Graph_.AddEdge(THyperedge(iNode, jNode, InnerJoin, false, false, true, {joinCondById[i]}, {joinCondById[j]}));
+                    Graph_.AddEdge(THyperedge(iNode, jNode, InnerJoin, false, false, true, {joinCondById[i]}, {joinCondById[j]}, StripColumnAliases_));
                 }
             }
         }
@@ -513,6 +519,7 @@ private:
 
 private:
     TJoinHypergraph<TNodeSet>& Graph_;
+    bool StripColumnAliases_;
 };
 
 /* 

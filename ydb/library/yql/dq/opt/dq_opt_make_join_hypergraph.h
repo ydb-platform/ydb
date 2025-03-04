@@ -40,6 +40,7 @@ inline bool AllJoinsAreInner(const std::shared_ptr<IBaseOptimizerNode>& joinTree
 template <typename TNodeSet>
 typename TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
     const std::shared_ptr<TJoinOptimizerNode>& joinNode,
+    bool stripColumnAliases,
     const TNodeSet& conditionUsedRels,
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet>& subtreeNodes,
     const TVector<TJoinColumn>& leftJoinKeys,
@@ -65,7 +66,7 @@ typename TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
     TNodeSet right = TES & subtreeNodes[joinNode->RightArg];
     
     bool isCommutative = OperatorIsCommutative(joinNode->JoinType) && (joinNode->IsReorderable);
-    return typename TJoinHypergraph<TNodeSet>::TEdge(left, right, joinNode->JoinType, joinNode->LeftAny, joinNode->RightAny, isCommutative, leftJoinKeys, rightJoinKeys);
+    return typename TJoinHypergraph<TNodeSet>::TEdge(left, right, joinNode->JoinType, joinNode->LeftAny, joinNode->RightAny, isCommutative, leftJoinKeys, rightJoinKeys, stripColumnAliases);
 }
 
 /* 
@@ -75,6 +76,7 @@ typename TJoinHypergraph<TNodeSet>::TEdge MakeHyperedge(
 template<typename TNodeSet>
 void AddCycle(
     TJoinHypergraph<TNodeSet>& graph,
+    bool stripColumnAliases,
     const std::shared_ptr<TJoinOptimizerNode>& joinNode,
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet>& subtreeNodes
 ) {
@@ -98,13 +100,14 @@ void AddCycle(
 
         TNodeSet conditionUsedRels{};
         conditionUsedRels = graph.GetNodesByRelNames(GetConditionUsedRelationNames(curGroupLhsJoinKeys, curGroupRhsJoinKeys));
-        graph.AddEdge(MakeHyperedge(joinNode, conditionUsedRels,subtreeNodes, curGroupLhsJoinKeys, curGroupRhsJoinKeys));
+        graph.AddEdge(MakeHyperedge(joinNode, stripColumnAliases, conditionUsedRels,subtreeNodes, curGroupLhsJoinKeys, curGroupRhsJoinKeys));
     }
 }
 
 template<typename TNodeSet>
 void MakeJoinHypergraphRec(
     TJoinHypergraph<TNodeSet>& graph,
+    bool stripColumnAliases,
     const std::shared_ptr<IBaseOptimizerNode>& joinTree,
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet>& subtreeNodes
 ) {
@@ -118,30 +121,31 @@ void MakeJoinHypergraphRec(
 
     auto joinNode = std::static_pointer_cast<TJoinOptimizerNode>(joinTree);
 
-    MakeJoinHypergraphRec(graph, joinNode->LeftArg, subtreeNodes);
-    MakeJoinHypergraphRec(graph, joinNode->RightArg, subtreeNodes);
+    MakeJoinHypergraphRec(graph, stripColumnAliases, joinNode->LeftArg, subtreeNodes);
+    MakeJoinHypergraphRec(graph, stripColumnAliases, joinNode->RightArg, subtreeNodes);
 
     subtreeNodes[joinTree] = subtreeNodes[joinNode->LeftArg] | subtreeNodes[joinNode->RightArg];
 
     /* In case of inner equi-innerjoins we create a cycle, not a hyperedge  */
     if (joinNode->LeftJoinKeys.size() > 1 && AllJoinsAreInner(joinTree)) {
-        AddCycle(graph, joinNode, subtreeNodes);
+        AddCycle(graph, stripColumnAliases, joinNode, subtreeNodes);
         return;
     }
 
     TNodeSet conditionUsedRels{};
     conditionUsedRels = graph.GetNodesByRelNames(GetConditionUsedRelationNames(joinNode->LeftJoinKeys, joinNode->RightJoinKeys));
-    graph.AddEdge(MakeHyperedge<TNodeSet>(joinNode, conditionUsedRels, subtreeNodes, joinNode->LeftJoinKeys, joinNode->RightJoinKeys));
+    graph.AddEdge(MakeHyperedge<TNodeSet>(joinNode, stripColumnAliases, conditionUsedRels, subtreeNodes, joinNode->LeftJoinKeys, joinNode->RightJoinKeys));
 }
 
 template <typename TNodeSet>
 TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
     const std::shared_ptr<IBaseOptimizerNode>& joinTree,
+    bool stripColumnAliases,
     const TOptimizerHints& hints = {}
 ) {
     TJoinHypergraph<TNodeSet> graph{};
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet> subtreeNodes{};
-    MakeJoinHypergraphRec(graph, joinTree, subtreeNodes);
+    MakeJoinHypergraphRec(graph, stripColumnAliases, joinTree, subtreeNodes);
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         YQL_CLOG(TRACE, CoreDq) << "Hypergraph build: ";
@@ -157,7 +161,7 @@ TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
         }
     }
 
-    TTransitiveClosureConstructor transitveClosure(graph);
+    TTransitiveClosureConstructor transitveClosure(graph, stripColumnAliases);
     transitveClosure.Construct();
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {

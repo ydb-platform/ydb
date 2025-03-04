@@ -134,6 +134,30 @@ TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoRespon
     return res;
 }
 
+bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorContext& ctx) {
+    auto sendResponse = [&](ui64 lagSize, bool readingFinished) {
+        auto response = MakeHasDataInfoResponse(lagSize, request.Cookie, readingFinished);
+        ctx.Send(request.Sender, response.Release());
+    };
+
+    if (!IsActive()) {
+        if (request.ReadTimestamp && *request.ReadTimestamp <= EndWriteTimestamp) {
+            sendResponse(GetSizeLag(request.Offset), false);
+        } else if (!request.ReadTimestamp && request.Offset < EndOffset) {
+            sendResponse(GetSizeLag(request.Offset), false);
+        } else {
+            sendResponse(0, true);
+        }
+    } else if (request.Offset < EndOffset) {
+        sendResponse(GetSizeLag(request.Offset), false);
+    } else {
+        return false;
+    }
+
+    return true;
+}
+
+
 void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
     if (!InitDone) {
         return;
@@ -148,22 +172,7 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
     };
 
     for (auto request = HasDataRequests.begin(); request != HasDataRequests.end();) {
-        auto sendResponse = [&](ui64 lagSize, bool readingFinished) {
-            auto response = MakeHasDataInfoResponse(lagSize, request->Cookie, readingFinished);
-            ctx.Send(request->Sender, response.Release());
-        };
-
-        if (!IsActive()) {
-            if (request->ReadTimestamp && *request->ReadTimestamp <= EndWriteTimestamp) {
-                sendResponse(GetSizeLag(request->Offset), false);
-            } else if (!request->ReadTimestamp && request->Offset < EndOffset) {
-                sendResponse(GetSizeLag(request->Offset), false);
-            } else {
-                sendResponse(0, true);
-            }
-        } else if (request->Offset < EndOffset) {
-            sendResponse(GetSizeLag(request->Offset), false);
-        } else {
+        if (!ProcessHasDataRequest(*request, ctx)) {
             break;
         }
 
@@ -198,27 +207,10 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     auto readTimestamp = GetReadFrom(record.GetMaxTimeLagMs(), record.GetReadTimestampMs(), TInstant::Zero(), ctx);
     TActorId sender = ActorIdFromProto(record.GetSender());
 
-    auto sendResponse = [&](ui64 lagSize, bool readingFinished) {
-        auto response = MakeHasDataInfoResponse(lagSize, cookie, readingFinished);
-        ctx.Send(sender, response.Release());
-    };
+    THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
+        record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp};
 
-    if (InitDone && !IsActive()) {
-        if (readTimestamp && *readTimestamp <= EndWriteTimestamp) {
-            sendResponse(GetSizeLag(record.GetOffset()), false);
-        } else if (!readTimestamp && EndOffset > (ui64)record.GetOffset()) {
-            sendResponse(GetSizeLag(record.GetOffset()), false);
-        } else {
-            auto& userInfo = UsersInfoStorage->GetOrCreate(record.GetClientId(), ctx);
-            userInfo.UpdateReadOffset((i64)EndOffset - 1, now, now, now, true);
-
-            sendResponse(0, true);
-        }
-    } else if (InitDone && EndOffset > (ui64)record.GetOffset()) { //already has data, answer right now
-        sendResponse(GetSizeLag(record.GetOffset()), false);
-    } else {
-        THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
-                        record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp};
+    if (InitDone && !ProcessHasDataRequest(req, ctx)) {
         THasDataDeadline dl{TInstant::MilliSeconds(record.GetDeadline()), req};
         auto res = HasDataRequests.insert(req);
         HasDataDeadlines.insert(dl);

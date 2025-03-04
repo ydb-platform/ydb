@@ -288,7 +288,7 @@ const TSharedData* TPrivatePageCache::Lookup(TPageId pageId, TInfo *info) {
         ToLoad.PushBack(page);
         Stats.CurrentCacheMisses++;
 
-        Y_DEBUG_ABORT_IF(info->GetPageType(page->Id) == EPage::FlatIndex, "Flat index pages should have been sticked and preloaded");
+        Y_DEBUG_ABORT_UNLESS(info->GetPageType(page->Id) != EPage::FlatIndex, "Flat index pages should have been sticked and preloaded");
     }
     return nullptr;
 }

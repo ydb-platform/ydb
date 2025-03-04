@@ -414,6 +414,8 @@ enum EServiceKikimr {
     TX_PRIORITIES_QUEUE = 3100;
 
     BSCONFIG = 3200;
+
+    DATASHARD_STATS_BUILDER = 3300;
 };
 
 message TActivity {

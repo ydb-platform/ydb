@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/kqp/runtime
     ydb/core/protos
     ydb/core/sys_view/common
+    ydb/core/tx/schemeshard
     ydb/core/tx/tx_proxy
     ydb/core/ydb_convert
     ydb/library/actors/core

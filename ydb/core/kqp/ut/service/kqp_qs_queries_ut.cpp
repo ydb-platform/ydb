@@ -2788,7 +2788,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT(!result.GetResultSets().empty());
 
             CompareYson(R"([
-                [["test_show_create"];["Table"];["CREATE TABLE `test_show_create` (\n    `Key` Uint32,\n    `Value` Uint32,\n    FAMILY default (COMPRESSION = 'off'),\n    PRIMARY KEY (`Key`)\n)\nWITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);\n"]];
+                [["test_show_create"];["Table"];["CREATE TABLE `test_show_create` (\n    `Key` Uint32,\n    `Value` Uint32,\n    FAMILY default (COMPRESSION = 'off'),\n    PRIMARY KEY (`Key`)\n);\n"]];
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }

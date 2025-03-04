@@ -79,12 +79,12 @@ private:
 
     void Format(const NKikimrSchemeOp::TColumnDescription& columnDesc);
     void Format(const NKikimrSchemeOp::TFamilyDescription& familyDesc);
-    void Format(const NKikimrSchemeOp::TPartitioningPolicy& policy);
+    bool Format(const NKikimrSchemeOp::TPartitioningPolicy& policy, ui32 shardsToCreate, TString& del, bool needWith);
 
     void Format(const Ydb::Table::TableIndex& index);
-    void Format(const Ydb::Table::ExplicitPartitions& explicitPartitions);
-    void Format(const Ydb::Table::ReadReplicasSettings& readReplicasSettings);
-    void Format(const Ydb::Table::TtlSettings& ttlSettings);
+    bool Format(const Ydb::Table::ExplicitPartitions& explicitPartitions, TString& del, bool needWith);
+    bool Format(const Ydb::Table::ReadReplicasSettings& readReplicasSettings, TString& del, bool needWith);
+    bool Format(const Ydb::Table::TtlSettings& ttlSettings, TString& del, bool needWith);
 
     void Format(ui64 expireAfterSeconds, std::optional<TString> storage = std::nullopt);
 

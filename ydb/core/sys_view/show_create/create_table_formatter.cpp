@@ -1,6 +1,7 @@
 #include "create_table_formatter.h"
 
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
@@ -352,17 +353,19 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
     Stream << ")\n";
     Stream << ")";
 
-    Stream << " WITH (\n";
+    TString del = "";
+    bool printed = false;
 
     if (tableDesc.HasPartitionConfig()) {
         if (tableDesc.GetPartitionConfig().HasPartitioningPolicy()) {
-            Format(tableDesc.GetPartitionConfig().GetPartitioningPolicy());
+            ui32 shardsToCreate = NSchemeShard::TTableInfo::ShardsToCreate(tableDesc);
+            printed = Format(tableDesc.GetPartitionConfig().GetPartitioningPolicy(), shardsToCreate, del, !printed);
         }
     }
 
     if (createRequest.partitions_case() == Ydb::Table::CreateTableRequest::kPartitionAtKeys) {
         try {
-            Format(createRequest.partition_at_keys());
+            printed = Format(createRequest.partition_at_keys(), del, !printed);
         } catch (const TFormatFail& ex) {
             return TResult(ex.Status, ex.Error);
         } catch (const yexception& e) {
@@ -373,22 +376,30 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
     FillReadReplicasSettings(createRequest, tableDesc);
 
     if (createRequest.has_read_replicas_settings()) {
-        Format(createRequest.read_replicas_settings());
+        printed = Format(createRequest.read_replicas_settings(), del, !printed);
     }
 
     FillKeyBloomFilter(createRequest, tableDesc);
 
     if (createRequest.key_bloom_filter() == Ydb::FeatureFlag::ENABLED) {
-        Stream << ",\n";
-        Stream << "\tKEY_BLOOM_FILTER = ENABLED";
+        if (!printed) {
+            Stream << " WITH (\n";
+        }
+        Stream << del << "\tKEY_BLOOM_FILTER = ENABLED";
+        printed = true;
+        del = ",\n";
     } else if (createRequest.key_bloom_filter() == Ydb::FeatureFlag::DISABLED) {
-        Stream << ",\n";
-        Stream << "\tKEY_BLOOM_FILTER = DISABLED";
+        if (!printed) {
+            Stream << " WITH (\n";
+        }
+        Stream << del << "\tKEY_BLOOM_FILTER = DISABLED";
+        printed = true;
+        del = ",\n";
     }
 
     if (createRequest.has_ttl_settings()) {
         try {
-            Format(createRequest.ttl_settings());
+            printed = Format(createRequest.ttl_settings(), del, !printed);
         } catch (const TFormatFail& ex) {
             return TResult(ex.Status, ex.Error);
         } catch (const yexception& e) {
@@ -396,7 +407,9 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
         }
     }
 
-    Stream << "\n);";
+    if (printed) {
+        Stream << "\n);";
+    }
 
     TString statement = Stream.Str();
     TString formattedStatement;
@@ -607,70 +620,101 @@ void TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
     Stream << ")";
 }
 
-void TCreateTableFormatter::Format(const NKikimrSchemeOp::TPartitioningPolicy& policy) {
-    TString del = "";
+bool TCreateTableFormatter::Format(const NKikimrSchemeOp::TPartitioningPolicy& policy, ui32 shardsToCreate, TString& del, bool needWith) {
+    bool printed = false;
     if (policy.HasSizeToSplit()) {
+        if (needWith) {
+            Stream << " WITH (\n";
+            needWith = false;
+        }
         if (policy.GetSizeToSplit()) {
-            Stream << "\tAUTO_PARTITIONING_BY_SIZE = ENABLED,\n";
+            Stream << del << "\tAUTO_PARTITIONING_BY_SIZE = ENABLED,\n";
             auto partitionBySize = policy.GetSizeToSplit() / (1 << 20);
-            Stream << "\tAUTO_PARTITIONING_PARTITION_SIZE_MB = " << partitionBySize;
+            Stream << del << "\tAUTO_PARTITIONING_PARTITION_SIZE_MB = " << partitionBySize;
         } else {
-            Stream << "\tAUTO_PARTITIONING_BY_SIZE = DISABLED";
+            Stream << del << "\tAUTO_PARTITIONING_BY_SIZE = DISABLED";
         }
         del = ",\n";
+        printed = true;
     }
 
     if (policy.HasSplitByLoadSettings()) {
-        Stream << del;
+        if (needWith) {
+            Stream << " WITH (\n";
+            needWith = false;
+        }
         if (policy.GetSplitByLoadSettings().GetEnabled()) {
-            Stream << "\tAUTO_PARTITIONING_BY_LOAD = ENABLED";
+            Stream << del << "\tAUTO_PARTITIONING_BY_LOAD = ENABLED";
         } else {
-            Stream << "\tAUTO_PARTITIONING_BY_LOAD = DISABLED";
+            Stream << del << "\tAUTO_PARTITIONING_BY_LOAD = DISABLED";
         }
         del = ",\n";
+        printed = true;
     }
 
-    if (policy.HasMinPartitionsCount() && policy.GetMinPartitionsCount()) {
-        Stream << del;
-        Stream << "\tAUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << policy.GetMinPartitionsCount();
+    if (policy.HasMinPartitionsCount() && policy.GetMinPartitionsCount() && policy.GetMinPartitionsCount() != shardsToCreate) {
+        if (needWith) {
+            Stream << " WITH (\n";
+            needWith = false;
+        }
+        Stream << del << "\tAUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << policy.GetMinPartitionsCount();
         del = ",\n";
+        printed = true;
     }
 
     if (policy.HasMaxPartitionsCount() && policy.GetMaxPartitionsCount()) {
-        Stream << del;
-        Stream << "\tAUTO_PARTITIONING_MAX_PARTITIONS_COUNT = " << policy.GetMaxPartitionsCount();
+        if (needWith) {
+            Stream << " WITH (\n";
+        }
+        Stream << del << "\tAUTO_PARTITIONING_MAX_PARTITIONS_COUNT = " << policy.GetMaxPartitionsCount();
+        del = ",\n";
+        printed = true;
     }
+    return printed;
 }
 
-void TCreateTableFormatter::Format(const Ydb::Table::ExplicitPartitions& explicitPartitions) {
+bool TCreateTableFormatter::Format(const Ydb::Table::ExplicitPartitions& explicitPartitions, TString& del, bool needWith) {
     if (explicitPartitions.split_points().empty()) {
-        return;
+        return false;
     }
-    Stream << ",\n";
-    Stream << "\tPARTITION_AT_KEYS = (";
+    if (needWith) {
+        Stream << " WITH (\n";
+    }
+    Stream << del << "\tPARTITION_AT_KEYS = (";
+    del = ",\n";
     Format(explicitPartitions.split_points(0), true);
     for (int i = 1; i < explicitPartitions.split_points().size(); i++) {
         Stream << ", ";
         Format(explicitPartitions.split_points(i), true);
     }
     Stream << ")";
+    return true;
 }
 
-void TCreateTableFormatter::Format(const Ydb::Table::ReadReplicasSettings& readReplicasSettings) {
+bool TCreateTableFormatter::Format(const Ydb::Table::ReadReplicasSettings& readReplicasSettings, TString& del, bool needWith) {
     switch (readReplicasSettings.settings_case()) {
         case Ydb::Table::ReadReplicasSettings::kPerAzReadReplicasCount:
         {
-            Stream << ",\n\tREAD_REPLICAS_SETTINGS = \"PER_AZ:" << readReplicasSettings.per_az_read_replicas_count() << "\"";
-            break;
+            if (needWith) {
+                Stream << " WITH (\n";
+            }
+            Stream << del << "\tREAD_REPLICAS_SETTINGS = \"PER_AZ:" << readReplicasSettings.per_az_read_replicas_count() << "\"";
+            del = ",\n";
+            return true;
         }
         case Ydb::Table::ReadReplicasSettings::kAnyAzReadReplicasCount:
         {
-            Stream << ",\n\tREAD_REPLICAS_SETTINGS = \"ANY_AZ:" << readReplicasSettings.any_az_read_replicas_count() << "\"";
-            break;
+            if (needWith) {
+                Stream << " WITH (\n";
+            }
+            Stream << del << "\tREAD_REPLICAS_SETTINGS = \"ANY_AZ:" << readReplicasSettings.any_az_read_replicas_count() << "\"";
+            del = ",\n";
+            return true;
         }
         default:
             break;
     }
+    return false;
 }
 
 void TCreateTableFormatter::Format(ui64 expireAfterSeconds, std::optional<TString> storage) {
@@ -688,8 +732,13 @@ void TCreateTableFormatter::Format(ui64 expireAfterSeconds, std::optional<TStrin
     }
 }
 
-void TCreateTableFormatter::Format(const Ydb::Table::TtlSettings& ttlSettings) {
-    Stream << ",\n\tTTL =\n\t  ";
+bool TCreateTableFormatter::Format(const Ydb::Table::TtlSettings& ttlSettings, TString& del, bool needWith) {
+    if (needWith) {
+        Stream << " WITH (\n";
+    }
+    Stream << del;
+    Stream << "\tTTL =\n\t  ";
+    del = ",\n";
     bool first = true;
     std::optional<TString> columnName;
     std::optional<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit> columnUnit;
@@ -801,6 +850,7 @@ void TCreateTableFormatter::Format(const Ydb::Table::TtlSettings& ttlSettings) {
                 ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unsupported unit");
         }
     }
+    return true;
 }
 
 } // NSysView

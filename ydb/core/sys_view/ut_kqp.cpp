@@ -592,8 +592,7 @@ R"(CREATE TABLE `test_show_create` (
     `Value` Bool DEFAULT TRUE,
     FAMILY default (COMPRESSION = 'off'),
     PRIMARY KEY (`Key`)
-)
-WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+);
 )"
         );
 
@@ -634,8 +633,7 @@ R"(CREATE TABLE `test_show_create` (
     `Value` Float DEFAULT 4,
     FAMILY default (COMPRESSION = 'off'),
     PRIMARY KEY (`Key`)
-)
-WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+);
 )"
         );
 
@@ -851,10 +849,7 @@ R"(CREATE TABLE `test_show_create` (
     FAMILY default (COMPRESSION = 'off'),
     PRIMARY KEY (`BoolValue`, `Int32Value`, `Uint32Value`, `Int64Value`, `Uint64Value`, `StringValue`, `Utf8Value`)
 )
-WITH (
-    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5,
-    PARTITION_AT_KEYS = ((FALSE), (FALSE, 1, 2), (TRUE, 1, 1, 1, 1, 'str'), (TRUE, 1, 1, 100, 0, 'str', 'utf'))
-);
+WITH (PARTITION_AT_KEYS = ((FALSE), (FALSE, 1, 2), (TRUE, 1, 1, 1, 1, 'str'), (TRUE, 1, 1, 100, 0, 'str', 'utf')));
 )",
         true);
     }
@@ -920,10 +915,7 @@ R"(CREATE TABLE `test_show_create` (
     FAMILY default (COMPRESSION = 'off'),
     PRIMARY KEY (`Key`)
 )
-WITH (
-    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
-    READ_REPLICAS_SETTINGS = 'ANY_AZ:3'
-);
+WITH (READ_REPLICAS_SETTINGS = 'ANY_AZ:3');
 )"
         );
     }
@@ -965,10 +957,7 @@ R"(CREATE TABLE `test_show_create` (
     FAMILY default (COMPRESSION = 'off'),
     PRIMARY KEY (`Key`)
 )
-WITH (
-    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
-    KEY_BLOOM_FILTER = DISABLED
-);
+WITH (KEY_BLOOM_FILTER = DISABLED);
 )"
         );
     }
@@ -1009,10 +998,7 @@ R"(CREATE TABLE `test_show_create` (
     FAMILY default (COMPRESSION = 'off'),
     PRIMARY KEY (`Key`)
 )
-WITH (
-    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
-    TTL = INTERVAL('PT1H') DELETE ON Key AS SECONDS
-);
+WITH (TTL = INTERVAL('PT1H') DELETE ON Key AS SECONDS);
 )"
         );
     }
@@ -1039,8 +1025,7 @@ R"(CREATE TEMPORARY TABLE `test_show_create` (
     `Value` String,
     FAMILY default (COMPRESSION = 'off'),
     PRIMARY KEY (`Key`)
-)
-WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+);
 )"
         , true);
     }
@@ -1154,8 +1139,7 @@ R"(CREATE TABLE `test_show_create` (
 )
 WITH (
     AUTO_PARTITIONING_BY_SIZE = ENABLED,
-    AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000,
-    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000
 );
 )"
         );
@@ -1196,7 +1180,6 @@ R"(CREATE TABLE `test_show_create` (
 )
 WITH (
     AUTO_PARTITIONING_BY_LOAD = ENABLED,
-    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4,
     PARTITION_AT_KEYS = ((10), (100, '123'), (1000, 'cde')),
     KEY_BLOOM_FILTER = ENABLED,
     TTL = INTERVAL('PT1H') DELETE ON Value4

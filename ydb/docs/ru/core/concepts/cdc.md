@@ -262,9 +262,12 @@ Change Data Capture (CDC) обеспечивает захват изменени
 >```
 
 Параметры топика могут быть изменены с использованием выражения [ALTER TOPIC](../yql/reference/syntax/alter-topic.md). Поддерживаемые действия:
+
 * [изменение параметров](../yql/reference/syntax/alter-topic.md#alter-topic):
+
   * `retention_period`;
   * `retention_storage_mb`;
+
 * [управление читателями](../yql/reference/syntax/alter-topic.md#consumer).
 
 ## Назначение и применение CDC {#best_practices}

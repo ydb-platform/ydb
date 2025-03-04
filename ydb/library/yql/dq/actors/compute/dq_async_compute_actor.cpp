@@ -847,6 +847,10 @@ private:
         auto it = OutputChannelsMap.find(ev->Get()->ChannelId);
         Y_ABORT_UNLESS(it != OutputChannelsMap.end());
         TOutputChannelInfo& outputChannel = it->second;
+        if (!shouldSkipData && !Channels->CanSendChannelData(outputChannel.ChannelId)) { // When channel will be connected (or finish retrying), they will call resume execution.
+            CA_LOG_D("OnOutputChannelData return because Channel can't send channel data, channel: " << outputChannel.ChannelId);
+            return;
+        }
         if (outputChannel.AsyncData) {
             CA_LOG_E("Data was not sent to the output channel in the previous step. Channel: " << outputChannel.ChannelId
             << " Finished: " << outputChannel.Finished

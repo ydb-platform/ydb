@@ -38,6 +38,7 @@ SRCS(
     target_base.cpp
     target_discoverer.cpp
     target_table.cpp
+    target_transfer.cpp
     target_with_stream.cpp
     tenant_resolver.cpp
     tx_assign_tx_id.cpp

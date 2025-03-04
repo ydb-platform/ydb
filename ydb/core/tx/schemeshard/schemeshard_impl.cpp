@@ -2256,7 +2256,7 @@ void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pa
         }
 
         if (DataErasureManager->Remove(pathId)) {
-            db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::WaitingDataErasureTenants::Status>(static_cast<ui32>(TDataErasureManager::EStatus::COMPLETED));
+            db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::WaitingDataErasureTenants::Status>(EDataErasureStatus::COMPLETED);
         }
 
         db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Delete();
@@ -7093,7 +7093,9 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
                 UpdateShardMetrics(p.ShardIdx, it->second);
                 dataErasureShards.push_back(p.ShardIdx);
             }
-            Execute(CreateTxAddEntryToDataErasure(dataErasureShards), this->ActorContext());
+            if (DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
+                Execute(CreateTxAddEntryToDataErasure(dataErasureShards), this->ActorContext());
+            }
         }
 
         std::vector<TShardIdx> cancelDataErasureShards;
@@ -7103,7 +7105,9 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
                 OnShardRemoved(p.ShardIdx);
                 cancelDataErasureShards.push_back(p.ShardIdx);
             }
-            Execute(CreateTxCancelDataErasureShards(cancelDataErasureShards), this->ActorContext());
+            if (DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
+                Execute(CreateTxCancelDataErasureShards(cancelDataErasureShards), this->ActorContext());
+            }
         }
     }
 
@@ -7616,20 +7620,20 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvDataErasureInfoRequest::TPtr& ev, c
     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
         "Handle TEvDataErasureInfoRequest, at schemeshard: " << TabletID());
 
-    TEvSchemeShard::TEvDataErasureInfoResponse::EStatus status = TEvSchemeShard::TEvDataErasureInfoResponse::EStatus::UNSPECIFIED;
+    NKikimrScheme::TEvDataErasureInfoResponse::EStatus status = NKikimrScheme::TEvDataErasureInfoResponse::UNSPECIFIED;
 
     switch (DataErasureManager->GetStatus()) {
-    case TDataErasureManager::EStatus::UNSPECIFIED:
-        status = TEvSchemeShard::TEvDataErasureInfoResponse::EStatus::UNSPECIFIED;
+    case EDataErasureStatus::UNSPECIFIED:
+        status = NKikimrScheme::TEvDataErasureInfoResponse::UNSPECIFIED;
         break;
-    case TDataErasureManager::EStatus::COMPLETED:
-        status = TEvSchemeShard::TEvDataErasureInfoResponse::EStatus::COMPLETED;
+    case EDataErasureStatus::COMPLETED:
+        status = NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED;
         break;
-    case TDataErasureManager::EStatus::IN_PROGRESS:
-        status = TEvSchemeShard::TEvDataErasureInfoResponse::EStatus::IN_PROGRESS_TENANT;
+    case EDataErasureStatus::IN_PROGRESS:
+        status = NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS_TENANT;
         break;
-    case TDataErasureManager::EStatus::IN_PROGRESS_BSC:
-        status = TEvSchemeShard::TEvDataErasureInfoResponse::EStatus::IN_PROGRESS_BSC;
+    case EDataErasureStatus::IN_PROGRESS_BSC:
+        status = NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS_BSC;
         break;
     }
     ctx.Send(ev->Sender, new TEvSchemeShard::TEvDataErasureInfoResponse(DataErasureManager->GetGeneration(), status));

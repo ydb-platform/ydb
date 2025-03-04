@@ -40,45 +40,29 @@ namespace NNodeBroker {
 struct TDynamicConfig;
 using TDynamicConfigPtr = TIntrusivePtr<TDynamicConfig>;
 
-struct TCacheMiss {
-    TCacheMiss(ui32 nodeId, TDynamicConfigPtr config, TAutoPtr<IEventHandle> origRequest, TInstant deadline)
-        : NodeId(nodeId)
-        , Config(config)
-        , OrigRequest(origRequest)
-        , Deadline(deadline)
-    {
-    }
-
+class TCacheMiss {
+public:
+    TCacheMiss(ui32 nodeId, TDynamicConfigPtr config, TAutoPtr<IEventHandle> origRequest, TInstant deadline);
     virtual ~TCacheMiss() = default;
-
-    virtual void OnSuccess(const TActorContext &) {
-        LOG_D("Cache miss succeed"
-            << ": nodeId=" << NodeId);
-    }
-
-    virtual void OnError(const TString &error, const TActorContext &) {
-        LOG_D("Cache miss failed"
-            << ": nodeId=" << NodeId
-            << ", error=" << error);
-    }
-
-    ui32 NodeId;
-    TDynamicConfigPtr Config;
-    TAutoPtr<IEventHandle> OrigRequest;
-    const TInstant Deadline;
-    size_t DeadlineHeapIndex = -1;
+    virtual void OnSuccess(const TActorContext &);
+    virtual void OnError(const TString &error, const TActorContext &);
 
     struct THeapIndexByDeadline {
-        size_t& operator()(TCacheMiss& cacheMiss) const {
-            return cacheMiss.DeadlineHeapIndex;
-        }
+        size_t& operator()(TCacheMiss& cacheMiss) const;
     };
 
     struct TCompareByDeadline {
-        bool operator()(const TCacheMiss& a, const TCacheMiss& b) const {
-            return a.Deadline < b.Deadline;
-        }
+        bool operator()(const TCacheMiss& a, const TCacheMiss& b) const;
     };
+
+public:
+    const ui32 NodeId;
+    const TInstant Deadline;
+
+protected:
+    TDynamicConfigPtr Config;
+    TAutoPtr<IEventHandle> OrigRequest;
+    size_t DeadlineHeapIndex = -1;
 };
 
 struct TDynamicConfig : public TThrRefBase {
@@ -147,8 +131,8 @@ private:
 
 template<typename TCacheMiss>
 class TActorCacheMiss;
-struct TCacheMissGet;
-struct TCacheMissResolve;
+class TCacheMissGet;
+class TCacheMissResolve;
 
 class TDynamicNameserver : public TActorBootstrapped<TDynamicNameserver> {
 public:

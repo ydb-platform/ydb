@@ -17,59 +17,6 @@ static void ResetInterconnectProxyConfig(ui32 nodeId, const TActorContext &ctx)
     ctx.Send(aid, new TEvInterconnect::TEvDisconnect);
 }
 
-struct TCacheMissGet : TCacheMiss {
-    using TBase = TCacheMiss;
-
-    TCacheMissGet(ui32 nodeId, TDynamicConfigPtr config,
-        TAutoPtr<IEventHandle> origRequest, TInstant deadline)
-        : TCacheMiss(nodeId, config, origRequest, deadline)
-    {
-    }
-
-    void OnSuccess(const TActorContext &ctx) override {
-        TBase::OnSuccess(ctx);
-
-        THolder<TEvInterconnect::TEvNodeInfo> reply(new TEvInterconnect::TEvNodeInfo(NodeId));
-        auto it = Config->DynamicNodes.find(NodeId);
-        if (it != Config->DynamicNodes.end())
-            reply->Node = MakeHolder<TEvInterconnect::TNodeInfo>(it->first, it->second.Address,
-                                                         it->second.Host, it->second.ResolveHost,
-                                                         it->second.Port, it->second.Location);
-        ctx.Send(OrigRequest->Sender, reply.Release());
-    }
-
-    void OnError(const TString &error, const TActorContext &ctx) override {
-        TBase::OnError(error, ctx);
-
-        THolder<TEvInterconnect::TEvNodeInfo> reply(new TEvInterconnect::TEvNodeInfo(NodeId));
-        ctx.Send(OrigRequest->Sender, reply.Release());
-    }
-};
-
-struct TCacheMissResolve : TCacheMiss {
-    using TBase = TCacheMiss;
-
-    TCacheMissResolve(ui32 nodeId, TDynamicConfigPtr config,
-        TAutoPtr<IEventHandle> origRequest, TInstant deadline)
-        : TCacheMiss(nodeId, config, origRequest, deadline)
-    {
-    }
-
-    void OnSuccess(const TActorContext &ctx) override {
-        TBase::OnSuccess(ctx);
-
-        ctx.Send(OrigRequest);
-    }
-
-    void OnError(const TString &error, const TActorContext &ctx) override {
-        TBase::OnError(error, ctx);
-
-        auto reply = new TEvLocalNodeInfo;
-        reply->NodeId = NodeId;
-        ctx.Send(OrigRequest->Sender, reply);
-    }
-};
-
 template<typename TCacheMiss>
 class TActorCacheMiss : public TActor<TActorCacheMiss<TCacheMiss>>, public TCacheMiss {
 public:
@@ -160,6 +107,86 @@ private:
 
     TDynamicNameserver* Owner;
     TIntrusivePtr<TListNodesCache> ListNodesCache;
+};
+
+TCacheMiss::TCacheMiss(ui32 nodeId, TDynamicConfigPtr config, TAutoPtr<IEventHandle> origRequest, TInstant deadline)
+    : NodeId(nodeId)
+    , Deadline(deadline)
+    , Config(config)
+    , OrigRequest(origRequest)
+{
+}
+
+void TCacheMiss::OnSuccess(const TActorContext &) {
+    LOG_D("Cache miss succeed"
+        << ": nodeId=" << NodeId);
+}
+
+void TCacheMiss::OnError(const TString &error, const TActorContext &) {
+    LOG_D("Cache miss failed"
+        << ": nodeId=" << NodeId
+        << ", error=" << error);
+}
+
+size_t& TCacheMiss::THeapIndexByDeadline::operator()(TCacheMiss& cacheMiss) const {
+    return cacheMiss.DeadlineHeapIndex;
+}
+
+bool TCacheMiss::TCompareByDeadline::operator()(const TCacheMiss& a, const TCacheMiss& b) const {
+    return a.Deadline < b.Deadline;
+}
+
+class TCacheMissGet : public TCacheMiss {
+public:
+    using TBase = TCacheMiss;
+
+    TCacheMissGet(ui32 nodeId, TDynamicConfigPtr config, TAutoPtr<IEventHandle> origRequest, TInstant deadline)
+        : TCacheMiss(nodeId, config, origRequest, deadline)
+    {
+    }
+
+    void OnSuccess(const TActorContext &ctx) override {
+        TBase::OnSuccess(ctx);
+
+        THolder<TEvInterconnect::TEvNodeInfo> reply(new TEvInterconnect::TEvNodeInfo(NodeId));
+        auto it = Config->DynamicNodes.find(NodeId);
+        if (it != Config->DynamicNodes.end())
+            reply->Node = MakeHolder<TEvInterconnect::TNodeInfo>(it->first, it->second.Address,
+                                                         it->second.Host, it->second.ResolveHost,
+                                                         it->second.Port, it->second.Location);
+        ctx.Send(OrigRequest->Sender, reply.Release());
+    }
+
+    void OnError(const TString &error, const TActorContext &ctx) override {
+        TBase::OnError(error, ctx);
+
+        THolder<TEvInterconnect::TEvNodeInfo> reply(new TEvInterconnect::TEvNodeInfo(NodeId));
+        ctx.Send(OrigRequest->Sender, reply.Release());
+    }
+};
+
+class TCacheMissResolve : public TCacheMiss {
+public:
+    using TBase = TCacheMiss;
+
+    TCacheMissResolve(ui32 nodeId, TDynamicConfigPtr config, TAutoPtr<IEventHandle> origRequest, TInstant deadline)
+        : TCacheMiss(nodeId, config, origRequest, deadline)
+    {
+    }
+
+    void OnSuccess(const TActorContext &ctx) override {
+        TBase::OnSuccess(ctx);
+
+        ctx.Send(OrigRequest);
+    }
+
+    void OnError(const TString &error, const TActorContext &ctx) override {
+        TBase::OnError(error, ctx);
+
+        auto reply = new TEvLocalNodeInfo;
+        reply->NodeId = NodeId;
+        ctx.Send(OrigRequest->Sender, reply);
+    }
 };
 
 void TDynamicNameserver::Bootstrap(const TActorContext &ctx)

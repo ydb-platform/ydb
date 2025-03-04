@@ -247,6 +247,26 @@ Change Data Capture (CDC) обеспечивает захват изменени
 
 Поток изменений может быть добавлен к существующей таблице или удален директивами [ADD CHANGEFEED и DROP CHANGEFEED](../yql/reference/syntax/alter_table/changefeed.md) операции YQL `ALTER TABLE`. При удалении таблицы добавленный к ней поток изменений также будет удален.
 
+## Получение и изменение параметров топика {#topic-options}
+
+Для получения параметров топика можно воспользоваться [SDK](../reference/ydb-sdk/) или [{{ ydb-short-name }} CLI](../reference/ydb-cli/), передав в аргументах путь до потока изменений, который формируется следующим образом:
+
+```txt
+путь/до/строковой_таблицы/имя_потока_изменений
+```
+
+>Например, если у строковой таблицы `table` в директории `my` есть поток изменений с именем `updates_feed`, то путь к нему будет выглядеть так:
+>
+>```text
+>my/table/updates_feed
+>```
+
+Параметры топика могут быть изменены с использованием выражения [ALTER TOPIC](../yql/reference/syntax/alter-topic.md). Поддерживаемые действия:
+* [изменение параметров](../yql/reference/syntax/alter-topic.md#alter-topic):
+  * `retention_period`;
+  * `retention_storage_mb`;
+* [управление читателями](../yql/reference/syntax/alter-topic.md#consumer).
+
 ## Назначение и применение CDC {#best_practices}
 
 Об использовании CDC при разработке приложений смотрите в [рекомендациях](../dev/cdc.md).

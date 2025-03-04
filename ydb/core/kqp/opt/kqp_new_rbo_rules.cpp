@@ -72,13 +72,13 @@ bool TPushFilterRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCont
     }
 
     auto filter = std::static_pointer_cast<TOpFilter>(input);
-    if (filter->Children[0]->Kind != EOperator::Join) {
+    if (filter->GetInput()->Kind != EOperator::Join) {
         return false;
     }
 
-    auto join = std::static_pointer_cast<TOpJoin>(filter->Children[0]);
-    auto leftIUs = join->Children[0]->GetOutputIUs();
-    auto rightIUs = join->Children[1]->GetOutputIUs();
+    auto join = std::static_pointer_cast<TOpJoin>(filter->GetInput());
+    auto leftIUs = join->GetLeftInput()->GetOutputIUs();
+    auto rightIUs = join->GetRightInput()->GetOutputIUs();
 
     // Break the filter into join conditions and other conjuncts
     // Join conditions can be pushed into the join operator and conjucts can either be pushed
@@ -121,6 +121,10 @@ bool TPushFilterRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCont
                 pushRight.push_back(std::get<0>(c));
             }
         }
+    }
+
+    if (!pushLeft.size() && !pushRight.size() && !joinConditions.size()) {
+        return false;
     }
 
     auto joinNode = TKqpOpJoin(join->Node);

@@ -94,7 +94,7 @@ std::shared_ptr<IOperator> TOpRead::Rebuild(TExprContext& ctx) {
     return std::make_shared<TOpRead>(Node);
 }
 
-TOpMap::TOpMap(TExprNode::TPtr node) : IOperator(EOperator::Map, node) {
+TOpMap::TOpMap(TExprNode::TPtr node) : IUnaryOperator(EOperator::Map, node) {
     auto opMap = TKqpOpMap(node);
 
     Children.push_back(ExprNodeToOperator(opMap.Input().Ptr()));
@@ -127,7 +127,7 @@ std::shared_ptr<IOperator> TOpMap::Rebuild(TExprContext& ctx) {
     return std::make_shared<TOpMap>(node);
 }
 
-TOpFilter::TOpFilter(TExprNode::TPtr node) : IOperator(EOperator::Filter, node) {
+TOpFilter::TOpFilter(TExprNode::TPtr node) : IUnaryOperator(EOperator::Filter, node) {
     auto opFilter = TKqpOpFilter(node);
 
     Children.push_back(ExprNodeToOperator(opFilter.Input().Ptr()));
@@ -213,7 +213,7 @@ TConjunctInfo TOpFilter::GetConjuctInfo() const {
 }
 
 
-TOpJoin::TOpJoin(TExprNode::TPtr node) : IOperator(EOperator::Join, node) {
+TOpJoin::TOpJoin(TExprNode::TPtr node) : IBinaryOperator(EOperator::Join, node) {
     auto opJoin = TKqpOpJoin(node);
 
     Children.push_back(ExprNodeToOperator(opJoin.LeftInput().Ptr()));
@@ -240,7 +240,7 @@ std::shared_ptr<IOperator> TOpJoin::Rebuild(TExprContext& ctx) {
     return std::make_shared<TOpJoin>(node);
 }
 
-TOpRoot::TOpRoot(TExprNode::TPtr node) : IOperator(EOperator::Root, node) {
+TOpRoot::TOpRoot(TExprNode::TPtr node) : IUnaryOperator(EOperator::Root, node) {
     auto opRoot = TKqpOpRoot(node);
 
     Children.push_back(ExprNodeToOperator(opRoot.Input().Ptr()));

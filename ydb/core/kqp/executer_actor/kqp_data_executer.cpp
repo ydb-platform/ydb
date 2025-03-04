@@ -244,6 +244,11 @@ public:
                         TxManager->AddLock(lock.GetDataShard(), lock);
                     }
                 }
+
+                if (info.HasBatchMaxKey()) {
+                    ResponseEv->BatchMaxCells = TSerializedCellVec(info.GetBatchMaxKey());
+                    ResponseEv->BatchKeyNames = std::move(info.GetBatchKeyNames());
+                }
             } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
                 NKikimrKqp::TEvKqpOutputActorResultInfo info;
                 YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");

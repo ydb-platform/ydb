@@ -114,7 +114,7 @@ bool IsBatchQuery(const NKqpProto::TKqpPhyQuery& physicalQuery) {
         for (const auto& stage : tx.GetStages()) {
             for (auto& sink : stage.GetSinks()) {
                 auto isFilledSettings = FillTableSinkSettings(sinkSettings, sink);
-                if (isFilledSettings && sinkSettings.GetIsBatch()) {
+                if (isFilledSettings && sinkSettings.HasIsBatch() && sinkSettings.GetIsBatch()) {
                     return true;
                 }
             }

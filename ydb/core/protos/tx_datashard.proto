@@ -131,6 +131,7 @@ message TKqpTransaction {
         optional uint32 Type = 3;
         optional NKikimrProto.TTypeInfo TypeInfo = 4;
         optional bool NotNull = 5;
+        optional bool IsPrimary = 6;
     }
 
     message TColumnWriteMeta {
@@ -231,6 +232,8 @@ message TKqpTransaction {
 
 message TEvKqpInputActorResultInfo {
     repeated NKikimrDataEvents.TLock Locks = 1;
+    optional string BatchMaxKey = 2;
+    optional string BatchKeyNames = 3;
 }
 
 message TKqpReadRangesSourceSettings {

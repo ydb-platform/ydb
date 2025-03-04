@@ -44,7 +44,15 @@ bool HasUpdateIntersection(const NCommon::TWriteTableSettings& settings) {
 TExprNode::TPtr CreateNodeTypeParameter(const TString& name, const TTypeAnnotationNode* colType, TPositionHandle pos,
     TExprContext& ctx) {
     if (colType->GetKind() == ETypeAnnotationKind::Optional) {
-      colType = colType->Cast<TOptionalExprType>()->GetItemType();
+        auto unwrapType = colType->Cast<TOptionalExprType>()->GetItemType();
+        return ctx.NewCallable(pos, "Parameter", {
+            ctx.NewAtom(pos, name),
+            ctx.NewCallable(pos, "OptionalType", {
+                ctx.NewCallable(pos, "DataType", {
+                    ctx.NewAtom(pos, FormatType(unwrapType))
+                })
+            })
+        });
     }
 
     return ctx.NewCallable(pos, "Parameter", {

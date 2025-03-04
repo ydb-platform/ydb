@@ -860,29 +860,6 @@ void TestChangefeedAndTopicDescriptionsIsPreserved(
     restore();
     auto changefeedsAndTopicsAfter = GetChangefeedAndTopicDescriptions(table, session, topicClient);
 
-    auto& [cb, tb] = changefeedsAndTopicsBefore;
-    auto& [ca, ta] = changefeedsAndTopicsAfter;
-
-    Cerr << "cb: " << Endl;
-    for (const auto& x : cb) {
-        Cerr << x << Endl;
-    }
-
-    Cerr << "ca: " << Endl;
-    for (const auto& x : ca) {
-        Cerr << x << Endl;
-    }
-
-    Cerr << "tb: " << Endl;
-    for (const auto& x : tb) {
-        Cerr << x << Endl;
-    }
-
-    Cerr << "ta: " << Endl;
-    for (const auto& x : ta) {
-        Cerr << x << Endl;
-    }
-
     UNIT_ASSERT_EQUAL(changefeedsAndTopicsBefore, changefeedsAndTopicsAfter);
 }
 

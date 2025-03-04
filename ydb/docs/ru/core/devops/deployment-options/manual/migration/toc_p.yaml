@@ -1,0 +1,5 @@
+items:
+- name: На конфигурацию v2
+  href: migration-to-v2.md
+- name: На ручную конфигурацию
+  href: migration-to-manual-configuration.md

@@ -132,8 +132,8 @@ TEST(TUpdateYsonStructTest, Inherited)
 
     auto configurator = TConfigurator<TSpecBase>();
     {
-        TConfigurator<TSpecWithPool> parentRegistrar = configurator;
-        parentRegistrar.Field("pool", &TSpecBase::Pool)
+        TConfigurator<TSpecWithPool> parentConfigurator = configurator;
+        parentConfigurator.Field("pool", &TSpecBase::Pool)
             .Updater(BIND([&] (const std::string& newPool) {
                 updatedPool = newPool;
             }));
@@ -154,8 +154,8 @@ TEST(TUpdateYsonStructTest, Nested)
 
     auto configurator = TConfigurator<TSpecBase>();
     {
-        TConfigurator<TSpecWithPool> parentRegistrar = configurator;
-        parentRegistrar.Field("pool", &TSpecBase::Pool)
+        TConfigurator<TSpecWithPool> parentConfigurator = configurator;
+        parentConfigurator.Field("pool", &TSpecBase::Pool)
             .Updater(BIND([&] (const std::string& newPool) {
                 updatedPool = newPool;
             }));
@@ -174,6 +174,37 @@ TEST(TUpdateYsonStructTest, Nested)
 
     EXPECT_EQ(updatedPool, "new_pool");
     EXPECT_EQ(updatedCommand, "sort");
+}
+
+TEST(TUpdateYsonStructTest, Validate)
+{
+    auto oldSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(TString("{pool=pool;}")));
+    auto longPoolSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(TString("{pool=new_pool;}")));
+    auto shortPoolSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(TString("{pool=p;}")));
+
+    std::string updatedPool;
+
+    auto configurator = TConfigurator<TSpecWithPool>();
+    configurator.Field("pool", &TSpecWithPool::Pool)
+        .Validator(BIND([&] (const std::string& newPool) {
+            THROW_ERROR_EXCEPTION_IF(
+                newPool.size() > 4,
+                "Pool name too long");
+        }))
+        .Updater(BIND([&] (const std::string& newPool) {
+            updatedPool = newPool;
+        }));
+
+    auto sealed = std::move(configurator).Seal();
+
+    EXPECT_THROW_WITH_SUBSTRING(
+        sealed.Validate(oldSpec, longPoolSpec),
+        "Pool name too long");
+
+    sealed.Validate(oldSpec, shortPoolSpec);
+    sealed.Update(oldSpec, shortPoolSpec);
+
+    EXPECT_EQ(updatedPool, "p");
 }
 
 } // namespace

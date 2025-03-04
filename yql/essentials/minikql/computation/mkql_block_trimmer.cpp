@@ -98,6 +98,17 @@ public:
     }
 };
 
+class TSingularBlockTrimmer: public TBlockTrimmerBase {
+public:
+    TSingularBlockTrimmer(arrow::MemoryPool* pool)
+        : TBlockTrimmerBase(pool) {
+    }
+
+    std::shared_ptr<arrow::ArrayData> Trim(const std::shared_ptr<arrow::ArrayData>& array) override {
+        return array;
+    }
+};
+
 template<typename TStringType, bool Nullable>
 class TStringBlockTrimmer : public TBlockTrimmerBase {
     using TOffset = typename TStringType::offset_type;
@@ -217,6 +228,7 @@ struct TTrimmerTraits {
     using TResource = TResourceBlockTrimmer<Nullable>;
     template<typename TTzDate, bool Nullable>
     using TTzDateReader = TTzDateBlockTrimmer<TTzDate, Nullable>;
+    using TSingular = TSingularBlockTrimmer;
 
     constexpr static bool PassType = false;
 
@@ -235,6 +247,10 @@ struct TTrimmerTraits {
         } else {
             return std::make_unique<TResource<false>>(pool);
         }
+    }
+
+    static TResult::TPtr MakeSingular(arrow::MemoryPool* pool) {
+        return std::make_unique<TSingular>(pool);
     }
 
     template<typename TTzDate>

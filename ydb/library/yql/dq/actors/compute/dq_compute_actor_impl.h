@@ -1338,6 +1338,7 @@ protected:
         const THashMap<TString, TString>& secureParams,
         const THashMap<TString, TString>& taskParams,
         const TVector<TString>& readRanges,
+        const TDqTaskRunnerMemoryLimits& memoryLimits,
         IRandomProvider* randomProvider
         )
     {
@@ -1371,7 +1372,8 @@ protected:
                         .MemoryQuotaManager = MemoryLimits.MemoryQuotaManager,
                         .SourceSettings = (!settings.empty() ? settings.at(inputIndex) : nullptr),
                         .Arena = Task.GetArena(),
-                        .TraceId = ComputeActorSpan.GetTraceId()
+                        .TraceId = ComputeActorSpan.GetTraceId(),
+                        .MemoryLimits = memoryLimits
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create source " << inputDesc.GetSource().GetType() << ": " << ex.what();

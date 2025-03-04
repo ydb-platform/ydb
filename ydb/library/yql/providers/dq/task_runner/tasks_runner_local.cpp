@@ -181,6 +181,10 @@ public:
         return {0, ""};
     }
 
+    const NDq::TDqTaskRunnerMemoryLimits& GetMemoryLimits() const override {
+        return Runner->GetMemoryLimits();
+    }
+
 private:
     void UpdateStats() {
         QueryStat.AddTaskRunnerStats(*Runner->GetStats(), Task.GetId(), Task.GetStageId());

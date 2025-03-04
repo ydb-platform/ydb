@@ -467,7 +467,8 @@ private:
             TaskRunner->GetTypeEnv(),
             TaskRunner->GetHolderFactory(),
             Alloc,
-            std::move(inputTransforms)
+            std::move(inputTransforms),
+            TaskRunner->GetMemoryLimits()
         );
 
         Send(

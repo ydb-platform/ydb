@@ -643,6 +643,7 @@ private:
                     taskRunner->GetHolderFactory(),
                     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>{},
                     THashMap<ui64, std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>>{},
+                    taskRunner->GetMemoryLimits(),
                     sensors);
 
                 actorSystem->Send(

@@ -62,6 +62,7 @@ public:
     virtual const THashMap<TString,TString>& GetSecureParams() const = 0;
     virtual const NKikimr::NMiniKQL::TTypeEnvironment& GetTypeEnv() const = 0;
     virtual const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const = 0;
+    virtual const NDq::TDqTaskRunnerMemoryLimits& GetMemoryLimits() const = 0;
 
     // if memoryLimit = Nothing()  then don't set memory limit, use existing one (if any)
     // if memoryLimit = 0          then set unlimited

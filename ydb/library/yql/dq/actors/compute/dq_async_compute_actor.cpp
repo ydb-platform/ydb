@@ -721,6 +721,7 @@ private:
         const auto& readRanges = ev->Get()->ReadRanges;
         const auto& typeEnv = ev->Get()->TypeEnv;
         const auto& holderFactory = ev->Get()->HolderFactory;
+        const auto& memoryLimits = ev->Get()->MemoryLimits;
         if (Stat) {
             Stat->AddCounters2(ev->Get()->Sensors);
         }
@@ -728,7 +729,7 @@ private:
         for (auto& [inputIndex, transform] : this->InputTransformsMap) {
             std::tie(transform.Input, transform.Buffer) = ev->Get()->InputTransforms.at(inputIndex);
         }
-        FillIoMaps(holderFactory, typeEnv, secureParams, taskParams, readRanges, nullptr);
+        FillIoMaps(holderFactory, typeEnv, secureParams, taskParams, readRanges, memoryLimits, nullptr);
 
         {
             // say "Hello" to executer

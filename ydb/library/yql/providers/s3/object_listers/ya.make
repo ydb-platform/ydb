@@ -12,6 +12,7 @@ PEERDIR(
     library/cpp/string_utils/quote
     library/cpp/xml/document
     ydb/library/yql/providers/common/http_gateway
+    ydb/library/yql/providers/s3/common
     ydb/library/yql/providers/s3/credentials
     yql/essentials/utils
     ydb/library/yql/utils/actor_log

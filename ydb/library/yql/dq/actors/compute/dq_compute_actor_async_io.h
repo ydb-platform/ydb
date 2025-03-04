@@ -22,6 +22,7 @@ class TTaskOutput;
 namespace NYql::NDq {
 struct TSourceState;
 struct TSinkState;
+struct TDqTaskRunnerMemoryLimits;
 } // namespace NYql::NDq
 
 namespace NActors {
@@ -262,6 +263,7 @@ public:
         const google::protobuf::Message* SourceSettings = nullptr;  // used only in case if we execute compute actor locally
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;  // Arena for SourceSettings
         NWilson::TTraceId TraceId;
+        const TDqTaskRunnerMemoryLimits& MemoryLimits;
     };
 
     struct TLookupSourceArguments {

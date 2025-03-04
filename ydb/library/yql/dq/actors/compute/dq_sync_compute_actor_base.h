@@ -249,6 +249,7 @@ protected:
             TaskRunner->GetSecureParams(),
             TaskRunner->GetTaskParams(),
             TaskRunner->GetReadRanges(),
+            TaskRunner->GetMemoryLimits(),
             TaskRunner->GetRandomProvider()
         );
     }

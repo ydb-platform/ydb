@@ -188,10 +188,10 @@ struct TEvS3Provider {
     };
 
     struct TEvNextRecordBatch : public NActors::TEventLocal<TEvNextRecordBatch, EvNextRecordBatch> {
-        TEvNextRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch, size_t pathInd, ui64 ingressDelta, TDuration cpuTimeDelta)
-            : Batch(batch), PathIndex(pathInd), IngressDelta(ingressDelta), CpuTimeDelta(cpuTimeDelta) {
+        TEvNextRecordBatch(size_t pathInd, ui64 ingressDelta, TDuration cpuTimeDelta)
+            : PathIndex(pathInd), IngressDelta(ingressDelta), CpuTimeDelta(cpuTimeDelta) {
         }
-        std::shared_ptr<arrow::RecordBatch> Batch;
+        std::vector<std::shared_ptr<arrow::RecordBatch>> SplitedBatch;
         const size_t PathIndex;
         const ui64 IngressDelta;
         const TDuration CpuTimeDelta;

@@ -43,6 +43,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateS3ReadA
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
     const TVector<TString>& readRanges,
+    const TDqTaskRunnerMemoryLimits& memoryLimits,
     const NActors::TActorId& computeActorId,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,

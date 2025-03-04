@@ -437,6 +437,7 @@ public:
     virtual const NKikimr::NMiniKQL::TTypeEnvironment& GetTypeEnv() const = 0;
     virtual const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const = 0;
     virtual NKikimr::NMiniKQL::TScopedAlloc& GetAllocator() const = 0;
+    virtual const TDqTaskRunnerMemoryLimits& GetMemoryLimits() const = 0;
 
     virtual const THashMap<TString, TString>& GetSecureParams() const = 0;
     virtual const THashMap<TString, TString>& GetTaskParams() const = 0;

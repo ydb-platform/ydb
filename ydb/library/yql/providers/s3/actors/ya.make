@@ -22,6 +22,7 @@ PEERDIR(
     contrib/libs/fmt
     contrib/libs/poco/Util
     ydb/library/actors/http
+    ydb/library/formats/arrow
     library/cpp/protobuf/util
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote

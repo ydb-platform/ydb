@@ -14,11 +14,13 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/formats/arrow
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/s3/events
     yql/essentials/public/issue
     yql/essentials/public/issue/protos
     yql/essentials/ast
+    contrib/libs/apache/arrow
 )
 
 IF (CLANG AND NOT WITH_VALGRIND)

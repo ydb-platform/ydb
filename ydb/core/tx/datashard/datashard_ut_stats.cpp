@@ -473,12 +473,12 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         UpsertRows(server, sender);
 
         TBlockEvents<NSharedCache::TEvResult> block(runtime, [&](const NSharedCache::TEvResult::TPtr& event) {
-            return runtime.FindActorName(event->GetRecipientRewrite()) == "DATASHARD_STATS_BUILDERTATS_BUILDER";
+            return runtime.FindActorName(event->GetRecipientRewrite()) == "DATASHARD_STATS_BUILDER";
         });
 
         CompactTable(runtime, shard1, tableId1, false);
 
-        runtime.WaitFor("blocked read", [&]{ return block.size(); });
+        runtime.WaitFor("blocked read", [&]{ return block.size(); }, TDuration::Seconds(10));
 
         block.Stop().Unblock();
 

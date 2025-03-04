@@ -796,7 +796,6 @@ void TestViewDependentOnAnotherViewIsRestored(
 
 std::pair<std::vector<TString>, std::vector<TString>> 
 GetChangefeedAndTopicDescriptions(const char* table, TSession& session, NTopic::TTopicClient& topicClient) {
-    Cerr << "DescribeChangefeeds: " << Endl;
     auto describeChangefeeds = DescribeChangefeeds(session, table);
     const auto vectorSize = describeChangefeeds.size();
 
@@ -808,7 +807,6 @@ GetChangefeedAndTopicDescriptions(const char* table, TSession& session, NTopic::
     std::vector<TString> topicsStr(vectorSize);
     std::transform(describeChangefeeds.begin(), describeChangefeeds.end(), topicsStr.begin(), [table, &topicClient](TChangefeedDescription changefeedDesc){
         TString protoStr;
-        Cerr << "DescribeTopics: " << Endl;
         auto proto = TProtoAccessor::GetProto(
             DescribeTopic(topicClient, TStringBuilder() << table << "/" << changefeedDesc.GetName())
         );
@@ -858,8 +856,6 @@ void TestChangefeedAndTopicDescriptionsIsPreserved(
             DROP TABLE `%s`;
         )", table
     ));
-
-    Y_UNUSED(restore);
 
     restore();
     auto changefeedsAndTopicsAfter = GetChangefeedAndTopicDescriptions(table, session, topicClient);
@@ -2291,8 +2287,6 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
         constexpr const char* table = "/Root/table";
         testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
-
-        testEnv.GetServer()
 
         TestChangefeedAndTopicDescriptionsIsPreserved(
             table,

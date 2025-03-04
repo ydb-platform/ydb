@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(Backup) {
 
     bool ProposeTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody, const ui64 txId) {
         auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
-            txKind, sender, txId, txBody);
+            txKind, sender, txId, txBody, 0, 0);
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
         auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);

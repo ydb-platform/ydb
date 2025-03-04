@@ -19,11 +19,11 @@ namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_STRUCT(TRegisteredFieldDirectory);
+DECLARE_REFCOUNTED_STRUCT(TConfiguredFieldDirectory);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct IFieldRegistrar
+struct IFieldConfigurator
     : public TRefCounted
 {
     virtual void DoValidate(
@@ -37,31 +37,31 @@ struct IFieldRegistrar
         TYsonStructBase* newStruct) const = 0;
 };
 
-DECLARE_REFCOUNTED_STRUCT(IFieldRegistrar);
-DEFINE_REFCOUNTED_TYPE(IFieldRegistrar);
+DECLARE_REFCOUNTED_STRUCT(IFieldConfigurator);
+DEFINE_REFCOUNTED_TYPE(IFieldConfigurator);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TValue>
-class TFieldRegistrar
-    : public IFieldRegistrar
+class TFieldConfigurator
+    : public IFieldConfigurator
 {
 public:
     // Registers validator that accepts old and new values as arguments.
-    TFieldRegistrar& Validator(TCallback<void(const TValue&, const TValue&)> validator);
+    TFieldConfigurator& Validator(TCallback<void(const TValue&, const TValue&)> validator);
 
     // Registers validator that accepts only new value as an argument.
-    TFieldRegistrar& Validator(TCallback<void(const TValue&)> validator);
+    TFieldConfigurator& Validator(TCallback<void(const TValue&)> validator);
 
     // Registers updater that accepts old and new values as arguments.
-    TFieldRegistrar& Updater(TCallback<void(const TValue&, const TValue&)> updater);
+    TFieldConfigurator& Updater(TCallback<void(const TValue&, const TValue&)> updater);
 
     // Registers updater that accepts only new value as an argument.
-    TFieldRegistrar& Updater(TCallback<void(const TValue&)> updater);
+    TFieldConfigurator& Updater(TCallback<void(const TValue&)> updater);
 
     // Registers nested YsonStruct to be updated recursively.
     template <CYsonStructDerived TUnwrappedValue>
-    TFieldRegistrar& NestedUpdater(
+    TFieldConfigurator& NestedUpdater(
         TCallback<TSealedConfigurator<TUnwrappedValue>()> configureCallback);
 
     void DoUpdate(
@@ -106,19 +106,19 @@ template <CYsonStructDerived TStruct>
 class TConfigurator
 {
 public:
-    explicit TConfigurator(NDetail::TRegisteredFieldDirectoryPtr state = {});
+    explicit TConfigurator(NDetail::TConfiguredFieldDirectoryPtr state = {});
 
     template <class TValue>
-    NDetail::TFieldRegistrar<TValue>& Field(const std::string& name, TYsonStructField<TStruct, TValue> field);
+    NDetail::TFieldConfigurator<TValue>& Field(const std::string& name, TYsonStructField<TStruct, TValue> field);
 
-    // Converts to a registrar of a base class
+    // Converts to a configurator of a base class
     template <class TAncestor>
     operator TConfigurator<TAncestor>() const;
 
     TSealedConfigurator<TStruct> Seal() &&;
 
 private:
-    NDetail::TRegisteredFieldDirectoryPtr RegisteredFields_;
+    NDetail::TConfiguredFieldDirectoryPtr ConfiguredFields_;
 
     template <CYsonStructDerived TStructForSealed>
     friend class TSealedConfigurator;
@@ -141,7 +141,7 @@ public:
         TIntrusivePtr<TStruct> newStruct) const;
 
 private:
-    using TFieldRegistrarMethod = void(NDetail::IFieldRegistrar::*)(
+    using TFieldConfiguratorMethod = void(NDetail::IFieldConfigurator::*)(
         IYsonStructParameterPtr parameter,
         TYsonStructBase* oldStruct,
         TYsonStructBase* newStruct) const;
@@ -149,9 +149,9 @@ private:
     void Do(
         TIntrusivePtr<TStruct> oldStruct,
         TIntrusivePtr<TStruct> newStruct,
-        TFieldRegistrarMethod fieldMethod) const;
+        TFieldConfiguratorMethod fieldMethod) const;
 
-    NDetail::TRegisteredFieldDirectoryPtr RegisteredFields_;
+    NDetail::TConfiguredFieldDirectoryPtr ConfiguredFields_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

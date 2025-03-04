@@ -268,8 +268,11 @@ def validate_test(unit, kw):
         if in_autocheck and size == consts.TestSize.Large:
             errors.append("LARGE test must have ya:fat tag")
 
-    if consts.YaTestTags.Privileged in tags and 'container' not in requirements:
-        errors.append("Only tests with 'container' requirement can have 'ya:privileged' tag")
+    if 'container' in requirements and 'porto_layers' in requirements:
+        errors.append("Only one of 'container', 'porto_layers' can be set, not both")
+
+    if consts.YaTestTags.Privileged in tags and 'container' not in requirements and 'porto_layers' not in requirements:
+        errors.append("Only tests with 'container' or 'porto_layers' requirement can have 'ya:privileged' tag")
 
     if size not in size_timeout:
         errors.append(

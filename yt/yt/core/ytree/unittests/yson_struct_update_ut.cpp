@@ -132,8 +132,8 @@ TEST(TUpdateYsonStructTest, Inherited)
 
     auto configurator = TConfigurator<TSpecBase>();
     {
-        TConfigurator<TSpecWithPool> parentRegistrar = configurator;
-        parentRegistrar.Field("pool", &TSpecBase::Pool)
+        TConfigurator<TSpecWithPool> parentConfigurator = configurator;
+        parentConfigurator.Field("pool", &TSpecBase::Pool)
             .Updater(BIND([&] (const std::string& newPool) {
                 updatedPool = newPool;
             }));
@@ -154,8 +154,8 @@ TEST(TUpdateYsonStructTest, Nested)
 
     auto configurator = TConfigurator<TSpecBase>();
     {
-        TConfigurator<TSpecWithPool> parentRegistrar = configurator;
-        parentRegistrar.Field("pool", &TSpecBase::Pool)
+        TConfigurator<TSpecWithPool> parentConfigurator = configurator;
+        parentConfigurator.Field("pool", &TSpecBase::Pool)
             .Updater(BIND([&] (const std::string& newPool) {
                 updatedPool = newPool;
             }));

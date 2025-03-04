@@ -231,6 +231,7 @@ class TestRequirements(Enum):
     Dns = 'dns'
     Kvm = 'kvm'
     Network = 'network'
+    PortoLayers = 'porto_layers'
     Ram = 'ram'
     RamDisk = 'ram_disk'
     SbVault = 'sb_vault'
@@ -450,6 +451,7 @@ class PythonLinterName(Enum):
 class CppLinterName(Enum):
     ClangFormat = "clang_format"
     ClangFormatYT = "clang_format_yt"
+    ClangFormat15 = "clang_format_15"
 
 
 class DefaultLinterConfig(Enum):
@@ -464,6 +466,7 @@ class LinterConfigsValidationRules(Enum):
 
 LINTER_CONFIG_TYPES = {
     CppLinterName.ClangFormat: (".clang-format",),
+    CppLinterName.ClangFormat15: (".clang-format",),
     CppLinterName.ClangFormatYT: (".clang-format",),
     PythonLinterName.Black: ("pyproject.toml",),
     PythonLinterName.Ruff: ("pyproject.toml", "ruff.toml"),

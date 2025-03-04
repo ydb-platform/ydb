@@ -691,6 +691,7 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
         loadedSettings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());
         loadedSettings.DqDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["DqDefaultAuto"].AsBool());
         loadedSettings.BlockDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["BlockDefaultAuto"].AsBool());
+        loadedSettings.IsReplay = true;
         currentSettings = &loadedSettings;
     }
 }

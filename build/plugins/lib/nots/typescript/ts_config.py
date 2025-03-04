@@ -64,7 +64,7 @@ class TsConfig(object):
 
     def read(self):
         try:
-            with open(self.path, encoding="utf-8") as f:
+            with open(self.path) as f:
                 self.data = self.rj.load(f, parse_mode=(self.rj.PM_COMMENTS | self.rj.PM_TRAILING_COMMAS))
 
         except Exception as e:

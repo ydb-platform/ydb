@@ -12,6 +12,7 @@ enum EStatus {
     SUCCESS = 0x00,
     PROTOCOL_ERROR = 0x02,
     INVALID_CREDENTIALS = 0x31,
+    BUSY = 0x33,
 };
 
 enum EProtocolOp {

@@ -128,7 +128,9 @@ namespace NLongTxService {
                     NKikimrTxColumnShard::TX_KIND_COMMIT,
                     SelfId(),
                     TxId,
-                    data.TxBody));
+                    data.TxBody,
+                    0,
+                    0));
             return true;
         }
 

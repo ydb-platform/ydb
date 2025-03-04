@@ -130,7 +130,7 @@ namespace TEvColumnShard {
         TEvProposeTransaction() = default;
 
         TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, const TActorId& source,
-                ui64 txId, TString txBody, const ui32 flags = 0, ui64 subDomainPathId = 0)
+                ui64 txId, TString txBody, const ui32 flags, ui64 subDomainPathId)
         {
             Record.SetTxKind(txKind);
             ActorIdToProto(source, Record.MutableSource());
@@ -143,7 +143,7 @@ namespace TEvColumnShard {
         }
 
         TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, ui64 ssId, const TActorId& source,
-                ui64 txId, TString txBody, const ui32 flags = 0, ui64 subDomainPathId = 0)
+                ui64 txId, TString txBody, const ui32 flags, ui64 subDomainPathId)
             : TEvProposeTransaction(txKind, source, txId, std::move(txBody), flags, subDomainPathId)
         {
 //            Y_ABORT_UNLESS(txKind == NKikimrTxColumnShard::TX_KIND_SCHEMA);
@@ -151,7 +151,7 @@ namespace TEvColumnShard {
         }
 
         TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, ui64 ssId, const TActorId& source,
-            ui64 txId, TString txBody, const TMessageSeqNo& seqNo, const NKikimrSubDomains::TProcessingParams& processingParams, const ui32 flags = 0, ui64 subDomainPathId = 0)
+            ui64 txId, TString txBody, const TMessageSeqNo& seqNo, const NKikimrSubDomains::TProcessingParams& processingParams, const ui32 flags, ui64 subDomainPathId)
             : TEvProposeTransaction(txKind, ssId, source, txId, std::move(txBody), flags, subDomainPathId)
         {
             Record.MutableProcessingParams()->CopyFrom(processingParams);

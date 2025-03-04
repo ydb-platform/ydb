@@ -8,7 +8,17 @@ For profiling memory allocations build kqprun with ya make flag `-D PROFILE_MEMO
 
 * `flame_graph.sh` - script for collecting flame graphs in svg format, usage:
     ```(bash)
-    ./flame_graph.sh [graph collection time in seconds] [use sudo]
+    ./scripts/flame_graph.sh [graph collection time in seconds] [use sudo]
+    ```
+
+* `start_prometheus.sh` - script for starting prometheus web UI, can be used for counters visualisation (kqprun should be runned with flag `-M <monitoring port>`), usage:
+    ```(bash)
+    ./scripts/start_prometheus.sh <monitoring port> <web UI port> [config path]
+    ```
+
+* `start_connector.sh` - script for starting local FQ connector, usage:
+    ```(bash)
+    ./scripts/start_connector.sh <connector port>
     ```
 
 ## Examples

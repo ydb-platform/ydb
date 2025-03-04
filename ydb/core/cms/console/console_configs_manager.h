@@ -223,7 +223,6 @@ private:
 
         if constexpr (IsGetAllConfigsRequest) {
             if (ev->Get()->Record.HasBypassAuth() && ev->Get()->Record.GetBypassAuth()) {
-                Cerr << "TConfigsManager::HandleWithRights bypass auth" << Endl;
                 Handle(ev, ctx);
                 return;
             }

@@ -6648,7 +6648,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );)";
         result = session.ExecuteSchemeQuery(query2).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
     }
 
     Y_UNIT_TEST(CreateExternalDataSourceValidationAuthMethod) {

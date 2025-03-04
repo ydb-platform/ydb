@@ -87,21 +87,4 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
     }); 
 }
 
-bool IsValidExternalDataSourceType(const TString& type) {
-    static TSet<TString> allTypes = {
-        ToString(NYql::EDatabaseType::ObjectStorage),
-        ToString(NYql::EDatabaseType::ClickHouse),
-        ToString(NYql::EDatabaseType::PostgreSQL),
-        ToString(NYql::EDatabaseType::MySQL),
-        ToString(NYql::EDatabaseType::Ydb),
-        ToString(NYql::EDatabaseType::YT),
-        ToString(NYql::EDatabaseType::Greenplum),
-        ToString(NYql::EDatabaseType::MsSQLServer),
-        ToString(NYql::EDatabaseType::Oracle),
-        ToString(NYql::EDatabaseType::Logging),
-        ToString(NYql::EDatabaseType::Solomon)
-    };
-    return allTypes.contains(type);
-}
-
 }

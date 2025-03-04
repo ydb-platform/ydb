@@ -18,5 +18,4 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
                                                          bool enableInfer = false,
                                                          bool allowLocalFiles = false);
 
-bool IsValidExternalDataSourceType(const TString& type);
 }

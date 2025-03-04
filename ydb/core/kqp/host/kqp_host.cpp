@@ -1163,12 +1163,6 @@ public:
             SessionCtx->SetTempTables(std::move(tempTablesState));
         }
 
-        for (const auto& source: queryServiceConfig.GetAvailableExternalDataSources()) {
-            if (!NKikimr::NExternalSource::IsValidExternalDataSourceType(source)) {
-                ythrow yexception() << "wrong AvailableExternalDataSources \"" << source << "\"";
-            }
-        }
-
         if (FederatedQuerySetup) {
             ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory({},
                                                                                  ActorSystem,

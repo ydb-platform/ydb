@@ -2262,6 +2262,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         NTopic::TTopicClient topicClient(testEnv.GetDriver());
 
         constexpr const char* table = "/Root/table";
+        testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
 
         TestChangefeedAndTopicDescriptionsIsPreserved(
             table,

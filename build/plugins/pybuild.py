@@ -725,6 +725,8 @@ def onpy_register(unit, *args):
                 unit.oncflags(['-DPyInit_{}=PyInit_{}'.format(shortname, mangle(name))])
             else:
                 unit.oncflags(['-Dinit{}=init{}'.format(shortname, mangle(name))])
+            # BOOST_PYTHON_MODULE case
+            unit.oncflags(['-Dinit_module_{}=init_module_{}'.format(shortname, mangle(name))])
 
 
 def py_main(unit, arg):

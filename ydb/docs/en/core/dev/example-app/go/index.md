@@ -55,7 +55,7 @@ The `ydb.Open` method takes two mandatory arguments:
 There are also many connection options available that let you override the default settings.
 
 
-By default, anonymous authorization is used. To connect to the {{ ydb-short-name }} cluster using an authorization token, use the following syntax:
+By default, anonymous authentication is used. To connect to the {{ ydb-short-name }} cluster using a token, use the following syntax:
 
 ```go
 db, err := ydb.Open(context.Background(), clusterEndpoint,

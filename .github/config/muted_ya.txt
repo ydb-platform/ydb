@@ -39,7 +39,6 @@ ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplitsWithRestartsWhenWait
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingConsistency64
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingModuloN
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.UpsertWhileSplitTest
-ydb/core/kqp/ut/olap KqpOlapJson.BloomIndexesVariants
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart

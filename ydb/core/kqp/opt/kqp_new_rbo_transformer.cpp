@@ -38,12 +38,15 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
                 joinExpr = opRead;
             } 
             else {
+                auto joinKeys = Build<TDqJoinKeyTupleList>(ctx, node->Pos()).Done();
+
                 joinExpr = Build<TKqpOpJoin>(ctx, node->Pos())
                     .LeftInput(joinExpr)
                     .RightInput(opRead)
                     .LeftLabel(lastAlias)
                     .RightLabel(alias)
                     .JoinKind().Value("Inner").Build()
+                    .JoinKeys(joinKeys)
                     .Done().Ptr();
             }
             lastAlias = alias;
@@ -89,8 +92,10 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
             .Build()
             .Done().Ptr();
 }
-
 }
+
+namespace NKikimr {
+namespace NKqp {
 
 IGraphTransformer::TStatus TKqpPgRewriteTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
@@ -114,16 +119,34 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
 
+    auto status = OptimizeExpr(output, output, [this] (const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+        if (TKqpOpRoot::Match(node.Get())) {
+            auto root = TOpRoot(node);
+            RBO.Optimize(root, ctx);
+            return root.Node;
+        } else {
+            return node;
+        }}, ctx, settings);
+
+    if (status != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+
+    //output = GeneratePhysicalPlan(output);
+
     return IGraphTransformer::TStatus::Ok;
 }
 
 void TKqpNewRBOTransformer::Rewind() {
 }
 
-TAutoPtr<IGraphTransformer> NKikimr::NKqp::CreateKqpPgRewriteTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx) {
+TAutoPtr<IGraphTransformer> CreateKqpPgRewriteTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx) {
     return new TKqpPgRewriteTransformer(kqpCtx, typeCtx);
 }
 
-TAutoPtr<IGraphTransformer> NKikimr::NKqp::CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx) {
-    return new TKqpNewRBOTransformer(kqpCtx, typeCtx);
+TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config) {
+    return new TKqpNewRBOTransformer(kqpCtx, typeCtx, config);
+}
+
+}
 }

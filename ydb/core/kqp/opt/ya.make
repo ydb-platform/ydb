@@ -15,6 +15,9 @@ SRCS(
     kqp_column_statistics_requester.cpp
     kqp_constant_folding_transformer.cpp
     kqp_new_rbo_transformer.cpp
+    kqp_operator.cpp
+    kqp_new_rbo.cpp
+    kqp_new_rbo_rules.cpp
 )
 
 PEERDIR(

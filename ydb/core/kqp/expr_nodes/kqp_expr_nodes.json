@@ -732,7 +732,7 @@
             "Children": [
                 {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 1, "Name": "Alias", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList", "Optional": true}
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -782,7 +782,7 @@
                 {"Index": 2, "Name": "LeftLabel", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "RightLabel", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "JoinKind", "Type":"TCoAtom"},
-                {"Index": 5, "Name": "JoinKeys", "Type": "TDqJoinKeyTupleList", "Optional" : true}
+                {"Index": 5, "Name": "JoinKeys", "Type": "TDqJoinKeyTupleList"}
             ]
         },
         {

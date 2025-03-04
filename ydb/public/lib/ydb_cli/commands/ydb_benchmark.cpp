@@ -515,12 +515,12 @@ void TWorkloadCommandBenchmark::SavePlans(const BenchmarkUtils::TQueryBenchmarkR
     if (res.GetQueryPlan()) {
         {
             TFileOutput out(planFName + "table");
-            TQueryPlanPrinter queryPlanPrinter(EDataFormat::PrettyTable, true, out, 120);
+            TQueryPlanPrinter queryPlanPrinter(EDataFormat::PrettyTable, true, out);
             queryPlanPrinter.Print(res.GetQueryPlan());
         }
         {
             TFileOutput out(planFName + "json");
-            TQueryPlanPrinter queryPlanPrinter(EDataFormat::JsonBase64, true, out, 120);
+            TQueryPlanPrinter queryPlanPrinter(EDataFormat::JsonBase64, true, out);
             queryPlanPrinter.Print(res.GetQueryPlan());
         }
         {

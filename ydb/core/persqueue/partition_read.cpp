@@ -141,9 +141,7 @@ bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorC
     };
 
     if (!IsActive()) {
-        if (request.ReadTimestamp && *request.ReadTimestamp <= EndWriteTimestamp) {
-            sendResponse(GetSizeLag(request.Offset), false);
-        } else if (!request.ReadTimestamp && request.Offset < EndOffset) {
+        if (request.Offset < EndOffset && (!request.ReadTimestamp || *request.ReadTimestamp <= EndWriteTimestamp)) {
             sendResponse(GetSizeLag(request.Offset), false);
         } else {
             sendResponse(0, true);

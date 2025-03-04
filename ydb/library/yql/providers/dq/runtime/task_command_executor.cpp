@@ -751,7 +751,7 @@ public:
             }
             settings.OptLLVM = DqConfiguration->OptLLVM.Get().GetOrElse("");
 
-            Ctx.FuncProvider = TaskTransformFactory(taskParams, Ctx.FuncRegistry);
+            Ctx.FuncProvider = TaskTransformFactory({taskParams, settings.ReadRanges}, Ctx.FuncRegistry);
 
             Y_ABORT_UNLESS(!Alloc);
             Y_ABORT_UNLESS(FunctionRegistry);

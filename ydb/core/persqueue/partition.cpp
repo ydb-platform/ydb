@@ -1278,11 +1278,14 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
             txSourceIds.insert(std::make_pair(s.first, s.second.SeqNo));
         }
         auto inFlightIter = TxInflightMaxSeqNoPerSourceId.find(s.first);
-        if (!inFlightIter.IsEnd() && s.second.MinSeqNo <= inFlightIter->second) {
-            tx.Predicate = false;
-            tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
-            tx.WriteInfoApplied = true;
-            break;
+        if (!inFlightIter.IsEnd()) {
+            Y_ABORT_UNLESS(!inFlightIter->second.empty());
+            if (s.second.MinSeqNo <= *inFlightIter->second.rbegin()) {
+                tx.Predicate = false;
+                tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
+                tx.WriteInfoApplied = true;
+                break;
+            }
         }
 
         auto existing = knownSourceIds.find(s.first);
@@ -1298,7 +1301,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
     if (ret == EProcessResult::Continue && tx.Predicate.GetOrElse(true)) {
         for (const auto& s : txSourceIds) {
             TxAffectedSourcesIds.insert(s.first);
-            TxInflightMaxSeqNoPerSourceId[s.first] = s.second;
+            TxInflightMaxSeqNoPerSourceId[s.first].insert(s.second);
         }
 
         tx.WriteInfoApplied = true;
@@ -2550,6 +2553,19 @@ void TPartition::RollbackTransaction(TSimpleSharedPtr<TTransaction>& t)
 
     if (t->Tx) {
         Y_ABORT_UNLESS(t->Predicate.Defined());
+        if (t->WriteInfo && t->WriteInfoApplied) {
+            for (const auto& [srcId, info] : t->WriteInfo->SrcIdInfo) {
+                auto iter = TxInflightMaxSeqNoPerSourceId.find(srcId);
+                if (!iter.IsEnd()) {
+                    iter->second.erase(info.SeqNo);
+                    if (iter->second.empty()) {
+                        TxInflightMaxSeqNoPerSourceId.erase(iter);
+                    }
+                }
+
+            }
+
+        }
         ChangePlanStepAndTxId(t->Tx->Step, t->Tx->TxId);
     } else if (t->ProposeConfig) {
         Y_ABORT_UNLESS(t->Predicate.Defined());

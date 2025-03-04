@@ -350,7 +350,6 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
         EscapeName(columns[tableDesc.GetKeyColumnIds(i)]->GetName());
     }
     Stream << ")\n";
-
     Stream << ")";
 
     Stream << " WITH (\n";
@@ -658,17 +657,15 @@ void TCreateTableFormatter::Format(const Ydb::Table::ExplicitPartitions& explici
 }
 
 void TCreateTableFormatter::Format(const Ydb::Table::ReadReplicasSettings& readReplicasSettings) {
-    Stream << ",\n";
-    Stream << "\tREAD_REPLICAS_SETTINGS = ";
     switch (readReplicasSettings.settings_case()) {
         case Ydb::Table::ReadReplicasSettings::kPerAzReadReplicasCount:
         {
-            Stream << "\"PER_AZ:" << readReplicasSettings.per_az_read_replicas_count() << "\"";
+            Stream << ",\n\tREAD_REPLICAS_SETTINGS = \"PER_AZ:" << readReplicasSettings.per_az_read_replicas_count() << "\"";
             break;
         }
         case Ydb::Table::ReadReplicasSettings::kAnyAzReadReplicasCount:
         {
-            Stream << "\"ANY_AZ:" << readReplicasSettings.any_az_read_replicas_count() << "\"";
+            Stream << ",\n\tREAD_REPLICAS_SETTINGS = \"ANY_AZ:" << readReplicasSettings.any_az_read_replicas_count() << "\"";
             break;
         }
         default:
@@ -692,8 +689,7 @@ void TCreateTableFormatter::Format(ui64 expireAfterSeconds, std::optional<TStrin
 }
 
 void TCreateTableFormatter::Format(const Ydb::Table::TtlSettings& ttlSettings) {
-    Stream << ",\n";
-    Stream << "\tTTL =\n\t  ";
+    Stream << ",\n\tTTL =\n\t  ";
     bool first = true;
     std::optional<TString> columnName;
     std::optional<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit> columnUnit;

@@ -178,4 +178,19 @@ namespace NActors {
         return {dataCenterId, moduleId, rackId, unitId};
     }
 
+
+    TString TEvInterconnect::TEvGetNode::ToString() const {
+        return TStringBuilder() << ToStringHeader() << " {"
+            << " NodeId: " << NodeId
+            << " Deadline: " << Deadline
+        << " }";
+    }
+
+    TString TEvInterconnect::TEvResolveNodeLocal::ToString() const {
+        return TStringBuilder() << ToStringHeader() << " {"
+            << " NodeId: " << NodeId
+            << " Deadline: " << Deadline
+        << " }";
+    }
+
 } // NActors

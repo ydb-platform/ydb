@@ -7,6 +7,7 @@
 
 namespace NActors {
     // resolve node info
+    // DEPRECATED: use TEvInterconnect::TEvResolveNodeLocal
     struct TEvInterconnect::TEvResolveNode: public TEventPB<TEvInterconnect::TEvResolveNode, NActorsInterconnect::TEvResolveNode, TEvInterconnect::EvResolveNode> {
         TEvResolveNode() {
         }
@@ -17,6 +18,9 @@ namespace NActors {
                 Record.SetDeadline(deadline.GetValue());
             }
         }
+
+        TMonotonic GetMonotonicDeadline(const TActorContext& ctx) const;
+        TString ToString() const override;
     };
 
     // node info

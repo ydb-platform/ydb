@@ -20,6 +20,7 @@ SRCS(
     interconnect.h
     interconnect_handshake.cpp
     interconnect_handshake.h
+    interconnect_impl.cpp
     interconnect_impl.h
     interconnect_mon.cpp
     interconnect_mon.h

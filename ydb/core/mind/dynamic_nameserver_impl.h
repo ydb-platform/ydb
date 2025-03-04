@@ -42,7 +42,7 @@ using TDynamicConfigPtr = TIntrusivePtr<TDynamicConfig>;
 
 class TCacheMiss {
 public:
-    TCacheMiss(ui32 nodeId, TDynamicConfigPtr config, TAutoPtr<IEventHandle> origRequest, TInstant deadline);
+    TCacheMiss(ui32 nodeId, TDynamicConfigPtr config, TAutoPtr<IEventHandle> origRequest, TMonotonic deadline);
     virtual ~TCacheMiss() = default;
     virtual void OnSuccess(const TActorContext &);
     virtual void OnError(const TString &error, const TActorContext &);
@@ -57,7 +57,8 @@ public:
 
 public:
     const ui32 NodeId;
-    const TInstant Deadline;
+    const TMonotonic Deadline;
+    bool NeedScheduleDeadline;
 
 protected:
     TDynamicConfigPtr Config;
@@ -191,6 +192,7 @@ public:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvInterconnect::TEvResolveNode, Handle);
+            HFunc(TEvInterconnect::TEvResolveNodeLocal, Handle);
             HFunc(TEvResolveAddress, Handle);
             HFunc(TEvInterconnect::TEvListNodes, Handle);
             HFunc(TEvInterconnect::TEvGetNode, Handle);
@@ -222,8 +224,9 @@ private:
     void RequestEpochUpdate(ui32 domain,
                             ui32 epoch,
                             const TActorContext &ctx);
-    void ResolveStaticNode(ui32 nodeId, TActorId sender, TInstant deadline, const TActorContext &ctx);
-    void ResolveDynamicNode(ui32 nodeId, TAutoPtr<IEventHandle> ev, TInstant deadline, const TActorContext &ctx);
+    void ResolveNode(ui32 nodeId, TAutoPtr<IEventHandle> ev, TMonotonic deadline, const TActorContext &ctx);
+    void ResolveStaticNode(ui32 nodeId, TActorId sender, TMonotonic deadline, const TActorContext &ctx);
+    void ResolveDynamicNode(ui32 nodeId, TAutoPtr<IEventHandle> ev, TMonotonic deadline, const TActorContext &ctx);
     void SendNodesList(const TActorContext &ctx);
     void PendingRequestAnswered(ui32 domain, const TActorContext &ctx);
     void UpdateState(const NKikimrNodeBroker::TNodesInfo &rec,
@@ -233,6 +236,7 @@ private:
                          const TActorContext &ctx);
 
     void Handle(TEvInterconnect::TEvResolveNode::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvInterconnect::TEvResolveNodeLocal::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvResolveAddress::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvInterconnect::TEvListNodes::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TActorContext &ctx);

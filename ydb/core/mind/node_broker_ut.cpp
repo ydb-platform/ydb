@@ -599,11 +599,11 @@ void AsyncResolveNode(TTestActorRuntime &runtime,
                       ui32 nodeId,
                       TDuration responseTime = TDuration::Max())
 {
-    TInstant deadline = TInstant::Max();
+    TMonotonic deadline = TMonotonic::Max();
     if (responseTime != TDuration::Max()) {
-        deadline = runtime.GetCurrentTime() + responseTime;
+        deadline = runtime.GetCurrentMonotonicTime() + responseTime;
     }
-    TAutoPtr<TEvInterconnect::TEvResolveNode> event = new TEvInterconnect::TEvResolveNode(nodeId, deadline);
+    TAutoPtr<TEvInterconnect::TEvResolveNodeLocal> event = new TEvInterconnect::TEvResolveNodeLocal(nodeId, deadline);
     runtime.Send(new IEventHandle(GetNameserviceActorId(), sender, event.Release()));
 }
 

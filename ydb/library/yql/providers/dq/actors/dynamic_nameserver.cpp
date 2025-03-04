@@ -120,7 +120,7 @@ namespace NYql::NDqs {
         {
             const TEvInterconnect::TEvResolveNode* request = ev->Get();
             const ui32 nodeId = request->Record.GetNodeId();
-            const TInstant deadline = request->Record.HasDeadline() ? TInstant::FromValue(request->Record.GetDeadline()) : TInstant::Max();
+            const TMonotonic deadline = request->GetMonotonicDeadline(ctx);
             auto it = NodeTable.find(nodeId);
 
             if (it == NodeTable.end()) {
@@ -149,7 +149,7 @@ namespace NYql::NDqs {
                                              request->Port,
                                              ev->Sender,
                                              SelfId(),
-                                             TInstant::Max()));
+                                             TMonotonic::Max()));
         }
 
         TVector<NActors::TEvInterconnect::TNodeInfo> GetNodesInfo()

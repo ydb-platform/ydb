@@ -16,9 +16,9 @@ namespace NActors {
     {
         struct TPendingRequest {
             TEvInterconnect::TEvResolveNode::TPtr Request;
-            TInstant Deadline;
+            TMonotonic Deadline;
 
-            TPendingRequest(TEvInterconnect::TEvResolveNode::TPtr request, const TInstant& deadline)
+            TPendingRequest(TEvInterconnect::TEvResolveNode::TPtr request, const TMonotonic& deadline)
                 : Request(request), Deadline(deadline)
             {
             }
@@ -55,7 +55,7 @@ namespace NActors {
 
         void DiscardTimedOutRequests(const TActorContext& ctx, ui32 compactionCount = 0) {
 
-            auto now = Now();
+            auto now = ctx.Monotonic();
 
             for (auto& pending : PendingRequests) {
                 if (pending.Request && pending.Deadline > now) {
@@ -116,12 +116,12 @@ namespace NActors {
 
         void HandleMissedNodeId(TEvInterconnect::TEvResolveNode::TPtr& ev,
                     const TActorContext& ctx,
-                    const TInstant& deadline) {
+                    const TMonotonic& deadline) {
             if (PendingPeriod) {
                 if (PendingRequests.size() == 0) {
                     SchedulePeriodic();
                 }
-                PendingRequests.emplace_back(std::move(ev), Min(deadline, Now() + PendingPeriod));
+                PendingRequests.emplace_back(std::move(ev), Min(deadline, ctx.Monotonic() + PendingPeriod));
             } else {
                 LOG_ERROR_IC("ICN07", "Unknown nodeId: %u", ev->Get()->Record.GetNodeId());
                 TInterconnectNameserverBase::HandleMissedNodeId(ev, ctx, deadline);

@@ -2048,37 +2048,20 @@ function showConfirmationModal(message, onConfirm, onDismiss) {
     });
 }
 
-function enableType(element, node, type, tabletName) {
-    $(element).css('color', 'gray');
 
-    showConfirmationModal(
-        'Are you sure you want to proceed? Allow starting tablets with type <b>' + tabletName + '</b> on node <b>' + node + '</b>.',
-        function () {
-            $.ajax({url:'?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&resettype=' + type});
-        },
-        function () {
-            $(element).css('color', '');
-        }
-    );
+function enableType(element, node, type) {
+    $(element).css('color', 'gray');
+    $.ajax({url:'?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&resettype=' + type});
 }
 
-function disableType(element, node, type, tabletName) {
+function disableType(element, node, type) {
     $(element).css('color', 'gray');
-
-    showConfirmationModal(
-        'Are you sure you want to proceed? Prohibit starting tablets with type <b>' + tabletName + '</b> on node <b>' + node + '</b>.',
-        function () {
-            $.ajax({url:'?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&maxcount=0&changetype=' + type});
-        },
-        function () {
-            $(element).css('color', '');
-        }
-    );
+    $.ajax({url:'?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&maxcount=0&changetype=' + type});
 }
 
 function changeDefaultTabletLimit(button, val, tabletTypeName) {
     let text = '';
-    if (val.endsWith('0')) {
+    if (val.split(':')[1] == '0') {
         text = 'Prohibit starting tablets of type <b>' + tabletTypeName + '</b> on every node';
     } else {
         text = 'Allow starting tablets of type <b>' + tabletTypeName + '</b> on every node';
@@ -2399,8 +2382,6 @@ public:
         TString ToHTML() const {
             auto totalCount = LeaderCount + FollowerCount;
             TStringBuilder str;
-            auto shortTypeName = GetTabletTypeShortName(TabletType);
-            auto longTypeName = TTabletTypes::TypeToStr(TabletType);
             if (MaxCount > 0) {
                 str << "<span class='box' ";
             } else {
@@ -2410,9 +2391,9 @@ public:
                 str << " style='color: red' ";
             }
             str << " onclick='"  << (MaxCount == 0 ? "enableType" : "disableType")
-                << "(this," << NodeId << "," << (ui32)TabletType << ", \"" << longTypeName << "\")";
+                << "(this," << NodeId << "," << (ui32)TabletType << ")";
             str << "'>";
-            str << shortTypeName;
+            str << GetTabletTypeShortName(TabletType);
             str << " ";
             str << LeaderCount;
             if (FollowerCount > 0) {

@@ -1,6 +1,7 @@
 Используйте бинарный файл amd64, если ваш Mac на базе процессора Intel.
 Версия | Дата выпуска | Скачать | Список изменений
 :--- | :--- | :--- | :---
+v.2.20.0 | 05.03.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.20.0/darwin/amd64/ydb) | [См. список](../../../changelog-cli.md#2-20-0)
 v.2.19.0 | 05.02.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.19.0/darwin/amd64/ydb) | [См. список](../../../changelog-cli.md#2-19-0)
 v.2.18.0 | 24.12.24 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.18.0/darwin/amd64/ydb) | [См. список](../../../changelog-cli.md#2-18-0)
 v.2.17.0 | 04.12.24 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.17.0/darwin/amd64/ydb) | [См. список](../../../changelog-cli.md#2-17-0)

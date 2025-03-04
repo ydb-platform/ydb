@@ -46,18 +46,27 @@ namespace NActors {
     struct TActivationContext {
     public:
         TMailbox& Mailbox;
-        TExecutorThread& ExecutorThread;
+        TExecutorThread* ExecutorThread_;
+        IExecutorPool* ExecutorPool_;
         const NHPTimer::STime EventStart;
 
     protected:
+        explicit TActivationContext(TMailbox& mailbox, IExecutorPool& executorPool, NHPTimer::STime eventStart)
+            : Mailbox(mailbox)
+            , ExecutorThread_(nullptr)
+            , ExecutorPool_(&executorPool)
+            , EventStart(eventStart)
+        {}
+
         explicit TActivationContext(TMailbox& mailbox, TExecutorThread& executorThread, NHPTimer::STime eventStart)
             : Mailbox(mailbox)
-            , ExecutorThread(executorThread)
+            , ExecutorThread_(&executorThread)
+            , ExecutorPool_(nullptr)
             , EventStart(eventStart)
-        {
-        }
+        {}
 
     public:
+
         template <ESendingType SendingType = ESendingType::Common>
         static bool Send(TAutoPtr<IEventHandle> ev);
 
@@ -143,6 +152,11 @@ namespace NActors {
     struct TActorContext: public TActivationContext {
         const TActorId SelfID;
         using TEventFlags = IEventHandle::TEventFlags;
+        explicit TActorContext(TMailbox& mailbox, IExecutorPool& executorPool, NHPTimer::STime eventStart, const TActorId& selfID)
+            : TActivationContext(mailbox, executorPool, eventStart)
+            , SelfID(selfID)
+        {
+        }
         explicit TActorContext(TMailbox& mailbox, TExecutorThread& executorThread, NHPTimer::STime eventStart, const TActorId& selfID)
             : TActivationContext(mailbox, executorThread, eventStart)
             , SelfID(selfID)
@@ -205,7 +219,12 @@ namespace NActors {
         void Schedule(TDuration delta, std::unique_ptr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr) const;
 
         TActorContext MakeFor(const TActorId& otherId) const {
-            return TActorContext(Mailbox, ExecutorThread, EventStart, otherId);
+            Y_ASSERT(ExecutorThread_ || ExecutorPool_);
+            if (ExecutorThread_) {
+                return TActorContext(Mailbox, *ExecutorThread_, EventStart, otherId);
+            } else {
+                return TActorContext(Mailbox, *ExecutorPool_, EventStart, otherId);
+            }
         }
 
         // register new actor in ActorSystem on new fresh mailbox.
@@ -799,7 +818,12 @@ namespace NActors {
 
     inline TActorContext TActivationContext::ActorContextFor(TActorId id) {
         auto& tls = *TlsActivationContext;
-        return TActorContext(tls.Mailbox, tls.ExecutorThread, tls.EventStart, id);
+        Y_ASSERT(tls.ExecutorThread_ || tls.ExecutorPool_);
+        if (tls.ExecutorThread_) {
+            return TActorContext(tls.Mailbox, *tls.ExecutorThread_, tls.EventStart, id);
+        } else {
+            return TActorContext(tls.Mailbox, *tls.ExecutorPool_, tls.EventStart, id);
+        }
     }
 
     class TDecorator : public IActorCallback {

@@ -42,7 +42,7 @@ namespace NActors {
         TStackVec<TPoolShortInfo, 8> PoolInfos;
         TStackVec<TPoolThreadRange, 8> PoolThreadRanges;
         TStackVec<i16, 8> PriorityOrder;
-    
+
         TPoolManager(const TVector<TPoolShortInfo> &poolInfos);
     };
 
@@ -131,6 +131,7 @@ namespace NActors {
 
         void ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingWriteCounter) override;
 
+        TActorSystem *GetActorSystem() const override { return ActorSystem; }
         void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) override;
         void Start() override;
         void PrepareStop() override;

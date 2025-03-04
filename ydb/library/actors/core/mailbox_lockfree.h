@@ -5,6 +5,8 @@
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 #include <atomic>
 #include <mutex>
+#include <thread>
+#include "util/string/builder.h"
 
 namespace NActors {
 
@@ -21,8 +23,78 @@ namespace NActors {
         ui64 ElapsedCycles = 0;
     };
 
+    struct TSimpleQueue {
+        std::deque<IEventHandle*> Queue;
+        std::mutex Mutex;
+        std::condition_variable CondVar;
+
+    public:
+
+        TSimpleQueue() {
+        }
+
+        void Push(IEventHandle* ev) {
+            //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " ev# " << (void*)ev << Endl);
+            std::unique_lock<std::mutex> g(Mutex);
+            Queue.push_back(ev);
+            //if (Queue.size() == 1) {
+                CondVar.notify_one();
+            //}
+        }
+
+        void Notify() {
+            //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " " << (void*)this << Endl);
+            Push(nullptr);
+        }
+
+        std::deque<IEventHandle*> PopAll() {
+            //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " " << (void*)this << " wait" << Endl);
+            std::unique_lock<std::mutex> g(Mutex);
+            while (true) {
+                if (Queue.size()) {
+                    std::deque<IEventHandle*> x;
+                    //x.reserve(32);
+                    x.swap(Queue);
+                    // Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " " << (void*)this << " event# " << (void*)x << Endl);
+                    return x;
+                }
+                CondVar.wait_for(g, std::chrono::milliseconds(1000)); //, [&]() {return Queue.size();});
+                // Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " " << (void*)this << " nullptr" << Endl);
+            }
+        }
+
+        IEventHandle* Pop() {
+            //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " " << (void*)this << " wait" << Endl);
+            std::unique_lock<std::mutex> g(Mutex);
+            while (true) {
+                if (Queue.size()) {
+                    auto x = Queue.front();
+                    Queue.pop_front();
+                    // Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " " << (void*)this << " event# " << (void*)x << Endl);
+                    return x;
+                }
+                CondVar.wait_for(g, std::chrono::milliseconds(1000)); //, [&]() {return Queue.size();});
+                // Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " " << (void*)this << " nullptr" << Endl);
+            }
+        }
+
+        size_t Cleanup(bool worker) {
+            std::unique_lock<std::mutex> g(Mutex);
+            size_t x = Queue.size();
+            Queue.clear();
+            g.unlock();
+            if (worker) {
+                Notify();
+            }
+            return x;
+        }
+    };
+
+    class TExecutorThread;
+
     class alignas(64) TMailbox {
     private:
+        // static constexpr uintptr_t MarkerLocked = 0;
         static constexpr uintptr_t MarkerUnlocked = 1;
         static constexpr uintptr_t MarkerFree = 2;
 
@@ -47,7 +119,7 @@ namespace NActors {
 
         static constexpr ui64 ArrayCapacity = 8;
 
-        struct alignas(64) TActorArray {
+        struct alignas(128) TActorArray {
             TActorPair Actors[ArrayCapacity];
         };
 
@@ -70,11 +142,13 @@ namespace NActors {
 
     public:
         bool IsEmpty() const {
+            std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
             return ActorPack == EActorPack::Empty;
         }
 
         template<typename T>
         void ForEach(T&& callback) noexcept {
+            std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
             switch (ActorPack) {
                 case EActorPack::Empty:
                     break;
@@ -98,9 +172,16 @@ namespace NActors {
             }
         }
 
+        void SetExecutorPool(IExecutorPool *executerPool) {
+            ExecutorPool = executerPool;
+        }
+
+        void Work() noexcept;
+
         IActor* FindActor(ui64 localActorId) noexcept;
         void AttachActor(ui64 localActorId, IActor* actor) noexcept;
         IActor* DetachActor(ui64 localActorId) noexcept;
+        void UnregisterActor(ui64 localActorId) noexcept;
 
         IActor* FindAlias(ui64 localActorId) noexcept;
         void AttachAlias(ui64 localActorId, IActor* actor) noexcept;
@@ -112,11 +193,11 @@ namespace NActors {
         std::optional<double> GetElapsedSeconds();
 
         bool CleanupActors() noexcept;
-        bool CleanupEvents() noexcept;
+        size_t CleanupEvents() noexcept;
         bool Cleanup() noexcept;
         ~TMailbox() noexcept;
 
-        TMailbox() = default;
+        TMailbox();
         TMailbox(const TMailbox&) = delete;
         TMailbox& operator=(const TMailbox&) = delete;
 
@@ -196,6 +277,8 @@ namespace NActors {
     public:
         ui32 Hint = 0;
 
+        std::unique_ptr<std::recursive_mutex> ActorsMutex = std::make_unique<std::recursive_mutex>();
+
         EActorPack ActorPack = EActorPack::Empty;
 
         static constexpr TMailboxType::EType Type = TMailboxType::LockFreeIntrusive;
@@ -203,7 +286,7 @@ namespace NActors {
         TActorsInfo ActorsInfo{ .Empty = {} };
 
         // Used by executor run list
-        std::atomic<uintptr_t> NextRunPtr{ 0 };
+        //std::atomic<uintptr_t> NextRunPtr{ 0 };
 
         // An atomic stack of new events in reverse order
         std::atomic<uintptr_t> NextEventPtr{ MarkerFree };
@@ -214,9 +297,17 @@ namespace NActors {
 
         // Used to track how much time until activation
         NHPTimer::STime ScheduleMoment{ 0 };
+
+        std::unique_ptr<TSimpleQueue> SimpleQueue = std::make_unique<TSimpleQueue>();
+
+        std::optional<std::thread> Worker;
+
+        IExecutorPool *ExecutorPool = nullptr;
+
+        TVector<THolder<IActor>> DyingActors;
     };
 
-    static_assert(sizeof(TMailbox) <= 64, "TMailbox is too large");
+    static_assert(sizeof(TMailbox) <= 128, "TMailbox is too large");
 
     class TMailboxTable {
     public:

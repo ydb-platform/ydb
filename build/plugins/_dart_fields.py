@@ -1137,6 +1137,8 @@ class TestFiles:
     # https://a.yandex-team.ru/arcadia/devtools/ya/test/dartfile/__init__.py?rev=r14292146#L10
     KEY2 = 'FILES'
 
+    # XXX: this is a workaround to support very specific linting settings.
+    # Do not use it as a general mechanism!
     _GRUT_PREFIX = 'grut'
     _GRUT_INCLUDE_LINTER_TEST_PATHS = (
         'grut/libs/bigrt/clients',
@@ -1149,6 +1151,36 @@ class TestFiles:
         'grut/libs/bigrt/profiles',
         'grut/libs/bigrt/queue_info_config',
         'grut/libs/shooter',
+    )
+
+    # XXX: this is a workaround to support very specific linting settings.
+    # Do not use it as a general mechanism!
+    _MAPS_RENDERER_PREFIX = 'maps/renderer'
+    _MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS = (
+        'maps/renderer/cartograph',
+        'maps/renderer/denormalization',
+        'maps/renderer/libs/api',
+        'maps/renderer/libs/data_sets/geojson_data_set',
+        'maps/renderer/libs/data_sets/yt_data_set',
+        'maps/renderer/libs/design',
+        'maps/renderer/libs/geosx',
+        'maps/renderer/libs/gltf',
+        'maps/renderer/libs/golden',
+        'maps/renderer/libs/hd3d',
+        'maps/renderer/libs/image',
+        'maps/renderer/libs/kv_storage',
+        'maps/renderer/libs/marking',
+        'maps/renderer/libs/mesh',
+        'maps/renderer/libs/serializers',
+        'maps/renderer/libs/style2',
+        'maps/renderer/libs/style2_layer_bundle',
+        'maps/renderer/libs/terrain',
+        'maps/renderer/libs/vec',
+        'maps/renderer/tilemill',
+        'maps/renderer/tools/fontograph',
+        'maps/renderer/tools/terrain_cli',
+        'maps/renderer/tools/mapcheck2/lib',
+        'maps/renderer/tools/mapcheck2/tests',
     )
 
     @classmethod
@@ -1251,6 +1283,14 @@ class TestFiles:
                     break
             else:
                 raise DartValueError()
+
+        if upath.startswith(cls._MAPS_RENDERER_PREFIX):
+            for path in cls._MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS:
+                if os.path.commonpath([upath, path]) == path:
+                    break
+            else:
+                raise DartValueError()
+
         files_dart = _reference_group_var("ALL_SRCS", consts.STYLE_CPP_ALL_EXTS)
         return {cls.KEY: files_dart, cls.KEY2: files_dart}
 

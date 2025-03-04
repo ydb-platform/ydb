@@ -87,32 +87,6 @@ struct TMetricsInflight {
     ui64 BodySize = 0;
 };
 
-TString GetSolomonUrl(const TString& endpoint, bool useSsl, const TString& project, const TString& cluster, const TString& service, const ::NYql::NSo::NProto::ESolomonClusterType& type) {
-    TUrlBuilder builder((useSsl ? "https://" : "http://") + endpoint);
-
-    switch (type) {
-        case NSo::NProto::ESolomonClusterType::CT_SOLOMON: {
-            builder.AddPathComponent("api");
-            builder.AddPathComponent("v2");
-            builder.AddPathComponent("push");
-            builder.AddUrlParam("project", project);
-            builder.AddUrlParam("cluster", cluster);
-            builder.AddUrlParam("service", service);
-            break;
-        }
-        case NSo::NProto::ESolomonClusterType::CT_MONITORING: {
-            builder.AddPathComponent("monitoring/v2/data/write");
-            builder.AddUrlParam("folderId", cluster);
-            builder.AddUrlParam("service", service);
-            break;
-        }
-        default:
-            Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(type));
-    }
-
-    return builder.Build();
-}
-
 class TDqSolomonWriteActor : public NActors::TActor<TDqSolomonWriteActor>, public IDqComputeActorAsyncOutput {
 public:
     static constexpr char ActorName[] = "DQ_SOLOMON_WRITE_ACTOR";
@@ -553,6 +527,32 @@ void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, ISecuredServ
                 counters,
                 credentialsFactory);
         });
+}
+
+TString GetSolomonUrl(const TString& endpoint, bool useSsl, const TString& project, const TString& cluster, const TString& service, const ::NYql::NSo::NProto::ESolomonClusterType& type) {
+    TUrlBuilder builder((useSsl ? "https://" : "http://") + endpoint);
+
+    switch (type) {
+        case NSo::NProto::ESolomonClusterType::CT_SOLOMON: {
+            builder.AddPathComponent("api");
+            builder.AddPathComponent("v2");
+            builder.AddPathComponent("push");
+            builder.AddUrlParam("project", project);
+            builder.AddUrlParam("cluster", cluster);
+            builder.AddUrlParam("service", service);
+            break;
+        }
+        case NSo::NProto::ESolomonClusterType::CT_MONITORING: {
+            builder.AddPathComponent("monitoring/v2/data/write");
+            builder.AddUrlParam("folderId", cluster);
+            builder.AddUrlParam("service", service);
+            break;
+        }
+        default:
+            Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(type));
+    }
+
+    return builder.Build();
 }
 
 } // namespace NYql::NDq

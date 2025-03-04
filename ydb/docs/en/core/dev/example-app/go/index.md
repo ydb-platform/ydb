@@ -33,7 +33,7 @@ import (
 )
 ```
 
-It is necessary to create {{ ydb-short-name }}-driver for interaction with {{ ydb-short-name }}:
+To interact with {{ ydb-short-name }}, it is necessary to create a {{ ydb-short-name }} driver:
 
 ```go
 db, err := ydb.Open(context.Background(), "grpc://localhost:2136/local")

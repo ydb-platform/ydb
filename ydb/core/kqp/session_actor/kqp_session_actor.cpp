@@ -1470,7 +1470,7 @@ public:
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
-            (!Settings.TableService.GetEnableOltpSink() && QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
+            (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
                 ? GUCSettings : nullptr,
             txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId);
 

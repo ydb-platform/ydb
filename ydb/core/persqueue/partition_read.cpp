@@ -148,12 +148,19 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
     };
 
     for (auto request = HasDataRequests.begin(); request != HasDataRequests.end();) {
-        if (request->Offset < EndOffset && (IsActive() || !request->ReadTimestamp || *request->ReadTimestamp < EndWriteTimestamp)) {
-            auto response = MakeHasDataInfoResponse(GetSizeLag(request->Offset), request->Cookie);
+        auto sendResponse = [&](ui64 lagSize, bool readingFinished) {
+            auto response = MakeHasDataInfoResponse(lagSize, request->Cookie, readingFinished);
             ctx.Send(request->Sender, response.Release());
+        };
+
+        if (request->Offset < EndOffset) {
+            sendResponse(GetSizeLag(request->Offset), false);
         } else if (!IsActive()) {
-            auto response = MakeHasDataInfoResponse(0, request->Cookie, true);
-            ctx.Send(request->Sender, response.Release());
+            if (request->ReadTimestamp && *request->ReadTimestamp <= EndWriteTimestamp) {
+                sendResponse(GetSizeLag(request->Offset), false);
+            } else {
+                sendResponse(0, true);
+            }
         } else {
             break;
         }
@@ -183,21 +190,28 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     auto& record = ev->Get()->Record;
     Y_ABORT_UNLESS(record.HasSender());
 
+    auto now = ctx.Now();
+
     auto cookie = record.HasCookie() ? TMaybe<ui64>(record.GetCookie()) : TMaybe<ui64>();
     auto readTimestamp = GetReadFrom(record.GetMaxTimeLagMs(), record.GetReadTimestampMs(), TInstant::Zero(), ctx);
-
     TActorId sender = ActorIdFromProto(record.GetSender());
-    if (InitDone && EndOffset > (ui64)record.GetOffset() && (!readTimestamp || EndWriteTimestamp >= *readTimestamp)) { //already has data, answer right now
-        auto response = MakeHasDataInfoResponse(GetSizeLag(record.GetOffset()), cookie);
+
+    auto sendResponse = [&](ui64 lagSize, bool readingFinished) {
+        auto response = MakeHasDataInfoResponse(lagSize, cookie, readingFinished);
         ctx.Send(sender, response.Release());
+    };
+
+    if (InitDone && EndOffset > (ui64)record.GetOffset()) { //already has data, answer right now
+        sendResponse(GetSizeLag(record.GetOffset()), false);
     } else if (InitDone && !IsActive()) {
-        auto now = ctx.Now();
+        if (readTimestamp && *readTimestamp <= EndWriteTimestamp) {
+            sendResponse(GetSizeLag(record.GetOffset()), false);
+        } else {
+            auto& userInfo = UsersInfoStorage->GetOrCreate(record.GetClientId(), ctx);
+            userInfo.UpdateReadOffset((i64)EndOffset - 1, now, now, now, true);
 
-        auto& userInfo = UsersInfoStorage->GetOrCreate(record.GetClientId(), ctx);
-        userInfo.UpdateReadOffset((i64)EndOffset - 1, now, now, now, true);
-
-        auto response = MakeHasDataInfoResponse(0, cookie, true);
-        ctx.Send(sender, response.Release());
+            sendResponse(0, true);
+        }
     } else {
         THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
                         record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp};
@@ -207,8 +221,6 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
         Y_ABORT_UNLESS(res.second);
 
         if (InitDone && record.HasClientId() && !record.GetClientId().empty()) {
-            auto now = ctx.Now();
-
             auto& userInfo = UsersInfoStorage->GetOrCreate(record.GetClientId(), ctx);
             ++userInfo.Subscriptions;
             userInfo.UpdateReadOffset((i64)EndOffset - 1, now, now, now);

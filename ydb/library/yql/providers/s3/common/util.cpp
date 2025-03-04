@@ -95,10 +95,9 @@ TString TUrlBuilder::Build() const {
     return std::move(result);
 }
 
-TArrowBlockSplitter::TArrowBlockSplitter(ui32 chunkSizeLimit, ui32 rowMetaSize, ui32 batchMetaSize)
+TArrowBlockSplitter::TArrowBlockSplitter(ui32 chunkSizeLimit, ui32 rowMetaSize)
     : ChunkSizeLimit(chunkSizeLimit)
     , RowMetaSize(rowMetaSize)
-     ,BatchMetaSize(batchMetaSize)
 {}
 
 void TArrowBlockSplitter::SplitRecordBatch(std::shared_ptr<arrow::RecordBatch> batch, ui64 firstRowId, std::vector<std::shared_ptr<arrow::RecordBatch>>& result) {
@@ -132,7 +131,7 @@ void TArrowBlockSplitter::SplitRecordBatch(std::shared_ptr<arrow::RecordBatch> b
 
 bool TArrowBlockSplitter::CheckBatchSize(const std::shared_ptr<arrow::RecordBatch>& batch) const {
     const ui64 batchSize = NKikimr::NArrow::GetBatchDataSize(batch) + batch->num_rows() * RowMetaSize;
-    return batchSize + BatchMetaSize <= ChunkSizeLimit;
+    return batchSize <= ChunkSizeLimit;
 }
 
 }

@@ -36,7 +36,7 @@ private:
 
 class TArrowBlockSplitter {
 public:
-    TArrowBlockSplitter(ui32 chunkSizeLimit, ui32 rowMetaSize, ui32 batchMetaSize);
+    TArrowBlockSplitter(ui32 chunkSizeLimit, ui32 rowMetaSize);
 
     void SplitRecordBatch(std::shared_ptr<arrow::RecordBatch> batch, ui64 firstRowId, std::vector<std::shared_ptr<arrow::RecordBatch>>& result);
 
@@ -46,7 +46,6 @@ private:
 private:
     const ui32 ChunkSizeLimit;
     const ui32 RowMetaSize;
-    const ui32 BatchMetaSize;
     std::vector<std::shared_ptr<arrow::RecordBatch>> SplitStack;
 };
 

@@ -191,7 +191,7 @@ struct TEvS3Provider {
         TEvNextRecordBatch(size_t pathInd, ui64 ingressDelta, TDuration cpuTimeDelta)
             : PathIndex(pathInd), IngressDelta(ingressDelta), CpuTimeDelta(cpuTimeDelta) {
         }
-        std::vector<std::shared_ptr<arrow::RecordBatch>> SplitedBatch;
+        std::vector<std::shared_ptr<arrow::RecordBatch>> SplittedBatch;
         const size_t PathIndex;
         const ui64 IngressDelta;
         const TDuration CpuTimeDelta;

@@ -274,7 +274,7 @@ struct TParquetFileInfo {
 class TS3ReadCoroImpl : public TActorCoroImpl {
     friend class TS3StreamReadActor;
 
-    static constexpr ui64 BLOCK_BATCH_METADATA_SIZE = 1_MB;
+    static constexpr double BLOCK_MIN_FILL_RATIO = 0.9;  // Blocks will be shrinked to fit only if size <= (min fill ratio) * capacity
     static constexpr ui64 BLOCK_ROW_METADATA_SIZE = sizeof(ui64);
 
 public:
@@ -639,10 +639,10 @@ public:
     void SendRecordBatchEvent(std::shared_ptr<arrow::RecordBatch> batch, std::vector<TColumnConverter>& columnConverters, ui64& decodedBytes, ui64& numRows) {
         auto convertedBatch = ConvertArrowColumns(batch, columnConverters);
         auto ev = std::make_unique<TEvS3Provider::TEvNextRecordBatch>(PathIndex, TakeIngressDelta(), TakeCpuTimeDelta());
-        ArrowBlockSplitter.SplitRecordBatch(convertedBatch, numRows, ev->SplitedBatch);
+        ArrowBlockSplitter.SplitRecordBatch(convertedBatch, numRows, ev->SplittedBatch);
 
         ui64 size = 0;
-        for (const auto& batch : ev->SplitedBatch) {
+        for (const auto& batch : ev->SplittedBatch) {
             size += NKikimr::NArrow::GetBatchDataSize(batch);
         }
         decodedBytes += size;
@@ -1068,7 +1068,7 @@ public:
         : TActorCoroImpl(256_KB), ReadActorFactoryCfg(readActorFactoryCfg), InputIndex(inputIndex),
         TxId(txId), RetryStuff(retryStuff), ReadSpec(readSpec), ComputeActorId(computeActorId),
         PathIndex(pathIndex), Path(path), Url(url), RowsRemained(maxRows),
-        ArrowBlockSplitter(channelBufferSize, BLOCK_ROW_METADATA_SIZE, BLOCK_BATCH_METADATA_SIZE),
+        ArrowBlockSplitter(BLOCK_MIN_FILL_RATIO * channelBufferSize, BLOCK_ROW_METADATA_SIZE),
         SourceContext(queueBufferCounter), DeferredQueueSize(deferredQueueSize), HttpInflightSize(httpInflightSize),
         HttpDataRps(httpDataRps), RawInflightSize(rawInflightSize), AsyncDecompressing(asyncDecompressing) {
     }
@@ -1770,7 +1770,7 @@ private:
     void HandleNextRecordBatch(TEvS3Provider::TEvNextRecordBatch::TPtr& next) {
         YQL_ENSURE(ReadSpec->Arrow);
         ui64 rows = 0;
-        for (const auto& batch : next->Get()->SplitedBatch) {
+        for (const auto& batch : next->Get()->SplittedBatch) {
             rows += batch->num_rows();
             IngressStats.Chunks++;
             if (Counters) {

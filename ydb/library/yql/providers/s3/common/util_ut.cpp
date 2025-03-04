@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(TestArrowBlockSplitter) {
         const ui64 totalSize = GetBatchDataSize(batch);
         constexpr ui64 numberParts = 8;
 
-        TArrowBlockSplitter splitter(totalSize / numberParts, 0, 0);
+        TArrowBlockSplitter splitter(totalSize / numberParts, 0);
         std::vector<std::shared_ptr<arrow::RecordBatch>> splttedBatches;
         splitter.SplitRecordBatch(batch, 0, splttedBatches);
         ValidateSplit(batch, numberParts, splttedBatches);
@@ -107,23 +107,10 @@ Y_UNIT_TEST_SUITE(TestArrowBlockSplitter) {
         const ui64 totalSize = GetBatchDataSize(batch) + rowOverhead * batch->num_rows();
         constexpr ui64 numberParts = 8;
 
-        TArrowBlockSplitter splitter(totalSize / numberParts, rowOverhead, 0);
+        TArrowBlockSplitter splitter(totalSize / numberParts, rowOverhead);
         std::vector<std::shared_ptr<arrow::RecordBatch>> splttedBatches;
         splitter.SplitRecordBatch(batch, 0, splttedBatches);
         ValidateSplit(batch, numberParts, splttedBatches);
-    }
-
-    Y_UNIT_TEST(SplitByMetaSize) {
-        NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int64Type>>>("field");
-        std::shared_ptr<arrow::RecordBatch> batch = NConstruction::TRecordBatchConstructor({ column }).BuildBatch(2048);
-
-        const ui64 totalSize = GetBatchDataSize(batch);
-        const ui64 batchOverhead = totalSize / 2;
-
-        TArrowBlockSplitter splitter(totalSize, 0, batchOverhead);
-        std::vector<std::shared_ptr<arrow::RecordBatch>> splttedBatches;
-        splitter.SplitRecordBatch(batch, 0, splttedBatches);
-        ValidateSplit(batch, 2, splttedBatches);
     }
 
     Y_UNIT_TEST(PassSmallBlock) {
@@ -133,9 +120,8 @@ Y_UNIT_TEST_SUITE(TestArrowBlockSplitter) {
 
         constexpr ui64 rowOverhead = sizeof(ui64);
         const ui64 totalSize = GetBatchDataSize(batch) + rowOverhead * batch->num_rows();
-        const ui64 batchOverhead = 1_MB;
 
-        TArrowBlockSplitter splitter(totalSize + batchOverhead, rowOverhead, batchOverhead);
+        TArrowBlockSplitter splitter(totalSize, rowOverhead);
         std::vector<std::shared_ptr<arrow::RecordBatch>> splttedBatches;
         splitter.SplitRecordBatch(batch, 0, splttedBatches);
         ValidateSplit(batch, 1, splttedBatches);
@@ -150,7 +136,7 @@ Y_UNIT_TEST_SUITE(TestArrowBlockSplitter) {
         const ui64 totalSize = GetBatchDataSize(batch);
 
         constexpr ui64 rowId = 42;
-        TArrowBlockSplitter splitter(strSize / 2, 0, 0);
+        TArrowBlockSplitter splitter(strSize / 2, 0);
         std::vector<std::shared_ptr<arrow::RecordBatch>> splttedBatches;
         UNIT_ASSERT_EXCEPTION_CONTAINS(splitter.SplitRecordBatch(batch, rowId, splttedBatches), parquet::ParquetException, TStringBuilder() << "Row " << rowId + 1 << " size is " << totalSize << ", that is larger than allowed limit " << strSize / 2);
     }

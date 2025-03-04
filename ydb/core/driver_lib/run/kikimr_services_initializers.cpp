@@ -2315,7 +2315,7 @@ void TActorConveyorInitializer::InitializeServices(NActors::TActorSystemSetup* s
         serviceConfig.SetDefaultFractionOfThreadsCount(0.8);
     }
 
-    if (serviceConfig.IsEnabled()) {
+    if (serviceConfig.IsEnabled() && Config.GetFeatureFlags().GetEnableActorConveyor()) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
         TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_ACTR_CONVEYOR");
 

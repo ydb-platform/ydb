@@ -81,10 +81,20 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
 
     const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index);
 
-    NKikimr::NConveyor::TActorServiceOperator::Register(Self->SelfId(), std::unique_ptr<IActor>(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
+    if (AppDataVerified().FeatureFlags.GetEnableActorConveyor()) {
+        NKikimr::NConveyor::TActorServiceOperator::Register(Self->SelfId(), std::unique_ptr<IActor>(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
+            Self->DataAccessorsManager.GetObjectPtrVerified(),
+            TComputeShardingPolicy(), ScanId, LockId.value_or(0), ScanGen, requestCookie, Self->TabletID(), TDuration::Max(), readMetadataRange,
+            NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters())), "TTxInternalScan", detailedInfo, requestCookie);
+    } else {
+        auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
         Self->DataAccessorsManager.GetObjectPtrVerified(),
         TComputeShardingPolicy(), ScanId, LockId.value_or(0), ScanGen, requestCookie, Self->TabletID(), TDuration::Max(), readMetadataRange,
-        NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters())), "TTxInternalScan", detailedInfo, requestCookie);
+        NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters()));
+
+        Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxInternalScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);
+    }
 }
 
 }   // namespace NKikimr::NOlap::NReader

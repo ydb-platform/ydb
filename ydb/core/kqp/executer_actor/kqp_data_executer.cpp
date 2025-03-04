@@ -247,7 +247,9 @@ public:
 
                 if (info.HasBatchMaxKey()) {
                     ResponseEv->BatchMaxCells = TSerializedCellVec(info.GetBatchMaxKey());
-                    ResponseEv->BatchKeyNames = std::move(info.GetBatchKeyNames());
+                    for (auto keyId : info.GetBatchKeyIds()) {
+                        ResponseEv->BatchKeyIds.push_back(keyId);
+                    }
                 }
             } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
                 NKikimrKqp::TEvKqpOutputActorResultInfo info;

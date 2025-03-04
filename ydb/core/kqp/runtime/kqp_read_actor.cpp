@@ -801,7 +801,7 @@ public:
 
                 if (column.HasIsPrimary() && column.GetIsPrimary()) {
                     KeyColumnIndexes.push_back(i);
-                    KeyColumnNames.push_back(column.GetName());
+                    KeyColumnIds.push_back(column.GetId());
                 }
             }
         }
@@ -1012,24 +1012,21 @@ public:
         ui64 seqNo = ev->Get()->Record.GetSeqNo();
         Reads[id].RegisterMessage(*ev->Get());
 
-        for (size_t row = 0; row < ev->Get()->GetRowsCount(); ++row) {
-            if (KeyColumnIndexes.size() != KeyColumnTypes.size()) {
-                break;
-            }
-
-            auto cells = ev->Get()->GetCells(row);
-            if (BatchMaxRow.empty()) {
-                BatchMaxRow = TOwnedCellVec::Make(cells);
-                continue;
-            }
-
-            for (size_t i = 0; i < KeyColumnIndexes.size(); ++i) {
-                auto keyIdx = KeyColumnIndexes[i];
-                NScheme::TTypeInfoOrder typeDescending(KeyColumnTypes[i], NScheme::EOrder::Ascending);
-
-                if (CompareTypedCells(BatchMaxRow[keyIdx], cells[keyIdx], typeDescending) < 0) {
+        if (KeyColumnIndexes.size() == KeyColumnTypes.size()) {
+            for (size_t row = 0; row < ev->Get()->GetRowsCount(); ++row) {
+                auto cells = ev->Get()->GetCells(row);
+                if (BatchMaxRow.empty()) {
                     BatchMaxRow = TOwnedCellVec::Make(cells);
-                    break;
+                    continue;
+                }
+
+                for (size_t i = 0; i < KeyColumnIndexes.size(); ++i) {
+                    auto keyIdx = KeyColumnIndexes[i];
+                    NScheme::TTypeInfoOrder typeDescending(KeyColumnTypes[i], NScheme::EOrder::Ascending);
+                    if (CompareTypedCells(BatchMaxRow[keyIdx], cells[keyIdx], typeDescending) < 0) {
+                        BatchMaxRow = TOwnedCellVec::Make(cells);
+                        break;
+                    }
                 }
             }
         }
@@ -1490,10 +1487,10 @@ public:
             }
 
             TConstArrayRef<TCell> keyRef(keyRow);
-            TString keyNames = JoinStrings(KeyColumnNames, ";");
-
             resultInfo.SetBatchMaxKey(TSerializedCellVec::Serialize(keyRef));
-            resultInfo.SetBatchKeyNames(keyNames);
+            for (auto id : KeyColumnIds) {
+                resultInfo.AddBatchKeyIds(id);
+            }
         }
         result.PackFrom(resultInfo);
         return result;
@@ -1558,7 +1555,7 @@ private:
     TVector<TResultColumn> ResultColumns;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TVector<size_t> KeyColumnIndexes;
-    TVector<TString> KeyColumnNames;
+    TVector<ui32> KeyColumnIds;
 
     NMiniKQL::TBytesStatistics BytesStats;
     ui64 ReceivedRowCount = 0;

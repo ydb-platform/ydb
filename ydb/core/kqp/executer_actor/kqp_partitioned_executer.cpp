@@ -44,7 +44,7 @@ class TKqpPartitionedExecuter : public TActorBootstrapped<TKqpPartitionedExecute
     };
 
     struct TKeyColumnInfo {
-        TString Name;
+        ui32 Id;
         NScheme::TTypeInfo Type;
     };
 
@@ -94,26 +94,26 @@ public:
                 for (const auto& sink : stage.GetSinks()) {
                     FillTableMetaInfo(sink);
 
-                    if (!KeyColumnInfos.empty()) {
+                    if (!KeyColumnInfo.empty()) {
                         break;
                     }
                 }
             }
         }
 
-        PE_LOG_I("Create " << ActorName << " with KeyColumnInfos.size() = " << KeyColumnInfos.size());
+        PE_LOG_I("Create " << ActorName << " with KeyColumnInfo.size() = " << KeyColumnInfo.size());
     }
 
     void Bootstrap() {
-        YQL_ENSURE(!KeyColumnInfos.empty());
+        YQL_ENSURE(!KeyColumnInfo.empty());
 
-        const TVector<TCell> minKey(KeyColumnInfos.size());
+        const TVector<TCell> minKey(KeyColumnInfo.size());
         const TTableRange range(minKey, true, {}, false, false);
 
-        YQL_ENSURE(range.IsFullRange(KeyColumnInfos.size()));
+        YQL_ENSURE(range.IsFullRange(KeyColumnInfo.size()));
 
         TVector<NScheme::TTypeInfo> keyColumnTypes;
-        for (const auto& [_, type] : KeyColumnInfos) {
+        for (const auto& [_, type] : KeyColumnInfo) {
             keyColumnTypes.push_back(type);
         }
 
@@ -333,14 +333,38 @@ public:
         PE_LOG_I("Got success response from ExId = " << exId);
 
         auto partInfo = ExecuterPartition[exId];
-        auto lastRow = ev->BatchMaxCells;
-        auto lastKeyString = ev->BatchKeyNames;
+        auto maxRow = ev->BatchMaxCells;
+        auto maxRowKeyIds = ev->BatchKeyIds;
 
-        TVector<TString> lastKeys = StringSplitter(lastKeyString).Split(';');
+        YQL_ENSURE(KeyColumnInfo.size() == maxRowKeyIds.size());
 
-        if (!lastRow.GetCells().empty()) {
-            auto key = ReorderKeyColumns(lastRow, lastKeys);
-            partInfo->BeginRange = TKeyDesc::TPartitionRangeInfo(key,
+        if (NeedReordering.Empty()) {
+            NeedReordering = false;
+            for (size_t i = 0; i < KeyColumnInfo.size(); ++i) {
+                if (KeyColumnInfo[i].Id != maxRowKeyIds[i]) {
+                    NeedReordering = true;
+                    break;
+                }
+            }
+
+            if (NeedReordering.GetRef()) {
+                for (auto& curPart : Partitions) {
+                    auto& beginRow = curPart->BeginRange;
+                    if (!beginRow.Empty()) {
+                        beginRow->EndKeyPrefix = ReorderRowKeyColumns(beginRow->EndKeyPrefix, maxRowKeyIds);
+                    }
+
+                    auto& endRow = curPart->EndRange;
+                    if (!endRow.Empty()) {
+                        endRow->EndKeyPrefix = ReorderRowKeyColumns(endRow->EndKeyPrefix, maxRowKeyIds);
+                    }
+                }
+                ReorderKeyColumnInfo(maxRowKeyIds);
+            }
+        }
+
+        if (!maxRow.GetCells().empty()) {
+            partInfo->BeginRange = TKeyDesc::TPartitionRangeInfo(maxRow,
                 /* IsInclusive */ true,
                 /* IsPoint */ false
             );
@@ -467,11 +491,11 @@ private:
         NKikimrKqp::TKqpTableSinkSettings settings;
         YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
 
-        KeyColumnInfos.reserve(settings.GetKeyColumns().size());
+        KeyColumnInfo.reserve(settings.GetKeyColumns().size());
         for (const auto& column : settings.GetKeyColumns()) {
             auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
                 column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
-            KeyColumnInfos.emplace_back(column.GetName(), typeInfoMod.TypeInfo);
+            KeyColumnInfo.emplace_back(column.GetId(), typeInfoMod.TypeInfo);
         }
 
         TableId = MakeTableId(settings.GetTable());
@@ -497,6 +521,8 @@ private:
 
         auto queryData = physicalRequest.Transactions.front().Params;
         queryData->ClearPrunedParams();
+
+        DebugPrintRequest(queryData);
 
         if (!ev->GetTxResults().empty()) {
             queryData->AddTxResults(0, std::move(ev->GetTxResults()));
@@ -575,10 +601,10 @@ private:
                 : false)
         );
 
-        for (size_t i = 0; i < KeyColumnInfos.size(); ++i) {
+        for (size_t i = 0; i < KeyColumnInfo.size(); ++i) {
             auto paramName = ((isBegin) ? NBatchParams::Begin : NBatchParams::End) + ToString(i + 1);
             if (range && i < range->EndKeyPrefix.GetCells().size()) {
-                auto cellValue = NMiniKQL::GetCellValue(range->EndKeyPrefix.GetCells()[i], KeyColumnInfos[i].Type);
+                auto cellValue = NMiniKQL::GetCellValue(range->EndKeyPrefix.GetCells()[i], KeyColumnInfo[i].Type);
                 YQL_ENSURE(FillParamValue(queryData, paramName, cellValue));
             } else {
                 YQL_ENSURE(FillParamValue(queryData, paramName, false, /* setDefault */ true));
@@ -637,12 +663,16 @@ private:
             [](auto it) { return it->Response == EExecuterResponse::ERROR; });
     }
 
-    TSerializedCellVec ReorderKeyColumns(const TSerializedCellVec& row, const TVector<TString>& keyNames) {
-        std::vector<TCell> newRow;
+    TSerializedCellVec ReorderRowKeyColumns(const TSerializedCellVec& row, const TVector<ui32>& keyIds) {
+        if (row.GetCells().empty()) {
+            return row;
+        }
 
-        for (const auto& [name, _] : KeyColumnInfos) {
-            for (size_t i = 0; i < keyNames.size(); ++i) {
-                if (name == keyNames[i]) {
+        TVector<TCell> newRow;
+        for (auto keyId : keyIds) {
+            for (size_t i = 0; i < KeyColumnInfo.size(); ++i) {
+                const auto& [prevKeyId, _] = KeyColumnInfo[i];
+                if (prevKeyId == keyId) {
                     newRow.push_back(row.GetCells()[i]);
                     break;
                 }
@@ -653,7 +683,21 @@ private:
         return TSerializedCellVec(rowRef);
     }
 
-    TStringBuilder DebugPrintRequest(TQueryData::TPtr queryData) {
+    void ReorderKeyColumnInfo(const TVector<ui32>& keyIds) {
+        TVector<TKeyColumnInfo> newInfo;
+        for (size_t i = 0; i < keyIds.size(); ++i) {
+            for (const auto& [keyId, keyType] : KeyColumnInfo) {
+                if (keyId == keyIds[i]) {
+                    newInfo.emplace_back(keyId, keyType);
+                    break;
+                }
+            }
+        }
+
+        KeyColumnInfo = std::move(newInfo);
+    }
+
+    void DebugPrintRequest(TQueryData::TPtr queryData) {
         TStringBuilder builder;
         builder << "Fill request with parameters: ";
 
@@ -668,7 +712,7 @@ private:
 
         builder << "(";
 
-        for (size_t i = 0; i < KeyColumnInfos.size(); ++i) {
+        for (size_t i = 0; i < KeyColumnInfo.size(); ++i) {
             auto beginName = NBatchParams::Begin + ToString(i + 1);
             auto [beginType, beginValue] = queryData->GetParameterUnboxedValue(beginName);
 
@@ -691,13 +735,13 @@ private:
                 builder << "[" << endValue << "]";
             }
 
-            if (i + 1 < KeyColumnInfos.size()) {
+            if (i + 1 < KeyColumnInfo.size()) {
                 builder << ", ";
             }
         }
 
         builder << ")";
-        return builder;
+        PE_LOG_I(builder);
     }
 
     void RuntimeError(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
@@ -736,10 +780,11 @@ private:
 
 private:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
-    TVector<TKeyColumnInfo> KeyColumnInfos;
+    TVector<TKeyColumnInfo> KeyColumnInfo;
     TVector<TBatchPartitionInfo::TPtr> Partitions;
     THashMap<TActorId, TBatchPartitionInfo::TPtr> ExecuterPartition;
     THashMap<TActorId, TBatchPartitionInfo::TPtr> BufferPartition;
+    TMaybe<bool> NeedReordering = Nothing();
     TTableId TableId;
     TString TablePath;
     IKqpGateway::TExecPhysicalRequest LiteralRequest;

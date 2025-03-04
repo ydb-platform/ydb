@@ -233,7 +233,7 @@ message TKqpTransaction {
 message TEvKqpInputActorResultInfo {
     repeated NKikimrDataEvents.TLock Locks = 1;
     optional string BatchMaxKey = 2;
-    optional string BatchKeyNames = 3;
+    repeated uint32 BatchKeyIds = 3;
 }
 
 message TKqpReadRangesSourceSettings {

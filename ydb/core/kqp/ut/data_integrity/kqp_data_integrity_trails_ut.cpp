@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: DataShard"), 0);
     }
 
-    Y_UNIT_TEST(BrokenReadLock) {
+    Y_UNIT_TEST_TWIN(BrokenReadLock, UseSink) {
         TStringStream ss;
         {
             NKikimrConfig::TAppConfig AppConfig;

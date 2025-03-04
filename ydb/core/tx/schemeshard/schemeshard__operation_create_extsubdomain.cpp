@@ -260,7 +260,7 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, newNode->PathId);
 
         Y_ABORT_UNLESS(0 == txState.Shards.size());
-        parentPath.DomainInfo()->IncPathsInside();
+        parentPath.DomainInfo()->IncPathsInside(context.SS);
         parentPath.Base()->IncAliveChildren();
 
         SetState(NextState());

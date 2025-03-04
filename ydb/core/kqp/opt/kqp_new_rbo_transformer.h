@@ -8,7 +8,8 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-
+#include <ydb/core/kqp/opt/kqp_new_rbo.h>
+#include <ydb/core/kqp/opt/kqp_new_rbo_rules.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -36,9 +37,10 @@ TAutoPtr<IGraphTransformer> CreateKqpPgRewriteTransformer(const TIntrusivePtr<TK
 
 class TKqpNewRBOTransformer : public TSyncTransformerBase {
     public:
-        TKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx) : 
+        TKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config) : 
             TypeCtx(typeCtx),
-            KqpCtx(*kqpCtx) {}
+            KqpCtx(*kqpCtx),
+            RBO({RuleStage1}, kqpCtx, typeCtx, config) {}
 
         // Main method of the transformer
         IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
@@ -47,9 +49,10 @@ class TKqpNewRBOTransformer : public TSyncTransformerBase {
     private:
         TTypeAnnotationContext& TypeCtx;
         const TKqpOptimizeContext& KqpCtx;
+        TRuleBasedOptimizer RBO;
 };
 
-TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx);
+TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config);
 
 }
 }

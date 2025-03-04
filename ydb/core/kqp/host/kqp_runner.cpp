@@ -335,7 +335,7 @@ private:
             .AddCommonOptimization()
 
             .Add(CreateKqpPgRewriteTransformer(OptimizeCtx, *typesCtx), "RewritePgSelect")
-            .Add(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx), "NewRBOTransformer")
+            .Add(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, Config), "NewRBOTransformer")
 
             .Add(CreatePhysicalDataProposalsInspector(*typesCtx), "ProvidersPhysicalOptimize")
             .Add(CreateKqpFinalizingOptTransformer(OptimizeCtx), "FinalizingOptimize")

@@ -6,7 +6,7 @@
 namespace {
     const std::unordered_map<TString, NYql::NDq::TPqMetaExtractor::TPqMetaExtractorLambda> ExtractorsMap = {
         {
-            "_yql_sys_create_time", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
+            "_yql_sys_create_time", [](const NYdb::NFederatedTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
                 using TDataType = NYql::NUdf::TDataType<NYql::NUdf::TTimestamp>;
                 return std::make_pair(
                     NYql::NUdf::TUnboxedValuePod(static_cast<TDataType::TLayout>(message.GetCreateTime().MicroSeconds())),
@@ -15,7 +15,7 @@ namespace {
             }
         },
         {
-            "_yql_sys_tsp_write_time", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
+            "_yql_sys_tsp_write_time", [](const NYdb::NFederatedTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
                 using TDataType = NYql::NUdf::TDataType<NYql::NUdf::TTimestamp>;
                 return std::make_pair(
                     NYql::NUdf::TUnboxedValuePod(static_cast<TDataType::TLayout>(message.GetWriteTime().MicroSeconds())),
@@ -24,16 +24,16 @@ namespace {
             }
         },
         {
-            "_yql_sys_partition_id", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
+            "_yql_sys_partition_id", [](const NYdb::NFederatedTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
                 using TDataType = NYql::NUdf::TDataType<ui64>;
                 return std::make_pair(
-                    NYql::NUdf::TUnboxedValuePod(static_cast<TDataType::TLayout>(message.GetPartitionSession()->GetPartitionId())),
+                    NYql::NUdf::TUnboxedValuePod(static_cast<TDataType::TLayout>(message.GetFederatedPartitionSession()->GetPartitionId())),
                     NYql::NUdf::GetDataTypeInfo(TDataType::Slot).FixedSize
                 );
             }
         },
         {
-            "_yql_sys_offset", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
+            "_yql_sys_offset", [](const NYdb::NFederatedTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
                 using TDataType = NYql::NUdf::TDataType<ui64>;
                 return std::make_pair(
                     NYql::NUdf::TUnboxedValuePod(static_cast<TDataType::TLayout>(message.GetOffset())),
@@ -41,7 +41,7 @@ namespace {
             }
         },
         {
-            "_yql_sys_message_group_id", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
+            "_yql_sys_message_group_id", [](const NYdb::NFederatedTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
                 const auto& data = message.GetMessageGroupId();
                 return std::make_pair(
                     NKikimr::NMiniKQL::MakeString(NYql::NUdf::TStringRef(data.data(), data.size())),
@@ -50,7 +50,7 @@ namespace {
             }
         },
         {
-            "_yql_sys_seq_no", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
+            "_yql_sys_seq_no", [](const NYdb::NFederatedTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message){
                 using TDataType = NYql::NUdf::TDataType<ui64>;
                 return std::make_pair(
                     NYql::NUdf::TUnboxedValuePod(static_cast<TDataType::TLayout>(message.GetSeqNo())),

@@ -43,20 +43,22 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         return TStringBuilder() << settings.items(itemIdx).source_prefix() << "/permissions.pb";
     }
 
+    static TString ChangefeedDescriptionKeyFromSettings(const Ydb::Import::ImportFromS3Settings& settings, ui32 itemIdx, const TString& changefeedName) {
+        Y_ABORT_UNLESS(itemIdx < (ui32)settings.items_size());
+        return TStringBuilder() << settings.items(itemIdx).source_prefix() << "/" << changefeedName << "/changefeed_description.pb";
+    }
+
+    static TString TopicDescriptionKeyFromSettings(const Ydb::Import::ImportFromS3Settings& settings, ui32 itemIdx, const TString& changefeedName) {
+        Y_ABORT_UNLESS(itemIdx < (ui32)settings.items_size());
+        return TStringBuilder() << settings.items(itemIdx).source_prefix() << "/" << changefeedName << "/topic_description.pb";
+    }
+
     static bool IsView(TStringBuf schemeKey) {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateView().FileName);
     }
 
     static bool NoObjectFound(Aws::S3::S3Errors errorType) {
         return errorType == S3Errors::RESOURCE_NOT_FOUND || errorType == S3Errors::NO_SUCH_KEY;
-    }
-
-    static TString ChangefeedDescriptionKey(const TString& changefeedPrefix) {
-        return TStringBuilder() << changefeedPrefix << "/changefeed_description.pb";
-    }
-
-    static TString TopicDescriptionKey(const TString& changefeedPrefix) {
-        return TStringBuilder() << changefeedPrefix << "/topic_description.pb";
     }
 
     void HeadObject(const TString& key) {
@@ -148,8 +150,8 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         }
 
         const auto contentLength = result.GetResult().GetContentLength();
-        Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsKeys.size());
-        GetObject(ChangefeedDescriptionKey(ChangefeedsKeys[IndexDownloadedChangefeed]), std::make_pair(0, contentLength - 1));
+        Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsNames.size());
+        GetObject(ChangefeedDescriptionKeyFromSettings(ImportInfo->Settings, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), std::make_pair(0, contentLength - 1));
     }
 
     void HandleTopic(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -164,8 +166,8 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         }
 
         const auto contentLength = result.GetResult().GetContentLength();
-        Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsKeys.size());
-        GetObject(TopicDescriptionKey(ChangefeedsKeys[IndexDownloadedChangefeed]), std::make_pair(0, contentLength - 1));
+        Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsNames.size());
+        GetObject(TopicDescriptionKeyFromSettings(ImportInfo->Settings, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), std::make_pair(0, contentLength - 1));
     }
 
     void GetObject(const TString& key, const std::pair<ui64, ui64>& range) {
@@ -342,11 +344,11 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
 
         auto nextStep = [this]() {
             Become(&TThis::StateDownloadTopics);
-            HeadObject(TopicDescriptionKey(ChangefeedsKeys[IndexDownloadedChangefeed]));
+            HeadObject(TopicDescriptionKeyFromSettings(ImportInfo->Settings, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]));
         };
 
         if (NeedValidateChecksums) {
-            StartValidatingChecksum(ChangefeedDescriptionKey(ChangefeedsKeys[IndexDownloadedChangefeed]), msg.Body, nextStep);
+            StartValidatingChecksum(ChangefeedDescriptionKeyFromSettings(ImportInfo->Settings, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), msg.Body, nextStep);
         } else {
             nextStep();
         }        
@@ -378,16 +380,16 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         *item.Changefeeds.MutableChangefeeds(IndexDownloadedChangefeed)->MutableTopic() = std::move(topic);
 
         auto nextStep = [this]() {
-            if (++IndexDownloadedChangefeed >= ChangefeedsKeys.size()) {
+            if (++IndexDownloadedChangefeed >= ChangefeedsNames.size()) {
                 Reply();
             } else {
                 Become(&TThis::StateDownloadChangefeeds);
-                HeadObject(ChangefeedDescriptionKey(ChangefeedsKeys[IndexDownloadedChangefeed]));
+                HeadObject(ChangefeedDescriptionKeyFromSettings(ImportInfo->Settings, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]));
             }
         };
 
         if (NeedValidateChecksums) {
-            StartValidatingChecksum(TopicDescriptionKey(ChangefeedsKeys[IndexDownloadedChangefeed]), msg.Body, nextStep);
+            StartValidatingChecksum(TopicDescriptionKeyFromSettings(ImportInfo->Settings, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), msg.Body, nextStep);
         } else {
             nextStep();
         }        
@@ -416,22 +418,22 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         }
 
         const auto& objects = result.GetResult().GetContents();
-        ChangefeedsKeys.clear();
-        ChangefeedsKeys.reserve(objects.size());
+        ChangefeedsNames.clear();
+        ChangefeedsNames.reserve(objects.size());
 
         for (const auto& obj : objects) {
             const TFsPath& path = obj.GetKey();
             if (path.GetName() == "changefeed_description.pb") {
-                ChangefeedsKeys.push_back(path.Dirname());
+                ChangefeedsNames.push_back(path.Parent().GetName());
             }
         }
 
-        if (!ChangefeedsKeys.empty()) {
+        if (!ChangefeedsNames.empty()) {
             auto& item = ImportInfo->Items.at(ItemIdx);
-            Resize(item.Changefeeds.MutableChangefeeds(), ChangefeedsKeys.size());
+            Resize(item.Changefeeds.MutableChangefeeds(), ChangefeedsNames.size());
 
-            Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsKeys.size());
-            HeadObject(ChangefeedDescriptionKey(ChangefeedsKeys[IndexDownloadedChangefeed]));
+            Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsNames.size());
+            HeadObject(ChangefeedDescriptionKeyFromSettings(ImportInfo->Settings, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]));
         } else {
             Reply();
         }
@@ -635,7 +637,7 @@ private:
     const TString MetadataKey;
     TString SchemeKey;
     const TString PermissionsKey;
-    TVector<TString> ChangefeedsKeys;
+    TVector<TString> ChangefeedsNames;
     ui64 IndexDownloadedChangefeed = 0;
 
     const ui32 Retries;

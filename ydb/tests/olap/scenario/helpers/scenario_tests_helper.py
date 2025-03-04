@@ -679,8 +679,20 @@ class ScenarioTestHelper:
         if self_descr is None:
             return []
 
+        kind_order = [
+            ydb.SchemeEntryType.COLUMN_TABLE,
+            ydb.SchemeEntryType.COLUMN_STORE,
+            ydb.SchemeEntryType.EXTERNAL_DATA_SOURCE,
+        ]
+
+        def kind_order_key_reversed(kind):
+            try:
+                return -kind_order.index(kind)
+            except ValueError:
+                return -len(kind_order)
+
         if self_descr.is_directory():
-            return list(reversed(YdbCluster.list_directory(root_path, path))) + [self_descr]
+            return list(reversed(YdbCluster.list_directory(root_path, path, kind_order_key_reversed))) + [self_descr]
         else:
             return self_descr
 

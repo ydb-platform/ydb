@@ -34,25 +34,24 @@ NChunkClient::EChunkFormat DefaultFormatFromOptimizeFor(
 // Mostly used in unittests and for debugging purposes.
 // Quite inefficient.
 TUnversionedOwningRow YsonToSchemafulRow(
-    const TString& yson,
+    TStringBuf yson,
     const TTableSchema& tableSchema,
     bool treatMissingAsNull,
     NYson::EYsonType ysonType = NYson::EYsonType::MapFragment,
     bool validateValues = false);
-TUnversionedOwningRow YsonToSchemalessRow(
-    const TString& yson);
+TUnversionedOwningRow YsonToSchemalessRow(TStringBuf yson);
 TVersionedRow YsonToVersionedRow(
     const TRowBufferPtr& rowBuffer,
-    const TString& keyYson,
-    const TString& valueYson,
+    TStringBuf keyYson,
+    TStringBuf valueYson,
     const std::vector<TTimestamp>& deleteTimestamps = {},
     const std::vector<TTimestamp>& extraWriteTimestamps = {});
 TVersionedOwningRow YsonToVersionedRow(
-    const TString& keyYson,
-    const TString& valueYson,
+    TStringBuf keyYson,
+    TStringBuf valueYson,
     const std::vector<TTimestamp>& deleteTimestamps = {},
     const std::vector<TTimestamp>& extraWriteTimestamps = {});
-TUnversionedOwningRow YsonToKey(const TString& yson);
+TUnversionedOwningRow YsonToKey(TStringBuf yson);
 TString KeyToYson(TUnversionedRow row);
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -207,7 +207,7 @@ TConclusion<bool> TProgramStepPrepare::DoExecuteInplace(const std::shared_ptr<ID
 TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*cursor*/) const {
 //    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()(
 //        "program", source->GetContext()->GetCommonContext()->GetReadMetadata()->GetProgram().ProtoDebugString());
-    auto result = Step->Execute(source->GetStageData().GetTable());
+    auto result = Step->Execute(source->GetStageData().GetTable(), Step);
     if (result.IsFail()) {
         return result;
     }

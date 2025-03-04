@@ -267,11 +267,13 @@ TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoRequestReliable(const T&
         const bool haveNewConnection = CreateNewConnectionIfNeeded();
         const bool couldRetry = !haveNewConnection && i == 0; // Actually old connection could be already closed by server,
                                                               // so we should try one more time in this case.
-        try {
-            cancellation.Future().Subscribe([&](auto&) {
-                Connection->Shutdown();
-            });
+        TManualEvent cancellationEndEvent;
+        cancellation.Future().Subscribe([&](auto&) {
+            Connection->Shutdown();
+            cancellationEndEvent.Signal();
+        });
 
+        try {
             Connection->Write(raw);
 
             THttpCode code = ReadAndTransferHttp(*Connection->GetHttpInput(), output, outHeaders);
@@ -280,20 +282,29 @@ TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoRequestReliable(const T&
             }
             return code;
         } catch (const TSystemError& e) {
+            if (cancellation.IsCancellationRequested()) {
+                cancellationEndEvent.WaitI();
+                cancellation.ThrowIfCancellationRequested();
+            }
             Connection.Reset();
-            cancellation.ThrowIfCancellationRequested();
             if (!couldRetry || e.Status() != EPIPE) {
                 throw;
             }
         } catch (const THttpReadException&) { // Actually old connection is already closed by server
+            if (cancellation.IsCancellationRequested()) {
+                cancellationEndEvent.WaitI();
+                cancellation.ThrowIfCancellationRequested();
+            }
             Connection.Reset();
-            cancellation.ThrowIfCancellationRequested();
             if (!couldRetry) {
                 throw;
             }
         } catch (const std::exception&) {
+            if (cancellation.IsCancellationRequested()) {
+                cancellationEndEvent.WaitI();
+                cancellation.ThrowIfCancellationRequested();
+            }
             Connection.Reset();
-            cancellation.ThrowIfCancellationRequested();
             throw;
         }
     }

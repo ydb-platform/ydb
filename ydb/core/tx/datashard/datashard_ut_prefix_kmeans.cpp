@@ -19,6 +19,7 @@ static std::atomic<ui64> sId = 1;
 static constexpr const char* kMainTable = "/Root/table-main";
 static constexpr const char* kLevelTable = "/Root/table-level";
 static constexpr const char* kPostingTable = "/Root/table-posting";
+[[maybe_unused]] static constexpr const char* kPrefixTable = "/Root/table-prefix";
 
 Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
     static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
@@ -28,7 +29,6 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
-        auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
         auto datashards = GetTableShards(server, sender, kMainTable);
         TTableId tableId = ResolveTableId(server, sender, kMainTable);
 
@@ -50,9 +50,6 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 tableId.PathId.ToProto(rec.MutablePathId());
             }
 
-            rec.SetSnapshotTxId(snapshot.TxId);
-            rec.SetSnapshotStep(snapshot.Step);
-
             VectorIndexSettings settings;
             settings.set_vector_dimension(dims);
             settings.set_vector_type(type);
@@ -64,14 +61,10 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
             }
             rec.SetSeed(1337);
 
-            rec.SetState(NKikimrTxDataShard::TEvPrefixKMeansRequest::SAMPLE);
-            rec.SetUpload(NKikimrTxDataShard::TEvPrefixKMeansRequest::UPLOAD_MAIN_TO_POSTING);
+            rec.SetUpload(NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING);
 
-            rec.SetDoneRounds(0);
             rec.SetNeedsRounds(3);
 
-            rec.SetParentFrom(0);
-            rec.SetParentTo(0);
             rec.SetChild(1);
 
             if (rec.HasEmbeddingColumn()) {
@@ -98,7 +91,6 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
-        auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
         auto datashards = GetTableShards(server, sender, kMainTable);
         TTableId tableId = ResolveTableId(server, sender, kMainTable);
 
@@ -130,12 +122,11 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
                 rec.SetNeedsRounds(300);
 
-                rec.SetParentFrom(parent);
-                rec.SetParentTo(parent);
                 rec.SetChild(parent + 1);
 
                 rec.SetEmbeddingColumn("embedding");
                 rec.AddDataColumns("data");
+                rec.SetPrefixColumns(1);
 
                 rec.SetLevelName(kLevelTable);
                 rec.SetPostingName(kPostingTable);
@@ -164,17 +155,6 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
     {
         ui64 txId = AsyncDropTable(server, sender, "/Root", name);
         WaitTxNotification(server, sender, txId);
-    }
-
-    static void CreateMainTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options)
-    {
-        options.AllowSystemColumnNames(false);
-        options.Columns({
-            {"key", "Uint32", true, true},
-            {"embedding", "String", false, false},
-            {"data", "String", false, false},
-        });
-        CreateShardedTable(server, sender, "/Root", "table-main", options);
     }
 
     static void CreateLevelTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options)
@@ -284,7 +264,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
             DoBadRequest(server, sender, ev, 2, VectorIndexSettings::VECTOR_TYPE_FLOAT,
                          VectorIndexSettings::METRIC_UNSPECIFIED);
         }
-        // TODO(mbkkt) For now all build_index, sample_k, build_columns, local_kmeans doesn't really check this
+        // TODO(mbkkt) For now all build_index, sample_k, build_columns, local_kmeans, prefix_kmeans doesn't really check this
         // {
         //     auto ev = std::make_unique<TEvDataShard::TEvPrefixKMeansRequest>();
         //     auto snapshotCopy = snapshot;
@@ -297,186 +277,6 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         //     snapshotCopy.TxId++;
         //     DoBadRequest(server, sender, ev);
         // }
-    }
-
-    Y_UNIT_TEST (MainToPosting) {
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root");
-
-        Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto& runtime = *server->GetRuntime();
-        auto sender = runtime.AllocateEdgeActor();
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-
-        InitRoot(server, sender);
-
-        TShardedTableOptions options;
-        options.EnableOutOfOrder(true); // TODO(mbkkt) what is it?
-        options.Shards(1);
-
-        CreateMainTable(server, sender, options);
-        // Upsert some initial values
-        ExecSQL(server, sender,
-                R"(
-        UPSERT INTO `/Root/table-main`
-            (key, embedding, data)
-        VALUES )"
-                "(1, \"\x30\x30\3\", \"one\"),"
-                "(2, \"\x31\x31\3\", \"two\"),"
-                "(3, \"\x32\x32\3\", \"three\"),"
-                "(4, \"\x65\x65\3\", \"four\"),"
-                "(5, \"\x75\x75\3\", \"five\");");
-
-        auto create = [&] {
-            CreateLevelTable(server, sender, options);
-            CreatePostingTable(server, sender, options);
-        };
-        create();
-        auto recreate = [&] {
-            DropTable(server, sender, "table-level");
-            DropTable(server, sender, "table-posting");
-            create();
-        };
-
-        ui64 seed, k;
-        k = 2;
-
-        seed = 0;
-        for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
-            auto [level, posting] = DoPrefixKMeans(server, sender, 0, seed, k,
-                                                  NKikimrTxDataShard::TEvPrefixKMeansRequest::UPLOAD_MAIN_TO_POSTING,
-                                                  VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = mm\3\n"
-                                            "__ydb_parent = 0, __ydb_id = 2, __ydb_centroid = 11\3\n");
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 4, data = four\n"
-                                              "__ydb_parent = 1, key = 5, data = five\n"
-                                              "__ydb_parent = 2, key = 1, data = one\n"
-                                              "__ydb_parent = 2, key = 2, data = two\n"
-                                              "__ydb_parent = 2, key = 3, data = three\n");
-            recreate();
-        }
-
-        seed = 111;
-        for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
-            auto [level, posting] = DoPrefixKMeans(server, sender, 0, seed, k,
-                                                  NKikimrTxDataShard::TEvPrefixKMeansRequest::UPLOAD_MAIN_TO_POSTING,
-                                                  VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = 11\3\n"
-                                            "__ydb_parent = 0, __ydb_id = 2, __ydb_centroid = mm\3\n");
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, data = one\n"
-                                              "__ydb_parent = 1, key = 2, data = two\n"
-                                              "__ydb_parent = 1, key = 3, data = three\n"
-                                              "__ydb_parent = 2, key = 4, data = four\n"
-                                              "__ydb_parent = 2, key = 5, data = five\n");
-            recreate();
-        }
-        seed = 32;
-        for (auto similarity : {VectorIndexSettings::SIMILARITY_INNER_PRODUCT, VectorIndexSettings::SIMILARITY_COSINE,
-                                VectorIndexSettings::DISTANCE_COSINE})
-        {
-            auto [level, posting] = DoPrefixKMeans(server, sender, 0, seed, k,
-                                                  NKikimrTxDataShard::TEvPrefixKMeansRequest::UPLOAD_MAIN_TO_POSTING,
-                                                  VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
-            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = II\3\n");
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, data = one\n"
-                                              "__ydb_parent = 1, key = 2, data = two\n"
-                                              "__ydb_parent = 1, key = 3, data = three\n"
-                                              "__ydb_parent = 1, key = 4, data = four\n"
-                                              "__ydb_parent = 1, key = 5, data = five\n");
-            recreate();
-        }
-    }
-
-    Y_UNIT_TEST (MainToBuild) {
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root");
-
-        Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto& runtime = *server->GetRuntime();
-        auto sender = runtime.AllocateEdgeActor();
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-
-        InitRoot(server, sender);
-
-        TShardedTableOptions options;
-        options.EnableOutOfOrder(true); // TODO(mbkkt) what is it?
-        options.Shards(1);
-
-        CreateMainTable(server, sender, options);
-        // Upsert some initial values
-        ExecSQL(server, sender,
-                R"(
-        UPSERT INTO `/Root/table-main`
-            (key, embedding, data)
-        VALUES )"
-                "(1, \"\x30\x30\3\", \"one\"),"
-                "(2, \"\x31\x31\3\", \"two\"),"
-                "(3, \"\x32\x32\3\", \"three\"),"
-                "(4, \"\x65\x65\3\", \"four\"),"
-                "(5, \"\x75\x75\3\", \"five\");");
-
-        auto create = [&] {
-            CreateLevelTable(server, sender, options);
-            CreateBuildTable(server, sender, options, "table-posting");
-        };
-        create();
-        auto recreate = [&] {
-            DropTable(server, sender, "table-level");
-            DropTable(server, sender, "table-posting");
-            create();
-        };
-
-        ui64 seed, k;
-        k = 2;
-
-        seed = 0;
-        for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
-            auto [level, posting] = DoPrefixKMeans(server, sender, 0, seed, k,
-                                                  NKikimrTxDataShard::TEvPrefixKMeansRequest::UPLOAD_MAIN_TO_BUILD,
-                                                  VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = mm\3\n"
-                                            "__ydb_parent = 0, __ydb_id = 2, __ydb_centroid = 11\3\n");
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 4, embedding = \x65\x65\3, data = four\n"
-                                              "__ydb_parent = 1, key = 5, embedding = \x75\x75\3, data = five\n"
-                                              "__ydb_parent = 2, key = 1, embedding = \x30\x30\3, data = one\n"
-                                              "__ydb_parent = 2, key = 2, embedding = \x31\x31\3, data = two\n"
-                                              "__ydb_parent = 2, key = 3, embedding = \x32\x32\3, data = three\n");
-            recreate();
-        }
-
-        seed = 111;
-        for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
-            auto [level, posting] = DoPrefixKMeans(server, sender, 0, seed, k,
-                                                  NKikimrTxDataShard::TEvPrefixKMeansRequest::UPLOAD_MAIN_TO_BUILD,
-                                                  VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = 11\3\n"
-                                            "__ydb_parent = 0, __ydb_id = 2, __ydb_centroid = mm\3\n");
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, embedding = \x30\x30\3, data = one\n"
-                                              "__ydb_parent = 1, key = 2, embedding = \x31\x31\3, data = two\n"
-                                              "__ydb_parent = 1, key = 3, embedding = \x32\x32\3, data = three\n"
-                                              "__ydb_parent = 2, key = 4, embedding = \x65\x65\3, data = four\n"
-                                              "__ydb_parent = 2, key = 5, embedding = \x75\x75\3, data = five\n");
-            recreate();
-        }
-        seed = 32;
-        for (auto similarity : {VectorIndexSettings::SIMILARITY_INNER_PRODUCT, VectorIndexSettings::SIMILARITY_COSINE,
-                                VectorIndexSettings::DISTANCE_COSINE})
-        {
-            auto [level, posting] = DoPrefixKMeans(server, sender, 0, seed, k,
-                                                  NKikimrTxDataShard::TEvPrefixKMeansRequest::UPLOAD_MAIN_TO_BUILD,
-                                                  VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
-            UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 0, __ydb_id = 1, __ydb_centroid = II\3\n");
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, embedding = \x30\x30\3, data = one\n"
-                                              "__ydb_parent = 1, key = 2, embedding = \x31\x31\3, data = two\n"
-                                              "__ydb_parent = 1, key = 3, embedding = \x32\x32\3, data = three\n"
-                                              "__ydb_parent = 1, key = 4, embedding = \x65\x65\3, data = four\n"
-                                              "__ydb_parent = 1, key = 5, embedding = \x75\x75\3, data = five\n");
-            recreate();
-        }
     }
 
     Y_UNIT_TEST (BuildToPosting) {
@@ -528,7 +328,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         seed = 0;
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             auto [level, posting] = DoPrefixKMeans(server, sender, 40, seed, k,
-                                                  NKikimrTxDataShard::TEvPrefixKMeansRequest::UPLOAD_BUILD_TO_POSTING,
+                                                  NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = mm\3\n"
                                             "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = 11\3\n");
@@ -543,7 +343,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         seed = 111;
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             auto [level, posting] = DoPrefixKMeans(server, sender, 40, seed, k,
-                                                  NKikimrTxDataShard::TEvPrefixKMeansRequest::UPLOAD_BUILD_TO_POSTING,
+                                                  NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = 11\3\n"
                                             "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = mm\3\n");
@@ -559,7 +359,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                                 VectorIndexSettings::DISTANCE_COSINE})
         {
             auto [level, posting] = DoPrefixKMeans(server, sender, 40, seed, k,
-                                                  NKikimrTxDataShard::TEvPrefixKMeansRequest::UPLOAD_BUILD_TO_POSTING,
+                                                  NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = II\3\n");
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, data = one\n"
@@ -620,7 +420,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         seed = 0;
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             auto [level, posting] = DoPrefixKMeans(server, sender, 40, seed, k,
-                                                  NKikimrTxDataShard::TEvPrefixKMeansRequest::UPLOAD_BUILD_TO_BUILD,
+                                                  NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = mm\3\n"
                                             "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = 11\3\n");
@@ -635,7 +435,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         seed = 111;
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             auto [level, posting] = DoPrefixKMeans(server, sender, 40, seed, k,
-                                                  NKikimrTxDataShard::TEvPrefixKMeansRequest::UPLOAD_BUILD_TO_BUILD,
+                                                  NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = 11\3\n"
                                             "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = mm\3\n");
@@ -651,7 +451,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                                 VectorIndexSettings::DISTANCE_COSINE})
         {
             auto [level, posting] = DoPrefixKMeans(server, sender, 40, seed, k,
-                                                  NKikimrTxDataShard::TEvPrefixKMeansRequest::UPLOAD_BUILD_TO_BUILD,
+                                                  NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD,
                                                   VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
             UNIT_ASSERT_VALUES_EQUAL(level, "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = II\3\n");
             UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, embedding = \x30\x30\3, data = one\n"

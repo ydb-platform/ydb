@@ -379,51 +379,53 @@ public:
     EScan Seek(TLead& lead, ui64 seq) noexcept final
     {
         LOG_D("Seek " << Debug());
-        if (State == UploadState) {
-            if (!WriteBuf.IsEmpty()) {
-                return EScan::Sleep;
-            }
-            if (!ReadBuf.IsEmpty()) {
-                ReadBuf.FlushTo(WriteBuf);
-                Upload(false);
-                return EScan::Sleep;
-            }
-            if (MoveToNextKey()) {
-                return EScan::Reset;
-            }
-            return EScan::Final;
-        }
-
-        lead = Lead;
-        if (State == EState::SAMPLE) {
-            lead.SetTags({&KMeansScan, 1});
-            if (seq == 0 && !HasNextKey) {
-                return EScan::Feed;
-            }
-            State = EState::KMEANS;
-            if (!InitAggregatedClusters()) {
-                // We don't need to do anything,
-                // because this datashard doesn't have valid embeddings for this parent
+        while (true) {
+            if (State == UploadState) {
+                if (!WriteBuf.IsEmpty()) {
+                    return EScan::Sleep;
+                }
+                if (!ReadBuf.IsEmpty()) {
+                    ReadBuf.FlushTo(WriteBuf);
+                    Upload(false);
+                    return EScan::Sleep;
+                }
                 if (MoveToNextKey()) {
-                    return EScan::Reset;
+                    continue;
                 }
                 return EScan::Final;
             }
-            ++Round;
+
+            lead = Lead;
+            if (State == EState::SAMPLE) {
+                lead.SetTags({&KMeansScan, 1});
+                if (seq == 0 && !HasNextKey) {
+                    return EScan::Feed;
+                }
+                State = EState::KMEANS;
+                if (!InitAggregatedClusters()) {
+                    // We don't need to do anything,
+                    // because this datashard doesn't have valid embeddings for this parent
+                    if (MoveToNextKey()) {
+                        continue;
+                    }
+                    return EScan::Final;
+                }
+                ++Round;
+                return EScan::Feed;
+            }
+
+            Y_ASSERT(State == EState::KMEANS);
+            if (RecomputeClusters()) {
+                lead.SetTags(UploadScan);
+
+                UploadSample();
+                State = UploadState;
+            } else {
+                lead.SetTags({&KMeansScan, 1});
+                ++Round;
+            }
             return EScan::Feed;
         }
-
-        Y_ASSERT(State == EState::KMEANS);
-        if (RecomputeClusters()) {
-            lead.SetTags(UploadScan);
-
-            UploadSample();
-            State = UploadState;
-        } else {
-            lead.SetTags({&KMeansScan, 1});
-            ++Round;
-        }
-        return EScan::Feed;
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final
@@ -681,8 +683,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
         return;
     }
 
-    if (record.GetK() < 1) {
-        badRequest("Should be requested at least single cluster");
+    if (record.GetK() < 2) {
+        badRequest("Should be requested partition on at least two rows");
         return;
     }
 

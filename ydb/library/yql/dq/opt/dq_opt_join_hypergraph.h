@@ -54,13 +54,13 @@ public:
 
         void RemoveAttributeAliases() {
             for (auto& leftKey : LeftJoinKeys) {
-                if (auto idx = leftKey.AttributeName.find_last_of('.'); idx != TString::npos) {
+                if (auto idx = leftKey.AttributeName.find('.'); idx != TString::npos) {
                     leftKey.AttributeName = leftKey.AttributeName.substr(idx + 1);
                 }
             }
 
             for (auto& rightKey : RightJoinKeys) {
-                if (auto idx = rightKey.AttributeName.find_last_of('.'); idx != TString::npos) {
+                if (auto idx = rightKey.AttributeName.find('.'); idx != TString::npos) {
                     rightKey.AttributeName = rightKey.AttributeName.substr(idx + 1);
                 }
             }

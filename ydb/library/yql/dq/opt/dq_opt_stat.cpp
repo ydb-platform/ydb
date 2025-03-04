@@ -24,16 +24,16 @@ namespace {
 
 
     TString RemoveAliases(TString attributeName) {
-        if (auto idx = attributeName.find_last_of('.'); idx != TString::npos) {
+        if (auto idx = attributeName.find('.'); idx != TString::npos) {
             return attributeName.substr(idx+1);
         }
         return attributeName;
     }
 
     TString ExtractAlias(TString attributeName) {
-        if (auto idx = attributeName.find_last_of('.'); idx != TString::npos) {
+        if (auto idx = attributeName.find('.'); idx != TString::npos) {
             auto substr = attributeName.substr(0, idx);
-            if (auto idx2 = substr.find_last_of('.'); idx != TString::npos) {
+            if (auto idx2 = substr.find('.'); idx != TString::npos) {
                 substr = substr.substr(idx2+1);
             }
             return substr;

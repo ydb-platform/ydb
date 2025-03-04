@@ -31,7 +31,7 @@ target_link_libraries(ydb-core-kqp-gateway-ut PUBLIC
   ydb-services-kesus
   ydb-services-ydb
   ydb-services-persqueue_cluster_discovery
-  minikql-comp_nodes-llvm14
+  minikql-comp_nodes-llvm16
   ydb-services-metadata
   essentials-sql-pg
 )

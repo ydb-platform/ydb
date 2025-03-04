@@ -56,6 +56,7 @@ target_link_libraries(api-protos PUBLIC
 
 target_proto_messages(api-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/datastreams.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/field_transformation.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/fq.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/persqueue_common.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/persqueue_error_codes.proto
@@ -68,26 +69,27 @@ target_proto_messages(api-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_tablet.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_view.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/ymq.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/field_transformation.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_federation_discovery.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/persqueue_error_codes_v1.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_auth.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_debug.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_persqueue_v1.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_persqueue_cluster_discovery.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_clickhouse_internal.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_cms.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_common.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_config.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_coordination.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_debug.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_discovery.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_export.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_federation_discovery.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_formats.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_import.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_issue_message.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_keyvalue.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_monitoring.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_operation.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_query_stats.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_persqueue_cluster_discovery.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_persqueue_v1.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_query.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_query_stats.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_rate_limiter.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_scheme.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_scripting.proto
@@ -95,12 +97,11 @@ target_proto_messages(api-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_table.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_topic.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_value.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_keyvalue.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_bsconfig.proto
 )
 
 target_sources(api-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/datastreams.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/field_transformation.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/fq.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/persqueue_common.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/persqueue_error_codes.pb.h
@@ -113,26 +114,27 @@ target_sources(api-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/ydb_tablet.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/ydb_view.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/ymq.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/field_transformation.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_federation_discovery.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/persqueue_error_codes_v1.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_auth.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_debug.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_persqueue_v1.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_persqueue_cluster_discovery.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_clickhouse_internal.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_cms.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_common.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_config.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_coordination.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_debug.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_discovery.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_export.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_federation_discovery.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_formats.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_import.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_issue_message.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_keyvalue.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_monitoring.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_operation.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_query_stats.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_persqueue_cluster_discovery.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_persqueue_v1.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_query.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_query_stats.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_rate_limiter.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_scheme.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_scripting.pb.h
@@ -140,8 +142,6 @@ target_sources(api-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_table.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_topic.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_value.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_keyvalue.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_bsconfig.pb.h
 )
 
 

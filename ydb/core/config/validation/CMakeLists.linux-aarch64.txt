@@ -25,6 +25,7 @@ target_link_libraries(core-config-validation PUBLIC
   yutil
   ydb-core-protos
   formats-arrow-serializer
+  cpp-protobuf-json
 )
 
 target_sources(core-config-validation PRIVATE

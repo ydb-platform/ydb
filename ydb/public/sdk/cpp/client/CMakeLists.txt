@@ -12,15 +12,5 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ydb_table)
-add_subdirectory(impl)
-add_subdirectory(ydb_types)
-add_subdirectory(resources)
-add_subdirectory(ydb_driver)
-add_subdirectory(ydb_common_client)
-add_subdirectory(ydb_params)
-add_subdirectory(ydb_value)
-add_subdirectory(ydb_proto)
-add_subdirectory(ydb_result)
-add_subdirectory(ydb_scheme)
-add_subdirectory(ydb_query)
+add_subdirectory(ydb_persqueue_public)
+add_subdirectory(ydb_topic)

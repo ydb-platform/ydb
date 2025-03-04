@@ -39,6 +39,12 @@ target_link_libraries(essentials-core-facade PUBLIC
   qplayer-storage-interface
   core-qplayer-udf_resolver
   yql-essentials-sql
+  essentials-sql-v1
+  v1-lexer-antlr4
+  v1-lexer-antlr4_ansi
+  v1-proto_parser-antlr4
+  v1-proto_parser-antlr4_ansi
+  parser-pg_wrapper-interface
   essentials-utils-log
   yql-essentials-core
   essentials-core-type_ann

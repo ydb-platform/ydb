@@ -13,3 +13,4 @@
 # changes in this file.
 
 add_subdirectory(yt)
+add_subdirectory(ytflow)

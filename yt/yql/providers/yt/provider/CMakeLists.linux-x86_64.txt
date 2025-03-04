@@ -39,6 +39,12 @@ target_link_libraries(providers-yt-provider PUBLIC
   essentials-public-udf
   public-udf-tz
   yql-essentials-sql
+  essentials-sql-v1
+  v1-lexer-antlr4
+  v1-lexer-antlr4_ansi
+  v1-proto_parser-antlr4
+  v1-proto_parser-antlr4_ansi
+  parser-pg_wrapper-interface
   yql-essentials-utils
   essentials-utils-log
   yql-essentials-core
@@ -80,6 +86,9 @@ target_link_libraries(providers-yt-provider PUBLIC
   providers-yt-opt
   yt-gateway-qplayer
   providers-yt-proto
+  providers-ytflow-expr_nodes
+  ytflow-integration-interface
+  ytflow-integration-proto
   tools-enum_parser-enum_serialization_runtime
 )
 
@@ -128,6 +137,8 @@ target_sources(providers-yt-provider PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_dq_optimize.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_dq_hybrid.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_wide_flow.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_ytflow_integration.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_ytflow_optimize.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/phy_opt/yql_yt_phy_opt.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/phy_opt/yql_yt_phy_opt_content.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/phy_opt/yql_yt_phy_opt_fuse.cpp

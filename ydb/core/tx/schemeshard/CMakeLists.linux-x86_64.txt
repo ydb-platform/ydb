@@ -38,6 +38,8 @@ add_subdirectory(ut_cdc_stream_reboots)
 add_subdirectory(ut_column_build)
 add_subdirectory(ut_compaction)
 add_subdirectory(ut_continuous_backup)
+add_subdirectory(ut_data_erasure)
+add_subdirectory(ut_data_erasure_reboots)
 add_subdirectory(ut_export)
 add_subdirectory(ut_export_reboots_s3)
 add_subdirectory(ut_external_data_source)
@@ -101,6 +103,7 @@ target_link_libraries(core-tx-schemeshard PUBLIC
   ydb-core-audit
   ydb-core-base
   ydb-core-blob_depot
+  core-blobstorage-base
   core-blockstore-core
   ydb-core-engine
   core-engine-minikql
@@ -152,6 +155,7 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__borrowed_compaction.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__clean_pathes.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__conditional_erase.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__data_erasure_manager.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__delete_tablet_reply.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__describe_scheme.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__find_subdomain_path_id.cpp
@@ -276,6 +280,8 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__unmark_restore_tables.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__upgrade_access_database.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__upgrade_schema.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__root_data_erasure_manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__tenant_data_erasure_manager.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_audit_log.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_audit_log_fragment.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_backup.cpp

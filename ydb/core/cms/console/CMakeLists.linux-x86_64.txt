@@ -36,7 +36,7 @@ target_link_libraries(core-cms-console PUBLIC
   core-blobstorage-groupinfo
   cms-console-validators
   core-config-init
-  ydb-core-control
+  core-control-lib
   core-engine-minikql
   ydb-core-mind
   ydb-core-node_whiteboard

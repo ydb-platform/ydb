@@ -13,8 +13,8 @@
 # changes in this file.
 
 add_subdirectory(common)
-add_subdirectory(service)
 add_subdirectory(metadata)
+add_subdirectory(service)
 add_subdirectory(ut)
 
 add_library(ydb-services-ext_index INTERFACE)

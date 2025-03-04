@@ -63,12 +63,12 @@ target_link_libraries(cpp-messagebus-www.global PUBLIC
 )
 
 target_sources(cpp-messagebus-www.global PRIVATE
-  ${PROJECT_BINARY_DIR}/library/cpp/messagebus/www/dd5bbfe173cb40020e73f3227e3ac73d.cpp
+  ${PROJECT_BINARY_DIR}/library/cpp/messagebus/www/f8054eb7042dc0eee09a41f89e2413e0.cpp
 )
 
 
 resources(cpp-messagebus-www.global
-  ${PROJECT_BINARY_DIR}/library/cpp/messagebus/www/dd5bbfe173cb40020e73f3227e3ac73d.cpp
+  ${PROJECT_BINARY_DIR}/library/cpp/messagebus/www/f8054eb7042dc0eee09a41f89e2413e0.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/www/messagebus.js
   ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/www/bus-ico.png

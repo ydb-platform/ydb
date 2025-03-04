@@ -28,9 +28,6 @@ target_sources(core-kqp-expr_nodes PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.gen.h
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.decl.inl.h
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.defs.inl.h
-  ${PROJECT_BINARY_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.gen.h
-  ${PROJECT_BINARY_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.decl.inl.h
-  ${PROJECT_BINARY_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.defs.inl.h
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.h
 )
 

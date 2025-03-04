@@ -60,9 +60,6 @@ run_antlr(
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/SQLv1Parser.h
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.h
-  DEPENDS
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/SQLv1.g
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/org/antlr/codegen/templates/Cpp/Cpp.stg
   WORKING_DIRECTORY
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi
   ANTLER_ARGS

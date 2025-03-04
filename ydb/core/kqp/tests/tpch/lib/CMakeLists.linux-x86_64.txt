@@ -53,12 +53,12 @@ target_link_libraries(tests-tpch-lib.global PUBLIC
 )
 
 target_sources(tests-tpch-lib.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/core/kqp/tests/tpch/lib/8a9b63095ffdea8c245fccfb0c6b87ec.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/kqp/tests/tpch/lib/63ae9ac2a8c853f48ee41c793072d76c.cpp
 )
 
 
 resources(tests-tpch-lib.global
-  ${PROJECT_BINARY_DIR}/ydb/core/kqp/tests/tpch/lib/8a9b63095ffdea8c245fccfb0c6b87ec.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/kqp/tests/tpch/lib/63ae9ac2a8c853f48ee41c793072d76c.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/ps_0.001/customer.tbl
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/ps_0.001/lineitem.tbl

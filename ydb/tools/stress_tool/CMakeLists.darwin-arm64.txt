@@ -34,7 +34,7 @@ target_link_libraries(ydb_stress_tool PUBLIC
   ydb-library-pdisk_io
   essentials-parser-pg_wrapper
   essentials-sql-pg
-  minikql-comp_nodes-llvm14
+  minikql-comp_nodes-llvm16
   ydb_device_test
   tools-stress_tool-proto
 )

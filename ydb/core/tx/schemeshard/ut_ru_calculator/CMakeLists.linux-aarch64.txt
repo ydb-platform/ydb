@@ -36,7 +36,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_ru_calculator PUBLIC
   ydb-services-ydb
   ydb-services-kesus
   ydb-services-persqueue_cluster_discovery
-  minikql-comp_nodes-llvm14
+  minikql-comp_nodes-llvm16
 )
 
 target_allocator(ydb-core-tx-schemeshard-ut_ru_calculator

@@ -21,7 +21,7 @@ target_link_libraries(library-actors-prof PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-tcmalloc-malloc_extension
-  library-cpp-charset
+  cpp-charset-lite
   cpp-containers-atomizer
 )
 

@@ -50,7 +50,6 @@ target_link_options(ydb-core-tablet_flat-ut_pg PRIVATE
   -fPIC
   -lrt
   -ldl
-  -lutil
 )
 
 target_sources(ydb-core-tablet_flat-ut_pg PRIVATE

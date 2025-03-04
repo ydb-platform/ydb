@@ -49,7 +49,7 @@ target_link_libraries(ydb-core-tx-columnshard-splitter-ut PUBLIC
   tx-columnshard-data_accessor
   ydb-core-tx
   ydb-core-mind
-  minikql-comp_nodes-llvm14
+  minikql-comp_nodes-llvm16
   udf-service-exception_policy
   essentials-sql-pg
   ydb-services-kesus

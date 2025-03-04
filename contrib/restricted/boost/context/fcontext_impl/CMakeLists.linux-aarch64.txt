@@ -29,5 +29,6 @@ target_sources(boost-context-fcontext_impl PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/context/src/asm/make_arm64_aapcs_elf_gas.S
   ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/context/src/asm/jump_arm64_aapcs_elf_gas.S
   ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/context/src/asm/ontop_arm64_aapcs_elf_gas.S
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/context/src/fcontext.cpp
 )
 

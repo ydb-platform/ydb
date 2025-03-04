@@ -39,7 +39,6 @@ target_link_options(blobsan PRIVATE
   -fPIC
   -lrt
   -ldl
-  -lutil
 )
 
 target_sources(blobsan PRIVATE

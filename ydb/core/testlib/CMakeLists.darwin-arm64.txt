@@ -89,10 +89,11 @@ target_link_libraries(ydb-core-testlib PUBLIC
   library-mkql_proto-protos
   library-persqueue-topic_parser
   ydb-library-security
-  minikql-comp_nodes-llvm14
+  minikql-comp_nodes-llvm16
   providers-s3-actors_factory
   yt-codec-codegen
-  yt-comp_nodes-llvm14
+  yt-comp_nodes-llvm16
+  comp_nodes-dq-llvm16
   udf-service-exception_policy
   api-protos
   public-lib-base

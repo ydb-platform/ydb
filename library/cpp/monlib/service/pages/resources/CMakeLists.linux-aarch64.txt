@@ -50,12 +50,12 @@ target_link_libraries(service-pages-resources.global PUBLIC
 )
 
 target_sources(service-pages-resources.global PRIVATE
-  ${PROJECT_BINARY_DIR}/library/cpp/monlib/service/pages/resources/ff1cb2429e1fce561e9b0ed0d5522c37.cpp
+  ${PROJECT_BINARY_DIR}/library/cpp/monlib/service/pages/resources/a3cc37908e2d765b4fcbe5557003eebe.cpp
 )
 
 
 resources(service-pages-resources.global
-  ${PROJECT_BINARY_DIR}/library/cpp/monlib/service/pages/resources/ff1cb2429e1fce561e9b0ed0d5522c37.cpp
+  ${PROJECT_BINARY_DIR}/library/cpp/monlib/service/pages/resources/a3cc37908e2d765b4fcbe5557003eebe.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/resources/static/css/bootstrap.min.css
   ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/resources/static/fonts/glyphicons-halflings-regular.eot

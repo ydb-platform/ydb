@@ -31,9 +31,6 @@ target_sources(essentials-core-expr_nodes PRIVATE
   ${PROJECT_BINARY_DIR}/yql/essentials/core/expr_nodes/yql_expr_nodes.gen.h
   ${PROJECT_BINARY_DIR}/yql/essentials/core/expr_nodes/yql_expr_nodes.decl.inl.h
   ${PROJECT_BINARY_DIR}/yql/essentials/core/expr_nodes/yql_expr_nodes.defs.inl.h
-  ${PROJECT_BINARY_DIR}/yql/essentials/core/expr_nodes/yql_expr_nodes.gen.h
-  ${PROJECT_BINARY_DIR}/yql/essentials/core/expr_nodes/yql_expr_nodes.decl.inl.h
-  ${PROJECT_BINARY_DIR}/yql/essentials/core/expr_nodes/yql_expr_nodes.defs.inl.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/expr_nodes/yql_expr_nodes.h
 )
 

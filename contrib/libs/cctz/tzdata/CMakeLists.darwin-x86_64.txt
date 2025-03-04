@@ -43,12 +43,12 @@ target_link_libraries(libs-cctz-tzdata.global PUBLIC
 
 target_sources(libs-cctz-tzdata.global PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/libs/cctz/tzdata/factory.cpp
-  ${PROJECT_BINARY_DIR}/contrib/libs/cctz/tzdata/0be5888175f70ec803b38a1f5cc4d221.cpp
+  ${PROJECT_BINARY_DIR}/contrib/libs/cctz/tzdata/78d273686c1614d1dd0e22183517dbad.cpp
 )
 
 
 resources(libs-cctz-tzdata.global
-  ${PROJECT_BINARY_DIR}/contrib/libs/cctz/tzdata/0be5888175f70ec803b38a1f5cc4d221.cpp
+  ${PROJECT_BINARY_DIR}/contrib/libs/cctz/tzdata/78d273686c1614d1dd0e22183517dbad.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/contrib/libs/cctz/tzdata/generated/58543f30ac34b6510b552b9b3e82b772
   ${PROJECT_SOURCE_DIR}/contrib/libs/cctz/tzdata/generated/796a57137d718e4fa3db8ef611f18e61

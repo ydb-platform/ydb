@@ -24,6 +24,7 @@ target_link_libraries(core-mind-bscontroller PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-actors-core
+  ydb-library-yaml_config
   ydb-core-base
   core-base-services
   ydb-core-blobstorage
@@ -101,5 +102,6 @@ target_sources(core-mind-bscontroller PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/sys_view.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/table_merger.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/types.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/bscontroller/yaml_config_helpers.h
 )
 

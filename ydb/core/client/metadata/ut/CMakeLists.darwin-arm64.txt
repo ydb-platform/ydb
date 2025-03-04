@@ -28,7 +28,7 @@ target_link_libraries(ydb-core-client-metadata-ut PUBLIC
   yutil
   cpp-testing-unittest_main
   core-client-metadata
-  minikql-invoke_builtins-llvm14
+  minikql-invoke_builtins-llvm16
   udf-service-stub
   essentials-sql-pg_dummy
 )

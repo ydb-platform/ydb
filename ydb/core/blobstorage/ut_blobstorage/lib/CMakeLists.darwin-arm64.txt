@@ -38,7 +38,7 @@ target_link_libraries(blobstorage-ut_blobstorage-lib PUBLIC
   core-tx-mediator
   core-tx-coordinator
   ydb-core-util
-  minikql-comp_nodes-llvm14
+  minikql-comp_nodes-llvm16
   udf-service-exception_policy
   essentials-sql-pg_dummy
   core-util-actorsys_test

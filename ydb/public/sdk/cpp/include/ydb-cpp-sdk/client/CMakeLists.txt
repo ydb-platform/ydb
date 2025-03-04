@@ -14,3 +14,4 @@
 
 add_subdirectory(iam)
 add_subdirectory(topic)
+add_subdirectory(iam_private)

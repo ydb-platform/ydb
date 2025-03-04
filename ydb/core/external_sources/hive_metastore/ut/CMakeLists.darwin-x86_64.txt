@@ -31,7 +31,7 @@ target_link_libraries(ydb-core-external_sources-hive_metastore-ut PUBLIC
   core-testlib-actors
   core-testlib-basics
   essentials-minikql-comp_nodes
-  minikql-comp_nodes-llvm14
+  minikql-comp_nodes-llvm16
   essentials-sql-pg_dummy
 )
 

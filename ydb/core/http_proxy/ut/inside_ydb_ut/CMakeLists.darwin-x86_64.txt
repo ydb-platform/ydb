@@ -62,7 +62,7 @@ target_sources(ydb-core-http_proxy-ut-inside_ydb_ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/ut/kinesis_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/ut/ymq_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/ut/inside_ydb_ut/inside_ydb_ut.cpp
-  ${PROJECT_BINARY_DIR}/ydb/core/http_proxy/ut/inside_ydb_ut/a4a54fecc6c7df1d053bfeea0e394e63.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/http_proxy/ut/inside_ydb_ut/0f6b0d5aea21d5b5f6c912c732589114.cpp
 )
 
 
@@ -104,7 +104,7 @@ set_yunittest_property(
 )
 
 resources(ydb-core-http_proxy-ut-inside_ydb_ut
-  ${PROJECT_BINARY_DIR}/ydb/core/http_proxy/ut/inside_ydb_ut/a4a54fecc6c7df1d053bfeea0e394e63.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/http_proxy/ut/inside_ydb_ut/0f6b0d5aea21d5b5f6c912c732589114.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/ut/internal_counters.json
   ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/ut/proxy_counters.json

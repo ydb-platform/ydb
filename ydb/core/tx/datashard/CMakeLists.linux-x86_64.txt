@@ -318,8 +318,7 @@ target_sources(core-tx-datashard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/volatile_tx_mon.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/wait_for_plan_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/wait_for_stream_clearance_unit.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_buffer_raw.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_buffer_zstd.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_buffer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_uploader.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/extstorage_usage_config.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/import_s3.cpp
@@ -470,12 +469,12 @@ target_link_libraries(core-tx-datashard.global PUBLIC
 )
 
 target_sources(core-tx-datashard.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/core/tx/datashard/c2cace4d46ce7c7b8eb886dfb16275a3.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/datashard/228a9ef04a09490f95213fb4e0fcf641.cpp
 )
 
 
 resources(core-tx-datashard.global
-  ${PROJECT_BINARY_DIR}/ydb/core/tx/datashard/c2cace4d46ce7c7b8eb886dfb16275a3.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/datashard/228a9ef04a09490f95213fb4e0fcf641.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/ui/index.html
   KEYS

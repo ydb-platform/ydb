@@ -44,6 +44,7 @@ target_link_options(ydb-public-lib-ydb_cli-common-ut PRIVATE
 )
 
 target_sources(ydb-public-lib-ydb_cli-common-ut PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/cert_format_converter_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/normalize_path_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/csv_parser_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/pg_dump_parser_ut.cpp

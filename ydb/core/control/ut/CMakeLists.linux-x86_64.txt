@@ -37,7 +37,7 @@ target_link_libraries(ydb-core-control-ut PUBLIC
   ydb-services-persqueue_v1
   ydb-services-kesus
   ydb-services-persqueue_cluster_discovery
-  minikql-comp_nodes-llvm14
+  minikql-comp_nodes-llvm16
   udf-service-exception_policy
 )
 
@@ -58,7 +58,6 @@ target_link_options(ydb-core-control-ut PRIVATE
 )
 
 target_sources(ydb-core-control-ut PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_actor_ut.cpp
 )
 

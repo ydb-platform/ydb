@@ -33,13 +33,13 @@ target_link_libraries(ydb-core-tx-columnshard-ut_schema PUBLIC
   library-cpp-getopt
   cpp-regex-pcre
   library-cpp-svnversion
-  libs-aws-sdk-cpp-aws-cpp-sdk-core
   core-testlib-default
   columnshard-hooks-abstract
   columnshard-hooks-testing
   tx-columnshard-test_helper
   ydb-services-metadata
   ydb-core-tx
+  ydb-core-util
   public-lib-yson_value
 )
 

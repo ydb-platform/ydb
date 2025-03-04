@@ -44,7 +44,6 @@ target_link_options(ydb-core-blobstorage-vdisk-hulldb-cache_block-ut PRIVATE
   -fPIC
   -lrt
   -ldl
-  -lutil
 )
 
 target_sources(ydb-core-blobstorage-vdisk-hulldb-cache_block-ut PRIVATE

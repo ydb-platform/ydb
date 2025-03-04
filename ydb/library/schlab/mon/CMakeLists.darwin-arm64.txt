@@ -53,12 +53,12 @@ target_link_libraries(library-schlab-mon.global PUBLIC
 )
 
 target_sources(library-schlab-mon.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/library/schlab/mon/a4c6647a47483a30dd2cb446cfff2507.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/schlab/mon/5d739145875baa315e61bb4328e7555c.cpp
 )
 
 
 resources(library-schlab-mon.global
-  ${PROJECT_BINARY_DIR}/ydb/library/schlab/mon/a4c6647a47483a30dd2cb446cfff2507.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/schlab/mon/5d739145875baa315e61bb4328e7555c.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/schlab/mon/static/css/bootstrap.min.css
   ${PROJECT_SOURCE_DIR}/ydb/library/schlab/mon/static/css/scharm.css

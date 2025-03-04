@@ -66,12 +66,12 @@ target_link_libraries(library-workload-log.global PUBLIC
 
 target_sources(library-workload-log.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/log/registrar.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/log/c169ba64d7ab39988074b96cfdbd49fe.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/log/2d60b698b0f6eef06eaa80ea0fd09b59.cpp
 )
 
 
 resources(library-workload-log.global
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/log/c169ba64d7ab39988074b96cfdbd49fe.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/log/2d60b698b0f6eef06eaa80ea0fd09b59.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/log/select_queries.sql
   KEYS

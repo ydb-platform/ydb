@@ -44,16 +44,17 @@ target_link_libraries(yt-comp_nodes-no_llvm PUBLIC
   providers-common-mkql
   providers-yt-codec
   providers-yt-expr_nodes
-  yt-lib-errors
   minikql-invoke_builtins-no_llvm
 )
 
 target_sources(yt-comp_nodes-no_llvm PRIVATE
+  ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/comp_nodes/no_llvm/yql_mkql_file_block_stream.cpp
   ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/comp_nodes/no_llvm/yql_mkql_file_input_state.cpp
   ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/comp_nodes/no_llvm/yql_mkql_file_list.cpp
   ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/comp_nodes/no_llvm/yql_mkql_input_stream.cpp
   ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/comp_nodes/no_llvm/yql_mkql_input.cpp
   ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/comp_nodes/no_llvm/yql_mkql_output.cpp
+  ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/comp_nodes/no_llvm/yql_mkql_block_table_content.cpp
   ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/comp_nodes/no_llvm/yql_mkql_table_content.cpp
   ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/comp_nodes/no_llvm/yql_mkql_table.cpp
   ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/comp_nodes/no_llvm/yql_mkql_ungrouping_list.cpp
@@ -66,6 +67,11 @@ target_sources(yt-comp_nodes-no_llvm PRIVATE
   ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/comp_nodes/no_llvm/yql/essentials/minikql/invoke_builtins/mkql_builtins_decimal.h
 )
 
+
+copy_file(
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/comp_nodes/yql_mkql_file_block_stream.cpp
+  ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/comp_nodes/no_llvm/yql_mkql_file_block_stream.cpp
+)
 
 copy_file(
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/comp_nodes/yql_mkql_file_input_state.cpp
@@ -90,6 +96,11 @@ copy_file(
 copy_file(
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/comp_nodes/yql_mkql_output.cpp
   ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/comp_nodes/no_llvm/yql_mkql_output.cpp
+)
+
+copy_file(
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/comp_nodes/yql_mkql_block_table_content.cpp
+  ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/comp_nodes/no_llvm/yql_mkql_block_table_content.cpp
 )
 
 copy_file(

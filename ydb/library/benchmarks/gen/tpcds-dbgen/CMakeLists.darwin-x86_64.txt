@@ -925,12 +925,12 @@ target_link_libraries(benchmarks-gen-tpcds-dbgen.global PUBLIC
 )
 
 target_sources(benchmarks-gen-tpcds-dbgen.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/library/benchmarks/gen/tpcds-dbgen/74a5b60c4b6093a232132499a74d357f.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/benchmarks/gen/tpcds-dbgen/721ca82c6b9b66cb58977408bbf9dabe.cpp
 )
 
 
 resources(benchmarks-gen-tpcds-dbgen.global
-  ${PROJECT_BINARY_DIR}/ydb/library/benchmarks/gen/tpcds-dbgen/74a5b60c4b6093a232132499a74d357f.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/benchmarks/gen/tpcds-dbgen/721ca82c6b9b66cb58977408bbf9dabe.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/gen/tpcds-dbgen/tpcds.idx
   KEYS

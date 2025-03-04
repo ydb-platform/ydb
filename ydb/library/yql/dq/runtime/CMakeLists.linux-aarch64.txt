@@ -45,6 +45,7 @@ target_link_libraries(yql-dq-runtime PUBLIC
   providers-common-comp_nodes
   common-schema-mkql
   library-actors-util
+  library-formats-arrow-hash
   tools-enum_parser-enum_serialization_runtime
 )
 

@@ -54,12 +54,12 @@ target_link_libraries(essentials-core-issue.global PUBLIC
 )
 
 target_sources(essentials-core-issue.global PRIVATE
-  ${PROJECT_BINARY_DIR}/yql/essentials/core/issue/9cb629cc63a6969a6d03a72303abfabe.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/core/issue/bc236c5e583a254aee315f00e84d8633.cpp
 )
 
 
 resources(essentials-core-issue.global
-  ${PROJECT_BINARY_DIR}/yql/essentials/core/issue/9cb629cc63a6969a6d03a72303abfabe.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/core/issue/bc236c5e583a254aee315f00e84d8633.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/issue/yql_issue.txt
   KEYS

@@ -20,7 +20,7 @@ target_link_libraries(table-perf PUBLIC
   contrib-libs-cxxsupp
   yutil
   test-libs-table
-  library-cpp-charset
+  cpp-charset-lite
   library-cpp-getopt
   ydb-core-tablet_flat
   essentials-sql-pg_dummy

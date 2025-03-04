@@ -67,12 +67,12 @@ target_link_libraries(library-workload-tpc_base.global PUBLIC
 )
 
 target_sources(library-workload-tpc_base.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpc_base/ac98c4d01c2035c460570b862a5799aa.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpc_base/c22e6feb6eaa6874db53c56cbc2a1b8a.cpp
 )
 
 
 resources(library-workload-tpc_base.global
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpc_base/ac98c4d01c2035c460570b862a5799aa.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpc_base/c22e6feb6eaa6874db53c56cbc2a1b8a.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/gen_queries/consts.yql
   ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/gen_queries/consts_decimal.yql

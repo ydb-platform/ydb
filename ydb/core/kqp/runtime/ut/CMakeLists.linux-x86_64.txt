@@ -32,7 +32,7 @@ target_link_libraries(ydb-core-kqp-runtime-ut PUBLIC
   core-kqp-runtime
   cpp-testing-unittest
   testlib-basics-pg
-  minikql-comp_nodes-llvm14
+  minikql-comp_nodes-llvm16
   udf-service-exception_policy
 )
 

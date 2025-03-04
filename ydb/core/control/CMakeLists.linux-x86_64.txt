@@ -12,6 +12,7 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(lib)
 add_subdirectory(ut)
 
 add_library(ydb-core-control)
@@ -22,21 +23,14 @@ target_link_libraries(ydb-core-control PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-actors-core
-  cpp-monlib-dynamic_counters
-  ydb-core-base
-  ydb-core-mon
-  ydb-core-node_whiteboard
+  core-control-lib
   cpp-deprecated-atomic
 )
 
 target_sources(ydb-core-control PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_control.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_impl.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/control/defs.h
   ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_actor.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_control.h
   ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_wrapper.h
 )
 

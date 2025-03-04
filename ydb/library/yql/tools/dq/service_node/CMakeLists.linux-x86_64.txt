@@ -34,7 +34,7 @@ target_link_libraries(service_node PUBLIC
   utils-log-proto
   providers-dq-provider
   dq-worker_manager-interface
-  minikql-invoke_builtins-llvm14
+  minikql-invoke_builtins-llvm16
   essentials-utils-backtrace
   providers-dq-service
   providers-dq-metrics
@@ -42,7 +42,7 @@ target_link_libraries(service_node PUBLIC
   providers-yt-dq_task_preprocessor
   providers-dq-global_worker_manager
   dq-actors-yt
-  yt-comp_nodes-llvm14
+  yt-comp_nodes-llvm16
   yt-codec-codegen
   yt-yt-client
 )

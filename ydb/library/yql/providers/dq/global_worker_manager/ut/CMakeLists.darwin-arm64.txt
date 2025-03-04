@@ -34,8 +34,8 @@ target_link_libraries(yql-providers-dq-global_worker_manager-ut PUBLIC
   dq-actors-yt
   providers-dq-actors
   dq-actors-compute
-  minikql-computation-llvm14
-  minikql-comp_nodes-llvm14
+  minikql-computation-llvm16
+  minikql-comp_nodes-llvm16
   core-dq_integration-transform
   yql-dq-comp_nodes
   providers-common-comp_nodes

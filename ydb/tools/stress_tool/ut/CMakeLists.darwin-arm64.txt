@@ -27,7 +27,7 @@ target_link_libraries(ydb-tools-stress_tool-ut PUBLIC
   version_definition
   essentials-parser-pg_wrapper
   essentials-sql-pg
-  minikql-comp_nodes-llvm14
+  minikql-comp_nodes-llvm16
 )
 
 target_allocator(ydb-tools-stress_tool-ut

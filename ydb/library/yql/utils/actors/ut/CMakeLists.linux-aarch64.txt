@@ -26,7 +26,7 @@ target_link_libraries(ydb-library-yql-utils-actors-ut PUBLIC
   cpp-testing-unittest_main
   yql-utils-actors
   testlib-basics-default
-  minikql-comp_nodes-llvm14
+  minikql-comp_nodes-llvm16
 )
 
 target_allocator(ydb-library-yql-utils-actors-ut

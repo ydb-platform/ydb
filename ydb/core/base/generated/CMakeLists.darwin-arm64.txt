@@ -32,7 +32,6 @@ target_link_libraries(core-base-generated PUBLIC
 )
 
 target_sources(core-base-generated PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/core/base/generated/runtime_feature_flags.h
   ${PROJECT_BINARY_DIR}/ydb/core/base/generated/runtime_feature_flags.cpp
   ${PROJECT_BINARY_DIR}/ydb/core/base/generated/runtime_feature_flags.h
 )

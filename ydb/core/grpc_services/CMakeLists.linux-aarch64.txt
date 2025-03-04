@@ -40,7 +40,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   ydb-core-actorlib_impl
   ydb-core-audit
   ydb-core-base
-  ydb-core-control
+  core-control-lib
   ydb-core-discovery
   ydb-core-engine
   ydb-core-formats
@@ -86,8 +86,8 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
 )
 
 target_sources(ydb-core-grpc_services PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/audit_log.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/audit_dml_operations.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/audit_log.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/audit_logins.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/grpc_endpoint_publish_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/grpc_helper.cpp
@@ -102,32 +102,34 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_alter_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_backup.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_begin_transaction.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_bsconfig.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_calls.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_cancel_operation.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_cms.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_commit_transaction.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_dynamic_config.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_config.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_copy_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_copy_tables.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_export.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_create_coordination_node.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_create_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_describe_coordination_node.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_describe_external_data_source.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_describe_external_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_describe_path.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_describe_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_describe_table_options.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_discovery.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_drop_coordination_node.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_drop_table.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_discovery.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_dynamic_config.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_execute_data_query.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_execute_scheme_query.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_execute_yql_script.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_explain_yql_script.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_explain_data_query.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_explain_yql_script.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_export.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_forget_operation.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_fq_internal.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_fq.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_fq_internal.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_get_operation.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_get_scale_recommendation.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_get_shard_locations.cpp
@@ -139,20 +141,21 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_kh_snapshots.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_kqp_base.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_list_operations.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_login.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_load_rows.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_log_store.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_node_registration.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_login.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_maintenance.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_make_directory.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_modify_permissions.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_monitoring.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_node_registration.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_object_storage.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_ping.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_prepare_data_query.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_rate_limiter_api.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_read_columns.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_read_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_read_rows.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_read_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_remove_directory.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_rename_tables.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_replication.cpp
@@ -160,9 +163,8 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_scheme_base.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_stream_execute_scan_query.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_stream_execute_yql_script.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_whoami.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_object_storage.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_view.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_whoami.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/table_settings.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_common/rpc_common_kqp_session.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/query/rpc_execute_query.cpp

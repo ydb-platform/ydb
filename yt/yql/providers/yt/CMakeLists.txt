@@ -12,14 +12,14 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(comp_nodes)
+add_subdirectory(gateway)
 add_subdirectory(codec)
 add_subdirectory(common)
 add_subdirectory(lib)
-add_subdirectory(gateway)
 add_subdirectory(expr_nodes)
 add_subdirectory(provider)
 add_subdirectory(opt)
 add_subdirectory(proto)
 add_subdirectory(job)
+add_subdirectory(comp_nodes)
 add_subdirectory(mkql_dq)

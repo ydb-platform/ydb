@@ -21,6 +21,7 @@ target_link_libraries(library-formats-arrow-switch PUBLIC
   yutil
   libs-apache-arrow
   library-actors-core
+  library-formats-arrow-validation
 )
 
 target_sources(library-formats-arrow-switch PRIVATE

@@ -23,8 +23,8 @@ target_link_libraries(commands PUBLIC
 )
 
 target_sources(commands PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/commands/ydb_cloud_root.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/commands/ydb_version.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/commands/ydb_root.cpp
   ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/commands/ydb_update.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/commands/ydb_version.cpp
 )
 

@@ -38,10 +38,13 @@ target_link_libraries(ydb-core-util PUBLIC
   ydb-core-mon
   cpp-deprecated-atomic
   ydb-library-yverify_stream
+  libs-aws-sdk-cpp-aws-cpp-sdk-core
+  contrib-libs-curl
 )
 
 target_sources(ydb-core-util PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/util/address_classifier.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/util/aws.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/backoff.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/cache.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/concurrent_rw_hash.cpp

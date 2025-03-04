@@ -63,12 +63,12 @@ target_link_libraries(src-client-resources.global PUBLIC
 )
 
 target_sources(src-client-resources.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/public/sdk/cpp/src/client/resources/0911be33759cfbc9d06fce186cd4572e.cpp
+  ${PROJECT_BINARY_DIR}/ydb/public/sdk/cpp/src/client/resources/8c375ac0e1dc6689598f7076c0ebd8e5.cpp
 )
 
 
 resources(src-client-resources.global
-  ${PROJECT_BINARY_DIR}/ydb/public/sdk/cpp/src/client/resources/0911be33759cfbc9d06fce186cd4572e.cpp
+  ${PROJECT_BINARY_DIR}/ydb/public/sdk/cpp/src/client/resources/8c375ac0e1dc6689598f7076c0ebd8e5.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/resources/ydb_sdk_version.txt
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/resources/ydb_root_ca.pem

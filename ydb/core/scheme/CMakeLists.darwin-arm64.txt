@@ -23,7 +23,7 @@ target_link_libraries(ydb-core-scheme PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-actors-core
-  library-cpp-charset
+  cpp-charset-lite
   cpp-containers-bitseq
   cpp-deprecated-enum_codegen
   library-cpp-yson

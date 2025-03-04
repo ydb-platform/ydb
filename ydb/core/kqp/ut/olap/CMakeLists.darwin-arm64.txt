@@ -62,6 +62,7 @@ target_sources(ydb-core-kqp-ut-olap PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/decimal_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/delete_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/indexes_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/json_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/kqp_olap_stats_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/locks_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/optimizer_ut.cpp

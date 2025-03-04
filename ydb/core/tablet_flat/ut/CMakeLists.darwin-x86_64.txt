@@ -96,7 +96,7 @@ target_sources(ydb-core-tablet_flat-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_slice.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_slice_loader.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_versions.cpp
-  ${PROJECT_BINARY_DIR}/ydb/core/tablet_flat/ut/6cf77686c9ddf4f7a8a150d2405a77e7.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/tablet_flat/ut/3f63c6c5c2279df5eb07e7ad1d95f1b4.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/flat_test_db.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/flat_test_db_helpers.h
 )
@@ -139,7 +139,7 @@ set_yunittest_property(
 )
 
 resources(ydb-core-tablet_flat-ut
-  ${PROJECT_BINARY_DIR}/ydb/core/tablet_flat/ut/6cf77686c9ddf4f7a8a150d2405a77e7.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/tablet_flat/ut/3f63c6c5c2279df5eb07e7ad1d95f1b4.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/test/data/002_full_part.pages
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/test/data/008_basics_db.redo

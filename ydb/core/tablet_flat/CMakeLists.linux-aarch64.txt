@@ -63,7 +63,7 @@ target_link_libraries(ydb-core-tablet_flat PUBLIC
   library-cpp-lwtrace
   cpp-lwtrace-mon
   ydb-core-base
-  ydb-core-control
+  core-control-lib
   ydb-core-protos
   ydb-core-tablet
   core-tablet_flat-protos

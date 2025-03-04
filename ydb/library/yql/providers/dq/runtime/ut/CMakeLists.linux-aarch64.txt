@@ -43,7 +43,6 @@ target_link_options(ydb-library-yql-providers-dq-runtime-ut PRIVATE
   -fPIC
   -lrt
   -ldl
-  -lutil
 )
 
 target_sources(ydb-library-yql-providers-dq-runtime-ut PRIVATE

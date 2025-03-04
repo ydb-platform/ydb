@@ -38,12 +38,12 @@ target_link_libraries(providers-generic-proto PUBLIC
 )
 
 target_proto_messages(providers-generic-proto PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/proto/range.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/proto/partition.proto
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/proto/source.proto
 )
 
 target_sources(providers-generic-proto PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/proto/range.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/proto/partition.pb.h
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/proto/source.pb.h
 )
 

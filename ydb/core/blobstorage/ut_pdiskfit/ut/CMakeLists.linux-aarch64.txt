@@ -37,7 +37,6 @@ target_link_options(ydb-core-blobstorage-ut_pdiskfit-ut PRIVATE
   -fPIC
   -lrt
   -ldl
-  -lutil
 )
 
 target_sources(ydb-core-blobstorage-ut_pdiskfit-ut PRIVATE

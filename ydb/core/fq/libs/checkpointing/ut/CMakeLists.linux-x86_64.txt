@@ -33,7 +33,7 @@ target_link_libraries(ydb-core-fq-libs-checkpointing-ut PUBLIC
   cpp-testing-unittest
   core-testlib-actors
   testlib-basics-default
-  minikql-comp_nodes-llvm14
+  minikql-comp_nodes-llvm16
 )
 
 target_allocator(ydb-core-fq-libs-checkpointing-ut

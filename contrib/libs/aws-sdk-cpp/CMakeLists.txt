@@ -12,5 +12,5 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(aws-cpp-sdk-s3)
 add_subdirectory(aws-cpp-sdk-core)
+add_subdirectory(aws-cpp-sdk-s3)

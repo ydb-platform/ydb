@@ -38,7 +38,7 @@ target_link_libraries(ydb-library-yql-providers-pq-provider-ut PUBLIC
   core-services-mounts
   yql-dq-comp_nodes
   yql-dq-transform
-  minikql-comp_nodes-llvm14
+  minikql-comp_nodes-llvm16
   providers-common-comp_nodes
   providers-common-db_id_async_resolver
   providers-dq-local_gateway
@@ -66,7 +66,6 @@ target_link_options(ydb-library-yql-providers-pq-provider-ut PRIVATE
   -fPIC
   -lrt
   -ldl
-  -lutil
 )
 
 target_sources(ydb-library-yql-providers-pq-provider-ut PRIVATE

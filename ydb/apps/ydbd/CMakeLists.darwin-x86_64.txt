@@ -61,7 +61,7 @@ target_link_libraries(ydbd PUBLIC
   url_udf
   yson2_udf
   dsv_udf
-  client-persqueue_public-codecs
+  client-ydb_persqueue_public-codecs
 )
 
 target_allocator(ydbd

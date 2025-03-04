@@ -43,7 +43,6 @@ target_link_options(ydb-library-yql-providers-s3-provider-ut PRIVATE
   -fPIC
   -lrt
   -ldl
-  -lutil
 )
 
 target_sources(ydb-library-yql-providers-s3-provider-ut PRIVATE

@@ -112,6 +112,7 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/bootstrapper.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/change_exchange.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/channel_purpose.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/protos/checksum.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/cms.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/compaction.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/compile_service_config.proto
@@ -194,6 +195,7 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/query_stats.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/replication.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/resource_broker.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/protos/s3_settings.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/scheme_board.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/scheme_board_mon.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/scheme_log.proto
@@ -301,6 +303,9 @@ target_sources(ydb-core-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/protos/channel_purpose.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/channel_purpose.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/channel_purpose.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/checksum.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/checksum.deps.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/checksum.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/cms.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/cms.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/cms.grpc.pb.h
@@ -547,6 +552,9 @@ target_sources(ydb-core-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/protos/resource_broker.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/resource_broker.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/resource_broker.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/s3_settings.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/s3_settings.deps.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/s3_settings.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/scheme_board.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/scheme_board.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/scheme_board.grpc.pb.h

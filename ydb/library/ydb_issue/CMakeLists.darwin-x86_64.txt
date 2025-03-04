@@ -51,12 +51,12 @@ target_link_libraries(ydb-library-ydb_issue.global PUBLIC
 )
 
 target_sources(ydb-library-ydb_issue.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/library/ydb_issue/11a2a83241c8a9ca7a1ce00f99de45d7.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/ydb_issue/8e0bc561e2e2b36d17354354d11a957e.cpp
 )
 
 
 resources(ydb-library-ydb_issue.global
-  ${PROJECT_BINARY_DIR}/ydb/library/ydb_issue/11a2a83241c8a9ca7a1ce00f99de45d7.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/ydb_issue/8e0bc561e2e2b36d17354354d11a957e.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/ydb_issue/ydb_issue.txt
   KEYS

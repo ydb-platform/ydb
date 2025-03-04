@@ -12,6 +12,6 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(core)
 add_subdirectory(formats)
+add_subdirectory(core)
 add_subdirectory(client)

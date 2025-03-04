@@ -63,9 +63,9 @@ target_link_libraries(ydb_query_replay PUBLIC
   core-tx-time_cast
   core-tx-tx_proxy
   core-services-mounts
-  minikql-comp_nodes-llvm14
+  minikql-comp_nodes-llvm16
   yt-codec-codegen
-  yt-comp_nodes-llvm14
+  yt-comp_nodes-llvm16
   udf-service-exception_policy
   api-protos
   public-lib-base

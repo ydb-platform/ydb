@@ -12,6 +12,11 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(antlr4)
+add_subdirectory(antlr4_ansi)
+add_subdirectory(antlr3)
+add_subdirectory(antlr3_ansi)
+
 add_library(sql-v1-lexer)
 
 
@@ -19,10 +24,7 @@ target_link_libraries(sql-v1-lexer PUBLIC
   contrib-libs-cxxsupp
   yutil
   core-issue-protos
-  proto_ast-gen-v1
-  proto_ast-gen-v1_ansi
-  proto_ast-gen-v1_antlr4
-  proto_ast-gen-v1_ansi_antlr4
+  essentials-sql-settings
 )
 
 target_sources(sql-v1-lexer PRIVATE

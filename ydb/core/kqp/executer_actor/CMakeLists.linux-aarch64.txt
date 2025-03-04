@@ -74,6 +74,7 @@ target_sources(core-kqp-executer_actor PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/executer_actor/kqp_table_resolver.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/executer_actor/kqp_tasks_validate.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/executer_actor/kqp_partitioned_executer.cpp
 )
 
 

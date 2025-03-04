@@ -153,12 +153,12 @@ target_link_libraries(ydb-core-kqp.global PUBLIC
 )
 
 target_sources(ydb-core-kqp.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/core/kqp/da10233abc65c3f178c7da0ce0d7a4ea.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/kqp/3da8dbaeba872782fac48b9271010819.cpp
 )
 
 
 resources(ydb-core-kqp.global
-  ${PROJECT_BINARY_DIR}/ydb/core/kqp/da10233abc65c3f178c7da0ce0d7a4ea.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/kqp/3da8dbaeba872782fac48b9271010819.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/kqp_default_settings.txt
   KEYS

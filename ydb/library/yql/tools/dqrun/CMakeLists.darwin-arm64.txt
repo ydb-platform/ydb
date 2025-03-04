@@ -39,13 +39,19 @@ target_link_libraries(dqrun PUBLIC
   core-file_storage-http_download
   essentials-core-services
   core-services-mounts
+  yql-essentials-sql
+  essentials-sql-v1
+  v1-lexer-antlr4
+  v1-lexer-antlr4_ansi
+  v1-proto_parser-antlr4
+  v1-proto_parser-antlr4_ansi
   dq-actors-input_transforms
   yql-dq-comp_nodes
   yql-dq-opt
   core-dq_integration-transform
   yql-dq-transform
-  minikql-comp_nodes-llvm14
-  minikql-invoke_builtins-llvm14
+  minikql-comp_nodes-llvm16
+  minikql-invoke_builtins-llvm16
   providers-clickhouse-actors
   providers-clickhouse-provider
   providers-common-comp_nodes
@@ -80,14 +86,14 @@ target_link_libraries(dqrun PUBLIC
   essentials-core-url_lister
   essentials-core-pg_ext
   providers-yt-actors
-  comp_nodes-dq-llvm14
+  comp_nodes-dq-llvm16
   providers-yt-dq_task_preprocessor
   yt-gateway-file
   yt-gateway-native
   yt-codec-codegen
   providers-yt-mkql_dq
   providers-yt-provider
-  yt-comp_nodes-llvm14
+  yt-comp_nodes-llvm16
   yt-lib-yt_download
   yt-lib-yt_url_lister
   yt-lib-config_clusters

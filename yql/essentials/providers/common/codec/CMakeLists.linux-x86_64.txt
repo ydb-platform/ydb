@@ -41,7 +41,6 @@ target_link_libraries(providers-common-codec PUBLIC
   library-cpp-yson
   library-cpp-json
   library-cpp-enumbitset
-  yt-library-decimal
   tools-enum_parser-enum_serialization_runtime
 )
 

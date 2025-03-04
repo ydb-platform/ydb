@@ -29,9 +29,6 @@ target_sources(providers-result-expr_nodes PRIVATE
   ${PROJECT_BINARY_DIR}/yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.gen.h
   ${PROJECT_BINARY_DIR}/yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.decl.inl.h
   ${PROJECT_BINARY_DIR}/yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.defs.inl.h
-  ${PROJECT_BINARY_DIR}/yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.gen.h
-  ${PROJECT_BINARY_DIR}/yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.decl.inl.h
-  ${PROJECT_BINARY_DIR}/yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.defs.inl.h
 )
 
 

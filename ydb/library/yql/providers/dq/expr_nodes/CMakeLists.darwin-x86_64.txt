@@ -28,9 +28,6 @@ target_sources(providers-dq-expr_nodes PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.gen.h
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.decl.inl.h
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.defs.inl.h
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.gen.h
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.decl.inl.h
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.defs.inl.h
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h
 )
 

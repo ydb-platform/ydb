@@ -41,7 +41,6 @@ target_link_options(ydb-core-fq-libs-db_id_async_resolver_impl-ut PRIVATE
   -fPIC
   -lrt
   -ldl
-  -lutil
 )
 
 target_sources(ydb-core-fq-libs-db_id_async_resolver_impl-ut PRIVATE

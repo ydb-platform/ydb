@@ -62,6 +62,15 @@ target_link_libraries(core-kqp-provider PUBLIC
   providers-result-expr_nodes
   providers-result-provider
   yql-essentials-sql
+  essentials-sql-v1
+  v1-lexer-antlr4
+  v1-lexer-antlr4_ansi
+  v1-proto_parser-antlr4
+  v1-proto_parser-antlr4_ansi
+  v1-lexer-antlr3
+  v1-lexer-antlr3_ansi
+  v1-proto_parser-antlr3
+  v1-proto_parser-antlr3_ansi
   library-ydb_issue-proto
   essentials-public-issue
   essentials-utils-log
@@ -83,9 +92,6 @@ target_sources(core-kqp-provider PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_settings.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_type_ann.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_type_ann_pg.cpp
-  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.gen.h
-  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.decl.inl.h
-  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.defs.inl.h
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.gen.h
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.decl.inl.h
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.defs.inl.h

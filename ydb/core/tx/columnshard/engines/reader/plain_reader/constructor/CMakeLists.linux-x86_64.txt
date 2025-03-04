@@ -25,7 +25,6 @@ target_link_libraries(reader-plain_reader-constructor PUBLIC
 )
 
 target_sources(reader-plain_reader-constructor PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/resolver.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/read_metadata.cpp
 )
 

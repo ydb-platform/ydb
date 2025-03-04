@@ -45,9 +45,6 @@ target_link_libraries(proto_ast-gen-v0_proto_split PUBLIC
 )
 
 target_sources(proto_ast-gen-v0_proto_split PRIVATE
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v0_proto_split/SQLParser.pb.h
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v0_proto_split/SQLParser.pb.classes.h
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v0_proto_split/SQLParser.pb.main.h
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v0_proto_split/SQLParser.pb.code0.cc
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v0_proto_split/SQLParser.pb.code1.cc
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v0_proto_split/SQLParser.pb.code2.cc
@@ -73,9 +70,6 @@ configure_file(
 run_antlr(
   OUTPUT
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v0_proto_split/SQLParser.proto
-  DEPENDS
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v0/SQL.g
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v0_proto_split/org/antlr/codegen/templates/protobuf/protobuf.stg
   WORKING_DIRECTORY
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v0_proto_split
   ANTLER_ARGS

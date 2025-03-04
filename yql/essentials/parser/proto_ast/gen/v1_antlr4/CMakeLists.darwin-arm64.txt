@@ -63,10 +63,6 @@ run_antlr4(
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Parser.h
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h
-  DEPENDS
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4.g
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_antlr4/org/antlr/v4/tool/templates/codegen/Cpp/Cpp.stg
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_antlr4/org/antlr/v4/tool/templates/codegen/Cpp/Files.stg
   WORKING_DIRECTORY
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_antlr4
   ANTLER_ARGS

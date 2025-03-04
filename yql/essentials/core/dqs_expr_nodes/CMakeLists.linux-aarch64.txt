@@ -29,9 +29,6 @@ target_sources(essentials-core-dqs_expr_nodes PRIVATE
   ${PROJECT_BINARY_DIR}/yql/essentials/core/dqs_expr_nodes/dqs_expr_nodes.gen.h
   ${PROJECT_BINARY_DIR}/yql/essentials/core/dqs_expr_nodes/dqs_expr_nodes.decl.inl.h
   ${PROJECT_BINARY_DIR}/yql/essentials/core/dqs_expr_nodes/dqs_expr_nodes.defs.inl.h
-  ${PROJECT_BINARY_DIR}/yql/essentials/core/dqs_expr_nodes/dqs_expr_nodes.gen.h
-  ${PROJECT_BINARY_DIR}/yql/essentials/core/dqs_expr_nodes/dqs_expr_nodes.decl.inl.h
-  ${PROJECT_BINARY_DIR}/yql/essentials/core/dqs_expr_nodes/dqs_expr_nodes.defs.inl.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/dqs_expr_nodes/dqs_expr_nodes.h
 )
 

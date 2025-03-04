@@ -224,12 +224,12 @@ target_link_libraries(ydb-core-viewer.global PUBLIC
 )
 
 target_sources(ydb-core-viewer.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/core/viewer/6c9a1ef37d8b63e26a573579c716cfb5.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/viewer/f7451ff56ee7901156fb681fa86158d6.cpp
 )
 
 
 resources(ydb-core-viewer.global
-  ${PROJECT_BINARY_DIR}/ydb/core/viewer/6c9a1ef37d8b63e26a573579c716cfb5.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/viewer/f7451ff56ee7901156fb681fa86158d6.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/index.html
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/content/viewer.js

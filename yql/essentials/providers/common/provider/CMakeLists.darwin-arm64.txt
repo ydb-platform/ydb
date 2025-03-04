@@ -24,7 +24,6 @@ target_link_libraries(providers-common-provider PUBLIC
   yutil
   yql-essentials-minikql
   essentials-public-udf
-  yql-essentials-sql
   yql-essentials-core
   essentials-parser-pg_catalog
 )

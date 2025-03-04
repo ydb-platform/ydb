@@ -23,6 +23,7 @@ target_link_libraries(essentials-parser-lexer_common PUBLIC
 
 target_sources(essentials-parser-lexer_common PRIVATE
   ${PROJECT_SOURCE_DIR}/yql/essentials/parser/lexer_common/tokens.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/lexer_common/lexer.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/parser/lexer_common/hints.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/parser/lexer_common/parse_hints_impl.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/parser/lexer_common/lexer.h

@@ -58,7 +58,7 @@ target_link_libraries(core-tx-columnshard PUBLIC
   tools-enum_parser-enum_serialization_runtime
   ydb-core-actorlib_impl
   ydb-core-base
-  ydb-core-control
+  core-control-lib
   ydb-core-formats
   ydb-core-kqp
   ydb-core-protos

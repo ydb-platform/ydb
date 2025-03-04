@@ -32,8 +32,8 @@ target_link_libraries(ydb-library-yql-providers-solomon-async_io-ut PUBLIC
   cpp-http-simple
   library-cpp-retry
   core-testlib-basics
-  minikql-computation-llvm14
-  minikql-comp_nodes-llvm14
+  minikql-computation-llvm16
+  minikql-comp_nodes-llvm16
   udf-service-exception_policy
   yql-essentials-sql
   essentials-sql-pg_dummy

@@ -36,7 +36,7 @@ target_link_libraries(ydb-core-load_test PUBLIC
   core-blobstorage-backpressure
   core-blobstorage-base
   core-blobstorage-pdisk
-  ydb-core-control
+  core-control-lib
   ydb-core-keyvalue
   ydb-core-jaeger_tracing
   core-kqp-common

@@ -42,6 +42,13 @@ target_link_libraries(libs-row_dispatcher-purecalc_no_pg_wrapper PUBLIC
   essentials-utils-log
   yql-essentials-core
   essentials-core-type_ann
+  yql-essentials-sql
+  essentials-sql-v1
+  v1-lexer-antlr4
+  v1-lexer-antlr4_ansi
+  v1-proto_parser-antlr4
+  v1-proto_parser-antlr4_ansi
+  parser-pg_wrapper-interface
   providers-common-codec
   providers-common-comp_nodes
   providers-common-mkql

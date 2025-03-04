@@ -19,20 +19,27 @@ get_built_tool_path(
   enum_parser
 )
 
+add_subdirectory(proto)
+add_subdirectory(ut)
+
 add_library(core-backup-common)
 
 
 target_link_libraries(core-backup-common PUBLIC
   contrib-libs-cxxsupp
   yutil
+  contrib-libs-openssl
   library-cpp-json
+  backup-common-proto
   ydb-core-base
+  ydb-library-yverify_stream
   tools-enum_parser-enum_serialization_runtime
 )
 
 target_sources(core-backup-common PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/backup/common/metadata.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/backup/common/checksum.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/backup/common/encryption.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/backup/common/metadata.cpp
 )
 
 

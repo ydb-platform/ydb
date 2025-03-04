@@ -23,7 +23,7 @@ target_link_libraries(mkql_proto-ut-helpers PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  minikql-comp_nodes-llvm14
+  minikql-comp_nodes-llvm16
   cpp-testing-unittest
   contrib-libs-protobuf
 )

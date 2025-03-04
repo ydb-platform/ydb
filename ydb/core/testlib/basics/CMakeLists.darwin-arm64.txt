@@ -34,6 +34,7 @@ target_link_libraries(core-testlib-basics PUBLIC
   core-blobstorage-nodewarden
   core-blobstorage-pdisk
   core-client-server
+  ydb-core-control
   ydb-core-formats
   ydb-core-mind
   ydb-core-node_whiteboard
@@ -45,7 +46,7 @@ target_link_libraries(core-testlib-basics PUBLIC
   core-tx-scheme_board
   core-tx-schemeshard
   ydb-core-util
-  minikql-invoke_builtins-llvm14
+  minikql-invoke_builtins-llvm16
   udf-service-exception_policy
   ydb-services-kesus
   ydb-services-persqueue_cluster_discovery

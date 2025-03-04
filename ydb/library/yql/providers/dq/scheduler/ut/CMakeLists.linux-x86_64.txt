@@ -47,7 +47,6 @@ target_link_options(ydb-library-yql-providers-dq-scheduler-ut PRIVATE
   -fPIC
   -lrt
   -ldl
-  -lutil
 )
 
 target_sources(ydb-library-yql-providers-dq-scheduler-ut PRIVATE

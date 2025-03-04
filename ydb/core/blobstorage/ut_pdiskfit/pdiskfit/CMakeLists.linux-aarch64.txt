@@ -39,7 +39,6 @@ target_link_options(pdiskfit PRIVATE
   -fPIC
   -lrt
   -ldl
-  -lutil
 )
 
 target_sources(pdiskfit PRIVATE

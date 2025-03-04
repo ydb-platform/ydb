@@ -30,9 +30,6 @@ target_sources(providers-stat-expr_nodes PRIVATE
   ${PROJECT_BINARY_DIR}/yql/providers/stat/expr_nodes/yql_stat_expr_nodes.gen.h
   ${PROJECT_BINARY_DIR}/yql/providers/stat/expr_nodes/yql_stat_expr_nodes.decl.inl.h
   ${PROJECT_BINARY_DIR}/yql/providers/stat/expr_nodes/yql_stat_expr_nodes.defs.inl.h
-  ${PROJECT_BINARY_DIR}/yql/providers/stat/expr_nodes/yql_stat_expr_nodes.gen.h
-  ${PROJECT_BINARY_DIR}/yql/providers/stat/expr_nodes/yql_stat_expr_nodes.decl.inl.h
-  ${PROJECT_BINARY_DIR}/yql/providers/stat/expr_nodes/yql_stat_expr_nodes.defs.inl.h
 )
 
 

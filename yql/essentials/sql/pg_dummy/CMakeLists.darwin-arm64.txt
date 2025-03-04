@@ -24,6 +24,7 @@ target_link_libraries(essentials-sql-pg_dummy PUBLIC
   yutil
   parser-pg_wrapper-interface
   yql-essentials-minikql
+  essentials-sql-settings
 )
 
 target_sources(essentials-sql-pg_dummy PRIVATE

@@ -34,6 +34,7 @@ target_link_libraries(tx-replication-ut_helpers PUBLIC
 target_sources(tx-replication-ut_helpers PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/ut_helpers/mock_service.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/ut_helpers/test_table.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/ut_helpers/test_topic.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/ut_helpers/test_env.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/ut_helpers/write_topic.h
 )

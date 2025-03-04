@@ -61,6 +61,7 @@ target_sources(cpp-mapreduce-interface PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/protobuf_format.cpp
   ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/serialize.cpp
   ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/skiff_row.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/temp.cpp
   ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/tvm.cpp
 )
 

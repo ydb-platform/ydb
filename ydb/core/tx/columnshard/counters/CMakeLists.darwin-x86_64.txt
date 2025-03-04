@@ -51,6 +51,7 @@ target_sources(tx-columnshard-counters PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/splitter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/portions.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/writes_monitor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/portion_index.cpp
 )
 
 

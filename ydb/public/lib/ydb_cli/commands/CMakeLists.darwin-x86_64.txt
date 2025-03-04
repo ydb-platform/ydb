@@ -45,24 +45,22 @@ target_link_libraries(clicommands PUBLIC
   arrow-csv-table
   ydb-library-workload
   library-yaml_config-public
-  essentials-public-decimal
-  src-library-operation_id
   public-lib-stat_visualization
-  common
   ydb_cli_command_base
   ydb_cli-commands-interactive
+  ydb_sdk_core_access
   topic_workload
   transfer_workload
   ydb_cli_command_ydb_discovery
-  ydb_sdk_core_access
+  common
   lib-ydb_cli-dump
   ydb_cli-dump-files
   lib-ydb_cli-import
   topic
-  src-client-draft
-  src-client-bsconfig
+  src-client-config
   src-client-coordination
   src-client-debug
+  src-client-draft
   src-client-export
   src-client-import
   src-client-monitoring
@@ -73,6 +71,8 @@ target_link_libraries(clicommands PUBLIC
   src-client-table
   src-client-topic
   types-credentials-login
+  src-library-operation_id
+  essentials-public-decimal
   tools-enum_parser-enum_serialization_runtime
 )
 
@@ -89,6 +89,7 @@ target_sources(clicommands PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_debug.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_dynamic_config.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_latency.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_node_config.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_ping.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_profile.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_root_common.cpp

@@ -31,7 +31,6 @@ target_link_libraries(providers-dq-common PUBLIC
   yutil
   cpp-string_utils-parse_size
   yql-essentials-minikql
-  yql-essentials-sql
   yql-essentials-utils
   essentials-utils-log
   yql-dq-actors

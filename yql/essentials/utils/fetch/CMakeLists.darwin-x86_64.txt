@@ -18,7 +18,7 @@ add_library(essentials-utils-fetch)
 target_link_libraries(essentials-utils-fetch PUBLIC
   contrib-libs-cxxsupp
   yutil
-  library-cpp-charset
+  cpp-charset-lite
   cpp-http-io
   cpp-http-misc
   cpp-openssl-io

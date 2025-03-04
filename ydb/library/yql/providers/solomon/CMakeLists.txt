@@ -13,8 +13,9 @@
 # changes in this file.
 
 add_subdirectory(proto)
-add_subdirectory(async_io)
-add_subdirectory(scheme)
 add_subdirectory(gateway)
 add_subdirectory(provider)
 add_subdirectory(expr_nodes)
+add_subdirectory(scheme)
+add_subdirectory(async_io)
+add_subdirectory(solomon_accessor)

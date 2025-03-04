@@ -31,6 +31,7 @@ target_link_libraries(sql-v1-format PUBLIC
   essentials-sql-settings
   sql-v1-lexer
   sql-v1-proto_parser
+  proto_ast-gen-v1_proto_split
   essentials-core-sql_types
   cpp-protobuf-util
 )
@@ -53,18 +54,19 @@ target_link_libraries(sql-v1-format.global PUBLIC
   essentials-sql-settings
   sql-v1-lexer
   sql-v1-proto_parser
+  proto_ast-gen-v1_proto_split
   essentials-core-sql_types
   cpp-protobuf-util
 )
 
 target_sources(sql-v1-format.global PRIVATE
-  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/format/f0f211fc72c202a87ecb38ef07923a37.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/format/4972e0f01139d2f543cdbdf771dfd7c0.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/format/fc7a27111fefe6e3b9b2f3eab0f61340.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/format/c5c6e8218c03924468ead58ac2b74fd8.cpp
 )
 
 
 resources(sql-v1-format.global
-  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/format/f0f211fc72c202a87ecb38ef07923a37.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/format/fc7a27111fefe6e3b9b2f3eab0f61340.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/SQLv1.g.in
   KEYS
@@ -73,7 +75,7 @@ resources(sql-v1-format.global
 )
 
 resources(sql-v1-format.global
-  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/format/4972e0f01139d2f543cdbdf771dfd7c0.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/format/c5c6e8218c03924468ead58ac2b74fd8.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/SQLv1Antlr4.g.in
   KEYS

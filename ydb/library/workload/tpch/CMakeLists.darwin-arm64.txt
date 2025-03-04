@@ -79,13 +79,13 @@ target_link_libraries(library-workload-tpch.global PUBLIC
 target_sources(library-workload-tpch.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/data_generator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/registrar.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/c2efb1f1061b4f91b0a9c589f3b2968c.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/360405c7092c2420885ee56df6eb5870.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/9604d7cfe5b647e964e6be189a1a7be6.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/83b85b748436853b0d2eaabd43befc63.cpp
 )
 
 
 resources(library-workload-tpch.global
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/c2efb1f1061b4f91b0a9c589f3b2968c.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/9604d7cfe5b647e964e6be189a1a7be6.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/tpch_schema.yaml
   ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/gen/tpch-dbgen/dists.dss
@@ -96,7 +96,7 @@ resources(library-workload-tpch.global
 )
 
 resources(library-workload-tpch.global
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/360405c7092c2420885ee56df6eb5870.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/83b85b748436853b0d2eaabd43befc63.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1_canonical/q1.result
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1_canonical/q10.result

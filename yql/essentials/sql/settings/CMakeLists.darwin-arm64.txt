@@ -20,6 +20,7 @@ target_link_libraries(essentials-sql-settings PUBLIC
   yutil
   cpp-deprecated-split
   library-cpp-json
+  essentials-public-issue
   essentials-core-issue
   essentials-core-pg_settings
   core-issue-protos
@@ -29,5 +30,6 @@ target_link_libraries(essentials-sql-settings PUBLIC
 target_sources(essentials-sql-settings PRIVATE
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/settings/partitioning.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/settings/translation_settings.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/settings/translator.cpp
 )
 

@@ -30,6 +30,15 @@ target_link_libraries(ydb-core-kqp-ut-view PUBLIC
   ydb-core-kqp
   kqp-ut-common
   yql-essentials-sql
+  essentials-sql-v1
+  v1-lexer-antlr4
+  v1-lexer-antlr4_ansi
+  v1-proto_parser-antlr4
+  v1-proto_parser-antlr4_ansi
+  v1-lexer-antlr3
+  v1-lexer-antlr3_ansi
+  v1-proto_parser-antlr3
+  v1-proto_parser-antlr3_ansi
   essentials-utils-log
   testlib-basics-default
 )

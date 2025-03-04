@@ -34,7 +34,6 @@ target_link_libraries(tx-schemeshard-generated PUBLIC
 
 target_sources(tx-schemeshard-generated PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/tx/schemeshard/generated/dispatch_op.h
-  ${PROJECT_BINARY_DIR}/ydb/core/tx/schemeshard/generated/dispatch_op.h
 )
 
 

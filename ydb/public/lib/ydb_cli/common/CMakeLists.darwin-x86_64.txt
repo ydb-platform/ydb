@@ -28,6 +28,7 @@ target_link_libraries(common PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-aws-sdk-cpp-aws-cpp-sdk-s3
+  contrib-libs-openssl
   library-cpp-config
   library-cpp-getopt
   cpp-json-writer
@@ -51,7 +52,9 @@ target_link_libraries(common PUBLIC
 
 target_sources(common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/aws.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/cert_format_converter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/command.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/command_utils.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/common.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/csv_parser.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/examples.cpp
@@ -78,8 +81,8 @@ target_sources(common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/sys.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/tabbed_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/waiting_bar.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/yt.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/ydb_updater.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/yt.cpp
 )
 
 

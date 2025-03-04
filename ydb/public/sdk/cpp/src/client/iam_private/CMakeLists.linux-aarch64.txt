@@ -12,6 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(common)
+
 add_library(src-client-iam_private)
 
 
@@ -28,7 +30,7 @@ target_link_libraries(src-client-iam_private PUBLIC
   contrib-libs-cxxsupp
   yutil
   client-yc_private-iam
-  client-iam-common
+  client-iam_private-common
 )
 
 target_sources(src-client-iam_private PRIVATE

@@ -33,6 +33,17 @@ target_link_libraries(core-kqp-host PUBLIC
   essentials-core-services
   essentials-minikql-invoke_builtins
   yql-essentials-sql
+  essentials-sql-v0
+  essentials-sql-v1
+  v1-lexer-antlr4
+  v1-lexer-antlr4_ansi
+  v1-proto_parser-antlr4
+  v1-proto_parser-antlr4_ansi
+  v1-lexer-antlr3
+  v1-lexer-antlr3_ansi
+  v1-proto_parser-antlr3
+  v1-proto_parser-antlr3_ansi
+  parser-pg_wrapper-interface
   yql-essentials-core
   providers-common-codec
   yql-dq-opt

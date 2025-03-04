@@ -28,6 +28,7 @@ target_link_libraries(impl-ydb_internal-plain_status PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-protobuf
+  src-client-resources
   sdk-library-grpc-client-v3
   src-library-issue
 )

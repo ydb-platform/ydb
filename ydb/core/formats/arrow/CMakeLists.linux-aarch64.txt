@@ -22,6 +22,7 @@ add_subdirectory(dictionary)
 add_subdirectory(accessor)
 add_subdirectory(save_load)
 add_subdirectory(transformer)
+add_subdirectory(program)
 add_subdirectory(ut)
 
 add_library(core-formats-arrow)
@@ -29,10 +30,6 @@ add_library(core-formats-arrow)
 
 target_compile_options(core-formats-arrow PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_include_directories(core-formats-arrow PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/arrow_clickhouse
 )
 
 target_link_libraries(core-formats-arrow PUBLIC
@@ -56,19 +53,15 @@ target_link_libraries(core-formats-arrow PUBLIC
   library-formats-arrow
   ydb-library-services
   core-arrow_kernels-request
-  ydb-library-arrow_clickhouse
 )
 
 target_sources(core-formats-arrow PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/arrow_batch_builder.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/arrow_filter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/arrow_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/arrow_filter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/converter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/custom_registry.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/permutations.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/size_calcer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/ssa_program_optimizer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/special_keys.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/process_columns.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/converter.h

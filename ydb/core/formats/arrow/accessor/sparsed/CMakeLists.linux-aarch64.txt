@@ -22,6 +22,10 @@ target_link_libraries(arrow-accessor-sparsed PUBLIC
   arrow-accessor-abstract
   library-formats-arrow
   library-formats-arrow-protos
+  formats-arrow-save_load
+  formats-arrow-serializer
+  formats-arrow-splitter
+  library-formats-arrow-accessor-common
 )
 
 target_sources(arrow-accessor-sparsed PRIVATE
@@ -40,6 +44,10 @@ target_link_libraries(arrow-accessor-sparsed.global PUBLIC
   arrow-accessor-abstract
   library-formats-arrow
   library-formats-arrow-protos
+  formats-arrow-save_load
+  formats-arrow-serializer
+  formats-arrow-splitter
+  library-formats-arrow-accessor-common
 )
 
 target_sources(arrow-accessor-sparsed.global PRIVATE

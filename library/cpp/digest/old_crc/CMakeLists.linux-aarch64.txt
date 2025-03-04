@@ -33,7 +33,6 @@ target_link_libraries(cpp-digest-old_crc PUBLIC
 target_sources(cpp-digest-old_crc PRIVATE
   ${PROJECT_SOURCE_DIR}/library/cpp/digest/old_crc/crc.cpp
   ${PROJECT_BINARY_DIR}/library/cpp/digest/old_crc/crc.inc
-  ${PROJECT_BINARY_DIR}/library/cpp/digest/old_crc/crc.inc
 )
 
 

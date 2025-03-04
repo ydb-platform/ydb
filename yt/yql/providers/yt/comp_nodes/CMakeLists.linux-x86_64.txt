@@ -13,7 +13,7 @@
 # changes in this file.
 
 add_subdirectory(dq)
-add_subdirectory(llvm14)
+add_subdirectory(llvm16)
 add_subdirectory(no_llvm)
 
 add_library(providers-yt-comp_nodes INTERFACE)

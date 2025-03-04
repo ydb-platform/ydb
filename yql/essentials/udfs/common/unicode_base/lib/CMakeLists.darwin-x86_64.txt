@@ -17,7 +17,7 @@ add_library(common-unicode_base-lib)
 
 target_compile_options(common-unicode_base-lib PRIVATE
   -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=27
+  -DUDF_ABI_VERSION_MINOR=37
   -DUDF_ABI_VERSION_PATCH=0
 )
 
@@ -29,6 +29,7 @@ target_link_libraries(common-unicode_base-lib PUBLIC
   cpp-unicode-normalization
   cpp-unicode-set
   essentials-public-udf
+  public-udf-arrow
   yql-essentials-utils
 )
 

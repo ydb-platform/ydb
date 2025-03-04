@@ -88,12 +88,12 @@ target_link_libraries(ydb-core-public_http.global PUBLIC
 )
 
 target_sources(ydb-core-public_http.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/core/public_http/61d421c52ac59775eb29fb236d3d6f5a.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/public_http/3c06267cc8676b548ec51793a1145a4c.cpp
 )
 
 
 resources(ydb-core-public_http.global
-  ${PROJECT_BINARY_DIR}/ydb/core/public_http/61d421c52ac59775eb29fb236d3d6f5a.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/public_http/3c06267cc8676b548ec51793a1145a4c.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/core/public_http/openapi/openapi.yaml
   KEYS

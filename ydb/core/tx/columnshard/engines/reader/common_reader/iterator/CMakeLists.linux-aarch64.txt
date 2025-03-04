@@ -47,3 +47,21 @@ generate_enum_serilization(reader-common_reader-iterator
   INCLUDE_HEADERS
   ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h
 )
+
+add_global_library_for(reader-common_reader-iterator.global
+  reader-common_reader-iterator)
+
+
+target_link_libraries(reader-common_reader-iterator.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  columnshard-engines-scheme
+  tools-enum_parser-enum_serialization_runtime
+)
+
+target_sources(reader-common_reader-iterator.global PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/sub_columns_fetching.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.cpp
+)
+

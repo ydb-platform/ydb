@@ -40,12 +40,12 @@ target_link_libraries(benchmarks-queries-tpch.global PUBLIC
 )
 
 target_sources(benchmarks-queries-tpch.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/library/benchmarks/queries/tpch/c855a08acf66c245b2e7727cb8ad3225.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/benchmarks/queries/tpch/3f8177889cc04537d11ba2780d1b09f6.cpp
 )
 
 
 resources(benchmarks-queries-tpch.global
-  ${PROJECT_BINARY_DIR}/ydb/library/benchmarks/queries/tpch/c855a08acf66c245b2e7727cb8ad3225.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/benchmarks/queries/tpch/3f8177889cc04537d11ba2780d1b09f6.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/yql/q1.sql
   ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/queries/tpch/yql/q10.sql

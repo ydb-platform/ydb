@@ -30,7 +30,7 @@ target_link_libraries(core-blobstorage-nodewarden PUBLIC
   core-blobstorage-crypto
   core-blobstorage-groupinfo
   core-blobstorage-pdisk
-  ydb-core-control
+  core-control-lib
   ydb-library-pdisk_io
   ydb-library-yaml_config
   core-util-actorsys_test

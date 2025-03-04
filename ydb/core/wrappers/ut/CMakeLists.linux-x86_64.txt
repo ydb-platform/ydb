@@ -33,11 +33,11 @@ target_link_libraries(ydb-core-wrappers-ut PUBLIC
   library-actors-core
   cpp-digest-md5
   cpp-testing-unittest
-  libs-aws-sdk-cpp-aws-cpp-sdk-core
   ydb-core-protos
   testlib-basics-default
-  minikql-comp_nodes-llvm14
+  ydb-core-util
   core-wrappers-ut_helpers
+  minikql-comp_nodes-llvm16
 )
 
 target_allocator(ydb-core-wrappers-ut

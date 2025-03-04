@@ -75,12 +75,14 @@ configure_file(
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/protobuf/protobuf.stg
 )
 
+configure_file(
+  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/Cpp/Cpp.stg
+)
+
 run_antlr(
   OUTPUT
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathParser.proto
-  DEPENDS
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/jsonpath/JsonPath.g
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/protobuf/protobuf.stg
   WORKING_DIRECTORY
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath
   ANTLER_ARGS
@@ -93,20 +95,12 @@ run_antlr(
   protobuf
 )
 
-configure_file(
-  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/Cpp/Cpp.stg
-)
-
 run_antlr(
   OUTPUT
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathParser.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathLexer.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathParser.h
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathLexer.h
-  DEPENDS
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/jsonpath/JsonPath.g
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/Cpp/Cpp.stg
   WORKING_DIRECTORY
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath
   ANTLER_ARGS

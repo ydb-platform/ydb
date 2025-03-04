@@ -55,7 +55,7 @@ target_link_options(ydb-core-fq-libs-compute-common-ut PRIVATE
 target_sources(ydb-core-fq-libs-compute-common-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/common/ut/config_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/common/ut/utils_ut.cpp
-  ${PROJECT_BINARY_DIR}/ydb/core/fq/libs/compute/common/ut/e0c99a96370f1fa3f873ae2f9e47d447.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/fq/libs/compute/common/ut/df7817fd96c88c40436a1e63868dc5df.cpp
 )
 
 
@@ -96,7 +96,7 @@ set_yunittest_property(
 )
 
 resources(ydb-core-fq-libs-compute-common-ut
-  ${PROJECT_BINARY_DIR}/ydb/core/fq/libs/compute/common/ut/e0c99a96370f1fa3f873ae2f9e47d447.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/fq/libs/compute/common/ut/df7817fd96c88c40436a1e63868dc5df.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/common/ut/resources/plan.json
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/common/ut/resources/stat.json

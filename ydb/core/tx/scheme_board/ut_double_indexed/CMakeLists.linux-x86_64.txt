@@ -44,7 +44,6 @@ target_link_options(ydb-core-tx-scheme_board-ut_double_indexed PRIVATE
   -fPIC
   -lrt
   -ldl
-  -lutil
 )
 
 target_sources(ydb-core-tx-scheme_board-ut_double_indexed PRIVATE

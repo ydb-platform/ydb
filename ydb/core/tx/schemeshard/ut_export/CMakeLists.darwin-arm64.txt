@@ -31,10 +31,10 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_export PUBLIC
   library-cpp-getopt
   cpp-regex-pcre
   library-cpp-svnversion
-  libs-aws-sdk-cpp-aws-cpp-sdk-core
   core-testlib-default
   ydb-core-tx
   tx-schemeshard-ut_helpers
+  ydb-core-util
   core-wrappers-ut_helpers
   udf-service-exception_policy
 )

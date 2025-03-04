@@ -66,12 +66,14 @@ target_sources(tx-replication-controller PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/replication.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/secret_resolver.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/session_info.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/stream_consumer_remover.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/stream_creator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/stream_remover.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/sys_params.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/target_base.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/target_discoverer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/target_table.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/target_transfer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/target_with_stream.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tenant_resolver.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_assign_tx_id.cpp

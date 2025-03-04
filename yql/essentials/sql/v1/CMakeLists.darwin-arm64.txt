@@ -33,7 +33,7 @@ target_compile_options(essentials-sql-v1 PRIVATE
 target_link_libraries(essentials-sql-v1 PUBLIC
   contrib-libs-cxxsupp
   yutil
-  library-cpp-charset
+  cpp-charset-lite
   library-cpp-enumbitset
   library-cpp-json
   cpp-yson-node
@@ -45,14 +45,12 @@ target_link_libraries(essentials-sql-v1 PUBLIC
   essentials-core-sql_types
   essentials-parser-lexer_common
   parser-proto_ast-collect_issues
-  proto_ast-gen-v1
-  proto_ast-gen-v1_ansi
   proto_ast-gen-v1_proto_split
-  proto_ast-gen-v1_antlr4
-  proto_ast-gen-v1_ansi_antlr4
   essentials-parser-pg_catalog
   sql-v1-lexer
   sql-v1-proto_parser
+  proto_ast-gen-v1
+  proto_ast-gen-v1_antlr4
   tools-enum_parser-enum_serialization_runtime
 )
 

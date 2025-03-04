@@ -49,7 +49,6 @@ target_link_options(ydb-core-scheme-ut_pg PRIVATE
   -fPIC
   -lrt
   -ldl
-  -lutil
 )
 
 target_sources(ydb-core-scheme-ut_pg PRIVATE

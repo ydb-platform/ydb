@@ -40,12 +40,12 @@ target_link_libraries(certs.global PUBLIC
 )
 
 target_sources(certs.global PRIVATE
-  ${PROJECT_BINARY_DIR}/certs/b03c08f91a00a60ac9d7daef45f3075a.cpp
+  ${PROJECT_BINARY_DIR}/certs/28a5e97e36786bc5bad11fa9b4b42c47.cpp
 )
 
 
 resources(certs.global
-  ${PROJECT_BINARY_DIR}/certs/b03c08f91a00a60ac9d7daef45f3075a.cpp
+  ${PROJECT_BINARY_DIR}/certs/28a5e97e36786bc5bad11fa9b4b42c47.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/certs/cacert.pem
   KEYS

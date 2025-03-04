@@ -33,6 +33,12 @@ target_link_libraries(core-services-mounts PUBLIC
   essentials-core-user_data
   yql-essentials-core
   essentials-utils-log
+  yql-essentials-sql
+  essentials-sql-v1
+  v1-lexer-antlr4
+  v1-lexer-antlr4_ansi
+  v1-proto_parser-antlr4
+  v1-proto_parser-antlr4_ansi
 )
 
 target_sources(core-services-mounts PRIVATE
@@ -56,15 +62,21 @@ target_link_libraries(core-services-mounts.global PUBLIC
   essentials-core-user_data
   yql-essentials-core
   essentials-utils-log
+  yql-essentials-sql
+  essentials-sql-v1
+  v1-lexer-antlr4
+  v1-lexer-antlr4_ansi
+  v1-proto_parser-antlr4
+  v1-proto_parser-antlr4_ansi
 )
 
 target_sources(core-services-mounts.global PRIVATE
-  ${PROJECT_BINARY_DIR}/yql/essentials/core/services/mounts/419e424418ae5263d43ef93bd9d62762.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/core/services/mounts/a14b14967a1ebf018128e2ef561ab897.cpp
 )
 
 
 resources(core-services-mounts.global
-  ${PROJECT_BINARY_DIR}/yql/essentials/core/services/mounts/419e424418ae5263d43ef93bd9d62762.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/core/services/mounts/a14b14967a1ebf018128e2ef561ab897.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/aggregate.yqls
   ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/window.yqls

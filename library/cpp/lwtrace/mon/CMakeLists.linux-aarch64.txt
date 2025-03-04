@@ -58,12 +58,12 @@ target_link_libraries(cpp-lwtrace-mon.global PUBLIC
 )
 
 target_sources(cpp-lwtrace-mon.global PRIVATE
-  ${PROJECT_BINARY_DIR}/library/cpp/lwtrace/mon/55ff1192d5e8c2c093974f8d6c720a35.cpp
+  ${PROJECT_BINARY_DIR}/library/cpp/lwtrace/mon/64fe848195f712146f3b8a02f5adc992.cpp
 )
 
 
 resources(cpp-lwtrace-mon.global
-  ${PROJECT_BINARY_DIR}/library/cpp/lwtrace/mon/55ff1192d5e8c2c093974f8d6c720a35.cpp
+  ${PROJECT_BINARY_DIR}/library/cpp/lwtrace/mon/64fe848195f712146f3b8a02f5adc992.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/library/cpp/lwtrace/mon/static/common.css
   ${PROJECT_SOURCE_DIR}/library/cpp/lwtrace/mon/static/common.js

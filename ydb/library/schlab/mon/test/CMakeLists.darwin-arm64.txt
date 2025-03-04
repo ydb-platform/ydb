@@ -45,12 +45,12 @@ target_link_options(mon-test PRIVATE
 
 target_sources(mon-test PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/schlab/mon/test/test.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/schlab/mon/test/58594e5c7af65697df8d9899a8761b06.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/schlab/mon/test/175f3476431db24d9d6457d775e62f8f.cpp
 )
 
 
 resources(mon-test
-  ${PROJECT_BINARY_DIR}/ydb/library/schlab/mon/test/58594e5c7af65697df8d9899a8761b06.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/schlab/mon/test/175f3476431db24d9d6457d775e62f8f.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/schlab/mon/static/schviz-test0.json
   KEYS

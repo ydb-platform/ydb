@@ -30,9 +30,6 @@ target_sources(providers-generic-expr_nodes PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.gen.h
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.decl.inl.h
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.defs.inl.h
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.gen.h
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.decl.inl.h
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.defs.inl.h
 )
 
 

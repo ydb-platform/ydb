@@ -56,12 +56,12 @@ target_link_libraries(library-workload-clickbench.global PUBLIC
 
 target_sources(library-workload-clickbench.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/clickbench/registrar.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/clickbench/6b47edb3216ce048eaf5ddc4608249a3.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/clickbench/576b9ab97932c39a8b771353ecd313d2.cpp
 )
 
 
 resources(library-workload-clickbench.global
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/clickbench/6b47edb3216ce048eaf5ddc4608249a3.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/clickbench/576b9ab97932c39a8b771353ecd313d2.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/clickbench/click_bench_queries.sql
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/clickbench/click_bench_queries_pg.sql

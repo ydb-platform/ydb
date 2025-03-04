@@ -29,10 +29,11 @@ target_link_libraries(kqp-common-simple PUBLIC
 
 target_sources(kqp-common-simple PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/simple/helpers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/simple/query_id.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/simple/settings.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/simple/services.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/simple/kqp_event_ids.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/simple/query_id.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/simple/reattach.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/simple/services.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/simple/settings.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/simple/temp_tables.cpp
 )
 

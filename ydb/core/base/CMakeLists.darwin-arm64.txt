@@ -22,6 +22,7 @@ get_built_tool_path(
 add_subdirectory(generated)
 add_subdirectory(services)
 add_subdirectory(ut)
+add_subdirectory(ut_auth)
 add_subdirectory(ut_board_subscriber)
 
 add_library(ydb-core-base)

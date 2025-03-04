@@ -30,7 +30,7 @@ target_link_libraries(library-workload-tpcds PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-resource
-  library-cpp-charset
+  cpp-charset-lite
   ydb-library-accessor
   library-workload-tpc_base
   benchmarks-gen-tpcds-dbgen
@@ -87,7 +87,7 @@ target_link_libraries(library-workload-tpcds.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-resource
-  library-cpp-charset
+  cpp-charset-lite
   ydb-library-accessor
   library-workload-tpc_base
   benchmarks-gen-tpcds-dbgen
@@ -96,13 +96,13 @@ target_link_libraries(library-workload-tpcds.global PUBLIC
 
 target_sources(library-workload-tpcds.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/registrar.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpcds/11ab61ffb4a0d161e61d07c14a4efb1b.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpcds/5b0517407153ee30509ec91e84ea5b7a.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpcds/157f0790f67d6e022f0b8e66f2dd91de.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpcds/5a5bdc8a74f44769176076702ce4801a.cpp
 )
 
 
 resources(library-workload-tpcds.global
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpcds/11ab61ffb4a0d161e61d07c14a4efb1b.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpcds/157f0790f67d6e022f0b8e66f2dd91de.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/tpcds_schema.yaml
   KEYS
@@ -111,7 +111,7 @@ resources(library-workload-tpcds.global
 )
 
 resources(library-workload-tpcds.global
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpcds/5b0517407153ee30509ec91e84ea5b7a.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpcds/5a5bdc8a74f44769176076702ce4801a.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s1_canonical/q1.result.gz
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s1_canonical/q10.result.gz
@@ -250,7 +250,7 @@ resources(library-workload-tpcds.global
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s10_canonical/q41.result.gz
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s10_canonical/q42.result.gz
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s10_canonical/q43.result.gz
-  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s10_canonical/q44.result.gz
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s10_canonical/q44.result
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s10_canonical/q45.result.gz
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s10_canonical/q46.result.gz
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s10_canonical/q47.result.gz
@@ -349,7 +349,7 @@ resources(library-workload-tpcds.global
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s100_canonical/q41.result.gz
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s100_canonical/q42.result.gz
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s100_canonical/q43.result.gz
-  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s100_canonical/q44.result.gz
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s100_canonical/q44.result
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s100_canonical/q45.result.gz
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s100_canonical/q46.result.gz
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcds/s100_canonical/q47.result.gz
@@ -548,7 +548,7 @@ resources(library-workload-tpcds.global
   resfs/file/tpcds/s10_canonical/q41.result.gz
   resfs/file/tpcds/s10_canonical/q42.result.gz
   resfs/file/tpcds/s10_canonical/q43.result.gz
-  resfs/file/tpcds/s10_canonical/q44.result.gz
+  resfs/file/tpcds/s10_canonical/q44.result
   resfs/file/tpcds/s10_canonical/q45.result.gz
   resfs/file/tpcds/s10_canonical/q46.result.gz
   resfs/file/tpcds/s10_canonical/q47.result.gz
@@ -647,7 +647,7 @@ resources(library-workload-tpcds.global
   resfs/file/tpcds/s100_canonical/q41.result.gz
   resfs/file/tpcds/s100_canonical/q42.result.gz
   resfs/file/tpcds/s100_canonical/q43.result.gz
-  resfs/file/tpcds/s100_canonical/q44.result.gz
+  resfs/file/tpcds/s100_canonical/q44.result
   resfs/file/tpcds/s100_canonical/q45.result.gz
   resfs/file/tpcds/s100_canonical/q46.result.gz
   resfs/file/tpcds/s100_canonical/q47.result.gz
@@ -984,7 +984,7 @@ resources(library-workload-tpcds.global
   -
   resfs/src/resfs/file/tpcds/s10_canonical/q43.result.gz=ydb/library/workload/tpcds/s10_canonical/q43.result.gz
   -
-  resfs/src/resfs/file/tpcds/s10_canonical/q44.result.gz=ydb/library/workload/tpcds/s10_canonical/q44.result.gz
+  resfs/src/resfs/file/tpcds/s10_canonical/q44.result=ydb/library/workload/tpcds/s10_canonical/q44.result
   -
   resfs/src/resfs/file/tpcds/s10_canonical/q45.result.gz=ydb/library/workload/tpcds/s10_canonical/q45.result.gz
   -
@@ -1182,7 +1182,7 @@ resources(library-workload-tpcds.global
   -
   resfs/src/resfs/file/tpcds/s100_canonical/q43.result.gz=ydb/library/workload/tpcds/s100_canonical/q43.result.gz
   -
-  resfs/src/resfs/file/tpcds/s100_canonical/q44.result.gz=ydb/library/workload/tpcds/s100_canonical/q44.result.gz
+  resfs/src/resfs/file/tpcds/s100_canonical/q44.result=ydb/library/workload/tpcds/s100_canonical/q44.result
   -
   resfs/src/resfs/file/tpcds/s100_canonical/q45.result.gz=ydb/library/workload/tpcds/s100_canonical/q45.result.gz
   -

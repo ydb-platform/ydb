@@ -42,12 +42,12 @@ target_link_libraries(service-pages-tablesorter.global PUBLIC
 )
 
 target_sources(service-pages-tablesorter.global PRIVATE
-  ${PROJECT_BINARY_DIR}/library/cpp/monlib/service/pages/tablesorter/0c255888afcc3e2adc5fd360ee152bac.cpp
+  ${PROJECT_BINARY_DIR}/library/cpp/monlib/service/pages/tablesorter/b12ac0e7d0b2766cdd2b0361542b8b80.cpp
 )
 
 
 resources(service-pages-tablesorter.global
-  ${PROJECT_BINARY_DIR}/library/cpp/monlib/service/pages/tablesorter/0c255888afcc3e2adc5fd360ee152bac.cpp
+  ${PROJECT_BINARY_DIR}/library/cpp/monlib/service/pages/tablesorter/b12ac0e7d0b2766cdd2b0361542b8b80.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/tablesorter/resources/jquery.tablesorter.css
   ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/tablesorter/resources/jquery.tablesorter.js

@@ -18,9 +18,10 @@ add_subdirectory(partition_stats)
 add_subdirectory(processor)
 add_subdirectory(auth)
 add_subdirectory(nodes)
-add_subdirectory(sessions)
 add_subdirectory(pg_tables)
 add_subdirectory(query_stats)
+add_subdirectory(resource_pool_classifiers)
+add_subdirectory(sessions)
 add_subdirectory(storage)
 add_subdirectory(tablets)
 add_subdirectory(ut)
@@ -42,11 +43,12 @@ target_link_libraries(ydb-core-sys_view PUBLIC
   core-sys_view-auth
   core-sys_view-common
   core-sys_view-nodes
-  core-sys_view-sessions
   core-sys_view-partition_stats
   core-sys_view-pg_tables
   core-sys_view-query_stats
+  core-sys_view-resource_pool_classifiers
   core-sys_view-service
+  core-sys_view-sessions
   core-sys_view-storage
   core-sys_view-tablets
 )

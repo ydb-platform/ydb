@@ -51,6 +51,7 @@ target_sources(yql-essentials-utils PRIVATE
   ${PROJECT_SOURCE_DIR}/yql/essentials/utils/retry.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/utils/sort.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/utils/swap_bytes.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/tty.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/utils/url_builder.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/utils/utf8.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/utils/yql_panic.cpp
@@ -69,8 +70,10 @@ target_sources(yql-essentials-utils PRIVATE
   ${PROJECT_SOURCE_DIR}/yql/essentials/utils/rand_guid.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/utils/resetable_setting.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/utils/retry.h
+  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/runnable.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/utils/sort.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/utils/swap_bytes.h
+  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/tty.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/utils/yql_panic.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/utils/yql_paths.h
 )

@@ -56,7 +56,7 @@ target_link_options(core-fq-libs-control_plane_storage-internal-ut PRIVATE
 
 target_sources(core-fq-libs-control_plane_storage-internal-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/utils_ut.cpp
-  ${PROJECT_BINARY_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/047a4c3f0575d8af7f0dc67f808daaba.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/d4342142e8336dbdf35b352f2ad2e04c.cpp
 )
 
 
@@ -97,7 +97,7 @@ set_yunittest_property(
 )
 
 resources(core-fq-libs-control_plane_storage-internal-ut
-  ${PROJECT_BINARY_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/047a4c3f0575d8af7f0dc67f808daaba.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/d4342142e8336dbdf35b352f2ad2e04c.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/resources/v1_output.json
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/ut/resources/v2_output.json

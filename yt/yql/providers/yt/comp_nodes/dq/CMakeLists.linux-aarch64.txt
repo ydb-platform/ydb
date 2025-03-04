@@ -12,7 +12,7 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(llvm14)
+add_subdirectory(llvm16)
 
 add_library(yt-comp_nodes-dq INTERFACE)
 

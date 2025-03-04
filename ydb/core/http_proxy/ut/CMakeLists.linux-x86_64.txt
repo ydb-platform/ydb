@@ -79,7 +79,7 @@ target_link_options(ydb-core-http_proxy-ut PRIVATE
 
 target_sources(ydb-core-http_proxy-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/ut/json_proto_conversion_ut.cpp
-  ${PROJECT_BINARY_DIR}/ydb/core/http_proxy/ut/59c60f59f98b4e28ecda3da9a4ab0e50.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/http_proxy/ut/1d759ba34d3f4e11a72177ba6243f792.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/ut/datastreams_fixture.h
 )
 
@@ -121,7 +121,7 @@ set_yunittest_property(
 )
 
 resources(ydb-core-http_proxy-ut
-  ${PROJECT_BINARY_DIR}/ydb/core/http_proxy/ut/59c60f59f98b4e28ecda3da9a4ab0e50.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/http_proxy/ut/1d759ba34d3f4e11a72177ba6243f792.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/ut/internal_counters.json
   ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/ut/proxy_counters.json

@@ -30,9 +30,6 @@ target_sources(providers-s3-expr_nodes PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.gen.h
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.decl.inl.h
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.defs.inl.h
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.gen.h
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.decl.inl.h
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.defs.inl.h
 )
 
 

@@ -22,6 +22,7 @@ get_built_tool_path(
 add_subdirectory(ut_json_change_record)
 add_subdirectory(ut_table_writer)
 add_subdirectory(ut_topic_reader)
+add_subdirectory(ut_transfer_writer)
 add_subdirectory(ut_worker)
 
 add_library(tx-replication-service)
@@ -31,22 +32,32 @@ target_compile_options(tx-replication-service PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
+target_include_directories(tx-replication-service PUBLIC
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
+)
+
+target_include_directories(tx-replication-service PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
+)
+
 target_link_libraries(tx-replication-service PUBLIC
   contrib-libs-cxxsupp
   yutil
+  library-cpp-json
   ydb-core-base
   ydb-core-change_exchange
+  libs-row_dispatcher-events
+  core-io_formats-cell_maker
+  core-persqueue-purecalc
   ydb-core-protos
   ydb-core-scheme
   ydb-core-scheme_types
   ydb-core-tablet_flat
-  core-io_formats-cell_maker
   tx-replication-common
   tx-replication-ydb_proxy
+  ydb-core-wrappers
   library-actors-core
   ydb-library-services
-  ydb-core-wrappers
-  library-cpp-json
   tools-enum_parser-enum_serialization_runtime
 )
 
@@ -56,6 +67,7 @@ target_sources(tx-replication-service PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/service/service.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/service/table_writer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/service/topic_reader.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/service/transfer_writer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/service/worker.cpp
 )
 

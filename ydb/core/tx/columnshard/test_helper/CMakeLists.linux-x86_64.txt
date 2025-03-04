@@ -28,6 +28,10 @@ target_link_libraries(tx-columnshard-test_helper PUBLIC
   libs-apache-arrow
   library-actors-core
   columnshard-blobs_action-bs
+  library-formats-arrow-protos
+  yql-essentials-minikql
+  essentials-minikql-invoke_builtins
+  core-arrow_kernels-request
   core-tx-columnshard
   ydb-core-wrappers
   columnshard-blobs_action-tier
@@ -39,5 +43,7 @@ target_sources(tx-columnshard-test_helper PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/test_helper/columnshard_ut_common.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/test_helper/shard_reader.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/test_helper/shard_writer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/test_helper/kernels_wrapper.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/test_helper/program_constructor.cpp
 )
 

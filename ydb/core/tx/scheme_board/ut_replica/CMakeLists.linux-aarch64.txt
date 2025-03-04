@@ -30,7 +30,7 @@ target_link_libraries(ydb-core-tx-scheme_board-ut_replica PUBLIC
   cpp-testing-unittest_main
   core-tx-scheme_board
   cpp-testing-unittest
-  minikql-comp_nodes-llvm14
+  minikql-comp_nodes-llvm16
   testlib-basics-default
 )
 

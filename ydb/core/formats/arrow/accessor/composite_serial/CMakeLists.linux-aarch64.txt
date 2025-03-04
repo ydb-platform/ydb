@@ -20,7 +20,7 @@ target_link_libraries(arrow-accessor-composite_serial PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-apache-arrow
-  library-formats-arrow-accessor-abstract
+  arrow-accessor-abstract
   formats-arrow-common
   formats-arrow-save_load
 )

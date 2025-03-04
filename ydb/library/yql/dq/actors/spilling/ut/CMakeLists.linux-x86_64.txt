@@ -50,7 +50,6 @@ target_link_options(ydb-library-yql-dq-actors-spilling-ut PRIVATE
   -fPIC
   -lrt
   -ldl
-  -lutil
 )
 
 target_sources(ydb-library-yql-dq-actors-spilling-ut PRIVATE

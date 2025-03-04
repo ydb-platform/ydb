@@ -42,7 +42,7 @@ target_link_libraries(yql-providers-generic-provider-ut-pushdown PUBLIC
   providers-result-provider
   udf-service-stub
   yql-essentials-sql
-  minikql-invoke_builtins-llvm14
+  minikql-invoke_builtins-llvm16
   essentials-sql-pg_dummy
 )
 
@@ -59,7 +59,6 @@ target_link_options(yql-providers-generic-provider-ut-pushdown PRIVATE
   -fPIC
   -lrt
   -ldl
-  -lutil
 )
 
 target_sources(yql-providers-generic-provider-ut-pushdown PRIVATE

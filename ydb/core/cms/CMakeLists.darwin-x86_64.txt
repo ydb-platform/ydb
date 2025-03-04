@@ -160,12 +160,12 @@ target_link_libraries(ydb-core-cms.global PUBLIC
 )
 
 target_sources(ydb-core-cms.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/core/cms/61fadd9735c755e346de419abfdd531d.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/cms/7b236339b76c40a1068c109693c2bbb5.cpp
 )
 
 
 resources(ydb-core-cms.global
-  ${PROJECT_BINARY_DIR}/ydb/core/cms/61fadd9735c755e346de419abfdd531d.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/cms/7b236339b76c40a1068c109693c2bbb5.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/ui/index.html
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/ui/cms.css

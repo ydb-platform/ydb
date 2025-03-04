@@ -14,8 +14,8 @@
 
 add_subdirectory(impl)
 add_subdirectory(include)
-add_subdirectory(codecs)
 add_subdirectory(ut)
+add_subdirectory(codecs)
 
 add_library(src-client-persqueue_public INTERFACE)
 

@@ -59,9 +59,6 @@ run_antlr(
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v0/SQLLexer.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v0/SQLParser.h
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v0/SQLLexer.h
-  DEPENDS
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v0/SQL.g
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v0/org/antlr/codegen/templates/Cpp/Cpp.stg
   WORKING_DIRECTORY
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v0
   ANTLER_ARGS

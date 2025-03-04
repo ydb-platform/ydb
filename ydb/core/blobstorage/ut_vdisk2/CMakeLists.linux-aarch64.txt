@@ -44,7 +44,6 @@ target_link_options(ydb-core-blobstorage-ut_vdisk2 PRIVATE
   -fPIC
   -lrt
   -ldl
-  -lutil
 )
 
 target_sources(ydb-core-blobstorage-ut_vdisk2 PRIVATE

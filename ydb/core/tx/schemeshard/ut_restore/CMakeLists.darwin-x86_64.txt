@@ -29,11 +29,11 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_restore PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   core-tx-schemeshard
-  libs-aws-sdk-cpp-aws-cpp-sdk-core
   contrib-libs-double-conversion
   cpp-string_utils-quote
   kqp-ut-common
   tx-schemeshard-ut_helpers
+  ydb-core-util
   core-wrappers-ut_helpers
   ydb-core-ydb_convert
   essentials-sql-pg

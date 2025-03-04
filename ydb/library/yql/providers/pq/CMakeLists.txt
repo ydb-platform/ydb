@@ -13,10 +13,10 @@
 # changes in this file.
 
 add_subdirectory(proto)
-add_subdirectory(task_meta)
-add_subdirectory(cm_client)
 add_subdirectory(provider)
+add_subdirectory(cm_client)
 add_subdirectory(common)
 add_subdirectory(expr_nodes)
+add_subdirectory(task_meta)
 add_subdirectory(async_io)
 add_subdirectory(gateway)

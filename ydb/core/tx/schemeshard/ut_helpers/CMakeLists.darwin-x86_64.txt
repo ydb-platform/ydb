@@ -48,6 +48,7 @@ target_link_libraries(tx-schemeshard-ut_helpers PUBLIC
 
 target_sources(tx-schemeshard-ut_helpers PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/auditlog_helpers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/data_erasure_helpers.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/export_reboots_common.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/failing_mtpq.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/helpers.cpp

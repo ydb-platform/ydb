@@ -46,8 +46,9 @@ target_link_options(ydb-library-yql-dq-opt-ut PRIVATE
 )
 
 target_sources(ydb-library-yql-dq-opt-ut PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_cbo_ut.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt_hypergraph_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/opt/ut/dq_cbo_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/opt/ut/dq_opt_hypergraph_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/opt/ut/dq_opt_interesting_orderings_ut.cpp
 )
 
 

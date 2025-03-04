@@ -83,7 +83,8 @@ target_sources(ydb-core-persqueue-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/fetch_request_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/utils_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/list_all_topics_ut.cpp
-  ${PROJECT_BINARY_DIR}/ydb/core/persqueue/ut/20fb34d39c23be7518eb4226481d815e.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/cache_eviction_ut.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/persqueue/ut/f89aca7d5720af1c229ab9c4d35a20e7.cpp
 )
 
 
@@ -124,7 +125,7 @@ set_yunittest_property(
 )
 
 resources(ydb-core-persqueue-ut
-  ${PROJECT_BINARY_DIR}/ydb/core/persqueue/ut/20fb34d39c23be7518eb4226481d815e.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/persqueue/ut/f89aca7d5720af1c229ab9c4d35a20e7.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_datastreams.html
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/ut/resources/counters_pqproxy_firstclass.html

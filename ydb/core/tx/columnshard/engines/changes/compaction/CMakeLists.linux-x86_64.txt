@@ -16,6 +16,7 @@ add_subdirectory(abstract)
 add_subdirectory(common)
 add_subdirectory(plain)
 add_subdirectory(sparsed)
+add_subdirectory(sub_columns)
 
 add_library(engines-changes-compaction)
 
@@ -29,6 +30,7 @@ target_link_libraries(engines-changes-compaction PUBLIC
   changes-compaction-common
   changes-compaction-plain
   changes-compaction-sparsed
+  changes-compaction-sub_columns
 )
 
 target_sources(engines-changes-compaction PRIVATE

@@ -35,7 +35,9 @@ target_link_libraries(ydb-core-formats-arrow-ut PUBLIC
   libs-apache-arrow
   ydb-library-arrow_kernels
   library-formats-arrow-simple_builder
+  formats-arrow-program
   ydb-core-base
+  library-formats-arrow
   udf-service-exception_policy
   essentials-sql-pg
   essentials-parser-pg_wrapper
@@ -54,7 +56,6 @@ target_link_options(ydb-core-formats-arrow-ut PRIVATE
   -fPIC
   -lrt
   -ldl
-  -lutil
 )
 
 target_sources(ydb-core-formats-arrow-ut PRIVATE

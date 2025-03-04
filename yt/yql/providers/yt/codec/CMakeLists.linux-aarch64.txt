@@ -46,6 +46,7 @@ target_link_libraries(providers-yt-codec PUBLIC
   providers-yt-common
   yt-lib-mkql_helpers
   yt-lib-skiff
+  yt-library-decimal
   common-codec-yt_arrow_converter_interface
 )
 

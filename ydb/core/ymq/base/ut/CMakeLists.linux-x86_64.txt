@@ -41,7 +41,6 @@ target_link_options(ydb-core-ymq-base-ut PRIVATE
   -fPIC
   -lrt
   -ldl
-  -lutil
 )
 
 target_sources(ydb-core-ymq-base-ut PRIVATE

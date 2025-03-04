@@ -12,6 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(complete)
+add_subdirectory(antlr_ast)
 add_subdirectory(ut)
 
 add_library(ydb_cli-commands-interactive)
@@ -21,12 +23,15 @@ target_link_libraries(ydb_cli-commands-interactive PUBLIC
   contrib-libs-cxxsupp
   yutil
   restricted-patched-replxx
+  contrib-libs-antlr4_cpp_runtime
   essentials-parser-lexer_common
+  proto_ast-gen-v1_antlr4
   sql-v1-lexer
+  v1-lexer-antlr4
+  v1-lexer-antlr4_ansi
   essentials-sql-settings
   yql-essentials-utils
-  contrib-libs-antlr4_cpp_runtime
-  proto_ast-gen-v1_antlr4
+  commands-interactive-complete
   common
 )
 

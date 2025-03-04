@@ -30,7 +30,7 @@ target_link_libraries(worker_node PUBLIC
   yql-dq-comp_nodes
   core-dq_integration-transform
   yql-dq-transform
-  minikql-comp_nodes-llvm14
+  minikql-comp_nodes-llvm16
   providers-clickhouse-actors
   providers-common-comp_nodes
   providers-dq-runtime
@@ -51,8 +51,8 @@ target_link_libraries(worker_node PUBLIC
   essentials-utils-failure_injector
   essentials-utils-backtrace
   essentials-utils-network
-  comp_nodes-dq-llvm14
-  yt-comp_nodes-llvm14
+  comp_nodes-dq-llvm16
+  yt-comp_nodes-llvm16
   yt-codec-codegen
   providers-yt-mkql_dq
   dq-actors-yt

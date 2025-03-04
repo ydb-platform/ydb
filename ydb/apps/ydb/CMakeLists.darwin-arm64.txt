@@ -45,12 +45,12 @@ target_link_options(ydb PRIVATE
 
 target_sources(ydb PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/main.cpp
-  ${PROJECT_BINARY_DIR}/ydb/apps/ydb/6cd42c8765176f399b20eb2533f20a94.cpp
+  ${PROJECT_BINARY_DIR}/ydb/apps/ydb/1b94a3bdf828264b149e79c6d66ed87d.cpp
 )
 
 
 resources(ydb
-  ${PROJECT_BINARY_DIR}/ydb/apps/ydb/6cd42c8765176f399b20eb2533f20a94.cpp
+  ${PROJECT_BINARY_DIR}/ydb/apps/ydb/1b94a3bdf828264b149e79c6d66ed87d.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/version.txt
   KEYS

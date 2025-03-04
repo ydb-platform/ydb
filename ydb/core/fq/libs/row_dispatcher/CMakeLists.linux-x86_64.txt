@@ -14,8 +14,8 @@
 
 add_subdirectory(protos)
 add_subdirectory(events)
-add_subdirectory(format_handler)
 add_subdirectory(purecalc_no_pg_wrapper)
+add_subdirectory(format_handler)
 add_subdirectory(purecalc_compilation)
 
 add_library(fq-libs-row_dispatcher)

@@ -16,6 +16,7 @@ namespace NKikimr::NReplication::NController {
 const TString ReplicationConsumerName = "replicationConsumer";
 
 namespace {
+
 class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
     void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());

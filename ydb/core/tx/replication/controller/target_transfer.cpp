@@ -6,7 +6,8 @@
 #include <ydb/library/actors/core/events.h>
 
 namespace NKikimr::NReplication::NController {
-    TTargetTransfer::TTargetTransfer(TReplication* replication, ui64 id, const IConfig::TPtr& config)
+
+TTargetTransfer::TTargetTransfer(TReplication* replication, ui64 id, const IConfig::TPtr& config)
     : TTargetWithStream(replication, ETargetKind::Transfer, id, config)
 {
 }

@@ -521,6 +521,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
         SourceIdCounter.Use(sourceId, now);
     }
     TxSourceIdForPostPersist.clear();
+    TxInflightMaxSeqNoPerSourceId.clear();
 
     TxAffectedSourcesIds.clear();
     WriteAffectedSourcesIds.clear();

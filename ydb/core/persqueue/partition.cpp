@@ -1262,7 +1262,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
 
     EProcessResult ret = EProcessResult::Continue;
     const auto& knownSourceIds = SourceIdStorage.GetInMemorySourceIds();
-    THashSet<TString> txSourceIds;
+    THashMap<TString, ui64> txSourceIds;
     for (auto& s : srcIdInfo) {
         if (TxAffectedSourcesIds.contains(s.first)) {
             ret = EProcessResult::Blocked;
@@ -1275,7 +1275,14 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
                 ret = EProcessResult::Blocked;
                 break;
             }
-            txSourceIds.insert(s.first);
+            txSourceIds.insert(std::make_pair(s.first, s.second.SeqNo));
+        }
+        auto inFlightIter = TxInflightMaxSeqNoPerSourceId.find(s.first);
+        if (!inFlightIter.IsEnd() && s.second.MinSeqNo <= inFlightIter->second) {
+            tx.Predicate = false;
+            tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
+            tx.WriteInfoApplied = true;
+            break;
         }
 
         auto existing = knownSourceIds.find(s.first);
@@ -1289,10 +1296,10 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
         }
     }
     if (ret == EProcessResult::Continue && tx.Predicate.GetOrElse(true)) {
-        TxAffectedSourcesIds.insert(txSourceIds.begin(), txSourceIds.end());
-
-        // A temporary solution. This line should be deleted when we fix the error with the SeqNo promotion.
-        WriteAffectedSourcesIds.insert(txSourceIds.begin(), txSourceIds.end());
+        for (const auto& s : txSourceIds) {
+            TxAffectedSourcesIds.insert(s.first);
+            TxInflightMaxSeqNoPerSourceId[s.first] = s.second;
+        }
 
         tx.WriteInfoApplied = true;
         WriteKeysSizeEstimate += tx.WriteInfo->BodyKeys.size();

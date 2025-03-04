@@ -18,13 +18,13 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
-    contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
     ydb/core/testlib/default
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
     ydb/services/metadata
     ydb/core/tx
+    ydb/core/util
     ydb/public/lib/yson_value
 )
 

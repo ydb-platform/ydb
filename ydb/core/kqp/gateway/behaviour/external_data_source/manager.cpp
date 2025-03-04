@@ -85,7 +85,10 @@ TString GetOrEmpty(const NYql::TCreateObjectSettings& container, const TString& 
         "use_tls",
         "schema", // managed PG, GP
         "service_name", // oracle
-        "folder_id" // logging
+        "folder_id", // logging
+        "reading_mode", // mongodb
+        "unexpected_type_display_mode", // mongodb
+       "unsupported_type_display_mode", // mongodb
     };
 
     auto& featuresExtractor = settings.GetFeaturesExtractor();

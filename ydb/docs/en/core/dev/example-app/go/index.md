@@ -47,7 +47,7 @@ defer db.Close(context.Background())
 
 The `ydb.Open` method returns a driver instance if successful. The driver performs several services, such as {{ ydb-short-name }} cluster discovery and client-side load balancing.
 
-The ydb.Open method takes two required arguments:
+The `ydb.Open` method takes two mandatory arguments:
 
 * a context
 * a {{ ydb-short-name }} connection string

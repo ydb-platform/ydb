@@ -70,7 +70,7 @@ It is necessary to close the driver at the end of work to clean up resources.
 defer db.Close(ctx)
 ```
 
-The `db` struct is the entry point for working with all {{ ydb-short-name }} functionalities. To query tables, use the query service: `db.Query()`:
+The `db` struct is the entry point for working with {{ ydb-short-name }}. To query tables, use the `db.Query()` query service:
 
 YQL queries are executed within special objects called `query.Session`. Sessions store the execution context of queries (for example, transactions) and provide server-side load balancing among the {{ ydb-short-name }} cluster nodes.
 

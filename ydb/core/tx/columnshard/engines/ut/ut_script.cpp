@@ -19,10 +19,9 @@ using namespace NKikimr::NOlap;
 using namespace NKikimr::NOlap::NReader;
 
 Y_UNIT_TEST_SUITE(TestScript) {
-    NSimple::TSpecialReadContext MakeTestReadContext(const THashMap<ui32, NTable::TColumn>& columns, const std::vector<ui32> pkIds = {0}) {
-        auto columnsCopy = columns;
+    NSimple::TSpecialReadContext MakeTestReadContext(THashMap<ui32, NTable::TColumn> columns, const std::vector<ui32> pkIds = {0}) {
         for (ui64 i = 0; i < pkIds.size(); ++i) {
-            TValidator::CheckNotNull(columnsCopy.FindPtr(pkIds[i]))->KeyOrder = i;
+            TValidator::CheckNotNull(columns.FindPtr(pkIds[i]))->KeyOrder = i;
         }
 
         const auto versionedIndex = std::make_shared<TVersionedIndex>();

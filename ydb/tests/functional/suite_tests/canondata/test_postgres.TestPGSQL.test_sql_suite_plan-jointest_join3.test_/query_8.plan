@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 11,
+                "PlanNodeId": 9,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +14,18 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 9
+                                        "ExternalPlanNodeId": 7
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 10,
+                        "PlanNodeId": 8,
                         "Plans": [
                             {
                                 "Node Type": "Merge",
-                                "PlanNodeId": 9,
+                                "PlanNodeId": 7,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -45,16 +45,13 @@
                                                 "Condition": "ss1.x = ss2._equijoin_column_0",
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 7
-                                                    },
-                                                    {
                                                         "ExternalPlanNodeId": 5
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
-                                        "PlanNodeId": 8,
+                                        "PlanNodeId": 6,
                                         "Plans": [
                                             {
                                                 "Node Type": "Broadcast",
@@ -115,17 +112,6 @@
                                                                 ]
                                                             }
                                                         ]
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                "Node Type": "Map",
-                                                "PlanNodeId": 7,
-                                                "PlanNodeType": "Connection",
-                                                "Plans": [
-                                                    {
-                                                        "Node Type": "Stage",
-                                                        "PlanNodeId": 6
                                                     }
                                                 ]
                                             }

@@ -10,8 +10,8 @@
                 "PlanNodeType": "Query",
                 "Plans": [
                     {
-                        "Node Type": "ResultSet_2",
-                        "PlanNodeId": 21,
+                        "Node Type": "ResultSet_1",
+                        "PlanNodeId": 18,
                         "PlanNodeType": "ResultSet",
                         "Plans": [
                             {
@@ -20,22 +20,23 @@
                                     {
                                         "Inputs": [
                                             {
-                                                "ExternalPlanNodeId": 19
+                                                "ExternalPlanNodeId": 16
                                             }
                                         ],
                                         "Limit": "1001",
                                         "Name": "Limit"
                                     }
                                 ],
-                                "PlanNodeId": 20,
+                                "PlanNodeId": 17,
                                 "Plans": [
                                     {
                                         "Node Type": "Merge",
-                                        "PlanNodeId": 19,
+                                        "PlanNodeId": 16,
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TopSort-LeftJoin (MapJoin)-Filter",
+                                                "CTE Name": "precompute_0_0",
+                                                "Node Type": "TopSort-LeftJoin (MapJoin)-ConstantExpr-Filter",
                                                 "Operators": [
                                                     {
                                                         "Inputs": [
@@ -51,95 +52,100 @@
                                                         "Condition": "a.Group = t.Group",
                                                         "Inputs": [
                                                             {
-                                                                "ExternalPlanNodeId": 17
+                                                                "InternalOperatorId": 2
                                                             },
                                                             {
-                                                                "InternalOperatorId": 2
+                                                                "InternalOperatorId": 3
                                                             }
                                                         ],
                                                         "Name": "LeftJoin (MapJoin)"
                                                     },
                                                     {
+                                                        "Inputs": [],
+                                                        "Name": "ToFlow",
+                                                        "ToFlow": "precompute_0_0"
+                                                    },
+                                                    {
                                                         "Inputs": [
                                                             {
-                                                                "ExternalPlanNodeId": 15
+                                                                "ExternalPlanNodeId": 14
                                                             }
                                                         ],
                                                         "Name": "Filter",
                                                         "Predicate": "Exist(item.Group)"
                                                     }
                                                 ],
-                                                "PlanNodeId": 18,
+                                                "PlanNodeId": 15,
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Map",
-                                                        "PlanNodeId": 17,
-                                                        "PlanNodeType": "Connection",
-                                                        "Plans": [
-                                                            {
-                                                                "CTE Name": "precompute_0_0",
-                                                                "Node Type": "ConstantExpr",
-                                                                "Operators": [
-                                                                    {
-                                                                        "Inputs": [],
-                                                                        "Name": "ToFlow",
-                                                                        "ToFlow": "precompute_0_0"
-                                                                    }
-                                                                ],
-                                                                "PlanNodeId": 16
-                                                            }
-                                                        ]
-                                                    },
-                                                    {
                                                         "Node Type": "Broadcast",
-                                                        "PlanNodeId": 15,
+                                                        "PlanNodeId": 14,
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
                                                                 "Node Type": "Stage",
-                                                                "PlanNodeId": 14,
+                                                                "PlanNodeId": 13,
                                                                 "Plans": [
                                                                     {
                                                                         "Node Type": "UnionAll",
-                                                                        "PlanNodeId": 13,
+                                                                        "PlanNodeId": 12,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "CTE Name": "precompute_1_0",
-                                                                                "Node Type": "Filter-TablePointLookup-ConstantExpr",
+                                                                                "Node Type": "Filter",
                                                                                 "Operators": [
                                                                                     {
                                                                                         "Inputs": [
                                                                                             {
-                                                                                                "InternalOperatorId": 1
+                                                                                                "ExternalPlanNodeId": 10
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Filter",
                                                                                         "Predicate": "Exist(item.Group)"
-                                                                                    },
+                                                                                    }
+                                                                                ],
+                                                                                "PlanNodeId": 11,
+                                                                                "Plans": [
                                                                                     {
-                                                                                        "Inputs": [
-                                                                                            {
-                                                                                                "InternalOperatorId": 2
-                                                                                            }
-                                                                                        ],
-                                                                                        "Name": "TablePointLookup",
-                                                                                        "Path": "/local/base_join_group_by_lookup_script_script/Temp",
-                                                                                        "ReadColumns": [
+                                                                                        "Columns": [
                                                                                             "Group",
                                                                                             "Value"
                                                                                         ],
+                                                                                        "E-Cost": "0",
+                                                                                        "E-Rows": "0",
+                                                                                        "E-Size": "0",
+                                                                                        "LookupKeyColumns": [
+                                                                                            "Group"
+                                                                                        ],
+                                                                                        "Node Type": "TableLookup",
+                                                                                        "Path": "/local/base_join_group_by_lookup_script_script/Temp",
+                                                                                        "PlanNodeId": 10,
+                                                                                        "PlanNodeType": "Connection",
+                                                                                        "Plans": [
+                                                                                            {
+                                                                                                "CTE Name": "precompute_0_0",
+                                                                                                "Node Type": "ConstantExpr-Aggregate",
+                                                                                                "Operators": [
+                                                                                                    {
+                                                                                                        "Inputs": [
+                                                                                                            {
+                                                                                                                "InternalOperatorId": 1
+                                                                                                            }
+                                                                                                        ],
+                                                                                                        "Iterator": "PartitionByKey",
+                                                                                                        "Name": "Iterator"
+                                                                                                    },
+                                                                                                    {
+                                                                                                        "Input": "precompute_0_0",
+                                                                                                        "Inputs": [],
+                                                                                                        "Name": "PartitionByKey"
+                                                                                                    }
+                                                                                                ],
+                                                                                                "PlanNodeId": 9
+                                                                                            }
+                                                                                        ],
                                                                                         "Table": "base_join_group_by_lookup_script_script/Temp"
-                                                                                    },
-                                                                                    {
-                                                                                        "Inputs": [],
-                                                                                        "Iterator": "precompute_1_0",
-                                                                                        "Name": "Iterator"
                                                                                     }
-                                                                                ],
-                                                                                "PlanNodeId": 12,
-                                                                                "Tables": [
-                                                                                    "base_join_group_by_lookup_script_script/Temp"
                                                                                 ]
                                                                             }
                                                                         ]
@@ -160,27 +166,6 @@
                                 ]
                             }
                         ]
-                    },
-                    {
-                        "Node Type": "Precompute_1",
-                        "Parent Relationship": "InitPlan",
-                        "PlanNodeId": 10,
-                        "PlanNodeType": "Materialize",
-                        "Plans": [
-                            {
-                                "CTE Name": "precompute_0_0",
-                                "Node Type": "Aggregate",
-                                "Operators": [
-                                    {
-                                        "Input": "precompute_0_0",
-                                        "Inputs": [],
-                                        "Name": "PartitionByKey"
-                                    }
-                                ],
-                                "PlanNodeId": 9
-                            }
-                        ],
-                        "Subplan Name": "CTE precompute_1_0"
                     },
                     {
                         "Node Type": "Precompute_0",
@@ -302,6 +287,9 @@
                             "columns": [
                                 "Group",
                                 "Value"
+                            ],
+                            "lookup_by": [
+                                "Group"
                             ],
                             "type": "Lookup"
                         }

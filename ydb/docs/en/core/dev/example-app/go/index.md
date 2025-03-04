@@ -81,7 +81,7 @@ The query service client provides an API for executing queries:
 * `db.Query().Exec` is used to run a single query that returns **no result**, with automatic retry logic on failure. This method returns nil if the execution was successful, or an error otherwise.
 * `db.Query().Query` executes a single query containing one or more statements that return a result. It automatically handles retries. Upon successful execution, it returns a fully materialized result (`query.Result`). All result rows are loaded into memory and available for immediate iteration. For queries returning large datasets, this may lead to an [Out of memory](https://en.wikipedia.org/wiki/Out_of_memory) problem.
 * `db.Query().QueryResultSet` executes a query containing exactly one statement returning results (it may contain other auxiliary statements without results, e.g. `UPSERT`). Like `db.Query().Query`, it automatically retries failed operations and returns a fully materialized result set (`query.ResultSet`). This can also cause an [OOM](https://en.wikipedia.org/wiki/Out_of_memory) error when receiving large datasets.
-* `db.Query().QueryRow` runs queries expected to return exactly one row, with similar automatic retries. On success, it returns a `query.Row` instance.
+* `db.Query().QueryRow` runs queries expected to return exactly one row. It also automatically retries failed operations. On success, it returns a `query.Row` instance.
 
 {% include [steps/02_create_table.md](../_includes/steps/02_create_table.md) %}
 

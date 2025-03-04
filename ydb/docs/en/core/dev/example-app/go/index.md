@@ -74,7 +74,7 @@ The `db` struct is the entry point for working with {{ ydb-short-name }}. To que
 
 YQL queries are executed within special objects called `query.Session`. Sessions store the execution context of queries (for example, transactions) and provide server-side load balancing among the {{ ydb-short-name }} cluster nodes.
 
-The query service client provides an API for executing queries against tables:
+The query service client provides an API for executing queries:
 
 * `db.Query().Do(ctx, op)` creates sessions in the background and automatically retries the provided operation `op func(ctx context.Context, s query.Session) error`. As soon as a session is ready, it is passed to the callback.
 * `db.Query().DoTx(ctx, op)` automatically handles transaction lifecycle. It provides a prepared transaction object `query.TxActor` to the user-defined function `op func(ctx context.Context, tx query.TxActor)` error. If the operation returns without error (nil), the transaction will commit automatically. If it returns any error, the transaction will rollback automatically.

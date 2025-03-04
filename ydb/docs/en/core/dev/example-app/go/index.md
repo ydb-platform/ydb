@@ -139,7 +139,7 @@ if err != nil {
 }
 ```
 
-You can extract row data (`query.Row`) via methods:
+You can extract row data (`query.Row`) using the following methods:
 
 * `query.Row.ScanStruct` — scans row data into a struct based on struct field tags matching column names.
 * `query.Row.ScanNamed` — scans data into variables via explicitly defined column-variable pairs.

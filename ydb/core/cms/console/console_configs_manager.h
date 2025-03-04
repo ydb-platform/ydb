@@ -216,6 +216,19 @@ private:
             HandleUnauthorized(ev, ctx);
         };
 
+        constexpr bool IsGetAllConfigsRequest = std::is_same_v<
+            std::decay_t<T>, 
+            typename TEvConsole::TEvGetAllConfigsRequest::TPtr
+        >;
+
+        if constexpr (IsGetAllConfigsRequest) {
+            if (ev->Get()->Record.HasBypassAuth() && ev->Get()->Record.GetBypassAuth()) {
+                Cerr << "TConfigsManager::HandleWithRights bypass auth" << Endl;
+                Handle(ev, ctx);
+                return;
+            }
+        }
+
         if (IsAdministrator(AppData(ctx), ev->Get()->Record.GetUserToken())) {
             Handle(ev, ctx);
         } else {

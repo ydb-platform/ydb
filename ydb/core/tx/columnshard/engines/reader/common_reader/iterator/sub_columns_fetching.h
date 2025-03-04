@@ -191,6 +191,7 @@ private:
         AFL_VERIFY(!!StorageId);
         TBlobsAction blobsAction(Source->GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
         auto reading = blobsAction.GetReading(*StorageId);
+        reading->SetIsBackgroundProcess(false);
         for (auto&& i : ColumnChunks) {
             if (!!i.GetHeaderRange()) {
                 const TString readBlob = blobs.Extract(*StorageId, *i.GetHeaderRange());

@@ -37,106 +37,48 @@
 namespace NKikimr {
 namespace NNodeBroker {
 
-class TListNodesCache : public TSimpleRefCount<TListNodesCache> {
-public:
-    TListNodesCache();
-
-    void Update(TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr newNodes, TInstant newExpire);
-    void Invalidate();
-    bool NeedUpdate(TInstant now) const;
-    TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr GetNodes() const;
-private:
-    TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr Nodes;
-    TInstant Expire;
-};
-
-class TDynamicNameserver;
 struct TDynamicConfig;
 using TDynamicConfigPtr = TIntrusivePtr<TDynamicConfig>;
 
-class TDynamicNodeResolverBase : public TActor<TDynamicNodeResolverBase> {
-public:
-
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::NAMESERVICE;
-    }
-
-    TDynamicNodeResolverBase(TDynamicNameserver* owner, ui32 nodeId, TDynamicConfigPtr config,
-                             TIntrusivePtr<TListNodesCache> listNodesCache,
-                             TAutoPtr<IEventHandle> origRequest, TInstant deadline)
-        : TActor(&TThis::StateWork)
-        , Owner(owner)
-        , NodeId(nodeId)
+struct TCacheMiss {
+    TCacheMiss(ui32 nodeId, TDynamicConfigPtr config, TAutoPtr<IEventHandle> origRequest, TInstant deadline)
+        : NodeId(nodeId)
         , Config(config)
-        , ListNodesCache(listNodesCache)
         , OrigRequest(origRequest)
         , Deadline(deadline)
     {
     }
 
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvNodeBroker::TEvResolvedNode, Handle);
-        }
+    virtual ~TCacheMiss() = default;
+
+    virtual void OnSuccess(const TActorContext &) {
+        LOG_D("Cache miss succeed"
+            << ": nodeId=" << NodeId);
     }
 
-    void SendRequest();
+    virtual void OnError(const TString &error, const TActorContext &) {
+        LOG_D("Cache miss failed"
+            << ": nodeId=" << NodeId
+            << ", error=" << error);
+    }
 
-    virtual void OnSuccess() = 0;
-    virtual void OnError(const TString& error) = 0;
-
-public:
-    void Handle(TEvNodeBroker::TEvResolvedNode::TPtr &ev, const TActorContext &ctx);
-
-    TDynamicNameserver* Owner;
     ui32 NodeId;
     TDynamicConfigPtr Config;
-    TIntrusivePtr<TListNodesCache> ListNodesCache;
     TAutoPtr<IEventHandle> OrigRequest;
     const TInstant Deadline;
     size_t DeadlineHeapIndex = -1;
 
     struct THeapIndexByDeadline {
-        size_t& operator()(TDynamicNodeResolverBase& resolver) const {
-            return resolver.DeadlineHeapIndex;
+        size_t& operator()(TCacheMiss& cacheMiss) const {
+            return cacheMiss.DeadlineHeapIndex;
         }
     };
 
     struct TCompareByDeadline {
-        bool operator()(const TDynamicNodeResolverBase& a, const TDynamicNodeResolverBase& b) const {
+        bool operator()(const TCacheMiss& a, const TCacheMiss& b) const {
             return a.Deadline < b.Deadline;
         }
     };
-};
-
-class TDynamicNodeResolver : public TDynamicNodeResolverBase {
-    using TBase = TDynamicNodeResolverBase;
-
-public:
-    TDynamicNodeResolver(TDynamicNameserver* owner, ui32 nodeId, TDynamicConfigPtr config,
-                         TIntrusivePtr<TListNodesCache> listNodesCache,
-                         TAutoPtr<IEventHandle> origRequest, TInstant deadline)
-        : TDynamicNodeResolverBase(owner, nodeId, config, listNodesCache, origRequest, deadline)
-    {
-    }
-
-    void OnSuccess() override;
-    void OnError(const TString& error) override;
-};
-
-class TDynamicNodeSearcher : public TDynamicNodeResolverBase {
-    using TBase = TDynamicNodeResolverBase;
-
-public:
-    TDynamicNodeSearcher(TDynamicNameserver* owner, ui32 nodeId, TDynamicConfigPtr config,
-                         TIntrusivePtr<TListNodesCache> listNodesCache,
-                         TAutoPtr<IEventHandle> origRequest, TInstant deadline)
-        : TDynamicNodeResolverBase(owner, nodeId, config, listNodesCache, origRequest, deadline)
-    {
-    }
-
-    void OnSuccess() override;
-    void OnError(const TString& error) override;
 };
 
 struct TDynamicConfig : public TThrRefBase {
@@ -186,13 +128,34 @@ struct TDynamicConfig : public TThrRefBase {
     TEpochInfo Epoch;
     TActorId NodeBrokerPipe;
 
-    using TCacheMiss = TDynamicNodeResolverBase;
-    TIntrusiveHeap<TCacheMiss, TCacheMiss::THeapIndexByDeadline, TCacheMiss::TCompareByDeadline> PendingCacheMisses;
+    using TPendingCacheMissesQueue = TIntrusiveHeap<TCacheMiss, TCacheMiss::THeapIndexByDeadline, TCacheMiss::TCompareByDeadline>;
+    TPendingCacheMissesQueue PendingCacheMisses;
 };
+
+class TListNodesCache : public TSimpleRefCount<TListNodesCache> {
+public:
+    TListNodesCache();
+
+    void Update(TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr newNodes, TInstant newExpire);
+    void Invalidate();
+    bool NeedUpdate(TInstant now) const;
+    TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr GetNodes() const;
+private:
+    TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr Nodes;
+    TInstant Expire;
+};
+
+template<typename TCacheMiss>
+class TActorCacheMiss;
+struct TCacheMissGet;
+struct TCacheMissResolve;
 
 class TDynamicNameserver : public TActorBootstrapped<TDynamicNameserver> {
 public:
     using TBase = TActorBootstrapped<TDynamicNameserver>;
+
+    friend TActorCacheMiss<TCacheMissGet>;
+    friend TActorCacheMiss<TCacheMissResolve>;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::NAMESERVICE;
@@ -267,13 +230,11 @@ public:
     void Handle(TEvNodeWardenStorageConfig::TPtr ev);
     void Die(const TActorContext &ctx) override;
 
-    void OpenPipe(TActorId& pipe);
-    void OpenPipe(ui32 domain);
-
     size_t GetTotalPendingCacheMissesSize() const;
 
 private:
-    
+    void OpenPipe(ui32 domain);
+    void OpenPipe(TActorId& pipe);
     void RequestEpochUpdate(ui32 domain,
                             ui32 epoch,
                             const TActorContext &ctx);
@@ -284,8 +245,8 @@ private:
     void UpdateState(const NKikimrNodeBroker::TNodesInfo &rec,
                      const TActorContext &ctx);
 
-    void OnPipeDestroyed(ui32 domain, const TActorContext &ctx);
-    void RegisterNewCacheMiss(TDynamicNodeResolverBase* cacheMiss, TDynamicConfigPtr config);
+    void OnPipeDestroyed(ui32 domain,
+                         const TActorContext &ctx);
 
     void Handle(TEvInterconnect::TEvResolveNode::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvResolveAddress::TPtr &ev, const TActorContext &ctx);
@@ -305,6 +266,7 @@ private:
     void HandleWakeup(const TActorContext &ctx);
 
     void ReplaceNameserverSetup(TIntrusivePtr<TTableNameserverSetup> newStaticConfig);
+    void RegisterNewCacheMiss(TCacheMiss* cacheMiss, TDynamicConfigPtr config);
 
 private:
     TIntrusivePtr<TTableNameserverSetup> StaticConfig;

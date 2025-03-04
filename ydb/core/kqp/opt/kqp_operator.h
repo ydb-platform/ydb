@@ -74,6 +74,19 @@ class IOperator {
     TVector<TInfoUnit> OutputIUs;
 };
 
+class IUnaryOperator : public IOperator {
+    public:
+    IUnaryOperator(EOperator kind, TExprNode::TPtr node) : IOperator(kind, node) {}
+    std::shared_ptr<IOperator>& GetInput() { return Children[0]; }
+};
+
+class IBinaryOperator : public IOperator {
+    public:
+    IBinaryOperator(EOperator kind, TExprNode::TPtr node) : IOperator(kind, node) {}
+    std::shared_ptr<IOperator>& GetLeftInput() { return Children[0]; }
+    std::shared_ptr<IOperator>& GetRightInput() { return Children[1]; }
+};
+
 class TOpEmptySource : public IOperator {
     public:
     TOpEmptySource() : IOperator(EOperator::EmptySource, nullptr) {}
@@ -88,14 +101,14 @@ class TOpRead : public IOperator {
 
 };
 
-class TOpMap : public IOperator {
+class TOpMap : public IUnaryOperator {
     public:
     TOpMap(TExprNode::TPtr node);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
 
 };
 
-class TOpFilter : public IOperator {
+class TOpFilter : public IUnaryOperator {
     public:
     TOpFilter(TExprNode::TPtr node);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
@@ -104,14 +117,14 @@ class TOpFilter : public IOperator {
     TConjunctInfo GetConjuctInfo() const;
 };
 
-class TOpJoin : public IOperator {
+class TOpJoin : public IBinaryOperator {
     public:
     TOpJoin(TExprNode::TPtr node);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
 
 };
 
-class TOpRoot : public IOperator {
+class TOpRoot : public IUnaryOperator {
     public:
     TOpRoot(TExprNode::TPtr node);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;

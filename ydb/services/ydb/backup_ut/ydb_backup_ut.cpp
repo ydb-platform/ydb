@@ -1609,7 +1609,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
-        const auto table = "/Root/test/table";
+        const auto table = "/Root/table";
 
         TestChangefeedAndTopicDescriptionsIsPreserved(
             table,

@@ -220,15 +220,16 @@ struct TReadSessionEvent {
 class TDeferredCommit: NTopic::TDeferredCommit {
     using TBase = NTopic::TDeferredCommit;
 public:
+    // FIXME BROKEN, need separate by db + partitionId instead of partitionId alone
     //! Add message to set.
     void Add(const TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
-        TBase::Add(message);
+        Add(*message.GetFederatedPartitionSession(), message.GetOffset());
     }
 
     //! Add all messages from dataReceivedEvent to set.
     void Add(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent) {
         for (auto& message: dataReceivedEvent.GetMessages()) {
-            TBase::Add(message);
+            Add(message);
         }
     }
 

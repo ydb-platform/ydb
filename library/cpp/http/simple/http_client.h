@@ -172,13 +172,13 @@ public:
 
     void EnableVerificationForHttps();
 
-    void DoGet(const TStringBuf relativeUrl, IOutputStream* output, const THeaders& headers = THeaders(), NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default()) const;
+    void DoGet(const TStringBuf relativeUrl, IOutputStream* output, const THeaders& headers = THeaders(), THttpHeaders* outHeaders = nullptr, NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default()) const;
 
     // builds post request from headers and body
-    void DoPost(const TStringBuf relativeUrl, TStringBuf body, IOutputStream* output, const THeaders& headers = THeaders(), NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default()) const;
+    void DoPost(const TStringBuf relativeUrl, TStringBuf body, IOutputStream* output, const THeaders& headers = THeaders(), THttpHeaders* outHeaders = nullptr, NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default()) const;
 
     // requires already well-formed post request
-    void DoPostRaw(const TStringBuf relativeUrl, TStringBuf rawRequest, IOutputStream* output, NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default()) const;
+    void DoPostRaw(const TStringBuf relativeUrl, TStringBuf rawRequest, IOutputStream* output, THttpHeaders* outHeaders = nullptr, NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default()) const;
 
     virtual ~TSimpleHttpClient();
 

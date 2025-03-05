@@ -110,6 +110,7 @@ class StaticConfigGenerator(object):
             "pdisk_key.txt": None,
             "immediate_controls_config.txt": None,
             "cms_config.txt": None,
+            "audit_config.txt": None,
         }
         self.__optional_config_files = set(
             (
@@ -247,6 +248,14 @@ class StaticConfigGenerator(object):
     @property
     def audit_txt_enabled(self):
         return self.__proto_config("audit.txt").ByteSize() > 0
+
+    @property
+    def audit_config_txt(self):
+        return self.__proto_config("audit_config.txt", config_pb2.TAuditConfig, self.__cluster_details.get_service("audit_config"))
+
+    @property
+    def audit_config_txt_enabled(self):
+        return self.__proto_config("audit_config.txt").ByteSize() > 0
 
     @property
     def fq_txt(self):
@@ -644,8 +653,6 @@ class StaticConfigGenerator(object):
         app_config.VDiskConfig.CopyFrom(self.vdisks_txt)
         app_config.PQConfig.CopyFrom(self.pq_txt)
 
-        if self.cms_txt.ByteSize() > 0:
-            app_config.CmsConfig.CopyFrom(self.cms_txt)
         if self.dyn_ns_txt.ByteSize() > 0:
             app_config.DynamicNameserviceConfig.CopyFrom(self.dyn_ns_txt)
         if self.pqcd_txt.ByteSize() > 0:
@@ -656,8 +663,6 @@ class StaticConfigGenerator(object):
             app_config.ResourceBrokerConfig.CopyFrom(self.rb_txt)
         if self.metering_txt_enabled:
             app_config.MeteringConfig.CopyFrom(self.metering_txt)
-        if self.audit_txt_enabled:
-            app_config.AuditConfig.CopyFrom(self.audit_txt)
         if self.fq_txt_enabled:
             app_config.FederatedQueryConfig.CopyFrom(self.fq_txt)
         if self.failure_injection_txt_enabled:
@@ -671,8 +676,20 @@ class StaticConfigGenerator(object):
             app_config.PDiskKeyConfig.CopyFrom(self.pdisk_key_txt)
         if self.immediate_controls_config_txt_enabled:
             app_config.ImmediateControlsConfig.CopyFrom(self.immediate_controls_config_txt)
+
+        # Old template style:
+        if self.cms_txt.ByteSize() > 0:
+            app_config.CmsConfig.CopyFrom(self.cms_txt)
+        # New config.yaml style:
         if self.cms_config_txt_enabled:
             app_config.CmsConfig.CopyFrom(self.cms_config_txt)
+
+        # Old template style:
+        if self.audit_txt_enabled:
+            app_config.AuditConfig.CopyFrom(self.audit_txt)
+        # New config.yaml style:
+        if self.audit_config_txt_enabled:
+            app_config.AuditConfig.CopyFrom(self.audit_config_txt)
         return app_config
 
     def __proto_config(self, config_file, config_class=None, cluster_details_for_field=None):

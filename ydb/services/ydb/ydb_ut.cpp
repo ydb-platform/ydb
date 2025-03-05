@@ -5704,7 +5704,9 @@ Y_UNIT_TEST_SUITE(TYqlDateTimeTests) {
 
 Y_UNIT_TEST_SUITE(LocalityOperation) {
 Y_UNIT_TEST(LocksFromAnotherTenants) {
-    TKikimrWithGrpcAndRootSchema server;
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+    TKikimrWithGrpcAndRootSchema server(appConfig);
     //server.Server_->SetupLogging(
 
     auto connection = NYdb::TDriver(

@@ -265,7 +265,7 @@ Y_UNIT_TEST(Limits_Config) {
 
     SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU, 2_MB);
     LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 3 * 2), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(2_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 2_MB);
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
     UNIT_ASSERT_VALUES_EQUAL(counters->ConfigLimitBytes->Val(), 2_MB);
@@ -280,7 +280,7 @@ Y_UNIT_TEST(Limits_Config) {
 
     SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU, 0_MB);
     LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(1_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 0_MB);
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
     UNIT_ASSERT_VALUES_EQUAL(counters->ConfigLimitBytes->Val(), 0_MB);

@@ -9,7 +9,7 @@ For a full description of {{ ydb-short-name }} CLI commands, see the following a
 * [List of objects](../commands/scheme-ls.md).
 * [Getting information about schema objects](../commands/scheme-describe.md).
 * [Working with directories](../commands/dir.md).
-* [YQL execution](../yql-query-overview.md).
+* [Query execution](../yql-query-overview.md).
 * [Streaming table reads](../commands/readtable.md).
 * [Working with secondary indexes](../commands/secondary_index.md).
 * [Getting a list of DB endpoints](../commands/discovery-list.md).

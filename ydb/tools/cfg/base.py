@@ -722,7 +722,13 @@ class ClusterDetailsProvider(object):
 
     @property
     def grpc_config(self):
-        return merge_with_default(GRPC_DEFAULT_CONFIG, self.__cluster_description.get("grpc", {}))
+        grpc_config = merge_with_default(GRPC_DEFAULT_CONFIG, self.__cluster_description.get("grpc", {}))
+
+        # specifying `port` equal to `ssl_port` leads to erroneous behavior in ydbd, half of the incoming
+        # connections use tls, half do not, so this is prohibited
+        if grpc_config.get("ssl_port") is not None and int(grpc_config["port"]) == int(grpc_config["ssl_port"]):
+            del grpc_config["port"]
+        return grpc_config
 
     @property
     def dynamicnameservice_config(self):

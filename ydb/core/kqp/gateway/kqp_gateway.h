@@ -190,8 +190,6 @@ public:
 public:
     virtual TString GetDatabase() = 0;
     virtual TString GetDatabaseId() = 0;
-    virtual bool GetDomainLoginOnly() = 0;
-    virtual TMaybe<TString> GetDomainName() = 0;
 
     /* Scheme */
     virtual NThreading::TFuture<TKqpTableProfilesResult> GetTableProfiles() = 0;

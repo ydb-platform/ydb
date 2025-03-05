@@ -178,15 +178,6 @@ public:
         });
     }
 
-    TString GetDatabaseForLoginOperation() const {
-        const auto domainLoginOnly = AppData()->AuthConfig.GetDomainLoginOnly();
-        const auto domain = AppData()->DomainsInfo ? AppData()->DomainsInfo->GetDomain() : nullptr;
-        const auto domainName = domain ? domain->Name : "";
-        TString database;
-        return NSchemeHelpers::SetDatabaseForLoginOperation(database, domainLoginOnly, domainName, Database)
-            ? database : Database;
-    }
-
     void MakeSchemeOperationRequest() {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
@@ -248,21 +239,21 @@ public:
             case NKqpProto::TKqpSchemeOperation::kCreateUser: {
                 const auto& modifyScheme = schemeOp.GetCreateUser();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
-                ev->Record.SetDatabaseName(GetDatabaseForLoginOperation());
+                ev->Record.SetDatabaseName(NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(), Database));
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kAlterUser: {
                 const auto& modifyScheme = schemeOp.GetAlterUser();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
-                ev->Record.SetDatabaseName(GetDatabaseForLoginOperation());
+                ev->Record.SetDatabaseName(NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(), Database));
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kDropUser: {
                 const auto& modifyScheme = schemeOp.GetDropUser();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
-                ev->Record.SetDatabaseName(GetDatabaseForLoginOperation());
+                ev->Record.SetDatabaseName(NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(), Database));
                 break;
             }
             case NKqpProto::TKqpSchemeOperation::kCreateExternalTable: {
@@ -284,35 +275,35 @@ public:
             case NKqpProto::TKqpSchemeOperation::kCreateGroup: {
                 const auto& modifyScheme = schemeOp.GetCreateGroup();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
-                ev->Record.SetDatabaseName(GetDatabaseForLoginOperation());
+                ev->Record.SetDatabaseName(NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(), Database));
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kAddGroupMembership: {
                 const auto& modifyScheme = schemeOp.GetAddGroupMembership();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
-                ev->Record.SetDatabaseName(GetDatabaseForLoginOperation());
+                ev->Record.SetDatabaseName(NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(), Database));
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kRemoveGroupMembership: {
                 const auto& modifyScheme = schemeOp.GetRemoveGroupMembership();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
-                ev->Record.SetDatabaseName(GetDatabaseForLoginOperation());
+                ev->Record.SetDatabaseName(NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(), Database));
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kRenameGroup: {
                 const auto& modifyScheme = schemeOp.GetRenameGroup();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
-                ev->Record.SetDatabaseName(GetDatabaseForLoginOperation());
+                ev->Record.SetDatabaseName(NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(), Database));
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kDropGroup: {
                 const auto& modifyScheme = schemeOp.GetDropGroup();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
-                ev->Record.SetDatabaseName(GetDatabaseForLoginOperation());
+                ev->Record.SetDatabaseName(NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(), Database));
                 break;
             }
 
@@ -619,7 +610,7 @@ public:
                 << "Error creating temporary directory: "
                 << result->Get()->Result.Issues().ToString(true));
         }
-        
+
         CreateSessionDirectory();
     }
 

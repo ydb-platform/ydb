@@ -78,6 +78,8 @@ private:
     void HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/);
 
 private:
+    void CheckHanging(const bool logging = false) const;
+
     void MakeResult(size_t reserveRows = 0);
 
     void AddRow(const TConstArrayRef<TCell>& row) override;
@@ -113,6 +115,7 @@ private:
     void ScheduleWakeup(const TMonotonic deadline);
 
     TMonotonic GetDeadline() const;
+    TMonotonic GetNotificationDeadline() const;
 
 private:
     const TActorId ColumnShardActorId;

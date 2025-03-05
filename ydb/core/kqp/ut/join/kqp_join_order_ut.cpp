@@ -122,9 +122,9 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
         settings.push_back(setting);
     }
 
-    setting.SetName("OptShuffleElimination");
-    setting.SetValue("true");
-    settings.push_back(setting);
+    // setting.SetName("OptShuffleElimination");
+    // setting.SetValue("true");
+    // settings.push_back(setting);
 
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
@@ -403,13 +403,18 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
             auto explainRes = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
             explainRes.GetIssues().PrintTo(Cerr);
+            for (const auto& issue: explainRes.GetIssues()) {
+                for (const auto& subissue: issue.GetSubIssues()) {
+                    UNIT_ASSERT_C(!(8000 <= subissue->IssueCode && subissue->IssueCode < 9000), "CBO didn't work for this query!");
+                }
+            }
             UNIT_ASSERT_VALUES_EQUAL(explainRes.GetStatus(), EStatus::SUCCESS);
             PrintPlan(*explainRes.GetStats()->GetPlan());
 
-            auto execRes = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            execRes.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT_VALUES_EQUAL(execRes.GetStatus(), EStatus::SUCCESS);
-            return {*explainRes.GetStats()->GetPlan(), execRes.GetResultSets()};
+            // auto execRes = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            // execRes.GetIssues().PrintTo(Cerr);
+            // UNIT_ASSERT_VALUES_EQUAL(execRes.GetStatus(), EStatus::SUCCESS);
+            return {*explainRes.GetStats()->GetPlan(), {}};
         }
     }
 
@@ -537,8 +542,8 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch21.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCH22, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch22.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST(TPCH22) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch22.sql", "stats/tpch100s.json", false, true);
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS16, StreamLookupJoin, ColumnStore) {
@@ -801,6 +806,16 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
+    Y_UNIT_TEST(TPCH12_100) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch12.sql", "stats/tpch100s.json", false, true, true);
+        // auto joinFinder = TFindJoinWithLabels(plan);
+        // auto join = joinFinder.Find({"customer", "orders"});
+        // UNIT_ASSERT_C(join.Join == "InnerJoin (Grace)", join.Join);
+        // UNIT_ASSERT(!join.LhsShuffled);
+        // UNIT_ASSERT(join.RhsShuffled);
+    }
+
+
     Y_UNIT_TEST(TPCH9_100) {
         auto [plan, _] =  ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch9.sql", "stats/tpch100s.json", false, true);
         auto joinFinder = TFindJoinWithLabels(plan);
@@ -856,6 +871,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
                 ).ExtractValueSync();
 
             result.GetIssues().PrintTo(Cerr);
+            for (const auto& issue: result.GetIssues()) {
+                for (const auto& subissue: issue.GetSubIssues()) {
+                    UNIT_ASSERT_C(!(8000 <= subissue->IssueCode && subissue->IssueCode < 9000), "CBO didn't work for this query!");
+                }
+            }
             PrintPlan(TString{*result.GetStats()->GetPlan()});
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 

@@ -15,6 +15,12 @@ TString GetJoinOrderString(const std::shared_ptr<IBaseOptimizerNode>& node) {
     return  "(" + GetJoinOrderString(joinNode->LeftArg) + "," + GetJoinOrderString(joinNode->RightArg) + ")";
 }
 
+struct TBestJoin {
+    TOptimizerStatistics Stats;
+    EJoinAlgoType Algo;
+    bool IsReversed; // todo ticket #12291
+};
+
 /*
  * DPHyp (Dynamic Programming with Hypergraph) is a graph-aware
  * join eumeration algorithm that only considers CSGs (Connected Sub-Graphs) of
@@ -127,12 +133,6 @@ public:
         return "DPHypShuffleElimination";
     }
 
-    struct TBestJoin {
-        TOptimizerStatistics Stats;
-        EJoinAlgoType Algo;
-        bool IsReversed; // todo ticket #12291
-    };
-
     void InitDpEntry(const TNodeSet& nodes, const std::shared_ptr<IBaseOptimizerNode>& relNode) {
         DpTable_[nodes].emplace_back(relNode);
     }
@@ -240,12 +240,10 @@ public:
 
     THashMap<TNodeSet, std::shared_ptr<IBaseOptimizerNode>, std::hash<TNodeSet>> DpTable_;
 private:
-    std::shared_ptr<TJoinOptimizerNodeInternal> PickBestJoin(
+    TBestJoin PickBestJoin(
         const std::shared_ptr<IBaseOptimizerNode>& left,
         const std::shared_ptr<IBaseOptimizerNode>& right,
         EJoinKind joinKind,
-        bool leftAny,
-        bool rightAny,
         bool isCommutative,
         const TVector<TJoinColumn>& leftJoinKeys,
         const TVector<TJoinColumn>& rightJoinKeys,
@@ -288,8 +286,6 @@ private:
         leftNodes,
         rightNodes,
         csgCmpEdge->JoinKind,
-        csgCmpEdge->LeftAny,
-        csgCmpEdge->RightAny,
         csgCmpEdge->IsCommutative,
         csgCmpEdge->LeftJoinKeys,
         csgCmpEdge->RightJoinKeys,
@@ -298,8 +294,11 @@ private:
         maybeJoinAlgoHint
     );
 
-    if (!DpTable_.contains(joined) || bestJoin->Stats.Cost < DpTable_[joined]->Stats.Cost) {
-        DpTable_[joined] = bestJoin;
+    if (!DpTable_.contains(joined) || bestJoin.Stats.Cost < DpTable_[joined]->Stats.Cost) {
+        DpTable_[joined] =
+            bestJoin.IsReversed?
+            MakeJoinInternal(std::move(bestJoin.Stats), rightNodes, leftNodes, csgCmpEdge->RightJoinKeys, csgCmpEdge->LeftJoinKeys, csgCmpEdge->JoinKind, bestJoin.Algo, csgCmpEdge->RightAny, csgCmpEdge->LeftAny, std::nullopt) :
+            MakeJoinInternal(std::move(bestJoin.Stats), leftNodes, rightNodes, csgCmpEdge->LeftJoinKeys, csgCmpEdge->RightJoinKeys, csgCmpEdge->JoinKind, bestJoin.Algo, csgCmpEdge->LeftAny, csgCmpEdge->RightAny, std::nullopt);
     }
 
     #ifndef NDEBUG
@@ -309,12 +308,10 @@ private:
     #endif
 }
 
-template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSolverClassic<TNodeSet>::PickBestJoin(
+template <typename TNodeSet> TBestJoin TDPHypSolverClassic<TNodeSet>::PickBestJoin(
     const std::shared_ptr<IBaseOptimizerNode>& left,
     const std::shared_ptr<IBaseOptimizerNode>& right,
     EJoinKind joinKind,
-    bool leftAny,
-    bool rightAny,
     bool isCommutative,
     const TVector<TJoinColumn>& leftJoinKeys,
     const TVector<TJoinColumn>& rightJoinKeys,
@@ -325,7 +322,7 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
     if (maybeJoinAlgoHint) {
         maybeJoinAlgoHint->Applied = true;
         auto stats = ctx.ComputeJoinStatsV1(left->Stats, right->Stats, leftJoinKeys, rightJoinKeys, maybeJoinAlgoHint->Algo, joinKind, maybeCardHint, false, false);
-        return MakeJoinInternal(std::move(stats), left, right, leftJoinKeys, rightJoinKeys, joinKind, maybeJoinAlgoHint->Algo, leftAny, rightAny, std::nullopt);
+        return TBestJoin{.Stats = std::move(stats), .Algo = maybeJoinAlgoHint->Algo, .IsReversed = false};
     }
 
     TOptimizerStatistics bestJoinStats;
@@ -358,12 +355,7 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
     }
 
     Y_ENSURE(bestAlgo != EJoinAlgoType::Undefined, "No join was chosen!");
-
-    if (bestJoinIsReversed) {
-        return MakeJoinInternal(std::move(bestJoinStats), right, left, rightJoinKeys, leftJoinKeys, joinKind, bestAlgo, rightAny, leftAny, std::nullopt);
-    }
-
-    return MakeJoinInternal(std::move(bestJoinStats), left, right, leftJoinKeys, rightJoinKeys, joinKind, bestAlgo, leftAny, rightAny, std::nullopt);
+    return TBestJoin{.Stats = std::move(bestJoinStats), .Algo = bestAlgo, .IsReversed = bestJoinIsReversed};
 }
 
 /*
@@ -668,7 +660,7 @@ template <typename TNodeSet, typename TDerived> TNodeSet TDPHypSolverBase<TNodeS
     return res;
 }
 
-template <typename TNodeSet> TDPHypSolverShuffleElimination<TNodeSet>::TBestJoin TDPHypSolverShuffleElimination<TNodeSet>::PickBestJoin(
+template <typename TNodeSet> TBestJoin TDPHypSolverShuffleElimination<TNodeSet>::PickBestJoin(
     const std::shared_ptr<IBaseOptimizerNode>& left,
     const std::shared_ptr<IBaseOptimizerNode>& right,
     const TJoinHypergraph<TNodeSet>::TEdge& edge,

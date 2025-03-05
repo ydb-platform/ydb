@@ -242,8 +242,8 @@ public:
     const std::vector<TDeletedColumn>& DeletedColumns() const;
 
     //! Strict schema forbids columns not specified in the schema.
-    DEFINE_BYVAL_RO_PROPERTY(bool, Strict, false);
-    DEFINE_BYVAL_RO_PROPERTY(bool, UniqueKeys, false);
+    DEFINE_BYVAL_RO_BOOLEAN_PROPERTY(Strict, false);
+    DEFINE_BYVAL_RO_BOOLEAN_PROPERTY(UniqueKeys, false);
     DEFINE_BYVAL_RO_PROPERTY(ETableSchemaModification, SchemaModification, ETableSchemaModification::None);
 
     //! Constructs an empty non-strict schema.
@@ -296,7 +296,6 @@ public:
     bool HasTimestampColumn() const;
     bool HasTtlColumn() const;
     bool IsSorted() const;
-    bool IsUniqueKeys() const;
     bool HasRenamedColumns() const;
     bool IsEmpty() const;
     bool IsCGComparatorApplicable() const;
@@ -446,6 +445,7 @@ void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TSt
 
 //! Returns serialized NTableClient.NProto.TTableSchemaExt.
 std::string SerializeToWireProto(const TTableSchemaPtr& schema);
+std::string SerializeToWireProto(const TTableSchema& schema);
 
 void DeserializeFromWireProto(TTableSchemaPtr* schema, const std::string& serializedProto);
 
@@ -554,6 +554,9 @@ void ValidateTableSchema(
 ////////////////////////////////////////////////////////////////////////////////
 
 void ValidateNoDescendingSortOrder(const TTableSchema& schema);
+void ValidateNoDescendingSortOrder(
+    const std::vector<ESortOrder>& sortOrders,
+    const TKeyColumns& keyColumns);
 
 void ValidateNoRenamedColumns(const TTableSchema& schema);
 

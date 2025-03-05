@@ -1724,7 +1724,6 @@
                     },
                     {
                         "ACL": "",
-                        "ChildrenExist": false,
                         "CreateFinished": true,
                         "CreateStep": "not-zero-number-text",
                         "CreateTxId": "not-zero-number-text",
@@ -1738,7 +1737,6 @@
                     },
                     {
                         "ACL": "",
-                        "ChildrenExist": false,
                         "CreateFinished": true,
                         "CreateStep": "not-zero-number-text",
                         "CreateTxId": "not-zero-number-text",
@@ -1752,7 +1750,6 @@
                     },
                     {
                         "ACL": "",
-                        "ChildrenExist": false,
                         "CreateFinished": true,
                         "CreateStep": "not-zero-number-text",
                         "CreateTxId": "not-zero-number-text",
@@ -1980,7 +1977,6 @@
                 },
                 "Self": {
                     "ACL": "",
-                    "ChildrenExist": true,
                     "CreateFinished": true,
                     "CreateStep": "0",
                     "CreateTxId": "not-zero-number-text",
@@ -2061,7 +2057,6 @@
                 },
                 "Self": {
                     "ACL": "",
-                    "ChildrenExist": false,
                     "CreateFinished": true,
                     "CreateStep": "0",
                     "CreateTxId": "not-zero-number-text",
@@ -2158,7 +2153,6 @@
                 },
                 "Self": {
                     "ACL": "",
-                    "ChildrenExist": true,
                     "CreateFinished": true,
                     "CreateStep": "0",
                     "CreateTxId": "not-zero-number-text",

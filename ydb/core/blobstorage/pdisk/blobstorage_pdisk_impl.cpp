@@ -7,6 +7,7 @@
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/static_control_board_impl.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/library/schlab/schine/job_kind.h>
@@ -2848,6 +2849,7 @@ bool TPDisk::Initialize() {
     if (!IsStarted) {
         if (PCtx->ActorSystem && PCtx->ActorSystem->AppData<TAppData>() && PCtx->ActorSystem->AppData<TAppData>()->Icb) {
             auto& icb = PCtx->ActorSystem->AppData<TAppData>()->Icb;
+            auto& scb = PCtx->ActorSystem->AppData<TAppData>()->StaticControlBoard;
 
             REGISTER_LOCAL_CONTROL(SlowdownAddLatencyNs);
             REGISTER_LOCAL_CONTROL(EnableForsetiBinLog);
@@ -2856,8 +2858,8 @@ bool TPDisk::Initialize() {
             REGISTER_LOCAL_CONTROL(ForsetiMaxLogBatchNs);
             REGISTER_LOCAL_CONTROL(ForsetiOpPieceSizeSsd);
             REGISTER_LOCAL_CONTROL(ForsetiOpPieceSizeRot);
-            icb->RegisterSharedControl(UseNoopSchedulerHDD, "PDiskControls.UseNoopSchedulerHDD");
-            icb->RegisterSharedControl(UseNoopSchedulerSSD, "PDiskControls.UseNoopSchedulerSSD");
+            scb->RegisterSharedControl(UseNoopSchedulerHDD, EStaticControlType::PDiskControlsUseNoopSchedulerHDD);
+            scb->RegisterSharedControl(UseNoopSchedulerSSD, EStaticControlType::PDiskControlsUseNoopSchedulerSSD);
 
             if (Cfg->SectorMap) {
                 auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();

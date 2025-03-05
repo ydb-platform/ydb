@@ -2,17 +2,17 @@
 #include "transfer_writer.h"
 #include "worker.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/services/services.pb.h>
-
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 #include <ydb/core/kqp/runtime/kqp_write_table.h>
-#include <ydb/core/persqueue/purecalc/purecalc.h>
+#include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
+#include <ydb/core/persqueue/purecalc/purecalc.h> // should be after topic_message
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
 #include <yql/essentials/public/purecalc/helpers/stream/stream_from_vector.h>
@@ -593,7 +593,7 @@ private:
         ProcessData(ev->Get()->PartitionId, ev->Get()->Records);
     }
 
-    void ProcessData(const ui32 partitionId, const TVector<TEvWorker::TEvData::TRecord>& records) {
+    void ProcessData(const ui32 partitionId, const TVector<TTopicMessage>& records) {
         if (!records) {
             Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::DONE));
             return;
@@ -603,12 +603,12 @@ private:
 
         for (auto& message : records) {
             NYdb::NTopic::NPurecalc::TMessage input;
-            input.Data = std::move(message.Data);
-            input.MessageGroupId = std::move(message.MessageGroupId);
+            input.Data = std::move(message.GetData());
+            input.MessageGroupId = std::move(message.GetMessageGroupId());
             input.Partition = partitionId;
-            input.ProducerId = std::move(message.ProducerId);
-            input.Offset = message.Offset;
-            input.SeqNo = message.SeqNo;
+            input.ProducerId = std::move(message.GetProducerId());
+            input.Offset = message.GetOffset();
+            input.SeqNo = message.GetSeqNo();
 
             try {
                 auto result = ProgramHolder->GetProgram()->Apply(NYql::NPureCalc::StreamFromVector(TVector{input}));
@@ -616,7 +616,7 @@ private:
                     TableState->AddData(m->Data);
                 }
             } catch (const yexception& e) {
-                ProcessingError = TStringBuilder() << "Error transform message: '" << message.Data << "': " << e.what();
+                ProcessingError = TStringBuilder() << "Error transform message: " << e.what();
                 break;
             }
         }
@@ -730,7 +730,7 @@ private:
 
     std::optional<TActorId> PendingWorker;
     ui32 PendingPartitionId = 0;
-    std::optional<TVector<TEvWorker::TEvData::TRecord>> PendingRecords;
+    std::optional<TVector<TTopicMessage>> PendingRecords;
 
     ui32 Attempt = 0;
     TDuration Delay = TDuration::Minutes(1);

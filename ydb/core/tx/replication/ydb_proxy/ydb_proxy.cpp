@@ -24,14 +24,6 @@ using namespace NYdb::NScheme;
 using namespace NYdb::NTable;
 using namespace NYdb::NTopic;
 
-void TEvYdbProxy::TReadTopicResult::TMessage::Out(IOutputStream& out) const {
-    out << "{"
-        << " Offset: " << Offset
-        << " Data: " << Data.size() << "b"
-        << " Codec: " << Codec
-    << " }";
-}
-
 void TEvYdbProxy::TReadTopicResult::Out(IOutputStream& out) const {
     out << "{"
         << " PartitionId: " << PartitionId
@@ -512,10 +504,6 @@ IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ss
     return new TYdbProxy(endpoint, database, ssl, credentials);
 }
 
-}
-
-Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::TEvYdbProxy::TReadTopicResult::TMessage, o, x) {
-    return x.Out(o);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::TEvYdbProxy::TReadTopicResult, o, x) {

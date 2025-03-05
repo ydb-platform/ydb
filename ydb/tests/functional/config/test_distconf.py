@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
 import yaml
-import time
 from hamcrest import assert_that
 
 from ydb.tests.library.common.types import Erasure
@@ -41,6 +40,12 @@ class DistConfKiKiMRTest(object):
     @classmethod
     def setup_class(cls):
         nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
+        log_configs = {
+            'BS_NODE': LogLevels.DEBUG,
+            'GRPC_SERVER': LogLevels.DEBUG,
+            'TX_PROXY': LogLevels.DEBUG,
+            'TICKER_PARSER': LogLevels.DEBUG,
+        }
         configurator = KikimrConfigGenerator(cls.erasure,
                                              nodes=nodes_count,
                                              use_in_memory_pdisks=False,
@@ -50,12 +55,11 @@ class DistConfKiKiMRTest(object):
                                              use_distconf=True,
                                              simple_config=True,
                                              extra_grpc_services=['config'],
-                                             additional_log_configs={'BS_NODE': LogLevels.DEBUG},
-                                             )
+                                             additional_log_configs=log_configs)
+
         cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()
 
-        time.sleep(10)
         cms.request_increase_ratio_limit(cls.cluster.client)
         host = cls.cluster.nodes[1].host
         grpc_port = cls.cluster.nodes[1].port

@@ -156,6 +156,11 @@ public:
                 return;
             }
         }
+        if (!NKikimr::IsAdministrator(AppData(), Request_->GetSerializedToken())) {
+            self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a database administrator.",
+                  NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
+            return;
+        }
         self->Become(&TReplaceStorageConfigRequest::StateFunc);
         self->Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvNodeWardenQueryStorageConfig(false)); 
     }

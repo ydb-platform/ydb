@@ -62,7 +62,7 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
         SendScanError("scanner_start_error:" + startResult.GetErrorMessage());
         Finish(NColumnShard::TScanCounters::EStatusFinish::ProblemOnStart);
     } else {
-        ScheduleWakeup(GetNotificationDeadline());
+        ScheduleWakeup(TInstant::Now() + Timeout / 5);
 
         // propagate self actor id // TODO: FlagSubscribeOnSession ?
         Send(ScanComputeActorId, new NKqp::TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen, TabletId),
@@ -164,14 +164,12 @@ void TColumnShardScan::HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/) {
         "Scan " << ScanActorId << " guard execution timeout"
                 << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
 
-    if (TMonotonic::Now() >= GetNotificationDeadline()) {
-        CheckHanging(true);
-    }
+    CheckHanging(true);
     if (TMonotonic::Now() >= GetDeadline()) {
         SendScanError("ColumnShard scanner timeout: HAS_ACK=" + ::ToString(!!AckReceivedInstant));
         Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
     } else {
-        ScheduleWakeup(GetNotificationDeadline());
+        ScheduleWakeup(TInstant::Now() + Timeout / 5);
     }
 }
 
@@ -430,13 +428,5 @@ TMonotonic TColumnShardScan::GetDeadline() const {
         return *LastResultInstant + Timeout;
     }
     return *StartInstant + Timeout;
-}
-
-TMonotonic TColumnShardScan::GetNotificationDeadline() const {
-    AFL_VERIFY(StartInstant);
-    if (LastResultInstant) {
-        return *LastResultInstant + Timeout / 5;
-    }
-    return *StartInstant + Timeout / 5;
 }
 }   // namespace NKikimr::NOlap::NReader

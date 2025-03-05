@@ -115,7 +115,6 @@ private:
     void ScheduleWakeup(const TMonotonic deadline);
 
     TMonotonic GetDeadline() const;
-    TMonotonic GetNotificationDeadline() const;
 
 private:
     const TActorId ColumnShardActorId;

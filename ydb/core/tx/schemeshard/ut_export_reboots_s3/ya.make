@@ -19,10 +19,10 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
-    contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
     ydb/core/testlib/default
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
+    ydb/core/util
     ydb/core/wrappers/ut_helpers
     ydb/library/yql/public/udf/service/exception_policy
 )

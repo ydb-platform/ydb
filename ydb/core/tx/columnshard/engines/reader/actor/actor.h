@@ -47,8 +47,8 @@ public:
 private:
     STATEFN(StateScan) {
         auto g = Stats->MakeGuard("processing");
-        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())(
-            "TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)("task_identifier", ReadMetadataRange->GetScanIdentifier()));
+        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())("TabletId",
+            TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)("task_identifier", ReadMetadataRange->GetScanIdentifier()));
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScan);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleScan);
@@ -78,6 +78,7 @@ private:
     void HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/);
 
 private:
+    void CheckHanging(const bool logging = false) const;
     void MakeResult(size_t reserveRows = 0);
 
     void AddRow(const TConstArrayRef<TCell>& row) override;

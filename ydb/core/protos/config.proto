@@ -2161,6 +2161,7 @@ message TKafkaProxyConfig {
     optional TProxy Proxy = 7;
     optional bool MeteringV2Enabled = 10 [default = true];
     optional bool AuthViaApiKey = 11 [default = true];
+    optional bool EnableNativeBalancing = 12 [default = false];
 }
 
 message TAwsCompatibilityConfig {

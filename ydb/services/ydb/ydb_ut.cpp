@@ -5703,9 +5703,9 @@ Y_UNIT_TEST_SUITE(TYqlDateTimeTests) {
 #endif
 
 Y_UNIT_TEST_SUITE(LocalityOperation) {
-Y_UNIT_TEST(LocksFromAnotherTenants) {
+Y_UNIT_TEST_TWIN(LocksFromAnotherTenants, UseSink) {
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+    appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
     TKikimrWithGrpcAndRootSchema server(appConfig);
     //server.Server_->SetupLogging(
 

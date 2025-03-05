@@ -14,9 +14,9 @@ The `admin cluster dump` command dumps the cluster to the client file system in 
 
 - `-o <PATH>` or `--output <PATH>`: Path to the directory in the client file system to dump the data to.
     If such a directory doesn't exist, it will be created. However, the entire path to the directory must already exist.
-    
+
     If the specified directory exists, it must be empty.
-    
+
     If the parameter is omitted, the `backup_YYYYDDMMTHHMMSS` directory will be created in the current directory, where `YYYYDDMM` is the date and `HHMMSS` is the time when the dump process began.
 
 A [cluster configuration](../../../../maintenance/manual/config-overview.md) is dumped separately using the `{{{ ydb-cli }} admin cluster config fetch` command.
@@ -35,9 +35,9 @@ The `admin database dump` command dumps the database to the client file system i
 
 - `-o <PATH>` or `--output <PATH>`: Path to the directory in the client file system to dump the data to.
     If such a directory doesn't exist, it will be created. However, the entire path to the directory must already exist.
-    
+
     If the specified directory exists, it must be empty.
-    
+
     If the parameter is omitted, the `backup_YYYYDDMMTHHMMSS` directory will be created in the current directory, where `YYYYDDMM` is the date and `HHMMSS` is the time when the dump process began.
 
 A [database configuration](../../../../maintenance/manual/config-overview.md) is dumped separately using the `{{{ ydb-cli }} admin cluster config fetch` command.
@@ -58,9 +58,9 @@ The `tools dump` command dumps the schema objects to the client file system in t
 
 - `-o <PATH>` or `--output <PATH>`: Path to the directory in the client file system to dump the data to.
     If such a directory doesn't exist, it will be created. However, the entire path to the directory must already exist.
-    
+
     If the specified directory exists, it must be empty.
-    
+
     If the parameter is omitted, the `backup_YYYYDDMMTHHMMSS` directory will be created in the current directory, where `YYYYDDMM` is the date and `HHMMSS` is the time when the dump process began.
 
 - `--exclude <STRING>`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Specify this parameter multiple times for different templates.

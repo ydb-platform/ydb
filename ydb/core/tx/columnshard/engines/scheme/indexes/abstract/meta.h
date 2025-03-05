@@ -16,7 +16,6 @@ class TExprBase;
 
 namespace NKikimr::NOlap {
 struct TIndexInfo;
-class TProgramContainer;
 class TIndexChunk;
 }   // namespace NKikimr::NOlap
 
@@ -26,16 +25,73 @@ class TOlapSchema;
 
 namespace NKikimr::NOlap::NIndexes {
 
+class TChunkOriginalData {
+private:
+    std::optional<TBlobRange> Range;
+    std::optional<TString> Data;
+
+public:
+    explicit TChunkOriginalData(const TBlobRange& range)
+        : Range(range) {
+    }
+    explicit TChunkOriginalData(const TString& data)
+        : Data(data) {
+    }
+
+    ui32 GetSize() const {
+        if (Range) {
+            return Range->GetSize();
+        } else {
+            return Data->size();
+        }
+    }
+
+    bool HasData() const {
+        return !!Data;
+    }
+    const TBlobRange& GetBlobRangeVerified() const {
+        AFL_VERIFY(BlobRange);
+        return *BlobRange;
+    }
+    const TString& GetDataVerified() const {
+        AFL_VERIFY(Data);
+        return *Data;
+    }
+};
+
 class IIndexMeta {
 private:
     YDB_READONLY_DEF(TString, IndexName);
     YDB_READONLY(ui32, IndexId, 0);
     YDB_READONLY(TString, StorageId, IStoragesManager::DefaultStorageId);
 
+    virtual std::shared_ptr<IKernelFetchLogic> DoBuildFetchTask(const TIndexDataAddress& dataAddress,
+        const std::vector<TChunkOriginalData>& chunks, const TIndexesCollection& collection,
+        const std::shared_ptr<IIndexMeta>& selfPtr) {
+        if (collection.HasIndexData(dataAddress)) {
+            return nullptr;
+        } else {
+            const TIndexColumnChunked* chunkedIndex = collection.GetIndexDataOptional(GetIndexId());
+            std::vector<TIndexChunkFetching> fetchingChunks;
+            AFL_VERIFY(!chunkedIndex || chunkedIndex->GetChunksCount() == chunks.size());
+            ui32 idx = 0;
+            for (auto&& i : chunks) {
+                const std::shared_ptr<IIndexHeader> header = chunkedIndex ? chunkedIndex->GetHeader(idx) : nullptr;
+                fetchingChunks.emplace_back(TIndexChunkFetching(GetStorageId(), i, header, selfPtr));
+                ++idx;
+            }
+            return std::make_shared<TIndexFetcherLogic>(dataAddress, fetchingChunks, selfPtr);
+        }
+    }
+
+    virtual TConclusion<std::shared_ptr<IIndexHeader>> DoBuildHeader(const TChunkOriginalData& data) const {
+        return std::make_shared<TDefaultHeader>(data.GetSize());
+    }
+
 protected:
     virtual TConclusion<std::shared_ptr<IPortionDataChunk>> DoBuildIndexOptional(
-        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data,
-        const ui32 recordsCount, const TIndexInfo& indexInfo) const = 0;
+        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount,
+        const TIndexInfo& indexInfo) const = 0;
     virtual void DoFillIndexCheckers(
         const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) = 0;
@@ -48,6 +104,15 @@ protected:
 public:
     using TFactory = NObjectFactory::TObjectFactory<IIndexMeta, TString>;
     using TProto = NKikimrSchemeOp::TOlapIndexDescription;
+
+    TConclusion<std::shared_ptr<IIndexHeader>> BuildHeader(const std::optional<TString>& data) const {
+        return DoBuildHeader(data);
+    }
+
+    std::shared_ptr<IKernelFetchLogic> BuildFetchTask(
+        const TIndexDataAddress& dataAddress, const std::vector<TChunkOriginalData>& chunks, const TIndexesCollection& collection, const std::shared_ptr<IIndexMeta>& meta) {
+        return DoBuildFetchTask(dataAddress, chunks, collection, meta);
+    }
 
     bool IsInplaceData() const {
         return StorageId == NBlobOperations::TGlobal::LocalMetadataStorageId;
@@ -75,8 +140,9 @@ public:
 
     virtual ~IIndexMeta() = default;
 
-    TConclusion<std::shared_ptr<IPortionDataChunk>> BuildIndexOptional(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data,
-        const ui32 recordsCount, const TIndexInfo& indexInfo) const {
+    TConclusion<std::shared_ptr<IPortionDataChunk>> BuildIndexOptional(
+        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount,
+        const TIndexInfo& indexInfo) const {
         return DoBuildIndexOptional(data, recordsCount, indexInfo);
     }
 

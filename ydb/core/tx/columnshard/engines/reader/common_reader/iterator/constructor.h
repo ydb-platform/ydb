@@ -19,16 +19,14 @@ private:
     virtual void DoOnDataCollected() = 0;
 
 protected:
-    const std::shared_ptr<IDataSource> Source;
-    const std::shared_ptr<NArrow::NAccessor::TAccessorsCollection> Resources;
+    const std::shared_ptr<IStoragesManager> StoragesManager;
 
 public:
     virtual ~IKernelFetchLogic() = default;
 
-    IKernelFetchLogic(const ui32 columnId, const std::shared_ptr<IDataSource>& source)
+    IKernelFetchLogic(const ui32 columnId, const std::shared_ptr<IStoragesManager>& storagesManager)
         : ColumnId(columnId)
-        , Source(source)
-        , Resources(Source->GetStageData().GetTable()) {
+        , StoragesManager(storagesManager) {
         AFL_VERIFY(Resources);
     }
 

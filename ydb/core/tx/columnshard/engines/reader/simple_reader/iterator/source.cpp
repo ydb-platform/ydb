@@ -172,7 +172,7 @@ void TPortionDataSource::DoAbort() {
 
 void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) {
     THashMap<ui32, std::vector<TString>> indexBlobs;
-    std::set<ui32> indexIds = indexChecker->GetIndexIds();
+    const std::set<TIndexDataAddress> indexIds = indexChecker->GetIndexIds();
     //    NActors::TLogContextGuard gLog = NActors::TLogContextBuilder::Build()("records_count", GetRecordsCount())("portion_id", Portion->GetPortionId());
     std::vector<TPortionDataAccessor::TPage> pages = GetStageData().GetPortionAccessor().BuildPages();
     NArrow::TColumnFilter constructor = NArrow::TColumnFilter::BuildAllowFilter();

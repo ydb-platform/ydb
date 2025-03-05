@@ -213,6 +213,21 @@ TConclusion<bool> TProgramStepPrepare::DoExecuteInplace(const std::shared_ptr<ID
         logic->Start(readActions);
         AFL_VERIFY(fetchers.emplace(i.GetColumnId(), logic).second)("column_id", i.GetColumnId());
     }
+    for (auto&& i : Step.GetOriginalIndexesToUse()) {
+        const NIndexes::TIndexMetaContainer indexMeta = source->GetSourceSchema()->GetIndexVerified(i.GetIndexId());
+        auto chunks = source->GetStageData().GetPortionAccessor().GetIndexChunksPointers(i.GetColumnId());
+        std::vector<NIndexes::TChunkOriginalData> originalChunks;
+        for (auto&& c : chunks) {
+            if (auto range = c->GetBlobRangeOptional()) {
+                originalChunks.emplace_back(source->GetStageData().GetPortionAccessor().GetPortionInfo().RestoreBlobRange(*range));
+            } else {
+                originalChunks.emplace_back(c->GetBlobDataVerified());
+            }
+        }
+        std::shared_ptr<IKernelFetchLogic> logic = indexMeta->BuildFetchTask(i, originalChunks, source->GetStageData().GetIndexes(), indexMeta);
+        logic->Start(readActions);
+        AFL_VERIFY(fetchers.emplace(i.GetColumnId(), logic).second)("column_id", i.GetColumnId());
+    }
     if (readActions.IsEmpty()) {
         NBlobOperations::NRead::TCompositeReadBlobs blobs;
         for (auto&& i : fetchers) {

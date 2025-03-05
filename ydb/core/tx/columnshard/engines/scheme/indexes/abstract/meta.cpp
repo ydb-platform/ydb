@@ -1,4 +1,5 @@
 #include "meta.h"
+
 #include <ydb/core/tx/columnshard/engines/portions/index_chunk.h>
 
 namespace NKikimr::NOlap::NIndexes {

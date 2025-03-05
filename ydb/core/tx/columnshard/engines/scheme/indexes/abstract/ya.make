@@ -6,6 +6,9 @@ LIBRARY()
 
 SRCS(
     constructor.cpp
+    collection.cpp
+    header.cpp
+    fetcher.cpp
     meta.cpp
     checker.cpp
     GLOBAL composite.cpp

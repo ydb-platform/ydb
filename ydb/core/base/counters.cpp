@@ -7,7 +7,9 @@ LWTRACE_DEFINE_PROVIDER(MONITORING_PROVIDER)
 namespace NKikimr {
 
 static const THashSet<TString> DATABASE_SERVICES
-    = {{ TString("compile"),
+    = {{
+         TString("blob_depot_agent"),
+         TString("compile"),
          TString("coordinator"),
          TString("dsproxy"),
          TString("dsproxy_mon"),

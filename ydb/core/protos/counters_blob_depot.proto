@@ -13,6 +13,12 @@ enum ESimpleCounters {
     COUNTER_TOTAL_S3_DATA_SIZE = 5 [(NKikimr.CounterOpts) = {Name: "TotalS3DataSize"}];
     COUNTER_TOTAL_S3_TRASH_OBJECTS = 6 [(NKikimr.CounterOpts) = {Name: "TotalS3TrashObjects"}];
     COUNTER_TOTAL_S3_TRASH_SIZE = 7 [(NKikimr.CounterOpts) = {Name: "TotalS3TrashSize"}];
+    COUNTER_MODE_STARTING = 8 [(NKikimr.CounterOpts) = {Name: "Mode/Starting"}];
+    COUNTER_MODE_LOADING_KEYS = 9 [(NKikimr.CounterOpts) = {Name: "Mode/LoadingKeys"}];
+    COUNTER_MODE_LOADED = 10 [(NKikimr.CounterOpts) = {Name: "Mode/Loaded"}];
+    COUNTER_DECOMMIT_MODE_PREPARING = 11 [(NKikimr.CounterOpts) = {Name: "DecommitMode/Preparing"}];
+    COUNTER_DECOMMIT_MODE_IN_PROGRESS = 12 [(NKikimr.CounterOpts) = {Name: "DecommitMode/InProgress"}];
+    COUNTER_DECOMMIT_MODE_DONE = 13 [(NKikimr.CounterOpts) = {Name: "DecommitMode/Done"}];
 }
 
 enum ECumulativeCounters {

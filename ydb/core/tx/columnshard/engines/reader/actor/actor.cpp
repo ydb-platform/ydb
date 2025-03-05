@@ -62,7 +62,7 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
         SendScanError("scanner_start_error:" + startResult.GetErrorMessage());
         Finish(NColumnShard::TScanCounters::EStatusFinish::ProblemOnStart);
     } else {
-        ScheduleWakeup(TInstant::Now() + Timeout / 5);
+        ScheduleWakeup(TMonotonic::Now() + Timeout / 5);
 
         // propagate self actor id // TODO: FlagSubscribeOnSession ?
         Send(ScanComputeActorId, new NKqp::TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen, TabletId),
@@ -169,7 +169,7 @@ void TColumnShardScan::HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/) {
         SendScanError("ColumnShard scanner timeout: HAS_ACK=" + ::ToString(!!AckReceivedInstant));
         Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
     } else {
-        ScheduleWakeup(TInstant::Now() + Timeout / 5);
+        ScheduleWakeup(TMonotonic::Now() + Timeout / 5);
     }
 }
 

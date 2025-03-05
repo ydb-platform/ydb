@@ -72,24 +72,21 @@ namespace NKikimr::NBlobDepot {
             ui32 Size;
             ui64 OutputOffset;
         };
+        struct TS3ReadItem {
+            TString Key;
+            ui32 Offset;
+            ui32 Size;
+            ui64 OutputOffset;
+        };
         std::vector<TReadItem> items;
+        std::vector<TS3ReadItem> s3items;
 
         ui64 offset = arg.Offset;
         ui64 size = arg.Size;
 
         for (const auto& value : arg.Value.Chain) {
-            const ui32 groupId = value.GroupId;
-            const auto& blobId = value.BlobId;
             const ui32 begin = value.SubrangeBegin;
             const ui32 end = value.SubrangeEnd;
-
-            if (end <= begin || blobId.BlobSize() < end) {
-                error = "incorrect SubrangeBegin/SubrangeEnd pair";
-                STLOG(PRI_CRIT, BLOB_DEPOT_AGENT, BDA24, error, (AgentId, Agent.LogId), (QueryId, GetQueryId()),
-                    (ReadId, arg.Tag), (Key, Agent.PrettyKey(arg.Key)), (Offset, arg.Offset), (Size, arg.Size),
-                    (Value, arg.Value));
-                return false;
-            }
 
             // calculate the whole length of current part
             ui64 partLen = end - begin;
@@ -103,7 +100,26 @@ namespace NKikimr::NBlobDepot {
             partLen = Min(size ? size : Max<ui64>(), partLen - offset);
             Y_ABORT_UNLESS(partLen);
 
-            items.push_back(TReadItem{groupId, blobId, ui32(offset + begin), ui32(partLen), outputOffset});
+            ui32 itemLen = 0;
+            ui32 partOffset = offset + begin;
+
+            if (value.Blob) {
+                const auto& [blobId, groupId] = *value.Blob;
+                items.push_back(TReadItem{groupId, blobId, partOffset, ui32(partLen), outputOffset});
+                itemLen = blobId.BlobSize();
+            } else if (const auto& locator = value.S3Locator) {
+                TString key = locator->MakeObjectName(Agent.S3BasePath);
+                s3items.push_back(TS3ReadItem{std::move(key), partOffset, ui32(partLen), outputOffset});
+                itemLen = locator->Len;
+            }
+
+            if (end <= begin || itemLen < end) {
+                error = "incorrect SubrangeBegin/SubrangeEnd pair";
+                STLOG(PRI_CRIT, BLOB_DEPOT_AGENT, BDA24, error, (AgentId, Agent.LogId), (QueryId, GetQueryId()),
+                    (ReadId, arg.Tag), (Key, Agent.PrettyKey(arg.Key)), (Offset, arg.Offset), (Size, arg.Size),
+                    (Value, arg.Value));
+                return false;
+            }
 
             outputOffset += partLen;
             offset = 0;
@@ -153,6 +169,85 @@ namespace NKikimr::NBlobDepot {
             STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA39, "issuing TEvGet", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
                 (ReadId, context->GetTag()), (Key, Agent.PrettyKey(context->ReadArg.Key)), (GroupId, groupId), (Msg, *event));
             Agent.SendToProxy(groupId, std::move(event), this, std::move(partContext));
+            ++context->NumPartsPending;
+        }
+
+        for (TS3ReadItem& item : s3items) {
+            class TGetActor : public TActor<TGetActor> {
+                size_t OutputOffset;
+                std::shared_ptr<TReadContext> ReadContext;
+                TQuery* const Query;
+
+                TString AgentLogId;
+                TString QueryId;
+                ui64 ReadId;
+
+            public:
+                TGetActor(size_t outputOffset, std::shared_ptr<TReadContext> readContext, TQuery *query)
+                    : TActor(&TThis::StateFunc)
+                    , OutputOffset(outputOffset)
+                    , ReadContext(std::move(readContext))
+                    , Query(query)
+                    , AgentLogId(query->Agent.LogId)
+                    , QueryId(query->GetQueryId())
+                    , ReadId(ReadContext->GetTag())
+                {}
+
+                void Handle(NWrappers::TEvExternalStorage::TEvGetObjectResponse::TPtr ev) {
+                    auto& msg = *ev->Get();
+
+                    STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA55, "received TEvGetObjectResponse",
+                        (AgentId, AgentLogId), (QueryId, QueryId), (ReadId, ReadId),
+                        (Response, msg.Result), (BodyLen, std::size(msg.Body)));
+
+                    if (msg.IsSuccess()) {
+                        Finish(std::move(msg.Body), "");
+                    } else if (const auto& error = msg.GetError(); error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_KEY) {
+                        Finish(std::nullopt, "data has disappeared from S3");
+                    } else {
+                        Finish(std::nullopt, msg.GetError().GetMessage().c_str());
+                    }
+                }
+
+                void HandleUndelivered() {
+                    STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA56, "received TEvUndelivered",
+                        (AgentId, AgentLogId), (QueryId, QueryId), (ReadId, ReadId));
+                    Finish(std::nullopt, "wrapper actor terminated");
+                }
+
+                void Finish(std::optional<TString> data, const char *error) {
+                    auto& context = *ReadContext;
+                    if (!context.Terminated && !context.StopProcessingParts) {
+                        if (data) {
+                            context.Buffer.Write(OutputOffset, TRope(std::move(*data)));
+                            if (!--context.NumPartsPending) {
+                                context.EndWithSuccess(Query);
+                            }
+                        } else {
+                            context.EndWithError(Query, NKikimrProto::ERROR, TStringBuilder()
+                                << "failed to fetch data from S3: " << error);
+                        }
+                    }
+                    PassAway();
+                }
+
+                STRICT_STFUNC(StateFunc,
+                    hFunc(NWrappers::TEvExternalStorage::TEvGetObjectResponse, Handle)
+                    cFunc(TEvents::TSystem::Undelivered, HandleUndelivered)
+                    cFunc(TEvents::TSystem::Poison, PassAway)
+                )
+            };
+            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA57, "starting S3 read", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
+                (ReadId, context->GetTag()), (Key, item.Key), (Offset, item.Offset), (Size, item.Size),
+                (OutputOffset, item.OutputOffset));
+            const TActorId actorId = Agent.RegisterWithSameMailbox(new TGetActor(item.OutputOffset, context, this));
+            auto request = std::make_unique<NWrappers::TEvExternalStorage::TEvGetObjectRequest>(
+                Aws::S3::Model::GetObjectRequest()
+                    .WithBucket(Agent.S3BackendSettings->GetSettings().GetBucket())
+                    .WithKey(std::move(item.Key))
+                    .WithRange(TStringBuilder() << "bytes=" << item.Offset << '-' << item.Offset + item.Size - 1)
+            );
+            TActivationContext::Send(new IEventHandle(Agent.S3WrapperId, actorId, request.release(), IEventHandle::FlagTrackDelivery));
             ++context->NumPartsPending;
         }
 

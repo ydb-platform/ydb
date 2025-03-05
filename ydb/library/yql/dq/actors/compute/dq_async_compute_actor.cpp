@@ -852,6 +852,8 @@ private:
         if (!Channels->ShouldSkipData(outputChannel.ChannelId) && !Channels->CanSendChannelData(outputChannel.ChannelId)) {
             // Once RetryState will be reset, channel will trigger either ResumeExecution or PeerFinished; either way execution will re-reach this function
             CA_LOG_D("OnOutputChannelData return because Channel can't send channel data, channel: " << outputChannel.ChannelId);
+            outputChannel.PopStarted = false;
+            ProcessOutputsState.Inflight--;
             return;
         }
         if (outputChannel.AsyncData) {

@@ -113,6 +113,7 @@ target_sources(core-tx-columnshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__propose_transaction.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__scan.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__statistics.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_subdomain_path_id.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__write.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__write_index.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard.cpp

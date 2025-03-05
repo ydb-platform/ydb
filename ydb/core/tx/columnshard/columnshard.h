@@ -88,6 +88,7 @@ namespace TEvColumnShard {
         EvApplyLinksModification,
         EvApplyLinksModificationFinished,
         EvInternalScan,
+        EvRequestFilter,
 
         EvEnd
     };

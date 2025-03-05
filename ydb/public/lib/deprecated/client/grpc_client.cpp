@@ -325,8 +325,6 @@ namespace NKikimr {
         IMPL_REQUEST(ResolveNode, TResolveNodeRequest, TResponse)
         IMPL_REQUEST(HiveCreateTablet, THiveCreateTablet, TResponse)
         IMPL_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse)
-        IMPL_REQUEST(LocalEnumerateTablets, TLocalEnumerateTablets, TResponse)
-        IMPL_REQUEST(KeyValue, TKeyValueRequest, TResponse)
         IMPL_REQUEST(CmsRequest, TCmsRequest, TCmsResponse)
         IMPL_REQUEST(LocalMKQL, TLocalMKQL, TResponse)
         IMPL_REQUEST(LocalSchemeTx, TLocalSchemeTx, TResponse)

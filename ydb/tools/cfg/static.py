@@ -1347,10 +1347,17 @@ class StaticConfigGenerator(object):
             if len(cluster_uuid) == 0:
                 cluster_uuid = self.__cluster_details.cluster_uuid  # fall back to `cluster_uuid: ...`
 
+            # fall back to generated if no cluster uuid is specified at all
             cluster_uuid = "ydb:{}".format(utils.uuid()) if cluster_uuid is None else cluster_uuid
+
             self.names_txt.ClusterUUID = cluster_uuid
-            self.names_txt.AcceptUUID.append(cluster_uuid)
-            self.names_txt.AcceptUUID.extend(accepted_uuids)
+            accepted_uuids.append(cluster_uuid)
+
+            # combine accept uuids from all possible sources: old format, new format, and filter unique
+            existing_set = set(self.names_txt.AcceptUUID)
+            new_set = set(accepted_uuids)
+            unique_elements = existing_set.union(new_set)
+            self.names_txt.AcceptUUID[:] = unique_elements
 
     def __generate_sys_txt(self):
         self.__proto_configs["sys.txt"] = config_pb2.TActorSystemConfig()

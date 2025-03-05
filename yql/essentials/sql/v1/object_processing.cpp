@@ -25,6 +25,7 @@ bool TObjectProcessorImpl::DoInit(TContext& ctx, ISource* src) {
     Y_UNUSED(src);
     Scoped->UseCluster(ServiceId, Cluster);
     auto options = FillFeatures(BuildOptions());
+    AddNodeFeatures(options);
     auto keys = BuildKeys();
 
     Add("block", Q(Y(
@@ -55,6 +56,52 @@ INode::TPtr TCreateObject::FillFeatures(INode::TPtr options) const {
         options->Add(Q(Y(Q("resetFeatures"), Q(reset))));
     }
     return options;
+}
+
+namespace {
+
+bool InitFeatures(TContext& ctx, ISource* src, std::map<TString, TDeferredAtom>& features) {
+    for (auto& [name, feature] : features) {
+        if (feature.HasNode() && !feature.Build()->Init(ctx, src)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool InitNodeFeatures(TContext& ctx, ISource* src, std::map<TString, TNodePtr>& nodeFeatures) {
+    for (auto& [name, nodeFeature] : nodeFeatures) {
+        if (!nodeFeature->Init(ctx, src)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}
+
+bool TCreateObject::DoInit(TContext& ctx, ISource* src) {
+    if (!InitFeatures(ctx, src, Features)) {
+        return false;
+    }
+    if (!InitNodeFeatures(ctx, src, NodeFeatures)) {
+        return false;
+    }
+    return TObjectProcessorImpl::DoInit(ctx, src);
+}
+
+void TCreateObject::AddNodeFeatures(TNodePtr options) const {
+    if (!NodeFeatures.empty()) {
+        auto nodeFeatures = Y();
+        for (const auto& [name, node] : NodeFeatures) {
+            nodeFeatures->Add(Q(Y(BuildQuotedAtom(Pos, name), node)));
+        }
+        options->Add(Q(Y(Q("nodeFeatures"), Q(nodeFeatures))));
+    }
+}
+
+void TCreateObject::AddNodeFeature(TStringBuf name, TNodePtr node) {
+    NodeFeatures.emplace(name, node);
 }
 
 TObjectOperatorContext::TObjectOperatorContext(TScopedStatePtr scoped)

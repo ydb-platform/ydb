@@ -91,6 +91,7 @@ class StaticConfigGenerator(object):
             "sys.txt": self.__generate_sys_txt,
             "tracing.txt": self.__generate_tracing_txt,
             # files with default implementation
+            "actor_system_config.txt": None,
             "sqs.txt": None,
             "vdisks.txt": None,
             "ic.txt": None,
@@ -294,6 +295,16 @@ class StaticConfigGenerator(object):
     @property
     def cms_config_txt_enabled(self):
         return self.__proto_config("cms_config.txt").ByteSize() > 0
+
+    @property
+    def actor_system_config_txt(self):
+        return self.__proto_config("actor_system_config.txt",
+                                   config_pb2.TActorSystemConfig,
+                                   self.__cluster_details.get_service("actor_system_config"))
+
+    @property
+    def actor_system_config_txt_enabled(self):
+        return self.__proto_config("actor_system_config.txt").ByteSize() > 0
 
     @property
     def mbus_enabled(self):
@@ -647,7 +658,6 @@ class StaticConfigGenerator(object):
             app_config.AuthConfig.CopyFrom(self.auth_txt)
         app_config.KQPConfig.CopyFrom(self.kqp_txt)
         app_config.NameserviceConfig.CopyFrom(self.names_txt)
-        app_config.ActorSystemConfig.CopyFrom(self.sys_txt)
         app_config.GRpcConfig.CopyFrom(self.grpc_txt)
         app_config.InterconnectConfig.CopyFrom(self.ic_txt)
         app_config.VDiskConfig.CopyFrom(self.vdisks_txt)
@@ -676,6 +686,12 @@ class StaticConfigGenerator(object):
             app_config.PDiskKeyConfig.CopyFrom(self.pdisk_key_txt)
         if self.immediate_controls_config_txt_enabled:
             app_config.ImmediateControlsConfig.CopyFrom(self.immediate_controls_config_txt)
+
+        # Old template style:
+        app_config.ActorSystemConfig.CopyFrom(self.sys_txt)
+        # New config.yaml style:
+        if self.actor_system_config_txt_enabled:
+            app_config.ActorSystemConfig.CopyFrom(self.actor_system_config_txt)
 
         # Old template style:
         if self.cms_txt.ByteSize() > 0:

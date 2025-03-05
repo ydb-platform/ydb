@@ -90,7 +90,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , InFlightReadsTracker(StoragesManager, Counters.GetRequestsTracingCounters())
     , VersionCounters(std::make_shared<NOlap::TVersionCounters>())
     , TablesManager(StoragesManager, std::make_shared<NOlap::NDataAccessorControl::TLocalManager>(nullptr),
-          std::make_shared<NOlap::TSchemaObjectsCache>(), Counters.GetPortionIndexCounters(), info->TabletID, VersionCounters)
+          std::make_shared<NOlap::TSchemaObjectsCache>(), Counters.GetPortionIndexCounters(), VersionCounters, info->TabletID)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , InsertTable(std::make_unique<NOlap::TInsertTable>(VersionCounters))

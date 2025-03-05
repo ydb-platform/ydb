@@ -28,14 +28,15 @@ namespace NKikimr::NOlap {
 
 TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-    const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema, const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters)
+    const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema, const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters, const std::shared_ptr<TVersionCounters>& versionCounters)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
     , DataAccessorsManager(dataAccessorsManager)
     , StoragesManager(storagesManager)
     , SchemaObjectsCache(schemaCache)
+    , VersionedIndex(versionCounters)
     , TabletId(tabletId)
-    , Counters(counters)
     , VersionCounters(versionCounters)
+    , Counters(counters)
     , LastPortion(0)
     , LastGranule(0) {
     ActualizationController = std::make_shared<NActualizer::TController>();
@@ -44,14 +45,15 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
 
 TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-    const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId, TIndexInfo&& schema, const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters)
+    const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId, TIndexInfo&& schema, const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters, const std::shared_ptr<TVersionCounters>& versionCounters)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
     , DataAccessorsManager(dataAccessorsManager)
     , StoragesManager(storagesManager)
     , SchemaObjectsCache(schemaCache)
+    , VersionedIndex(versionCounters)
     , TabletId(tabletId)
-    , Counters(counters)
     , VersionCounters(versionCounters)
+    , Counters(counters)
     , LastPortion(0)
     , LastGranule(0)
 {

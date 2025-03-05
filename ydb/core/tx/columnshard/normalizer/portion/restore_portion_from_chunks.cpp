@@ -72,8 +72,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         return TConclusionStatus::Fail("Not ready");
     }
 
+    std::shared_ptr<TVersionCounters> versionCounters = std::make_shared<TVersionCounters>();
     TTablesManager tablesManager(controller.GetStoragesManager(), std::make_shared<NDataAccessorControl::TLocalManager>(nullptr),
-        std::make_shared<TSchemaObjectsCache>(), std::make_shared<TPortionIndexStats>(), 0, versionCounters);
+        std::make_shared<TSchemaObjectsCache>(), std::make_shared<TPortionIndexStats>(), versionCounters, 0);
     if (!tablesManager.InitFromDB(db)) {
         ACFL_TRACE("normalizer", "TChunksNormalizer")("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");

@@ -205,9 +205,8 @@ private:
 
 public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
-        const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager, const ui64 tabletId, const std::shared_ptr<NOlap::TVersionCounters>& versionCounters);
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const std::shared_ptr<TPortionIndexStats>& portionsStats, const std::shared_ptr<NOlap::TVersionCounters>& versionCounters, 
+        const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const std::shared_ptr<TPortionIndexStats>& portionsStats, const std::shared_ptr<NOlap::TVersionCounters>& versionCounters,
         const ui64 tabletId);
 
     const std::unique_ptr<TTableLoadTimeCounters>& GetLoadTimeCounters() const {

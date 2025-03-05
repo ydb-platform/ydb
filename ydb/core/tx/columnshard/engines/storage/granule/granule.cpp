@@ -27,7 +27,7 @@ void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
 
     OnBeforeChangePortion(nullptr);
     Portions.emplace(info->GetPortionId(), info);
-    auto schemaVersionOpt = info.GetPortionInfo().GetSchemaVersionOptional();
+    auto schemaVersionOpt = info->GetSchemaVersionOptional();
     if (schemaVersionOpt.has_value()) {
         VersionCounters->VersionAddRef(*schemaVersionOpt);
     }

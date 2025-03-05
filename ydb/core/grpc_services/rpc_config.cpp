@@ -334,7 +334,7 @@ private:
 
     STFUNC(StateConsoleReplaceFunc) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NConsole::TEvC onsole::TEvReplaceYamlConfigResponse, Handle);
+            hFunc(NConsole::TEvConsole::TEvReplaceYamlConfigResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvSetYamlConfigResponse, Handle);
             default:
                 return StateConsoleFunc(ev);

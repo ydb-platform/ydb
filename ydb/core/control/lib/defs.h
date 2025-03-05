@@ -72,6 +72,10 @@ namespace NKikimr {
         CoordinatorControlsMinLeaderLeaseDurationUs         /* "CoordinatorControls.MinLeaderLeaseDurationUs" */,
         CoordinatorControlsVolatilePlanLeaseMs              /* "CoordinatorControls.VolatilePlanLeaseMs" */,
         CoordinatorControlsPlanAheadTimeShiftMs             /* "CoordinatorControls.PlanAheadTimeShiftMs" */,
-        CoordinatorControlsMinPlanResolutionMs              /* "CoordinatorControls.MinPlanResolutionMs" */
+        CoordinatorControlsMinPlanResolutionMs              /* "CoordinatorControls.MinPlanResolutionMs" */,
+        PDiskControlsMaxCommonLogChunksHDD                 /* "PDiskControls.MaxCommonLogChunksHDD" */,
+        PDiskControlsMaxCommonLogChunksSSD                 /* "PDiskControls.MaxCommonLogChunksSSD" */,
+        PDiskControlsUseNoopSchedulerHDD                   /* "PDiskControls.UseNoopSchedulerHDD" */,
+        PDiskControlsUseNoopSchedulerSSD                   /* "PDiskControls.UseNoopSchedulerSSD" */,
     };
 } // NKikimr

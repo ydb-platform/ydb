@@ -2,6 +2,8 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include "schemeshard_utils.h"  // for PQGroupReserve
+
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/config/config.h>
@@ -212,7 +214,7 @@ public:
             if (alterConfig.HasOffloadConfig()) {
                 // TODO: check validity
                 auto* pathId = alterConfig.MutableOffloadConfig()->MutableIncrementalBackup()->MutableDstPathId();
-                PathIdFromPathId(TPath::Resolve(alterConfig.GetOffloadConfig().GetIncrementalBackup().GetDstPath(), context.SS).Base()->PathId, pathId);
+                TPath::Resolve(alterConfig.GetOffloadConfig().GetIncrementalBackup().GetDstPath(), context.SS).Base()->PathId.ToProto(pathId);
             }
 
             alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema());
@@ -862,7 +864,7 @@ public:
         context.SS->ClearDescribePathCaches(path.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
 
-        path.DomainInfo()->AddInternalShards(txState);
+        path.DomainInfo()->AddInternalShards(txState, context.SS);
         path.DomainInfo()->IncPQPartitionsInside(partitionsToCreate);
         path.DomainInfo()->UpdatePQReservedStorage(oldReserve.Storage, reserve.Storage);
         path.Base()->IncShardsInside(shardsToCreate);

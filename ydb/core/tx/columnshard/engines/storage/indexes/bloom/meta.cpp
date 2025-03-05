@@ -1,68 +1,90 @@
-#include "meta.h"
 #include "checker.h"
-#include <ydb/library/formats/arrow/hash/xx_hash.h>
+#include "meta.h"
+
 #include <ydb/core/formats/arrow/hash/calcer.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
+
+#include <ydb/library/formats/arrow/hash/xx_hash.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 
 namespace NKikimr::NOlap::NIndexes {
 
-TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
-    std::set<ui64> hashes;
-    {
-        NArrow::NHash::NXX64::TStreamStringHashCalcer hashCalcer(0);
-        for (reader.Start(); reader.IsCorrect(); reader.ReadNext()) {
-            hashCalcer.Start();
-            for (auto&& i : reader) {
-                NArrow::NHash::TXX64::AppendField(i.GetCurrentChunk(), i.GetCurrentRecordIndex(), hashCalcer);
-            }
-            hashes.emplace(hashCalcer.Finish());
+TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
+    std::deque<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> dataOwners;
+    ui32 indexHitsCount = 0;
+    for (reader.Start(); reader.IsCorrect();) {
+        AFL_VERIFY(reader.GetColumnsCount() == 1);
+        for (auto&& i : reader) {
+            dataOwners.emplace_back(i.GetCurrentChunk());
+            indexHitsCount += GetDataExtractor()->GetIndexHitsCount(dataOwners.back());
         }
+        reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
+    }
+    const ui32 bitsCount = TFixStringBitsStorage::GrowBitsCountToByte(HashesCount * std::max<ui32>(indexHitsCount, 10) / std::log(2));
+    std::vector<bool> filterBits(bitsCount, false);
+
+    const auto predNoBase = [&](const ui64 hash, const ui32 /*idx*/) {
+        filterBits[hash % bitsCount] = true;
+    };
+    while (dataOwners.size()) {
+        GetDataExtractor()->VisitAll(
+            dataOwners.front(),
+            [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase) {
+                for (ui64 i = 0; i < HashesCount; ++i) {
+                    if (hashBase) {
+                        const auto predWithBase = [&](const ui64 hash, const ui32 /*idx*/) {
+                            filterBits[CombineHashes(hashBase, hash) % bitsCount] = true;
+                        };
+                        NArrow::NHash::TXX64::CalcForAll(arr, i, predWithBase);
+                    } else {
+                        NArrow::NHash::TXX64::CalcForAll(arr, i, predNoBase);
+                    }
+                }
+            },
+            [&](const std::string_view data, const ui64 hashBase) {
+                for (ui64 i = 0; i < HashesCount; ++i) {
+                    const ui64 hash = NArrow::NHash::TXX64::CalcSimple(data, i);
+                    if (hashBase) {
+                        filterBits[CombineHashes(hashBase, hash) % bitsCount] = true;
+                    } else {
+                        filterBits[hash % bitsCount] = true;
+                    }
+                }
+            });
+        dataOwners.pop_front();
     }
 
-    const ui32 bitsCount = HashesCount * hashes.size() / std::log(2);
-    TFixStringBitsStorage bits(bitsCount);
-    const auto pred = [&bits](const ui64 hash) {
-        bits.Set(true, hash % bits.GetSizeBits());
-    };
-    BuildHashesSet(hashes, pred);
-    return bits.GetData();
+    return TFixStringBitsStorage(filterBits).GetData();
 }
 
-void TBloomIndexMeta::DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const {
+void TBloomIndexMeta::DoFillIndexCheckers(
+    const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& /*schema*/) const {
     for (auto&& branch : info->GetBranches()) {
-        std::map<ui32, std::shared_ptr<arrow::Scalar>> foundColumns;
-        for (auto&& cId : ColumnIds) {
-            auto c = schema.GetColumns().GetById(cId);
-            if (!c) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "incorrect index column")("id", cId);
-                return;
+        for (auto&& i : branch->GetEquals()) {
+            if (i.first.GetColumnId() != GetColumnId()) {
+                continue;
             }
-            auto itEqual = branch->GetEquals().find(c->GetName());
-            if (itEqual == branch->GetEquals().end()) {
-                break;
+            ui64 hashBase = 0;
+            if (!GetDataExtractor()->CheckForIndex(i.first, hashBase)) {
+                continue;
             }
-            foundColumns.emplace(cId, itEqual->second);
-        }
-        if (foundColumns.size() != ColumnIds.size()) {
-            continue;
-        }
-        std::set<ui64> hashes;
-        const auto pred = [&hashes](const ui64 hash) {
-            hashes.emplace(hash);
-        };
-        NArrow::NHash::NXX64::TStreamStringHashCalcer calcer(0);
-        for (ui32 i = 0; i < HashesCount; ++i) {
-            calcer.Start();
-            for (auto&& i : foundColumns) {
-                NArrow::NHash::TXX64::AppendField(i.second, calcer);
+            std::set<ui64> hashes;
+            if (hashBase) {
+                for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
+                    const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(i.second, hashSeed);
+                    hashes.emplace(CombineHashes(hashBase, hash));
+                }
+            } else {
+                for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
+                    const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(i.second, hashSeed);
+                    hashes.emplace(hash);
+                }
             }
-            BuildHashesSet(calcer.Finish(), pred);
+            branch->MutableIndexes().emplace_back(std::make_shared<TBloomFilterChecker>(GetIndexId(), std::move(hashes)));
         }
-        branch->MutableIndexes().emplace_back(std::make_shared<TBloomFilterChecker>(GetIndexId(), std::move(hashes)));
     }
 }
 

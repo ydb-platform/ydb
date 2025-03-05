@@ -28,6 +28,11 @@ class TMemoryUsageInfo;
 
 const ui32 CodegenArraysFallbackLimit = 1000u;
 
+template <typename Type, EMemorySubPool MemoryPool = EMemorySubPool::Default>
+using TMKQLVector = std::vector<Type, TMKQLAllocator<Type, MemoryPool>>;
+template<typename Key, typename T, typename Hash = std::hash<Key>, typename KeyEqual = std::equal_to<Key>, EMemorySubPool MemoryPool = EMemorySubPool::Default>
+using TMKQLHashMap = std::unordered_map<Key, T, Hash, KeyEqual, TMKQLAllocator<std::pair<const Key, T>, MemoryPool>>;
+
 using TKeyTypes = std::vector<std::pair<NUdf::EDataSlot, bool>>;
 using TUnboxedValueVector = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue>>;
 using TTemporaryUnboxedValueVector = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue, EMemorySubPool::Temporary>>;
@@ -582,11 +587,13 @@ public:
     {
     }
 
-    inline static TArrowBlock& From(const NUdf::TUnboxedValue& value) {
-        return *static_cast<TArrowBlock*>(value.AsBoxed().Get());
+    inline static const TArrowBlock& From(const NUdf::TUnboxedValuePod& value) {
+        return *static_cast<TArrowBlock*>(value.AsRawBoxed());
     }
 
-    inline arrow::Datum& GetDatum() {
+    inline static const TArrowBlock& From(NUdf::TUnboxedValuePod&& value) = delete;
+
+    inline const arrow::Datum& GetDatum() const {
         return Datum_;
     }
 
@@ -1072,7 +1079,7 @@ public: //unavailable getters may be eliminated at compile time, but it'd make c
 private:
     TKeyTypes KeyTypes;
     bool IsTuple = false;
-    
+
     //unsused pointers may be eliminated at compile time, but it'd make code much less readable
     NUdf::IEquate::TPtr Equate;
     NUdf::IHash::TPtr Hash;

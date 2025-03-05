@@ -1,7 +1,7 @@
 #include "memory_controller.h"
 #include "memory_controller_config.h"
 #include "memtable_collection.h"
-#include <util/stream/format.h>
+
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/base/memory_controller_iface.h>
@@ -11,16 +11,21 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/memory_controller_config.pb.h>
 #include <ydb/core/protos/memory_stats.pb.h>
-#include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
+#include <ydb/core/tablet/resource_broker.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/process_stats.h>
 #include <ydb/library/services/services.pb.h>
 #include <yql/essentials/minikql/aligned_page_pool.h>
+#include <yql/essentials/public/udf/arrow/memory_pool.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/memory_pool.h>
-#include <yql/essentials/public/udf/arrow/memory_pool.h>
+
+#include <util/stream/format.h>
+
+#include <tcmalloc/malloc_extension.h>
 
 namespace NKikimr::NMemory {
 
@@ -35,7 +40,7 @@ ui64 SafeDiff(ui64 a, ui64 b) {
 }
 
 TString HumanReadableBytes(std::optional<ui64> bytes) {
-    return bytes.has_value() ? TString(TStringBuilder() << HumanReadableBytes(bytes.value())) : "none"; 
+    return bytes.has_value() ? TString(TStringBuilder() << HumanReadableBytes(bytes.value())) : "none";
 }
 
 }
@@ -126,6 +131,20 @@ public:
             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
                     NKikimrConsole::TConfigItem::MemoryControllerConfigItem}));
 
+        // When profiling memory it's convenient to set initial tcmalloc soft limit
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+        auto processMemoryInfo = ProcessMemoryInfoProvider->Get();
+        bool hasMemTotalHardLimit = false;
+        ui64 hardLimitBytes = GetHardLimitBytes(Config, processMemoryInfo, hasMemTotalHardLimit);
+
+        tcmalloc::MallocExtension::MemoryLimit limit;
+        limit.hard = false;
+        limit.limit = GetSoftLimitBytes(Config, hardLimitBytes);
+        tcmalloc::MallocExtension::SetMemoryLimit(limit);
+
+        LOG_NOTICE_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Set tcmalloc soft limit " << limit.limit);
+#endif
+
         HandleWakeup(ctx);
 
         LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Bootstrapped with config " << Config.ShortDebugString());
@@ -213,6 +232,7 @@ private:
         Counters->GetCounter("Stats/CGroupLimit")->Set(processMemoryInfo.CGroupLimit.value_or(0));
         Counters->GetCounter("Stats/MemTotal")->Set(processMemoryInfo.MemTotal.value_or(0));
         Counters->GetCounter("Stats/MemAvailable")->Set(processMemoryInfo.MemAvailable.value_or(0));
+        Counters->GetCounter("Stats/MemMapsCount")->Set(GetMemoryMapsCount());
         Counters->GetCounter("Stats/AllocatedMemory")->Set(processMemoryInfo.AllocatedMemory);
         Counters->GetCounter("Stats/AllocatorCachesMemory")->Set(processMemoryInfo.AllocatorCachesMemory);
         Counters->GetCounter("Stats/HardLimit")->Set(hardLimitBytes);

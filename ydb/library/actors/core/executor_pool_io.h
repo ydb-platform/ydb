@@ -3,9 +3,9 @@
 #include "actorsystem.h"
 #include "executor_thread.h"
 #include "executor_thread_ctx.h"
-#include "harmonizer.h"
 #include "scheduler_queue.h"
 #include "executor_pool_base.h"
+#include <ydb/library/actors/core/harmonizer/harmonizer.h>
 #include <ydb/library/actors/actor_type/indexes.h>
 #include <ydb/library/actors/util/ticket_lock.h>
 #include <ydb/library/actors/util/unordered_cache.h>
@@ -30,13 +30,13 @@ namespace NActors {
         explicit TIOExecutorPool(const TIOExecutorPoolConfig& cfg, IHarmonizer *harmonizer = nullptr);
         ~TIOExecutorPool();
 
-        ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) override;
+        TMailbox* GetReadyActivation(ui64 revolvingCounter) override;
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
 
-        void ScheduleActivationEx(ui32 activation, ui64 revolvingWriteCounter) override;
+        void ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingWriteCounter) override;
 
         void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) override;
         void Start() override;
@@ -46,5 +46,8 @@ namespace NActors {
         void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const override;
         void GetExecutorPoolState(TExecutorPoolState &poolState) const override;
         TString GetName() const override;
+
+        ui64 TimePerMailboxTs() const override;
+        ui32 EventsPerMailbox() const override;
     };
 }

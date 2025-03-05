@@ -188,6 +188,8 @@ private:
     TInstant AsyncStart_;
 };
 
+TAutoPtr<IGraphTransformer> MakeSharedTransformerProxy(const std::shared_ptr<IGraphTransformer>& inner);
+
 struct TTransformStage {
     TString Name;
     EYqlIssueCode IssueCode;

@@ -26,6 +26,10 @@ TConclusion<NErrorCodes::TOperator::TYdbStatusInfo> TOperator::GetStatusInfo(
         case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {
             return TYdbStatusInfo(Ydb::StatusIds::ABORTED, NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, "Transaction locks invalidated.");
         }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE:
+            return TYdbStatusInfo(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Wrong shard state");
+        case NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION:
+            return TYdbStatusInfo(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Constraint violated");
     }
 }
 

@@ -303,8 +303,9 @@ namespace NActors {
         TActorId Register(IActor* actor, ui32 nodeIndex = 0, ui32 poolId = 0,
             TMailboxType::EType mailboxType = TMailboxType::Simple, ui64 revolvingCounter = 0,
             const TActorId& parentid = TActorId());
-        TActorId Register(IActor *actor, ui32 nodeIndex, ui32 poolId, TMailboxHeader *mailbox, ui32 hint,
+        TActorId Register(IActor *actor, ui32 nodeIndex, ui32 poolId, TMailbox *mailbox,
             const TActorId& parentid = TActorId());
+        TActorId RegisterAlias(TMailbox* mailbox, IActor* actor, ui32 nodeIndex, ui32 poolId);
         TActorId RegisterService(const TActorId& serviceId, const TActorId& actorId, ui32 nodeIndex = 0);
         TActorId AllocateEdgeActor(ui32 nodeIndex = 0);
         TEventsList CaptureEvents();
@@ -333,6 +334,9 @@ namespace NActors {
         bool IsScheduleForActorEnabled(const TActorId& actorId) const;
         TIntrusivePtr<NMonitoring::TDynamicCounters> GetDynamicCounters(ui32 nodeIndex = 0);
         void SetupMonitoring(ui16 monitoringPortOffset = 0, bool monitoringTypeAsync = false);
+        void DisableBreakOnStopCondition() {
+            AllowBreakOnStopCondition = false;
+        }
 
         using TEventObserverCollection = std::list<std::function<void(TAutoPtr<IEventHandle>& event)>>;
         class TEventObserverHolder {
@@ -789,7 +793,7 @@ namespace NActors {
         THashMap<TActorId, TString> ActorNames;
         TDispatchContext* CurrentDispatchContext;
         TVector<ui64> TxAllocatorTabletIds;
-
+        bool AllowBreakOnStopCondition = true;
         static ui32 NextNodeId;
     };
 

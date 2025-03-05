@@ -2,9 +2,9 @@
 #define PYTHONIC_NUMPY_CONVOLVE_HPP
 
 #include "pythonic/include/numpy/convolve.hpp"
+#include "pythonic/numpy/conjugate.hpp"
 #include "pythonic/numpy/correlate.hpp"
 #include "pythonic/numpy/flip.hpp"
-#include "pythonic/numpy/conjugate.hpp"
 #include "pythonic/types/ndarray.hpp"
 
 PYTHONIC_NS_BEGIN
@@ -31,7 +31,7 @@ namespace numpy
   }
 
   NUMPY_EXPR_TO_NDARRAY0_IMPL(convolve)
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

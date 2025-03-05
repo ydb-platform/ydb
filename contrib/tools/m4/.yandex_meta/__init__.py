@@ -170,7 +170,9 @@ m4 = NixProject(
         "gettextP.h",
         "lc-charset-dispatch.h",
         "libc-lock.h",
+        "libio/",
         "localename-table.h",
+        "locale/",
         "../locale/localeinfo.h",
         "OS.h",
         "os2.h",
@@ -184,6 +186,7 @@ m4 = NixProject(
         "sys/ps.h",
         "sys/single_threaded.h",
         "unistring-notinline.h",
+        "vasprintf.h",
     ],
     put={
         "libm4": "lib",

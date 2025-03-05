@@ -1,7 +1,12 @@
 #pragma once
-#include "defs.h"
-
 #include "schemeshard_identificators.h"
+
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
+#include <util/datetime/base.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -15,6 +20,8 @@ namespace TEvPrivate {
         EvRunConditionalErase,
         EvIndexBuildBilling,
         EvImportSchemeReady,
+        EvImportSchemeQueryResult,
+        EvExportSchemeUploadResult,
         EvServerlessStorageBilling,
         EvCleanDroppedPaths,
         EvCleanDroppedSubDomains,
@@ -31,6 +38,8 @@ namespace TEvPrivate {
         EvSendBaseStatsToSA,
         EvRunBackgroundCleaning,
         EvRetryNodeSubscribe,
+        EvRunDataErasure,
+        EvRunTenantDataErasure,
         EvEnd
     };
 
@@ -89,6 +98,43 @@ namespace TEvPrivate {
 
         TEvImportSchemeReady(ui64 id, ui32 itemIdx, bool success, const TString& error)
             : ImportId(id)
+            , ItemIdx(itemIdx)
+            , Success(success)
+            , Error(error)
+        {}
+    };
+
+    struct TEvImportSchemeQueryResult: public TEventLocal<TEvImportSchemeQueryResult, EvImportSchemeQueryResult> {
+        const ui64 ImportId;
+        const ui32 ItemIdx;
+        const Ydb::StatusIds::StatusCode Status;
+        const std::variant<TString, NKikimrSchemeOp::TModifyScheme> Result;
+
+        // failed query
+        TEvImportSchemeQueryResult(ui64 id, ui32 itemIdx, Ydb::StatusIds::StatusCode status, TString&& error)
+            : ImportId(id)
+            , ItemIdx(itemIdx)
+            , Status(status)
+            , Result(error)
+        {}
+
+        // successful query
+        TEvImportSchemeQueryResult(ui64 id, ui32 itemIdx, Ydb::StatusIds::StatusCode status, NKikimrSchemeOp::TModifyScheme&& preparedQuery)
+            : ImportId(id)
+            , ItemIdx(itemIdx)
+            , Status(status)
+            , Result(preparedQuery)
+        {}
+    };
+
+    struct TEvExportSchemeUploadResult: public TEventLocal<TEvExportSchemeUploadResult, EvExportSchemeUploadResult> {
+        const ui64 ExportId;
+        const ui32 ItemIdx;
+        const bool Success;
+        const TString Error;
+
+        TEvExportSchemeUploadResult(ui64 id, ui32 itemIdx, bool success, const TString& error)
+            : ExportId(id)
             , ItemIdx(itemIdx)
             , Success(success)
             , Error(error)

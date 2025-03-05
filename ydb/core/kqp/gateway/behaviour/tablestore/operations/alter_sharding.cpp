@@ -1,4 +1,5 @@
 #include "alter_sharding.h"
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/library/actors/core/log.h>
 #include <util/string/type.h>
 

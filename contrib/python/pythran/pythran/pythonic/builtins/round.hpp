@@ -25,7 +25,7 @@ namespace builtins
   {
     return std::lround(v);
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

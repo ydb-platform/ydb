@@ -14,6 +14,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 
@@ -407,7 +408,6 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
                 TKikimrSettings settings;
                 NKikimrConfig::TAppConfig appConfig;
                 appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(testActorType == ETestActorType::SorceRead);
-                appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(testActorType == ETestActorType::StreamLookup);
                 settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
                 settings.SetAppConfig(appConfig);
 
@@ -680,7 +680,6 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         Tests::TServerSettings serverSettings(pm.GetPort(2134));
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(false);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetAppConfig(appConfig);

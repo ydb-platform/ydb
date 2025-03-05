@@ -1,52 +1,44 @@
 diff --git a/include/typeinfo b/include/typeinfo
-index eb3dc59..e6c9648 100644
+index 8b75ced..266ae95 100644
 --- a/include/typeinfo
 +++ b/include/typeinfo
-@@ -363,26 +363,48 @@ class _LIBCPP_EXPORTED_FROM_ABI bad_cast
-     : public exception
- {
-  public:
-+#ifdef _LIBCPP_ABI_MICROSOFT
+@@ -332,24 +332,40 @@ public:
+ 
+ class _LIBCPP_EXPORTED_FROM_ABI bad_cast : public exception {
+ public:
++#  ifdef _LIBCPP_ABI_MICROSOFT
 +  bad_cast() _NOEXCEPT {}
 +  virtual ~bad_cast() _NOEXCEPT {}
-+  virtual const char* what() const _NOEXCEPT
-+  {
-+    return "std::bad_cast";
-+  }
-+#else
++  virtual const char* what() const _NOEXCEPT { return "std::bad_cast"; }
++#  else
    bad_cast() _NOEXCEPT;
-   _LIBCPP_HIDE_FROM_ABI bad_cast(const bad_cast&) _NOEXCEPT = default;
+   _LIBCPP_HIDE_FROM_ABI bad_cast(const bad_cast&) _NOEXCEPT            = default;
    _LIBCPP_HIDE_FROM_ABI bad_cast& operator=(const bad_cast&) _NOEXCEPT = default;
    ~bad_cast() _NOEXCEPT override;
    const char* what() const _NOEXCEPT override;
-+#endif
++#  endif
  };
  
- class _LIBCPP_EXPORTED_FROM_ABI bad_typeid
-     : public exception
- {
-  public:
-+#ifdef _LIBCPP_ABI_MICROSOFT
+ class _LIBCPP_EXPORTED_FROM_ABI bad_typeid : public exception {
+ public:
++#  ifdef _LIBCPP_ABI_MICROSOFT
 +  bad_typeid() _NOEXCEPT {}
 +  virtual ~bad_typeid() _NOEXCEPT {}
-+  virtual const char* what() const _NOEXCEPT
-+  {
-+    return "std::bad_typeid";
-+  }
-+#else
++  virtual const char* what() const _NOEXCEPT { return "std::bad_typeid"; }
++#  else
    bad_typeid() _NOEXCEPT;
-   _LIBCPP_HIDE_FROM_ABI bad_typeid(const bad_typeid&) _NOEXCEPT = default;
+   _LIBCPP_HIDE_FROM_ABI bad_typeid(const bad_typeid&) _NOEXCEPT            = default;
    _LIBCPP_HIDE_FROM_ABI bad_typeid& operator=(const bad_typeid&) _NOEXCEPT = default;
    ~bad_typeid() _NOEXCEPT override;
    const char* what() const _NOEXCEPT override;
-+#endif
++#  endif
  };
  
  } // namespace std
  
-+#ifdef _LIBCPP_ABI_MICROSOFT
++#  ifdef _LIBCPP_ABI_MICROSOFT
 +class type_info : public std::type_info {};
-+#endif
++#  endif
 +
  #endif // defined(_LIBCPP_ABI_VCRUNTIME)
  

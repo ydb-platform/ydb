@@ -5,15 +5,9 @@ IF (NOT WITH_VALGRIND)
 
     SPLIT_FACTOR(60)
 
-    IF (SANITIZER_TYPE OR WITH_VALGRIND)
-        TIMEOUT(3600)
-        SIZE(LARGE)
-        TAG(ya:fat)
-    ELSE()
-        TIMEOUT(1800)
-        SIZE(LARGE)
-        TAG(ya:fat)
-    ENDIF()
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+
 
     PEERDIR(
         library/cpp/getopt

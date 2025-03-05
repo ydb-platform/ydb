@@ -154,7 +154,7 @@ namespace {
 
             auto traits = ctx.ReplaceNodes(TExprNode::TPtr(traitsFactoryBody), factoryReplaces);
             ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-            auto status = ExpandApply(traits, traits, ctx);
+            auto status = ExpandApplyNoRepeat(traits, traits, ctx);
             if (status == IGraphTransformer::TStatus::Error) {
                 return nullptr;
             }
@@ -1224,6 +1224,7 @@ namespace {
         // lambda L F L S L
         // lambda S F L S S
         // lambda O F L S O
+        // lambda P F L S P
         // lambda F F F - F
 
         bool warn = false;
@@ -1300,7 +1301,7 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        input->SetTypeAnn(MakeSequenceType(resultKind, *lambdaItemType, ctx.Expr));
+        input->SetTypeAnn(resultKind == ETypeAnnotationKind::Pg ? lambdaItemType : MakeSequenceType(resultKind, *lambdaItemType, ctx.Expr));
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1522,6 +1523,115 @@ namespace {
 
     IGraphTransformer::TStatus ListCollectWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         return OptListWrapperImpl<1U>(input, output, ctx, "Collect");
+    }
+
+    IGraphTransformer::TStatus ListSampleWrapperCommon(const TExprNode::TPtr& input, TExprNode::TPtr& output, NUdf::EDataSlot probArgDataType, TContext& ctx) {
+        if (!EnsureMinMaxArgsCount(*input, 2, 3, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (IsNull(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto type = input->Head().GetTypeAnn();
+        if (type->GetKind() == ETypeAnnotationKind::Optional) {
+            type = type->Cast<TOptionalExprType>()->GetItemType();
+        }
+
+        if (type->GetKind() != ETypeAnnotationKind::List && type->GetKind() != ETypeAnnotationKind::EmptyList) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder()
+                << "Expected (empty) list or optional of (empty) list, but got: " << *input->Head().GetTypeAnn()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (type->GetKind() == ETypeAnnotationKind::EmptyList) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (IsNull(*input->Child(1))) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (!EnsureSpecificDataType(*input->Child(1), probArgDataType, ctx.Expr, true)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->ChildrenSize() == 2) {
+            auto children = input->ChildrenList();
+            children.push_back(ctx.Expr.NewCallable(input->Pos(), "Null", {}));
+            output = ctx.Expr.ChangeChildren(*input, std::move(children));
+            return IGraphTransformer::TStatus::Repeat;
+        }
+        YQL_ENSURE(input->ChildrenSize() == 3);
+
+        if (!EnsureComputable(*input->Child(2), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus ListSampleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        return ListSampleWrapperCommon(input, output, NUdf::EDataSlot::Double, ctx);
+    }
+
+    IGraphTransformer::TStatus ListSampleNWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        return ListSampleWrapperCommon(input, output, NUdf::EDataSlot::Uint64, ctx);
+    }
+
+    IGraphTransformer::TStatus ListShuffleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureMinMaxArgsCount(*input, 1, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (IsNull(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto type = input->Head().GetTypeAnn();
+        if (type->GetKind() == ETypeAnnotationKind::Optional) {
+            type = type->Cast<TOptionalExprType>()->GetItemType();
+        }
+
+        if (type->GetKind() != ETypeAnnotationKind::List && type->GetKind() != ETypeAnnotationKind::EmptyList) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder()
+                << "Expected (empty) list or optional of (empty) list, but got: " << *input->Head().GetTypeAnn()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (type->GetKind() == ETypeAnnotationKind::EmptyList) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (input->ChildrenSize() == 1) {
+            auto children = input->ChildrenList();
+            children.push_back(ctx.Expr.NewCallable(input->Pos(), "Null", {}));
+            output = ctx.Expr.ChangeChildren(*input, std::move(children));
+            return IGraphTransformer::TStatus::Repeat;
+        }
+        YQL_ENSURE(input->ChildrenSize() == 2);
+
+        if (!EnsureComputable(*input->Child(1), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     IGraphTransformer::TStatus OptListFold1WrapperImpl(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx, TExprNode::TPtr&& updateLambda) {
@@ -2290,11 +2400,13 @@ namespace {
                 case EDataSlot::Date:
                 case EDataSlot::TzDate:
                 case EDataSlot::Date32:
+                case EDataSlot::TzDate32:
                     value = ctx.Expr.NewAtom(input->Pos(), "86400000000", TNodeFlags::Default);
                     break;
                 case EDataSlot::Datetime:
                 case EDataSlot::TzDatetime:
                 case EDataSlot::Datetime64:
+                case EDataSlot::TzDatetime64:
                     value = ctx.Expr.NewAtom(input->Pos(), "1000000", TNodeFlags::Default);
                     break;
                 default:

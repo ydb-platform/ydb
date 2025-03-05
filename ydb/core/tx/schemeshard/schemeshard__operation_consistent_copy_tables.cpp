@@ -1,7 +1,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
-#include "schemeshard_path_element.h"
+
+#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
@@ -9,7 +9,7 @@
 
 #include <util/generic/algorithm.h>
 
-NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst, bool omitFollowers, bool isBackup) {
+static NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst, const NKikimrSchemeOp::TCopyTableConfig& descr) {
     using namespace NKikimr::NSchemeShard;
 
     auto scheme = TransactionTemplate(dst.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
@@ -18,13 +18,18 @@ NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath& src, 
     auto operation = scheme.MutableCreateTable();
     operation->SetName(dst.LeafName());
     operation->SetCopyFromTable(src.PathString());
-    operation->SetOmitFollowers(omitFollowers);
-    operation->SetIsBackup(isBackup);
+    operation->SetOmitFollowers(descr.GetOmitFollowers());
+    operation->SetIsBackup(descr.GetIsBackup());
+    operation->SetAllowUnderSameOperation(descr.GetAllowUnderSameOperation());
+    if (descr.HasCreateSrcCdcStream()) {
+        auto* coOp = scheme.MutableCreateCdcStream();
+        coOp->CopyFrom(descr.GetCreateSrcCdcStream());
+    }
 
     return scheme;
 }
 
-NKikimrSchemeOp::TModifyScheme CreateIndexTask(NKikimr::NSchemeShard::TTableIndexInfo::TPtr indexInfo, NKikimr::NSchemeShard::TPath& dst) {
+static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NSchemeShard::TTableIndexInfo::TPtr indexInfo, NKikimr::NSchemeShard::TPath& dst) {
     using namespace NKikimr::NSchemeShard;
 
     auto scheme = TransactionTemplate(dst.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
@@ -34,6 +39,7 @@ NKikimrSchemeOp::TModifyScheme CreateIndexTask(NKikimr::NSchemeShard::TTableInde
     operation->SetName(dst.LeafName());
 
     operation->SetType(indexInfo->Type);
+
     for (const auto& keyName: indexInfo->IndexKeys) {
         *operation->MutableKeyColumnNames()->Add() = keyName;
     }
@@ -42,19 +48,32 @@ NKikimrSchemeOp::TModifyScheme CreateIndexTask(NKikimr::NSchemeShard::TTableInde
         *operation->MutableDataColumnNames()->Add() = dataColumn;
     }
 
+    if (indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+        *operation->MutableVectorIndexKmeansTreeDescription() =
+            std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
+    } else if (!std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription)) {
+        return {};
+    }
+
     return scheme;
 }
 
 namespace NKikimr::NSchemeShard {
 
-TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+bool CreateConsistentCopyTables(
+    TOperationId nextId,
+    const TTxTransaction& tx,
+    TOperationContext& context,
+    TVector<ISubOperation::TPtr>& result)
+{
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables);
 
     const auto& op = tx.GetCreateConsistentCopyTables();
 
     if (0 == op.CopyTableDescriptionsSize()) {
         TString msg = TStringBuilder() << "no task to do, empty list CopyTableDescriptions";
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+        result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+        return false;
     }
 
     TPath firstPath = TPath::Resolve(op.GetCopyTableDescriptions(0).GetSrcPath(), context.SS);
@@ -66,7 +85,8 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
             .IsAtLocalSchemeShard();
 
         if (!checks) {
-            return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+            result = {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+            return false;
         }
     }
 
@@ -80,19 +100,19 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
         : limits.MaxConsistentCopyTargets;
 
     if (op.CopyTableDescriptionsSize() > limit) {
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, TStringBuilder()
+        result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, TStringBuilder()
             << "Consistent copy object count limit exceeded"
                 << ", limit: " << limit
                 << ", objects: " << op.CopyTableDescriptionsSize()
         )};
+        return false;
     }
 
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, errStr)};
+        result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, errStr)};
+        return false;
     }
-
-    TVector<ISubOperation::TPtr> result;
 
     for (const auto& descr: op.GetCopyTableDescriptions()) {
         const auto& srcStr = descr.GetSrcPath();
@@ -108,7 +128,8 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
                   .IsTheSameDomain(firstPath);
 
             if (!checks) {
-                return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+                result = {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+                return false;
             }
         }
 
@@ -134,8 +155,10 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
             sequences.emplace(sequenceName);
         }
 
-        result.push_back(CreateCopyTable(NextPartId(nextId, result),
-            CopyTableTask(srcPath, dstPath, descr.GetOmitFollowers(), descr.GetIsBackup()), sequences));
+        result.push_back(CreateCopyTable(
+                             NextPartId(nextId, result),
+                             CopyTableTask(srcPath, dstPath, descr),
+                             sequences));
 
         TVector<NKikimrSchemeOp::TSequenceDescription> sequenceDescriptions;
         for (const auto& child: srcPath.Base()->GetChildren()) {
@@ -165,18 +188,24 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
             }
 
             Y_ABORT_UNLESS(srcIndexPath.Base()->PathId == pathId);
-            Y_VERIFY_S(srcIndexPath.Base()->GetChildren().size() == 1, srcIndexPath.PathString() << " has children " << srcIndexPath.Base()->GetChildren().size() << " but 1 expected");
-
             TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
-            result.push_back(CreateNewTableIndex(NextPartId(nextId, result), CreateIndexTask(indexInfo, dstIndexPath)));
+            auto scheme = CreateIndexTask(indexInfo, dstIndexPath);
+            if (!scheme) {
+                result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
+                                       TStringBuilder{} << "Consistent copy table doesn't support table with index type " << indexInfo->Type)};
+                return false;
+            }
+            result.push_back(CreateNewTableIndex(NextPartId(nextId, result), *scheme));
 
-            TString srcImplTableName = srcIndexPath.Base()->GetChildren().begin()->first;
-            TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
-            Y_ABORT_UNLESS(srcImplTable.Base()->PathId == srcIndexPath.Base()->GetChildren().begin()->second);
-            TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
+            for (const auto& [srcImplTableName, srcImplTablePathId] : srcIndexPath.Base()->GetChildren()) {
+                TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
+                Y_ABORT_UNLESS(srcImplTable.Base()->PathId == srcImplTablePathId);
+                TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 
-            result.push_back(CreateCopyTable(NextPartId(nextId, result),
-                CopyTableTask(srcImplTable, dstImplTable, descr.GetOmitFollowers(), descr.GetIsBackup())));
+                result.push_back(CreateCopyTable(
+                                     NextPartId(nextId, result),
+                                     CopyTableTask(srcImplTable, dstImplTable, descr)));
+            }
         }
 
         for (auto&& sequenceDescription : sequenceDescriptions) {
@@ -192,6 +221,14 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
             result.push_back(CreateCopySequence(NextPartId(nextId, result), scheme));
         }
     }
+
+    return true;
+}
+
+TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+    TVector<ISubOperation::TPtr> result;
+
+    CreateConsistentCopyTables(nextId, tx, context, result);
 
     return result;
 }

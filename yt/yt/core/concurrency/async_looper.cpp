@@ -83,7 +83,7 @@ void TAsyncLooper::DoStart()
 
 void TAsyncLooper::StartLoop(bool cleanStart, const TGuard& guard)
 {
-    VERIFY_SPINLOCK_AFFINITY(StateLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(StateLock_);
     YT_VERIFY(State_ == EState::Running);
     YT_VERIFY(Stage_ == EStage::Idle);
 
@@ -187,18 +187,9 @@ void TAsyncLooper::AfterStart(bool cleanStart, bool wasRestarted, ui64 epochNumb
                     // Caller of |Start| will start the new chain
                     // and we just bail out.
                     YT_LOG_DEBUG("Looper restart occured during the intermission between async and sync steps");
-
                     return;
                 }
                 break;
-
-            case EState::Restarting:
-                // Restarting requires stage to
-                // not be |Idle|.
-                // NB(arkady-e1ppa): Since enum is not macro generated
-                // it is not serializable.
-                YT_LOG_ERROR(
-                    "Looper encountered impossible state while starting sync step (State: Restarting)");
 
             default:
                 YT_ABORT();

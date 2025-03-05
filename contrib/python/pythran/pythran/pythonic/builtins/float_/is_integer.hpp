@@ -19,8 +19,8 @@ namespace builtins
     {
       return std::trunc(d) == d;
     }
-  }
-}
+  } // namespace float_
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

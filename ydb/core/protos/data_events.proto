@@ -66,6 +66,11 @@ message TMvccSnapshot {
     optional bool RepeatableRead = 12 [default = true];
 }
 
+enum ELockMode {
+    OPTIMISTIC = 0;
+    OPTIMISTIC_SNAPSHOT_ISOLATION = 1;
+}
+
 enum EDataFormat {
     FORMAT_UNSPECIFIED = 0;
     FORMAT_CELLVEC = 1;
@@ -115,6 +120,8 @@ message TEvWrite {
     // This mostly affects the minimum MVCC version of the resulting write
     optional TMvccSnapshot MvccSnapshot = 8;
     optional uint32 GranuleShardingVersionId = 9;
+
+    optional ELockMode LockMode = 10;
 }
 
 message TEvWriteResult {
@@ -130,6 +137,8 @@ message TEvWriteResult {
         STATUS_SCHEME_CHANGED = 8;
         STATUS_LOCKS_BROKEN = 9;
         STATUS_DISK_SPACE_EXHAUSTED = 10;
+        STATUS_WRONG_SHARD_STATE = 11;
+        STATUS_CONSTRAINT_VIOLATION = 12;
     }
 
     // Status

@@ -10,6 +10,7 @@ IF (SANITIZER_TYPE OR WITH_VALGRIND)
     TIMEOUT(1800)
     SIZE(LARGE)
     TAG(ya:fat sb:ttl=2)
+    INCLUDE(${ARCADIA_ROOT}/devtools/large_on_multi_slots.inc)
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
@@ -23,16 +24,16 @@ REQUIREMENTS(
 
 DATA(
     arcadia/contrib/ydb/docs/ru/core/postgresql/_includes/functions.md
-    arcadia/contrib/ydb/library/yql/cfg/udf_test
+    arcadia/yql/essentials/cfg/udf_test
     arcadia/yql/essentials/mount
 )
 
 PEERDIR(
-    contrib/ydb/library/yql/tests/common/test_framework
+    yql/essentials/tests/common/test_framework
 )
 
 DEPENDS(
-    contrib/ydb/library/yql/tools/yqlrun
+    yql/tools/yqlrun
     yql/essentials/udfs/common/re2
 )
 

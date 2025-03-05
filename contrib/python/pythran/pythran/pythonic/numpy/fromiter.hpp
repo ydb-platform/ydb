@@ -3,8 +3,8 @@
 
 #include "pythonic/include/numpy/fromiter.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -25,11 +25,11 @@ namespace numpy
     } else {
       utils::shared_ref<types::raw_array<T>> buffer(count);
       std::copy_n(iterable.begin(), count, buffer->data);
-      types::array<long, 1> shape = {count};
+      types::array_tuple<long, 1> shape = {count};
       return {buffer, shape};
     }
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-LeftJoin (MapJoin)-Filter",
+                                        "Node Type": "Limit-LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -47,19 +47,10 @@
                                                         "ExternalPlanNodeId": 15
                                                     },
                                                     {
-                                                        "InternalOperatorId": 2
-                                                    }
-                                                ],
-                                                "Name": "LeftJoin (MapJoin)"
-                                            },
-                                            {
-                                                "Inputs": [
-                                                    {
                                                         "ExternalPlanNodeId": 5
                                                     }
                                                 ],
-                                                "Name": "Filter",
-                                                "Predicate": "Exist(item.unique2)"
+                                                "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
                                         "PlanNodeId": 16,
@@ -88,6 +79,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
+                                                                                        "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                                         "ReadColumns": [
                                                                                             "thousand",
                                                                                             "twothousand",
@@ -122,7 +114,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "LeftJoin (MapJoin)-Filter",
+                                                        "Node Type": "LeftJoin (MapJoin)",
                                                         "Operators": [
                                                             {
                                                                 "Condition": "a.unique1 = b.thousand",
@@ -131,19 +123,10 @@
                                                                         "ExternalPlanNodeId": 13
                                                                     },
                                                                     {
-                                                                        "InternalOperatorId": 1
-                                                                    }
-                                                                ],
-                                                                "Name": "LeftJoin (MapJoin)"
-                                                            },
-                                                            {
-                                                                "Inputs": [
-                                                                    {
                                                                         "ExternalPlanNodeId": 10
                                                                     }
                                                                 ],
-                                                                "Name": "Filter",
-                                                                "Predicate": "Exist(item.thousand)"
+                                                                "Name": "LeftJoin (MapJoin)"
                                                             }
                                                         ],
                                                         "PlanNodeId": 14,
@@ -174,6 +157,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
+                                                                                        "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                                         "ReadColumns": [
                                                                                             "thousand",
                                                                                             "twothousand",
@@ -222,6 +206,7 @@
                                                                                                     {
                                                                                                         "Inputs": [],
                                                                                                         "Name": "TableFullScan",
+                                                                                                        "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                                                         "ReadColumns": [
                                                                                                             "thousand",
                                                                                                             "twothousand",

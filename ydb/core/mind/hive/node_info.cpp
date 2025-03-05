@@ -24,6 +24,14 @@ TNodeInfo::TNodeInfo(TNodeId nodeId, THive& hive)
 void TNodeInfo::ChangeVolatileState(EVolatileState state) {
     BLOG_W("Node(" << Id << ", " << ResourceValues << ") VolatileState: " << EVolatileStateName(VolatileState) << " -> " << EVolatileStateName(state));
 
+    if (VolatileState != state) {
+        if (VolatileState == EVolatileState::Connected) {
+            --Hive.AliveNodes;
+        } else if (state == EVolatileState::Connected) {
+            ++Hive.AliveNodes;
+        }
+    }
+
     if (state == EVolatileState::Connected) {
         switch (VolatileState) {
         case EVolatileState::Unknown:
@@ -110,13 +118,11 @@ bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debu
     bool result = false;
 
     for (const auto& candidate : effectiveAllowedDomains) {
-        if (Hive.DomainHasNodes(candidate)) {
-            result = std::find(ServicedDomains.begin(),
-                               ServicedDomains.end(),
-                               candidate) != ServicedDomains.end();
-            if (result) {
-                break;
-            }
+        result = std::find(ServicedDomains.begin(),
+                           ServicedDomains.end(),
+                           candidate) != ServicedDomains.end();
+        if (result) {
+            break;
         }
     }
 
@@ -203,7 +209,7 @@ bool TNodeInfo::IsAllowedToRunTablet(const TTabletInfo& tablet, TTabletDebugStat
     return true;
 }
 
-i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet) const {
+i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet, TDataCenterPriority& dcPriority) const {
     i32 priority = 0;
 
     auto it = TabletAvailability.find(tablet.GetTabletType());
@@ -214,6 +220,9 @@ i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet) const {
     if (tablet.FailedNodeId == Id) {
         --priority;
     }
+
+    priority += dcPriority[GetDataCenter()];
+    priority -= GetRestartsPerPeriod() / Hive.GetNodeRestartsForPenalty();
 
     return priority;
 }

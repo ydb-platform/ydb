@@ -4,6 +4,8 @@
 #include "polymorphic_yson_struct.h"
 #endif
 
+#include <yt/yt/core/misc/error.h>
+
 namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -50,7 +52,8 @@ TPolymorphicYsonStruct<TMapping>::TPolymorphicYsonStruct(TKey key)
 
 template <CPolymorphicEnumMapping TMapping>
 TPolymorphicYsonStruct<TMapping>::TPolymorphicYsonStruct(TKey key, TIntrusivePtr<TBase> ptr) noexcept
-    : Storage_(std::move(ptr))
+    : Storage_(ptr)
+    , SerializedStorage_(ConvertToNode(ptr))
     , HeldType_(key)
 {
     YT_VERIFY(Storage_);
@@ -71,7 +74,8 @@ void TPolymorphicYsonStruct<TMapping>::Load(
     // conversion smth? FillMap wont work since we
     // do not know the value_type of a map we would
     // parse (unless we want to slice which we don't).
-    IMapNodePtr map = TTraits::AsNode(source)->AsMap();
+    SerializedStorage_ = TTraits::AsNode(source);
+    IMapNodePtr map = SerializedStorage_->AsMap();
 
     if (!map || map->GetChildCount() == 0) {
         // Empty struct.
@@ -152,6 +156,38 @@ template <CPolymorphicEnumMapping TMapping>
 const typename TPolymorphicYsonStruct<TMapping>::TBase* TPolymorphicYsonStruct<TMapping>::operator->() const
 {
     return Storage_.Get();
+}
+
+template <CPolymorphicEnumMapping TMapping>
+void TPolymorphicYsonStruct<TMapping>::MergeWith(const TPolymorphicYsonStruct& other)
+{
+    if (!Storage_) {
+        *this = other;
+        return;
+    }
+
+    THROW_ERROR_EXCEPTION_UNLESS(
+        GetCurrentType() == other.GetCurrentType(),
+        "Can't merge polymorphic yson structs with different types stored (ThisType: %v, OtherType: %v)",
+        GetCurrentType(),
+        other.GetCurrentType());
+
+    SerializedStorage_ = PatchNode(SerializedStorage_, other.SerializedStorage_);
+
+    // NB(arkady-e1ppa): Since if there ever was a recursiveUnrecognizedStrategy, it would be kept
+    // in storage, so it is okay to supply nullopt.
+    Load(
+        SerializedStorage_,
+        /*postprocess*/ true,
+        /*setDefaults*/ true,
+        /*path*/ "",
+        /*recursiveUnrecognizedStrategy*/ std::nullopt);
+}
+
+template <CPolymorphicEnumMapping TMapping>
+TPolymorphicYsonStruct<TMapping>::operator bool() const
+{
+    return Storage_.operator bool();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

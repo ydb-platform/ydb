@@ -93,11 +93,9 @@ bool IsDescriptionValid(const THolder<TProposeResponse>& result, const NKikimrSc
 }
 
 bool IsResourcePoolInfoValid(const THolder<TProposeResponse>& result, const TResourcePoolInfo::TPtr& info) {
-    try {
-        NKikimr::NResourcePool::TPoolSettings settings(info->Properties.GetProperties());
-        settings.Validate();
-    } catch (...) {
-        result->SetError(NKikimrScheme::StatusSchemeError, CurrentExceptionMessage());
+    NKikimr::NResourcePool::TPoolSettings settings(info->Properties.GetProperties());
+    if (auto error = settings.Validate()) {
+        result->SetError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Invalid resource pool settings: " << error);
         return false;
     }
     return true;

@@ -431,9 +431,17 @@ void Serialize(const std::tuple<T...>& value, NYson::IYsonConsumer* consumer)
     NDetail::SerializeTuple(value, consumer);
 }
 
-// For any associative container.
+// TODO(eshcherbin): Add a concept for associative containers.
+// Any associative container (except TCompactFlatMap).
 template <template<typename...> class C, class... T, class K>
 void Serialize(const C<T...>& value, NYson::IYsonConsumer* consumer)
+{
+    NDetail::SerializeAssociative(value, consumer);
+}
+
+// TCompactFlatMap.
+template <class K, class V, size_t N>
+void Serialize(const TCompactFlatMap<K, V, N>& value, NYson::IYsonConsumer* consumer)
 {
     NDetail::SerializeAssociative(value, consumer);
 }

@@ -1,6 +1,9 @@
 #include "distconf.h"
 #include "node_warden_impl.h"
 #include <ydb/core/mind/dynamic_nameserver.h>
+#include <ydb/library/yaml_config/yaml_config_helpers.h>
+#include <ydb/library/yaml_config/yaml_config.h>
+#include <library/cpp/streams/zstd/zstd.h>
 
 namespace NKikimr::NStorage {
 
@@ -19,10 +22,11 @@ namespace NKikimr::NStorage {
         STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
 
         auto ns = NNodeBroker::BuildNameserverTable(Cfg->NameserviceConfig);
-        auto ev = std::make_unique<TEvInterconnect::TEvNodesInfo>();
+        auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
         for (const auto& [nodeId, item] : ns->StaticNodeTable) {
-            ev->Nodes.emplace_back(nodeId, item.Address, item.Host, item.ResolveHost, item.Port, item.Location);
+            nodes->emplace_back(nodeId, item.Address, item.Host, item.ResolveHost, item.Port, item.Location);
         }
+        auto ev = std::make_unique<TEvInterconnect::TEvNodesInfo>(nodes);
         Send(SelfId(), ev.release());
 
         // and subscribe for the node list too
@@ -30,10 +34,13 @@ namespace NKikimr::NStorage {
 
         // generate initial drive set and query stored configuration
         if (IsSelfStatic) {
-            EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
-                DrivesToRead.push_back(drive.GetPath());
-            });
-            std::sort(DrivesToRead.begin(), DrivesToRead.end());
+            if (BaseConfig.GetSelfManagementConfig().GetEnabled()) {
+                // read this only if it is possibly enabled
+                EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
+                    DrivesToRead.push_back(drive.GetPath());
+                });
+                std::sort(DrivesToRead.begin(), DrivesToRead.end());
+            }
             ReadConfig();
         } else {
             StorageConfigLoaded = true;
@@ -59,17 +66,55 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
-        if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration()) {
+        if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration() ||
+                (!IsSelfStatic && !config.GetGeneration() && !config.GetSelfManagementConfig().GetEnabled())) {
+            // extract the main config from newly applied section
+            MainConfigYaml = MainConfigFetchYaml = {};
+            MainConfigYamlVersion.reset();
+            MainConfigFetchYamlHash = 0;
+
+            if (config.HasConfigComposite()) {
+                // parse the composite stream
+                auto error = DecomposeConfig(config.GetConfigComposite(), &MainConfigYaml,
+                    &MainConfigYamlVersion.emplace(), &MainConfigFetchYaml);
+                if (error) {
+                    Y_ABORT("ConfigComposite format incorrect: %s", error->data());
+                }
+
+                // and _fetched_ config hash
+                MainConfigFetchYamlHash = NYaml::GetConfigHash(MainConfigFetchYaml);
+            }
+
+            // now extract the additional storage section
+            StorageConfigYaml.reset();
+            if (config.HasCompressedStorageYaml()) {
+                try {
+                    TStringInput ss(config.GetCompressedStorageYaml());
+                    TZstdDecompress zstd(&ss);
+                    StorageConfigYaml.emplace(zstd.ReadAll());
+                } catch (const std::exception& ex) {
+                    Y_ABORT("CompressedStorageYaml format incorrect: %s", ex.what());
+                }
+            }
+
+            SelfManagementEnabled = (!IsSelfStatic || BaseConfig.GetSelfManagementConfig().GetEnabled()) &&
+                config.GetSelfManagementConfig().GetEnabled() &&
+                config.GetGeneration();
+
             StorageConfig.emplace(config);
             if (ProposedStorageConfig && ProposedStorageConfig->GetGeneration() <= StorageConfig->GetGeneration()) {
                 ProposedStorageConfig.reset();
             }
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenStorageConfig(*StorageConfig,
-                ProposedStorageConfig ? &ProposedStorageConfig.value() : nullptr));
+
+            ReportStorageConfigToNodeWarden(0);
+
             if (IsSelfStatic) {
                 PersistConfig({});
                 ApplyConfigUpdateToDynamicNodes(false);
+                ConnectToConsole();
+                SendConfigProposeRequest();
             }
+
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
                 StorageConfig->GetFingerprint() != config.GetFingerprint()) {
@@ -196,6 +241,10 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(!Binding);
         } else {
             Y_ABORT_UNLESS(RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT);
+
+            // we can't have connection to the Console without being the root node
+            Y_ABORT_UNLESS(!ConsolePipeId);
+            Y_ABORT_UNLESS(!ConsoleConnected);
         }
     }
 #endif
@@ -250,6 +299,19 @@ namespace NKikimr::NStorage {
         }
     }
 
+    void TDistributedConfigKeeper::ReportStorageConfigToNodeWarden(ui64 cookie) {
+        Y_ABORT_UNLESS(StorageConfig);
+        const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
+        const NKikimrBlobStorage::TStorageConfig *config = SelfManagementEnabled
+            ? &StorageConfig.value()
+            : &BaseConfig;
+        const NKikimrBlobStorage::TStorageConfig *proposedConfig = ProposedStorageConfig && SelfManagementEnabled
+            ? &ProposedStorageConfig.value()
+            : nullptr;
+        auto ev = std::make_unique<TEvNodeWardenStorageConfig>(*config, proposedConfig, SelfManagementEnabled);
+        Send(wardenId, ev.release(), 0, cookie);
+    }
+
     STFUNC(TDistributedConfigKeeper::StateFunc) {
         STLOG(PRI_DEBUG, BS_NODE, NWDC15, "StateFunc", (Type, ev->GetTypeRewrite()), (Sender, ev->Sender),
             (SessionId, ev->InterconnectSession), (Cookie, ev->Cookie));
@@ -279,6 +341,11 @@ namespace NKikimr::NStorage {
             fFunc(TEvents::TSystem::Gone, HandleGone);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             cFunc(TEvents::TSystem::Poison, PassAway);
+            hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            hFunc(TEvBlobStorage::TEvControllerValidateConfigResponse, Handle);
+            hFunc(TEvBlobStorage::TEvControllerProposeConfigResponse, Handle);
+            hFunc(TEvBlobStorage::TEvControllerConsoleCommitResponse, Handle);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);
@@ -291,13 +358,44 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::StartDistributedConfigKeeper() {
         auto *appData = AppData();
-        const bool isSelfStatic = !appData->DynamicNameserviceConfig || SelfId().NodeId() <= appData->DynamicNameserviceConfig->MaxStaticNodeId;
-        DistributedConfigKeeperId = Register(new TDistributedConfigKeeper(Cfg, StorageConfig, isSelfStatic));
+        if (!appData->FeatureFlags.GetForceDistconfDisable()) {
+            const bool isSelfStatic = !appData->DynamicNameserviceConfig ||
+                SelfId().NodeId() <= appData->DynamicNameserviceConfig->MaxStaticNodeId;
+            DistributedConfigKeeperId = Register(new TDistributedConfigKeeper(Cfg, StorageConfig, isSelfStatic));
+        }
     }
 
     void TNodeWarden::ForwardToDistributedConfigKeeper(STATEFN_SIG) {
         ev->Rewrite(ev->GetTypeRewrite(), DistributedConfigKeeperId);
         TActivationContext::Send(ev.Release());
+    }
+
+
+    std::optional<TString> DecomposeConfig(const TString& configComposite, TString *mainConfigYaml,
+            ui64 *mainConfigVersion, TString *mainConfigFetchYaml) {
+        try {
+            TStringInput ss(configComposite);
+            TZstdDecompress zstd(&ss);
+
+            TString yaml = TString::Uninitialized(LoadSize(&zstd));
+            zstd.LoadOrFail(yaml.Detach(), yaml.size());
+            if (mainConfigVersion) {
+                auto metadata = NYamlConfig::GetMainMetadata(yaml);
+                Y_DEBUG_ABORT_UNLESS(metadata.Version.has_value());
+                *mainConfigVersion = metadata.Version.value_or(0);
+            }
+            if (mainConfigYaml) {
+                *mainConfigYaml = std::move(yaml);
+            }
+
+            if (mainConfigFetchYaml) {
+                *mainConfigFetchYaml = TString::Uninitialized(LoadSize(&zstd));
+                zstd.LoadOrFail(mainConfigFetchYaml->Detach(), mainConfigFetchYaml->size());
+            }
+        } catch (const std::exception& ex) {
+            return ex.what();
+        }
+        return std::nullopt;
     }
 
 } // NKikimr::NStorage

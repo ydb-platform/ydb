@@ -1,5 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -403,8 +403,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
                 SELECT * FROM TestImmediateEffects;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("Duplicated keys found.");
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
+                return issue.GetMessage().contains("Duplicated keys found.");
             }));
         }
     }
@@ -429,8 +429,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
                 SELECT * FROM TestImmediateEffects;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const NYql::TIssue& issue) {
-                return issue.GetMessage().Contains("Conflict with existing key.");
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
+                return issue.GetMessage().contains("Conflict with existing key.");
             }));
         }
     }
@@ -921,7 +921,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx;
+        std::optional<TTransaction> tx;
         {
             auto result = session1.ExecuteDataQuery(R"(
                 --!syntax_v1
@@ -992,7 +992,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session);
 
-        TMaybe<TTransaction> tx;
+        std::optional<TTransaction> tx;
         {
             auto result = session.ExecuteDataQuery(R"(
                 --!syntax_v1
@@ -1070,7 +1070,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
 
-        TMaybe<TTransaction> tx;
+        std::optional<TTransaction> tx;
         {
             auto result = session.ExecuteDataQuery(R"(
                 --!syntax_v1
@@ -1174,7 +1174,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
 
-        TMaybe<TTransaction> tx;
+        std::optional<TTransaction> tx;
         {
             auto result = session.ExecuteDataQuery(R"(
                 --!syntax_v1
@@ -1232,7 +1232,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session);
 
-        TMaybe<TTransaction> tx1;
+        std::optional<TTransaction> tx1;
         auto session1 = db.CreateSession().GetValueSync().GetSession();
         {
             auto result = session1.ExecuteDataQuery(R"(
@@ -1246,7 +1246,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
             UNIT_ASSERT(tx1);
         }
 
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx2;
         auto session2 = db.CreateSession().GetValueSync().GetSession();
         {
             auto result = session2.ExecuteDataQuery(R"(
@@ -1310,7 +1310,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session);
 
-        TMaybe<TTransaction> tx1;
+        std::optional<TTransaction> tx1;
         auto session1 = db.CreateSession().GetValueSync().GetSession();
         {
             auto result = session1.ExecuteDataQuery(R"(
@@ -1326,7 +1326,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
             UNIT_ASSERT(tx1);
         }
 
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx2;
         auto session2 = db.CreateSession().GetValueSync().GetSession();
         {
             // This just establishes a snapshot that is before tx1 commit
@@ -1400,7 +1400,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
 
         auto session1 = db.CreateSession().GetValueSync().GetSession();
-        TMaybe<TTransaction> tx1;
+        std::optional<TTransaction> tx1;
         {
             auto result = session.ExecuteDataQuery(R"(
                 --!syntax_v1
@@ -1448,8 +1448,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // read1
             auto result = session1.ExecuteDataQuery(R"(
@@ -1505,8 +1505,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // read1
             auto result = session1.ExecuteDataQuery(R"(
@@ -1566,8 +1566,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // read1
             auto result = session1.ExecuteDataQuery(R"(
@@ -1627,8 +1627,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // write1
             auto result = session1.ExecuteDataQuery(R"(
@@ -1684,8 +1684,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // write1
             auto result = session1.ExecuteDataQuery(R"(
@@ -1739,8 +1739,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // write1
             auto result = session1.ExecuteDataQuery(R"(
@@ -1795,8 +1795,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // write1
             auto result = session1.ExecuteDataQuery(R"(
@@ -1851,8 +1851,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // read1 + write1
             auto result = session1.ExecuteDataQuery(R"(
@@ -1912,8 +1912,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // read1 + write1
             auto result = session1.ExecuteDataQuery(R"(
@@ -1968,8 +1968,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // read1 + write1
             auto result = session1.ExecuteDataQuery(R"(
@@ -2025,8 +2025,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session1);
 
-        TMaybe<TTransaction> tx1;
-        TMaybe<TTransaction> tx2;
+        std::optional<TTransaction> tx1;
+        std::optional<TTransaction> tx2;
 
         {  // read1 + write1
             auto result = session1.ExecuteDataQuery(R"(
@@ -2084,7 +2084,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
         CreateShardedTestTable(session);
 
-        TMaybe<TTransaction> tx;
+        std::optional<TTransaction> tx;
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
 
@@ -2227,6 +2227,160 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         }
     }
 
+    Y_UNIT_TEST(ManyFlushes) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateTestTable(session);
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (3u, "Three"),
+                    (4u, "Four");
+
+                SELECT * FROM TestImmediateEffects;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]]
+            ])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+
+        {  // multiple effects
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES (5u, "Five");
+                SELECT * FROM TestImmediateEffects;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES (6u, "Six");
+                SELECT * FROM TestImmediateEffects;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES (7u, "Seven");
+                SELECT * FROM TestImmediateEffects;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]];
+                [[5u];["Five"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]];
+                [[5u];["Five"]];
+                [[6u];["Six"]]
+            ])", FormatResultSetYson(result.GetResultSet(1)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]];
+                [[5u];["Five"]];
+                [[6u];["Six"]];
+                [[7u];["Seven"]]
+            ])", FormatResultSetYson(result.GetResultSet(2)));
+        }
+    }
+
+     Y_UNIT_TEST(Interactive) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateTestTable(session);
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (3u, "Three"),
+                    (4u, "Four");
+
+                SELECT * FROM TestImmediateEffects;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]]
+            ])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES (5u, "Five");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto tx = result.GetTransaction();
+
+            result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES (6u, "Six");
+                SELECT * FROM TestImmediateEffects;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES (7u, "Seven");
+                SELECT * FROM TestImmediateEffects;
+            )", TTxControl::Tx(*tx)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]];
+                [[5u];["Five"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]];
+                [[5u];["Five"]];
+                [[6u];["Six"]]
+            ])", FormatResultSetYson(result.GetResultSet(1)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]];
+                [[5u];["Five"]];
+                [[6u];["Six"]];
+                [[7u];["Seven"]]
+            ])", FormatResultSetYson(result.GetResultSet(2)));
+
+            auto commitResult = tx->Commit().ExtractValueSync();
+            UNIT_ASSERT(commitResult.IsSuccess());
+        }
+    }
 }
 
 } // namespace NKqp

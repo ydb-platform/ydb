@@ -21,9 +21,10 @@ message TPDiskState {
         OpenFileError = 11;
         ChunkQuotaError = 12;
         DeviceIoError = 13;
-        Reserved14 = 14;
+        Stopped = 14;
         Reserved15 = 15;
         Reserved16 = 16;
+        Reserved17 = 17;
 
         Missing = 252;
         Timeout = 253;
@@ -66,6 +67,8 @@ message TVDiskMetrics {
     optional NKikimrWhiteboard.EVDiskState State = 11;
     optional bool Replicated = 12;
     optional NKikimrWhiteboard.EFlag DiskSpace = 13;
+    optional bool IsThrottling = 14;
+    optional uint32 ThrottlingRate = 15;
 }
 
 message TPDiskMetrics {

@@ -4,7 +4,7 @@
 
 To connect to an external {{ ydb-short-name }} database from another {{ ydb-short-name }} database acting as the federated query engine, the following steps need to be performed on the latter:
 
-1. Prepare authentication data to access the remote {{ ydb-short-name }} database. Currently, in federated queries to {{ ydb-short-name }}, the only available authentication method  is [login and password](../../concepts/auth.md#static-credentials) (other methods are not supported). The password to the external database is stored as a [secret](../datamodel/secrets.md):
+1. Prepare authentication data to access the remote {{ ydb-short-name }} database. Currently, in federated queries to {{ ydb-short-name }}, the only available authentication method  is [login and password](../../security/authentication.md#static-credentials) (other methods are not supported). The password to the external database is stored as a [secret](../datamodel/secrets.md):
 
     ```yql
     CREATE OBJECT ydb_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
@@ -71,24 +71,25 @@ There are several limitations when working with external {{ ydb-short-name }} da
 
 ## Supported data types
 
-When working with tables located in the external {{ ydb-short-name }} database, users have access to a limited set of data types. All other types, except for those listed below, are not supported. Type conversion is not performed, meaning that the columns of the table from the external {{ ydb-short-name }} database retain their type after being read by the {{ ydb-short-name }} database processing the federated query.
+When working with tables located in the external {{ ydb-short-name }} database, users have access to a limited set of data types. All other types, except for those listed below, are not supported. In some cases the type conversion is performed, meaning that the columns of the table from the external {{ ydb-short-name }} database may change their type after being read by the {{ ydb-short-name }} database processing the federated query.
 
-|{{ ydb-short-name }} Data Type|
-|----|
-|`Bool`|
-|`Int8`|
-|`Int16`|
-|`Int32`|
-|`Int64`|
-|`Uint8`|
-|`Uint16`|
-|`Uint32`|
-|`Uint64`|
-|`Float`|
-|`Double`|
-|`String`|
-|`Utf8`|
-|`Date`|
-|`Datetime`|
-|`Timestamp`|
-|`Json`|
+|External {{ ydb-short-name }} data type|Federated {{ ydb-short-name }} data type|
+|---------|---------|
+|`Bool`|`Bool`|
+|`Int8`|`Int8`|
+|`Int16`|`Int16`|
+|`Int32`|`Int32`|
+|`Int64`|`Int64`|
+|`Uint8`|`Uint8`|
+|`Uint16`|`Uint16`|
+|`Uint32`|`Uint32`|
+|`Uint64`|`Uint64`|
+|`Float`|`Float`|
+|`Double`|`Double`|
+|`String`|`String`|
+|`Utf8`|`Utf8`|
+|`Date`|`Date`|
+|`Datetime`|`Datetime`|
+|`Timestamp`|`Timestamp`|
+|`Json`|`Json`|
+|`JsonDocument`|`Json`|

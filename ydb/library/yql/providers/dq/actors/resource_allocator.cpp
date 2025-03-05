@@ -92,7 +92,7 @@ private:
     static TDuration GetAllocationTimeout(int workerCount, const TDqConfiguration::TPtr settings) {
         ui64 timeout = workerCount == 1
             ? settings->_LiteralTimeout.Get().GetOrElse(TDqSettings::TDefault::LiteralTimeout)
-            : settings->_TableTimeout.Get().GetOrElse(TDqSettings::TDefault::TableTimeout);
+            : settings->GetQueryTimeout();
         if (timeout & (1ULL<<63)) {
             return TDuration(); // no timeout
         }

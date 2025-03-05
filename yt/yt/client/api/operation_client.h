@@ -26,6 +26,7 @@ struct TSuspendOperationOptions
     : public TTimeoutOptions
 {
     bool AbortRunningJobs = false;
+    std::optional<TString> Reason;
 };
 
 struct TResumeOperationOptions
@@ -37,6 +38,10 @@ struct TCompleteOperationOptions
 { };
 
 struct TUpdateOperationParametersOptions
+    : public TTimeoutOptions
+{ };
+
+struct TPatchOperationSpecOptions
     : public TTimeoutOptions
 { };
 
@@ -109,11 +114,11 @@ struct TGetJobFailContextOptions
 struct TListOperationsAccessFilter
     : public NYTree::TYsonStruct
 {
-    TString Subject;
+    std::string Subject;
     NYTree::EPermissionSet Permissions;
 
     // This parameter cannot be set from YSON, it must be computed.
-    THashSet<TString> SubjectTransitiveClosure;
+    THashSet<std::string> SubjectTransitiveClosure;
 
     REGISTER_YSON_STRUCT(TListOperationsAccessFilter);
 
@@ -166,16 +171,16 @@ struct TPollJobShellResponse
 };
 
 DEFINE_ENUM(EJobSortField,
-    ((None)       (0))
-    ((Type)       (1))
-    ((State)      (2))
-    ((StartTime)  (3))
-    ((FinishTime) (4))
-    ((Address)    (5))
-    ((Duration)   (6))
-    ((Progress)   (7))
-    ((Id)         (8))
-    ((TaskName)   (9))
+    ((None)             (0))
+    ((Type)             (1))
+    ((State)            (2))
+    ((StartTime)        (3))
+    ((FinishTime)       (4))
+    ((Address)          (5))
+    ((Duration)         (6))
+    ((Progress)         (7))
+    ((Id)               (8))
+    ((TaskName)         (9))
 );
 
 DEFINE_ENUM(EJobSortDirection,
@@ -205,6 +210,12 @@ struct TListJobsOptions
     std::optional<bool> WithCompetitors;
     std::optional<bool> WithMonitoringDescriptor;
     std::optional<TString> TaskName;
+    std::optional<std::string> OperationIncarnation;
+
+    std::optional<TInstant> FromTime;
+    std::optional<TInstant> ToTime;
+
+    std::optional<TString> ContinuationToken;
 
     TDuration RunningJobsLookbehindPeriod = TDuration::Max();
 
@@ -220,6 +231,32 @@ struct TListJobsOptions
     bool IncludeArchive = false;
     EDataSource DataSource = EDataSource::Auto;
 };
+
+struct TListJobsContinuationToken
+    : public TListJobsOptions
+{
+    int Version = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TListJobsContinuationTokenSerializer
+    : public virtual NYTree::TExternalizedYsonStruct
+{
+public:
+    REGISTER_EXTERNALIZED_YSON_STRUCT(TListJobsContinuationToken, TListJobsContinuationTokenSerializer);
+
+    static void Register(TRegistrar registrar);
+};
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TListJobsContinuationToken, TListJobsContinuationTokenSerializer);
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString EncodeNewToken(TListJobsOptions&& options, int jobCount);
+TListJobsOptions DecodeListJobsOptionsFromToken(const TString& continuationToken);
+
+////////////////////////////////////////////////////////////////////////////////
 
 struct TAbandonJobOptions
     : public TTimeoutOptions
@@ -266,7 +303,7 @@ struct TOperation
     std::optional<TInstant> StartTime;
     std::optional<TInstant> FinishTime;
 
-    std::optional<TString> AuthenticatedUser;
+    std::optional<std::string> AuthenticatedUser;
 
     NYson::TYsonString BriefSpec;
     NYson::TYsonString Spec;
@@ -282,6 +319,7 @@ struct TOperation
     NYson::TYsonString RuntimeParameters;
 
     std::optional<bool> Suspended;
+    std::optional<std::string> SuspendReason;
 
     NYson::TYsonString Events;
     NYson::TYsonString Result;
@@ -351,6 +389,7 @@ struct TJob
     std::optional<TString> MonitoringDescriptor;
     std::optional<ui64> JobCookie;
     NYson::TYsonString ArchiveFeatures;
+    std::optional<std::string> OperationIncarnation;
 
     std::optional<bool> IsStale;
 
@@ -387,6 +426,8 @@ struct TListJobsResult
     TListJobsStatistics Statistics;
 
     std::vector<TError> Errors;
+
+    std::optional<TString> ContinuationToken;
 };
 
 struct TGetJobStderrResponse
@@ -441,6 +482,11 @@ struct IOperationClient
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const NYson::TYsonString& parameters,
         const TUpdateOperationParametersOptions& options = {}) = 0;
+
+    virtual TFuture<void> PatchOperationSpec(
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const NScheduler::TSpecPatchList& patches,
+        const TPatchOperationSpecOptions& options = {}) = 0;
 
     virtual TFuture<TOperation> GetOperation(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
@@ -513,4 +559,3 @@ struct IOperationClient
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

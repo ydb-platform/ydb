@@ -153,6 +153,27 @@ message TEvLogin {
 message TEvLoginResult {
     optional string Error = 1;
     optional string Token = 2;  // signed jwt token
+    optional string SanitizedToken = 3;  // sanitized token without signature
+    optional bool IsAdmin = 4;
+}
+
+message TEvListUsers {
+
+}
+
+message TEvListUsersResult {
+    message TUser {
+        optional string Name = 1;
+        optional bool IsEnabled = 2;
+        optional bool IsLockedOut = 3;
+        optional uint64 CreatedAt = 4;
+        optional uint64 LastSuccessfulAttemptAt = 5;
+        optional uint64 LastFailedAttemptAt = 6;
+        optional uint32 FailedAttemptCount = 7;
+        optional string PasswordHash = 8; // JSON with type, salt and password hash
+    }
+
+    repeated TUser Users = 1;
 }
 
 // Sending actor registers itself to be notified when tx completes
@@ -419,4 +440,38 @@ message TEvFindTabletSubDomainPathIdResult {
 }
 
 message TEvOwnerActorAck {
+}
+
+message TEvTenantDataErasureRequest {
+    optional uint64 Generation = 1;
+}
+
+message TEvTenantDataErasureResponse {
+    enum EStatus {
+        UNSPECIFIED = 0;
+        COMPLETED = 1;
+        IN_PROGRESS = 2;
+    }
+
+    optional NKikimrProto.TPathID PathId = 1;
+    optional uint64 Generation = 2;
+    optional EStatus Status = 3;
+}
+
+message TEvDataErasureInfoRequest {
+}
+
+message TEvDataErasureInfoResponse {
+    enum EStatus {
+        UNSPECIFIED = 0;
+        COMPLETED = 1;
+        IN_PROGRESS_TENANT = 2;
+        IN_PROGRESS_BSC = 3;
+    }
+
+    optional EStatus Status = 1;
+    optional uint64 Generation = 2;
+}
+
+message TEvDataErasureManualStartupRequest {
 }

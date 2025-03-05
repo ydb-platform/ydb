@@ -14,6 +14,8 @@ SRCS(
     scan.cpp
     splitter.cpp
     portions.cpp
+    writes_monitor.cpp
+    portion_index.cpp
 )
 
 PEERDIR(

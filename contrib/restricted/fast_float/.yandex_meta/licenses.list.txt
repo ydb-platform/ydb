@@ -192,28 +192,25 @@
 
 ====================Apache-2.0====================
 Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
+2.0</a> or <a href="LICENSE-MIT">MIT license</a> or <a
 
 
 ====================Apache-2.0====================
-Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
-2.0</a> or <a href="LICENSE-MIT">MIT license</a> or <a href="LICENSE-BOOST">BOOST license</a> .
-
-
-====================Apache-2.0====================
-under the Apache 2.0 license.
+was originally published under the Apache 2.0 license.
 
 
 ====================Apache-2.0 AND MIT====================
-under the Apache 2.0 license.
+was originally published under the Apache 2.0 license.
 
 ## License
 
 <sup>
 Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
-2.0</a> or <a href="LICENSE-MIT">MIT license</a> or <a href="LICENSE-BOOST">BOOST license</a> .
+2.0</a> or <a href="LICENSE-MIT">MIT license</a> or <a
+href="LICENSE-BOOST">BOOST license</a>.
 </sup>
 
-<br>
+<br/>
 
 <sub>
 Unless you explicitly state otherwise, any contribution intentionally submitted
@@ -221,8 +218,8 @@ for inclusion in this repository by you, as defined in the Apache-2.0 license,
 shall be triple licensed as above, without any additional terms or conditions.
 
 
-====================BSL-1.0====================
-2.0</a> or <a href="LICENSE-MIT">MIT license</a> or <a href="LICENSE-BOOST">BOOST license</a> .
+====================Apache-2.0 OR MIT OR BSL-1.0====================
+Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
 
 
 ====================BSL-1.0====================
@@ -250,6 +247,10 @@ FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
+====================BSL-1.0 AND BSL-1.0====================
+href="LICENSE-BOOST">BOOST license</a>.
+
+
 ====================COPYRIGHT====================
    Copyright 2021 The fast_float authors
 
@@ -264,7 +265,7 @@ João Paulo Magalhaes
 
 
 ====================MIT====================
-2.0</a> or <a href="LICENSE-MIT">MIT license</a> or <a href="LICENSE-BOOST">BOOST license</a> .
+2.0</a> or <a href="LICENSE-MIT">MIT license</a> or <a
 
 
 ====================MIT====================

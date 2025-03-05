@@ -65,14 +65,16 @@ public:
     TProgramPtr Create(
             const TFile& file,
             const TString& sessionId = TString(),
-            const TQContext& qContext = {});
+            const TQContext& qContext = {},
+            TMaybe<TString> gatewaysForMerge = {});
 
     TProgramPtr Create(
             const TString& filename,
             const TString& sourceCode,
             const TString& sessionId = TString(),
             EHiddenMode hiddenMode = EHiddenMode::Disable,
-            const TQContext& qContext = {});
+            const TQContext& qContext = {},
+            TMaybe<TString> gatewaysForMerge = {});
 
     void UnrepeatableRandom();
 private:
@@ -349,7 +351,8 @@ private:
         bool enableRangeComputeFor,
         const IArrowResolver::TPtr& arrowResolver,
         EHiddenMode hiddenMode,
-        const TQContext& qContext);
+        const TQContext& qContext,
+        TMaybe<TString> gatewaysForMerge);
 
     TTypeAnnotationContextPtr BuildTypeAnnotationContext(const TString& username);
     TTypeAnnotationContextPtr GetAnnotationContext() const;
@@ -377,7 +380,7 @@ private:
     std::optional<bool> CheckFallbackIssues(const TIssues& issues);
     void HandleSourceCode(TString& sourceCode);
     void HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
-        const NSQLTranslation::TTranslationSettings*& currentSettings);
+        NSQLTranslation::TTranslationSettings*& currentSettings);
 
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
@@ -386,9 +389,9 @@ private:
 
     TAstNode* AstRoot_;
     std::unique_ptr<TMemoryPool> AstPool_;
-    const IModuleResolver::TPtr Modules_;
     TAutoPtr<TExprContext> ExprCtx_;
     TTypeAnnotationContextPtr TypeCtx_;
+    const IModuleResolver::TPtr Modules_;
 
     TVector<TDataProviderInitializer> DataProvidersInit_;
     TAdaptiveLock DataProvidersLock_;
@@ -443,6 +446,7 @@ private:
     TMaybe<TString> LineageStr_;
 
     TQContext QContext_;
+    TMaybe<TString> GatewaysForMerge_;
     TIssues FinalIssues_;
 };
 

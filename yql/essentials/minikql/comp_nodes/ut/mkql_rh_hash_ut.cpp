@@ -375,6 +375,90 @@ Y_UNIT_TEST_SUITE(TMiniKQLRobinHoodHashTest) {
         Cerr << "maxDistance2: " << maxDistance2 << "\n";
         UNIT_ASSERT(maxDistance2 < 20);
     }
+
+    Y_UNIT_TEST(Lookup) {
+        TRobinHoodHashMap<i32> rh(sizeof(i64));
+        std::unordered_map<i32, i64> h;
+        for (ui64 i = 0; i < 10000; ++i) {
+            auto k = i % 1000;
+            auto [it, inserted] = h.emplace(k, 0);
+            bool isNew;
+            auto iter = rh.Insert(k, isNew);
+            UNIT_ASSERT_VALUES_EQUAL(rh.GetKey(iter), k);
+            UNIT_ASSERT_VALUES_EQUAL(isNew, inserted);
+            it->second += i;
+            if (isNew) {
+                *(i64*)rh.GetMutablePayload(iter) = i;
+                rh.CheckGrow();
+            } else {
+                *(i64*)rh.GetMutablePayload(iter) += i;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(h.size(), rh.GetSize());
+        }
+
+        for (ui64 i = 0; i < 1000; ++i) {
+            auto iter = rh.Lookup(i);
+            auto hit = h.find(i);
+            UNIT_ASSERT_VALUES_EQUAL(*(i64*)rh.GetPayload(iter), hit->second);
+            h.erase(hit);
+        }
+
+        UNIT_ASSERT(h.empty());
+    }
+
+    Y_UNIT_TEST(BatchLookup) {
+        using THashTable = TRobinHoodHashMap<i32>;
+        THashTable rh(sizeof(i64));
+        std::unordered_map<i32, i64> h;
+        for (ui64 i = 0; i < 10000; ++i) {
+            auto k = i % 1000;
+            auto [it, inserted] = h.emplace(k, 0);
+            bool isNew;
+            auto iter = rh.Insert(k, isNew);
+            UNIT_ASSERT_VALUES_EQUAL(rh.GetKey(iter), k);
+            UNIT_ASSERT_VALUES_EQUAL(isNew, inserted);
+            it->second += i;
+            if (isNew) {
+                *(i64*)rh.GetMutablePayload(iter) = i;
+                rh.CheckGrow();
+            } else {
+                *(i64*)rh.GetMutablePayload(iter) += i;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(h.size(), rh.GetSize());
+        }
+
+        std::array<TRobinHoodBatchRequestItem<i32>, PrefetchBatchSize> batch;
+        std::array<ui64, PrefetchBatchSize> batchI;
+        ui32 batchLen = 0;
+
+        auto processBatch = [&]() {
+            rh.BatchLookup({batch.data(), batchLen}, [&](size_t i, THashTable::iterator iter) {
+                auto key = batchI[i];
+                auto hit = h.find(key);
+                UNIT_ASSERT_VALUES_EQUAL(*(i64*)rh.GetPayload(iter), hit->second);
+                h.erase(hit);
+            });
+        };
+
+        for (ui64 i = 0; i < 1000; ++i) {
+            if (batchLen == batch.size()) {
+                processBatch();
+                batchLen = 0;
+            }
+
+            batch[batchLen].ConstructKey(i);
+            batchI[batchLen] = i;
+            ++batchLen;
+        }
+
+        if (batchLen > 0) {
+            processBatch();
+        }
+
+        UNIT_ASSERT(h.empty());
+    }
 }
 
 }

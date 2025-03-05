@@ -753,11 +753,11 @@ void TResultSetPrinter::EndLineBeforeNextResult() {
 }
 
 void TResultSetPrinter::PrintPretty(const TResultSet& resultSet) {
-    const TVector<TColumn>& columns = resultSet.GetColumnsMeta();
+    const std::vector<TColumn>& columns = resultSet.GetColumnsMeta();
     TResultSetParser parser(resultSet);
     TVector<TString> columnNames;
     for (const auto& column : columns) {
-        columnNames.push_back(column.Name);
+        columnNames.push_back(TString{column.Name});
     }
 
     TPrettyTableConfig tableConfig;
@@ -766,9 +766,12 @@ void TResultSetPrinter::PrintPretty(const TResultSet& resultSet) {
         tableConfig.WithoutHeader();
     }
     TPrettyTable table(columnNames, tableConfig);
-
-    while (parser.TryNextRow()) {
+    for (size_t printed = 0; parser.TryNextRow(); ++printed) {
         auto& row = table.AddRow();
+        if (Settings.GetMaxRowsCount() && printed >= Settings.GetMaxRowsCount()) {
+            row.FreeText(TStringBuilder() << "And " << (resultSet.RowsCount() - printed) << " more lines, total " << resultSet.RowsCount());
+            break;
+        }
         for (ui32 i = 0; i < columns.size(); ++i) {
             row.Column(i, FormatValueJson(parser.GetValue(i), EBinaryStringEncoding::Unicode));
         }
@@ -782,12 +785,16 @@ void TResultSetPrinter::PrintJsonArray(const TResultSet& resultSet, EBinaryStrin
 
     TResultSetParser parser(resultSet);
     bool firstRow = true;
-    while (parser.TryNextRow()) {
+    for (size_t printed = 0; parser.TryNextRow(); ++printed) {
         if (!firstRow || !FirstPart) {
             EndLineBeforeNextResult();
         }
         if (firstRow) {
             firstRow = false;
+        }
+        if (Settings.GetMaxRowsCount() && printed >= Settings.GetMaxRowsCount()) {
+            *Settings.GetOutput() << "And " << (resultSet.RowsCount() - printed) << " more lines, total " << resultSet.RowsCount();
+            break;
         }
         NJsonWriter::TBuf writer(NJsonWriter::HEM_UNSAFE, Settings.GetOutput());
         FormatResultRowJson(parser, columns, writer, encoding);
@@ -795,7 +802,7 @@ void TResultSetPrinter::PrintJsonArray(const TResultSet& resultSet, EBinaryStrin
 }
 
 void TResultSetPrinter::PrintCsv(const TResultSet& resultSet, const char* delim) {
-    const TVector<TColumn>& columns = resultSet.GetColumnsMeta();
+    const std::vector<TColumn>& columns = resultSet.GetColumnsMeta();
     TResultSetParser parser(resultSet);
     if (Settings.IsCsvWithHeader()) {
         for (ui32 i = 0; i < columns.size(); ++i) {
@@ -806,7 +813,11 @@ void TResultSetPrinter::PrintCsv(const TResultSet& resultSet, const char* delim)
         }
         *Settings.GetOutput() << Endl;
     }
-    while (parser.TryNextRow()) {
+    for (size_t printed = 0; parser.TryNextRow(); ++printed) {
+        if (Settings.GetMaxRowsCount() && printed >= Settings.GetMaxRowsCount()) {
+            *Settings.GetOutput() << "And " << (resultSet.RowsCount() - printed) << " more lines, total " << resultSet.RowsCount() << Endl;
+            break;
+        }
         for (ui32 i = 0; i < columns.size(); ++i) {
             *Settings.GetOutput() << FormatValueJson(parser.GetValue(i), EBinaryStringEncoding::Unicode);
             if (i < columns.size() - 1) {

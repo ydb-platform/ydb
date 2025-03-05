@@ -10,10 +10,10 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
@@ -544,34 +544,44 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         NYdb::TKikimrWithGrpcAndRootSchema server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
 
-        ui16 grpc = server.GetPort();
-        auto connection = NYdb::TDriver(NYdb::TDriverConfig()
+        // Grant `connect` to user
+        {
+            ui16 grpc = server.GetPort();
+            auto connection = NYdb::TDriver(NYdb::TDriverConfig()
+            .SetEndpoint(TStringBuilder() << "localhost:" << grpc)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin"));
+
+            NYdb::NTable::TTableClient tableClient(connection);
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery("GRANT CONNECT ON `/Root` TO `user@builtin`").ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            ui16 grpc = server.GetPort();
+            auto connection = NYdb::TDriver(NYdb::TDriverConfig()
             .SetEndpoint(TStringBuilder() << "localhost:" << grpc)
             .SetDatabase("/Root")
             .SetAuthToken("user@builtin"));
-        NYdb::NQuery::TQueryClient client(connection);
 
-        // Wait until KQP proxy is set up
-        {
-            NYdb::EStatus scriptStatus = NYdb::EStatus::UNAVAILABLE;
+            // Wait until KQP proxy is set up
+            NYdb::EStatus scriptStatus;
+            NYdb::NQuery::TQueryClient client(connection);            
             do {
                 auto executeScrptsResult = client.ExecuteScript("SELECT 42").ExtractValueSync();
                 scriptStatus = executeScrptsResult.Status().GetStatus();
                 UNIT_ASSERT_C(scriptStatus == NYdb::EStatus::UNAVAILABLE || scriptStatus == NYdb::EStatus::SUCCESS, executeScrptsResult.Status().GetIssues().ToString());
-                UNIT_ASSERT(scriptStatus == NYdb::EStatus::UNAVAILABLE || executeScrptsResult.Metadata().ExecutionId);
+                UNIT_ASSERT(scriptStatus == NYdb::EStatus::UNAVAILABLE || !executeScrptsResult.Metadata().ExecutionId.empty());
                 Sleep(TDuration::MilliSeconds(10));
             } while (scriptStatus == NYdb::EStatus::UNAVAILABLE);
+
+            // Check access to `.metadata/script_executions`
+            NYdb::NTable::TTableClient tableClient(connection);
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery("SELECT * FROM `.metadata/script_executions`", NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
         }
-
-        NYdb::NTable::TTableClient tableClient(connection);
-        auto session = tableClient.CreateSession().GetValueSync().GetSession();
-        auto result = session.ExecuteDataQuery("SELECT * FROM `.metadata/script_executions`", NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
-
-        NYdb::NScheme::TSchemeClient schemeClient(connection);
-        auto listResult = schemeClient.ListDirectory("/Root/.metadata").GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::UNAUTHORIZED, listResult.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(listResult.GetIssues().ToString(), "Access denied");
     }
 
     Y_UNIT_TEST(ExecuteScriptFailsWithoutFeatureFlag) {

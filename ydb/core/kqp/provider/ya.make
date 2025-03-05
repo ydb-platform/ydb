@@ -28,6 +28,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/protos
     ydb/core/docapi
+    ydb/core/scheme
     ydb/core/kqp/query_data
     ydb/library/aclib
     ydb/library/aclib/protos
@@ -37,7 +38,7 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/public/decimal
     ydb/public/lib/scheme_types
-    ydb/public/sdk/cpp/client/ydb_topic
+    ydb/public/sdk/cpp/src/client/topic
     yql/essentials/core/expr_nodes
     yql/essentials/core/peephole_opt
     yql/essentials/parser/pg_wrapper/interface
@@ -52,6 +53,15 @@ PEERDIR(
     yql/essentials/providers/result/expr_nodes
     yql/essentials/providers/result/provider
     yql/essentials/sql
+    yql/essentials/sql/v1
+    yql/essentials/sql/v1/lexer/antlr4
+    yql/essentials/sql/v1/lexer/antlr4_ansi
+    yql/essentials/sql/v1/proto_parser/antlr4
+    yql/essentials/sql/v1/proto_parser/antlr4_ansi
+    yql/essentials/sql/v1/lexer/antlr3
+    yql/essentials/sql/v1/lexer/antlr3_ansi
+    yql/essentials/sql/v1/proto_parser/antlr3
+    yql/essentials/sql/v1/proto_parser/antlr3_ansi
     ydb/library/ydb_issue/proto
     yql/essentials/public/issue
     yql/essentials/utils/log

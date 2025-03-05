@@ -14,11 +14,11 @@ using EState = NKikimrPQ::TTransaction::EState;
 
 namespace {
     struct TTransactionSnapshot {
-        TTransactionSnapshot(const TDistributedTransaction& tx)
+        explicit TTransactionSnapshot(const TDistributedTransaction& tx)
             : TxId(tx.TxId)
             , Step(tx.Step)
             , State(tx.State)
-            , MinStep(tx.MaxStep)
+            , MinStep(tx.MinStep)
             , MaxStep(tx.MaxStep) {
         }
 
@@ -119,12 +119,12 @@ private:
                                     for (auto& tx : Transactions) {
                                         TABLER() {
                                             TABLED() {
-                                                HREF(TStringBuilder() << "?TxId=" << tx.TxId) {
+                                                HREF(TStringBuilder() << "?TabletID=" << TabletID << "&TxId=" << tx.TxId) {
                                                     str << tx.TxId;
                                                 }
                                             }
-                                            TABLED() {str << tx.Step;}
-                                            TABLED() {str << (int)tx.State;}
+                                            TABLED() {str << GetTxStep(tx);}
+                                            TABLED() {str << NKikimrPQ::TTransaction_EState_Name(tx.State);}
                                             TABLED() {str << tx.MinStep;}
                                             TABLED() {str << tx.MaxStep;}
                                         }
@@ -145,6 +145,13 @@ private:
         PQ_LOG_D("Answer TEvRemoteHttpInfoRes: to " << Sender << " self " << ctx.SelfID);
         ctx.Send(Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
         Die(ctx);
+    }
+
+    static TString GetTxStep(const TTransactionSnapshot& tx) {
+        if (tx.Step == Max<ui64>()) {
+            return "-";
+        }
+        return ToString(tx.Step);
     }
 
     void Wakeup(const TActorContext& ctx) {
@@ -242,6 +249,15 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
     for (auto& [_, tx] : Txs) {
         transactions.emplace_back(tx);
     }
+
+    auto isLess = [](const TTransactionSnapshot& lhs, const TTransactionSnapshot& rhs) {
+        auto makeValue = [](const TTransactionSnapshot& v) {
+            return std::make_tuple(v.Step, v.TxId);
+        };
+
+        return makeValue(lhs) < makeValue(rhs);
+    };
+    std::sort(transactions.begin(), transactions.end(), isLess);
 
     ctx.Register(new TMonitoringProxy(ev->Sender, ev->Get()->Query, std::move(res), CacheActor, TopicName,
         TabletID(), ResponseProxy.size(), std::move(config), std::move(transactions)));

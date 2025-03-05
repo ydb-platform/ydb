@@ -38,6 +38,7 @@ public:
 
 private:
     NYTree::INodePtr Session;
+    std::vector<NYTree::INodePtr> Results;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -46,7 +47,7 @@ private:
 
 // -> Cookie
 class TWriteTableFragmentCommand
-    : public TTypedCommand<NApi::TFragmentTableWriterOptions>
+    : public TTypedCommand<NApi::TTableFragmentWriterOptions>
     , private TWriteTableCommand
 {
 public:
@@ -62,10 +63,10 @@ private:
     using TBase = TWriteTableCommand;
 
     NYTree::INodePtr Cookie;
-    TRefCountedPtr ResultingCookie;
+    TRefCountedPtr TableWriter;
 
-    TFuture<NApi::ITableWriterPtr> CreateTableWriter(
-        const ICommandContextPtr& context) const override;
+    NApi::ITableWriterPtr CreateTableWriter(
+        const ICommandContextPtr& context) override;
 
     void DoExecute(ICommandContextPtr context) override;
 };

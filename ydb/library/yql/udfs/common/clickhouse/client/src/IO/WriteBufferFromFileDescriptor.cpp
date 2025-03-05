@@ -48,7 +48,7 @@ void WriteBufferFromFileDescriptor::nextImpl()
     Stopwatch watch;
 
     size_t bytes_written = 0;
-    while (bytes_written != offset())
+    while (bytes_written < offset())
     {
         ProfileEvents::increment(ProfileEvents::WriteBufferFromFileDescriptorWrite);
 
@@ -58,7 +58,7 @@ void WriteBufferFromFileDescriptor::nextImpl()
             res = ::write(fd, working_buffer.begin() + bytes_written, offset() - bytes_written);
         }
 
-        if ((-1 == res || 0 == res) && errno != EINTR)
+        if ((-1 == res && errno != EINTR) || 0 == res)
         {
             ProfileEvents::increment(ProfileEvents::WriteBufferFromFileDescriptorWriteFailed);
             throwFromErrnoWithPath("Cannot write to file " + getFileName(), getFileName(),

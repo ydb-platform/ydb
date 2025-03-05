@@ -14,7 +14,7 @@ ELSE()
         yt_wrapper.h
     )
     PEERDIR(
-        contrib/ydb/library/actors/core
+        ydb/library/actors/core
         ydb/core/base
         ydb/core/protos
         ydb/library/aclib

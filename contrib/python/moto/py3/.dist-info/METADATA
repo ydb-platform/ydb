@@ -1,11 +1,11 @@
 Metadata-Version: 2.1
 Name: moto
-Version: 3.1.12
+Version: 4.0.8
 Summary: A library that allows your python tests to easily mock out the boto library
 Home-page: https://github.com/spulec/moto
 Author: Steve Pulec
 Author-email: spulec@gmail.com
-License: Apache
+License: Apache License 2.0
 Project-URL: Documentation, http://docs.getmoto.org/en/latest/
 Project-URL: Issue tracker, https://github.com/spulec/moto/issues
 Project-URL: Changelog, https://github.com/spulec/moto/blob/master/CHANGELOG.md
@@ -26,10 +26,10 @@ Requires-Dist: botocore (>=1.12.201)
 Requires-Dist: cryptography (>=3.3.1)
 Requires-Dist: requests (>=2.5)
 Requires-Dist: xmltodict
-Requires-Dist: werkzeug (>=0.5)
+Requires-Dist: werkzeug (!=2.2.0,!=2.2.1,>=0.5)
 Requires-Dist: pytz
 Requires-Dist: python-dateutil (<3.0.0,>=2.1)
-Requires-Dist: responses (>=0.9.0)
+Requires-Dist: responses (>=0.13.0)
 Requires-Dist: MarkupSafe (!=2.0.0a1)
 Requires-Dist: Jinja2 (>=2.10.1)
 Requires-Dist: importlib-metadata ; python_version < "3.8"
@@ -48,6 +48,7 @@ Requires-Dist: sshpubkeys (>=3.1.0) ; extra == 'all'
 Requires-Dist: pyparsing (>=3.0.7) ; extra == 'all'
 Requires-Dist: openapi-spec-validator (>=0.2.8) ; extra == 'all'
 Requires-Dist: setuptools ; extra == 'all'
+Provides-Extra: amp
 Provides-Extra: apigateway
 Requires-Dist: PyYAML (>=5.1) ; extra == 'apigateway'
 Requires-Dist: python-jose[cryptography] (<4.0.0,>=3.1.0) ; extra == 'apigateway'
@@ -66,6 +67,7 @@ Provides-Extra: batch
 Requires-Dist: docker (>=2.5.1) ; extra == 'batch'
 Provides-Extra: batch_simple
 Provides-Extra: budgets
+Provides-Extra: ce
 Provides-Extra: cloudformation
 Requires-Dist: PyYAML (>=5.1) ; extra == 'cloudformation'
 Requires-Dist: python-jose[cryptography] (<4.0.0,>=3.1.0) ; extra == 'cloudformation'
@@ -83,12 +85,14 @@ Requires-Dist: setuptools ; extra == 'cloudformation'
 Provides-Extra: cloudfront
 Provides-Extra: cloudtrail
 Provides-Extra: cloudwatch
+Provides-Extra: codebuild
 Provides-Extra: codecommit
 Provides-Extra: codepipeline
 Provides-Extra: cognitoidentity
 Provides-Extra: cognitoidp
 Requires-Dist: python-jose[cryptography] (<4.0.0,>=3.1.0) ; extra == 'cognitoidp'
 Requires-Dist: ecdsa (!=0.15) ; extra == 'cognitoidp'
+Provides-Extra: comprehend
 Provides-Extra: config
 Provides-Extra: databrew
 Provides-Extra: datapipeline
@@ -120,6 +124,7 @@ Provides-Extra: elb
 Provides-Extra: elbv2
 Provides-Extra: emr
 Provides-Extra: emrcontainers
+Provides-Extra: emrserverless
 Provides-Extra: es
 Provides-Extra: events
 Provides-Extra: firehose
@@ -145,15 +150,16 @@ Provides-Extra: medialive
 Provides-Extra: mediapackage
 Provides-Extra: mediastore
 Provides-Extra: mediastoredata
+Provides-Extra: meteringmarketplace
 Provides-Extra: mq
 Provides-Extra: opsworks
 Provides-Extra: organizations
+Provides-Extra: personalize
 Provides-Extra: pinpoint
 Provides-Extra: polly
 Provides-Extra: quicksight
 Provides-Extra: ram
 Provides-Extra: rds
-Provides-Extra: rds2
 Provides-Extra: redshift
 Provides-Extra: redshiftdata
 Provides-Extra: rekognition
@@ -182,10 +188,12 @@ Requires-Dist: sshpubkeys (>=3.1.0) ; extra == 'server'
 Requires-Dist: pyparsing (>=3.0.7) ; extra == 'server'
 Requires-Dist: openapi-spec-validator (>=0.2.8) ; extra == 'server'
 Requires-Dist: setuptools ; extra == 'server'
-Requires-Dist: flask ; extra == 'server'
+Requires-Dist: flask (!=2.2.0,!=2.2.1) ; extra == 'server'
 Requires-Dist: flask-cors ; extra == 'server'
 Provides-Extra: servicediscovery
+Provides-Extra: servicequotas
 Provides-Extra: ses
+Provides-Extra: signer
 Provides-Extra: sns
 Provides-Extra: sqs
 Provides-Extra: ssm

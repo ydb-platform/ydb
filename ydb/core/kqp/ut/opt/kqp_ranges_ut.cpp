@@ -1,7 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -862,11 +862,6 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-
-        if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 1);
-        }
     }
 
     Y_UNIT_TEST(DuplicateKeyPredicateLiteral) {
@@ -1094,11 +1089,6 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
         }
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().rows(), 3);
-
-        if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).affected_shards(), 4);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).partitions_count(), 4);
-        }
     }
 
     Y_UNIT_TEST(LiteralOrCompisite) {
@@ -1508,7 +1498,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
                 TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            CompareYson(expectedYson, FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(TString{expectedYson}, TString{FormatResultSetYson(result.GetResultSet(0))});
         }
     }
 

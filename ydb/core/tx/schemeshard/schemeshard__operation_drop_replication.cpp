@@ -23,6 +23,25 @@ bool IsDropReplication(TTxState::ETxType type) {
     }
 }
 
+struct IStrategy {
+    virtual void Check(const TPath::TChecker& checks) const = 0;
+};
+
+struct TReplicationStrategy : public IStrategy {
+    void Check(const TPath::TChecker& checks) const override {
+        checks.IsReplication();
+    };
+};
+
+struct TTransferStrategy : public IStrategy {
+    void Check(const TPath::TChecker& checks) const override {
+        checks.IsTransfer();
+    };
+};
+
+static constexpr TReplicationStrategy ReplicationStrategy;
+static constexpr TTransferStrategy TransferStrategy;
+
 class TDropParts: public TSubOperationState {
     TString DebugHint() const override {
         return TStringBuilder()
@@ -54,7 +73,7 @@ public:
             const auto tabletId = context.SS->ShardInfos.at(shard.Idx).TabletID;
 
             auto ev = MakeHolder<NReplication::TEvController::TEvDropReplication>();
-            PathIdFromPathId(pathId, ev->Record.MutablePathId());
+            pathId.ToProto(ev->Record.MutablePathId());
             ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
             ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
             ev->Record.SetCascade(txState->TxType == TTxState::TxDropReplicationCascade);
@@ -182,8 +201,8 @@ public:
         context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
 
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(-1);
-        context.SS->ResolveDomainInfo(pathId)->DecPathsInside();
-        parentPath->DecAliveChildren();
+        context.SS->ResolveDomainInfo(pathId)->DecPathsInside(context.SS);
+        DecAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         ++parentPath->DirAlterVersion;
         context.SS->PersistPathDirAlterVersion(db, parentPath);
@@ -238,15 +257,17 @@ class TDropReplication: public TSubOperation {
     }
 
 public:
-    explicit TDropReplication(TOperationId id, const TTxTransaction& tx, bool cascade)
+    explicit TDropReplication(TOperationId id, const TTxTransaction& tx, bool cascade, const IStrategy* strategy)
         : TSubOperation(id, tx)
         , Cascade(cascade)
+        , Strategy(strategy)
     {
     }
 
-    explicit TDropReplication(TOperationId id, TTxState::ETxState state, bool cascade)
+    explicit TDropReplication(TOperationId id, TTxState::ETxState state, bool cascade, const IStrategy* strategy)
         : TSubOperation(id, state)
         , Cascade(cascade)
+        , Strategy(strategy)
     {
     }
 
@@ -272,10 +293,10 @@ public:
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
-                .IsReplication()
                 .NotDeleted()
                 .NotUnderDeleting()
                 .NotUnderOperation();
+            Strategy->Check(checks);
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -366,17 +387,26 @@ public:
 
 private:
     const bool Cascade;
+    const IStrategy* Strategy;
 
 }; // TDropReplication
 
 } // anonymous
 
 ISubOperation::TPtr CreateDropReplication(TOperationId id, const TTxTransaction& tx, bool cascade) {
-    return MakeSubOperation<TDropReplication>(id, tx, cascade);
+    return MakeSubOperation<TDropReplication>(id, tx, cascade, &ReplicationStrategy);
 }
 
 ISubOperation::TPtr CreateDropReplication(TOperationId id, TTxState::ETxState state, bool cascade) {
-    return MakeSubOperation<TDropReplication>(id, state, cascade);
+    return MakeSubOperation<TDropReplication>(id, state, cascade, &ReplicationStrategy);
+}
+
+ISubOperation::TPtr CreateDropTransfer(TOperationId id, const TTxTransaction& tx, bool cascade) {
+    return MakeSubOperation<TDropReplication>(id, tx, cascade, &TransferStrategy);
+}
+
+ISubOperation::TPtr CreateDropTransfer(TOperationId id, TTxState::ETxState state, bool cascade) {
+    return MakeSubOperation<TDropReplication>(id, state, cascade, &TransferStrategy);
 }
 
 }

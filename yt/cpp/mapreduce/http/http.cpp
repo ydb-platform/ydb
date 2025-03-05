@@ -10,6 +10,7 @@
 
 #include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/interface/errors.h>
+#include <yt/cpp/mapreduce/interface/error_codes.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <yt/yt/core/http/http.h>
@@ -36,6 +37,27 @@
 
 
 namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::exception_ptr WrapSystemError(
+    const TRequestContext& context,
+    const std::exception& ex)
+{
+    if (auto errorResponse = dynamic_cast<const TErrorResponse*>(&ex); errorResponse != nullptr) {
+        return std::make_exception_ptr(errorResponse);
+    }
+
+    auto message = NYT::Format("Request %qv to %qv failed", context.RequestId, context.HostName + context.Method);
+    TYtError outer(1, message, {TYtError(NClusterErrorCodes::Generic, ex.what())}, {
+        {"request_id", context.RequestId},
+        {"host", context.HostName},
+        {"method", context.Method},
+    });
+    TTransportError errorResponse(std::move(outer));
+
+    return std::make_exception_ptr(errorResponse);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -92,17 +114,17 @@ private:
         CheckErrorState();
         try {
             func();
-        } catch (const std::exception&) {
-            HandleWriteException();
+        } catch (const std::exception& ex) {
+            HandleWriteException(ex);
         }
     }
 
     // In many cases http proxy stops reading request and resets connection
     // if error has happend. This function tries to read error response
     // in such cases.
-    void HandleWriteException() {
+    void HandleWriteException(const std::exception& ex) {
         Y_ABORT_UNLESS(WriteError_ == nullptr);
-        WriteError_ = std::current_exception();
+        WriteError_ = WrapSystemError(HttpRequest_->Context_, ex);
         Y_ABORT_UNLESS(WriteError_ != nullptr);
         try {
             HttpRequest_->GetResponseStream();
@@ -130,16 +152,16 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 THttpHeader::THttpHeader(const TString& method, const TString& command, bool isApi)
-    : Method(method)
-    , Command(command)
-    , IsApi(isApi)
+    : Method_(method)
+    , Command_(command)
+    , IsApi_(isApi)
 { }
 
 void THttpHeader::AddParameter(const TString& key, TNode value, bool overwrite)
 {
-    auto it = Parameters.find(key);
-    if (it == Parameters.end()) {
-        Parameters.emplace(key, std::move(value));
+    auto it = Parameters_.find(key);
+    if (it == Parameters_.end()) {
+        Parameters_.emplace(key, std::move(value));
     } else {
         if (overwrite) {
             it->second = std::move(value);
@@ -158,12 +180,12 @@ void THttpHeader::MergeParameters(const TNode& newParameters, bool overwrite)
 
 void THttpHeader::RemoveParameter(const TString& key)
 {
-    Parameters.erase(key);
+    Parameters_.erase(key);
 }
 
 TNode THttpHeader::GetParameters() const
 {
-    return Parameters;
+    return Parameters_;
 }
 
 void THttpHeader::AddTransactionId(const TTransactionId& transactionId, bool overwrite)
@@ -185,7 +207,7 @@ void THttpHeader::AddOperationId(const TOperationId& operationId, bool overwrite
     AddParameter("operation_id", GetGuidAsString(operationId), overwrite);
 }
 
-void THttpHeader::AddMutationId()
+TMutationId THttpHeader::AddMutationId()
 {
     TGUID guid;
 
@@ -198,85 +220,92 @@ void THttpHeader::AddMutationId()
     guid.dw[2] = GetPID() ^ MicroSeconds();
 
     AddParameter("mutation_id", GetGuidAsString(guid), true);
+
+    return guid;
 }
 
 bool THttpHeader::HasMutationId() const
 {
-    return Parameters.contains("mutation_id");
+    return Parameters_.contains("mutation_id");
+}
+
+void THttpHeader::SetMutationId(TMutationId mutationId)
+{
+    AddParameter("mutation_id", GetGuidAsString(mutationId), /*overwrite*/ true);
 }
 
 void THttpHeader::SetToken(const TString& token)
 {
-    Token = token;
+    Token_ = token;
 }
 
 void THttpHeader::SetProxyAddress(const TString& proxyAddress)
 {
-    ProxyAddress = proxyAddress;
+    ProxyAddress_ = proxyAddress;
 }
 
 void THttpHeader::SetHostPort(const TString& hostPort)
 {
-    HostPort = hostPort;
+    HostPort_ = hostPort;
 }
 
 void THttpHeader::SetImpersonationUser(const TString& impersonationUser)
 {
-    ImpersonationUser = impersonationUser;
+    ImpersonationUser_ = impersonationUser;
 }
 
 void THttpHeader::SetServiceTicket(const TString& ticket)
 {
-    ServiceTicket = ticket;
+    ServiceTicket_ = ticket;
 }
 
 void THttpHeader::SetInputFormat(const TMaybe<TFormat>& format)
 {
-    InputFormat = format;
+    InputFormat_ = format;
 }
 
 void THttpHeader::SetOutputFormat(const TMaybe<TFormat>& format)
 {
-    OutputFormat = format;
+    OutputFormat_ = format;
 }
 
 TMaybe<TFormat> THttpHeader::GetOutputFormat() const
 {
-    return OutputFormat;
+    return OutputFormat_;
 }
 
 void THttpHeader::SetRequestCompression(const TString& compression)
 {
-    RequestCompression = compression;
+    RequestCompression_ = compression;
 }
 
 void THttpHeader::SetResponseCompression(const TString& compression)
 {
-    ResponseCompression = compression;
+    ResponseCompression_ = compression;
 }
 
 TString THttpHeader::GetCommand() const
 {
-    return Command;
+    return Command_;
 }
 
 TString THttpHeader::GetUrl(bool needProxy) const
 {
     TStringStream url;
 
-    if (needProxy && !ProxyAddress.empty()) {
-        url << ProxyAddress << "/";
+    if (needProxy && !ProxyAddress_.empty()) {
+        url << ProxyAddress_ << "/";
         return url.Str();
     }
 
-    if (!ProxyAddress.empty()) {
-        url << HostPort;
+    if (!ProxyAddress_.empty()) {
+        url << HostPort_;
     }
 
-    if (IsApi) {
-        url << "/api/" << TConfig::Get()->ApiVersion << "/" << Command;
+    if (IsApi_) {
+        url << "/api/" << TConfig::Get()->ApiVersion << "/" << Command_;
     } else {
-        url << "/" << Command;
+        url << "/" << Command_;
     }
 
     return url.Str();
@@ -284,16 +313,16 @@ TString THttpHeader::GetUrl(bool needProxy) const
 
 bool THttpHeader::ShouldAcceptFraming() const
 {
-    return TConfig::Get()->CommandsWithFraming.contains(Command);
+    return TConfig::Get()->CommandsWithFraming.contains(Command_);
 }
 
 TString THttpHeader::GetHeaderAsString(const TString& hostName, const TString& requestId, bool includeParameters) const
 {
     TStringStream result;
 
-    result << Method << " " << GetUrl() << " HTTP/1.1\r\n";
+    result << Method_ << " " << GetUrl() << " HTTP/1.1\r\n";
 
-    GetHeader(HostPort.empty() ? hostName : HostPort, requestId, includeParameters).Get()->WriteTo(&result);
+    GetHeader(HostPort_.empty() ? hostName : HostPort_, requestId, includeParameters).Get()->WriteTo(&result);
 
     if (ShouldAcceptFraming()) {
         result << "X-YT-Accept-Framing: 1\r\n";
@@ -311,25 +340,25 @@ NHttp::THeadersPtrWrapper THttpHeader::GetHeader(const TString& hostName, const 
     headers->Add("Host", hostName);
     headers->Add("User-Agent", TProcessState::Get()->ClientVersion);
 
-    if (!Token.empty()) {
-        headers->Add("Authorization", "OAuth " + Token);
+    if (!Token_.empty()) {
+        headers->Add("Authorization", "OAuth " + Token_);
     }
-    if (!ServiceTicket.empty()) {
-        headers->Add("X-Ya-Service-Ticket", ServiceTicket);
+    if (!ServiceTicket_.empty()) {
+        headers->Add("X-Ya-Service-Ticket", ServiceTicket_);
     }
-    if (!ImpersonationUser.empty()) {
-        headers->Add("X-Yt-User-Name", ImpersonationUser);
+    if (!ImpersonationUser_.empty()) {
+        headers->Add("X-Yt-User-Name", ImpersonationUser_);
     }
 
-    if (Method == "PUT" || Method == "POST") {
+    if (Method_ == "PUT" || Method_ == "POST") {
         headers->Add("Transfer-Encoding", "chunked");
     }
 
     headers->Add("X-YT-Correlation-Id", requestId);
     headers->Add("X-YT-Header-Format", "<format=text>yson");
 
-    headers->Add("Content-Encoding", RequestCompression);
-    headers->Add("Accept-Encoding", ResponseCompression);
+    headers->Add("Content-Encoding", RequestCompression_);
+    headers->Add("Accept-Encoding", ResponseCompression_);
 
     auto printYTHeader = [&headers] (const char* headerName, const TString& value) {
         static const size_t maxHttpHeaderSize = 64 << 10;
@@ -353,14 +382,14 @@ NHttp::THeadersPtrWrapper THttpHeader::GetHeader(const TString& hostName, const 
         } while (ptr != finish);
     };
 
-    if (InputFormat) {
-        printYTHeader("X-YT-Input-Format", NodeToYsonString(InputFormat->Config));
+    if (InputFormat_) {
+        printYTHeader("X-YT-Input-Format", NodeToYsonString(InputFormat_->Config));
     }
-    if (OutputFormat) {
-        printYTHeader("X-YT-Output-Format", NodeToYsonString(OutputFormat->Config));
+    if (OutputFormat_) {
+        printYTHeader("X-YT-Output-Format", NodeToYsonString(OutputFormat_->Config));
     }
     if (includeParameters) {
-        printYTHeader("X-YT-Parameters", NodeToYsonString(Parameters));
+        printYTHeader("X-YT-Parameters", NodeToYsonString(Parameters_));
     }
 
     return NHttp::THeadersPtrWrapper(std::move(headers));
@@ -368,7 +397,7 @@ NHttp::THeadersPtrWrapper THttpHeader::GetHeader(const TString& hostName, const 
 
 const TString& THttpHeader::GetMethod() const
 {
-    return Method;
+    return Method_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -470,7 +499,7 @@ void TAddressCache::AddAddress(TString hostName, TAddressPtr address)
 
     {
         TWriteGuard guard(Lock_);
-        Cache_.emplace(std::move(hostName), std::move(entry));
+        Cache_[std::move(hostName)] = std::move(entry);
     }
 }
 
@@ -516,7 +545,7 @@ TConnectionPtr TConnectionPool::Connect(
     TSocketHolder socket(DoConnect(networkAddress));
     SetNonBlock(socket, false);
 
-    connection->Socket.Reset(new TSocket(socket.Release()));
+    connection->Socket = std::make_unique<TSocket>(socket.Release());
 
     connection->DeadLine = TInstant::Now() + socketTimeout;
     connection->Socket->SetSocketTimeout(socketTimeout.Seconds());
@@ -667,77 +696,129 @@ SOCKET TConnectionPool::DoConnect(TAddressCache::TAddressPtr address)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static TMaybe<TString> GetProxyName(const THttpInput& input)
+class THttpResponse::THttpInputWrapped
+    : public IInputStream
 {
-    if (auto proxyHeader = input.Headers().FindHeader("X-YT-Proxy")) {
-        return proxyHeader->Value();
+public:
+    explicit THttpInputWrapped(TRequestContext context, IInputStream* input)
+        : Context_(std::move(context))
+        , HttpInput_(input)
+    { }
+
+    const THttpHeaders& Headers() const noexcept
+    {
+        return HttpInput_.Headers();
     }
-    return Nothing();
-}
+
+    const TString& FirstLine() const noexcept
+    {
+        return HttpInput_.FirstLine();
+    }
+
+    bool IsKeepAlive() const noexcept
+    {
+        return HttpInput_.IsKeepAlive();
+    }
+
+    const TMaybe<THttpHeaders>& Trailers() const noexcept
+    {
+        return HttpInput_.Trailers();
+    }
+
+private:
+    size_t DoRead(void* buf, size_t len) override
+    {
+        try {
+            return HttpInput_.Read(buf, len);
+        } catch (const std::exception& ex) {
+            auto wrapped = WrapSystemError(Context_, ex);
+            std::rethrow_exception(wrapped);
+        }
+    }
+
+    size_t DoSkip(size_t len) override
+    {
+        try {
+            return HttpInput_.Skip(len);
+        } catch (const std::exception& ex) {
+            auto wrapped = WrapSystemError(Context_, ex);
+            std::rethrow_exception(wrapped);
+        }
+    }
+
+private:
+    const TRequestContext Context_;
+    THttpInput HttpInput_;
+};
 
 THttpResponse::THttpResponse(
-    IInputStream* socketStream,
-    const TString& requestId,
-    const TString& hostName)
-    : HttpInput_(socketStream)
-    , RequestId_(requestId)
-    , HostName_(GetProxyName(HttpInput_).GetOrElse(hostName))
-    , Unframe_(HttpInput_.Headers().HasHeader("X-YT-Framing"))
+    TRequestContext context,
+    IInputStream* socketStream)
+    : HttpInput_(std::make_unique<THttpInputWrapped>(context, socketStream))
+    , Unframe_(HttpInput_->Headers().HasHeader("X-YT-Framing"))
+    , Context_(std::move(context))
 {
-    HttpCode_ = ParseHttpRetCode(HttpInput_.FirstLine());
+    if (auto proxyHeader = HttpInput_->Headers().FindHeader("X-YT-Proxy")) {
+        Context_.HostName = proxyHeader->Value();
+    }
+    HttpCode_ = ParseHttpRetCode(HttpInput_->FirstLine());
     if (HttpCode_ == 200 || HttpCode_ == 202) {
         return;
     }
 
-    ErrorResponse_ = TErrorResponse(HttpCode_, RequestId_);
-
-    auto logAndSetError = [&] (const TString& rawError) {
+    auto logAndSetError = [&] (int code, const TString& rawError) {
         YT_LOG_ERROR("RSP %v - HTTP %v - %v",
-            RequestId_,
+            Context_.RequestId,
             HttpCode_,
             rawError.data());
-        ErrorResponse_->SetRawError(rawError);
+        ErrorResponse_ = TErrorResponse(TYtError(code, rawError), Context_.RequestId);
     };
 
     switch (HttpCode_) {
         case 429:
-            logAndSetError("request rate limit exceeded");
+            logAndSetError(NClusterErrorCodes::NSecurityClient::RequestQueueSizeLimitExceeded, "request rate limit exceeded");
             break;
 
         case 500:
-            logAndSetError(::TStringBuilder() << "internal error in proxy " << HostName_);
+            logAndSetError(NClusterErrorCodes::NRpc::Unavailable, ::TStringBuilder() << "internal error in proxy " << Context_.HostName);
+            break;
+
+        case 503:
+            logAndSetError(NClusterErrorCodes::NBus::TransportError, "service unavailable");
             break;
 
         default: {
             TStringStream httpHeaders;
             httpHeaders << "HTTP headers (";
-            for (const auto& header : HttpInput_.Headers()) {
+            for (const auto& header : HttpInput_->Headers()) {
                 httpHeaders << header.Name() << ": " << header.Value() << "; ";
             }
             httpHeaders << ")";
 
             auto errorString = Sprintf("RSP %s - HTTP %d - %s",
-                RequestId_.data(),
+                Context_.RequestId.data(),
                 HttpCode_,
                 httpHeaders.Str().data());
 
             YT_LOG_ERROR("%v",
                 errorString.data());
 
-            if (auto parsedResponse = ParseError(HttpInput_.Headers())) {
+            if (auto parsedResponse = ParseError(HttpInput_->Headers())) {
                 ErrorResponse_ = parsedResponse.GetRef();
             } else {
-                ErrorResponse_->SetRawError(
-                    errorString + " - X-YT-Error is missing in headers");
+                ErrorResponse_ = TErrorResponse(TYtError(errorString + " - X-YT-Error is missing in headers"), Context_.RequestId);
             }
             break;
         }
     }
 }
 
+THttpResponse::~THttpResponse()
+{ }
+
 const THttpHeaders& THttpResponse::Headers() const
 {
-    return HttpInput_.Headers();
+    return HttpInput_->Headers();
 }
 
 void THttpResponse::CheckErrorResponse() const
@@ -759,20 +840,21 @@ int THttpResponse::GetHttpCode() const
 
 const TString& THttpResponse::GetHostName() const
 {
-    return HostName_;
+    return Context_.HostName;
 }
 
 bool THttpResponse::IsKeepAlive() const
 {
-    return HttpInput_.IsKeepAlive();
+    return HttpInput_->IsKeepAlive();
 }
 
 TMaybe<TErrorResponse> THttpResponse::ParseError(const THttpHeaders& headers)
 {
     for (const auto& header : headers) {
         if (header.Name() == "X-YT-Error") {
-            TErrorResponse errorResponse(HttpCode_, RequestId_);
-            errorResponse.ParseFromJsonError(header.Value());
+            TYtError error;
+            error.ParseFrom(header.Value());
+            TErrorResponse errorResponse(std::move(error), Context_.RequestId);
             if (errorResponse.IsOk()) {
                 return Nothing();
             }
@@ -788,14 +870,14 @@ size_t THttpResponse::DoRead(void* buf, size_t len)
     if (Unframe_) {
         read = UnframeRead(buf, len);
     } else {
-        read = HttpInput_.Read(buf, len);
+        read = HttpInput_->Read(buf, len);
     }
     if (read == 0 && len != 0) {
         // THttpInput MUST return defined (but may be empty)
         // trailers when it is exhausted.
-        Y_ABORT_UNLESS(HttpInput_.Trailers().Defined(),
+        Y_ABORT_UNLESS(HttpInput_->Trailers().Defined(),
             "trailers MUST be defined for exhausted stream");
-        CheckTrailers(HttpInput_.Trailers().GetRef());
+        CheckTrailers(HttpInput_->Trailers().GetRef());
         IsExhausted_ = true;
     }
     return read;
@@ -807,14 +889,14 @@ size_t THttpResponse::DoSkip(size_t len)
     if (Unframe_) {
         skipped = UnframeSkip(len);
     } else {
-        skipped = HttpInput_.Skip(len);
+        skipped = HttpInput_->Skip(len);
     }
     if (skipped == 0 && len != 0) {
         // THttpInput MUST return defined (but may be empty)
         // trailers when it is exhausted.
-        Y_ABORT_UNLESS(HttpInput_.Trailers().Defined(),
+        Y_ABORT_UNLESS(HttpInput_->Trailers().Defined(),
             "trailers MUST be defined for exhausted stream");
-        CheckTrailers(HttpInput_.Trailers().GetRef());
+        CheckTrailers(HttpInput_->Trailers().GetRef());
         IsExhausted_ = true;
     }
     return skipped;
@@ -825,13 +907,13 @@ void THttpResponse::CheckTrailers(const THttpHeaders& trailers)
     if (auto errorResponse = ParseError(trailers)) {
         errorResponse->SetIsFromTrailers(true);
         YT_LOG_ERROR("RSP %v - %v",
-            RequestId_,
+            Context_.RequestId,
             errorResponse.GetRef().what());
         ythrow errorResponse.GetRef();
     }
 }
 
-static ui32 ReadDataFrameSize(THttpInput* stream)
+static ui32 ReadDataFrameSize(IInputStream* stream)
 {
     ui32 littleEndianSize;
     auto read = stream->Load(&littleEndianSize, sizeof(littleEndianSize));
@@ -846,7 +928,7 @@ bool THttpResponse::RefreshFrameIfNecessary()
 {
     while (RemainingFrameSize_ == 0) {
         ui8 frameTypeByte;
-        auto read = HttpInput_.Read(&frameTypeByte, sizeof(frameTypeByte));
+        auto read = HttpInput_->Read(&frameTypeByte, sizeof(frameTypeByte));
         if (read == 0) {
             return false;
         }
@@ -855,7 +937,7 @@ bool THttpResponse::RefreshFrameIfNecessary()
             case EFrameType::KeepAlive:
                 break;
             case EFrameType::Data:
-                RemainingFrameSize_ = ReadDataFrameSize(&HttpInput_);
+                RemainingFrameSize_ = ReadDataFrameSize(HttpInput_.get());
                 break;
             default:
                 ythrow yexception() << "Bad frame type " << static_cast<int>(frameTypeByte);
@@ -869,7 +951,7 @@ size_t THttpResponse::UnframeRead(void* buf, size_t len)
     if (!RefreshFrameIfNecessary()) {
         return 0;
     }
-    auto read = HttpInput_.Read(buf, Min(len, RemainingFrameSize_));
+    auto read = HttpInput_->Read(buf, Min(len, RemainingFrameSize_));
     RemainingFrameSize_ -= read;
     return read;
 }
@@ -879,80 +961,83 @@ size_t THttpResponse::UnframeSkip(size_t len)
     if (!RefreshFrameIfNecessary()) {
         return 0;
     }
-    auto skipped = HttpInput_.Skip(Min(len, RemainingFrameSize_));
+    auto skipped = HttpInput_->Skip(Min(len, RemainingFrameSize_));
     RemainingFrameSize_ -= skipped;
     return skipped;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-THttpRequest::THttpRequest()
-{
-    RequestId = CreateGuidAsString();
-}
-
-THttpRequest::THttpRequest(const TString& requestId)
-    : RequestId(requestId)
+THttpRequest::THttpRequest(TString requestId, TString hostName, THttpHeader header, TDuration socketTimeout)
+    : Context_(TRequestContext{
+        .RequestId = std::move(requestId),
+        .HostName = std::move(hostName),
+        .Method = header.GetUrl(/*needProxy=*/ false)
+    })
+    , Header_(std::move(header))
+    , Url_(Header_.GetUrl(true))
+    , SocketTimeout_(socketTimeout)
 { }
 
 THttpRequest::~THttpRequest()
 {
-    if (!Connection) {
+    if (!Connection_) {
         return;
     }
 
-    if (Input && Input->IsKeepAlive() && Input->IsExhausted()) {
+    if (Input_ && Input_->IsKeepAlive() && Input_->IsExhausted()) {
         // We should return to the pool only connections where HTTP response was fully read.
         // Otherwise next reader might read our remaining data and misinterpret them (YT-6510).
-        TConnectionPool::Get()->Release(Connection);
+        TConnectionPool::Get()->Release(Connection_);
     } else {
-        TConnectionPool::Get()->Invalidate(HostName, Connection);
+        TConnectionPool::Get()->Invalidate(Context_.HostName, Connection_);
     }
 }
 
 TString THttpRequest::GetRequestId() const
 {
-    return RequestId;
+    return Context_.RequestId;
 }
 
-void THttpRequest::Connect(TString hostName, TDuration socketTimeout)
+IOutputStream* THttpRequest::StartRequestImpl(bool includeParameters)
 {
-    HostName = std::move(hostName);
     YT_LOG_DEBUG("REQ %v - requesting connection to %v from connection pool",
-        RequestId,
-        HostName);
+        Context_.RequestId,
+        Context_.HostName);
 
     StartTime_ = TInstant::Now();
-    Connection = TConnectionPool::Get()->Connect(HostName, socketTimeout);
 
-    YT_LOG_DEBUG("REQ %v - connection #%v",
-        RequestId,
-        Connection->Id);
-}
-
-IOutputStream* THttpRequest::StartRequestImpl(const THttpHeader& header, bool includeParameters)
-{
-    auto strHeader = header.GetHeaderAsString(HostName, RequestId, includeParameters);
-    Url_ = header.GetUrl(true);
-
-    LogRequest(header, Url_, includeParameters, RequestId, HostName);
-
-    LoggedAttributes_ = GetLoggedAttributes(header, Url_, includeParameters, 128);
-
-    auto outputFormat = header.GetOutputFormat();
-    if (outputFormat && outputFormat->IsTextYson()) {
-        LogResponse = true;
+    try {
+        Connection_ = TConnectionPool::Get()->Connect(Context_.HostName, SocketTimeout_);
+    } catch (const std::exception& ex) {
+        auto wrapped = WrapSystemError(Context_, ex);
+        std::rethrow_exception(wrapped);
     }
 
-    RequestStream_ = MakeHolder<TRequestStream>(this, *Connection->Socket.Get());
+    YT_LOG_DEBUG("REQ %v - connection #%v",
+        Context_.RequestId,
+        Connection_->Id);
+
+    auto strHeader = Header_.GetHeaderAsString(Context_.HostName, Context_.RequestId, includeParameters);
+
+    LogRequest(Header_, Url_, includeParameters, Context_.RequestId, Context_.HostName);
+
+    LoggedAttributes_ = GetLoggedAttributes(Header_, Url_, includeParameters, 128);
+
+    auto outputFormat = Header_.GetOutputFormat();
+    if (outputFormat && outputFormat->IsTextYson()) {
+        LogResponse_ = true;
+    }
+
+    RequestStream_ = std::make_unique<TRequestStream>(this, *Connection_->Socket.get());
 
     RequestStream_->Write(strHeader.data(), strHeader.size());
-    return RequestStream_.Get();
+    return RequestStream_.get();
 }
 
-IOutputStream* THttpRequest::StartRequest(const THttpHeader& header)
+IOutputStream* THttpRequest::StartRequest()
 {
-    return StartRequestImpl(header, true);
+    return StartRequestImpl(true);
 }
 
 void THttpRequest::FinishRequest()
@@ -961,16 +1046,16 @@ void THttpRequest::FinishRequest()
     RequestStream_->Finish();
 }
 
-void THttpRequest::SmallRequest(const THttpHeader& header, TMaybe<TStringBuf> body)
+void THttpRequest::SmallRequest(TMaybe<TStringBuf> body)
 {
-    if (!body && (header.GetMethod() == "PUT" || header.GetMethod() == "POST")) {
-        const auto& parameters = header.GetParameters();
+    if (!body && (Header_.GetMethod() == "PUT" || Header_.GetMethod() == "POST")) {
+        const auto& parameters = Header_.GetParameters();
         auto parametersStr = NodeToYsonString(parameters);
-        auto* output = StartRequestImpl(header, false);
+        auto* output = StartRequestImpl(false);
         output->Write(parametersStr);
         FinishRequest();
     } else {
-        auto* output = StartRequest(header);
+        auto* output = StartRequest();
         if (body) {
             output->Write(*body);
         }
@@ -980,17 +1065,17 @@ void THttpRequest::SmallRequest(const THttpHeader& header, TMaybe<TStringBuf> bo
 
 THttpResponse* THttpRequest::GetResponseStream()
 {
-    if (!Input) {
-        SocketInput.Reset(new TSocketInput(*Connection->Socket.Get()));
+    if (!Input_) {
+        SocketInput_ = std::make_unique<TSocketInput>(*Connection_->Socket.get());
         if (TConfig::Get()->UseAbortableResponse) {
             Y_ABORT_UNLESS(!Url_.empty());
-            Input.Reset(new TAbortableHttpResponse(SocketInput.Get(), RequestId, HostName, Url_));
+            Input_ = std::make_unique<TAbortableHttpResponse>(Context_, SocketInput_.get(), Url_);
         } else {
-            Input.Reset(new THttpResponse(SocketInput.Get(), RequestId, HostName));
+            Input_ = std::make_unique<THttpResponse>(Context_, SocketInput_.get());
         }
-        Input->CheckErrorResponse();
+        Input_->CheckErrorResponse();
     }
-    return Input.Get();
+    return Input_.get();
 }
 
 TString THttpRequest::GetResponse()
@@ -1003,15 +1088,15 @@ TString THttpRequest::GetResponse()
         << "HostName: " << GetResponseStream()->GetHostName() << "; "
         << LoggedAttributes_;
 
-    if (LogResponse) {
+    if (LogResponse_) {
         constexpr auto sizeLimit = 1 << 7;
         YT_LOG_DEBUG("RSP %v - received response (Response: '%v'; %v)",
-            RequestId,
+            Context_.RequestId,
             TruncateForLogs(result, sizeLimit),
             loggedAttributes.Str());
     } else {
         YT_LOG_DEBUG("RSP %v - received response of %v bytes (%v)",
-            RequestId,
+            Context_.RequestId,
             result.size(),
             loggedAttributes.Str());
     }
@@ -1024,8 +1109,8 @@ int THttpRequest::GetHttpCode() {
 
 void THttpRequest::InvalidateConnection()
 {
-    TConnectionPool::Get()->Invalidate(HostName, Connection);
-    Connection.Reset();
+    TConnectionPool::Get()->Invalidate(Context_.HostName, Connection_);
+    Connection_.Reset();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

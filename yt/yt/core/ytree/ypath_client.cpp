@@ -151,6 +151,11 @@ NRpc::NProto::TRequestHeader& TYPathRequest::Header()
     return Header_;
 }
 
+bool TYPathRequest::IsAttachmentCompressionEnabled() const
+{
+    return false;
+}
+
 bool TYPathRequest::IsStreamingEnabled() const
 {
     return false;
@@ -225,7 +230,7 @@ void TYPathResponse::Deserialize(const TSharedRefArray& message)
 
     // COMPAT(danilalexeev): legacy RPC codecs
     auto codecId = header.has_codec()
-        ? std::make_optional(CheckedEnumCast<NCompression::ECodec>(header.codec()))
+        ? std::make_optional(FromProto<NCompression::ECodec>(header.codec()))
         : std::nullopt;
 
     if (!TryDeserializeBody(message[1], codecId)) {
@@ -259,6 +264,14 @@ TYPathMaybeRef GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader&
     return ypathExt.has_original_target_path()
         ? TYPathMaybeRef(ypathExt.original_target_path())
         : TYPathMaybeRef(ypathExt.target_path());
+}
+
+const google::protobuf::RepeatedPtrField<TProtobufString>& GetOriginalRequestAdditionalPaths(const NRpc::NProto::TRequestHeader& header)
+{
+    const auto& ypathExt = header.GetExtension(NProto::TYPathHeaderExt::ypath_header_ext);
+    return ypathExt.original_additional_paths_size() > 0
+        ? ypathExt.original_additional_paths()
+        : ypathExt.additional_paths();
 }
 
 void SetRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPathBuf path)

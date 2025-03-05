@@ -12,7 +12,7 @@ namespace operator_
   auto invert(A &&a) -> decltype(~std::forward<A>(a));
 
   DEFINE_FUNCTOR(pythonic::operator_, invert);
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

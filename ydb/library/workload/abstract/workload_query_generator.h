@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb-cpp-sdk/client/params/params.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 #include <ydb/library/accessor/accessor.h>
 #include <library/cpp/getopt/last_getopt.h>
 
@@ -35,6 +35,7 @@ struct TQueryInfo {
     TString TablePath;
     std::optional<NYdb::TValue> KeyToRead;
     std::optional<NYdb::NTable::TAlterTableSettings> AlterTable;
+    std::function<NYdb::TStatus(NYdb::NTable::TTableClient& tableClient)> TableOperation;
 
     std::optional<std::function<void(NYdb::NTable::TReadRowsResult)>> ReadRowsResultCallback;
     std::optional<std::function<void(NYdb::NTable::TDataQueryResult)>> DataQueryResultCallback;
@@ -102,7 +103,7 @@ public:
 
     virtual TDataPortions GenerateDataPortion() = 0;
     YDB_READONLY_DEF(std::string, Name);
-    YDB_READONLY(ui64, Size, 0);
+    YDB_READONLY_PROTECT(ui64, Size, 0);
 };
 
 using TBulkDataGeneratorList = std::vector<std::shared_ptr<IBulkDataGenerator>>;

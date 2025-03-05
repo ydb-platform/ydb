@@ -3,9 +3,9 @@
 
 #include "pythonic/include/numpy/logical_or.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/ndarray.hpp"
 #include "pythonic/types/numpy_broadcast.hpp"
+#include "pythonic/utils/functor.hpp"
 #include "pythonic/utils/numpy_traits.hpp"
 
 PYTHONIC_NS_BEGIN
@@ -19,12 +19,12 @@ namespace numpy
     {
       return t0 || t1;
     }
-  }
+  } // namespace wrapper
 
 #define NUMPY_NARY_FUNC_NAME logical_or
 #define NUMPY_NARY_FUNC_SYM wrapper::logical_or
 #include "pythonic/types/numpy_nary_expr.hpp"
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

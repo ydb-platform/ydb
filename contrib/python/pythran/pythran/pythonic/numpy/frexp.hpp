@@ -3,10 +3,10 @@
 
 #include "pythonic/include/numpy/frexp.hpp"
 
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/types/traits.hpp"
 #include "pythonic/utils/functor.hpp"
 #include "pythonic/utils/numpy_conversion.hpp"
-#include "pythonic/types/traits.hpp"
-#include "pythonic/types/ndarray.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -39,7 +39,7 @@ namespace numpy
         _frexp((*begin).begin(), (*begin).end(), (*significands_iter).begin(),
                (*exps_iter).begin(), utils::int_<N - 1>());
     }
-  }
+  } // namespace
 
   template <class E>
   typename std::enable_if<
@@ -56,7 +56,7 @@ namespace numpy
            utils::int_<E::value>());
     return std::make_tuple(significands, exps);
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

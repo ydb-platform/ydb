@@ -1,6 +1,7 @@
 #pragma once
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 
 #include <unordered_map>
 
@@ -63,7 +64,7 @@ private:
     NKikimr::NMiniKQL::TProgramBuilder Pb_;
     std::vector<NKikimr::NMiniKQL::TRuntimeNode> Items_;
     std::vector<NKikimr::NMiniKQL::TRuntimeNode> ArgsItems_;
-    std::unordered_map<const TTypeAnnotationNode*, NKikimr::NMiniKQL::TBlockType*> CachedTypes_;
+    NCommon::TMemoizedTypesMap TypesMemoization_;
     std::unordered_map<const TTypeAnnotationNode*, NKikimr::NMiniKQL::TRuntimeNode> CachedArgs_;
 };
 

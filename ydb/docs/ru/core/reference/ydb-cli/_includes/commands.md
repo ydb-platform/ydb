@@ -43,13 +43,14 @@
 [scheme describe](../commands/scheme-describe.md) | Описание объекта схемы данных
 [scheme ls](../commands/scheme-ls.md) | Список объектов схемы данных
 [scheme mkdir](../commands/dir.md#mkdir) | Создание директории
-scheme permissions add | Предоставление разрешения
-scheme permissions chown | Изменение владельца объекта
-scheme permissions clear | Очистка разрешений
-scheme permissions grant | Предоставление разрешения
-scheme permissions remove | Удаление разрешения
-scheme permissions revoke | Удаление разрешения
-scheme permissions set | Установка разрешений
+[scheme permissions chown](../commands/scheme-permissions.md#chown) | Изменение владельца объекта
+[scheme permissions clear](../commands/scheme-permissions.md#clear) | Очистка разрешений
+[scheme permissions grant](../commands/scheme-permissions.md#grant-revoke) | Предоставление разрешения
+[scheme permissions revoke](../commands/scheme-permissions.md#grant-revoke) | Удаление разрешения
+[scheme permissions set](../commands/scheme-permissions.md#set) | Установка разрешений
+[scheme permissions list](../commands/scheme-permissions.md#list) | Просмотр разрешений
+[scheme permissions clear-inheritance](../commands/scheme-permissions.md#clear-inheritance) | Запрет наследования разрешений
+[scheme permissions set-inheritance](../commands/scheme-permissions.md#set-inheritance) | Установка наследования разрешений
 [scheme rmdir](../commands/dir.md#rmdir) | Удаление директории
 [scripting yql](../scripting-yql.md) | Выполнение YQL-скрипта
 table attribute add | Добавление атрибута для строкой или колоночной таблицы

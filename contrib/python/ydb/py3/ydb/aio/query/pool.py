@@ -13,8 +13,11 @@ from ...retries import (
     RetrySettings,
     retry_operation_async,
 )
+from ...query.base import BaseQueryTxMode
+from ...query.base import QueryClientSettings
 from ... import convert
 from ..._grpc.grpcwrapper import common_utils
+from ..._grpc.grpcwrapper import ydb_query_public_types as _ydb_query_public
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +25,18 @@ logger = logging.getLogger(__name__)
 class QuerySessionPool:
     """QuerySessionPool is an object to simplify operations with sessions of Query Service."""
 
-    def __init__(self, driver: common_utils.SupportedDriverType, size: int = 100):
+    def __init__(
+        self,
+        driver: common_utils.SupportedDriverType,
+        size: int = 100,
+        *,
+        query_client_settings: Optional[QueryClientSettings] = None,
+        loop: Optional[asyncio.AbstractEventLoop] = None,
+    ):
         """
         :param driver: A driver instance
         :param size: Size of session pool
+        :param query_client_settings: ydb.QueryClientSettings object to configure QueryService behavior
         """
 
         self._driver = driver
@@ -34,10 +45,11 @@ class QuerySessionPool:
         self._queue = asyncio.Queue()
         self._current_size = 0
         self._waiters = 0
-        self._loop = asyncio.get_running_loop()
+        self._loop = asyncio.get_running_loop() if loop is None else loop
+        self._query_client_settings = query_client_settings
 
     async def _create_new_session(self):
-        session = QuerySession(self._driver)
+        session = QuerySession(self._driver, settings=self._query_client_settings)
         await session.create()
         logger.debug(f"New session was created for pool. Session id: {session._state.session_id}")
         return session
@@ -109,6 +121,39 @@ class QuerySessionPool:
         async def wrapped_callee():
             async with self.checkout() as session:
                 return await callee(session, *args, **kwargs)
+
+        return await retry_operation_async(wrapped_callee, retry_settings)
+
+    async def retry_tx_async(
+        self,
+        callee: Callable,
+        tx_mode: Optional[BaseQueryTxMode] = None,
+        retry_settings: Optional[RetrySettings] = None,
+        *args,
+        **kwargs,
+    ):
+        """Special interface to execute a bunch of commands with transaction in a safe, retriable way.
+
+        :param callee: A function, that works with session.
+        :param tx_mode: Transaction mode, which is a one from the following choises:
+          1) QuerySerializableReadWrite() which is default mode;
+          2) QueryOnlineReadOnly(allow_inconsistent_reads=False);
+          3) QuerySnapshotReadOnly();
+          4) QueryStaleReadOnly().
+        :param retry_settings: RetrySettings object.
+
+        :return: Result sets or exception in case of execution errors.
+        """
+
+        tx_mode = tx_mode if tx_mode else _ydb_query_public.QuerySerializableReadWrite()
+        retry_settings = RetrySettings() if retry_settings is None else retry_settings
+
+        async def wrapped_callee():
+            async with self.checkout() as session:
+                async with session.transaction(tx_mode=tx_mode) as tx:
+                    result = await callee(tx, *args, **kwargs)
+                    await tx.commit()
+                return result
 
         return await retry_operation_async(wrapped_callee, retry_settings)
 

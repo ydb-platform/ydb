@@ -5,19 +5,8 @@
 #include <ydb/core/erasure/erasure.h>
 
 #include <library/cpp/json/writer/json.h>
-
+#include <ydb/library/yaml_json/yaml_to_json.h>
 namespace NKikimr::NYaml::NDeprecated {
-
-    template<typename T>
-    static bool SetScalarFromYaml(const YAML::Node& yaml, NJson::TJsonValue& json, NJson::EJsonValueType jsonType) {
-        T data;
-        if (YAML::convert<T>::decode(yaml, data)) {
-            json.SetType(jsonType);
-            json.SetValue(data);
-            return true;
-        }
-        return false;
-    }
 
     static const TString& GetStringSafe(const NJson::TJsonValue& json, const TStringBuf& key) {
         auto& value = json[key];
@@ -34,53 +23,6 @@ namespace NKikimr::NYaml::NDeprecated {
 
     void EnsureJsonFieldIsArray(const NJson::TJsonValue& json, const TStringBuf& key) {
         Y_ENSURE_BT(json.Has(key) && json[key].IsArray(), "Array field `" << key << "` must be specified.");
-    }
-
-    NJson::TJsonValue Yaml2Json(const YAML::Node& yaml, bool isRoot) {
-        Y_ENSURE_BT(!isRoot || yaml.IsMap(), "YAML root is expected to be a map");
-
-        NJson::TJsonValue json;
-
-        if (yaml.IsMap()) {
-            for (const auto& it : yaml) {
-                const auto& key = it.first.as<TString>();
-
-                Y_ENSURE_BT(!json.Has(key), "Duplicate key entry: " << key);
-
-                json[key] = Yaml2Json(it.second, false);
-            }
-            return json;
-        } else if (yaml.IsSequence()) {
-            json.SetType(NJson::EJsonValueType::JSON_ARRAY);
-            for (const auto& it : yaml) {
-                json.AppendValue(Yaml2Json(it, false));
-            }
-            return json;
-        } else if (yaml.IsScalar()) {
-            if (SetScalarFromYaml<ui64>(yaml, json, NJson::EJsonValueType::JSON_UINTEGER))
-                return json;
-
-            if (SetScalarFromYaml<i64>(yaml, json, NJson::EJsonValueType::JSON_INTEGER))
-                return json;
-
-            if (SetScalarFromYaml<bool>(yaml, json, NJson::EJsonValueType::JSON_BOOLEAN))
-                return json;
-
-            if (SetScalarFromYaml<double>(yaml, json, NJson::EJsonValueType::JSON_DOUBLE))
-                return json;
-
-            if (SetScalarFromYaml<TString>(yaml, json, NJson::EJsonValueType::JSON_STRING))
-                return json;
-
-        } else if (yaml.IsNull()) {
-            json.SetType(NJson::EJsonValueType::JSON_NULL);
-            return json;
-        } else if (!yaml.IsDefined()) {
-            json.SetType(NJson::EJsonValueType::JSON_UNDEFINED);
-            return json;
-        }
-
-        ythrow yexception() << "Unknown type of YAML node: '" << yaml.as<TString>() << "'";
     }
 
     static NProtobufJson::TJson2ProtoConfig GetJsonToProtoConfig() {

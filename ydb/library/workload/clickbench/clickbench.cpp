@@ -51,8 +51,12 @@ TClickbenchWorkloadGenerator::TClickbenchWorkloadGenerator(const TClickbenchWork
     , Params(params)
 {}
 
-TString TClickbenchWorkloadGenerator::DoGetDDLQueries() const {
-    return NResource::Find("click_bench_schema.sql");
+TString TClickbenchWorkloadGenerator::GetTablesYaml() const {
+    return NResource::Find("click_bench_schema.yaml");
+}
+
+TWorkloadGeneratorBase::TSpecialDataTypes TClickbenchWorkloadGenerator::GetSpecialDataTypes() const {
+    return {};
 }
 
 TQueryInfoList TClickbenchWorkloadGenerator::GetInitialData() {

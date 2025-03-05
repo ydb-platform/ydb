@@ -196,13 +196,12 @@ void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet, TSideEffects& 
 }
 
 TInstant THive::GetAllowedBootingTime() {
-    auto connectedNodes = TabletCounters->Simple()[NHive::COUNTER_NODES_CONNECTED].Get();
-    BLOG_D(connectedNodes << " nodes connected out of " << ExpectedNodes);
-    if (connectedNodes == 0) {
-        return {};
+    BLOG_D("ProcessBootQueue: " << AliveNodes << " nodes connected out of " << ExpectedNodes);
+    if (AliveNodes == 0) {
+        return TInstant::Max();
     }
-    TInstant result = LastConnect + MaxTimeBetweenConnects * std::max<i64>(static_cast<i64>(ExpectedNodes) - static_cast<i64>(connectedNodes), 1);
-    if (connectedNodes < ExpectedNodes) {
+    TInstant result = LastConnect + MaxTimeBetweenConnects * std::max<i64>(static_cast<i64>(ExpectedNodes) - static_cast<i64>(AliveNodes), 1);
+    if (AliveNodes < ExpectedNodes) {
         result = std::max(result, StartTime() + GetWarmUpBootWaitingPeriod());
     }
     result = std::min(result, StartTime() + GetMaxWarmUpPeriod());
@@ -517,9 +516,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         } else if (tablet.IsReadyToBlockStorage()) {
             tablet.InitiateBlockStorage(sideEffects);
         } else if (tablet.IsDeleting()) {
-            if (!tablet.InitiateBlockStorage(sideEffects, std::numeric_limits<ui32>::max())) {
-                DeleteTabletWithoutStorage(&tablet);
-            }
+            BlockStorageForDelete(tablet.Id, sideEffects);
         } else if (tablet.IsLockedToActor()) {
             // we are wating for a lock
         } else if (tablet.IsExternalBoot()) {
@@ -577,6 +574,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         }
         SendToRootHivePipe(request.Release());
     }
+    UpdateCounterNodesConnected(+1); // self node
     Schedule(GetScaleRecommendationRefreshFrequency(), new TEvPrivate::TEvRefreshScaleRecommendation());
     ProcessPendingOperations();
 }
@@ -855,9 +853,7 @@ void THive::Handle(TEvHive::TEvInitiateBlockStorage::TPtr& ev) {
     TLeaderTabletInfo* tablet = FindTabletEvenInDeleting(tabletId);
     if (tablet != nullptr) {
         if (tablet->IsDeleting()) {
-            if (!tablet->InitiateBlockStorage(sideEffects, std::numeric_limits<ui32>::max())) {
-                DeleteTabletWithoutStorage(tablet);
-            }
+            BlockStorageForDelete(tabletId, sideEffects);
         } else
         if (tablet->IsReadyToBlockStorage()) {
             tablet->InitiateBlockStorage(sideEffects);
@@ -1180,15 +1176,15 @@ TNodeInfo* THive::SelectNode<NKikimrConfig::THiveConfig::HIVE_NODE_SELECT_STRATE
     return itNode->Node;
 }
 
-TVector<THive::TSelectedNode> THive::SelectMaxPriorityNodes(TVector<TSelectedNode> selectedNodes, const TTabletInfo& tablet) const
+TVector<THive::TSelectedNode> THive::SelectMaxPriorityNodes(TVector<TSelectedNode> selectedNodes, const TTabletInfo& tablet, TDataCenterPriority& dcPriority) const
 {
     i32 priority = std::numeric_limits<i32>::min();
     for (const TSelectedNode& selectedNode : selectedNodes) {
-        priority = std::max(priority, selectedNode.Node->GetPriorityForTablet(tablet));
+        priority = std::max(priority, selectedNode.Node->GetPriorityForTablet(tablet, dcPriority));
     }
 
     auto it = std::partition(selectedNodes.begin(), selectedNodes.end(), [&] (const TSelectedNode& selectedNode) {
-        return selectedNode.Node->GetPriorityForTablet(tablet) == priority;
+        return selectedNode.Node->GetPriorityForTablet(tablet, dcPriority) == priority;
     });
 
     selectedNodes.erase(it, selectedNodes.end());
@@ -1199,6 +1195,11 @@ TVector<THive::TSelectedNode> THive::SelectMaxPriorityNodes(TVector<TSelectedNod
 THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId) {
     BLOG_D("[FBN] Finding best node for tablet " << tablet.ToString());
     BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " family " << tablet.FamilyString());
+
+    const TDomainInfo* domain = FindDomain(tablet.NodeFilter.ObjectDomain);
+    if (domain && domain->Stopped) {
+        return TNoNodeFound();
+    }
 
     if (tablet.PreferredNodeId != 0) {
         TNodeInfo* node = FindNode(tablet.PreferredNodeId);
@@ -1278,53 +1279,21 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
         }
     }
 
-    std::vector<std::vector<TNodeInfo*>> candidateGroups;
-    candidateGroups.resize(dataCentersGroups.size() + 1);
-    std::unordered_map<TDataCenterId, std::vector<TNodeInfo*>*> indexDC2Group;
+    TDataCenterPriority dcPriority;
     for (size_t numGroup = 0; numGroup < dataCentersGroups.size(); ++numGroup) {
         const NKikimrHive::TDataCentersGroup* dcGroup = dataCentersGroups[numGroup];
-        if (dcGroup->DataCenterSize()) {
-            for (TDataCenterId dc : dcGroup->GetDataCenter()) {
-                indexDC2Group[dc] = candidateGroups.data() + numGroup;
-            }
-        } else {
-            for (const ui64 dcId : dcGroup->GetDataCenterNum()) {
-                indexDC2Group[DataCenterToString(dcId)] = candidateGroups.data() + numGroup;
-            }
-        }
-    }
-    for (auto it = Nodes.begin(); it != Nodes.end(); ++it) {
-        TNodeInfo* nodeInfo = &it->second;
-        if (nodeInfo->IsAlive()) {
-            TDataCenterId dataCenterId = nodeInfo->GetDataCenter();
-            auto itDataCenter = indexDC2Group.find(dataCenterId);
-            if (itDataCenter != indexDC2Group.end()) {
-                itDataCenter->second->push_back(nodeInfo);
-            } else {
-                candidateGroups.back().push_back(nodeInfo);
-            }
-        } else {
-            BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " node " << nodeInfo->Id << " is not alive");
-            debugState.NodesDead++;
+        for (TDataCenterId dc : dcGroup->GetDataCenter()) {
+            // First group gets largest priority, last group gets +1 priority, dcs not in any groups get 0
+            dcPriority[dc] = dataCentersGroups.size() - numGroup;
         }
     }
 
     TVector<TSelectedNode> selectedNodes;
+    selectedNodes.reserve(Nodes.size());
     bool thereAreNodesWithManyStarts = false;
 
-    for (auto itCandidateNodes = candidateGroups.begin(); itCandidateNodes != candidateGroups.end(); ++itCandidateNodes) {
-        const std::vector<TNodeInfo*>& candidateNodes(*itCandidateNodes);
-        if (candidateGroups.size() > 1) {
-            BLOG_TRACE("[FBN] Tablet " << tablet.ToString()
-                       << " checking candidates group " << (itCandidateNodes - candidateGroups.begin() + 1)
-                       << " of " << candidateGroups.size());
-        }
-
-        selectedNodes.clear();
-        selectedNodes.reserve(candidateNodes.size());
-
-        for (auto it = candidateNodes.begin(); it != candidateNodes.end(); ++it) {
-            TNodeInfo& nodeInfo = *(*it);
+    for (auto& [_, nodeInfo] : Nodes) {
+        if (nodeInfo.IsAlive()) {
             if (nodeInfo.IsAllowedToRunTablet(tablet, &debugState)) {
                 if (nodeInfo.IsAbleToScheduleTablet()) {
                     if (nodeInfo.IsAbleToRunTablet(tablet, &debugState)) {
@@ -1350,11 +1319,12 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
                             << " tablet allowed domains " << tablet.GetNodeFilter().AllowedDomains
                             << " tablet effective allowed domains " << tablet.GetNodeFilter().GetEffectiveAllowedDomains());
             }
-        }
-        if (!selectedNodes.empty()) {
-            break;
+        } else {
+            BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " node " << nodeInfo.Id << " is not alive");
+            debugState.NodesDead++;
         }
     }
+
     BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " selected nodes count " << selectedNodes.size());
     if (selectedNodes.empty() && thereAreNodesWithManyStarts) {
         BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " all available nodes are booting too many tablets");
@@ -1363,7 +1333,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
 
     TNodeInfo* selectedNode = nullptr;
     if (!selectedNodes.empty()) {
-        selectedNodes = SelectMaxPriorityNodes(std::move(selectedNodes), tablet);
+        selectedNodes = SelectMaxPriorityNodes(std::move(selectedNodes), tablet, dcPriority);
         BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " selected max priority nodes count " << selectedNodes.size());
 
         switch (GetNodeSelectStrategy()) {
@@ -1608,6 +1578,11 @@ void THive::DeleteTablet(TTabletId tabletId) {
                 Y_ENSURE_LOG(st->second.count(&tablet) == 0, " Deleting tablet found on node " << nt->first << " in state " << TTabletInfo::EVolatileStateName(st->first));
             }
             Y_ENSURE_LOG(nt->second.LockedTablets.count(&tablet) == 0, " Deleting tablet found on node " << nt->first << " in locked set");
+        }
+        for (const auto& followerGroup : tablet.FollowerGroups) {
+            for (auto& [_, dataCenter] : DataCenters) {
+                dataCenter.Followers.erase({tabletId, followerGroup.Id});
+            }
         }
         const i64 tabletsTotalDiff = -1 - (tablet.Followers.size());
         UpdateCounterTabletsTotal(tabletsTotalDiff);
@@ -1861,7 +1836,7 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
 void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo *info, const NKikimrHive::TEvRequestHiveInfo &req) {
     if (info) {
         TInstant now = TActivationContext::Now();
-        TInstant restartsBarrierTime = now - GetTabletRestartsPeriod();
+        TInstant restartsBarrierTime = now - GetTabletRestartWatchPeriod();
         auto& tabletInfo = *response.AddTablets();
         tabletInfo.SetTabletID(tabletId);
         tabletInfo.SetTabletType(info->Type);
@@ -2208,7 +2183,7 @@ void THive::Handle(TEvHive::TEvDrainNode::TPtr& ev) {
         .Persist = ev->Get()->Record.GetPersist(),
         .DownPolicy = policy,
         .DrainInFlight = ev->Get()->Record.GetDrainInFlight(),
-    }, ev->Sender));
+    }, ev->Sender, ev->Get()->Record.GetSeqNo()));
 }
 
 void THive::Handle(TEvHive::TEvFillNode::TPtr& ev) {
@@ -2378,6 +2353,17 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         nodeUsageHistogram.IncrementFor(record.Usage * 100);
     }
 
+    std::optional<TBalancerSettings> settings;
+    const auto maybeStartBalancer = [&settings, this]() -> bool {
+        Y_DEBUG_ABORT_UNLESS(settings);
+        if (LastBalancerTrigger == settings->Type
+            && BalancerStats[static_cast<size_t>(settings->Type)].LastRunMovements == 0) {
+            return false;
+        }
+        StartHiveBalancer(std::move(*settings));
+        return true;
+    };
+
     double minUsageToKick = GetMaxNodeUsageToKick() - GetNodeUsageRangeToKick();
     if (stats.MaxUsage >= GetMaxNodeUsageToKick() && stats.MinUsage < minUsageToKick) {
         std::vector<TNodeId> overloadedNodes;
@@ -2388,15 +2374,17 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         }
 
         if (!overloadedNodes.empty()) {
-            BLOG_D("Nodes " << overloadedNodes << " with usage over limit " << GetMaxNodeUsageToKick() << " - starting balancer");
-            StartHiveBalancer({
+            BLOG_D("Nodes " << overloadedNodes << " with usage over limit " << GetMaxNodeUsageToKick() << " - triggered balancer");
+            settings.emplace(TBalancerSettings{
                 .Type = EBalancerType::Emergency,
                 .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnEmergencyBalancer(),
                 .RecheckOnFinish = CurrentConfig.GetContinueEmergencyBalancer(),
                 .MaxInFlight = GetEmergencyBalancerInflight(),
                 .FilterNodeIds = std::move(overloadedNodes),
             });
-            return;
+            if (maybeStartBalancer()) {
+                return;
+            }
         }
     }
 
@@ -2405,24 +2393,19 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     }
 
     if (ObjectDistributions.GetMaxImbalance() > GetObjectImbalanceToBalance()) {
-        TInstant now = TActivationContext::Now();
-        if (LastBalancerTrigger != EBalancerType::SpreadNeighbours
-            || BalancerStats[static_cast<std::size_t>(EBalancerType::SpreadNeighbours)].LastRunMovements != 0
-            || BalancerStats[static_cast<std::size_t>(EBalancerType::SpreadNeighbours)].LastRunTimestamp + TDuration::Seconds(1) < now) {
-            auto objectToBalance = ObjectDistributions.GetObjectToBalance();
-            BLOG_D("Max imbalance " << ObjectDistributions.GetMaxImbalance() << " - starting balancer for object " << objectToBalance.ObjectId);
-            StartHiveBalancer({
-                .Type = EBalancerType::SpreadNeighbours,
-                .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
-                .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
-                .MaxInFlight = GetBalancerInflight(),
-                .FilterNodeIds = std::move(objectToBalance.Nodes),
-                .ResourceToBalance = EResourceToBalance::Counter,
-                .FilterObjectId = objectToBalance.ObjectId,
-            });
+        auto objectToBalance = ObjectDistributions.GetObjectToBalance();
+        BLOG_D("Max imbalance " << ObjectDistributions.GetMaxImbalance() << " - triggered balancer for object " << objectToBalance.ObjectId);
+        settings.emplace(TBalancerSettings{
+            .Type = EBalancerType::SpreadNeighbours,
+            .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
+            .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
+            .MaxInFlight = GetBalancerInflight(),
+            .FilterNodeIds = std::move(objectToBalance.Nodes),
+            .ResourceToBalance = EResourceToBalance::Counter,
+            .FilterObjectId = objectToBalance.ObjectId,
+        });
+        if (maybeStartBalancer()) {
             return;
-        } else {
-            BLOG_D("Skipping SpreadNeigbours Balancer, now: " << now << ", allowed: " << BalancerStats[static_cast<std::size_t>(EBalancerType::SpreadNeighbours)].LastRunTimestamp + TDuration::Seconds(1));
         }
     }
 
@@ -2447,14 +2430,21 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
                 break;
         }
         BLOG_TRACE("Scatter " << stats.ScatterByResource << " over limit "
-                   << GetMinScatterToBalance() << " - starting balancer " << EBalancerTypeName(balancerType));
-        StartHiveBalancer({
+                   << GetMinScatterToBalance() << " - triggered balancer " << EBalancerTypeName(balancerType));
+        settings.emplace(TBalancerSettings{
             .Type = balancerType,
             .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
             .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
             .MaxInFlight = GetBalancerInflight(),
             .ResourceToBalance = *scatteredResource,
         });
+        if (maybeStartBalancer()) {
+            return;
+        }
+    }
+
+    if (settings) {
+        StartHiveBalancer(std::move(*settings));
         return;
     }
 
@@ -2875,6 +2865,35 @@ ui64 THive::GetObjectImbalance(TFullObjectId object) {
     return it->second->GetImbalance();
 }
 
+void THive::BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects) {
+    auto* tablet = FindTabletEvenInDeleting(tabletId);
+    if (tablet == nullptr) {
+        return;
+    }
+    if (DeleteTabletInProgress < MAX_DELETE_TABLET_IN_PROGRESS) {
+        ++DeleteTabletInProgress;
+        if (!tablet->InitiateBlockStorage(sideEffects, std::numeric_limits<ui32>::max())) {
+            DeleteTabletWithoutStorage(tablet);
+        }
+    } else {
+        DeleteTabletQueue.push(tabletId);
+    }
+}
+
+void THive::ProcessPendingStopTablet() {
+    if (!StopTenantTabletsQueue.empty()) {
+        Execute(CreateStopTabletByTenant(StopTenantTabletsQueue.front()));
+        StopTenantTabletsQueue.pop();
+    }
+}
+
+void THive::ProcessPendingResumeTablet() {
+    if (!ResumeTenantTabletsQueue.empty()) {
+        Execute(CreateResumeTabletByTenant(ResumeTenantTabletsQueue.front()));
+        ResumeTenantTabletsQueue.pop();
+    }
+}
+
 THive::THive(TTabletStorageInfo *info, const TActorId &tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
@@ -3066,6 +3085,8 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvHive::TEvRequestScaleRecommendation, Handle);
         hFunc(TEvPrivate::TEvGenerateTestData, Handle);
         hFunc(TEvPrivate::TEvRefreshScaleRecommendation, Handle);
+        hFunc(TEvHive::TEvConfigureScaleRecommender, Handle);
+        hFunc(TEvPrivate::TEvUpdateFollowers, Handle);
     }
 }
 
@@ -3172,6 +3193,8 @@ STFUNC(THive::StateWork) {
         fFunc(TEvHive::TEvRequestScaleRecommendation::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvGenerateTestData::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvRefreshScaleRecommendation::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvConfigureScaleRecommender::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvUpdateFollowers::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3473,37 +3496,69 @@ void THive::Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev) {
 }
 
 void THive::Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
-    Execute(CreateUpdateDcFollowers(ev->Get()->DataCenter));
+    auto dataCenterId = ev->Get()->DataCenter;
+    auto& dataCenter = DataCenters[dataCenterId];
+    if (!dataCenter.UpdateScheduled) {
+        return;
+    }
+    dataCenter.UpdateScheduled = false;
+    if (dataCenter.IsRegistered()) {
+        for (auto& [tabletId, tablet] : Tablets) {
+            for (auto& group : tablet.FollowerGroups) {
+                auto& followers = dataCenter.Followers[{tabletId, group.Id}];
+                i64 neededCount = group.GetFollowerCountForDataCenter(dataCenterId);
+                i64 delta = neededCount - std::ssize(followers);
+                for (i64 i = 0; i < delta; ++i) {
+                    BLOG_TRACE("UpdateDataCenterFollowers: Pending create follower for " << tabletId);
+                    PendingFollowerUpdates.Create(tablet.GetFullTabletId(), group.Id, dataCenterId);
+                }
+            }
+        }
+    } else {
+        for (auto& [group, followers] : dataCenter.Followers) {
+            for (auto follower : followers) {
+                BLOG_TRACE("UpdateDataCenterFollowers: Pending delete follower for " << follower->GetFullTabletId());
+                PendingFollowerUpdates.Delete(follower->GetFullTabletId(), group.second, dataCenterId);
+            }
+        }
+    }
+    if (!PendingFollowerUpdates.Empty() && !ProcessFollowerUpdatesScheduled) {
+        Send(SelfId(), new TEvPrivate::TEvUpdateFollowers);
+        ProcessFollowerUpdatesScheduled = true;
+    }
 }
 
-template <typename TIt>
-ui32 THive::CalculateRecommendedNodes(TIt windowBegin, TIt windowEnd, size_t readyNodes, double target) {
-    double maxOnWindow = *std::max_element(windowBegin, windowEnd);
-    double ratio = maxOnWindow / target;
-    return std::ceil(readyNodes * ratio);
+void THive::Handle(TEvPrivate::TEvUpdateFollowers::TPtr&) {
+    Execute(CreateProcessUpdateFollowers());
 }
 
 void THive::MakeScaleRecommendation() {
-    BLOG_D("[MSR] Started making scale recommendation");
+    BLOG_D("[MSR] Started");
+    
+    if (AreWeRootHive()) {
+        return;
+    }
 
-    // TODO(pixcc): make following variables as configurable settings
-    constexpr TDuration NODE_INITILIZATION_TIME = TDuration::Seconds(30);
-    constexpr size_t MAX_HISTORY_SIZE = 15;
-    constexpr size_t SCALE_IN_WINDOW_SIZE = 5;
-    constexpr size_t SCALE_OUT_WINDOW_SIZE = 15;
-    constexpr double TARGET_AVG_CPU_USAGE_PERCENT = 0.66;
-    constexpr double CPU_USAGE_MARGIN = 0.2;
+    auto subdomainKey = GetMySubDomainKey();
+    auto it = Domains.find(subdomainKey);
+    if (it == Domains.end()) {
+        BLOG_ERROR("[MSR] Can't find domain " << subdomainKey);
+        Schedule(GetScaleRecommendationRefreshFrequency(), new TEvPrivate::TEvRefreshScaleRecommendation());
+        return;
+    }
+    auto& domain = it->second;
+
+    if (domain.ScaleRecommenderPolicies.empty() && CurrentConfig.GetDryRunTargetTrackingCPU() == 0) {
+        BLOG_TRACE("[MSR] No scaling policies configured, rescheduled");
+        Schedule(GetScaleRecommendationRefreshFrequency(), new TEvPrivate::TEvRefreshScaleRecommendation());
+        return;
+    }
 
     double cpuUsageSum = 0;
-    size_t readyNodesCount = 0;
+    ui32 readyNodesCount = 0;
     for (auto& [id, node] : Nodes) {
         if (!node.IsAlive()) {
             BLOG_TRACE("[MSR] Skip node " << id << ", not alive");
-            continue;
-        }
-
-        if (node.StartTime + NODE_INITILIZATION_TIME > TActivationContext::Now()) {
-            BLOG_TRACE("[MSR] Skip node " << id << ", in initialization");
             continue;
         }
 
@@ -3512,85 +3567,51 @@ void THive::MakeScaleRecommendation() {
             continue;
         }
 
-        if (node.GetServicedDomain() != GetMySubDomainKey()) {
+        if (node.GetServicedDomain() != subdomainKey) {
             BLOG_TRACE("[MSR] Skip node " << id << ", serviced domain doesn't match");
             continue;
         }
 
         double avgCpuUsage = node.AveragedNodeTotalCpuUsage.GetValue();
-        BLOG_TRACE("[MSR] Node " << id << " is ready, Avg CPU Usage " << avgCpuUsage);
+        BLOG_TRACE("[MSR] Node " << id << " is ready, avg CPU usage: " << avgCpuUsage);
         ++readyNodesCount;
 
         cpuUsageSum += avgCpuUsage;
         node.AveragedNodeTotalCpuUsage.Clear();
     }
 
-    auto& domain = Domains[GetMySubDomainKey()];
-    auto& avgCpuUsageHistory = domain.AvgCpuUsageHistory;
-
     double avgCpuUsage = readyNodesCount != 0 ? cpuUsageSum / readyNodesCount : 0;
-    BLOG_TRACE("[MSR] Total Avg CPU Usage " << avgCpuUsage);
+    BLOG_TRACE("[MSR] Total avg CPU usage: " << avgCpuUsage << ", ready nodes: " << readyNodesCount);
+    TabletCounters->Simple()[NHive::COUNTER_AVG_CPU_UTILIZATION].Set(avgCpuUsage * 100);
 
+    auto& avgCpuUsageHistory = domain.AvgCpuUsageHistory;
     avgCpuUsageHistory.push_back(avgCpuUsage);
-    while (avgCpuUsageHistory.size() > MAX_HISTORY_SIZE) {
+    size_t maxHistorySize = std::max(CurrentConfig.GetScaleInWindowSize(), CurrentConfig.GetScaleOutWindowSize());
+    while (avgCpuUsageHistory.size() > maxHistorySize) {
         avgCpuUsageHistory.pop_front();
     }
-    BLOG_TRACE("[MSR] Avg CPU Usage history " << '[' << JoinSeq(", ", avgCpuUsageHistory) << ']');
+    BLOG_TRACE("[MSR] Avg CPU usage history: " << '[' << JoinSeq(", ", avgCpuUsageHistory) << ']');
 
-    ui32 recommendedNodes = 0;
-
-    if (avgCpuUsageHistory.size() >= SCALE_IN_WINDOW_SIZE) {
-        auto scaleInWindowBegin = avgCpuUsageHistory.end() - SCALE_IN_WINDOW_SIZE;
-        auto scaleInWindowEnd = avgCpuUsageHistory.end();
-        double usageBottomThreshold = TARGET_AVG_CPU_USAGE_PERCENT - CPU_USAGE_MARGIN;
-
-        bool needScaleIn = std::all_of(
-            scaleInWindowBegin,
-            scaleInWindowEnd,
-            [usageBottomThreshold](double value){ return value < usageBottomThreshold; }
-        );
-
-        if (needScaleIn) {
-            recommendedNodes = CalculateRecommendedNodes(
-                scaleInWindowBegin,
-                scaleInWindowEnd,
-                readyNodesCount,
-                TARGET_AVG_CPU_USAGE_PERCENT
-            );
-            BLOG_D("[MSR] Need scale in: " << readyNodesCount << " -> " << recommendedNodes);
+    if (!domain.ScaleRecommenderPolicies.empty()) {
+        ui32 recommendedNodes = 1;
+        for (auto& policy : domain.ScaleRecommenderPolicies) {
+            recommendedNodes = std::max(recommendedNodes, policy->MakeScaleRecommendation(readyNodesCount, CurrentConfig));
         }
-    } else {
-        BLOG_D("[MSR] Not enough history data to scale in");
-    }
 
-    if (recommendedNodes == 0 && avgCpuUsageHistory.size() >= SCALE_OUT_WINDOW_SIZE) {
-        auto scaleOutWindowBegin = avgCpuUsageHistory.end() - SCALE_OUT_WINDOW_SIZE;
-        auto scaleOutWindowEnd = avgCpuUsageHistory.end();
-
-        bool needScaleOut = std::all_of(
-            scaleOutWindowBegin,
-            scaleOutWindowEnd,
-            [](double value){ return value > TARGET_AVG_CPU_USAGE_PERCENT; }
-        );
-
-        if (needScaleOut) {
-            recommendedNodes = CalculateRecommendedNodes(
-                scaleOutWindowBegin,
-                scaleOutWindowEnd,
-                readyNodesCount,
-                TARGET_AVG_CPU_USAGE_PERCENT
-            );
-            BLOG_D("[MSR] Need scale out: " << readyNodesCount << " -> " << recommendedNodes);
-        }
-    } else {
-        BLOG_D("[MSR] Not enough history data to scale out");
-    }
-
-    if (recommendedNodes != 0) {
         domain.LastScaleRecommendation = TScaleRecommendation{
             .Nodes = recommendedNodes,
             .Timestamp = TActivationContext::Now()
         };
+        TabletCounters->Simple()[NHive::COUNTER_NODES_RECOMMENDED].Set(recommendedNodes);
+        BLOG_TRACE("[MSR] Recommended nodes: " << recommendedNodes << ", current nodes: " << readyNodesCount);
+    }
+
+    if (CurrentConfig.GetDryRunTargetTrackingCPU() != 0) {
+        ui32 dryRunRecommendedNodes = 1;
+        TTargetTrackingPolicy dryRunPolicy(CurrentConfig.GetDryRunTargetTrackingCPU(), avgCpuUsageHistory, TabletID(), true);
+        dryRunRecommendedNodes = std::max(dryRunRecommendedNodes, dryRunPolicy.MakeScaleRecommendation(readyNodesCount, CurrentConfig));
+        TabletCounters->Simple()[NHive::COUNTER_NODES_RECOMMENDED_DRY_RUN].Set(dryRunRecommendedNodes);
+        BLOG_TRACE("[MSR] Dry run recommended nodes: " << dryRunRecommendedNodes << ", current nodes: " << readyNodesCount);
     }
 
     Schedule(GetScaleRecommendationRefreshFrequency(), new TEvPrivate::TEvRefreshScaleRecommendation());
@@ -3634,6 +3655,11 @@ void THive::Handle(TEvPrivate::TEvGenerateTestData::TPtr&) {
     for (int i = 0; i < 4; ++i) {
         Execute(CreateGenerateTestData(i));
     }
+}
+
+void THive::Handle(TEvHive::TEvConfigureScaleRecommender::TPtr& ev) {
+    BLOG_D("Handle TEvHive::TEvConfigureScaleRecommender(" << ev->Get()->Record.ShortDebugString() << ")");
+    Execute(CreateConfigureScaleRecommender(ev));
 }
 
 TVector<TNodeId> THive::GetNodesForWhiteboardBroadcast(size_t maxNodesToReturn) {

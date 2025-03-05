@@ -13,6 +13,9 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 import ydb.tests.fq.s3.s3_helpers as s3_helpers
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1, yq_all
 
+from moto import __version__ as moto_version
+from packaging.version import Version
+
 
 class TestS3(object):
     def create_bucket_and_upload_file(self, filename, s3, kikimr):
@@ -435,7 +438,8 @@ class TestS3(object):
         )
 
         bucket = resource.Bucket("error_bucket")
-        bucket.create(ACL='')
+        acl = '' if Version(moto_version) < Version("4.0.5") else 'public-write'
+        bucket.create(ACL=acl)
         bucket.objects.all().delete()
 
         kikimr.control_plane.wait_bootstrap(1)
@@ -462,18 +466,26 @@ class TestS3(object):
         )
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        start_at = time.time()
-        while True:
-            result = client.describe_query(query_id).result
-            assert result.query.meta.status in [
-                fq.QueryMeta.STARTING,
-                fq.QueryMeta.RUNNING,
-            ], "Query is not RUNNING anymore"
-            issues = result.query.transient_issue
-            if "500 Internal Server Error" in str(issues):
-                break
-            assert time.time() - start_at < 20, "Timeout waiting for transient issue in " + str(issues)
-            time.sleep(0.5)
+        if Version(moto_version) < Version("4.0.5"):
+            start_at = time.time()
+            while True:
+                result = client.describe_query(query_id).result
+                assert result.query.meta.status in [
+                    fq.QueryMeta.STARTING,
+                    fq.QueryMeta.RUNNING,
+                ], "Query is not RUNNING anymore"
+                issues = result.query.transient_issue
+                if "500 Internal Server Error" in str(issues):
+                    break
+                assert time.time() - start_at < 20, "Timeout waiting for transient issue in " + str(issues)
+                time.sleep(0.5)
+        else:
+            # Available since moto version 4.0.5+
+            client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+            msg = client.describe_query(query_id).result.query.issue
+            assert 'HTTP error code: 403' in str(msg)
+            assert 'Query failed with code EXTERNAL_ERROR' in str(msg)
+
         client.abort_query(query_id)
         client.wait_query(query_id)
 

@@ -1,5 +1,4 @@
 #include "request.h"
-#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
@@ -246,18 +245,13 @@ TRuntimeNode TKernelRequestBuilder::MakeArg(const TTypeAnnotationNode* type) {
 }
 
 TBlockType* TKernelRequestBuilder::MakeType(const TTypeAnnotationNode* type) {
-    auto [it, inserted] = CachedTypes_.emplace(type, nullptr);
-    if (!inserted) {
-        return it->second;
-    }
-
     TStringStream err;
-    const auto ret = NCommon::BuildType(*type, Pb_, err);
+    const auto ret = NCommon::BuildType(*type, Pb_, TypesMemoization_, err);
     if (!ret) {
         ythrow yexception() << err.Str();
     }
 
-    return it->second = AS_TYPE(TBlockType, ret);
+    return AS_TYPE(TBlockType, ret);
 }
 
 }

@@ -30,9 +30,10 @@ namespace numpy
     }
 
     inline auto negative_binomial(long n, double p, long size)
-        -> decltype(negative_binomial(n, p, types::array<long, 1>{{size}}))
+        -> decltype(negative_binomial(n, p,
+                                      types::array_tuple<long, 1>{{size}}))
     {
-      return negative_binomial(n, p, types::array<long, 1>{{size}});
+      return negative_binomial(n, p, types::array_tuple<long, 1>{{size}});
     }
 
     inline long negative_binomial(long n, double p, types::none_type d)

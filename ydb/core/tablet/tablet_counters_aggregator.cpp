@@ -1354,9 +1354,9 @@ TTabletCountersAggregatorActor::Bootstrap(const TActorContext &ctx) {
     auto mon = appData->Mon;
     if (mon) {
         if (!Follower)
-            mon->RegisterActorPage(nullptr, "labeledcounters", "Labeled Counters", false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId(), false);
+            mon->RegisterActorPage(nullptr, "labeledcounters", "Labeled Counters", false, TActivationContext::ActorSystem(), SelfId(), false);
         else
-            mon->RegisterActorPage(nullptr, "followercounters", "Follower Counters", false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId(), false);
+            mon->RegisterActorPage(nullptr, "followercounters", "Follower Counters", false, TActivationContext::ActorSystem(), SelfId(), false);
     }
 
     ctx.Schedule(TDuration::Seconds(WAKEUP_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
@@ -1474,7 +1474,7 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletLabeledCo
                 groupNames[j] = TString(1, toupper(groupNames[j][0])) + groupNames[j].substr(1);
                 if (groupNames[j] == "Topic") {
                     if (NPersQueue::CorrectName(groups[j])) {
-                        TString dc = to_title(NPersQueue::GetDC(groups[j]));
+                        TString dc = to_title(TString{NPersQueue::GetDC(groups[j])});
                         TString producer = NPersQueue::GetProducer(groups[j]);
                         TString topic = NPersQueue::GetRealTopic(groups[j]);
                         group = group->GetSubgroup("OriginDC", dc);

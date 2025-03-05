@@ -51,7 +51,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[row.col2,row.col1,row.col3]"
                                             },
                                             {
                                                 "Inputs": [
@@ -60,7 +60,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "item.e > item.c Or item.e < item.d And item.c > item.d"
+                                                "Predicate": "item.e > item.c OR item.e < item.d AND item.c > item.d"
                                             }
                                         ],
                                         "PlanNodeId": 2,
@@ -71,6 +71,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableRangeScan",
+                                                        "Path": "/Root/sqllogictest_select2-3.test_plan/t1",
                                                         "ReadColumns": [
                                                             "a",
                                                             "b",

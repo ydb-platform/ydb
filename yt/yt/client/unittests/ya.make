@@ -2,8 +2,6 @@ GTEST(unittester-client)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
-ALLOCATOR(YT)
-
 PROTO_NAMESPACE(yt)
 
 SRCS(
@@ -36,8 +34,6 @@ SRCS(
     validate_logical_type_ut.cpp
     wire_protocol_ut.cpp
     ypath_ut.cpp
-    zookeeper_bus_ut.cpp
-    zookeeper_protocol_ut.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)

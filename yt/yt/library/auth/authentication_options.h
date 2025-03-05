@@ -16,9 +16,9 @@ struct TAuthenticationOptions
 {
     static TAuthenticationOptions FromUser(const std::string& user, const std::optional<std::string>& userTag = {});
     static TAuthenticationOptions FromAuthenticationIdentity(const NRpc::TAuthenticationIdentity& identity);
-    static TAuthenticationOptions FromToken(const TString& token);
+    static TAuthenticationOptions FromToken(const std::string& token);
     static TAuthenticationOptions FromServiceTicketAuth(const IServiceTicketAuthPtr& ticketAuth);
-    static TAuthenticationOptions FromUserTicket(const TString& userTicket);
+    static TAuthenticationOptions FromUserTicket(const std::string& userTicket);
 
     const std::string& GetAuthenticatedUser() const;
     NRpc::TAuthenticationIdentity GetAuthenticationIdentity() const;
@@ -33,11 +33,14 @@ struct TAuthenticationOptions
     //! various clients that authenticate via the same effective user.
     std::optional<std::string> UserTag;
 
-    std::optional<TString> Token;
-    std::optional<TString> SessionId;
-    std::optional<TString> SslSessionId;
+    std::optional<std::string> Token;
+    std::optional<std::string> SessionId;
+    std::optional<std::string> SslSessionId;
     std::optional<IServiceTicketAuthPtr> ServiceTicketAuth;
-    std::optional<TString> UserTicket;
+    std::optional<std::string> UserTicket;
+
+    //! Controls whether authentication commands (SetUserPassword, IssueToken, ListUserTokens, etc.) require a correct password to be used.
+    bool RequirePasswordInAuthenticationCommands = true;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

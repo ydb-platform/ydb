@@ -58,13 +58,13 @@ struct TEvHttpInfoResult : public TEventLocal<TEvHttpInfoResult, TEvBlobStorage:
     }
 };
 
-struct TEvPDiskFormattingFinished : public TEventLocal<TEvPDiskFormattingFinished, TEvBlobStorage::EvPDiskFormattingFinished> {
+struct TEvPDiskFormattingFinished : TEventLocal<TEvPDiskFormattingFinished, TEvBlobStorage::EvPDiskFormattingFinished> {
     bool IsSucceed;
     TString ErrorStr;
 
-    TEvPDiskFormattingFinished(bool isSucceed, const TString &errorStr)
+    TEvPDiskFormattingFinished(bool isSucceed, TString errorStr)
         : IsSucceed(isSucceed)
-        , ErrorStr(errorStr)
+        , ErrorStr(std::move(errorStr))
     {}
 
     TString ToString() const {
@@ -209,7 +209,7 @@ struct TEvFormatReencryptionFinish : public TEventLocal<TEvFormatReencryptionFin
 
     TEvFormatReencryptionFinish(bool success, TString errorReason)
         : Success(success)
-        , ErrorReason(errorReason)
+        , ErrorReason(std::move(errorReason))
     {}
 
     TString ToString() const {

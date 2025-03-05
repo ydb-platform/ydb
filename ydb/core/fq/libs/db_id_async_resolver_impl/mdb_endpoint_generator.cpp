@@ -56,14 +56,14 @@ namespace NFq {
                     ui32 port;
 
                     switch (params.Protocol) {
-                        case NYql::NConnector::NApi::EProtocol::NATIVE:
+                        case NYql::EGenericProtocol::NATIVE:
                             port = params.UseTls ? CLICKHOUSE_NATIVE_SECURE_PORT : CLICKHOUSE_NATIVE_INSECURE_PORT;
                             break;
-                        case NYql::NConnector::NApi::EProtocol::HTTP:
+                        case NYql::EGenericProtocol::HTTP:
                             port = params.UseTls ? CLICKHOUSE_HTTP_SECURE_PORT : CLICKHOUSE_HTTP_INSECURE_PORT;
                             break;
                         default:
-                            ythrow yexception() << "Unexpected protocol for ClickHouse: " << NYql::NConnector::NApi::EProtocol_Name(params.Protocol);
+                            ythrow yexception() << "Unexpected protocol for ClickHouse: " << NYql::EGenericProtocol_Name(params.Protocol);
                     }
 
                     return TEndpoint(fixedHost, port);
@@ -71,26 +71,26 @@ namespace NFq {
                 case NYql::EDatabaseType::PostgreSQL:
                     // https://cloud.yandex.ru/docs/managed-postgresql/operations/connect
                     switch (params.Protocol) {
-                        case NYql::NConnector::NApi::EProtocol::NATIVE:
+                        case NYql::EGenericProtocol::NATIVE:
                             return TEndpoint(fixedHost, POSTGRESQL_PORT);
                         default:
-                            ythrow yexception() << "Unexpected protocol for PostgreSQL " << NYql::NConnector::NApi::EProtocol_Name(params.Protocol);
+                            ythrow yexception() << "Unexpected protocol for PostgreSQL " << NYql::EGenericProtocol_Name(params.Protocol);
                     }
                 case NYql::EDatabaseType::Greenplum:
                     // https://cloud.yandex.ru/docs/managed-greenplum/operations/connect
                     switch (params.Protocol) {
-                        case NYql::NConnector::NApi::EProtocol::NATIVE:
+                        case NYql::EGenericProtocol::NATIVE:
                             return TEndpoint(fixedHost, GREENPLUM_PORT);
                         default:
-                            ythrow yexception() << "Unexpected protocol for Greenplum: " << NYql::NConnector::NApi::EProtocol_Name(params.Protocol);
+                            ythrow yexception() << "Unexpected protocol for Greenplum: " << NYql::EGenericProtocol_Name(params.Protocol);
                     }
                 case NYql::EDatabaseType::MySQL:
                     // https://cloud.yandex.ru/docs/managed-mysql/operations/connect
                     switch (params.Protocol) {
-                        case NYql::NConnector::NApi::EProtocol::NATIVE:
+                        case NYql::EGenericProtocol::NATIVE:
                             return TEndpoint(fixedHost, MYSQL_PORT);
                         default:
-                            ythrow yexception() << "Unexpected protocol for MySQL: " << NYql::NConnector::NApi::EProtocol_Name(params.Protocol);
+                            ythrow yexception() << "Unexpected protocol for MySQL: " << NYql::EGenericProtocol_Name(params.Protocol);
                     }
                 default:
                     ythrow yexception() << "Unexpected database type: " << ToString(params.DatabaseType);

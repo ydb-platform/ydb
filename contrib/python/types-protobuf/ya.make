@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(5.27.0.20240920)
+VERSION(5.29.1.20250208)
 
 LICENSE(Apache-2.0)
 
@@ -31,6 +31,7 @@ PY_SRCS(
     google-stubs/protobuf/message.pyi
     google-stubs/protobuf/message_factory.pyi
     google-stubs/protobuf/reflection.pyi
+    google-stubs/protobuf/runtime_version.pyi
     google-stubs/protobuf/service.pyi
     google-stubs/protobuf/symbol_database.pyi
     google-stubs/protobuf/text_format.pyi

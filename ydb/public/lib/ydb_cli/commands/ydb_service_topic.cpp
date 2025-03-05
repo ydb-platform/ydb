@@ -8,7 +8,7 @@
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_write.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/generic/set.h>
 #include <util/stream/str.h>
@@ -380,7 +380,7 @@ namespace NYdb::NConsoleClient {
         }
 
         auto status = topicClient.CreateTopic(TopicName, settings).GetValueSync();
-        ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         return EXIT_SUCCESS;
     }
 
@@ -484,14 +484,14 @@ namespace NYdb::NConsoleClient {
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
-        ThrowOnError(topicDescription);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(topicDescription);
 
         auto describeResult = topicClient.DescribeTopic(TopicName).GetValueSync();
-        ThrowOnError(describeResult);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(describeResult);
 
         auto settings = PrepareAlterSettings(describeResult);
         auto result = topicClient.AlterTopic(TopicName, settings).GetValueSync();
-        ThrowOnError(result);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
         return EXIT_SUCCESS;
     }
 
@@ -515,11 +515,11 @@ namespace NYdb::NConsoleClient {
         NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
-        ThrowOnError(topicDescription);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(topicDescription);
 
         auto settings = NYdb::NTopic::TDropTopicSettings();
         TStatus status = topicClient.DropTopic(TopicName, settings).GetValueSync();
-        ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         return EXIT_SUCCESS;
     }
 
@@ -570,7 +570,7 @@ namespace NYdb::NConsoleClient {
         NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
-        ThrowOnError(topicDescription);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(topicDescription);
 
         NYdb::NTopic::TAlterTopicSettings readRuleSettings = NYdb::NTopic::TAlterTopicSettings();
         NYdb::NTopic::TConsumerSettings<NYdb::NTopic::TAlterTopicSettings> consumerSettings(readRuleSettings);
@@ -588,7 +588,7 @@ namespace NYdb::NConsoleClient {
         readRuleSettings.AppendAddConsumers(consumerSettings);
 
         TStatus status = topicClient.AlterTopic(TopicName, readRuleSettings).GetValueSync();
-        ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         return EXIT_SUCCESS;
     }
 
@@ -615,7 +615,7 @@ namespace NYdb::NConsoleClient {
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
-        ThrowOnError(topicDescription);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(topicDescription);
 
         auto consumers = topicDescription.GetTopicDescription().GetConsumers();
         if (!std::any_of(consumers.begin(), consumers.end(), [&](const auto& consumer) { return consumer.GetConsumerName() == ConsumerName_; }))
@@ -628,7 +628,7 @@ namespace NYdb::NConsoleClient {
         removeReadRuleSettings.AppendDropConsumers(ConsumerName_);
 
         TStatus status = topicClient.AlterTopic(TopicName, removeReadRuleSettings).GetValueSync();
-        ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         return EXIT_SUCCESS;
     }
 
@@ -659,7 +659,7 @@ namespace NYdb::NConsoleClient {
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto consumerDescription = topicClient.DescribeConsumer(TopicName, ConsumerName_, NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(ShowPartitionStats_)).GetValueSync();
-        ThrowOnError(consumerDescription);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(consumerDescription);
 
         return PrintDescription(this, OutputFormat, consumerDescription.GetConsumerDescription(), &TCommandTopicConsumerDescribe::PrintPrettyResult);
     }
@@ -700,7 +700,7 @@ namespace NYdb::NConsoleClient {
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
-        ThrowOnError(topicDescription);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(topicDescription);
 
         auto consumers = topicDescription.GetTopicDescription().GetConsumers();
         if (!std::any_of(consumers.begin(), consumers.end(), [&](const auto& consumer) { return consumer.GetConsumerName() == ConsumerName_; }))
@@ -710,7 +710,7 @@ namespace NYdb::NConsoleClient {
         }
 
         TStatus status = topicClient.CommitOffset(TopicName, PartitionId_, ConsumerName_, Offset_).GetValueSync();
-        ThrowOnError(status);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
         return EXIT_SUCCESS;
     }
 
@@ -779,9 +779,10 @@ namespace NYdb::NConsoleClient {
                            });
 
         // TODO(shmel1k@): improve help.
-        config.Opts->AddLongOption('c', "consumer", "Consumer name.")
-            .Required()
+        config.Opts->AddLongOption('c', "consumer", "Consumer name. If not set, then you need to specify partitions through --partition-ids to read without consumer")
+            .Optional()
             .StoreResult(&Consumer_);
+
         config.Opts->AddLongOption('f', "file", "File to write data to. In not specified, data is written to the standard output.")
             .Optional()
             .StoreResult(&File_);
@@ -862,7 +863,11 @@ namespace NYdb::NConsoleClient {
     NTopic::TReadSessionSettings TCommandTopicRead::PrepareReadSessionSettings() {
         NTopic::TReadSessionSettings settings;
         settings.AutoPartitioningSupport(true);
-        settings.ConsumerName(Consumer_);
+        if (Consumer_) {
+            settings.ConsumerName(Consumer_);
+        } else {
+            settings.WithoutConsumer();
+        }
         // settings.ReadAll(); // TODO(shmel1k@): change to read only original?
         if (Timestamp_.Defined()) {
             settings.ReadFromTimestamp(*Timestamp_);
@@ -876,6 +881,10 @@ namespace NYdb::NConsoleClient {
         }
 
         settings.AppendTopics(std::move(readSettings));
+
+        // This check was added for the static analyzer.
+        Y_ABORT_UNLESS(!settings.EventHandlers_.DataReceivedHandler_);
+
         return settings;
     }
 
@@ -885,13 +894,18 @@ namespace NYdb::NConsoleClient {
             throw TMisuseException() << "OutputFormat " << MessagingFormat << " is not compatible with "
                                      << "limit less and equal '0' or more than '500': '" << *Limit_ << "' was given";
         }
+
+        // validate partitions ids are specified, if no consumer is provided. no-consumer mode will be used. 
+        if (!Consumer_ && !PartitionIds_) {
+            throw TMisuseException() << "Please specify either --consumer or --partition-ids to read without consumer";
+        }
     }
 
     int TCommandTopicRead::Run(TConfig& config) {
         ValidateConfig();
 
         auto driver =
-            std::make_unique<TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
+            std::make_unique<TDriver>(CreateDriver(config, std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)).Release())));
         NTopic::TTopicClient topicClient(*driver);
 
         auto readSession = topicClient.CreateReadSession(PrepareReadSessionSettings());
@@ -1015,6 +1029,9 @@ namespace NYdb::NConsoleClient {
         settings.MessageGroupId(*MessageGroupId_);
         settings.ProducerId(*MessageGroupId_);
 
+        // This check was added for the static analyzer.
+        Y_ABORT_UNLESS(!settings.EventHandlers_.AcksHandler_);
+
         return settings;
     }
 
@@ -1022,7 +1039,7 @@ namespace NYdb::NConsoleClient {
         SetInterruptHandlers();
 
         auto driver =
-            std::make_unique<TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
+            std::make_unique<TDriver>(CreateDriver(config, std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)).Release())));
         NTopic::TTopicClient topicClient(*driver);
 
         {

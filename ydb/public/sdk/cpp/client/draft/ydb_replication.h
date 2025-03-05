@@ -10,11 +10,12 @@
 
 namespace Ydb::Replication {
     class ConnectionParams;
+    class ConsistencyLevelGlobal;
     class DescribeReplicationResult;
     class DescribeReplicationResult_Stats;
 }
 
-namespace NYdb {
+namespace NYdb::inline V2 {
     class TProtoAccessor;
 }
 
@@ -22,14 +23,14 @@ namespace NYql {
     class TIssues;
 }
 
-namespace NYdb::NReplication {
+namespace NYdb::inline V2::NReplication {
 
 class TDescribeReplicationResult;
 using TAsyncDescribeReplicationResult = NThreading::TFuture<TDescribeReplicationResult>;
 
 struct TDescribeReplicationSettings: public TOperationRequestSettings<TDescribeReplicationSettings> {
     using TSelf = TDescribeReplicationSettings;
-    FLUENT_SETTING_DEFAULT(bool, IncludeStats, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, IncludeStats, false);
 };
 
 struct TStaticCredentials {
@@ -63,6 +64,19 @@ private:
         TStaticCredentials,
         TOAuthCredentials
     > Credentials_;
+};
+
+struct TRowConsistency {
+};
+
+class TGlobalConsistency {
+public:
+    explicit TGlobalConsistency(const Ydb::Replication::ConsistencyLevelGlobal& proto);
+
+    const TDuration& GetCommitInterval() const;
+
+private:
+    TDuration CommitInterval_;
 };
 
 class TStats {
@@ -113,6 +127,11 @@ public:
         std::optional<TString> SrcChangefeedName;
     };
 
+    enum class EConsistencyLevel {
+        Row,
+        Global,
+    };
+
     enum class EState {
         Running,
         Error,
@@ -124,6 +143,9 @@ public:
     const TConnectionParams& GetConnectionParams() const;
     const TVector<TItem> GetItems() const;
 
+    EConsistencyLevel GetConsistencyLevel() const;
+    const TGlobalConsistency& GetGlobalConsistency() const;
+
     EState GetState() const;
     const TRunningState& GetRunningState() const;
     const TErrorState& GetErrorState() const;
@@ -132,6 +154,12 @@ public:
 private:
     TConnectionParams ConnectionParams_;
     TVector<TItem> Items_;
+
+    std::variant<
+        TRowConsistency,
+        TGlobalConsistency
+    > ConsistencyLevel_;
+
     std::variant<
         TRunningState,
         TErrorState,

@@ -3,6 +3,7 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/mind/hive/hive.h>
 
 namespace {
 
@@ -16,7 +17,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TSplitMerge TConfigureDestination"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -186,7 +187,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TSplitMerge TTransferData"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -784,6 +785,13 @@ public:
             return result;
         }
 
+        if (tableInfo->IsRestore) {
+            TString errMsg = TStringBuilder()
+                << "cannot split/merge restore table " << info.GetTablePath();
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errMsg);
+            return result;
+        }
+
         const THashMap<TShardIdx, ui64>& shardIdx2partition = tableInfo->GetShard2PartitionIdx();
 
         TVector<ui64> srcPartitionIdxs;
@@ -966,7 +974,7 @@ public:
             }
         }
 
-        path.DomainInfo()->AddInternalShards(op); //allow over commit for merge
+        path.DomainInfo()->AddInternalShards(op, context.SS); //allow over commit for merge
         path->IncShardsInside(dstCount);
 
         SetState(NextState());

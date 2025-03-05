@@ -53,6 +53,16 @@ enum EDrainDownPolicy {
     DRAIN_POLICY_KEEP_DOWN = 2;
 }
 
+enum ELockLostReason {
+    LOCK_LOST_REASON_UNKNOWN = 0;
+    LOCK_LOST_REASON_NODE_DISCONNECTED = 1;
+    LOCK_LOST_REASON_HIVE_RESTART = 2;
+    LOCK_LOST_REASON_TABLET_DELETED = 3;
+    LOCK_LOST_REASON_NEW_LOCK = 4;
+    LOCK_LOST_REASON_TABLET_RELEASED = 5;
+    LOCK_LOST_REASON_UNLOCKED = 6;
+}
+
 message TChannelInfo {
     message THistorySlot {
         optional uint32 FromGeneration = 1;
@@ -366,6 +376,7 @@ message TEvDrainNode {
     optional bool KeepDown = 4 [default = false]; // deprecated in favor of DownPolicy
     optional uint32 DrainInFlight = 5;
     optional EDrainDownPolicy DownPolicy = 6 [default = DRAIN_POLICY_KEEP_DOWN_UNTIL_RESTART];
+    optional uint64 SeqNo = 7;
 }
 
 message TEvDrainNodeResult {
@@ -405,6 +416,7 @@ message TEvLockTabletExecution {
 
 message TEvLockTabletExecutionLost {
     optional fixed64 TabletID = 1;
+    optional ELockLostReason Reason = 2;
 }
 
 message TEvLockTabletExecutionResult {
@@ -598,4 +610,29 @@ message TEvRequestScaleRecommendation {
 message TEvResponseScaleRecommendation {
     optional NKikimrProto.EReplyStatus Status = 1;
     optional uint32 RecommendedNodes = 2;
+}
+
+message TScaleRecommenderPolicies {
+    message TScaleRecommenderPolicy {
+        message TTargetTrackingPolicy {
+            oneof Target {
+                uint32 AverageCpuUtilizationPercent = 1; 
+            }
+        }
+
+        oneof Policy {
+            TTargetTrackingPolicy TargetTrackingPolicy = 1;
+        }
+    }
+
+    repeated TScaleRecommenderPolicy Policies = 1;
+}
+
+message TEvConfigureScaleRecommender {
+    optional NKikimrSubDomains.TDomainKey DomainKey = 1;
+    optional TScaleRecommenderPolicies Policies = 2;
+}
+
+message TEvConfigureScaleRecommenderReply {
+    optional NKikimrProto.EReplyStatus Status = 1;
 }

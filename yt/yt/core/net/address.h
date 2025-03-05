@@ -3,11 +3,12 @@
 #include "public.h"
 
 #include <yt/yt/core/misc/error.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <yt/yt/core/dns/public.h>
 
 #include <yt/yt/core/actions/future.h>
+
+#include <library/cpp/yt/memory/leaky_singleton.h>
 
 #include <util/generic/hash.h>
 
@@ -265,12 +266,12 @@ private:
 // Expected format: sas1-5535-9d7.sas-test.yp.gencfg-c.yandex.net, or noqpmfiudzbb4hvs.man.yp-c.yandex.net.
 // YP pod id must not contain a '.' in its name.
 std::optional<TStringBuf> InferYPClusterFromHostNameRaw(TStringBuf hostName);
-std::optional<TString> InferYPClusterFromHostName(TStringBuf hostName);
+std::optional<std::string> InferYPClusterFromHostName(TStringBuf hostName);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 std::optional<TStringBuf> InferYTClusterFromClusterUrlRaw(TStringBuf clusterUrl);
-std::optional<TString> InferYTClusterFromClusterUrl(TStringBuf clusterUrl);
+std::optional<std::string> InferYTClusterFromClusterUrl(TStringBuf clusterUrl);
 
 ////////////////////////////////////////////////////////////////////////////////
 

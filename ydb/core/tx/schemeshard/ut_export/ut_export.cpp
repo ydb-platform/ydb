@@ -1,11 +1,14 @@
-#include <ydb/core/tablet_flat/shared_cache_events.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/auditlog_helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
-#include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tablet_flat/shared_cache_events.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/auditlog_helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/util/aws.h>
+#include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
 #include <util/string/builder.h>
@@ -15,8 +18,6 @@
 
 #include <library/cpp/testing/hook/hook.h>
 
-#include <aws/core/Aws.h>
-
 using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NWrappers::NTestHelpers;
 
@@ -24,19 +25,18 @@ using TTablesWithAttrs = TVector<std::pair<TString, TMap<TString, TString>>>;
 
 namespace {
 
-    Aws::SDKOptions Options;
-
     Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
-        Aws::InitAPI(Options);
+        NKikimr::InitAwsAPI();
     }
 
     Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
-        Aws::ShutdownAPI(Options);
+        NKikimr::ShutdownAwsAPI();
     }
 
     void Run(TTestBasicRuntime& runtime, TTestEnv& env, const std::variant<TVector<TString>, TTablesWithAttrs>& tablesVar, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
-            const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "", const TString& peerName = "") {
+            const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "", const TString& peerName = "", 
+            const TVector<TString>& cdcStreams = {}) {
 
         TTablesWithAttrs tables;
 
@@ -125,6 +125,11 @@ namespace {
                 NKikimrScheme::StatusAccepted,
                 NKikimrScheme::StatusAlreadyExists,
             }, userAttrs);
+            env.TestWaitNotification(runtime, txId, schemeshardId);
+        }
+
+        for (const auto& cdcStream : cdcStreams) {
+            TestCreateCdcStream(runtime, schemeshardId, ++txId, dbName, cdcStream);
             env.TestWaitNotification(runtime, txId, schemeshardId);
         }
 
@@ -307,8 +312,6 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
             auto it = s3Mock.GetData().find(canonPath + "/metadata.json");
             UNIT_ASSERT(it != s3Mock.GetData().end());
             it = s3Mock.GetData().find(canonPath + "/scheme.pb");
-            UNIT_ASSERT(it != s3Mock.GetData().end());
-            it = s3Mock.GetData().find(canonPath + "/permissions.pb");
             UNIT_ASSERT(it != s3Mock.GetData().end());
         }
     }
@@ -2297,7 +2300,7 @@ partitioning_settings {
 
     Y_UNIT_TEST(TablePermissions) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnablePermissionsExport(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -2344,5 +2347,300 @@ partitioning_settings {
                 }
             }
         )"));
+    }
+
+    Y_UNIT_TEST(Checksums) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnablePermissionsExport(true).EnableChecksumsExport(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 8);
+        const auto* dataChecksum = s3Mock.GetData().FindPtr("/data_00.csv.sha256");
+        UNIT_ASSERT(dataChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(*dataChecksum, "19dcd641390a61063ee45f3e6e06b8f0d3acfc33f934b9bf1ba204668a98f21d data_00.csv");
+
+        const auto* metadataChecksum = s3Mock.GetData().FindPtr("/metadata.json.sha256");
+        UNIT_ASSERT(metadataChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "b72575244ae0cce8dffd45f3537d1e412bfe39de4268f4f85f529cb529870903 metadata.json");
+
+        const auto* schemeChecksum = s3Mock.GetData().FindPtr("/scheme.pb.sha256");
+        UNIT_ASSERT(schemeChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(*schemeChecksum, "cb1fb80965ae92e6369acda2b3b5921fd5518c97d6437f467ce00492907f9eb6 scheme.pb");
+
+        const auto* permissionsChecksum = s3Mock.GetData().FindPtr("/permissions.pb.sha256");
+        UNIT_ASSERT(permissionsChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(*permissionsChecksum, "b41fd8921ff3a7314d9c702dc0e71aace6af8443e0102add0432895c5e50a326 permissions.pb");
+    }
+
+    Y_UNIT_TEST(EnableChecksumsPersistance) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(true));
+        ui64 txId = 100;
+    
+        // Create test table
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+    
+        // Add some test data
+        UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+    
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+    
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+        
+        // Block sending backup task to datashards
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> block(runtime, [](auto& ev) {
+            NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+            UNIT_ASSERT(schemeTx.ParseFromString(ev.Get()->Get()->GetTxBody()));
+            return schemeTx.HasBackup();
+        });
+    
+        // Start export and expect it to be blocked
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+    
+        runtime.WaitFor("backup task is sent to datashards", [&]{ return block.size() >= 1; });
+    
+        // Stop blocking new events
+        block.Stop();
+        
+        // Reboot SchemeShard to resend backup task
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+    
+        // Wait for export to complete
+        env.TestWaitNotification(runtime, txId);
+    
+        // Verify checksums are created
+        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 6);
+
+        const auto* dataChecksum = s3Mock.GetData().FindPtr("/data_00.csv.sha256");
+        UNIT_ASSERT(dataChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(*dataChecksum, "19dcd641390a61063ee45f3e6e06b8f0d3acfc33f934b9bf1ba204668a98f21d data_00.csv");
+
+        const auto* metadataChecksum = s3Mock.GetData().FindPtr("/metadata.json.sha256");
+        UNIT_ASSERT(metadataChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "b72575244ae0cce8dffd45f3537d1e412bfe39de4268f4f85f529cb529870903 metadata.json");
+
+        const auto* schemeChecksum = s3Mock.GetData().FindPtr("/scheme.pb.sha256");
+        UNIT_ASSERT(schemeChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(*schemeChecksum, "cb1fb80965ae92e6369acda2b3b5921fd5518c97d6437f467ce00492907f9eb6 scheme.pb");
+    }
+
+    Y_UNIT_TEST(ChecksumsWithCompression) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+              compression: "zstd"
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        const auto* dataChecksum = s3Mock.GetData().FindPtr("/data_00.csv.sha256");
+        UNIT_ASSERT(dataChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(*dataChecksum, "19dcd641390a61063ee45f3e6e06b8f0d3acfc33f934b9bf1ba204668a98f21d data_00.csv");
+    }
+
+    class ChangefeedGenerator {
+    public:
+        ChangefeedGenerator(const ui64 count, const TS3Mock& s3Mock)
+            : Count(count)
+            , S3Mock(s3Mock)
+            , Changefeeds(GenChangefeeds())
+        {}
+
+        const TVector<TString>& GetChangefeeds() const {
+            return Changefeeds;
+        }
+
+        void Check() {
+            for (ui64 i = 1; i <= Count; ++i) {
+                auto changefeedDir = "/" + GenChangefeedName(i);
+                auto* changefeed = S3Mock.GetData().FindPtr(changefeedDir + "/changefeed_description.pb");
+                UNIT_ASSERT_VALUES_EQUAL(*changefeed, Sprintf(R"(name: "update_feed%d"
+mode: MODE_UPDATES
+format: FORMAT_JSON
+state: STATE_ENABLED
+)", i));
+
+                auto* topic = S3Mock.GetData().FindPtr(changefeedDir + "/topic_description.pb");
+                UNIT_ASSERT(topic);
+                UNIT_ASSERT_VALUES_EQUAL(*topic, Sprintf(R"(partitioning_settings {
+  min_active_partitions: 1
+  max_active_partitions: 1
+  auto_partitioning_settings {
+    strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
+    partition_write_speed {
+      stabilization_window {
+        seconds: 300
+      }
+      up_utilization_percent: 80
+      down_utilization_percent: 20
+    }
+  }
+}
+partitions {
+  active: true
+}
+retention_period {
+  seconds: 86400
+}
+partition_write_speed_bytes_per_second: 1048576
+partition_write_burst_bytes: 1048576
+attributes {
+  key: "__max_partition_message_groups_seqno_stored"
+  value: "6000000"
+}
+attributes {
+  key: "_allow_unauthenticated_read"
+  value: "true"
+}
+attributes {
+  key: "_allow_unauthenticated_write"
+  value: "true"
+}
+attributes {
+  key: "_message_group_seqno_retention_period_ms"
+  value: "1382400000"
+}
+)", i));
+
+                const auto* changefeedChecksum = S3Mock.GetData().FindPtr(changefeedDir + "/changefeed_description.pb.sha256");
+                UNIT_ASSERT(changefeedChecksum);
+
+                const auto* topicChecksum = S3Mock.GetData().FindPtr(changefeedDir + "/topic_description.pb.sha256");
+                UNIT_ASSERT(topicChecksum);
+            }
+        }
+
+    private:
+        static TString GenChangefeedName(const ui64 num) {
+            return TStringBuilder() << "update_feed" << num;
+        }
+
+        TVector<TString> GenChangefeeds() {
+            TVector<TString> result(Count);
+            std::generate(result.begin(), result.end(), [n = 1]() mutable {
+                    return Sprintf(
+                        R"(
+                            TableName: "Table"
+                            StreamDescription {
+                                Name: "%s"
+                                Mode: ECdcStreamModeUpdate
+                                Format: ECdcStreamFormatJson
+                                State: ECdcStreamStateReady
+                            }
+                        )", GenChangefeedName(n++).data()
+                    );
+                }
+            );
+            return result;
+        }
+
+        const ui64 Count;
+        const TS3Mock& S3Mock;
+        const TVector<TString> Changefeeds;
+    };
+
+    Y_UNIT_TEST(Changefeeds) {
+        TTestBasicRuntime runtime;
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        ChangefeedGenerator gen(3, s3Mock);
+
+        auto request = Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port);
+
+        TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(true));
+        Run(runtime, env, TVector<TString>{
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", gen.GetChangefeeds());
+
+        gen.Check();
     }
 }

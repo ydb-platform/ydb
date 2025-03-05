@@ -1907,6 +1907,10 @@ public:
         return new TTableRow<Join>(Pos, ArgsCount);
     }
 
+    bool IsTableRow() const final {
+        return true;
+    }
+
 private:
     const size_t ArgsCount;
     TNodePtr Node;
@@ -2282,7 +2286,8 @@ TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector
 }
 
 TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args,
-    TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, const TDeferredAtom& typeConfig, TNodePtr runConfig)
+    TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, const TDeferredAtom& typeConfig, TNodePtr runConfig,
+    TNodePtr options)
 {
     const TString fullName = module + "." + name;
     TNodePtr callable;
@@ -2314,18 +2319,24 @@ TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const
     // optional arguments
     if (customUserType) {
         sqlCallArgs.push_back(customUserType);
-    } else if (!typeConfig.Empty()) {
+    } else if (!typeConfig.Empty() || runConfig || options) {
         sqlCallArgs.push_back(new TCallNodeImpl(pos, "TupleType", {}));
     }
 
     if (!typeConfig.Empty()) {
         sqlCallArgs.push_back(typeConfig.Build());
-    } else if (runConfig) {
+    } else if (runConfig || options) {
         sqlCallArgs.push_back(BuildQuotedAtom(pos, ""));
     }
 
     if (runConfig) {
         sqlCallArgs.push_back(runConfig);
+    } else if (options) {
+        sqlCallArgs.push_back(new TCallNodeImpl(pos, "Void", {}));
+    }
+
+    if (options) {
+        sqlCallArgs.push_back(options);
     }
 
     return new TCallNodeImpl(pos, "SqlCall", sqlCallArgs);
@@ -2459,45 +2470,47 @@ TNodePtr BuildUdf(TContext& ctx, TPosition pos, const TString& module, const TSt
 
 class TScriptUdf final: public INode {
 public:
-    TScriptUdf(TPosition pos, const TString& moduleName, const TString& funcName, const TVector<TNodePtr>& args)
+    TScriptUdf(TPosition pos, const TString& moduleName, const TString& funcName, const TVector<TNodePtr>& args,
+        TNodePtr options)
         : INode(pos)
-        , ModuleName(moduleName)
-        , FuncName(funcName)
-        , Args(args)
+        , ModuleName_(moduleName)
+        , FuncName_(funcName)
+        , Args_(args)
+        , Options_(options)
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        const bool isPython = ModuleName.find(TStringBuf("Python")) != TString::npos;
+        const bool isPython = ModuleName_.find(TStringBuf("Python")) != TString::npos;
         if (!isPython) {
-            if (Args.size() != 2) {
-                ctx.Error(Pos) << ModuleName << " script declaration requires exactly two parameters";
+            if (Args_.size() != 2) {
+                ctx.Error(Pos) << ModuleName_ << " script declaration requires exactly two parameters";
                 return false;
             }
         } else {
-            if (Args.size() < 1 || Args.size() > 2) {
-                ctx.Error(Pos) << ModuleName << " script declaration requires one or two parameters";
+            if (Args_.size() < 1 || Args_.size() > 2) {
+                ctx.Error(Pos) << ModuleName_ << " script declaration requires one or two parameters";
                 return false;
             }
         }
 
-        auto nameAtom = BuildQuotedAtom(Pos, FuncName);
-        auto scriptNode = Args.back();
+        auto nameAtom = BuildQuotedAtom(Pos, FuncName_);
+        auto scriptNode = Args_.back();
         if (!scriptNode->Init(ctx, src)) {
             return false;
         }
-        auto scriptStrPtr = Args.back()->GetLiteral("String");
+        auto scriptStrPtr = Args_.back()->GetLiteral("String");
         if (!ctx.CompactNamedExprs && scriptStrPtr && scriptStrPtr->size() > SQL_MAX_INLINE_SCRIPT_LEN) {
             scriptNode = ctx.UniversalAlias("scriptudf", std::move(scriptNode));
         }
 
         INode::TPtr type;
-        if (Args.size() == 2) {
-            type = Args[0];
+        if (Args_.size() == 2) {
+            type = Args_[0];
         } else {
             // Python supports getting functions signatures right from docstrings
             type = Y("EvaluateType", Y("ParseTypeHandle", Y("Apply",
                 Y("bind", "core_module", Q("PythonFuncSignature")),
-                Q(ModuleName),
+                Q(ModuleName_),
                 scriptNode,
                 Y("String", nameAtom)
                 )));
@@ -2507,14 +2520,18 @@ public:
             return false;
         }
 
-        Node = Y("ScriptUdf", Q(ModuleName), nameAtom, type, scriptNode);
+        Node_ = Y("ScriptUdf", Q(ModuleName_), nameAtom, type, scriptNode);
+        if (Options_) {
+            Node_ = L(Node_, Options_);
+        }
+
         return true;
     }
 
     TAstNode* Translate(TContext& ctx) const override {
         Y_UNUSED(ctx);
-        Y_DEBUG_ABORT_UNLESS(Node);
-        return Node->Translate(ctx);
+        Y_DEBUG_ABORT_UNLESS(Node_);
+        return Node_->Translate(ctx);
     }
 
     void DoUpdateState() const override {
@@ -2522,19 +2539,46 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TScriptUdf(GetPos(), ModuleName, FuncName, CloneContainer(Args));
+        return new TScriptUdf(GetPos(), ModuleName_, FuncName_, CloneContainer(Args_), Options_);
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
-        Y_DEBUG_ABORT_UNLESS(Node);
-        Node->VisitTree(func, visited);
+        Y_DEBUG_ABORT_UNLESS(Node_);
+        Node_->VisitTree(func, visited);
     }
+
+    const TString* FuncName() const final {
+        return &FuncName_;
+    }
+
+    const TString* ModuleName() const final {
+        return &ModuleName_;
+    }
+
+    bool IsScript() const final {
+        return true;
+    }
+
+    size_t GetTupleSize() const final {
+        return Args_.size();
+    }
+
+    TPtr GetTupleElement(size_t index) const final {
+        return Args_[index];
+    }
+
 private:
-    TString ModuleName;
-    TString FuncName;
-    TVector<TNodePtr> Args;
-    TNodePtr Node;
+    TString ModuleName_;
+    TString FuncName_;
+    TVector<TNodePtr> Args_;
+    TNodePtr Node_;
+    TNodePtr Options_;
 };
+
+TNodePtr BuildScriptUdf(TPosition pos, const TString& moduleName, const TString& funcName, const TVector<TNodePtr>& args,
+        TNodePtr options) {
+    return new TScriptUdf(pos, moduleName, funcName, args, options);
+}
 
 template <bool Sorted, bool Hashed>
 class TYqlToDict final: public TCallNode {
@@ -2916,6 +2960,9 @@ struct TBuiltinFuncData {
             {"listtopsort", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTopSort", 2, 3)},
             {"listtopsortasc", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTopSortAsc", 2, 3)},
             {"listtopsortdesc", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTopSortDesc", 2, 3)},
+            {"listsample", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListSample", 2, 3)},
+            {"listsamplen", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListSampleN", 2, 3)},
+            {"listshuffle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListShuffle", 1, 2)},
 
             // Dict builtins
             {"dictlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Length", 1, 1)},
@@ -2947,6 +2994,7 @@ struct TBuiltinFuncData {
             {"emptydict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyDict", 0, 0)},
             {"callable", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Callable", 2, 2)},
             {"way", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Way", 1, 1) },
+            {"dynamicvariant", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DynamicVariant", 3, 3) },
             {"variant", BuildSimpleBuiltinFactoryCallback<TYqlVariant>() },
             {"enum", BuildSimpleBuiltinFactoryCallback<TYqlEnum>() },
             {"asvariant", BuildSimpleBuiltinFactoryCallback<TYqlAsVariant>() },
@@ -3003,6 +3051,7 @@ struct TBuiltinFuncData {
             {"callableresulttype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableResultType", 1, 1) },
             {"callableargumenttype", BuildSimpleBuiltinFactoryCallback<TYqlCallableArgumentType>() },
             {"variantunderlyingtype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VariantUnderlyingType", 1, 1) },
+            {"variantitem", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("SqlVariantItem", 1, 1) },
             {"fromysonsimpletype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FromYsonSimpleType", 2, 2) },
             {"currentutcdate", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "CurrentUtcDate", 0, -1) },
             {"currentutcdatetime", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "CurrentUtcDatetime", 0, -1) },
@@ -3140,10 +3189,6 @@ struct TBuiltinFuncData {
             // Hopping intervals time functions
             {"hopstart", BuildSimpleBuiltinFactoryCallback<THoppingTime<true>>()},
             {"hopend", BuildSimpleBuiltinFactoryCallback<THoppingTime<false>>()},
-
-            //MatchRecognize navigation functions
-            {"first", BuildNamedBuiltinFactoryCallback<TMatchRecognizeNavigate>("FIRST")},
-            {"last", BuildNamedBuiltinFactoryCallback<TMatchRecognizeNavigate>("LAST")},
         };
         return builtinFuncs;
     }
@@ -3260,6 +3305,10 @@ struct TBuiltinFuncData {
             {"firstvalueignorenulls", BuildAggrFuncFactoryCallback("FirstValueIgnoreNulls", "first_value_ignore_nulls_traits_factory", {OverWindow})},
             {"lastvalueignorenulls", BuildAggrFuncFactoryCallback("LastValueIgnoreNulls", "last_value_ignore_nulls_traits_factory", {OverWindow})},
             {"nthvalueignorenulls", BuildAggrFuncFactoryCallback("NthValueIgnoreNulls", "nth_value_ignore_nulls_traits_factory", {OverWindow}, NTH_VALUE)},
+
+            // MatchRecognize navigation functions
+            {"first", BuildAggrFuncFactoryCallback("First", "first_traits_factory")},
+            {"last", BuildAggrFuncFactoryCallback("Last", "last_traits_factory")},
         };
         return aggrFuncs;
     }
@@ -3294,6 +3343,7 @@ struct TBuiltinFuncData {
             {"forcespreadmembers", { "ForceSpreadMembers", 2, 2}},
             {"listfromtuple", { "ListFromTuple", 1, 1}},
             {"listtotuple", { "ListToTuple", 2, 2}},
+            {"opaque", { "Opaque", 1, 1}},
         };
         return coreFuncs;
     }
@@ -3419,8 +3469,6 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
             return BuildUdf(ctx, pos, moduleName, name, newArgs);
         }
-    } else if (ns == "datetime2" && (name == "Parse")) {
-        return BuildUdf(ctx, pos, nameSpace, name, args);
     } else if (ns == "pg" || ns == "pgagg" || ns == "pgproc") {
         bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
         bool isNormalFunc = NYql::NPg::HasProc(name, NYql::NPg::EProcKind::Function);
@@ -3539,7 +3587,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         return BuildUdf(ctx, pos, nameSpace, name, makeUdfArgs());
     } else if (scriptType != NKikimr::NMiniKQL::EScriptType::Unknown) {
         auto scriptName = NKikimr::NMiniKQL::IsCustomPython(scriptType) ? nameSpace : TString(NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType));
-        return new TScriptUdf(pos, scriptName, name, args);
+        return BuildScriptUdf(pos, scriptName, name, args, nullptr);
     } else if (ns.empty()) {
         if (auto simpleType = LookupSimpleType(normalizedName, ctx.FlexibleTypes, /* isPgType = */ false)) {
             const auto type = *simpleType;
@@ -3623,7 +3671,17 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                 return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown aggregation function: " << *args[0]->GetLiteral("String"));
             }
 
-            return (*aggrCallback).second(pos, args, aggMode, true).Release();
+            switch (ctx.GetColumnReferenceState()) {
+            case EColumnRefState::MatchRecognizeMeasures:
+                [[fallthrough]];
+            case EColumnRefState::MatchRecognizeDefine:
+                return new TInvalidBuiltin(pos, "Cannot use aggregation factory inside the MATCH_RECOGNIZE context");
+            default:
+                if ("first" == aggNormalizedName || "last" == aggNormalizedName) {
+                    return new TInvalidBuiltin(pos, "Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context");
+                }
+                return (*aggrCallback).second(pos, args, aggMode, true);
+            }
         }
 
         if (normalizedName == "aggregateby" || normalizedName == "multiaggregateby") {
@@ -3641,7 +3699,19 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
         auto aggrCallback = aggrFuncs.find(normalizedName);
         if (aggrCallback != aggrFuncs.end()) {
-            return (*aggrCallback).second(pos, args, aggMode, false).Release();
+            switch (ctx.GetColumnReferenceState()) {
+            case EColumnRefState::MatchRecognizeMeasures: {
+                auto result = (*aggrCallback).second(pos, args, aggMode, false);
+                return BuildMatchRecognizeVarAccess(pos, std::move(result));
+            }
+            case EColumnRefState::MatchRecognizeDefine:
+                return BuildMatchRecognizeDefineAggregate(ctx.Pos(), normalizedName, args);
+            default:
+                if ("first" == normalizedName || "last" == normalizedName) {
+                    return new TInvalidBuiltin(pos, "Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context");
+                }
+                return (*aggrCallback).second(pos, args, aggMode, false);
+            }
         }
         if (aggMode == EAggregateMode::Distinct || aggMode == EAggregateMode::OverWindowDistinct) {
             return new TInvalidBuiltin(pos, "DISTINCT can only be used in aggregation functions");
@@ -3698,6 +3768,58 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                 BuildTuple(pos, {BuildQuotedAtom(pos, ""), args[1]}),
             };
             return new TCallNodeImpl(pos, "FlattenMembers", 2, 2, flattenMembersArgs);
+        } else if (normalizedName == "visit" || normalizedName == "visitordefault") {
+            bool withDefault = normalizedName == "visitordefault";
+            TNodePtr variant;
+            TVector<TNodePtr> labels, handlers;
+            TMaybe<TNodePtr> dflt;
+            if (mustUseNamed && *mustUseNamed) {
+                *mustUseNamed = false;
+                auto &positional = *args[0]->GetTupleNode();
+                if (positional.GetTupleSize() != (withDefault ? 2 : 1)) {
+                    return new TInvalidBuiltin(pos, TStringBuilder() << name
+                        << " requires exactly " << (withDefault ? 2 : 1) << " positional arguments when named args are used");
+                }
+                auto &named = *args[1]->GetStructNode();
+                variant = positional.GetTupleElement(0);
+                auto &namedExprs = named.GetExprs();
+                labels.reserve(namedExprs.size());
+                handlers.reserve(namedExprs.size());
+                for (size_t idx = 0; idx < namedExprs.size(); idx++) {
+                    labels.push_back(BuildQuotedAtom(pos, namedExprs[idx]->GetLabel()));
+                    handlers.push_back(namedExprs[idx]);
+                }
+                if (withDefault) {
+                    dflt = positional.GetTupleElement(positional.GetTupleSize() - 1);
+                }
+            } else {
+                size_t minArgs = withDefault ? 2 : 1;
+                if (args.size() < minArgs) {
+                    return new TInvalidBuiltin(pos, TStringBuilder() << name
+                        << " requires at least " << minArgs << " positional arguments");
+                }
+                variant = args[0];
+                labels.reserve(args.size() - minArgs);
+                handlers.reserve(args.size() - minArgs);
+                for (size_t idx = 0; idx < args.size() - minArgs; idx++) {
+                    labels.push_back(BuildQuotedAtom(pos, ToString(idx)));
+                    handlers.push_back(args[minArgs + idx]);
+                }
+                if (withDefault) {
+                    dflt = args[1];
+                }
+            }
+            TVector<TNodePtr> resultArgs;
+            resultArgs.reserve(1 + labels.size() + handlers.size());
+            resultArgs.emplace_back(std::move(variant));
+            for (size_t idx = 0; idx < labels.size(); idx++) {
+                resultArgs.emplace_back(std::move(labels[idx]));
+                resultArgs.emplace_back(std::move(handlers[idx]));
+            }
+            if (dflt.Defined()) {
+                resultArgs.emplace_back(std::move(dflt->Get()));
+            }
+            return new TCallNodeImpl(pos, "SqlVisit", 1, -1, resultArgs);
         } else if (normalizedName == "sqlexternalfunction") {
             return new TCallNodeImpl(pos, "SqlExternalFunction", args);
         } else {
@@ -3756,9 +3878,6 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             namedArgs = BuildStructure(pos, {encodeUtf8});
             usedArgs = {positionalArgs, namedArgs};
         } else if (name.StartsWith("From")) {
-            if (usedArgs) {
-                usedArgs.resize(1U);
-            }
             name = "From";
         } else if (name == "GetLength" || name.StartsWith("ConvertTo") || name.StartsWith("Parse") || name.StartsWith("SerializeJson")) {
             if (usedArgs.size() < 2U) {
@@ -3790,7 +3909,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     }
 
     TNodePtr typeConfig = MakeTypeConfig(pos, ns, usedArgs);
-    return BuildSqlCall(ctx, pos, nameSpace, name, usedArgs, positionalArgs, namedArgs, customUserType, TDeferredAtom(typeConfig, ctx), nullptr);
+    return BuildSqlCall(ctx, pos, nameSpace, name, usedArgs, positionalArgs, namedArgs, customUserType,
+        TDeferredAtom(typeConfig, ctx), nullptr, nullptr);
 }
 
 } // namespace NSQLTranslationV1

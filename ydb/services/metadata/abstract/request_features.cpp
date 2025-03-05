@@ -1,5 +1,8 @@
 #include "request_features.h"
+
+#include <util/string/builder.h>
 #include <util/string/join.h>
+
 #include <set>
 
 namespace NYql {
@@ -14,7 +17,7 @@ TString TFeaturesExtractor::GetRemainedParamsString() const {
     return JoinSeq(", ", features);
 }
 
-void TFeaturesExtractor::ValidateResetFeatures() const {
+std::optional<TString> TFeaturesExtractor::ValidateResetFeatures() const {
     std::set<TString> duplicateFeatures;
     for (auto&& feature : ResetFeatures) {
         if (Features.contains(feature)) {
@@ -22,8 +25,9 @@ void TFeaturesExtractor::ValidateResetFeatures() const {
         }
     }
     if (!duplicateFeatures.empty()) {
-        throw yexception() << "Duplicate reset feature: " << JoinSeq(", ", duplicateFeatures);
+        return TStringBuilder() << "Duplicate reset feature: " << JoinSeq(", ", duplicateFeatures);
     }
+    return std::nullopt;
 }
 
 std::optional<TString> TFeaturesExtractor::Extract(const TString& paramName) {

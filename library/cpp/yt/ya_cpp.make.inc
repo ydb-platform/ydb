@@ -3,5 +3,6 @@
 IF (NOT MSVC)
     CXXFLAGS(
         -Wdeprecated-this-capture
+        -Wimplicit-fallthrough
     )
 ENDIF()

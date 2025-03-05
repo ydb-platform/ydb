@@ -29,10 +29,10 @@ namespace numpy
     }
 
     inline auto dirichlet(double alpha, long size)
-        -> decltype(dirichlet(alpha, types::array<long, 1>{{size}}))
+        -> decltype(dirichlet(alpha, types::array_tuple<long, 1>{{size}}))
     {
 
-      return dirichlet(alpha, types::array<long, 1>{{size}});
+      return dirichlet(alpha, types::array_tuple<long, 1>{{size}});
     }
 
     inline double dirichlet(double alpha, types::none_type d)

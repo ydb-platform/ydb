@@ -2,8 +2,6 @@
 
 This page contains a detailed description of the code of a test app that is available as part of the {{ ydb-short-name }} [PHP SDK](https://github.com/yandex-cloud/ydb-php-sdk).
 
-{% include [addition.md](auxilary/addition.md) %}
-
 {% include [init.md](steps/01_init.md) %}
 
 App code snippet for driver initialization:

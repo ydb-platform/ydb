@@ -1,0 +1,33 @@
+name: Collect-analytics-fast-run
+on:
+  schedule:
+    - cron: "*/15 * * * *"  # Every 15 min
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        type: string
+        default: ""
+        
+defaults:
+  run:
+    shell: bash
+jobs:
+  main:
+    name: Checkout and setup
+    runs-on: [ self-hosted ]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.commit_sha }}
+    - name: Setup ydb access
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+    - name: Install dependencies
+      run: |
+        python3 -m pip install ydb ydb[yc] codeowners pandas
+    - name: Upload new test history to fast table
+      run: python3 .github/scripts/analytics/test_history_fast.py
+    - name: Upload olap perfomance data mart
+      run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/perfomance_olap_mart.sql --table_path perfomance/olap/fast_results --store_type column --partition_keys Run_start_timestamp --primary_keys Db Suite Test Branch Run_start_timestamp --ttl_min 43200 --ttl_key Run_start_timestamp

@@ -2,7 +2,6 @@ UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
 
-TIMEOUT(600)
 SIZE(MEDIUM)
 
 SRCS(
@@ -10,7 +9,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/client/ydb_proto
+    ydb/public/sdk/cpp/src/client/proto
     ydb/core/kqp
     ydb/core/kqp/counters
     ydb/core/kqp/host

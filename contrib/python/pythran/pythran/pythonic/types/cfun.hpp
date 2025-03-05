@@ -8,8 +8,7 @@ PYTHONIC_NS_BEGIN
 namespace types
 {
   template <class ReturnType, class... ArgsType>
-  cfun<ReturnType(ArgsType...)>::cfun(ReturnType (*fun)(ArgsType...))
-      : ptr(fun)
+  cfun<ReturnType(ArgsType...)>::cfun(ReturnType (*fun)(ArgsType...)) : ptr(fun)
   {
   }
 
@@ -18,7 +17,7 @@ namespace types
   {
     return (*ptr)(args...);
   }
-}
+} // namespace types
 PYTHONIC_NS_END
 
 #ifdef ENABLE_PYTHON_MODULE

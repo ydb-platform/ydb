@@ -27,7 +27,7 @@ namespace numpy
   NUMPY_EXPR_TO_NDARRAY0_DECL(bincount);
 
   DEFINE_FUNCTOR(pythonic::numpy, bincount);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

@@ -213,7 +213,7 @@ void TBalancer::RenderApp(NApp::TNavigationBar& __navigationBar) const {
                     }
                     TABLER() {
                         TABLED() { }
-                        TABLED() { __stream << "<__streamong>Total:</__streamong>"; }
+                        TABLED() { __stream << "<strong>Total:</strong>"; }
                         TABLED() { }
                         TABLED() { __stream << familyAllCount << " / " << activeFamilyCount << " / " << releasingFamilyCount; }
                         TABLED() { __stream << (activePartitionCount + inactivePartitionCount + releasingPartitionCount) << " / " << activePartitionCount << " / "

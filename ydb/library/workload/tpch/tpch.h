@@ -17,8 +17,8 @@ public:
     explicit TTpchWorkloadGenerator(const TTpchWorkloadParams& params);
 
 protected:
-    TString DoGetDDLQueries() const override;
-    TVector<TString> GetTablesList() const override;
+    TString GetTablesYaml() const override;
+    TWorkloadGeneratorBase::TSpecialDataTypes GetSpecialDataTypes() const override;
 
 private:
     const TTpchWorkloadParams& Params;

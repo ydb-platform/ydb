@@ -25,13 +25,14 @@ namespace numpy
   //
   // the enable if is there to match this behavior
   template <class ArraySequence>
-  auto vstack(ArraySequence &&seq) -> typename std::enable_if<
-      (impl::vstack_helper<ArraySequence>::value == 1),
-      decltype(std::declval<impl::vstack_helper<ArraySequence>>().reshape(
-          std::declval<types::array<long, 2>>()))>::type;
+  auto vstack(ArraySequence &&seq) ->
+      typename std::enable_if<
+          (impl::vstack_helper<ArraySequence>::value == 1),
+          decltype(std::declval<impl::vstack_helper<ArraySequence>>().reshape(
+              std::declval<types::array_tuple<long, 2>>()))>::type;
 
   DEFINE_FUNCTOR(pythonic::numpy, vstack);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

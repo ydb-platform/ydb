@@ -21,7 +21,7 @@ namespace builtins
       return !s.empty() && std::all_of(s.chars().begin(), s.chars().end(),
                                        (int (*)(int))std::isdigit);
     }
-  }
-}
+  } // namespace str
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

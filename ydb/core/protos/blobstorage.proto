@@ -25,7 +25,7 @@ message TVDiskCostSettings {
     optional uint64 WriteSpeedBps = 3;
     optional uint64 ReadBlockSize = 4;
     optional uint64 WriteBlockSize = 5;
-    optional uint32 MinREALHugeBlobInBytes = 6;
+    optional uint32 MinHugeBlobInBytes = 6;
 };
 
 message TWindowFeedback {
@@ -1010,6 +1010,8 @@ message TNodeWardenServiceSet {
 
         optional TSerialManagementStage.E ManagementStage = 12;
         optional TPDiskSpaceColor.E SpaceColorBorder = 13;
+        optional bool ReadOnly = 14;
+        optional bool Stop = 15;
     }
 
     message TVDisk {
@@ -1087,6 +1089,22 @@ message TEvControllerRegisterNode {
     repeated TVDiskStatus VDiskStatus = 6; // actual status for currently operating VDisks
     repeated TDriveData DrivesData = 7;
     optional bool DeclarativePDiskManagement = 8;
+
+    message TShredStatus {
+        optional uint32 PDiskId = 1;
+        optional uint64 PDiskGuid = 2;
+        oneof ShredState {
+            uint64 ShredGenerationFinished = 3;
+            string ShredAborted = 4;
+            bool ShredInProgress = 5;
+        }
+    }
+
+    repeated TShredStatus ShredStatus = 9;
+    optional uint64 MainConfigVersion = 10;
+    optional uint64 MainConfigHash = 11;
+    optional uint64 StorageConfigVersion = 12;
+    optional uint64 StorageConfigHash = 13;
 }
 
 message TEvControllerUpdateNodeDrives {
@@ -1094,10 +1112,28 @@ message TEvControllerUpdateNodeDrives {
     repeated TDriveData DrivesData = 2;
 }
 
+message TYamlConfig {
+    optional string MainConfig = 1;
+    optional uint64 MainConfigVersion = 2;
+    optional string StorageConfig = 3;
+    optional uint64 StorageConfigVersion = 4;
+    optional bytes CompressedMainConfig = 5;
+    optional bytes CompressedStorageConfig = 6;
+}
+
 message TEvControllerNodeServiceSetUpdate {
     message TGroupMetadata {
         optional uint32 GroupId = 1;
         optional uint32 CurrentGeneration = 2; // current state in the database
+    }
+
+    message TShredRequest {
+        optional uint64 ShredGeneration = 1;
+        repeated uint32 PDiskIds = 2; // a set of PDisks to start shred at
+    }
+
+    message TSaveConfigRequest {
+        optional TYamlConfig YamlConfig = 1;
     }
 
     optional NKikimrProto.EReplyStatus Status = 1;
@@ -1107,6 +1143,9 @@ message TEvControllerNodeServiceSetUpdate {
     optional string InstanceId = 5;
     optional bool Comprehensive = 6; // if this flag is set to true, then there will be no any other entities than elisted in the ServiceSet
     optional uint64 AvailDomain = 7; // availability domain of the controller
+    optional TShredRequest ShredRequest = 8;
+    optional TSaveConfigRequest SaveConfigRequest = 9;
+    optional TYamlConfig YamlConfig = 10;
 }
 
 message TEvControllerConfigRequest {
@@ -1319,10 +1358,16 @@ message TEvControllerNodeReport {
     enum EPDiskPhase {
         PD_UNKNOWN = 0;
         PD_RESTARTED = 1;
+        PD_SHRED = 2;
     }
     message TPDiskReport {
         optional uint32 PDiskId = 1;
         optional EPDiskPhase Phase = 2;
+        optional uint64 PDiskGuid = 3;
+        oneof ShredState {
+            uint64 ShredGenerationFinished = 4; // if set, then PDisk's shredding generation was upped to this one
+            string ShredAborted = 5; // if set, then PDisk's shredding has been aborted, ShredGeneration kept as it is
+        }
     }
 
     optional uint32 NodeId = 1;
@@ -1357,4 +1402,112 @@ message TEvNodeWardenQueryGroupInfo {
 message TEvNodeWardenGroupInfo {
     optional TGroupInfo Group = 1;
     repeated uint32 StartedGroupIds = 2;
+}
+
+message TEvControllerProposeConfigRequest {
+    optional uint64 ConfigHash = 1;
+    optional uint64 ConfigVersion = 2;
+}
+
+message TEvControllerProposeConfigResponse {
+    enum EStatus {
+        HashMismatch = 0;
+        UnexpectedConfig = 1;
+        CommitIsNeeded = 2;
+        CommitIsNotNeeded = 3;
+        ReverseCommit = 4;
+    }
+    optional EStatus Status = 1;
+    optional uint64 ProposedConfigHash = 2;
+    optional uint64 ConsoleConfigHash = 3;
+    optional uint64 ProposedConfigVersion = 4;
+    optional uint64 ConsoleConfigVersion = 5;
+    optional string YAML = 6;
+}
+
+message TEvControllerConsoleCommitRequest {
+    optional string YAML = 1;
+    optional bool AllowUnknownFields = 2;
+    optional bool BypassMetadataChecks = 3;
+}
+
+message TEvControllerConsoleCommitResponse {
+    enum EStatus {
+        SessionMismatch = 0;
+        NotCommitted = 1;
+        Committed = 2;
+    }
+    optional EStatus Status = 1;
+    optional string ErrorReason = 2;
+}
+
+message TEvControllerReplaceConfigRequest {
+    optional string ClusterYaml = 1;
+    optional string StorageYaml = 2;
+    optional bool OverwriteFlag = 3; // this configuration is a priority: drop any pending transactions and start a new one
+    optional bool SkipBSCValidation = 4;
+    optional bool SkipConsoleValidation = 5;
+    optional bool SwitchDedicatedStorageSection = 6;
+    optional bool DedicatedConfigMode = 7;
+    // console flags
+    optional bool AllowUnknownFields = 8;
+    optional bool BypassMetadataChecks = 9;
+}
+
+message TEvControllerReplaceConfigResponse {
+    enum EStatus {
+        OngoingCommit = 0;
+        ValidationTimeout = 1;
+        ConsoleInvalidConfig = 2;
+        BSCInvalidConfig = 3;
+        SessionClosed = 4;
+        Success = 5;
+        InvalidRequest = 6;
+        Aborted = 7;
+    }
+    optional EStatus Status = 1;
+    optional string ErrorReason = 2;
+}
+
+message TEvControllerValidateConfigRequest {
+    optional string YAML = 1;
+    optional bool AllowUnknownFields = 2;
+    optional bool BypassMetadataChecks = 3;
+}
+
+message TEvControllerValidateConfigResponse {
+    enum EStatus {
+        IdPipeServerMismatch = 0;
+        ConfigNotValid = 1;
+        ConfigIsValid = 2;
+    }
+    optional EStatus Status = 1;
+    optional string YAML = 2;
+    optional string ErrorReason = 3;
+}
+
+message TEvControllerShredRequest {
+    optional uint64 Generation = 1; // if set, start a new shred iteration; operation is idempotent
+}
+
+message TEvControllerShredResponse {
+    optional uint64 CurrentGeneration = 1; // current shred iteration
+    optional bool Completed = 2; // is it completed?
+    optional uint32 Progress10k = 3; // progress in range [0, 10000]
+}
+
+message TShredState {
+    optional uint64 Generation = 1;
+    optional bool Completed = 2;
+    optional uint32 Progress10k = 3;
+}
+
+message TEvControllerFetchConfigRequest {
+    optional bool DedicatedStorageSection = 1;
+    optional bool DedicatedClusterSection = 2;
+}
+
+message TEvControllerFetchConfigResponse {
+    optional string ClusterYaml = 1;
+    optional string StorageYaml = 2;
 }

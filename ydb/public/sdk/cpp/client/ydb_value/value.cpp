@@ -18,7 +18,7 @@
 #include <util/generic/map.h>
 #include <util/string/builder.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 static void CheckKind(TTypeParser::ETypeKind actual, TTypeParser::ETypeKind expected, const TString& method)
 {
@@ -565,9 +565,13 @@ void FormatTypeInternal(TTypeParser& parser, IOutputStream& out) {
             out << "Null"sv;
             break;
 
-        default:
-            ThrowFatalError(TStringBuilder()
-                << "Unexpected type kind: " << parser.GetKind());
+        case TTypeParser::ETypeKind::EmptyList:
+            out << "EmptyList"sv;
+            break;
+
+        case TTypeParser::ETypeKind::EmptyDict:
+            out << "EmptyDict"sv;
+            break;
     }
 }
 

@@ -53,6 +53,10 @@ public:
         const NYPath::TYPath& path,
         const NApi::TUnfreezeTableOptions& options) override;
 
+    TFuture<void> CancelTabletTransition(
+        NTabletClient::TTabletId tabletId,
+        const NApi::TCancelTabletTransitionOptions& options) override;
+
     TFuture<void> ReshardTable(
         const NYPath::TYPath& path,
         const std::vector<NTableClient::TLegacyOwningKey>& pivotKeys,
@@ -130,9 +134,9 @@ public:
         const TAlterReplicationCardOptions& options = {}) override;
 
     // Distributed table client
-    TFuture<ITableWriterPtr> CreateFragmentTableWriter(
-        const TFragmentWriteCookiePtr& cookie,
-        const TFragmentTableWriterOptions& options) override;
+    TFuture<ITableFragmentWriterPtr> CreateTableFragmentWriter(
+        const TSignedWriteFragmentCookiePtr& cookie,
+        const TTableFragmentWriterOptions& options) override;
 
     // Queues.
     TFuture<NQueueClient::IQueueRowsetPtr> PullQueue(
@@ -251,6 +255,11 @@ public:
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const NYson::TYsonString& parameters,
         const NApi::TUpdateOperationParametersOptions& options) override;
+
+    TFuture<void> PatchOperationSpec(
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const NScheduler::TSpecPatchList& patches,
+        const NApi::TPatchOperationSpecOptions& options) override;
 
     TFuture<TOperation> GetOperation(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
@@ -457,6 +466,10 @@ public:
         const std::string& nodeAddress,
         const TRequestRestartOptions& options) override;
 
+    TFuture<TCollectCoverageResult> CollectCoverage(
+        const std::string& address,
+        const NApi::TCollectCoverageOptions& options) override;
+
     // Query tracker
 
     TFuture<NQueryTrackerClient::TQueryId> StartQuery(
@@ -570,7 +583,7 @@ public:
 
     // Shuffle service client
     TFuture<TShuffleHandlePtr> StartShuffle(
-        const TString& account,
+        const std::string& account,
         int partitionCount,
         NObjectClient::TTransactionId parentTransactionId,
         const TStartShuffleOptions& options) override;

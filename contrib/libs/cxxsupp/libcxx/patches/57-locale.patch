@@ -1,9 +1,9 @@
 diff --git a/src/locale.cpp b/src/locale.cpp
-index 317b4de..071edb9 100644
+index 4efdc63..219575b 100644
 --- a/src/locale.cpp
 +++ b/src/locale.cpp
-@@ -37,8 +37,8 @@
- #   include <langinfo.h>
+@@ -38,8 +38,8 @@
+ #  include <langinfo.h>
  #endif
  
 -#include "include/atomic_support.h"
@@ -12,28 +12,28 @@ index 317b4de..071edb9 100644
  
  // On Linux, wint_t and wchar_t have different signed-ness, and this causes
  // lots of noise in the build log, but no bugs that I know of.
-@@ -691,8 +691,17 @@ locale::facet::__on_zero_shared() noexcept
+@@ -593,8 +593,17 @@ void locale::facet::__on_zero_shared() noexcept { delete this; }
  constinit int32_t locale::id::__next_id = 0;
  
  long locale::id::__get() {
--    call_once(__flag_, [&] { __id_ = __libcpp_atomic_add(&__next_id, 1); });
--    return __id_ - 1;
-+    int32_t result = __id_.load(std::memory_order_acquire);
+-  call_once(__flag_, [&] { __id_ = __libcpp_atomic_add(&__next_id, 1); });
+-  return __id_ - 1;
++  int32_t result = __id_.load(std::memory_order_acquire);
++  if (result == 0) {
++    static std::mutex m;
++    std::lock_guard<std::mutex> guard(m);
++    result = __id_.load(std::memory_order_acquire);
 +    if (result == 0) {
-+        static std::mutex m;
-+        std::lock_guard<std::mutex> guard(m);
-+        result = __id_.load(std::memory_order_acquire);
-+        if (result == 0) {
-+            result = ++__next_id;
-+            __id_.store(result, std::memory_order_release);
-+        }
++      result = ++__next_id;
++      __id_.store(result, std::memory_order_release);
 +    }
-+    return result - 1;
++  }
++  return result - 1;
  }
  
  // template <> class collate_byname<char>
-@@ -1066,6 +1075,11 @@ extern "C" const int ** __ctype_tolower_loc();
- extern "C" const int ** __ctype_toupper_loc();
+@@ -895,6 +904,11 @@ extern "C" const int** __ctype_tolower_loc();
+ extern "C" const int** __ctype_toupper_loc();
  #endif
  
 +#if defined(__ANDROID__)
@@ -42,128 +42,143 @@ index 317b4de..071edb9 100644
 +#endif
 +
  #ifdef _LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE
- const ctype<char>::mask*
- ctype<char>::classic_table() noexcept
-@@ -1163,6 +1177,8 @@ ctype<char>::classic_table() noexcept
- #elif defined(_NEWLIB_VERSION)
-     // Newlib has a 257-entry table in ctype_.c, where (char)0 starts at [1].
-     return _ctype_ + 1;
-+#elif defined(__ANDROID__)
-+    return _ctype_android;
- #elif defined(_AIX)
-     return (const unsigned int *)__lc_ctype_ptr->obj->mask;
- #elif defined(__MVS__)
-@@ -4188,14 +4204,25 @@ __codecvt_utf16<char32_t, true>::do_out(state_type&,
-     const intern_type* frm, const intern_type* frm_end, const intern_type*& frm_nxt,
-     extern_type* to, extern_type* to_end, extern_type*& to_nxt) const
- {
+ const ctype<char>::mask* ctype<char>::classic_table() noexcept {
+   // clang-format off
+@@ -990,6 +1004,8 @@ const ctype<char>::mask* ctype<char>::classic_table() noexcept {
+ #  elif defined(_NEWLIB_VERSION)
+   // Newlib has a 257-entry table in ctype_.c, where (char)0 starts at [1].
+   return _ctype_ + 1;
++#  elif defined(__ANDROID__)
++  return _ctype_android;
+ #  elif defined(_AIX)
+   return (const unsigned int*)__lc_ctype_ptr->obj->mask;
+ #  elif defined(__MVS__)
+@@ -3644,15 +3660,25 @@ __codecvt_utf16<char32_t, true>::result __codecvt_utf16<char32_t, true>::do_out(
+     extern_type* to,
+     extern_type* to_end,
+     extern_type*& to_nxt) const {
 +#if defined(_LIBCPP_SHORT_WCHAR)
-+    const uint16_t* _frm = reinterpret_cast<const uint16_t*>(frm);
-+    const uint16_t* _frm_end = reinterpret_cast<const uint16_t*>(frm_end);
-+    const uint16_t* _frm_nxt = _frm;
++  const uint16_t* _frm     = reinterpret_cast<const uint16_t*>(frm);
++  const uint16_t* _frm_end = reinterpret_cast<const uint16_t*>(frm_end);
++  const uint16_t* _frm_nxt = _frm;
 +#else
-     const uint32_t* _frm = reinterpret_cast<const uint32_t*>(frm);
-     const uint32_t* _frm_end = reinterpret_cast<const uint32_t*>(frm_end);
-     const uint32_t* _frm_nxt = _frm;
+   const uint32_t* _frm     = reinterpret_cast<const uint32_t*>(frm);
+   const uint32_t* _frm_end = reinterpret_cast<const uint32_t*>(frm_end);
+   const uint32_t* _frm_nxt = _frm;
+-  uint8_t* _to             = reinterpret_cast<uint8_t*>(to);
+-  uint8_t* _to_end         = reinterpret_cast<uint8_t*>(to_end);
+-  uint8_t* _to_nxt         = _to;
+-  result r                 = ucs4_to_utf16le(_frm, _frm_end, _frm_nxt, _to, _to_end, _to_nxt, __maxcode_, __mode_);
+-  frm_nxt                  = frm + (_frm_nxt - _frm);
+-  to_nxt                   = to + (_to_nxt - _to);
 +#endif
-     uint8_t* _to = reinterpret_cast<uint8_t*>(to);
-     uint8_t* _to_end = reinterpret_cast<uint8_t*>(to_end);
-     uint8_t* _to_nxt = _to;
++  uint8_t* _to     = reinterpret_cast<uint8_t*>(to);
++  uint8_t* _to_end = reinterpret_cast<uint8_t*>(to_end);
++  uint8_t* _to_nxt = _to;
 +#if defined(_LIBCPP_SHORT_WCHAR)
-+    result r = ucs2_to_utf16le(_frm, _frm_end, _frm_nxt, _to, _to_end, _to_nxt,
-+                               __maxcode_, __mode_);
++  result r = ucs2_to_utf16le(_frm, _frm_end, _frm_nxt, _to, _to_end, _to_nxt, __maxcode_, __mode_);
 +#else
-     result r = ucs4_to_utf16le(_frm, _frm_end, _frm_nxt, _to, _to_end, _to_nxt,
-                                __maxcode_, __mode_);
++  result r = ucs4_to_utf16le(_frm, _frm_end, _frm_nxt, _to, _to_end, _to_nxt, __maxcode_, __mode_);
 +#endif
-     frm_nxt = frm + (_frm_nxt - _frm);
-     to_nxt = to + (_to_nxt - _to);
-     return r;
-@@ -4266,7 +4293,7 @@ __codecvt_utf8_utf16<wchar_t>::do_out(state_type&,
-     const intern_type* frm, const intern_type* frm_end, const intern_type*& frm_nxt,
-     extern_type* to, extern_type* to_end, extern_type*& to_nxt) const
- {
--#if defined(_LIBCPP_SHORT_WCHAR)
-+#ifdef _WIN32
-     const uint16_t* _frm = reinterpret_cast<const uint16_t*>(frm);
-     const uint16_t* _frm_end = reinterpret_cast<const uint16_t*>(frm_end);
-     const uint16_t* _frm_nxt = _frm;
-@@ -4293,7 +4320,7 @@ __codecvt_utf8_utf16<wchar_t>::do_in(state_type&,
-     const uint8_t* _frm = reinterpret_cast<const uint8_t*>(frm);
-     const uint8_t* _frm_end = reinterpret_cast<const uint8_t*>(frm_end);
-     const uint8_t* _frm_nxt = _frm;
--#if defined(_LIBCPP_SHORT_WCHAR)
-+#ifdef _WIN32
-     uint16_t* _to = reinterpret_cast<uint16_t*>(to);
-     uint16_t* _to_end = reinterpret_cast<uint16_t*>(to_end);
-     uint16_t* _to_nxt = _to;
-@@ -4452,9 +4479,15 @@ __codecvt_utf8_utf16<char32_t>::do_in(state_type&,
-     const uint8_t* _frm = reinterpret_cast<const uint8_t*>(frm);
-     const uint8_t* _frm_end = reinterpret_cast<const uint8_t*>(frm_end);
-     const uint8_t* _frm_nxt = _frm;
++  frm_nxt = frm + (_frm_nxt - _frm);
++  to_nxt  = to + (_to_nxt - _to);
+   return r;
+ }
+ 
+@@ -3712,7 +3738,7 @@ __codecvt_utf8_utf16<wchar_t>::result __codecvt_utf8_utf16<wchar_t>::do_out(
+     extern_type* to,
+     extern_type* to_end,
+     extern_type*& to_nxt) const {
+-#  if defined(_LIBCPP_SHORT_WCHAR)
++#  ifdef _WIN32
+   const uint16_t* _frm     = reinterpret_cast<const uint16_t*>(frm);
+   const uint16_t* _frm_end = reinterpret_cast<const uint16_t*>(frm_end);
+   const uint16_t* _frm_nxt = _frm;
+@@ -3741,7 +3767,7 @@ __codecvt_utf8_utf16<wchar_t>::result __codecvt_utf8_utf16<wchar_t>::do_in(
+   const uint8_t* _frm     = reinterpret_cast<const uint8_t*>(frm);
+   const uint8_t* _frm_end = reinterpret_cast<const uint8_t*>(frm_end);
+   const uint8_t* _frm_nxt = _frm;
+-#  if defined(_LIBCPP_SHORT_WCHAR)
++#  ifdef _WIN32
+   uint16_t* _to     = reinterpret_cast<uint16_t*>(to);
+   uint16_t* _to_end = reinterpret_cast<uint16_t*>(to_end);
+   uint16_t* _to_nxt = _to;
+@@ -3880,12 +3906,18 @@ __codecvt_utf8_utf16<char32_t>::result __codecvt_utf8_utf16<char32_t>::do_in(
+   const uint8_t* _frm     = reinterpret_cast<const uint8_t*>(frm);
+   const uint8_t* _frm_end = reinterpret_cast<const uint8_t*>(frm_end);
+   const uint8_t* _frm_nxt = _frm;
+-  uint32_t* _to           = reinterpret_cast<uint32_t*>(to);
+-  uint32_t* _to_end       = reinterpret_cast<uint32_t*>(to_end);
+-  uint32_t* _to_nxt       = _to;
+-  result r                = utf8_to_utf16(_frm, _frm_end, _frm_nxt, _to, _to_end, _to_nxt, __maxcode_, __mode_);
+-  frm_nxt                 = frm + (_frm_nxt - _frm);
+-  to_nxt                  = to + (_to_nxt - _to);
 +#if defined(_LIBCPP_SHORT_WCHAR)
-+    uint16_t* _to = reinterpret_cast<uint16_t*>(to);
-+    uint16_t* _to_end = reinterpret_cast<uint16_t*>(to_end);
-+    uint16_t* _to_nxt = _to;
++  uint16_t* _to     = reinterpret_cast<uint16_t*>(to);
++  uint16_t* _to_end = reinterpret_cast<uint16_t*>(to_end);
++  uint16_t* _to_nxt = _to;
 +#else
-     uint32_t* _to = reinterpret_cast<uint32_t*>(to);
-     uint32_t* _to_end = reinterpret_cast<uint32_t*>(to_end);
-     uint32_t* _to_nxt = _to;
++  uint32_t* _to     = reinterpret_cast<uint32_t*>(to);
++  uint32_t* _to_end = reinterpret_cast<uint32_t*>(to_end);
++  uint32_t* _to_nxt = _to;
 +#endif
-     result r = utf8_to_utf16(_frm, _frm_end, _frm_nxt, _to, _to_end, _to_nxt,
-                              __maxcode_, __mode_);
-     frm_nxt = frm + (_frm_nxt - _frm);
-@@ -5922,7 +5955,7 @@ __init_pat(money_base::pattern& pat, basic_string<charT>& __curr_symbol_,
-                     // We insert the space into the symbol instead of
-                     // setting pat.field[2]=space so that when
-                     // showbase is not set, the space goes away too.
--                    __curr_symbol_.insert(0, 1, space_char);
-+                    __curr_symbol_.insert((size_t)0, 1, space_char);
-                 }
-                 return;
-             default:
-@@ -5945,7 +5978,7 @@ __init_pat(money_base::pattern& pat, basic_string<charT>& __curr_symbol_,
-                     // We insert the space into the symbol instead of
-                     // setting pat.field[2]=space so that when
-                     // showbase is not set, the space goes away too.
--                    __curr_symbol_.insert(0, 1, space_char);
-+                    __curr_symbol_.insert((size_t)0, 1, space_char);
-                 }
-                 return;
-             case 2:  // Space between sign and currency or value.
-@@ -5975,7 +6008,7 @@ __init_pat(money_base::pattern& pat, basic_string<charT>& __curr_symbol_,
-                     // We insert the space into the symbol instead of
-                     // setting pat.field[1]=space so that when
-                     // showbase is not set, the space goes away too.
--                    __curr_symbol_.insert(0, 1, space_char);
-+                    __curr_symbol_.insert((size_t)0, 1, space_char);
-                 }
-                 pat.field[1] = none;
-                 pat.field[2] = symbol;
-@@ -6018,7 +6051,7 @@ __init_pat(money_base::pattern& pat, basic_string<charT>& __curr_symbol_,
-                     // We insert the space into the symbol instead of
-                     // setting pat.field[2]=space so that when
-                     // showbase is not set, the space goes away too.
--                    __curr_symbol_.insert(0, 1, space_char);
-+                    __curr_symbol_.insert((size_t)0, 1, space_char);
-                 }
-                 return;
-             default:
-@@ -6041,7 +6074,7 @@ __init_pat(money_base::pattern& pat, basic_string<charT>& __curr_symbol_,
-                     // We insert the space into the symbol instead of
-                     // setting pat.field[1]=space so that when
-                     // showbase is not set, the space goes away too.
--                    __curr_symbol_.insert(0, 1, space_char);
-+                    __curr_symbol_.insert((size_t)0, 1, space_char);
-                 }
-                 return;
-             case 2:  // Space between sign and currency or value.
-@@ -6082,7 +6115,7 @@ __init_pat(money_base::pattern& pat, basic_string<charT>& __curr_symbol_,
-                     // We insert the space into the symbol instead of
-                     // setting pat.field[2]=space so that when
-                     // showbase is not set, the space goes away too.
--                    __curr_symbol_.insert(0, 1, space_char);
-+                    __curr_symbol_.insert((size_t)0, 1, space_char);
-                 }
-                 return;
-             default:
++  result r = utf8_to_utf16(_frm, _frm_end, _frm_nxt, _to, _to_end, _to_nxt, __maxcode_, __mode_);
++  frm_nxt  = frm + (_frm_nxt - _frm);
++  to_nxt   = to + (_to_nxt - _to);
+   return r;
+ }
+ 
+@@ -5123,7 +5155,7 @@ static void __init_pat(
+           // We insert the space into the symbol instead of
+           // setting pat.field[2]=space so that when
+           // showbase is not set, the space goes away too.
+-          __curr_symbol_.insert(0, 1, space_char);
++          __curr_symbol_.insert((size_t)0, 1, space_char);
+         }
+         return;
+       default:
+@@ -5145,7 +5177,7 @@ static void __init_pat(
+           // We insert the space into the symbol instead of
+           // setting pat.field[2]=space so that when
+           // showbase is not set, the space goes away too.
+-          __curr_symbol_.insert(0, 1, space_char);
++          __curr_symbol_.insert((size_t)0, 1, space_char);
+         }
+         return;
+       case 2: // Space between sign and currency or value.
+@@ -5174,7 +5206,7 @@ static void __init_pat(
+           // We insert the space into the symbol instead of
+           // setting pat.field[1]=space so that when
+           // showbase is not set, the space goes away too.
+-          __curr_symbol_.insert(0, 1, space_char);
++          __curr_symbol_.insert((size_t)0, 1, space_char);
+         }
+         pat.field[1] = none;
+         pat.field[2] = symbol;
+@@ -5216,7 +5248,7 @@ static void __init_pat(
+           // We insert the space into the symbol instead of
+           // setting pat.field[2]=space so that when
+           // showbase is not set, the space goes away too.
+-          __curr_symbol_.insert(0, 1, space_char);
++          __curr_symbol_.insert((size_t)0, 1, space_char);
+         }
+         return;
+       default:
+@@ -5238,7 +5270,7 @@ static void __init_pat(
+           // We insert the space into the symbol instead of
+           // setting pat.field[1]=space so that when
+           // showbase is not set, the space goes away too.
+-          __curr_symbol_.insert(0, 1, space_char);
++          __curr_symbol_.insert((size_t)0, 1, space_char);
+         }
+         return;
+       case 2: // Space between sign and currency or value.
+@@ -5277,7 +5309,7 @@ static void __init_pat(
+           // We insert the space into the symbol instead of
+           // setting pat.field[2]=space so that when
+           // showbase is not set, the space goes away too.
+-          __curr_symbol_.insert(0, 1, space_char);
++          __curr_symbol_.insert((size_t)0, 1, space_char);
+         }
+         return;
+       default:

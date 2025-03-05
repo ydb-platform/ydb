@@ -462,7 +462,7 @@ private:
         try {
             Producer_.Run(consumer.get());
         } catch (const TErrorException& ex) {
-            if (ex.Error().FindMatching(EErrorCode::ResolveError)) {
+            if (ex.Error().FindMatching(NYTree::EErrorCode::ResolveError)) {
                 Reply(context, /*exists*/ false);
                 return;
             }

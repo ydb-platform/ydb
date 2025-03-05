@@ -15,14 +15,14 @@
 class TLogBackend;
 class TLog;
 
-namespace NYdb {
+namespace NYdb::inline V3 {
 
 class TDriver;
 class TParams;
 
 }
 
-namespace NYdb::NTable {
+namespace NYdb::inline V3::NTable {
 
 class TSession;
 class TTableClient;
@@ -37,7 +37,7 @@ class TTopicOperationsScenario {
 public:
     TTopicOperationsScenario();
 
-    int Run(const TClientCommand::TConfig& config);
+    int Run(TClientCommand::TConfig& config);
 
     void EnsurePercentileIsValid() const;
     void EnsureWarmupSecIsValid() const;
@@ -63,19 +63,21 @@ public:
     ui32 ConsumerCount = 0;
     bool Direct = false;
     TString ConsumerPrefix;
-    size_t MessageSize;
-    size_t MessageRate;
-    size_t ByteRate;
+    size_t MessageSizeBytes;
+    size_t MessagesPerSec;
+    size_t BytesPerSec;
     ui32 Codec;
     TString TableName;
     ui32 TablePartitionCount = 1;
     bool UseTransactions = false;
-    size_t CommitPeriod = 10;
+    size_t CommitPeriodSeconds = 1;
+    size_t TxCommitIntervalMs = 0;
     size_t CommitMessages = 1'000'000;
-    bool OnlyTopicInTx = false;
+    bool OnlyTopicInTx = true;
     bool OnlyTableInTx = false;
-    bool UseTableSelect = true;
+    bool UseTableSelect = false;
     bool ReadWithoutConsumer = false;
+    bool UseCpuTimestamp = false;
 
 protected:
     void CreateTopic(const TString& database,
@@ -130,8 +132,8 @@ private:
 
     static THolder<TLogBackend> MakeLogBackend(TClientCommand::TConfig::EVerbosityLevel level);
 
-    void InitLog(const TClientCommand::TConfig& config);
-    void InitDriver(const TClientCommand::TConfig& config);
+    void InitLog(TClientCommand::TConfig& config);
+    void InitDriver(TClientCommand::TConfig& config);
     void InitStatsCollector();
 };
 

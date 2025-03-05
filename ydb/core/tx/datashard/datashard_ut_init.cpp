@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::DataShard), &CreateDataShard);
 
         TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvTabletActive));
         runtime.DispatchEvents(options);
 
         Y_UNUSED(sender);

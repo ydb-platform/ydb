@@ -14,7 +14,7 @@ namespace builtins
   auto next(T &&y) -> decltype(*y);
 
   DEFINE_FUNCTOR(pythonic::builtins, next);
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

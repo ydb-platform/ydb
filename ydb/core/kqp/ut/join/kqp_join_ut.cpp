@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -215,7 +215,7 @@ static TDataQueryResult ExecQuery(TSession& session, const TString& query, const
 
     if (checkRewrite) {
         auto explain = session.ExplainDataQuery(query).GetValueSync();
-        UNIT_ASSERT_C(explain.GetAst().Contains("PartitionByKey"), explain.GetAst());
+        UNIT_ASSERT_C(explain.GetAst().contains("PartitionByKey"), explain.GetAst());
     }
 
     return result;
@@ -262,22 +262,13 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 }
             }
         } else {
-            if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Join1_1");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 8);
 
             ui32 index = 1;
-            if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
-                index = 2;
-            }
-
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/Join1_2");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 1);
@@ -326,22 +317,13 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 }
             }
         } else {
-            if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Join1_1");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 8);
 
             ui32 index = 1;
-            if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
-                index = 2;
-            }
-
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/Join1_2");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 3);
@@ -636,7 +618,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 PRAGMA FilterPushdownOverJoinOptionalSide;
 
                 SELECT t1.Key1, t1.Key2, t1.Fk1, t1.Value, t2.Key, t2.Value, t3.Key, t3.Value
-                
+
                 FROM `/Root/Join1_1` AS t1
                 LEFT JOIN `/Root/Join1_2` AS t2
                 ON t1.Fk1 = t2.Key
@@ -664,7 +646,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 CROSS JOIN `/Root/Join1_3` AS t3
                 LEFT JOIN `/Root/Join1_2` AS t2
                 ON t1.Fk1 = t2.Key
-                
+
                 WHERE t2.Value > 1001;
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -700,7 +682,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     .AddListItem().BeginStruct().AddMember("v").OptionalString("1.One").EndStruct()   // dup
                     .AddListItem().BeginStruct().AddMember("v").OptionalString("1.Two").EndStruct()
                     .AddListItem().BeginStruct().AddMember("v").OptionalString("Any").EndStruct()     // not exists
-                    .AddListItem().BeginStruct().AddMember("v").OptionalString(Nothing()).EndStruct() // null
+                    .AddListItem().BeginStruct().AddMember("v").OptionalString(std::nullopt).EndStruct() // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];["1.One"]];[[2];["1.Two"]]])", false);
@@ -742,7 +724,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(1).EndStruct()   // dup
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(2).EndStruct()
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(42).EndStruct()  // not exists
-                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(Nothing()).EndStruct() // null
+                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(std::nullopt).EndStruct() // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];["1.One"]];[[2];["1.Two"]]])");
@@ -790,12 +772,12 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                                                 .AddMember("k2").OptionalString("Two").EndStruct()
                     .AddListItem().BeginStruct().AddMember("k1").OptionalInt32(42)
                                                 .AddMember("k2").OptionalString("FortyTwo").EndStruct()  // not exists
-                    .AddListItem().BeginStruct().AddMember("k1").OptionalInt32(Nothing())
+                    .AddListItem().BeginStruct().AddMember("k1").OptionalInt32(std::nullopt)
                                                 .AddMember("k2").OptionalString("One").EndStruct()       // null
                     .AddListItem().BeginStruct().AddMember("k1").OptionalInt32(1)
-                                                .AddMember("k2").OptionalString(Nothing()).EndStruct()   // null
-                    .AddListItem().BeginStruct().AddMember("k1").OptionalInt32(Nothing())
-                                                .AddMember("k2").OptionalString(Nothing()).EndStruct()   // null
+                                                .AddMember("k2").OptionalString(std::nullopt).EndStruct()   // null
+                    .AddListItem().BeginStruct().AddMember("k1").OptionalInt32(std::nullopt)
+                                                .AddMember("k2").OptionalString(std::nullopt).EndStruct()   // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];["One"];["1.1.One"]];[[2];["Two"];["1.2.Two"]]])");
@@ -817,7 +799,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         }
     }
 
-    Y_UNIT_TEST(TwoJoinsWithQueryService) { 
+    Y_UNIT_TEST(TwoJoinsWithQueryService) {
         NKikimrConfig::TAppConfig appConfig;
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -832,9 +814,9 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             auto session = client.CreateSession().GetValueSync().GetSession();
             const auto query = Q_(R"(
                 CREATE TABLE ta(
-                    a Int64, 
-                    b Int64, 
-                    c Int64, 
+                    a Int64,
+                    b Int64,
+                    c Int64,
                     PRIMARY KEY(a)
                 );
             )");
@@ -845,10 +827,10 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             auto session = client.CreateSession().GetValueSync().GetSession();
             const auto query = Q_(R"(
                 CREATE TABLE tb(
-                    b Int64, 
-                    bval Int64, 
+                    b Int64,
+                    bval Int64,
                     PRIMARY KEY(b)
-                );    
+                );
             )");
             auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -857,8 +839,8 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             auto session = client.CreateSession().GetValueSync().GetSession();
             const auto query = Q_(R"(
                 CREATE TABLE tc(
-                    c Int64, 
-                    cval Int64, 
+                    c Int64,
+                    cval Int64,
                     PRIMARY KEY(c)
                 );
             )");
@@ -906,7 +888,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(1).EndStruct()   // dup
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(2).EndStruct()
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(42).EndStruct()  // not exists
-                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(Nothing()).EndStruct() // null
+                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(std::nullopt).EndStruct() // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];["One"];["1.1.One"]];[[2];["Two"];["1.2.Two"]]])");
@@ -969,7 +951,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     .AddListItem().BeginStruct().AddMember("v").OptionalString("2.One").EndStruct()   // dup
                     .AddListItem().BeginStruct().AddMember("v").OptionalString("2.Five").EndStruct()
                     .AddListItem().BeginStruct().AddMember("v").OptionalString("Any").EndStruct()     // not exists
-                    .AddListItem().BeginStruct().AddMember("v").OptionalString(Nothing()).EndStruct() // null
+                    .AddListItem().BeginStruct().AddMember("v").OptionalString(std::nullopt).EndStruct() // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];["2.One"];["Payload1"]];[[5];["2.Five"];["Payload2"]]])");
@@ -1022,8 +1004,8 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                                                 .AddMember("v").OptionalString("2.Five").EndStruct()
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(42)
                                                 .AddMember("v").OptionalString("Any").EndStruct()     // not exists
-                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(Nothing())
-                                                .AddMember("v").OptionalString(Nothing()).EndStruct() // null
+                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(std::nullopt)
+                                                .AddMember("v").OptionalString(std::nullopt).EndStruct() // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];[1];["2.One"];["Payload1"]];[[5];[5];["2.Five"];["Payload2"]]])");
@@ -1073,7 +1055,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(1).EndStruct()   // dup
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(5).EndStruct()
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(42).EndStruct()     // not exists
-                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(Nothing()).EndStruct() // null
+                    .AddListItem().BeginStruct().AddMember("k").OptionalInt32(std::nullopt).EndStruct() // null
                     .EndList().Build().Build();
 
             auto result = ExecQuery(session, query, params, R"([[[1];[1];["2.One"];["Payload1"]];[[5];[5];["2.Five"];["Payload2"]]])");
@@ -1638,7 +1620,6 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
         appConfig.MutableTableServiceConfig()->SetIdxLookupJoinPointsLimit(10);
-        //appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
 
         auto appsettings = TKikimrSettings().SetAppConfig(appConfig);
 
@@ -1666,7 +1647,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 [[105u];["One"];[105u];["One"];["Name2"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             AssertTableReads(result, "/Root/Join2", 5);
-            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+            UNIT_ASSERT(result.GetQueryPlan().contains("Lookup"));
         }
 
         {
@@ -1684,7 +1665,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 [[101u];["Two"];[101u];["Two"];["Name1"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             AssertTableReads(result, "/Root/Join2", 2);
-            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+            UNIT_ASSERT(result.GetQueryPlan().contains("Lookup"));
         }
 
         {
@@ -1703,7 +1684,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 [[103u];["One"];[103u];["One"];["Name1"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             AssertTableReads(result, "/Root/Join2", 3);
-            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+            UNIT_ASSERT(result.GetQueryPlan().contains("Lookup"));
         }
 
         {
@@ -1722,7 +1703,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 [[105u];["One"];[105u];["One"];["Name2"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             AssertTableReads(result, "/Root/Join2", 3);
-            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+            UNIT_ASSERT(result.GetQueryPlan().contains("Lookup"));
         }
 
         {
@@ -1740,7 +1721,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 [[105u];["One"];[105u];["One"];["Name2"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
             AssertTableReads(result, "/Root/Join2", 2);
-            UNIT_ASSERT(result.GetQueryPlan().Contains("Lookup"));
+            UNIT_ASSERT(result.GetQueryPlan().contains("Lookup"));
         }
     }
 
@@ -1831,11 +1812,11 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     ("04","1","07"),
                     ("04","2","08"),
                     ("05","1","09"),
-                    ("05","2","10"),                   
+                    ("05","2","10"),
                     ("06","1","11"),
-                    ("06","2","12"),    
+                    ("06","2","12"),
                     ("07","1","13"),
-                    ("07","2","14"), 
+                    ("07","2","14"),
                     ("09","1","15"),
                     ("09","2","16");
 
@@ -1866,11 +1847,11 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                     (NULL,"1","01"),
                     (NULL,"2","02"),
                     ("02","1","03"),
-                    ("02","1","04"),         
+                    ("02","1","04"),
                     ("02","2","05"),
                     ("02","2","06"),
                     ("03","1","07"),
-                    ("03","2","08"),                                     
+                    ("03","2","08"),
                     ("09","1","09"),
                     ("09","2","10");
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();

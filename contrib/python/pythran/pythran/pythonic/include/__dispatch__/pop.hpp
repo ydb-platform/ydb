@@ -8,11 +8,11 @@ PYTHONIC_NS_BEGIN
 namespace __dispatch__
 {
   template <class Any, class... Arg0>
-  auto pop(Any &&any, Arg0 &&... arg0)
-      -> decltype(any.pop(std::forward<Arg0>(arg0)...));
+  auto pop(Any &&any,
+           Arg0 &&...arg0) -> decltype(any.pop(std::forward<Arg0>(arg0)...));
 
   DEFINE_FUNCTOR(pythonic::__dispatch__, pop);
-}
+} // namespace __dispatch__
 PYTHONIC_NS_END
 
 #endif

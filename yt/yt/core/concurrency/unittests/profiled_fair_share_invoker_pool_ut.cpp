@@ -12,6 +12,7 @@
 
 #include <yt/yt/core/misc/lazy_ptr.h>
 
+#include <yt/yt/library/profiling/solomon/config.h>
 #include <yt/yt/library/profiling/solomon/exporter.h>
 
 #include <library/cpp/json/yson/json2yson.h>
@@ -149,7 +150,7 @@ protected:
 
     TDiagnosableInvokerPoolPtr CreateInvokerPool(IInvokerPtr underlyingInvoker, int invokerCount, TSolomonRegistryPtr registry = nullptr)
     {
-        std::vector<TString> bucketNames;
+        std::vector<std::string> bucketNames;
 
         for (int i = 0; i < invokerCount; ++i) {
             bucketNames.push_back("invoker_" + ToString(i));

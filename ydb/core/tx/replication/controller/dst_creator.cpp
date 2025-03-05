@@ -7,6 +7,8 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/subscriber.h>
@@ -119,6 +121,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
             break;
         case TReplication::ETargetKind::IndexTable:
+        case TReplication::ETargetKind::Transfer:
             Y_ABORT("unreachable");
         }
     }
@@ -225,10 +228,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         AllocateTxId();
     }
 
-    static void FillReplicationConfig(NKikimrSchemeOp::TTableReplicationConfig& replicationConfig) {
-        // TODO: support other modes
-        replicationConfig.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
-        replicationConfig.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
+    void FillReplicationConfig(NKikimrSchemeOp::TTableReplicationConfig& replicationConfig) const {
+        NController::FillReplicationConfig(replicationConfig, Mode, Consistency);
     }
 
     void AllocateTxId() {
@@ -364,6 +365,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         case TReplication::ETargetKind::Table:
             return CheckTableScheme(desc.GetTable(), error);
         case TReplication::ETargetKind::IndexTable:
+        case TReplication::ETargetKind::Transfer:
             Y_ABORT("unreachable");
         }
     }
@@ -374,22 +376,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return false;
         }
 
-        const auto& replicationConfig = got.GetReplicationConfig();
-
-        switch (replicationConfig.GetMode()) {
-        case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY:
-            break;
-        default:
-            error = "Unsupported replication mode";
-            return false;
-        }
-
-        switch (replicationConfig.GetConsistency()) {
-        case NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK:
-            break;
-        default:
-            error = TStringBuilder() << "Unsupported replication consistency"
-                << ": " << static_cast<int>(replicationConfig.GetConsistency());
+        if (!CheckReplicationConfig(got.GetReplicationConfig(), Mode, Consistency, error)) {
             return false;
         }
 
@@ -622,7 +609,9 @@ public:
             ui64 tid,
             TReplication::ETargetKind kind,
             const TString& srcPath,
-            const TString& dstPath)
+            const TString& dstPath,
+            EReplicationMode mode,
+            EConsistencyLevel consistency)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -632,6 +621,8 @@ public:
         , Kind(kind)
         , SrcPath(srcPath)
         , DstPath(dstPath)
+        , Mode(mode)
+        , Consistency(consistency)
         , LogPrefix("DstCreator", ReplicationId, TargetId)
     {
     }
@@ -641,7 +632,9 @@ public:
         case TReplication::ETargetKind::Table:
             return Resolve(PathId);
         case TReplication::ETargetKind::IndexTable:
+        case TReplication::ETargetKind::Transfer:
             // indexed table will be created along with its indexes
+            // transfer works with an existing table
             return SubscribeDstPath();
         }
     }
@@ -664,6 +657,8 @@ private:
     const TReplication::ETargetKind Kind;
     const TString SrcPath;
     const TString DstPath;
+    const EReplicationMode Mode;
+    const EConsistencyLevel Consistency;
     const TActorLogPrefix LogPrefix;
 
     TPathId DomainKey;
@@ -679,17 +674,79 @@ private:
 
 }; // TDstCreator
 
+static NKikimrSchemeOp::TTableReplicationConfig::EConsistencyLevel ConvertConsistencyLevel(EConsistencyLevel value) {
+    switch (value) {
+    case EConsistencyLevel::Row:
+        return NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW;
+    case EConsistencyLevel::Global:
+        return NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL;
+    }
+}
+
+static NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode ConvertMode(EReplicationMode value) {
+    switch (value) {
+    case EReplicationMode::ReadOnly:
+        return NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY;
+    }
+}
+
+void FillReplicationConfig(
+        NKikimrSchemeOp::TTableReplicationConfig& out,
+        EReplicationMode mode,
+        EConsistencyLevel consistency
+) {
+    out.SetMode(ConvertMode(mode));
+    out.SetConsistencyLevel(ConvertConsistencyLevel(consistency));
+}
+
+bool CheckReplicationConfig(
+        const NKikimrSchemeOp::TTableReplicationConfig& in,
+        EReplicationMode mode,
+        EConsistencyLevel consistency,
+        TString& error
+) {
+    if (in.GetMode() != ConvertMode(mode)) {
+        error = TStringBuilder() << "Replication mode mismatch"
+            << ": expected: " << ConvertMode(mode)
+            << ", got: " << static_cast<int>(in.GetMode());
+        return false;
+    }
+
+    if (in.GetConsistencyLevel() != ConvertConsistencyLevel(consistency)) {
+        error = TStringBuilder() << "Replication consistency level mismatch"
+            << ": expected: " << ConvertConsistencyLevel(consistency)
+            << ", got: " << static_cast<int>(in.GetConsistencyLevel());
+        return false;
+    }
+
+    return true;
+}
+
+static EConsistencyLevel ConvertConsistencyLevel(const NKikimrReplication::TConsistencySettings& settings) {
+    switch (settings.GetLevelCase()) {
+    case NKikimrReplication::TConsistencySettings::kRow:
+        return EConsistencyLevel::Row;
+    case NKikimrReplication::TConsistencySettings::kGlobal:
+        return EConsistencyLevel::Global;
+    default:
+        Y_ABORT("Unexpected consistency level");
+    }
+}
+
 IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
+
     return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(), replication->GetPathId(),
-        replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath());
+        replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
+        EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()));
 }
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy, const TPathId& pathId,
-        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath)
+        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
+        EReplicationMode mode, EConsistencyLevel consistency)
 {
-    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath);
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency);
 }
 
 }

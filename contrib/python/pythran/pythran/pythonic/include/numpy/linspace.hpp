@@ -14,7 +14,7 @@ namespace numpy
            bool retstep = false, dtype d = dtype());
 
   DEFINE_FUNCTOR(pythonic::numpy, linspace);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

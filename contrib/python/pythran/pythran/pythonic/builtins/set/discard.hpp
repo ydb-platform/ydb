@@ -30,7 +30,7 @@ namespace builtins
     {
       // nothing to remove in an empty_set
     }
-  }
-}
+  } // namespace set
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

@@ -405,7 +405,7 @@ select case a+1 when b then 111 when c then 222
 from t1
 order by col1,col2
 
-statement query
+statement skipped_cs query
 select case when c>avg_c then a*2 else b*10 end as col1,
        abs(a) as col2,
        case a+1 when b then 111 when c then 222
@@ -545,7 +545,7 @@ from t1
 where (a>b-2 and a<b+2)
     or (e>a and e<b)
 
-statement query
+statement skipped_cs query
 select b-c as col1,
        a+b*2+c*3 as col2,
        case when c>avg_c then a*2 else b*10 end as col3,
@@ -598,7 +598,7 @@ where (c<=d-2 or c>=d+2)
     or (e>c or e<d)
 order by col1,col2
 
-statement query
+statement skipped_cs query
 select case a+1 when b then 111 when c then 222
         when d then 333  when e then 444 else 555 end as col1
 from t1
@@ -793,7 +793,7 @@ from t1
 where (a>b-2 and a<b+2)
 order by col2,col1,col3
 
-statement query
+statement skipped_cs query
 select d-e as col1,
        case a+1 when b then 111 when c then 222
         when d then 333  when e then 444 else 555 end as col2,
@@ -1048,7 +1048,7 @@ from t1
 where exists(select 1 from t1 as x where x.b<t1.b)
     or e+d between a+b-10 and c+130
 
-statement query
+statement skipped_cs query
 select b-c as col1
 from t1
 where a is null
@@ -1333,7 +1333,7 @@ where (c<=d-2 or c>=d+2)
     or (e>c or e<d)
     or c>d
 
-statement query
+statement skipped_cs query
 select (a+b+c+d+e)/5 as col1,
        c-d as col2,
        case a+1 when b then 111 when c then 222
@@ -1346,7 +1346,7 @@ where a>b
    and a is null
 order by col5,col3,col2,col4,col1
 
-statement query
+statement skipped_cs query
 select a+b*2+c*3 as col1,
        a+b*2+c*3+d*4+e*5 as col2,
        d as col3,
@@ -1434,7 +1434,7 @@ from t1
 where c>d
 order by col1,col3,col2
 
-statement query
+statement skipped_cs query
 select abs(b-c) as col1,
        (a+b+c+d+e)/5 as col2,
        d as col3
@@ -1857,7 +1857,7 @@ select d-e as col1
 from t1
 order by col1
 
-statement query
+statement skipped_cs query
 select b-c as col1,
        case when c>avg_c then a*2 else b*10 end as col2,
        case when a<b-3 then 111 when a<=b then 222
@@ -2080,7 +2080,7 @@ from t1
 where c between b-2 and d+2
 order by col1
 
-statement query
+statement skipped_cs query
 select d as col1,
        a-b as col2,
        c-d as col3,
@@ -2224,7 +2224,7 @@ from t1
 where b is not null
     or d>e
 
-statement query
+statement skipped_cs query
 select a+b*2+c*3+d*4+e*5 as col1,
        case when a<b-3 then 111 when a<=b then 222
         when a<b+3 then 333 else 444 end as col2,

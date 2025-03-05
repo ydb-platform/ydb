@@ -2,12 +2,12 @@ PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 TEST_SRCS(
+    test_followers.py
     test_compatibility.py
 )
 
-TIMEOUT(3600)
 SIZE(LARGE)
-TAG(ya:fat)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 DEPENDS(
     ydb/apps/ydbd

@@ -14,7 +14,7 @@ namespace numpy
   auto ediff1d(types::list<E> const &expr) -> decltype(ediff1d(asarray(expr)));
 
   DEFINE_FUNCTOR(pythonic::numpy, ediff1d);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

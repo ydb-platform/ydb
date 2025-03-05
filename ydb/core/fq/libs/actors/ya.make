@@ -44,6 +44,7 @@ PEERDIR(
     ydb/core/fq/libs/db_schema
     ydb/core/fq/libs/events
     ydb/core/fq/libs/grpc
+    ydb/core/fq/libs/metrics
     ydb/core/fq/libs/private_client
     ydb/core/fq/libs/rate_limiter/utils
     ydb/core/fq/libs/result_formatter
@@ -72,7 +73,6 @@ PEERDIR(
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/dq/provider/exec
     ydb/library/yql/providers/dq/worker_manager/interface
-    ydb/library/yql/providers/generic/connector/api/common
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/generic/provider
     ydb/library/yql/providers/pq/cm_client
@@ -87,9 +87,9 @@ PEERDIR(
     ydb/library/yql/utils/actor_log
     ydb/public/api/protos
     ydb/public/lib/fq
-    ydb/public/sdk/cpp/client/ydb_query
-    ydb/public/sdk/cpp/client/ydb_operation
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/query
+    ydb/public/sdk/cpp/src/client/operation
+    ydb/public/sdk/cpp/src/client/table
 )
 
 YQL_LAST_ABI_VERSION()

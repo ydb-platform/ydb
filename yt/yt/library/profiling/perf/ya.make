@@ -2,10 +2,12 @@ LIBRARY()
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
+SRCS(event_counter_profiler.cpp)
+
 IF (OS_LINUX)
-    SRCS(counters.cpp)
+    SRCS(event_counter_linux.cpp)
 ELSE()
-    SRCS(counters_other.cpp)
+    SRCS(event_counter_dummy.cpp)
 ENDIF()
 
 PEERDIR(
@@ -14,3 +16,5 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(unittests)

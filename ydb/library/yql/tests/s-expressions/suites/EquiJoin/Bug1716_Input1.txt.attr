@@ -1,3 +1,0 @@
-{
-    "_yql_row_spec"={"Type" = [ "StructType";  [["field1";["OptionalType";["DataType";"String"]]];["field2";["OptionalType";["DataType";"String"]]];["id";["OptionalType";["DataType";"String"]]];["name";["OptionalType";["DataType";"String"]]]]];"UniqueKeys" = %false}
-}

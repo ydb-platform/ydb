@@ -19,7 +19,6 @@ struct TEvRetryQueuePrivate {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvRetry = EvBegin,
         EvHeartbeat,
-        EvSessionClosed,        // recipientId does not exist anymore
         EvEnd
     };
 
@@ -36,14 +35,6 @@ struct TEvRetryQueuePrivate {
 
     struct TEvEvHeartbeat : NActors::TEventLocal<TEvEvHeartbeat, EvHeartbeat> {
         explicit TEvEvHeartbeat(ui64 eventQueueId)
-            : EventQueueId(eventQueueId)
-        { }
-        const ui64 EventQueueId;
-    };
-
-
-    struct TEvSessionClosed : NActors::TEventLocal<TEvSessionClosed, EvSessionClosed> {
-        explicit TEvSessionClosed(ui64 eventQueueId)
             : EventQueueId(eventQueueId)
         { }
         const ui64 EventQueueId;
@@ -71,6 +62,12 @@ concept TProtobufEventWithTransportMeta = TProtobufEvent<T> && THasTransportMeta
 class TRetryEventsQueue {
 
 public:
+    enum class ESessionState{
+        WrongSession,       // event RecipientId != Sender (event is not from this queue)
+        Disconnected,
+        SessionClosed       // recipientId does not exist anymore
+    };
+
     class IRetryableEvent : public TSimpleRefCount<IRetryableEvent> {
     public:
         using TPtr = TIntrusivePtr<IRetryableEvent>;
@@ -92,7 +89,7 @@ public:
     void Send(THolder<T> ev, ui64 cookie = 0) {
         if (LocalRecipient) {
             LastSentDataTime = TInstant::Now();
-            NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release(), /* flags */ 0, cookie));
+            NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release(), /* flags */ NActors::IEventHandle::FlagTrackDelivery, cookie));
             return;
         }
 
@@ -148,7 +145,7 @@ public:
     void OnNewRecipientId(const NActors::TActorId& recipientId, bool unsubscribe = true, bool connected = false);
     void HandleNodeConnected(ui32 nodeId);
     void HandleNodeDisconnected(ui32 nodeId);
-    bool HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev);
+    ESessionState HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void Retry();
     bool Heartbeat();
 
@@ -189,6 +186,9 @@ private:
             THolder<T> ev = MakeHolder<T>();
             ev->Record = Event->Record;
             ev->Record.MutableTransportMeta()->SetConfirmedSeqNo(confirmedSeqNo);
+            for (ui32 i = 0; i < Event->GetPayloadCount(); ++i) {
+                ev->AddPayload(TRope(Event->GetPayload(i)));
+            }
             return MakeHolder<NActors::IEventHandle>(Recipient, Sender, ev.Release(), NActors::IEventHandle::FlagTrackDelivery, Cookie);
         }
 

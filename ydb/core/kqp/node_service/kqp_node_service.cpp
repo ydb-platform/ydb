@@ -107,7 +107,7 @@ public:
         if (mon) {
             NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "kqp_node", "KQP Node", false,
-                TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+                TActivationContext::ActorSystem(), SelfId());
         }
 
         Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
@@ -153,6 +153,9 @@ private:
             ? TMaybe<ui64>(msg.GetLockTxId())
             : Nothing();
         ui32 lockNodeId = msg.GetLockNodeId();
+        TMaybe<NKikimrDataEvents::ELockMode> lockMode = msg.HasLockMode()
+            ? TMaybe<NKikimrDataEvents::ELockMode>(msg.GetLockMode())
+            : Nothing();
 
         YQL_ENSURE(msg.GetStartAllOrFail()); // todo: support partial start
 
@@ -203,16 +206,21 @@ private:
 
         if (SchedulerOptions.Scheduler->Disabled(schedulerGroup)) {
             auto share = msg.GetPoolMaxCpuShare();
-            if (share <= 0 && msg.HasQueryCpuShare()) {
+            if (share <= 0 && (msg.HasQueryCpuShare() || msg.HasResourceWeight())) {
                 share = 1.0;
             }
+            std::optional<double> resourceWeight;
+            if (msg.GetResourceWeight() >= 0) {
+                resourceWeight = msg.GetResourceWeight();
+            }
+
             if (share > 0) {
-                Scheduler->UpdateGroupShare(schedulerGroup, share, schedulerNow);
-                Send(SchedulerActorId, new TEvSchedulerNewPool(msg.GetDatabaseId(), schedulerGroup));
+                Scheduler->UpdateGroupShare(schedulerGroup, share, schedulerNow, resourceWeight);
+                Send(SchedulerActorId, new TEvSchedulerNewPool(msg.GetDatabase(), schedulerGroup));
             } else {
                 schedulerGroup = "";
             }
-        } 
+        }
 
         std::optional<ui64> querySchedulerGroup;
         if (msg.HasQueryCpuShare() && schedulerGroup) {
@@ -228,7 +236,7 @@ private:
         TIntrusivePtr<NRm::TTxState> txInfo = MakeIntrusive<NRm::TTxState>(
             txId, TInstant::Now(), ResourceManager_->GetCounters(),
             msg.GetSchedulerGroup(), msg.GetMemoryPoolPercent(),
-            msg.GetDatabase());
+            msg.GetDatabase(), Config.GetVerboseMemoryLimitException());
 
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {
@@ -249,11 +257,12 @@ private:
                 }
             }
 
-            auto result = CaFactory_->CreateKqpComputeActor({
+            NComputeActor::IKqpNodeComputeActorFactory::TCreateArgs createArgs{
                 .ExecuterId = request.Executer,
                 .TxId = txId,
                 .LockTxId = lockTxId,
                 .LockNodeId = lockNodeId,
+                .LockMode = lockMode,
                 .Task = &dqTask,
                 .TxInfo = txInfo,
                 .RuntimeSettings = runtimeSettingsBase,
@@ -271,7 +280,15 @@ private:
                 .ComputesByStages = &computesByStage,
                 .State = State_,
                 .SchedulingOptions = std::move(schedulingTaskOptions),
-            });
+                // TODO: block tracking mode is not set!
+            };
+            if (msg.HasUserToken() && msg.GetUserToken()) {
+                createArgs.UserToken.Reset(MakeIntrusive<NACLib::TUserToken>(msg.GetUserToken()));
+            }
+
+            createArgs.Database = msg.GetDatabase();
+
+            auto result = CaFactory_->CreateKqpComputeActor(std::move(createArgs));
 
             if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {
                 ReplyError(txId, request.Executer, msg, rmResult->GetStatus(), rmResult->GetFailReason());
@@ -299,7 +316,8 @@ private:
         for (auto&& i : computesByStage) {
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
-                    m.GetMeta(), runtimeSettingsBase, txId, lockTxId, lockNodeId, scanPolicy, Counters, NWilson::TTraceId(ev->TraceId)));
+                    m.GetMeta(), runtimeSettingsBase, txId, lockTxId, lockNodeId, lockMode,
+                    scanPolicy, Counters, NWilson::TTraceId(ev->TraceId)));
             }
         }
 
@@ -439,7 +457,6 @@ private:
 
         ptr->InFlightMemoryLimitPerActorBytes = settings.GetInFlightMemoryLimitPerActorBytes();
         ptr->MemoryLimitPerMessageBytes = settings.GetMemoryLimitPerMessageBytes();
-        ptr->MaxBatchesPerMessage = settings.GetMaxBatchesPerMessage();
 
         ptr->StartRetryDelay = TDuration::MilliSeconds(settings.GetStartRetryDelayMs());
         ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxRetryDelayMs());

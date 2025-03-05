@@ -303,6 +303,12 @@ bool TSnapshotManager::PromoteImmediateWriteEdgeReplied(const TRowVersion& versi
     return false;
 }
 
+void TSnapshotManager::RestoreImmediateWriteEdge(const TRowVersion& version, const TRowVersion& replied) {
+    // Note: ImmediateWriteEdge is persistent, we must not overwrite it
+    Y_UNUSED(version);
+    ImmediateWriteEdgeReplied = replied;
+}
+
 TRowVersion TSnapshotManager::GetUnprotectedReadEdge() const {
     return UnprotectedReadEdge;
 }
@@ -314,6 +320,10 @@ bool TSnapshotManager::PromoteUnprotectedReadEdge(const TRowVersion& version) {
     }
 
     return false;
+}
+
+void TSnapshotManager::RestoreUnprotectedReadEdge(const TRowVersion& version) {
+    UnprotectedReadEdge = version;
 }
 
 std::pair<TRowVersion, bool> TSnapshotManager::GetFollowerReadEdge() const {

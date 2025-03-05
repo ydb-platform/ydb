@@ -119,12 +119,12 @@ public:
         i64 sourceOffset = change.GetSourceOffset();
 
         ui64 writeTxId = change.GetWriteTxId();
-        if (userTable.ReplicationConfig.HasWeakConsistency() || userTable.IncrementalBackupConfig.HasWeakConsistency()) {
+        if (userTable.ReplicationConfig.HasRowConsistency() || userTable.IncrementalBackupConfig.HasWeakConsistency()) {
             if (writeTxId) {
                 Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
-                    "WriteTxId cannot be specified for weak consistency");
+                    "WriteTxId cannot be specified for row consistency");
                 return false;
             }
         } else {
@@ -132,7 +132,7 @@ public:
                 Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
-                    "Non-zero WriteTxId must be specified for strong consistency");
+                    "Non-zero WriteTxId must be specified for global consistency");
                 return false;
             }
         }

@@ -28,12 +28,12 @@ public:
     ///    In this case a caller must wait operation completion and call StoreCompleted.
     ///    Design note: not using Subscribe on a Future here to avoid possible race condition
     std::optional<NThreading::TFuture<ISpiller::TKey>> WriteWideItem(const TArrayRef<NUdf::TUnboxedValuePod>& wideItem) {
-       Packer.AddWideItem(wideItem.data(), wideItem.size());
-       if(Packer.PackedSizeEstimate() > SizeLimit) {
-           return Spiller->Put(std::move(Packer.Finish()));
-       } else {
+        Packer.AddWideItem(wideItem.data(), wideItem.size());
+        if (Packer.PackedSizeEstimate() > SizeLimit) {
+            return Spiller->Put(std::move(Packer.Finish()));
+        } else {
            return std::nullopt;
-       }
+        }
     }
 
     std::optional<NThreading::TFuture<ISpiller::TKey>> FinishWriting() {

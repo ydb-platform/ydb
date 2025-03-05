@@ -4,7 +4,7 @@
 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 std::pair<ui64, ui64> GetMessageOffsetRange(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent, ui64 index);
 

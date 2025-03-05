@@ -53,8 +53,8 @@ public:
     bool IsRetry() const override;
     TMutationId GetMutationId() const override;
 
-    std::string GetService() const override;
-    std::string GetMethod() const override;
+    const std::string& GetService() const override;
+    const std::string& GetMethod() const override;
     TRealmId GetRealmId() const override;
     const TAuthenticationIdentity& GetAuthenticationIdentity() const override;
 
@@ -69,7 +69,6 @@ public:
 
     //! \note Thread affinity: any
     TFuture<TSharedRefArray> GetAsyncResponseMessage() const override;
-
     const TSharedRefArray& GetResponseMessage() const override;
 
     using TCanceledCallback = TCallback<void(const TError&)>;
@@ -131,6 +130,9 @@ protected:
     bool LoggingEnabled_;
     TRequestId RequestId_;
     TRealmId RealmId_;
+    TMutationId MutationId_;
+    std::string ServiceName_;
+    std::string MethodName_;
 
     TAuthenticationIdentity AuthenticationIdentity_;
 
@@ -217,8 +219,8 @@ public:
     bool IsRetry() const override;
     TMutationId GetMutationId() const override;
 
-    std::string GetService() const override;
-    std::string GetMethod() const override;
+    const std::string& GetService() const override;
+    const std::string& GetMethod() const override;
     TRealmId GetRealmId() const override;
     const TAuthenticationIdentity& GetAuthenticationIdentity() const override;
 
@@ -314,7 +316,7 @@ protected:
     TServerConfigPtr AppliedConfig_;
 
     //! Service name to service.
-    using TServiceMap = THashMap<TString, IServicePtr>;
+    using TServiceMap = THashMap<std::string, IServicePtr>;
     THashMap<TGuid, TServiceMap> RealmIdToServiceMap_;
 
     explicit TServerBase(NLogging::TLogger logger);

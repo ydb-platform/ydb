@@ -54,11 +54,13 @@
                                                             }
                                                         ],
                                                         "Name": "Filter",
-                                                        "Predicate": "SearchPhrase != "
+                                                        "Predicate": "SearchPhrase != \"\"",
+                                                        "Pushdown": "True"
                                                     },
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/local/clickbench/plans/column/hits",
                                                         "ReadColumns": [
                                                             "SearchPhrase"
                                                         ],

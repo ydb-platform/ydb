@@ -7,7 +7,7 @@
 
 namespace NKikimr::NOlap {
 
-class TTTLColumnEngineChanges: public TChangesWithAppend {
+class TTTLColumnEngineChanges: public TChangesWithAppend, public NColumnShard::TMonitoringObjectsCounter<TTTLColumnEngineChanges> {
 private:
     using TBase = TChangesWithAppend;
 
@@ -53,11 +53,15 @@ protected:
         }
         return result;
     }
+    virtual NDataLocks::ELockCategory GetLockCategory() const override {
+        return NDataLocks::ELockCategory::Actualization;
+    }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
         const auto pred = [](const TPortionForEviction& p) {
             return p.GetPortionInfo()->GetAddress();
         };
-        return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + RWAddress.DebugString() + "::" + GetTaskIdentifier(), PortionsToEvict, pred);
+        return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + RWAddress.DebugString() + "::" + GetTaskIdentifier(),
+            PortionsToEvict, pred, GetLockCategory());
     }
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) override {
         TBase::OnDataAccessorsInitialized(context);

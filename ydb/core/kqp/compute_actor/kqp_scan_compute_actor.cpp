@@ -23,15 +23,13 @@ static constexpr TDuration RL_MAX_BATCH_DELAY = TDuration::Seconds(50);
 
 } // anonymous namespace
 
-TKqpScanComputeActor::TKqpScanComputeActor(TComputeActorSchedulingOptions cpuOptions, const TActorId& executerId, ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId,
+TKqpScanComputeActor::TKqpScanComputeActor(TComputeActorSchedulingOptions cpuOptions, const TActorId& executerId, ui64 txId,
     NDqProto::TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
     TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode)
     : TBase(std::move(cpuOptions), executerId, txId, task, std::move(asyncIoFactory), AppData()->FunctionRegistry, settings,
         memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId), std::move(arena))
     , ComputeCtx(settings.StatsMode)
-    , LockTxId(lockTxId)
-    , LockNodeId(lockNodeId)
     , BlockTrackingMode(mode)
 {
     InitializeTask();
@@ -88,16 +86,40 @@ void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, b
         auto* taskStats = dst->MutableTasks(0);
         auto* tableStats = taskStats->AddTables();
 
+        auto& sourceStats = *taskStats->AddSources();
+
+        // sourceStats.SetInputIndex(0); // do not have real input index
+        sourceStats.SetIngressName("CS");
+
+        auto& ingressStats = *sourceStats.MutableIngress();
+
         tableStats->SetTablePath(ScanData->TablePath);
 
-        if (auto* x = ScanData->BasicStats.get()) {
-            tableStats->SetReadRows(x->Rows);
-            tableStats->SetReadBytes(x->Bytes);
-            tableStats->SetAffectedPartitions(x->AffectedShards);
+        if (auto* stats = ScanData->BasicStats.get()) {
+            ingressStats.SetRows(stats->Rows);
+            ingressStats.SetBytes(stats->Bytes);
+            ingressStats.SetFirstMessageMs(stats->FirstMessageMs);
+            ingressStats.SetLastMessageMs(stats->LastMessageMs);
+
+            for (auto& [shardId, stat] : stats->ExternalStats) {
+                auto& externalStat = *sourceStats.AddExternalPartitions();
+                externalStat.SetPartitionId(ToString(shardId));
+                externalStat.SetExternalRows(stat.ExternalRows);
+                externalStat.SetExternalBytes(stat.ExternalBytes);
+                externalStat.SetFirstMessageMs(stat.FirstMessageMs);
+                externalStat.SetLastMessageMs(stat.LastMessageMs);
+            }
+
+            taskStats->SetIngressRows(taskStats->GetIngressRows() + stats->Rows);
+            taskStats->SetIngressBytes(taskStats->GetIngressBytes() + stats->Bytes);
+
+            tableStats->SetReadRows(stats->Rows);
+            tableStats->SetReadBytes(stats->Bytes);
+            tableStats->SetAffectedPartitions(stats->AffectedShards);
             // TODO: CpuTime
         }
 
-        if (auto* x = ScanData->ProfileStats.get()) {
+        if (ScanData->ProfileStats) {
             NKqpProto::TKqpTaskExtraStats taskExtraStats;
             //                auto scanTaskExtraStats = taskExtraStats.MutableScanTaskExtraStats();
             //                scanTaskExtraStats->SetRetriesCount(TotalRetries);
@@ -245,7 +267,7 @@ void TKqpScanComputeActor::DoBootstrap() {
 
     auto wakeup = [this] { ContinueExecute(); };
     auto errorCallback = [this](const TString& error){ SendError(error); };
-    TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, std::move(wakeup), std::move(errorCallback)));
+    TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, MemoryLimits.ArrayBufferMinFillPercentage, std::move(wakeup), std::move(errorCallback)));
 
     ComputeCtx.AddTableScan(0, Meta, GetStatsMode());
     ScanData = &ComputeCtx.GetTableScan(0);

@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_BUILTIN_COMPLEX_HPP
 #define PYTHONIC_INCLUDE_BUILTIN_COMPLEX_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/types/complex.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -21,8 +21,8 @@ namespace builtins
         return os << "complex";
       }
     };
-  }
-}
+  } // namespace functor
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

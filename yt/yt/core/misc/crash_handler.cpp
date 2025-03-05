@@ -1,8 +1,8 @@
 #include "crash_handler.h"
-#include "signal_registry.h"
 
 #include <yt/yt/core/logging/log_manager.h>
 
+#include <yt/yt/core/misc/codicil.h>
 #include <yt/yt/core/misc/proc.h>
 
 #include <yt/yt/core/concurrency/fls.h>
@@ -19,6 +19,8 @@
 #include <library/cpp/yt/backtrace/backtrace.h>
 
 #include <library/cpp/yt/system/handle_eintr.h>
+
+#include <library/cpp/yt/misc/tls.h>
 
 #ifdef _unix_
 #include <library/cpp/yt/backtrace/cursors/libunwind/libunwind_cursor.h>
@@ -75,6 +77,23 @@ void WriteToStderr(const char* buffer)
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NDetail {
+
+constinit NThreading::TSpinLock CrashLock;
+constinit YT_DEFINE_THREAD_LOCAL(bool, CrashLockAcquiredByCurrentThread);
+
+void AcquireCrashLock()
+{
+    if (!std::exchange(CrashLockAcquiredByCurrentThread(), true)) {
+        CrashLock.Acquire();
+    }
+}
+
+void ReleaseCrashLock()
+{
+    if (std::exchange(CrashLockAcquiredByCurrentThread(), false)) {
+        CrashLock.Release();
+    }
+}
 
 Y_NO_INLINE TStackTrace GetStackTrace(TStackTraceBuffer* buffer)
 {
@@ -136,26 +155,21 @@ void DumpTimeInfo()
     WriteToStderr(formatter);
 }
 
-using TCodicilStack = std::vector<TString>;
-
-NConcurrency::TFlsSlot<TCodicilStack>& CodicilStackSlot()
-{
-    static NConcurrency::TFlsSlot<TCodicilStack> Slot;
-    return Slot;
-}
-
-//! Dump codicils.
+//! Dumps codicils.
 void DumpCodicils()
 {
-    // NB: Avoid constructing FLS slot to avoid allocations; these may lead to deadlocks if the
-    // program crashes during an allocation itself.
-    if (CodicilStackSlot().IsInitialized() && !CodicilStackSlot()->empty()) {
+    auto builders = GetCodicilBuilders();
+    if (!builders.empty()) {
         WriteToStderr("*** Begin codicils\n");
-        for (const auto& data : *CodicilStackSlot()) {
-            TFormatter formatter;
-            formatter.AppendString(data.c_str());
-            formatter.AppendString("\n");
+        TCodicilFormatter formatter;
+        for (const auto& builder : builders) {
+            formatter.Reset();
+            builder(&formatter);
             WriteToStderr(formatter);
+            if (formatter.GetBytesRemaining() == 0) {
+                WriteToStderr(" (truncated)");
+            }
+            WriteToStderr("\n");
         }
         WriteToStderr("*** End codicils\n");
     }
@@ -269,7 +283,7 @@ const char* GetSignalCodeName(int signo, int code)
 // From include/asm/traps.h
 
 [[maybe_unused]]
-const char* GetTrapName(int trapno)
+const char* FindTrapName(int trapno)
 {
 #define XX(name, value, message) case value: return #name " (" message ")";
 
@@ -314,7 +328,8 @@ void FormatErrorCodeName(TBaseFormatter* formatter, int codeno)
      *   bit 4 ==               1: fault was an instruction fetch
      *   bit 5 ==               1: protection keys block access
      */
-    enum x86_pf_error_code {
+    enum x86_pf_error_code
+    {
         X86_PF_PROT  =   1 << 0,
         X86_PF_WRITE =   1 << 1,
         X86_PF_USER  =   1 << 2,
@@ -348,7 +363,6 @@ void DumpSignalInfo(siginfo_t* si)
 {
     TFormatter formatter;
 
-    formatter.AppendString("*** ");
     if (const char* name = GetSignalName(si->si_signo)) {
         formatter.AppendString(name);
     } else {
@@ -359,20 +373,20 @@ void DumpSignalInfo(siginfo_t* si)
     }
 
     formatter.AppendString(" (@0x");
-    formatter.AppendNumber(reinterpret_cast<uintptr_t>(si->si_addr), 16);
+    formatter.AppendNumber(reinterpret_cast<uintptr_t>(si->si_addr), /*radix*/ 16);
     formatter.AppendString(")");
     formatter.AppendString(" received by PID ");
     formatter.AppendNumber(getpid());
 
     formatter.AppendString(" (FID 0x");
-    formatter.AppendNumber(NConcurrency::GetCurrentFiberId(), 16);
+    formatter.AppendNumber(NConcurrency::GetCurrentFiberId(), /*radix*/ 16);
     formatter.AppendString(" TID 0x");
     // We assume pthread_t is an integral number or a pointer, rather
     // than a complex struct. In some environments, pthread_self()
     // returns an uint64 but in some other environments pthread_self()
     // returns a pointer. Hence we use C-style cast here, rather than
     // reinterpret/static_cast, to support both types of environments.
-    formatter.AppendNumber((uintptr_t)pthread_self(), 16);
+    formatter.AppendNumber(reinterpret_cast<uintptr_t>(pthread_self()), /*radix*/ 16);
     formatter.AppendString(") ");
     // Only linux has the PID of the signal sender in si_pid.
 #ifdef _unix_
@@ -386,10 +400,8 @@ void DumpSignalInfo(siginfo_t* si)
     } else {
         formatter.AppendNumber(si->si_code);
     }
-
-    formatter.AppendString(" ");
 #endif
-    formatter.AppendString("***\n");
+    formatter.AppendChar('\n');
 
     WriteToStderr(formatter);
 }
@@ -401,59 +413,52 @@ void DumpSigcontext(void* uc)
 
     TFormatter formatter;
 
-    formatter.AppendString("\nERR ");
+    formatter.AppendString("ERR    ");
     FormatErrorCodeName(&formatter, context->uc_mcontext.gregs[REG_ERR]);
+    formatter.AppendChar('\n');
 
-    formatter.AppendString("\nTRAPNO ");
-    if (const char* trapName = GetTrapName(context->uc_mcontext.gregs[REG_TRAPNO])) {
+    formatter.AppendString("TRAPNO ");
+    if (const char* trapName = FindTrapName(context->uc_mcontext.gregs[REG_TRAPNO])) {
         formatter.AppendString(trapName);
     } else {
         formatter.AppendString("0x");
         formatter.AppendNumber(context->uc_mcontext.gregs[REG_TRAPNO], 16);
     }
+    formatter.AppendChar('\n');
 
-    formatter.AppendString("\nR8 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_R8], 16);
-    formatter.AppendString("\nR9 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_R9], 16);
-    formatter.AppendString("\nR10 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_R10], 16);
-    formatter.AppendString("\nR11 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_R11], 16);
-    formatter.AppendString("\nR12 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_R12], 16);
-    formatter.AppendString("\nR13 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_R13], 16);
-    formatter.AppendString("\nR14 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_R14], 16);
-    formatter.AppendString("\nR15 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_R15], 16);
-    formatter.AppendString("\nRDI 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_RDI], 16);
-    formatter.AppendString("\nRSI 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_RSI], 16);
-    formatter.AppendString("\nRBP 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_RBP], 16);
-    formatter.AppendString("\nRBX 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_RBX], 16);
-    formatter.AppendString("\nRDX 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_RDX], 16);
-    formatter.AppendString("\nRAX 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_RAX], 16);
-    formatter.AppendString("\nRCX 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_RCX], 16);
-    formatter.AppendString("\nRSP 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_RSP], 16);
-    formatter.AppendString("\nRIP 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_RIP], 16);
-    formatter.AppendString("\nEFL 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_EFL], 16);
-    formatter.AppendString("\nCSGSFS 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_CSGSFS], 16);
-    formatter.AppendString("\nOLDMASK 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_OLDMASK], 16);
-    formatter.AppendString("\nCR2 0x");
-    formatter.AppendNumber(context->uc_mcontext.gregs[REG_CR2], 16);
+    auto formatRegister = [&, horizontalPos = 0] (TStringBuf name, int reg) mutable {
+        if (horizontalPos > 1) {
+            formatter.AppendChar('\n');
+            horizontalPos = 0;
+        } else if (horizontalPos > 0) {
+            formatter.AppendChar(' ', 4);
+        }
+        formatter.AppendString(name);
+        formatter.AppendChar(' ', 7 - name.length());
+        formatter.AppendString("0x");
+        formatter.AppendNumber(context->uc_mcontext.gregs[reg], /*radix*/ 16, /*width*/ 16, /*ch*/ '0');
+        ++horizontalPos;
+    };
+    formatRegister("RAX", REG_RAX);
+    formatRegister("RBX", REG_RBX);
+    formatRegister("RCX", REG_RCX);
+    formatRegister("RDX", REG_RDX);
+    formatRegister("RSI", REG_RSI);
+    formatRegister("RDI", REG_RDI);
+    formatRegister("RBP", REG_RBP);
+    formatRegister("RSP", REG_RSP);
+    formatRegister("R8", REG_R8);
+    formatRegister("R9", REG_R9);
+    formatRegister("R10", REG_R10);
+    formatRegister("R11", REG_R11);
+    formatRegister("R12", REG_R12);
+    formatRegister("R13", REG_R13);
+    formatRegister("R14", REG_R14);
+    formatRegister("R15", REG_R15);
+    formatRegister("RIP", REG_RIP);
+    formatRegister("EFL", REG_EFL);
+    formatRegister("CR2", REG_CR2);
+    formatRegister("CSGSFS", REG_CSGSFS);
     formatter.AppendChar('\n');
 
     WriteToStderr(formatter);
@@ -498,6 +503,48 @@ void DumpUndumpableBlocksInfo()
 
 #endif
 
+Y_WEAK void MaybeThrowSafeAssertionException(TStringBuf /*message*/)
+{
+    // A default implementation has no means of safety.
+    // Actual implementation lives in yt/yt/library/safe_assert.
+}
+
+void AssertTrapImpl(
+    TStringBuf trapType,
+    TStringBuf expr,
+    TStringBuf file,
+    int line,
+    TStringBuf function)
+{
+    TRawFormatter<1024> formatter;
+    formatter.AppendString("*** ");
+    formatter.AppendString(trapType);
+    formatter.AppendString("(");
+    formatter.AppendString(expr);
+    formatter.AppendString(") at ");
+    formatter.AppendString(file);
+    formatter.AppendString(":");
+    formatter.AppendNumber(line);
+    if (function) {
+        formatter.AppendString(" in ");
+        formatter.AppendString(function);
+        formatter.AppendString("\n");
+    }
+
+    MaybeThrowSafeAssertionException(formatter.GetBuffer());
+
+    // Prevent clashes in stderr.
+    AcquireCrashLock();
+
+    WriteToStderr(formatter.GetBuffer());
+
+    // This (hopefully) invokes CrashSignalHandler.
+    YT_BUILTIN_TRAP();
+
+    // Not expected to get here but anyway...
+    ReleaseCrashLock();
+}
+
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -509,22 +556,16 @@ void CrashSignalHandler(int /*signal*/, siginfo_t* si, void* uc)
 {
     // All code here _MUST_ be async signal safe unless specified otherwise.
 
-    // When did the crash happen?
+    // Actually, it is not okay to hang.
+    ::signal(SIGALRM, NDetail::CrashTimeoutHandler);
+    ::alarm(60);
+
+    // Prevent clashes in stderr.
+    NDetail::AcquireCrashLock();
+
     NDetail::DumpTimeInfo();
 
-    // Dump codicils.
     NDetail::DumpCodicils();
-
-    // Where did the crash happen?
-    {
-        std::array<const void*, 1> frames{NDetail::GetPC(uc)};
-        NBacktrace::SymbolizeBacktrace(
-            TRange(frames),
-            [] (TStringBuf info) {
-                info.SkipPrefix(" 1. ");
-                WriteToStderr(info);
-            });
-    }
 
     NDetail::DumpSignalInfo(si);
 
@@ -535,11 +576,10 @@ void CrashSignalHandler(int /*signal*/, siginfo_t* si, void* uc)
 
     NDetail::DumpUndumpableBlocksInfo();
 
-    WriteToStderr("*** Waiting for logger to shut down\n");
+    // Releasing the lock gives other threads a chance to yell at us.
+    NDetail::ReleaseCrashLock();
 
-    // Actually, it is not okay to hang.
-    ::signal(SIGALRM, NDetail::CrashTimeoutHandler);
-    ::alarm(5);
+    WriteToStderr("*** Waiting for logger to shut down\n");
 
     NLogging::TLogManager::Get()->Shutdown();
 
@@ -552,73 +592,6 @@ void CrashSignalHandler(int /*signal*/)
 { }
 
 #endif
-
-////////////////////////////////////////////////////////////////////////////////
-
-void PushCodicil(const TString& data)
-{
-#ifdef _unix_
-    NDetail::CodicilStackSlot()->push_back(data);
-#else
-    Y_UNUSED(data);
-#endif
-}
-
-void PopCodicil()
-{
-#ifdef _unix_
-    YT_VERIFY(!NDetail::CodicilStackSlot()->empty());
-    NDetail::CodicilStackSlot()->pop_back();
-#endif
-}
-
-std::vector<TString> GetCodicils()
-{
-#ifdef _unix_
-    return *NDetail::CodicilStackSlot();
-#else
-    return {};
-#endif
-}
-
-TCodicilGuard::TCodicilGuard()
-    : Active_(false)
-{ }
-
-TCodicilGuard::TCodicilGuard(const TString& data)
-    : Active_(true)
-{
-    PushCodicil(data);
-}
-
-TCodicilGuard::~TCodicilGuard()
-{
-    Release();
-}
-
-TCodicilGuard::TCodicilGuard(TCodicilGuard&& other)
-    : Active_(other.Active_)
-{
-    other.Active_ = false;
-}
-
-TCodicilGuard& TCodicilGuard::operator=(TCodicilGuard&& other)
-{
-    if (this != &other) {
-        Release();
-        Active_ = other.Active_;
-        other.Active_ = false;
-    }
-    return *this;
-}
-
-void TCodicilGuard::Release()
-{
-    if (Active_) {
-        PopCodicil();
-        Active_ = false;
-    }
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 

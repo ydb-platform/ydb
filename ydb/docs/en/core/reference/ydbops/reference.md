@@ -27,6 +27,8 @@ DB connection options are described in [Connecting to and authenticating with a 
 - `--restart-duration <int>`: multiplied by `--restart-retry-number`, this gives the total duration in seconds for the maintenance operation. In other words, it is a promise to CMS that a single node restart will finish within given duration. Defaults to 60 (which makes the default CMS request duration 180 seconds in combination with the default value of `--restart-retry-number`)
 - `--restart-retry-number <int>`: if restarting a specific node failed, repeat the restart operation this much times. Defaults to 3.
 - `--cms-query-interval <int>`: how often to query for updates from CMS while waiting for new nodes. Defaults to 10 seconds.
+- `--nodes-inflight <int>`: the maximum number of nodes that are concurrently being restarted.
+- `--delay-between-restarts <duration>`: delay before initiating the next node restart.
 
 ### Filtering options
 

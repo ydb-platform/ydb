@@ -1,6 +1,6 @@
 #include "propagating_storage.h"
 
-#include <library/cpp/yt/small_containers/compact_flat_map.h>
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
@@ -213,7 +213,7 @@ struct TPropagatingStorageInfo
     TSourceLocation PrevLocation;
 };
 
-YT_DEFINE_GLOBAL(TFlsSlot<TPropagatingStorageInfo>, PropagatingStorageSlot);
+static YT_DEFINE_GLOBAL(TFlsSlot<TPropagatingStorageInfo>, PropagatingStorageSlot);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -42,11 +42,15 @@ protected:
     TString Database;
     TString SharedDatabase;
     bool Direct = false;
+    bool NeedRedirect = true;
     ui32 Requests = 0;
+    bool PassedAway = false;
     ui32 MaxRequestsInFlight = 200;
     NWilson::TSpan Span;
     IViewer* Viewer = nullptr;
     NMon::TEvHttpInfo::TPtr Event;
+    NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr HttpEvent;
+    TCgiParameters Params;
     TJsonSettings JsonSettings;
     TProto2JsonConfig Proto2JsonConfig;
     TDuration Timeout = TDuration::Seconds(10);
@@ -177,6 +181,7 @@ protected:
     TViewerPipeClient();
     TViewerPipeClient(NWilson::TTraceId traceId);
     TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev, const TString& handlerName = {});
+    TViewerPipeClient(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev, const TString& handlerName = {});
     TActorId ConnectTabletPipe(TTabletId tabletId);
     void SendEvent(std::unique_ptr<IEventHandle> event);
     void SendRequest(TActorId recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {});
@@ -195,6 +200,17 @@ protected:
     template<typename TResponse>
     TRequestResponse<TResponse> MakeRequestToPipe(TActorId pipe, IEventBase* ev, ui64 cookie = 0) {
         TRequestResponse<TResponse> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, TypeName(*ev)));
+        SendRequestToPipe(pipe, ev, cookie, response.Span.GetTraceId());
+        return response;
+    }
+
+    template<typename TResponse>
+    TRequestResponse<TResponse> MakeRequestToTablet(TTabletId tabletId, IEventBase* ev, ui64 cookie = 0) {
+        TActorId pipe = ConnectTabletPipe(tabletId);
+        TRequestResponse<TResponse> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, TypeName(*ev)));
+        if (response.Span) {
+            response.Span.Attribute("tablet_id", "#" + ::ToString(tabletId));
+        }
         SendRequestToPipe(pipe, ev, cookie, response.Span.GetTraceId());
         return response;
     }
@@ -236,6 +252,9 @@ protected:
     static bool IsSuccess(const std::unique_ptr<TEvStateStorage::TEvBoardInfo>& ev);
     static TString GetError(const std::unique_ptr<TEvStateStorage::TEvBoardInfo>& ev);
 
+    static bool IsSuccess(const std::unique_ptr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>& ev);
+    static TString GetError(const std::unique_ptr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>& ev);
+
     TRequestResponse<TEvHive::TEvResponseHiveDomainStats> MakeRequestHiveDomainStats(TTabletId hiveId);
     TRequestResponse<TEvHive::TEvResponseHiveStorageStats> MakeRequestHiveStorageStats(TTabletId hiveId);
     TRequestResponse<TEvHive::TEvResponseHiveNodeStats> MakeRequestHiveNodeStats(TTabletId hiveId, TEvHive::TEvRequestHiveNodeStats* request);
@@ -265,6 +284,7 @@ protected:
     void RequestSchemeCacheNavigate(const TPathId& pathId);
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(const TString& path, ui64 cookie = 0);
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(TPathId pathId, ui64 cookie = 0);
+    TRequestResponse<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> MakeRequestSchemeShardDescribe(TTabletId schemeShardId, const TString& path, const NKikimrSchemeOp::TDescribeOptions& options = {}, ui64 cookie = 0);
     TRequestResponse<TEvViewer::TEvViewerResponse> MakeRequestViewer(TNodeId nodeId, TEvViewer::TEvViewerRequest* request, ui32 flags = 0);
     void RequestTxProxyDescribe(const TString& path);
     void RequestStateStorageEndpointsLookup(const TString& path);
@@ -274,6 +294,19 @@ protected:
     std::vector<TNodeId> GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev);
     void InitConfig(const TCgiParameters& params);
     void InitConfig(const TRequestSettings& settings);
+    void BuildParamsFromJson(TStringBuf data);
+    void SetupTracing(const TString& handlerName);
+
+    template<typename TJson>
+    void Proto2Json(const NProtoBuf::Message& proto, TJson& json) {
+        try {
+            NProtobufJson::Proto2Json(proto, json, Proto2JsonConfig);
+        }
+        catch (const std::exception& e) {
+            json = TStringBuilder() << "error converting " << proto.GetTypeName() << " to json: " << e.what();
+        }
+    }
+
     void ClosePipes();
     ui32 FailPipeConnect(TTabletId tabletId);
 
@@ -303,6 +336,7 @@ protected:
     TString MakeForward(const std::vector<ui32>& nodes);
 
     void RequestDone(ui32 requests = 1);
+    void CancelAllRequests();
     void AddEvent(const TString& name);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev);
     void HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);

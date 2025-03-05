@@ -92,7 +92,6 @@ namespace NKikimr {
                                      const ui32 chunkSize,
                                      const ui32 appendBlockSize,
                                      const ui32 minHugeBlobInBytes,
-                                     const ui32 oldMinHugeBlobInBytes,
                                      const ui32 milestoneHugeBlobInBytes,
                                      const ui32 maxBlobInBytes,
                                      const ui32 overhead,
@@ -102,7 +101,6 @@ namespace NKikimr {
                                      const ui32 chunkSize,
                                      const ui32 appendBlockSize,
                                      const ui32 minHugeBlobInBytes,
-                                     const ui32 oldMinHugeBlobInBytes,
                                      const ui32 milestoneHugeBlobInBytes,
                                      const ui32 maxBlobInBytes,
                                      const ui32 overhead,
@@ -114,7 +112,6 @@ namespace NKikimr {
                                      const ui32 chunkSize,
                                      const ui32 appendBlockSize,
                                      const ui32 minHugeBlobInBytes,
-                                     const ui32 oldMinHugeBlobInBytes,
                                      const ui32 milestoneHugeBlobInBytes,
                                      const ui32 maxBlobInBytes,
                                      const ui32 overhead,
@@ -133,7 +130,7 @@ namespace NKikimr {
             static bool CheckEntryPoint(TContiguousSpan data);
             TString ToString() const;
             void RenderHtml(IOutputStream &str) const;
-            ui32 GetMinREALHugeBlobInBytes() const;
+            ui32 GetMinHugeBlobInBytes() const;
             ui64 FirstLsnToKeep(ui64 minInFlightLsn = Max<ui64>()) const;
             TString FirstLsnToKeepDecomposed() const;
             bool WouldNewEntryPointAdvanceLog(ui64 freeUpToLsn, ui64 minInFlightLsn, ui32 itemsAfterCommit) const;

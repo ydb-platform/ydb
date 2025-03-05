@@ -9,6 +9,7 @@ def post_install(self):
     # Support Darwin.
     linux_srcs = files(self.srcdir + "/source/unix/", rel=self.srcdir)
     darwin_srcs = files(self.srcdir + "/source/darwin/", rel=self.srcdir)
+    windows_srcs = files(self.srcdir + "/source/windows/", rel=self.srcdir)
     m.SRCS -= set(linux_srcs)
     m.after(
         "SRCS",
@@ -18,6 +19,15 @@ def post_install(self):
                 SRCS=darwin_srcs,
                 LDFLAGS=[Words("-framework", "Security")],
             ),
+            OS_WINDOWS=Linkable(SRCS=windows_srcs),
+        ),
+    )
+    m.after(
+        "CFLAGS",
+        Switch(
+            OS_WINDOWS=Linkable(
+                CFLAGS=["-DAWS_CAL_EXPORTS"],
+            ),
         ),
     )
 
@@ -25,7 +35,10 @@ def post_install(self):
 aws_c_cal = CMakeNinjaNixProject(
     arcdir="contrib/restricted/aws/aws-c-cal",
     nixattr="aws-c-cal",
-    copy_sources=["source/darwin/"],
+    copy_sources=[
+        "source/darwin/",
+        "source/windows/",
+    ],
     ignore_targets=["sha256_profile"],
     post_install=post_install,
 )

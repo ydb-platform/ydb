@@ -705,7 +705,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
         if (SessionsWithoutAuth) {
             ++(*SessionsWithoutAuth);
         }
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             CloseSession("Unauthenticated access is forbidden, please provide credentials", NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
             return;
         }
@@ -2431,10 +2431,6 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
 
 
 void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
-    if (ReadingFinishedSent) {
-        return;
-    }
-
     if (WaitDataInfly.size() > 1) { //already got 2 requests inflight
         return;
     }
@@ -2442,8 +2438,9 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     Y_ABORT_UNLESS(InitDone);
     Y_ABORT_UNLESS(PipeClient);
 
-    if (!WaitForData)
+    if (!WaitForData) {
         return;
+    }
 
     Y_ABORT_UNLESS(ReadOffset >= EndOffset);
 
@@ -2464,7 +2461,6 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     NTabletPipe::SendData(ctx, PipeClient, event.Release());
 
     ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
-
     ctx.Schedule(WAIT_DATA, new TEvPQProxy::TEvDeadlineExceeded(WaitDataCookie));
 
     WaitDataInfly.insert(WaitDataCookie);
@@ -2505,12 +2501,14 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
     EndOffset = record.GetEndOffset();
     SizeLag = record.GetSizeLag();
 
-    if (ReadOffset < EndOffset) {
-        WaitForData = false;
-        WaitDataInfly.clear();
-        SendPartitionReady(ctx);
-    } else if (PipeClient) {
-        WaitDataInPartition(ctx);
+    if (!record.GetReadingFinished()) {
+        if (ReadOffset < EndOffset) {
+            WaitForData = false;
+            WaitDataInfly.clear();
+            SendPartitionReady(ctx);
+        } else if (PipeClient) {
+            WaitDataInPartition(ctx);
+        }
     }
 
     if (!ReadingFinishedSent) {
@@ -2639,7 +2637,6 @@ void TPartitionActor::HandlePoison(TEvents::TEvPoisonPill::TPtr&, const TActorCo
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvDeadlineExceeded::TPtr& ev, const TActorContext& ctx) {
-
     WaitDataInfly.erase(ev->Get()->Cookie);
     if (ReadOffset >= EndOffset && WaitDataInfly.size() <= 1 && PipeClient) {
         Y_ABORT_UNLESS(WaitForData);

@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_ZEROSLIKE_HPP
 #define PYTHONIC_INCLUDE_NUMPY_ZEROSLIKE_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/numpy/zeros.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -19,7 +19,7 @@ namespace numpy
                         types::dtype_t<typename E::dtype>()));
 
   DEFINE_FUNCTOR(pythonic::numpy, zeros_like)
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

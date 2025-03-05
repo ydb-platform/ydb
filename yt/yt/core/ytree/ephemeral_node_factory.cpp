@@ -4,8 +4,6 @@
 #include "ypath_client.h"
 #include "ypath_detail.h"
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/core/yson/async_consumer.h>
 #include <yt/yt/core/yson/attribute_consumer.h>
 
@@ -252,7 +250,7 @@ public:
         auto it = ChildToKey_.find(child);
         YT_ASSERT(it != ChildToKey_.end());
 
-        // NB: don't use const auto& here, it becomes invalid!
+        // NB: Don't use const auto& here, it becomes invalid!
         auto key = it->second;
         ChildToKey_.erase(it);
         YT_VERIFY(KeyToChild_.erase(key) == 1);
@@ -269,7 +267,7 @@ public:
         auto it = ChildToKey_.find(oldChild);
         YT_ASSERT(it != ChildToKey_.end());
 
-        // NB: don't use const auto& here, it becomes invalid!
+        // NB: Don't use const auto& here, it becomes invalid!
         auto key = it->second;
 
         oldChild->SetParent(nullptr);
@@ -347,7 +345,7 @@ public:
         YT_ASSERT(child);
 
         if (beforeIndex < 0) {
-            YT_VERIFY(ChildToIndex_.emplace(child, static_cast<int>(IndexToChild_.size())).second);
+            YT_VERIFY(ChildToIndex_.emplace(child, std::ssize(IndexToChild_)).second);
             IndexToChild_.push_back(child);
         } else {
             YT_VERIFY(beforeIndex <= std::ssize(IndexToChild_));
@@ -451,7 +449,7 @@ public:
         : ShouldHideAttributes_(shouldHideAttributes)
     { }
 
-    virtual ~TEphemeralNodeFactory() override
+    ~TEphemeralNodeFactory() override
     {
         RollbackIfNeeded();
     }

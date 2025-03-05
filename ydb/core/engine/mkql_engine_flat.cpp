@@ -577,15 +577,6 @@ public:
                 AddError("Validate", __LINE__, "Bad shard program: key size is greater that specified in schema");
                 return false;
             }
-            for (size_t i = 0; i < desc.Range.From.size(); ++i) {
-                if (desc.KeyColumnTypes[i].GetTypeId() != NScheme::NTypeIds::Uint8)
-                    continue;
-                const TCell& c = desc.Range.From[i];
-                if (!c.IsNull() && c.AsValue<ui8>() > 127) {
-                    AddError("Validate", __LINE__, "Bad shard program: keys with Uint8 column values >127 are currently prohibited");
-                    return false;
-                }
-            }
         }
         return true;
     }

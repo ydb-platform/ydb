@@ -2,7 +2,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/env.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/persqueue/percentile_counter.h>
 #include <ydb/core/persqueue/partition.h>
@@ -56,7 +56,7 @@ struct THttpRequest : NMonitoring::IHttpRequest {
     }
 
     TStringBuf GetPostContent() const override {
-        return TString();
+        return TStringBuf();
     }
 
     HTTP_METHOD GetMethod() const override {
@@ -557,6 +557,109 @@ Y_UNIT_TEST(ImportantFlagSwitching) {
 
         CheckLabeledCountersResponse(tc, 8, MakeTopics({"user/1"}));
     });
+}
+
+Y_UNIT_TEST(NewConsumersCountersAppear) {
+    TTestContext tc;
+    tc.InitialEventsFilter.Prepare();
+
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    bool dbRegistered{false};
+    bool labeledCountersReceived =false ;
+
+    tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, true, true, true);
+
+    tc.Runtime->SetScheduledLimit(5000);
+
+    tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (event->GetTypeRewrite() == NSysView::TEvSysView::EvRegisterDbCounters) {
+            auto database = event.Get()->Get<NSysView::TEvSysView::TEvRegisterDbCounters>()->Database;
+            UNIT_ASSERT_VALUES_EQUAL(database, "/Root/PQ");
+            dbRegistered = true;
+        } else if (event->GetTypeRewrite() == TEvTabletCounters::EvTabletAddLabeledCounters) {
+            labeledCountersReceived = true;
+        }
+        return TTestActorRuntime::DefaultObserverFunc(event);
+    });
+    PQTabletPrepare({.deleteTime=3600, .writeSpeed = 100_KB, .meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS}, {{"client", true}}, tc);
+    TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
+    ui64 ssId = 325;
+    BootFakeSchemeShard(*tc.Runtime, ssId, state);
+
+    PQBalancerPrepare("topic", {{0, {tc.TabletId, 1}}}, ssId, tc, false, false, {"user1", "user2"});
+
+    IActor* actor = CreateTabletCountersAggregator(false);
+    auto aggregatorId = tc.Runtime->Register(actor);
+    tc.Runtime->EnableScheduleForActor(aggregatorId);
+
+    CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
+    CmdWrite(0, "sourceid1", TestData(), tc, false);
+    CmdWrite(0, "sourceid2", TestData(), tc, false);
+    PQGetPartInfo(0, 30, tc);
+
+    {
+        NSchemeCache::TDescribeResult::TPtr result = new NSchemeCache::TDescribeResult{};
+        result->SetPath("/Root");
+        TVector<TString> attrs = {"folder_id", "cloud_id", "database_id"};
+        for (auto& attr : attrs) {
+            auto ua = result->MutablePathDescription()->AddUserAttributes();
+            ua->SetKey(attr);
+            ua->SetValue(attr);
+        }
+        NSchemeCache::TDescribeResult::TCPtr cres = result;
+        auto event = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
+        TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries());
+        tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, event.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvTxProxySchemeCache::EvWatchNotifyUpdated);
+        auto processedCountersEvent = tc.Runtime->DispatchEvents(options);
+        UNIT_ASSERT_VALUES_EQUAL(processedCountersEvent, true);
+    }
+    {
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvPersQueue::EvPeriodicTopicStats);
+        auto processedCountersEvent = tc.Runtime->DispatchEvents(options);
+        UNIT_ASSERT_VALUES_EQUAL(processedCountersEvent, true);
+    }
+
+    {
+        auto counters = tc.Runtime->GetAppData(0).Counters;
+        auto dbGroup = GetServiceCounters(counters, "topics_serverless", false);
+
+        auto group = dbGroup->GetSubgroup("host", "")
+                            ->GetSubgroup("database", "/Root")
+                            ->GetSubgroup("cloud_id", "cloud_id")
+                            ->GetSubgroup("folder_id", "folder_id")
+                            ->GetSubgroup("database_id", "database_id")->GetSubgroup("topic", "topic");
+        for (const auto& user : {"client", "user1", "user2"}) {
+            auto consumerSG = group->FindSubgroup("consumer", user);
+            UNIT_ASSERT_C(consumerSG, user);
+        }
+    }
+    PQBalancerPrepare("topic", {{0, {tc.TabletId, 1}}}, ssId, tc, false, false, {"user3", "user2"});
+    {
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvPersQueue::EvPeriodicTopicStats);
+        auto processedCountersEvent = tc.Runtime->DispatchEvents(options);
+        UNIT_ASSERT_VALUES_EQUAL(processedCountersEvent, true);
+    }
+
+    {
+        auto counters = tc.Runtime->GetAppData(0).Counters;
+        auto dbGroup = GetServiceCounters(counters, "topics_serverless", false);
+
+        auto group = dbGroup->GetSubgroup("host", "")
+                            ->GetSubgroup("database", "/Root")
+                            ->GetSubgroup("cloud_id", "cloud_id")
+                            ->GetSubgroup("folder_id", "folder_id")
+                            ->GetSubgroup("database_id", "database_id")->GetSubgroup("topic", "topic");
+        for (const auto& user : {"user2", "user3"}) {
+            auto consumerSG = group->FindSubgroup("consumer", user);
+            UNIT_ASSERT_C(consumerSG, user);
+        }
+    }
 }
 
 } // Y_UNIT_TEST_SUITE(PQCountersLabeled)

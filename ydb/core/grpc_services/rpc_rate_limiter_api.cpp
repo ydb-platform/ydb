@@ -5,6 +5,7 @@
 #include "rpc_scheme_base.h"
 #include "rpc_common/rpc_common.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/kesus/tablet/events.h>
 
@@ -66,19 +67,8 @@ public:
 
         if (resource.has_metering_config()) {
             auto self = static_cast<TDerived*>(this);
-            const auto& userTokenStr = self->Request_->GetSerializedToken();
-            bool allowed = AppData()->AdministrationAllowedSIDs.empty();
-            if (userTokenStr) {
-                NACLib::TUserToken userToken(userTokenStr);
-                for (auto &sid : AppData()->AdministrationAllowedSIDs) {
-                    if (userToken.IsExist(sid)) {
-                        allowed = true;
-                        break;
-                    }
-                }
-            }
 
-            if (!allowed) {
+            if (!IsAdministrator(AppData(), self->Request_->GetInternalToken().Get())) {
                 status = StatusIds::UNAUTHORIZED;
                 issues.AddIssue("Setting metering is allowed only for administrators");
                 return false;
@@ -287,6 +277,7 @@ static void CopyProps(const Ydb::RateLimiter::Resource& src, NKikimrKesus::TStre
         auto copyMetric = [] (const Ydb::RateLimiter::MeteringConfig::Metric& srcMetric, NKikimrKesus::TAccountingConfig::TMetric& metric) {
             metric.SetEnabled(srcMetric.enabled());
             metric.SetBillingPeriodSec(srcMetric.billing_period_sec());
+            *metric.MutableLabels() = srcMetric.labels();
 
             /* overwrite if we have new fields */
             /* TODO: support arbitrary fields in metering core */
@@ -355,6 +346,7 @@ static void CopyProps(const NKikimrKesus::TStreamingQuoterResource& src, Ydb::Ra
         auto copyMetric = [] (const NKikimrKesus::TAccountingConfig::TMetric& srcMetric, Ydb::RateLimiter::MeteringConfig::Metric& metric) {
             metric.set_enabled(srcMetric.GetEnabled());
             metric.set_billing_period_sec(srcMetric.GetBillingPeriodSec());
+            *metric.mutable_labels() = srcMetric.GetLabels();
 
             /* TODO: support arbitrary fields in metering core */
             auto& metricFields = *metric.mutable_metric_fields()->mutable_fields();

@@ -11,10 +11,9 @@ namespace NYT::NFormats {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TControlAttributesConfig
+struct TControlAttributesConfig
     : public NTableClient::TChunkReaderOptions
 {
-public:
     bool EnableKeySwitch;
 
     bool EnableEndOfStream;
@@ -28,10 +27,9 @@ DEFINE_REFCOUNTED_TYPE(TControlAttributesConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TYsonFormatConfig
+struct TYsonFormatConfig
     : public NTableClient::TTypeConversionConfig
 {
-public:
     NYson::EYsonFormat Format;
     EComplexTypeMode ComplexTypeMode;
     EDictMode StringKeyedDictMode;
@@ -128,10 +126,9 @@ DEFINE_REFCOUNTED_TYPE(TDsvFormatConfigBase)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TYamrFormatConfig
+struct TYamrFormatConfig
     : public TYamrFormatConfigBase
 {
-public:
     TString Key;
     TString Subkey;
     TString Value;
@@ -145,10 +142,9 @@ DEFINE_REFCOUNTED_TYPE(TYamrFormatConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDsvFormatConfig
+struct TDsvFormatConfig
     : public TDsvFormatConfigBase
 {
-public:
     std::string TableIndexColumn;
     bool SkipUnsupportedTypes = false;
 
@@ -161,11 +157,10 @@ DEFINE_REFCOUNTED_TYPE(TDsvFormatConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TYamredDsvFormatConfig
+struct TYamredDsvFormatConfig
     : public TYamrFormatConfigBase
     , public TDsvFormatConfigBase
 {
-public:
     char YamrKeysSeparator;
 
     std::vector<std::string> KeyColumnNames;
@@ -188,10 +183,9 @@ DEFINE_ENUM(EMissingSchemafulDsvValueMode,
     (PrintSentinel)
 );
 
-class TSchemafulDsvFormatConfig
+struct TSchemafulDsvFormatConfig
     : public TTableFormatConfigBase
 {
-public:
     std::optional<std::vector<std::string>> Columns;
 
     EMissingSchemafulDsvValueMode MissingValueMode;
@@ -263,10 +257,9 @@ DEFINE_ENUM(EProtobufEnumWritingMode,
     (SkipUnknownValues)
 );
 
-class TProtobufTypeConfig
+struct TProtobufTypeConfig
     : public NYTree::TYsonStruct
 {
-public:
     EProtobufType ProtoType;
     std::vector<TProtobufColumnConfigPtr> Fields;
     std::optional<TString> EnumerationName;
@@ -278,10 +271,9 @@ public:
 
 DEFINE_REFCOUNTED_TYPE(TProtobufTypeConfig)
 
-class TProtobufColumnConfig
+struct TProtobufColumnConfig
     : public NYTree::TYsonStruct
 {
-public:
     TString Name;
     std::optional<ui64> FieldNumber;
     bool Repeated;
@@ -305,10 +297,9 @@ DEFINE_REFCOUNTED_TYPE(TProtobufColumnConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TProtobufTableConfig
+struct TProtobufTableConfig
     : public NYTree::TYsonStruct
 {
-public:
     std::vector<TProtobufColumnConfigPtr> Columns;
 
     REGISTER_YSON_STRUCT(TProtobufTableConfig);
@@ -323,10 +314,9 @@ DEFINE_ENUM(ENestedMessagesMode,
     (Yson)
 );
 
-class TProtobufFormatConfig
+struct TProtobufFormatConfig
     : public NYTree::TYsonStruct
 {
-public:
     TString FileDescriptorSet; // deprecated
     std::vector<int> FileIndices; // deprecated
     std::vector<int> MessageIndices; // deprecated
@@ -373,10 +363,9 @@ DEFINE_ENUM(EWebJsonValueFormat,
     (Yql)
 );
 
-class TWebJsonFormatConfig
+struct TWebJsonFormatConfig
     : public NYTree::TYsonStruct
 {
-public:
     int MaxSelectedColumnCount;
     int FieldWeightLimit;
     int StringWeightLimit;
@@ -396,10 +385,9 @@ DEFINE_REFCOUNTED_TYPE(TWebJsonFormatConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSkiffFormatConfig
+struct TSkiffFormatConfig
     : public NYTree::TYsonStruct
 {
-public:
     NYTree::IMapNodePtr SkiffSchemaRegistry;
     NYTree::IListNodePtr TableSkiffSchemas;
 
@@ -412,6 +400,25 @@ public:
 };
 
 DEFINE_REFCOUNTED_TYPE(TSkiffFormatConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TYamlFormatConfig
+    : public NYTree::TYsonStruct
+{
+    //! Write explicit tag "!yt/uint64" for uint64 data type.
+    //! Use this option if you want to preserve information about
+    //! the original YT type (without it, numbers in range [0, 2^63-1]
+    //! will always be written as integers).
+    //! Option has no effect for parsing.
+    bool WriteUintTag;
+
+    REGISTER_YSON_STRUCT(TYamlFormatConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TYamlFormatConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

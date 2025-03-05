@@ -34,7 +34,7 @@ TGroupSessions::TGroupSessions(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
     , MonActor(monActor)
     , ProxyActor(proxyActor)
 {
-    const ui32 nodeId = TlsActivationContext->ExecutorThread.ActorSystem->NodeId;
+    const ui32 nodeId = TActivationContext::ActorSystem()->NodeId;
 
     for (const auto& vdisk : info->GetVDisks()) {
         auto vd = info->GetVDiskId(vdisk.OrderNumber);
@@ -188,8 +188,8 @@ void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EV
     }
 }
 
-ui32 TGroupSessions::GetMinREALHugeBlobInBytes() const {
-    return GroupQueues->CostModel ? GroupQueues->CostModel->MinREALHugeBlobInBytes : 0;
+ui32 TGroupSessions::GetMinHugeBlobInBytes() const {
+    return GroupQueues->CostModel ? GroupQueues->CostModel->MinHugeBlobInBytes : 0;
 }
 
 ui32 TGroupSessions::GetNumUnconnectedDisks() {

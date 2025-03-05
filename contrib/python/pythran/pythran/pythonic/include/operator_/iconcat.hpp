@@ -1,10 +1,10 @@
 #ifndef PYTHONIC_INCLUDE_OPERATOR_ICONCAT_HPP
 #define PYTHONIC_INCLUDE_OPERATOR_ICONCAT_HPP
 
-#include "pythonic/include/utils/functor.hpp"
+#include "pythonic/include/types/dict.hpp"
 #include "pythonic/include/types/list.hpp"
 #include "pythonic/include/types/set.hpp"
-#include "pythonic/include/types/dict.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -23,7 +23,7 @@ namespace operator_
   auto iconcat(types::empty_set a, types::set<A> b) -> decltype(b);
 
   DEFINE_FUNCTOR(pythonic::operator_, iconcat);
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

@@ -19,7 +19,6 @@ public:
 
     FEATURE_FLAG_SETTER(AllowYdbRequestsWithoutDatabase)
     FEATURE_FLAG_SETTER(EnableSystemViews)
-    FEATURE_FLAG_SETTER(CheckDatabaseAccessPermission)
     FEATURE_FLAG_SETTER(EnablePersistentQueryStats)
     FEATURE_FLAG_SETTER(EnablePersistentPartitionStats)
     FEATURE_FLAG_SETTER(AllowUpdateChannelsBindingOfSolomonPartitions)
@@ -65,12 +64,18 @@ public:
     FEATURE_FLAG_SETTER(EnableBackupService)
     FEATURE_FLAG_SETTER(EnableGranularTimecast)
     FEATURE_FLAG_SETTER(EnablePgSyntax)
+    FEATURE_FLAG_SETTER(EnableAntlr4Parser)
     FEATURE_FLAG_SETTER(EnableTieringInColumnShard)
     FEATURE_FLAG_SETTER(EnableMetadataObjectsOnServerless)
     FEATURE_FLAG_SETTER(EnableOlapCompression)
     FEATURE_FLAG_SETTER(EnableParameterizedDecimal)
     FEATURE_FLAG_SETTER(EnableTopicAutopartitioningForCDC)
     FEATURE_FLAG_SETTER(EnableFollowerStats)
+    FEATURE_FLAG_SETTER(EnableChecksumsExport)
+    FEATURE_FLAG_SETTER(EnableTopicTransfer)
+    FEATURE_FLAG_SETTER(EnableStrictUserManagement)
+    FEATURE_FLAG_SETTER(EnableDatabaseAdmin)
+    FEATURE_FLAG_SETTER(EnablePermissionsExport)
 
     #undef FEATURE_FLAG_SETTER
 };

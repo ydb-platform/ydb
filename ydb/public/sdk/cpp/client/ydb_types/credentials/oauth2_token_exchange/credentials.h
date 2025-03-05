@@ -1,11 +1,14 @@
 #pragma once
+
+#include <ydb/public/sdk/cpp/client/ydb_types/fwd.h>
+
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/vector.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 class ITokenSource {
 public:
@@ -24,8 +27,8 @@ public:
 
 std::shared_ptr<ITokenSource> CreateFixedTokenSource(const TString& token, const TString& tokenType);
 
-#define FLUENT_SETTING_VECTOR_OR_SINGLE(type, name) \
-    FLUENT_SETTING_VECTOR(type, name);              \
+#define FLUENT_SETTING_VECTOR_OR_SINGLE_DEPRECATED(type, name) \
+    FLUENT_SETTING_VECTOR_DEPRECATED(type, name);              \
     TSelf& name(const type& value) {                \
         name##_.resize(1);                          \
         name##_[0] = value;                         \
@@ -35,22 +38,22 @@ std::shared_ptr<ITokenSource> CreateFixedTokenSource(const TString& token, const
 struct TOauth2TokenExchangeParams {
     using TSelf = TOauth2TokenExchangeParams;
 
-    FLUENT_SETTING(TString, TokenEndpoint);
+    FLUENT_SETTING_DEPRECATED(TString, TokenEndpoint);
 
-    FLUENT_SETTING_DEFAULT(TString, GrantType, "urn:ietf:params:oauth:grant-type:token-exchange");
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TString, GrantType, "urn:ietf:params:oauth:grant-type:token-exchange");
 
-    FLUENT_SETTING_VECTOR_OR_SINGLE(TString, Resource);
-    FLUENT_SETTING_VECTOR_OR_SINGLE(TString, Audience);
-    FLUENT_SETTING_VECTOR_OR_SINGLE(TString, Scope);
+    FLUENT_SETTING_VECTOR_OR_SINGLE_DEPRECATED(TString, Resource);
+    FLUENT_SETTING_VECTOR_OR_SINGLE_DEPRECATED(TString, Audience);
+    FLUENT_SETTING_VECTOR_OR_SINGLE_DEPRECATED(TString, Scope);
 
-    FLUENT_SETTING_DEFAULT(TString, RequestedTokenType, "urn:ietf:params:oauth:token-type:access_token");
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TString, RequestedTokenType, "urn:ietf:params:oauth:token-type:access_token");
 
-    FLUENT_SETTING(std::shared_ptr<ITokenSource>, SubjectTokenSource);
-    FLUENT_SETTING(std::shared_ptr<ITokenSource>, ActorTokenSource);
+    FLUENT_SETTING_DEPRECATED(std::shared_ptr<ITokenSource>, SubjectTokenSource);
+    FLUENT_SETTING_DEPRECATED(std::shared_ptr<ITokenSource>, ActorTokenSource);
 
-    FLUENT_SETTING_DEFAULT(TDuration, SocketTimeout, TDuration::Seconds(5));
-    FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
-    FLUENT_SETTING_DEFAULT(TDuration, SyncUpdateTimeout, TDuration::Seconds(20));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, SocketTimeout, TDuration::Seconds(5));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, ConnectTimeout, TDuration::Seconds(30));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, SyncUpdateTimeout, TDuration::Seconds(20));
 };
 
 // Creates OAuth 2.0 token exchange credentials provider factory that exchanges token using standard protocol

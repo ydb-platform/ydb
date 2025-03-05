@@ -9,8 +9,8 @@
 #include <ydb/library/formats/arrow/simple_builder/batch.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
@@ -19,15 +19,39 @@ namespace NKqp {
 class TTestHelper {
 public:
     class TCompression {
-        YDB_ACCESSOR(TString, SerializerName, "ARROW_SERIALIZER");
-        YDB_ACCESSOR(arrow::Compression::type, Type, arrow::Compression::type::UNCOMPRESSED);
-        YDB_ACCESSOR(i32, CompressionLevel, Max<i32>());
+        YDB_ACCESSOR(TString, SerializerClassName, "ARROW_SERIALIZER");
+        YDB_OPT(NKikimrSchemeOp::EColumnCodec, CompressionType);
+        YDB_ACCESSOR_DEF(std::optional<i32>, CompressionLevel);
+
+    public:
+        bool DeserializeFromProto(const NKikimrSchemeOp::TOlapColumn::TSerializer& serializer);
+        TString BuildQuery() const;
+
+        bool IsEqual(const TCompression& rhs, TString& errorMessage) const;
+
+        TString ToString() const;
+    };
+
+    class TColumnFamily {
+        YDB_ACCESSOR(ui32, Id, 0);
+        YDB_ACCESSOR_DEF(TString, FamilyName);
+        YDB_ACCESSOR_DEF(TString, Data);
+        YDB_ACCESSOR_DEF(TCompression, Compression);
+
+    public:
+        bool DeserializeFromProto(const NKikimrSchemeOp::TFamilyDescription& family);
+        TString BuildQuery() const;
+
+        bool IsEqual(const TColumnFamily& rhs, TString& errorMessage) const;
+
+        TString ToString() const;
     };
 
     class TColumnSchema {
         YDB_ACCESSOR_DEF(TString, Name);
         YDB_ACCESSOR_DEF(NScheme::TTypeInfo, TypeInfo);
         YDB_FLAG_ACCESSOR(Nullable, true);
+        YDB_ACCESSOR_DEF(TString, ColumnFamilyName);
 
     public:
         TString BuildQuery() const;
@@ -43,6 +67,7 @@ public:
         YDB_ACCESSOR_DEF(TVector<TString>, PrimaryKey);
         YDB_ACCESSOR_DEF(TVector<TString>, Sharding);
         YDB_ACCESSOR(ui32, MinPartitionsCount, 1);
+        YDB_ACCESSOR_DEF(TVector<TColumnFamily>, ColumnFamilies);
 
         std::optional<std::pair<TString, TString>> TTLConf;
 
@@ -84,9 +109,10 @@ public:
     NYdb::NTable::TSession& GetSession();
     void CreateTable(const TColumnTableBase& table, const NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
     void DropTable(const TString& tableName);
+    void EnsureSecret(const TString& name, const TString& value);
     void CreateTier(const TString& tierName);
     TString CreateTieringRule(const TString& tierName, const TString& columnName);
-    void SetTiering(const TString& tableName, const TString& ruleName);
+    void SetTiering(const TString& tableName, const TString& tierName, const TString& columnName);
     void ResetTiering(const TString& tableName);
     void BulkUpsert(
         const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS);

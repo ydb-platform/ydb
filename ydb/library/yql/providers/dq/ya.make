@@ -4,6 +4,7 @@ RECURSE(
     counters
     expr_nodes
     global_worker_manager
+    helper
     interface
     metrics
     mkql

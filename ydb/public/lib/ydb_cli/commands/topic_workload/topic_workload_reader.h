@@ -3,7 +3,7 @@
 #include "topic_workload_defines.h"
 #include "topic_workload_stats_collector.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/logger/log.h>
 #include <util/system/types.h>
@@ -28,10 +28,10 @@ namespace NYdb {
             ui64 ReaderIdx;
             bool UseTransactions = false;
             bool UseTopicCommit = false;
-            bool UseTableSelect = true;
-            bool UseTableUpsert = true;
+            bool UseTableSelect = false;
+            bool UseTableUpsert = false;
             bool ReadWithoutConsumer = false;
-            size_t CommitPeriod = 15;
+            size_t CommitPeriodMs = 15'000;
             size_t CommitMessages = 1'000'000;
         };
 
@@ -44,9 +44,9 @@ namespace NYdb {
         private:
             static void ReaderLoop(TTopicWorkloadReaderParams& params, TInstant endTime);
 
-            static TVector<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvents(NYdb::NTopic::IReadSession& readSession,
-                                                                              TTopicWorkloadReaderParams& params,
-                                                                              std::optional<TTransactionSupport>& txSupport);
+            static std::vector<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvents(NYdb::NTopic::IReadSession& readSession,
+                                                                                  TTopicWorkloadReaderParams& params,
+                                                                                  std::optional<TTransactionSupport>& txSupport);
 
             static void TryCommitTx(TTopicWorkloadReaderParams& params,
                                     std::optional<TTransactionSupport>& txSupport,

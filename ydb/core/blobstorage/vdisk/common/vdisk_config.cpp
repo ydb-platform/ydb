@@ -136,9 +136,7 @@ namespace NKikimr {
                 MinHugeBlobInBytes = 512u << 10u;
                 break;
         }
-        OldMinHugeBlobInBytes = MinHugeBlobInBytes; // preserved to migrate entry point state correctly 
         MilestoneHugeBlobInBytes = 512u << 10u;  // for compatibility reasons it must be 512KB
-
     }
 
     void TVDiskConfig::Merge(const NKikimrBlobStorage::TVDiskConfig &update) {

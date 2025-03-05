@@ -15,12 +15,16 @@
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
+#include <library/cpp/testing/gtest_protobuf/matcher.h>
+
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
 #include <google/protobuf/util/message_differencer.h>
 
 #include <google/protobuf/wire_format.h>
+
+#include <util/generic/scope.h>
 
 namespace NYT {
 
@@ -1019,35 +1023,43 @@ TEST(TYsonToProtobufTest, Entities)
 
 TEST(TYsonToProtobufTest, ValidUtf8StringCheck)
 {
-    for (auto option: {EUtf8Check::Disable, EUtf8Check::LogOnFail, EUtf8Check::ThrowOnFail}) {
-        auto config = New<TProtobufInteropConfig>();
-        config->Utf8Check = option;
-        SetProtobufInteropConfig(config);
+    for (auto configOption : {EUtf8Check::Disable, EUtf8Check::LogOnFail, EUtf8Check::ThrowOnFail}) {
+        for (auto option: std::vector<std::optional<EUtf8Check>>{
+            std::nullopt, EUtf8Check::Disable, EUtf8Check::LogOnFail, EUtf8Check::ThrowOnFail})
+        {
+            auto config = New<TProtobufInteropConfig>();
+            config->Utf8Check = configOption;
+            SetProtobufInteropConfig(config);
+            auto effectiveOption = option.value_or(configOption);
 
-        TString invalidUtf8 = "\xc3\x28";
-
-        auto check = [&] {
-            TEST_PROLOGUE_WITH_OPTIONS(TMessage, {})
-                .BeginMap()
-                    .Item("string_field").Value(invalidUtf8)
-                .EndMap();
-        };
-        if (option == EUtf8Check::ThrowOnFail) {
-            EXPECT_THROW_WITH_SUBSTRING(check(), "Non UTF-8 value in string field");
-        } else {
-            EXPECT_NO_THROW(check());
-        }
-
-        NProto::TMessage message;
-        message.set_string_field(invalidUtf8);
-        TString newYsonString;
-        TStringOutput newYsonOutputStream(newYsonString);
-        TYsonWriter ysonWriter(&newYsonOutputStream, EYsonFormat::Pretty);
-        if (option == EUtf8Check::ThrowOnFail) {
-            EXPECT_THROW_WITH_SUBSTRING(
-                WriteProtobufMessage(&ysonWriter, message), "Non UTF-8 value in string field");
-        } else {
-            EXPECT_NO_THROW(WriteProtobufMessage(&ysonWriter, message));
+            TString invalidUtf8 = "\xc3\x28";
+            auto checkWrite = [&] {
+                TEST_PROLOGUE_WITH_OPTIONS(TMessage, TProtobufWriterOptions{.Utf8Check = option})
+                    .BeginMap()
+                        .Item("string_field").Value(invalidUtf8)
+                    .EndMap();
+            };
+            if (effectiveOption == EUtf8Check::ThrowOnFail) {
+                EXPECT_THROW_WITH_SUBSTRING(checkWrite(), "Non UTF-8 value in string field");
+            } else {
+                EXPECT_NO_THROW(checkWrite());
+            }
+            NProto::TMessage message;
+            message.set_string_field(invalidUtf8);
+            TString newYsonString;
+            TStringOutput newYsonOutputStream(newYsonString);
+            TYsonWriter ysonWriter(&newYsonOutputStream, EYsonFormat::Pretty);
+            auto checkParse = [&] {
+                WriteProtobufMessage(
+                    &ysonWriter,
+                    message,
+                    TProtobufParserOptions{.Utf8Check = option});
+            };
+            if (effectiveOption == EUtf8Check::ThrowOnFail) {
+                EXPECT_THROW_WITH_SUBSTRING(checkParse(), "Non UTF-8 value in string field");
+            } else {
+                EXPECT_NO_THROW(checkParse());
+            }
         }
     }
 }
@@ -2101,7 +2113,7 @@ void TestScalarByYPath(const TYPath& path, FieldDescriptor::Type type)
     EXPECT_EQ(path, result.HeadPath);
     EXPECT_EQ("", result.TailPath);
     EXPECT_EQ(
-        static_cast<TProtobufScalarElement::TType>(type),
+        static_cast<TProtobufElementType>(type),
         std::get<std::unique_ptr<TProtobufScalarElement>>(result.Element)->Type);
 }
 
@@ -2517,6 +2529,8 @@ TEST(TYsonToProtobufTest, YsonStringMerger)
     ASSERT_EQ(protobufStringBinary, protobufStringMerged);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 template <class T, class TNodeList, class TRepeated>
 void CopyToProto(const TNodeList& from, TRepeated& rep)
 {
@@ -2524,6 +2538,8 @@ void CopyToProto(const TNodeList& from, TRepeated& rep)
         rep.Add(child->template GetValue<T>());
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 TEST(TPackedRepeatedProtobufTest, TestSerializeDeserialize)
 {
@@ -2655,9 +2671,11 @@ TEST(TPackedRepeatedProtobufTest, TestSerializeDeserialize)
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TEnumYsonStorageTypeTest, TestDeserializeSerialize)
 {
-    for (auto storageType: {EEnumYsonStorageType::String, EEnumYsonStorageType::Int}) {
+    for (auto storageType : {EEnumYsonStorageType::String, EEnumYsonStorageType::Int}) {
         auto config = New<TProtobufInteropConfig>();
         config->DefaultEnumYsonStorageType = storageType;
         SetProtobufInteropConfig(config);
@@ -2770,6 +2788,8 @@ TEST(TEnumYsonStorageTypeTest, TestDeserializeSerialize)
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TYsonToProtobufTest, Casing)
 {
     auto ysonNode = BuildYsonNodeFluently()
@@ -2791,6 +2811,225 @@ TEST(TYsonToProtobufTest, Casing)
     EXPECT_EQ(message.somefield(), 1);
     EXPECT_EQ(message.anotherfield123(), 2);
 }
+
+TEST(TYsonToProtobufTest, ForceSnakeCaseNames)
+{
+    auto oldConfig = GetProtobufInteropConfig();
+    Y_DEFER {
+        SetProtobufInteropConfig(oldConfig);
+    };
+
+    auto newConfig = CloneYsonStruct(oldConfig);
+    newConfig->ForceSnakeCaseNames = true;
+    SetProtobufInteropConfig(newConfig);
+
+    auto ysonNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("some_field").Value(1)
+            .Item("another_field123").Value(2)
+        .EndMap();
+    auto ysonString = ConvertToYsonString(ysonNode);
+
+    NProto::TOtherExternalProtobuf message;
+    message.ParseFromStringOrThrow(NYson::YsonStringToProto(
+        ysonString,
+        NYson::ReflectProtobufMessageType<NProto::TOtherExternalProtobuf>(),
+        TProtobufWriterOptions()));
+
+    EXPECT_EQ(message.somefield(), 1);
+    EXPECT_EQ(message.anotherfield123(), 2);
+    {
+        TString newYsonString;
+        TStringOutput newYsonOutputStream(newYsonString);
+        TYsonWriter ysonWriter(&newYsonOutputStream, EYsonFormat::Pretty);
+        WriteProtobufMessage(&ysonWriter, message);
+
+        auto originalNode = NYTree::ConvertToNode(ysonString, NYTree::GetEphemeralNodeFactory());
+        auto newNode = NYTree::ConvertToNode(TYsonStringBuf(newYsonString), NYTree::GetEphemeralNodeFactory());
+
+        EXPECT_TRUE(NYTree::AreNodesEqual(originalNode, newNode))
+            << "Expected: " << ysonString.AsStringBuf() << "\n\n"
+            << "Actual: " << newYsonString << "\n\n";
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TStrictEnumValueCheckTest, DeserializeSerializeUnknownUnchecked)
+{
+    auto config = New<TProtobufInteropConfig>();
+    config->DefaultEnumYsonStorageType = EEnumYsonStorageType::Int;
+    SetProtobufInteropConfig(config);
+
+    NProto::TAnotherMessageWithEnumsV2 message;
+
+    message.set_enum_not_strictly_checked(NProto::TAnotherMessageWithEnumsV2::VALUE2);
+
+    // Proto message to yson via old descriptor.
+    TString resultedYson;
+    {
+        TString protobufString;
+        Y_UNUSED(message.SerializeToString(&protobufString));
+        TStringOutput ysonOutputStream(resultedYson);
+        TYsonWriter ysonWriter(&ysonOutputStream, EYsonFormat::Pretty);
+        ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+
+        EXPECT_NO_THROW(ParseProtobuf(
+            &ysonWriter,
+            &protobufInput,
+            ReflectProtobufMessageType<NProto::TAnotherMessageWithEnums>()));
+    }
+
+    // Check enum values in yson.
+    {
+        auto expectedYson = BuildYsonStringFluently(EYsonFormat::Pretty)
+            .BeginMap()
+                .Item("enum_not_strictly_checked").Value(2)
+            .EndMap()
+            .ToString();
+        EXPECT_EQ(resultedYson, expectedYson);
+    }
+
+    // Yson to proto message via old descriptor.
+    {
+        TString protobufString;
+        google::protobuf::io::StringOutputStream protobufOutput(&protobufString);
+        auto protobufWriter = NYson::CreateProtobufWriter(
+            &protobufOutput,
+            NYson::ReflectProtobufMessageType<NProto::TAnotherMessageWithEnums>());
+        ParseYsonStringBuffer(resultedYson, EYsonType::Node, protobufWriter.get());
+
+        NProto::TAnotherMessageWithEnumsV2 resultedMessage;
+        resultedMessage.ParseFromStringOrThrow(protobufString);
+
+        // Check that original message is equal to its deserialized + serialized via old descriptor version.
+        EXPECT_THAT(resultedMessage, NGTest::EqualsProto(message));
+    }
+}
+
+TEST(TStrictEnumValueCheckTest, YsonToProtoUnknownChecked)
+{
+    auto config = New<TProtobufInteropConfig>();
+    config->DefaultEnumYsonStorageType = EEnumYsonStorageType::Int;
+    SetProtobufInteropConfig(config);
+    auto checkedFields = std::to_array({
+        "enum_strictly_checked",
+        "enum_unspecified",
+    });
+
+    for (const auto& field : checkedFields) {
+        auto yson = BuildYsonStringFluently(EYsonFormat::Pretty)
+            .BeginMap()
+                .Item(field).Value(2)
+            .EndMap()
+            .ToString();
+
+        TString protobufString;
+        google::protobuf::io::StringOutputStream protobufOutput(&protobufString);
+        auto protobufWriter = NYson::CreateProtobufWriter(
+            &protobufOutput,
+            NYson::ReflectProtobufMessageType<NProto::TAnotherMessageWithEnums>());
+        EXPECT_THROW(
+            ParseYsonStringBuffer(yson, EYsonType::Node, protobufWriter.get()),
+            TErrorException)
+            << "Unknown enum value for " << field << " should throw";
+    }
+}
+
+TEST(TStrictEnumValueCheckTest, YsonToProtoUnknownStringChecked)
+{
+    auto config = New<TProtobufInteropConfig>();
+    config->DefaultEnumYsonStorageType = EEnumYsonStorageType::Int;
+    SetProtobufInteropConfig(config);
+    auto checkedFields = std::to_array({
+        "enum_strict_string",
+        "enum_non_strict_string",
+    });
+
+    for (const auto& field : checkedFields) {
+        auto yson = BuildYsonStringFluently(EYsonFormat::Pretty)
+            .BeginMap()
+                .Item(field).Value("VALUE2")
+            .EndMap()
+            .ToString();
+
+        TString protobufString;
+        google::protobuf::io::StringOutputStream protobufOutput(&protobufString);
+        auto protobufWriter = NYson::CreateProtobufWriter(
+            &protobufOutput,
+            NYson::ReflectProtobufMessageType<NProto::TAnotherMessageWithEnums>());
+        EXPECT_THROW(
+            ParseYsonStringBuffer(yson, EYsonType::Node, protobufWriter.get()),
+            TErrorException)
+            << "Unknown enum value for " << field << " should throw";
+    }
+}
+
+TEST(TStrictEnumValueCheckTest, ProtoToYsonUnknownChecked)
+{
+    auto config = New<TProtobufInteropConfig>();
+    config->DefaultEnumYsonStorageType = EEnumYsonStorageType::Int;
+    SetProtobufInteropConfig(config);
+    auto checkedFieldSetters = std::to_array<std::function<void(NProto::TAnotherMessageWithEnumsV2*)>>({
+        [] (auto* proto) {
+            proto->set_enum_strictly_checked(NProto::TAnotherMessageWithEnumsV2::VALUE2);
+        },
+        [] (auto* proto) {
+            proto->set_enum_unspecified(NProto::TAnotherMessageWithEnumsV2::VALUE2);
+        },
+        [] (auto* proto) {
+            proto->set_enum_strict_string(NProto::TAnotherMessageWithEnumsV2::VALUE2);
+        },
+        [] (auto* proto) {
+            proto->set_enum_non_strict_string(NProto::TAnotherMessageWithEnumsV2::VALUE2);
+        },
+    });
+
+    for (const auto& setter : checkedFieldSetters) {
+        NProto::TAnotherMessageWithEnumsV2 message;
+        setter(&message);
+
+        TString resultedYson;
+        TString protobufString;
+        Y_UNUSED(message.SerializeToString(&protobufString));
+        TStringOutput ysonOutputStream(resultedYson);
+        TYsonWriter ysonWriter(&ysonOutputStream, EYsonFormat::Pretty);
+        ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+
+        EXPECT_THROW(ParseProtobuf(
+            &ysonWriter,
+            &protobufInput,
+            ReflectProtobufMessageType<NProto::TAnotherMessageWithEnums>()),
+            TErrorException);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TProtobufWriterOptionsTest, CreateChildOptions)
+{
+    TProtobufWriterOptions options{
+        .UnknownYsonFieldModeResolver = [] (const NYPath::TYPath& path) {
+            return path.StartsWith("/foo")
+                ? EUnknownYsonFieldsMode::Keep
+                : EUnknownYsonFieldsMode::Fail;
+        }
+    };
+
+    auto optionsCopy = options.CreateChildOptions("");
+    EXPECT_EQ(optionsCopy.UnknownYsonFieldModeResolver("/foo"), EUnknownYsonFieldsMode::Keep);
+    EXPECT_EQ(optionsCopy.UnknownYsonFieldModeResolver("/bar"), EUnknownYsonFieldsMode::Fail);
+
+    auto fooOptions = options.CreateChildOptions("/foo");
+    EXPECT_EQ(fooOptions.UnknownYsonFieldModeResolver(""), EUnknownYsonFieldsMode::Keep);
+    EXPECT_EQ(fooOptions.UnknownYsonFieldModeResolver("/baz"), EUnknownYsonFieldsMode::Keep);
+
+    auto barOptions = options.CreateChildOptions("/bar");
+    EXPECT_EQ(barOptions.UnknownYsonFieldModeResolver(""), EUnknownYsonFieldsMode::Fail);
+    EXPECT_EQ(barOptions.UnknownYsonFieldModeResolver("/foo"), EUnknownYsonFieldsMode::Fail);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 } // namespace NYT::NYson

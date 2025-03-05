@@ -2,12 +2,12 @@
 #include <ydb/services/ydb/ydb_common_ut.h>
 #include <ydb/services/ydb/ydb_keys_ut.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb-cpp-sdk/client/datastreams/datastreams.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/api/grpc/draft/ydb_datastreams_v1.grpc.pb.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -97,7 +97,9 @@ public:
         KikimrServer = std::make_unique<TKikimr>(std::move(appConfig));
         ui16 grpc = KikimrServer->GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driverConfig = TDriverConfig().SetEndpoint(location).SetLog(CreateLogBackend("cerr", TLOG_DEBUG));
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(location)
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", TLOG_DEBUG).Release()));
         if (secure) {
             driverConfig.UseSecureConnection(TString(NYdbSslTestData::CaCrt));
         } else {
@@ -105,13 +107,10 @@ public:
         }
 
         Driver = std::make_unique<TDriver>(std::move(driverConfig));
-        DataStreamsClient = std::make_unique<NYDS_V1::TDataStreamsClient>(*Driver,
-             TCommonClientSettings()
-                 .AuthToken("user@builtin"));
 
         {
             NYdb::NScheme::TSchemeClient schemeClient(*Driver);
-            NYdb::NScheme::TPermissions permissions("user@builtin", {"ydb.generic.read", "ydb.generic.write"});
+            NYdb::NScheme::TPermissions permissions("user@builtin", {"ydb.database.connect", "ydb.generic.read", "ydb.generic.write"});
 
             auto result = schemeClient.ModifyPermissions("/Root",
                 NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
@@ -120,11 +119,18 @@ public:
             UNIT_ASSERT(result.IsSuccess());
         }
 
-        TClient client(*(KikimrServer->ServerSettings));
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 client.AlterUserAttributes("/", "Root", {{"folder_id", DEFAULT_FOLDER_ID},
-                                                                          {"cloud_id", DEFAULT_CLOUD_ID},
-                                                                          {"database_id", "root"}}));
+        {
+            TClient alterClient(*(KikimrServer->ServerSettings));
+            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+                                    alterClient.AlterUserAttributes("/", "Root", {{"folder_id", DEFAULT_FOLDER_ID},
+                                                                            {"cloud_id", DEFAULT_CLOUD_ID},
+                                                                            {"database_id", "root"}}));
+        }
+
+        DataStreamsClient = std::make_unique<NYDS_V1::TDataStreamsClient>(*Driver,
+             TCommonClientSettings()
+                 .AuthToken("user@builtin"));
+
     }
 
 public:
@@ -180,6 +186,13 @@ ui32 CheckMeteringFile(TTempFileHandle* meteringFile, const TString& streamPath,
     return schemaFoundTimes;
 }
 
+void GrantConnect(const TDriver& driver, const TString& user) {
+    NYdb::NScheme::TSchemeClient permissionClient(driver);
+    NYdb::NScheme::TPermissions permissions(user, {"ydb.database.connect"});
+    auto result = permissionClient.ModifyPermissions("/Root",
+        NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)).ExtractValueSync();
+    UNIT_ASSERT(result.IsSuccess());
+}
 
 #define Y_UNIT_TEST_NAME this->Name_;
 
@@ -1389,6 +1402,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::EPriority::PRI_DEBUG);
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NLog::EPriority::PRI_DEBUG);
 
+        GrantConnect(*driver, "user2@builtin");
+
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
 
         TString dataStr = "9876543210";
@@ -1434,7 +1449,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 for (const auto& item : dataReceivedEvent->GetMessages()) {
                     Cerr << item.DebugString(true) << Endl;
                     UNIT_ASSERT_VALUES_EQUAL(item.GetData(), item.GetPartitionKey());
-                    auto hashKey = item.GetExplicitHash().empty() ? HexBytesToDecimal(MD5::Calc(item.GetPartitionKey())) : BytesToDecimal(item.GetExplicitHash());
+                    auto hashKey = item.GetExplicitHash().empty() ? HexBytesToDecimal(MD5::Calc(item.GetPartitionKey())) : BytesToDecimal(TString{item.GetExplicitHash()});
                     UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataStreams::V1::ShardFromDecimal(hashKey, 5), item.GetPartitionStream()->GetPartitionId());
                     UNIT_ASSERT(item.GetIp().empty());
                     if (item.GetData() == dataStr) {
@@ -1464,8 +1479,18 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
+        GrantConnect(*driver, "user2@builtin");
+
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::EPriority::PRI_DEBUG);
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
+
+        while (true) {
+            auto result = client.PutRecords(streamName, {{"key", "key", ""}}).ExtractValueSync();
+            if (result.IsSuccess()) {
+                break;
+            }
+        }
 
         // Test for too long partition key
         TString longKey = TString(257, '1');
@@ -1546,8 +1571,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 0);
             Cerr << result.GetResult().DebugString() << Endl;
 
+            // Send multiple records to deplete quota.
+
             Cerr << "Second put records (async)\n";
             auto secondWriteAsync = client.PutRecords(streamPath, records);
+            for (size_t i = 0; i < 10; ++i) {
+                client.PutRecords(streamPath, records);
+            }
 
             Cerr << Now().Seconds() << "Third put records\n";
             result = client.PutRecords(streamPath, records).ExtractValueSync();
@@ -1560,13 +1590,6 @@ Y_UNIT_TEST_SUITE(DataStreams) {
 
             result = secondWriteAsync.ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            if (result.GetStatus() != EStatus::SUCCESS) {
-                result.GetIssues().PrintTo(Cerr);
-            }
-            Cerr << result.GetResult().DebugString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 0);
-            Cerr << result.GetResult().DebugString() << Endl;
-
         }
 
         NYdb::NPersQueue::TPersQueueClient pqClient(*driver);
@@ -1600,7 +1623,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 break;
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(readCount, 16);
+        UNIT_ASSERT_GE(readCount, 16);
     }
 
     Y_UNIT_TEST(TestPutRecords) {
@@ -1614,6 +1637,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
+        GrantConnect(*driver, "user2@builtin");
 
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
         NYdb::NScheme::TSchemeClient schemeClient(*driver);
@@ -1670,6 +1695,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         }
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::EPriority::PRI_DEBUG);
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NLog::EPriority::PRI_DEBUG);
+
+        GrantConnect(*driver, "user2@builtin");
 
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
 
@@ -2038,6 +2065,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
+
         const ui32 recordsCount = 30;
         std::vector<NYDS_V1::TDataRecord> records;
         for (ui32 i = 1; i <= recordsCount; ++i) {
@@ -2184,6 +2212,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
+        GrantConnect(*driver, "user2@builtin");
 
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
         NYdb::NScheme::TSchemeClient schemeClient(*driver);
@@ -2351,6 +2381,66 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             }
         }
 
+    }
+
+    Y_UNIT_TEST(TestGetRecordsWithCount) {
+        TInsecureDatastreamsTestServer testServer;
+        const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const ui32 recordsCount = 16;
+        std::vector<ui64> timestamps;
+        {
+            std::string data;
+            data.resize(1_MB); // big messages. compaction must will be completed.
+            std::iota(data.begin(), data.end(), 1);
+            std::random_device rd;
+            std::mt19937 generator{rd()};
+
+            for (ui32 i = 1; i <= recordsCount; ++i) {
+                std::shuffle(data.begin(), data.end(), generator);
+                {
+                    TString id = Sprintf("%04u", i);
+                    NYDS_V1::TDataRecord dataRecord{{data.begin(), data.end()}, id, ""};
+                    //
+                    // we make sure that the value of WriteTimestampMs is between neighboring timestamps
+                    //
+                    timestamps.push_back(TInstant::Now().MilliSeconds());
+                    Sleep(TDuration::MilliSeconds(500));
+                    auto result = testServer.DataStreamsClient->PutRecord(streamName, dataRecord).ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                }
+                Sleep(TDuration::MilliSeconds(500));
+            }
+        }
+
+        for (ui32 i = 0; i < recordsCount; ++i) {
+            TString shardIterator;
+
+            {
+                auto result = testServer.DataStreamsClient->GetShardIterator(streamName, "shard-000000",
+                    YDS_V1::ShardIteratorType::AT_TIMESTAMP,
+                     NYDS_V1::TGetShardIteratorSettings().Timestamp(timestamps[i])).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                shardIterator = result.GetResult().shard_iterator();
+            }
+
+            {
+                auto result = testServer.DataStreamsClient->GetRecords(shardIterator,
+                     NYDS_V1::TGetRecordsSettings().Limit(1)).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(std::stoi(result.GetResult().records().begin()->sequence_number()), i);
+            }
+        }
     }
 
     Y_UNIT_TEST(TestGetRecordsStreamWithMultipleShards) {

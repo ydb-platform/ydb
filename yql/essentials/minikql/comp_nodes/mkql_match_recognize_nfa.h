@@ -3,7 +3,7 @@
 #include "mkql_match_recognize_matched_vars.h"
 #include "mkql_match_recognize_save_load.h"
 #include "../computation/mkql_computation_node_holders.h"
-#include "../computation/mkql_computation_node_impl.h"
+#include "util/generic/overloaded.h"
 #include <yql/essentials/core/sql_types/match_recognize.h>
 #include <util/generic/hash_table.h>
 #include <util/generic/string.h>
@@ -13,22 +13,37 @@ namespace NKikimr::NMiniKQL::NMatchRecognize {
 using namespace NYql::NMatchRecognize;
 
 struct TVoidTransition {
-    friend bool operator==(const TVoidTransition&, const TVoidTransition&) {
-        return true;
-    }
+    friend constexpr bool operator==(const TVoidTransition&, const TVoidTransition&) = default;
 };
-using TEpsilonTransition = size_t; //to
-using TEpsilonTransitions = std::vector<TEpsilonTransition, TMKQLAllocator<TEpsilonTransition>>;
-using TMatchedVarTransition = std::pair<std::pair<ui32, bool>, size_t>; //{{varIndex, saveState}, to}
-using TQuantityEnterTransition = size_t; //to
-using TQuantityExitTransition = std::pair<std::pair<ui64, ui64>, std::pair<size_t, size_t>>; //{{min, max}, {foFindMore, toMatched}}
+struct TEpsilonTransitions {
+    std::vector<size_t, TMKQLAllocator<size_t>> To;
+    friend constexpr bool operator==(const TEpsilonTransitions&, const TEpsilonTransitions&) = default;
+};
+struct TMatchedVarTransition {
+    size_t To;
+    ui32 VarIndex;
+    bool SaveState;
+    bool ExcludeFromOutput;
+    friend constexpr bool operator==(const TMatchedVarTransition&, const TMatchedVarTransition&) = default;
+};
+struct TQuantityEnterTransition {
+    size_t To;
+    friend constexpr bool operator==(const TQuantityEnterTransition&, const TQuantityEnterTransition&) = default;
+};
+struct TQuantityExitTransition {
+    ui64 QuantityMin;
+    ui64 QuantityMax;
+    size_t ToFindMore;
+    size_t ToMatched;
+    friend constexpr bool operator==(const TQuantityExitTransition&, const TQuantityExitTransition&) = default;
+};
 
 template <typename... Ts>
 struct TVariantHelper {
     using TVariant =  std::variant<Ts...>;
     using TTuple =  std::tuple<Ts...>;
 
-    static std::variant<Ts...> getVariantByIndex(size_t i) {
+    static std::variant<Ts...> GetVariantByIndex(size_t i) {
         MKQL_ENSURE(i < sizeof...(Ts), "Wrong variant index");
         static std::variant<Ts...> table[] = { Ts{ }... };
         return table[i];
@@ -46,35 +61,36 @@ using TNfaTransitionHelper = TVariantHelper<
 using TNfaTransition = TNfaTransitionHelper::TVariant;
 
 struct TNfaTransitionDestinationVisitor {
-    std::function<size_t(size_t)> callback;
+    std::function<size_t(size_t)> Callback;
 
     template<typename Callback>
     explicit TNfaTransitionDestinationVisitor(Callback callback)
-        : callback(std::move(callback)) {}
+        : Callback(std::move(callback)) {}
 
     TNfaTransition operator()(TVoidTransition tr) const {
         return tr;
     }
 
     TNfaTransition operator()(TMatchedVarTransition tr) const {
-        tr.second = callback(tr.second);
+        tr.To = Callback(tr.To);
         return tr;
     }
 
     TNfaTransition operator()(TEpsilonTransitions tr) const {
-        for (size_t& toNode: tr) {
-            toNode = callback(toNode);
+        for (size_t& toNode: tr.To) {
+            toNode = Callback(toNode);
         }
         return tr;
     }
 
     TNfaTransition operator()(TQuantityEnterTransition tr) const {
-        return callback(tr);
+        tr.To = Callback(tr.To);
+        return tr;
     }
 
     TNfaTransition operator()(TQuantityExitTransition tr) const {
-        tr.second.first = callback(tr.second.first);
-        tr.second.second = callback(tr.second.second);
+        tr.ToFindMore = Callback(tr.ToFindMore);
+        tr.ToMatched = Callback(tr.ToMatched);
         return tr;
     }
 };
@@ -95,7 +111,21 @@ struct TNfaTransitionGraph {
         serializer(Transitions.size());
         for (ui64 i = 0; i < Transitions.size(); ++i) {
             serializer.Write(Transitions[i].index());
-            std::visit(serializer, Transitions[i]);
+            std::visit(TOverloaded{
+                [&](const TVoidTransition&) {},
+                [&](const TEpsilonTransitions& tr) {
+                    serializer(tr.To);
+                },
+                [&](const TMatchedVarTransition& tr) {
+                    serializer(tr.VarIndex, tr.SaveState, tr.To);
+                },
+                [&](const TQuantityEnterTransition& tr) {
+                    serializer(tr.To);
+                },
+                [&](const TQuantityExitTransition& tr) {
+                    serializer(tr.QuantityMin, tr.QuantityMax, tr.ToFindMore, tr.ToMatched);
+                },
+            }, Transitions[i]);
         }
         serializer(Input, Output);
     }
@@ -105,8 +135,22 @@ struct TNfaTransitionGraph {
         Transitions.resize(transitionSize);
         for (ui64 i = 0; i < transitionSize; ++i) {
             size_t index = serializer.Read<std::size_t>();
-            Transitions[i] = TNfaTransitionHelper::getVariantByIndex(index);
-            std::visit(serializer, Transitions[i]);
+            Transitions[i] = TNfaTransitionHelper::GetVariantByIndex(index);
+            std::visit(TOverloaded{
+                [&](TVoidTransition&) {},
+                [&](TEpsilonTransitions& tr) {
+                    serializer(tr.To);
+                },
+                [&](TMatchedVarTransition& tr) {
+                    serializer(tr.VarIndex, tr.SaveState, tr.To);
+                },
+                [&](TQuantityEnterTransition& tr) {
+                    serializer(tr.To);
+                },
+                [&](TQuantityExitTransition& tr) {
+                    serializer(tr.QuantityMin, tr.QuantityMax, tr.ToFindMore, tr.ToMatched);
+                },
+            }, Transitions[i]);
         }
         serializer(Input, Output);
     }
@@ -136,14 +180,14 @@ private:
                 // new vector of eps transitions,
                 // contains refs to all nodes which are reachable from oldNode via eps transitions
                 TEpsilonTransitions optimizedTs;
-                auto dfsStack = *ts;
+                auto dfsStack = ts->To;
                 while (!dfsStack.empty()) {
                     auto curNode = dfsStack.back();
                     dfsStack.pop_back();
                     if (auto* curTs = std::get_if<TEpsilonTransitions>(&Graph->Transitions[curNode])) {
-                        std::copy(curTs->begin(), curTs->end(), std::back_inserter(dfsStack));
+                        std::copy(curTs->To.begin(), curTs->To.end(), std::back_inserter(dfsStack));
                     } else {
-                        optimizedTs.push_back(curNode);
+                        optimizedTs.To.push_back(curNode);
                     }
                 }
                 *ts = optimizedTs;
@@ -157,8 +201,8 @@ private:
             }
             Graph->Transitions[node] = std::visit(TNfaTransitionDestinationVisitor([&](size_t toNode) -> size_t {
                 if (auto *tr = std::get_if<TEpsilonTransitions>(&Graph->Transitions[toNode])) {
-                    if (tr->size() == 1) {
-                        return (*tr)[0];
+                    if (tr->To.size() == 1) {
+                        return tr->To[0];
                     }
                 }
                 return toNode;
@@ -227,10 +271,10 @@ private:
     TNfaItem BuildTerms(const TVector<TRowPatternTerm>& terms, const THashMap<TString, size_t>& varNameToIndex) {
         auto input = AddNode();
         auto output = AddNode();
-        std::vector<TEpsilonTransition, TMKQLAllocator<TEpsilonTransition>> fromInput;
+        TEpsilonTransitions fromInput;
         for (const auto& t: terms) {
             auto a = BuildTerm(t, varNameToIndex);
-            fromInput.push_back(a.Input);
+            fromInput.To.push_back(a.Input);
             Graph->Transitions[a.Output] = TEpsilonTransitions({output});
         }
         Graph->Transitions[input] = std::move(fromInput);
@@ -254,32 +298,39 @@ private:
         auto input = AddNode();
         auto output = AddNode();
         auto item = factor.Primary.index() == 0 ?
-                    BuildVar(varNameToIndex.at(std::get<0>(factor.Primary)), !factor.Unused) :
+                    BuildVar(varNameToIndex.at(std::get<0>(factor.Primary)), !factor.Unused, !factor.Output) :
                     BuildTerms(std::get<1>(factor.Primary), varNameToIndex);
         if (1 == factor.QuantityMin && 1 == factor.QuantityMax) { //simple linear case
-            Graph->Transitions[input] = TEpsilonTransitions{item.Input};
-            Graph->Transitions[item.Output] = TEpsilonTransitions{output};
+            Graph->Transitions[input] = TEpsilonTransitions{{item.Input}};
+            Graph->Transitions[item.Output] = TEpsilonTransitions{{output}};
         } else {
             auto interim = AddNode();
-            auto fromInput = TEpsilonTransitions{interim};
+            auto fromInput = TEpsilonTransitions{{interim}};
             if (factor.QuantityMin == 0) {
-                fromInput.push_back(output);
+                fromInput.To.push_back(output);
             }
             Graph->Transitions[input] = fromInput;
             Graph->Transitions[interim] = TQuantityEnterTransition{item.Input};
-            Graph->Transitions[item.Output] = std::pair{
-                std::pair{factor.QuantityMin, factor.QuantityMax},
-                std::pair{item.Input, output}
+            Graph->Transitions[item.Output] = TQuantityExitTransition{
+                factor.QuantityMin,
+                factor.QuantityMax,
+                item.Input,
+                output,
             };
         }
         return {input, output};
     }
-    TNfaItem BuildVar(ui32 varIndex, bool isUsed) {
+    TNfaItem BuildVar(ui32 varIndex, bool isUsed, bool excludeFromOutput) {
         auto input = AddNode();
         auto matchVar = AddNode();
         auto output = AddNode();
         Graph->Transitions[input] = TEpsilonTransitions({matchVar});
-        Graph->Transitions[matchVar] = std::pair{std::pair{varIndex, isUsed}, output};
+        Graph->Transitions[matchVar] = TMatchedVarTransition{
+            output,
+            varIndex,
+            isUsed,
+            excludeFromOutput,
+        };
         return {input, output};
     }
 public:
@@ -301,35 +352,14 @@ class TNfa {
     using TRange = TSparseList::TRange;
     using TMatchedVars = TMatchedVars<TRange>;
 
-
-    struct TState {
-        
-        TState() {}
-
-        TState(size_t index, const TMatchedVars& vars, std::stack<ui64, std::deque<ui64, TMKQLAllocator<ui64>>>&& quantifiers)
-            : Index(index)
-            , Vars(vars)
-            , Quantifiers(quantifiers) {}
-        size_t Index;
+public:
+    struct TMatch {
+        size_t BeginIndex;
+        size_t EndIndex;
         TMatchedVars Vars;
-        
-        using TQuantifiersStdStack = std::stack<
-            ui64,
-            std::deque<ui64, TMKQLAllocator<ui64>>>; //get rid of this
-
-        struct TQuantifiersStack: public TQuantifiersStdStack {
-            template<typename...TArgs>
-            TQuantifiersStack(TArgs... args) : TQuantifiersStdStack(args...) {}
-            
-            auto begin() const { return c.begin(); }
-            auto end() const { return c.end(); }
-            auto clear() { return c.clear(); }
-        };
-
-        TQuantifiersStack Quantifiers;
 
         void Save(TMrOutputSerializer& serializer) const {
-            serializer.Write(Index);
+            serializer(BeginIndex, EndIndex);
             serializer.Write(Vars.size());
             for (const auto& vector : Vars) {
                 serializer.Write(vector.size());
@@ -337,16 +367,11 @@ class TNfa {
                     range.Save(serializer);
                 }
             }
-            serializer.Write(Quantifiers.size());
-            for (ui64 qnt : Quantifiers) {
-                serializer.Write(qnt);
-            }
         }
 
         void Load(TMrInputSerializer& serializer) {
-            serializer.Read(Index);
-
-            auto varsSize = serializer.Read<TMatchedVars::size_type>();
+            serializer(BeginIndex, EndIndex);
+            auto varsSize = serializer.Read<size_t>();
             Vars.clear();
             Vars.resize(varsSize);
             for (auto& subvec: Vars) {
@@ -356,75 +381,119 @@ class TNfa {
                     item.Load(serializer);
                 }
             }
+        }
+    };
+
+private:
+    struct TState {
+        size_t Index;
+        TMatch Match;
+        std::deque<ui64, TMKQLAllocator<ui64>> Quantifiers;
+
+        void Save(TMrOutputSerializer& serializer) const {
+            serializer.Write(Index);
+            Match.Save(serializer);
+            serializer.Write(Quantifiers.size());
+            for (ui64 qnt : Quantifiers) {
+                serializer.Write(qnt);
+            }
+        }
+
+        void Load(TMrInputSerializer& serializer) {
+            serializer.Read(Index);
+            Match.Load(serializer);
             Quantifiers.clear();
             auto quantifiersSize = serializer.Read<ui64>();
             for (size_t i = 0; i < quantifiersSize; ++i) {
                 ui64 qnt = serializer.Read<ui64>();
-                Quantifiers.push(qnt);
+                Quantifiers.push_back(qnt);
             }
         }
 
         friend inline bool operator<(const TState& lhs, const TState& rhs) {
-            return std::tie(lhs.Index, lhs.Quantifiers, lhs.Vars) < std::tie(rhs.Index, rhs.Quantifiers, rhs.Vars);
+            auto lhsMatchEndIndex = -static_cast<i64>(lhs.Match.EndIndex);
+            auto rhsMatchEndIndex = -static_cast<i64>(rhs.Match.EndIndex);
+            return std::tie(lhs.Match.BeginIndex, lhsMatchEndIndex, lhs.Index, lhs.Match.Vars, lhs.Quantifiers) < std::tie(rhs.Match.BeginIndex, rhsMatchEndIndex, rhs.Index, rhs.Match.Vars, rhs.Quantifiers);
         }
         friend inline bool operator==(const TState& lhs, const TState& rhs) {
-            return std::tie(lhs.Index, lhs.Quantifiers, lhs.Vars) == std::tie(rhs.Index, rhs.Quantifiers, rhs.Vars);
+            return std::tie(lhs.Match.BeginIndex, lhs.Match.EndIndex, lhs.Index, lhs.Match.Vars, lhs.Quantifiers) == std::tie(rhs.Match.BeginIndex, rhs.Match.EndIndex, rhs.Index, rhs.Match.Vars, rhs.Quantifiers);
         }
     };
 public:
 
-    TNfa(TNfaTransitionGraph::TPtr transitionGraph, IComputationExternalNode* matchedRangesArg, const TComputationNodePtrVector& defines)
-        : TransitionGraph(transitionGraph)
-        , MatchedRangesArg(matchedRangesArg)
-        , Defines(defines) {
-    }
+    TNfa(
+        TNfaTransitionGraph::TPtr transitionGraph,
+        IComputationExternalNode* matchedRangesArg,
+        const TComputationNodePtrVector& defines,
+        TAfterMatchSkipTo skipTo)
+    : TransitionGraph(transitionGraph)
+    , MatchedRangesArg(matchedRangesArg)
+    , Defines(defines)
+    , SkipTo_(skipTo)
+    {}
 
-    void ProcessRow(TSparseList::TRange&& currentRowLock, TComputationContext& ctx) {        
-        ActiveStates.emplace(TransitionGraph->Input, TMatchedVars(Defines.size()), std::stack<ui64, std::deque<ui64, TMKQLAllocator<ui64>>>{});
+    void ProcessRow(TSparseList::TRange&& currentRowLock, TComputationContext& ctx) {
+        TState state(TransitionGraph->Input, TMatch{currentRowLock.From(), currentRowLock.To(), TMatchedVars(Defines.size())}, std::deque<ui64, TMKQLAllocator<ui64>>{});
+        Insert(std::move(state));
         MakeEpsilonTransitions();
-        std::set<TState, std::less<TState>, TMKQLAllocator<TState>> newStates;
-        std::set<TState, std::less<TState>, TMKQLAllocator<TState>> deletedStates;
-        for (const auto& s: ActiveStates) {
+        TStateSet newStates;
+        TStateSet deletedStates;
+        for (const auto& state : ActiveStates) {
             //Here we handle only transitions of TMatchedVarTransition type,
             //all other transitions are handled in MakeEpsilonTransitions
-            if (const auto* matchedVarTransition = std::get_if<TMatchedVarTransition>(&TransitionGraph->Transitions[s.Index])) {
-                MatchedRangesArg->SetValue(ctx, ctx.HolderFactory.Create<TMatchedVarsValue<TRange>>(ctx.HolderFactory, s.Vars));
-                const auto varIndex = matchedVarTransition->first.first;
+            if (const auto* matchedVarTransition = std::get_if<TMatchedVarTransition>(&TransitionGraph->Transitions[state.Index])) {
+                MatchedRangesArg->SetValue(ctx, ctx.HolderFactory.Create<TMatchedVarsValue<TRange>>(ctx.HolderFactory, state.Match.Vars));
+                const auto varIndex = matchedVarTransition->VarIndex;
                 const auto& v = Defines[varIndex]->GetValue(ctx);
                 if (v && v.Get<bool>()) {
-                    if (matchedVarTransition->first.second) {
-                        auto vars = s.Vars; //TODO get rid of this copy
+                    if (matchedVarTransition->SaveState) {
+                        auto vars = state.Match.Vars; //TODO get rid of this copy
                         auto& matchedVar = vars[varIndex];
+                        currentRowLock.NfaIndex(state.Index);
                         Extend(matchedVar, currentRowLock);
-                        newStates.emplace(matchedVarTransition->second, std::move(vars), std::stack<ui64, std::deque<ui64, TMKQLAllocator<ui64>>>(s.Quantifiers));
+                        newStates.emplace(matchedVarTransition->To, TMatch{state.Match.BeginIndex, currentRowLock.To(), std::move(vars)}, state.Quantifiers);
                     } else {
-                        newStates.emplace(matchedVarTransition->second, s.Vars, std::stack<ui64, std::deque<ui64, TMKQLAllocator<ui64>>>(s.Quantifiers));
+                        newStates.emplace(matchedVarTransition->To, TMatch{state.Match.BeginIndex, currentRowLock.To(), state.Match.Vars}, state.Quantifiers);
                     }
                 }
-                deletedStates.insert(s);
+                deletedStates.insert(state);
             }
         }
-        for (auto& s: deletedStates)
-            ActiveStates.erase(s);
-        ActiveStates.insert(newStates.begin(), newStates.end());
+        for (auto& state : deletedStates) {
+            Erase(std::move(state));
+        }
+        for (auto& state : newStates) {
+            Insert(std::move(state));
+        }
         MakeEpsilonTransitions();
-        EpsilonTransitionsLastRow = 0;
     }
 
     bool HasMatched() const {
-        for (auto& s: ActiveStates) {
-            if (s.Index == TransitionGraph->Output) {
+        for (auto& state: ActiveStates) {
+            if (auto activeStateIter = ActiveStateCounters.find(state.Match.BeginIndex),
+                finishedStateIter = FinishedStateCounters.find(state.Match.BeginIndex);
+                ((activeStateIter != ActiveStateCounters.end() &&
+                finishedStateIter != FinishedStateCounters.end() &&
+                activeStateIter->second == finishedStateIter->second) ||
+                EndOfData) &&
+                state.Index == TransitionGraph->Output) {
                 return true;
             }
         }
         return false;
     }
 
-    std::optional<TMatchedVars> GetMatched() {
-        for (auto& s: ActiveStates) {
-            if (s.Index == TransitionGraph->Output) {
-                auto result = s.Vars;
-                ActiveStates.erase(s);
+    std::optional<TMatch> GetMatched() {
+        for (auto& state: ActiveStates) {
+            if (auto activeStateIter = ActiveStateCounters.find(state.Match.BeginIndex),
+                finishedStateIter = FinishedStateCounters.find(state.Match.BeginIndex);
+                ((activeStateIter != ActiveStateCounters.end() &&
+                finishedStateIter != FinishedStateCounters.end() &&
+                activeStateIter->second == finishedStateIter->second) ||
+                EndOfData) &&
+                state.Index == TransitionGraph->Output) {
+                auto result = state.Match;
+                Erase(std::move(state));
                 return result;
             }
         }
@@ -441,97 +510,178 @@ public:
         for (const auto& state : ActiveStates) {
             state.Save(serializer);
         }
-        serializer.Write(EpsilonTransitionsLastRow);
+        serializer.Write(ActiveStateCounters.size());
+        for (const auto& counter : ActiveStateCounters) {
+            serializer(counter);
+        }
+        serializer.Write(FinishedStateCounters.size());
+        for (const auto& counter : FinishedStateCounters) {
+            serializer(counter);
+        }
     }
 
     void Load(TMrInputSerializer& serializer) {
-        auto stateSize = serializer.Read<ui64>();
-        for (size_t i = 0; i < stateSize; ++i) {
-            TState state;
-            state.Load(serializer);
-            ActiveStates.emplace(state);
+        {
+            ActiveStates.clear();
+            auto activeStatesSize = serializer.Read<ui64>();
+            for (size_t i = 0; i < activeStatesSize; ++i) {
+                TState state;
+                state.Load(serializer);
+                ActiveStates.emplace(state);
+            }
         }
-        serializer.Read(EpsilonTransitionsLastRow);
+        {
+            ActiveStateCounters.clear();
+            auto activeStateCountersSize = serializer.Read<ui64>();
+            for (size_t i = 0; i < activeStateCountersSize; ++i) {
+                using map_type = decltype(ActiveStateCounters);
+                auto matchBeginIndex = serializer.Read<map_type::key_type>();
+                auto counter = serializer.Read<map_type::mapped_type>();
+                ActiveStateCounters.emplace(matchBeginIndex, counter);
+            }
+        }
+        {
+            FinishedStateCounters.clear();
+            auto finishedStateCountersSize = serializer.Read<ui64>();
+            for (size_t i = 0; i < finishedStateCountersSize; ++i) {
+                using map_type = decltype(FinishedStateCounters);
+                auto matchBeginIndex = serializer.Read<map_type::key_type>();
+                auto counter = serializer.Read<map_type::mapped_type>();
+                FinishedStateCounters.emplace(matchBeginIndex, counter);
+            }
+        }
     }
 
-    void Clear() {
-        ActiveStates.clear();
+    bool ProcessEndOfData(const TComputationContext& /* ctx */) {
+        EndOfData = true;
+        return HasMatched();
+    }
+
+    void AfterMatchSkip(const TMatch& match) {
+        const auto skipToRowIndex = [&]() {
+            switch (SkipTo_.To) {
+            case EAfterMatchSkipTo::NextRow:
+                return match.BeginIndex + 1;
+            case EAfterMatchSkipTo::PastLastRow:
+                return match.EndIndex + 1;
+            case EAfterMatchSkipTo::ToFirst:
+                MKQL_ENSURE(false, "AFTER MATCH SKIP TO FIRST is not implemented yet");
+            case EAfterMatchSkipTo::ToLast:
+                [[fallthrough]];
+            case EAfterMatchSkipTo::To:
+                MKQL_ENSURE(false, "AFTER MATCH SKIP TO LAST is not implemented yet");
+            }
+        }();
+
+        TStateSet deletedStates;
+        for (const auto& state : ActiveStates) {
+            if (state.Match.BeginIndex < skipToRowIndex) {
+                deletedStates.insert(state);
+            }
+        }
+        for (auto& state : deletedStates) {
+            Erase(std::move(state));
+        }
+    }
+
+    const TNfaTransitionGraph& GetTransitionGraph() const {
+        return *TransitionGraph;
     }
 
 private:
     //TODO (zverevgeny): Consider to change to std::vector for the sake of perf
     using TStateSet = std::set<TState, std::less<TState>, TMKQLAllocator<TState>>;
-    struct TTransitionVisitor {
-        TTransitionVisitor(const TState& state, TStateSet& newStates, TStateSet& deletedStates)
-            : State(state)
-            , NewStates(newStates)
-            , DeletedStates(deletedStates) {}
-        void operator()(const TVoidTransition&) {
-            //Do nothing for void
-        }
-        void operator()(const TMatchedVarTransition& var) {
-            //Transitions of TMatchedVarTransition type are handled in ProcessRow method
-            Y_UNUSED(var);
-        }
-        void operator()(const TEpsilonTransitions& epsilonTransitions) {
-            for (const auto& i: epsilonTransitions) {
-                NewStates.emplace(i, TMatchedVars(State.Vars), std::stack<ui64, std::deque<ui64, TMKQLAllocator<ui64>>>(State.Quantifiers));
-            }
-            DeletedStates.insert(State);
-        }
-        void operator()(const TQuantityEnterTransition& quantityEnterTransition) {
-            DeletedStates.insert(State);
-            auto quantifiers = State.Quantifiers; //TODO get rid of this copy
-            quantifiers.push(0);
-            NewStates.emplace(quantityEnterTransition, TMatchedVars(State.Vars), std::move(quantifiers));
-        }
-        void operator()(const TQuantityExitTransition& quantityExitTransition) {
-            DeletedStates.insert(State);
-            auto minQuantity = quantityExitTransition.first.first;
-            auto maxQuantity = quantityExitTransition.first.second;
-            if (State.Quantifiers.top() + 1 < quantityExitTransition.first.second) {
-                auto q = State.Quantifiers;
-                q.top()++;
-                NewStates.emplace(quantityExitTransition.second.first, TMatchedVars(State.Vars), std::move(q));
-            }
-            if (State.Quantifiers.top() + 1 >= minQuantity && State.Quantifiers.top() + 1 <= maxQuantity) {
-                auto q = State.Quantifiers;
-                q.pop();
-                NewStates.emplace(quantityExitTransition.second.second, TMatchedVars(State.Vars), std::move(q));
-            }
-
-        }
-        const TState& State;
-        TStateSet& NewStates;
-        TStateSet& DeletedStates;
-    };
 
     bool MakeEpsilonTransitionsImpl() {
         TStateSet newStates;
         TStateSet deletedStates;
-        for (const auto& s: ActiveStates) {
-            ++EpsilonTransitionsLastRow;
-            std::visit(TTransitionVisitor(s, newStates, deletedStates), TransitionGraph->Transitions[s.Index]);
+        for (const auto& state: ActiveStates) {
+            std::visit(TOverloaded {
+                [&](const TVoidTransition&) {
+                    //Do nothing for void
+                },
+                [&](const TMatchedVarTransition&) {
+                    //Transitions of TMatchedVarTransition type are handled in ProcessRow method
+                },
+                [&](const TEpsilonTransitions& epsilonTransitions) {
+                    deletedStates.insert(state);
+                    for (const auto& i : epsilonTransitions.To) {
+                        newStates.emplace(i, state.Match, state.Quantifiers);
+                    }
+                },
+                [&](const TQuantityEnterTransition& quantityEnterTransition) {
+                    deletedStates.insert(state);
+                    auto quantifiers = state.Quantifiers; //TODO get rid of this copy
+                    quantifiers.push_back(0);
+                    newStates.emplace(quantityEnterTransition.To, state.Match, std::move(quantifiers));
+                },
+                [&](const TQuantityExitTransition& quantityExitTransition) {
+                    deletedStates.insert(state);
+                    auto [quantityMin, quantityMax, toFindMore, toMatched] = quantityExitTransition;
+                    if (state.Quantifiers.back() + 1 < quantityMax) {
+                        auto q = state.Quantifiers;
+                        q.back()++;
+                        newStates.emplace(toFindMore, state.Match, std::move(q));
+                    }
+                    if (quantityMin <= state.Quantifiers.back() + 1 && state.Quantifiers.back() + 1 <= quantityMax) {
+                        auto q = state.Quantifiers;
+                        q.pop_back();
+                        newStates.emplace(toMatched, state.Match, std::move(q));
+                    }
+                },
+            }, TransitionGraph->Transitions[state.Index]);
         }
         bool result = newStates != deletedStates;
-        for (auto& s: deletedStates) {
-            ActiveStates.erase(s);
+        for (auto& state : deletedStates) {
+            Erase(std::move(state));
         }
-        ActiveStates.insert(newStates.begin(), newStates.end());
+        for (auto& state : newStates) {
+            Insert(std::move(state));
+        }
         return result;
     }
 
     void MakeEpsilonTransitions() {
-        do {
+        while (MakeEpsilonTransitionsImpl());
+    }
 
-        } while (MakeEpsilonTransitionsImpl());
+    static void Add(THashMap<size_t, i64>& counters, size_t index, i64 value) {
+        auto countersIter = counters.try_emplace(index, 0).first;
+        MKQL_ENSURE(countersIter != counters.end(), "Internal logic error");
+        countersIter->second += value;
+        if (countersIter->second == 0) {
+            counters.erase(countersIter);
+        }
+    }
+
+    void Insert(TState state) {
+        auto matchBeginIndex = state.Match.BeginIndex;
+        const auto& transition = TransitionGraph->Transitions[state.Index];
+        auto diff = static_cast<i64>(ActiveStates.insert(std::move(state)).second);
+        Add(ActiveStateCounters, matchBeginIndex, diff);
+        if (std::holds_alternative<TVoidTransition>(transition)) {
+            Add(FinishedStateCounters, matchBeginIndex, diff);
+        }
+    }
+
+    void Erase(TState state) {
+        auto matchBeginIndex = state.Match.BeginIndex;
+        const auto& transition = TransitionGraph->Transitions[state.Index];
+        auto diff = -static_cast<i64>(ActiveStates.erase(std::move(state)));
+        Add(ActiveStateCounters, matchBeginIndex, diff);
+        if (std::holds_alternative<TVoidTransition>(transition)) {
+            Add(FinishedStateCounters, matchBeginIndex, diff);
+        }
     }
 
     TNfaTransitionGraph::TPtr TransitionGraph;
     IComputationExternalNode* const MatchedRangesArg;
     const TComputationNodePtrVector Defines;
     TStateSet ActiveStates; //NFA state
-    size_t EpsilonTransitionsLastRow = 0;
+    THashMap<size_t, i64> ActiveStateCounters;
+    THashMap<size_t, i64> FinishedStateCounters;
+    bool EndOfData = false;
+    TAfterMatchSkipTo SkipTo_;
 };
 
 }//namespace NKikimr::NMiniKQL::NMatchRecognize

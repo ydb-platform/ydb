@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    audit_log_item_builder.h
     audit_log.h
     audit_log_service.h
     audit_log_impl.cpp

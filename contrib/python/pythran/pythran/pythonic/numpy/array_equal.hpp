@@ -3,10 +3,10 @@
 
 #include "pythonic/include/numpy/array_equal.hpp"
 
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/types/ndarray.hpp"
 #include "pythonic/numpy/all.hpp"
 #include "pythonic/numpy/equal.hpp"
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -19,7 +19,7 @@ namespace numpy
       return all(functor::equal{}(u, v));
     return false;
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

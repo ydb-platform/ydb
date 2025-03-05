@@ -3,12 +3,13 @@
 #include "defs.h"
 
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/base.pb.h>
+#include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/protos/whiteboard_disk_states.pb.h>
 
 namespace NKikimr {
     namespace NMonGroup {
-
         class TBase {
         public:
             TBase(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
@@ -135,6 +136,24 @@ public:                                                                         
 
                 COUNTER_INIT_IF_EXTENDED(FreshSatisfactionRankPercent, false);
                 COUNTER_INIT_IF_EXTENDED(LevelSatisfactionRankPercent, false);
+
+                COUNTER_INIT_IF_EXTENDED(ThrottlingCurrentSpeedLimit, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingIsActive, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingDryRun, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingLevel0SstCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinLevel0SstCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxLevel0SstCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingInplacedSize, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinInplacedSizeHDD, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxInplacedSizeHDD, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinInplacedSizeSSD, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxInplacedSizeSSD, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingOccupancyPerMille, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinOccupancyPerMille, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxOccupancyPerMille, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingLogChunkCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinLogChunkCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxLogChunkCount, false);
             }
 
             COUNTER_DEF(EmergencyMovedPatchQueueItems);
@@ -153,6 +172,24 @@ public:                                                                         
 
             COUNTER_DEF(FreshSatisfactionRankPercent);
             COUNTER_DEF(LevelSatisfactionRankPercent);
+
+            COUNTER_DEF(ThrottlingCurrentSpeedLimit);
+            COUNTER_DEF(ThrottlingIsActive);
+            COUNTER_DEF(ThrottlingDryRun);
+            COUNTER_DEF(ThrottlingLevel0SstCount);
+            COUNTER_DEF(ThrottlingMinLevel0SstCount);
+            COUNTER_DEF(ThrottlingMaxLevel0SstCount);
+            COUNTER_DEF(ThrottlingInplacedSize);
+            COUNTER_DEF(ThrottlingMinInplacedSizeHDD);
+            COUNTER_DEF(ThrottlingMaxInplacedSizeHDD);
+            COUNTER_DEF(ThrottlingMinInplacedSizeSSD);
+            COUNTER_DEF(ThrottlingMaxInplacedSizeSSD);
+            COUNTER_DEF(ThrottlingOccupancyPerMille);
+            COUNTER_DEF(ThrottlingMinOccupancyPerMille);
+            COUNTER_DEF(ThrottlingMaxOccupancyPerMille);
+            COUNTER_DEF(ThrottlingLogChunkCount);
+            COUNTER_DEF(ThrottlingMinLogChunkCount);
+            COUNTER_DEF(ThrottlingMaxLogChunkCount);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -455,6 +492,7 @@ public:                                                                         
             TLsmLevelGroup Level9to16;
             TLsmLevelGroup Level17;
             TLsmLevelGroup Level18;
+            TLsmLevelGroup Level19;
 
             TLsmAllLevelsStat(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
                 : Group(counters->GetSubgroup("subsystem", "levels"))
@@ -463,6 +501,7 @@ public:                                                                         
                 , Level9to16(Group, "level", "9..16")
                 , Level17(Group, "level", "17")
                 , Level18(Group, "level", "18")
+                , Level19(Group, "level", "19")
             {}
         };
 
@@ -665,6 +704,130 @@ public:                                                                         
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
+        // THandleClassGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class THandleClassGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(THandleClassGroup)
+            {
+                COUNTER_INIT_IF_EXTENDED(Undefined, true);
+                COUNTER_INIT_IF_EXTENDED(GetDiscover, true);
+                COUNTER_INIT_IF_EXTENDED(GetFast, true);
+                COUNTER_INIT_IF_EXTENDED(GetAsync, true);
+                COUNTER_INIT_IF_EXTENDED(GetLow, true);
+                COUNTER_INIT_IF_EXTENDED(PutTabletLog, true);
+                COUNTER_INIT_IF_EXTENDED(PutUserData, true);
+                COUNTER_INIT_IF_EXTENDED(PutAsyncBlob, true);
+            }
+
+            COUNTER_DEF(Undefined);
+            COUNTER_DEF(GetDiscover);
+            COUNTER_DEF(GetFast);
+            COUNTER_DEF(GetAsync);
+            COUNTER_DEF(GetLow);
+            COUNTER_DEF(PutTabletLog);
+            COUNTER_DEF(PutUserData);
+            COUNTER_DEF(PutAsyncBlob);
+            
+            ::NMonitoring::TDeprecatedCounter &GetCounter(const std::optional<NKikimrBlobStorage::EGetHandleClass>& handleClass) {
+                if (!handleClass) {
+                    return Undefined();
+                }
+                switch (*handleClass) {
+                    case NKikimrBlobStorage::AsyncRead:
+                        return GetAsync();
+                    case NKikimrBlobStorage::FastRead:
+                        return GetFast();
+                    case NKikimrBlobStorage::Discover:
+                        return GetDiscover();
+                    case NKikimrBlobStorage::LowRead:
+                        return GetLow();
+                    default:
+                        return Undefined();
+                }
+            }
+            ::NMonitoring::TDeprecatedCounter &GetCounter(const std::optional<NKikimrBlobStorage::EPutHandleClass>& handleClass) {
+                if (!handleClass) {
+                    return Undefined();
+                }
+                switch (*handleClass) {
+                    case NKikimrBlobStorage::TabletLog:
+                        return PutTabletLog();
+                    case NKikimrBlobStorage::AsyncBlob:
+                        return PutAsyncBlob();
+                    case NKikimrBlobStorage::UserData:
+                        return PutUserData();
+                    default:
+                        return Undefined();
+                }
+            }
+
+            ::NMonitoring::TDeprecatedCounter &GetCounter() {
+                return Undefined();
+            }
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TResponseStatusGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TResponseStatusGroup {
+        public:
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> Group;
+
+            THandleClassGroup Undefined;
+            THandleClassGroup ResponsesWithStatusError;
+            THandleClassGroup ResponsesWithStatusRace;
+            THandleClassGroup ResponsesWithStatusBlocked;
+            THandleClassGroup ResponsesWithStatusOutOfSpace;
+            THandleClassGroup ResponsesWithStatusDeadline;
+            THandleClassGroup ResponsesWithStatusNotReady;
+            THandleClassGroup ResponsesWithStatusVdiskErrorState;
+
+            TResponseStatusGroup(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
+                : Group(counters->GetSubgroup("subsystem", "statuses"))
+                , Undefined(Group, "status", "UNDEFINED")
+                , ResponsesWithStatusError(Group, "status", "ERROR")
+                , ResponsesWithStatusRace(Group, "status", "RACE")
+                , ResponsesWithStatusBlocked(Group, "status", "BLOCKED")
+                , ResponsesWithStatusOutOfSpace(Group, "status", "OUT_OF_SPACE")
+                , ResponsesWithStatusDeadline(Group, "status", "DEADLINE")
+                , ResponsesWithStatusNotReady(Group, "status", "NOT_READY")
+                , ResponsesWithStatusVdiskErrorState(Group, "status", "VDISK_STATUS_ERROR")
+            {}
+
+            template <typename THandleClassType>
+            ::NMonitoring::TDeprecatedCounter &GetCounterByHandleClass(NKikimrProto::EReplyStatus status, const std::optional<THandleClassType>& handleClass = std::nullopt) {
+                switch (status) {
+                    case NKikimrProto::ERROR:
+                        return ResponsesWithStatusError.GetCounter(handleClass);
+                    case NKikimrProto::RACE:
+                        return ResponsesWithStatusRace.GetCounter(handleClass);
+                    case NKikimrProto::BLOCKED:
+                        return ResponsesWithStatusBlocked.GetCounter(handleClass);
+                    case NKikimrProto::OUT_OF_SPACE:
+                        return ResponsesWithStatusOutOfSpace.GetCounter(handleClass);
+                    case NKikimrProto::DEADLINE:
+                        return ResponsesWithStatusDeadline.GetCounter(handleClass);
+                    case NKikimrProto::NOTREADY:
+                        return ResponsesWithStatusNotReady.GetCounter(handleClass);
+                    case NKikimrProto::VDISK_ERROR_STATE:
+                        return ResponsesWithStatusVdiskErrorState.GetCounter(handleClass);
+                    default: return Undefined.GetCounter(handleClass);
+                }
+            }
+
+            ::NMonitoring::TDeprecatedCounter &GetCounter(NKikimrProto::EReplyStatus status) {
+                return GetCounterByHandleClass(status, std::optional<NKikimrBlobStorage::EPutHandleClass>{});
+            }
+            ::NMonitoring::TDeprecatedCounter &GetCounter(NKikimrProto::EReplyStatus status, const std::optional<NKikimrBlobStorage::EPutHandleClass>& handleClass) {
+                return GetCounterByHandleClass(status, handleClass);
+            }
+            ::NMonitoring::TDeprecatedCounter &GetCounter(NKikimrProto::EReplyStatus status, const std::optional<NKikimrBlobStorage::EGetHandleClass>& handleClass) {
+                return GetCounterByHandleClass(status, handleClass);
+            }
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
         // TCostTrackerGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TCostTrackerGroup : public TBase {
@@ -713,6 +876,28 @@ public:                                                                         
             COUNTER_DEF(BlobsFixed);
         };
 
+        class TMalfunctionGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TMalfunctionGroup)
+            {
+                COUNTER_INIT(DroppingStuckInternalQueue, false);
+            }
+
+            COUNTER_DEF(DroppingStuckInternalQueue);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TTimerGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TTimerGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TTimerGroup)
+            {
+                COUNTER_INIT(SkeletonFrontUptimeSeconds, false);
+            }
+
+            COUNTER_DEF(SkeletonFrontUptimeSeconds);
+        };
+
     } // NMonGroup
 } // NKikimr
-

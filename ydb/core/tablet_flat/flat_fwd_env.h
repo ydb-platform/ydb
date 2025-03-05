@@ -150,7 +150,7 @@ namespace NFwd {
             return Get(GetQueue(part, room), ref, EPage::Opaque);
         }
 
-        void DoSave(TIntrusiveConstPtr<IPageCollection> pageCollection, ui64 cookie, TArrayRef<NPageCollection::TLoadedPage> pages)
+        void DoSave(TIntrusiveConstPtr<IPageCollection> pageCollection, ui64 cookie, TVector<NSharedCache::TEvResult::TLoaded> pages)
         {
             const ui32 epoch = ui32(cookie) - Salt;
             if (epoch < Epoch) {
@@ -167,12 +167,14 @@ namespace NFwd {
 
             for (auto& page : pages) {
                 auto type = EPage(pageCollection->Page(page.PageId).Type);
+                auto data = NSharedCache::TPinnedPageRef(page.Page).GetData();
+                NPageCollection::TLoadedPage loadedPage{page.PageId, std::move(data)};
                 if (IsIndexPage(type)) {
                     Y_ABORT_UNLESS(queue.IndexPageCollection->Label() == pageCollection->Label(), "TPart head storage doesn't match with fetch result");
-                    queue->Fill(page, type);
+                    queue->Fill(loadedPage, std::move(page.Page), type);
                 } else {
                     Y_ABORT_UNLESS(queue.GroupPageCollection->Label() == pageCollection->Label(), "TPart head storage doesn't match with fetch result");
-                    queue->Fill(page, type);
+                    queue->Fill(loadedPage, std::move(page.Page), type);
                 }
             }
         }

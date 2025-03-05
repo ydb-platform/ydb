@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/core/blobstorage/vdisk/synclog)
 
 FORK_SUBTESTS()
 
-TIMEOUT(600)
-
 SIZE(MEDIUM)
 
 PEERDIR(

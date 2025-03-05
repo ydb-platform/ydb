@@ -152,7 +152,9 @@ namespace NFake {
                 || ev == TEvBlobStorage::EvDiscover
                 || ev == TEvBlobStorage::EvRange
                 || ev == TEvBlobStorage::EvCollectGarbage
-                || ev == TEvBlobStorage::EvStatus;
+                || ev == TEvBlobStorage::EvStatus
+                || ev == NFake::EvBlobStorageContainsRequest
+                || ev == NFake::EvBlobStorageDeferGC;
         }
 
     public:

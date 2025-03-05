@@ -10,6 +10,7 @@
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/resource_subscriber/container.h>
 #include <ydb/core/tx/data_events/write_data.h>
 #include <ydb/core/tx/priorities/usage/abstract.h>
 
@@ -47,6 +48,8 @@ struct TEvPrivate {
 
         EvWritingAddDataToBuffer,
         EvWritingFlushBuffer,
+        EvWritingPortionsAddDataToBuffer,
+        EvWritingPortionsFlushBuffer,
 
         EvExportWritingFinished,
         EvExportWritingFailed,
@@ -75,7 +78,7 @@ struct TEvPrivate {
     private:
         const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
         const ui64 Generation;
-        NOlap::TDataAccessorsResult Result;
+        std::optional<NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>> Result;
 
     public:
         const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& GetProcessor() const {
@@ -84,12 +87,15 @@ struct TEvPrivate {
         ui64 GetGeneration() const {
             return Generation;
         }
-        NOlap::TDataAccessorsResult ExtractResult() {
-            return std::move(Result);
+        NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult> ExtractResult() {
+            AFL_VERIFY(Result);
+            auto result = std::move(*Result);
+            Result.reset();
+            return result;
         }
 
-        TEvMetadataAccessorsInfo(
-            const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor, const ui64 gen, NOlap::TDataAccessorsResult&& result)
+        TEvMetadataAccessorsInfo(const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor, const ui64 gen,
+            NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>&& result)
             : Processor(processor)
             , Generation(gen)
             , Result(std::move(result)) {

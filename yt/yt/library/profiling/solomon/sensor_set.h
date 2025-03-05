@@ -51,7 +51,7 @@ DECLARE_REFCOUNTED_STRUCT(TTimeCounterState)
 struct TTimeCounterState final
 {
     TTimeCounterState(
-        TWeakPtr<ITimeCounterImpl> owner,
+        TWeakPtr<ITimeCounter> owner,
         const TTagIdList& tagIds,
         const TProjectionSet& projections)
         : Owner(std::move(owner))
@@ -59,7 +59,7 @@ struct TTimeCounterState final
         , Projections(projections)
     { }
 
-    const TWeakPtr<ITimeCounterImpl> Owner;
+    const TWeakPtr<ITimeCounter> Owner;
     TDuration LastValue = TDuration::Zero();
 
     TTagIdList TagIds;
@@ -101,7 +101,7 @@ DECLARE_REFCOUNTED_STRUCT(TSummaryState)
 struct TSummaryState final
 {
     TSummaryState(
-        TWeakPtr<ISummaryImpl> owner,
+        TWeakPtr<ISummary> owner,
         const TTagIdList& tagIds,
         const TProjectionSet& projections)
         : Owner(std::move(owner))
@@ -109,7 +109,7 @@ struct TSummaryState final
         , Projections(projections)
     { }
 
-    const TWeakPtr<ISummaryImpl> Owner;
+    const TWeakPtr<ISummary> Owner;
 
     TTagIdList TagIds;
     const TProjectionSet Projections;
@@ -124,7 +124,7 @@ DECLARE_REFCOUNTED_STRUCT(TTimerSummaryState)
 struct TTimerSummaryState final
 {
     TTimerSummaryState(
-        TWeakPtr<ITimerImpl> owner,
+        TWeakPtr<ITimer> owner,
         const TTagIdList& tagIds,
         const TProjectionSet& projections)
         : Owner(owner)
@@ -132,7 +132,7 @@ struct TTimerSummaryState final
         , Projections(projections)
     { }
 
-    const TWeakPtr<ITimerImpl> Owner;
+    const TWeakPtr<ITimer> Owner;
 
     TTagIdList TagIds;
     const TProjectionSet Projections;

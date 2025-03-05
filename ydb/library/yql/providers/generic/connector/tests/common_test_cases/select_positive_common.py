@@ -2,7 +2,7 @@ import itertools
 from dataclasses import dataclass, replace
 from typing import Sequence, Optional
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind, EGenericProtocol
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
@@ -95,11 +95,11 @@ class Factory:
                 SelectWhat.asterisk(column_list=schema.columns),
                 data_in,
                 (
-                    EDataSourceKind.CLICKHOUSE,
-                    EDataSourceKind.POSTGRESQL,
-                    EDataSourceKind.YDB,
-                    EDataSourceKind.MYSQL,
-                    EDataSourceKind.MS_SQL_SERVER,
+                    EGenericDataSourceKind.CLICKHOUSE,
+                    EGenericDataSourceKind.POSTGRESQL,
+                    EGenericDataSourceKind.YDB,
+                    EGenericDataSourceKind.MYSQL,
+                    EGenericDataSourceKind.MS_SQL_SERVER,
                 ),
             ),
             # SELECT COL1 FROM table
@@ -110,11 +110,11 @@ class Factory:
                     [10],
                 ],
                 (
-                    EDataSourceKind.CLICKHOUSE,
+                    EGenericDataSourceKind.CLICKHOUSE,
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
-                    EDataSourceKind.YDB,
-                    EDataSourceKind.MYSQL,
-                    EDataSourceKind.MS_SQL_SERVER,
+                    EGenericDataSourceKind.YDB,
+                    EGenericDataSourceKind.MYSQL,
+                    EGenericDataSourceKind.MS_SQL_SERVER,
                 ),
             ),
             # SELECT col1 FROM table
@@ -124,7 +124,7 @@ class Factory:
                     [1],
                     [10],
                 ],
-                (EDataSourceKind.POSTGRESQL,),  # works because of implicit cast to lowercase (COL1 -> col1)
+                (EGenericDataSourceKind.POSTGRESQL,),  # works because of implicit cast to lowercase (COL1 -> col1)
             ),
             # SELECT col2 FROM table
             (
@@ -134,11 +134,11 @@ class Factory:
                     [20],
                 ],
                 (
-                    EDataSourceKind.CLICKHOUSE,
-                    EDataSourceKind.POSTGRESQL,
-                    EDataSourceKind.YDB,
-                    EDataSourceKind.MYSQL,
-                    EDataSourceKind.MS_SQL_SERVER,
+                    EGenericDataSourceKind.CLICKHOUSE,
+                    EGenericDataSourceKind.POSTGRESQL,
+                    EGenericDataSourceKind.YDB,
+                    EGenericDataSourceKind.MYSQL,
+                    EGenericDataSourceKind.MS_SQL_SERVER,
                 ),
             ),
             # SELECT col2, COL1 FROM table
@@ -149,11 +149,11 @@ class Factory:
                     [20, 10],
                 ],
                 (
-                    EDataSourceKind.CLICKHOUSE,
+                    EGenericDataSourceKind.CLICKHOUSE,
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
-                    EDataSourceKind.YDB,
-                    EDataSourceKind.MYSQL,
-                    EDataSourceKind.MS_SQL_SERVER,
+                    EGenericDataSourceKind.YDB,
+                    EGenericDataSourceKind.MYSQL,
+                    EGenericDataSourceKind.MS_SQL_SERVER,
                 ),
             ),
             # SELECT col2, col1 FROM table
@@ -163,7 +163,7 @@ class Factory:
                     [2, 1],
                     [20, 10],
                 ],
-                (EDataSourceKind.POSTGRESQL,),  # works because of implicit cast to lowercase (COL1 -> col1)
+                (EGenericDataSourceKind.POSTGRESQL,),  # works because of implicit cast to lowercase (COL1 -> col1)
             ),
             # Simple math computation:
             # SELECT COL1 + col2 AS col3 FROM table
@@ -174,11 +174,11 @@ class Factory:
                     [30],
                 ],
                 (
-                    EDataSourceKind.CLICKHOUSE,
+                    EGenericDataSourceKind.CLICKHOUSE,
                     # NOTE: YQ-2264: doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
-                    EDataSourceKind.YDB,
-                    EDataSourceKind.MYSQL,
-                    EDataSourceKind.MS_SQL_SERVER,
+                    EGenericDataSourceKind.YDB,
+                    EGenericDataSourceKind.MYSQL,
+                    EGenericDataSourceKind.MS_SQL_SERVER,
                 ),
             ),
             # Select the same column multiple times with different aliases
@@ -196,11 +196,11 @@ class Factory:
                     [20, 20, 20, 20, 20],
                 ],
                 (
-                    EDataSourceKind.CLICKHOUSE,
-                    EDataSourceKind.POSTGRESQL,
-                    EDataSourceKind.YDB,
-                    EDataSourceKind.MYSQL,
-                    EDataSourceKind.MS_SQL_SERVER,
+                    EGenericDataSourceKind.CLICKHOUSE,
+                    EGenericDataSourceKind.POSTGRESQL,
+                    EGenericDataSourceKind.YDB,
+                    EGenericDataSourceKind.MYSQL,
+                    EGenericDataSourceKind.MS_SQL_SERVER,
                 ),
             ),
         )
@@ -215,7 +215,7 @@ class Factory:
                 test_case = TestCase(
                     data_in=data_in,
                     data_source_kind=data_source_kind,
-                    protocol=EProtocol.NATIVE,
+                    protocol=EGenericProtocol.NATIVE,
                     select_what=select_what,
                     select_where=None,
                     schema=schema,
@@ -260,8 +260,8 @@ class Factory:
         )
 
         data_source_kinds = (
-            EDataSourceKind.CLICKHOUSE,
-            EDataSourceKind.POSTGRESQL,
+            EGenericDataSourceKind.CLICKHOUSE,
+            EGenericDataSourceKind.POSTGRESQL,
         )
 
         test_case_name = 'large'
@@ -269,11 +269,11 @@ class Factory:
 
         for data_source_kind in data_source_kinds:
             match data_source_kind:
-                case EDataSourceKind.CLICKHOUSE:
+                case EGenericDataSourceKind.CLICKHOUSE:
                     tc = TestCase(
                         name_=test_case_name,
                         data_source_kind=data_source_kind,
-                        protocol=EProtocol.NATIVE,
+                        protocol=EGenericProtocol.NATIVE,
                         data_in=None,
                         data_out_=[[999999]],  # We put 1M of rows in the large table
                         select_what=SelectWhat(SelectWhat.Item(name='MAX(col_00_int32)', kind='expr')),
@@ -282,18 +282,18 @@ class Factory:
                         pragmas=dict(),
                     )
 
-                case EDataSourceKind.POSTGRESQL:
+                case EGenericDataSourceKind.POSTGRESQL:
                     # Assuming that request will look something like:
                     # `SELECT * FROM table WHERE id = (SELECT MAX(id) FROM table)`
                     # We expect last line to be the answer
                     data_in = generate_table_data(schema=schema, bytes_soft_limit=table_size)
                     data_out = [data_in[-1]]
-                    data_source_kinds = [EDataSourceKind.CLICKHOUSE, EDataSourceKind.POSTGRESQL]
+                    data_source_kinds = [EGenericDataSourceKind.CLICKHOUSE, EGenericDataSourceKind.POSTGRESQL]
 
                     tc = TestCase(
                         name_=test_case_name,
                         data_source_kind=data_source_kind,
-                        protocol=EProtocol.NATIVE,
+                        protocol=EGenericProtocol.NATIVE,
                         data_in=data_in,
                         data_out_=data_out,
                         select_what=SelectWhat.asterisk(schema.columns),
@@ -311,31 +311,31 @@ class Factory:
 
         return test_cases
 
-    def make_test_cases(self, data_source_kind: EDataSourceKind) -> Sequence[TestCase]:
+    def make_test_cases(self, data_source_kind: EGenericDataSourceKind) -> Sequence[TestCase]:
         protocols = {
-            EDataSourceKind.CLICKHOUSE: [EProtocol.NATIVE, EProtocol.HTTP],
-            EDataSourceKind.POSTGRESQL: [EProtocol.NATIVE],
-            EDataSourceKind.YDB: [EProtocol.NATIVE],
-            EDataSourceKind.MYSQL: [EProtocol.NATIVE],
-            EDataSourceKind.MS_SQL_SERVER: [EProtocol.NATIVE],
+            EGenericDataSourceKind.CLICKHOUSE: [EGenericProtocol.NATIVE, EGenericProtocol.HTTP],
+            EGenericDataSourceKind.POSTGRESQL: [EGenericProtocol.NATIVE],
+            EGenericDataSourceKind.YDB: [EGenericProtocol.NATIVE],
+            EGenericDataSourceKind.MYSQL: [EGenericProtocol.NATIVE],
+            EGenericDataSourceKind.MS_SQL_SERVER: [EGenericProtocol.NATIVE],
         }
 
         base_test_cases = None
 
         if data_source_kind in [
-            EDataSourceKind.YDB,
-            EDataSourceKind.MYSQL,
-            EDataSourceKind.MS_SQL_SERVER,
+            EGenericDataSourceKind.YDB,
+            EGenericDataSourceKind.MYSQL,
+            EGenericDataSourceKind.MS_SQL_SERVER,
         ]:
             base_test_cases = self._column_selection()
-        elif data_source_kind in [EDataSourceKind.CLICKHOUSE, EDataSourceKind.POSTGRESQL]:
+        elif data_source_kind in [EGenericDataSourceKind.CLICKHOUSE, EGenericDataSourceKind.POSTGRESQL]:
             base_test_cases = list(
                 itertools.chain(
                     self._column_selection(),
                     self._large_table(),
                 )
             )
-        elif data_source_kind == EDataSourceKind.ORACLE:
+        elif data_source_kind == EGenericDataSourceKind.ORACLE:
             raise 'Common test cases are not supported by Oracle due to the lack of Int32 columns'
         else:
             raise f'Unexpected data source kind: {data_source_kind}'

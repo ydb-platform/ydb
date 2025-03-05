@@ -18,7 +18,7 @@ namespace numpy
          1);
     return concatenate(std::forward<ArraySequence>(seq), concatenate_axis);
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

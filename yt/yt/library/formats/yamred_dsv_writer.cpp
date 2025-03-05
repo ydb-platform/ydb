@@ -85,7 +85,7 @@ private:
         RowValues_.resize(NameTableSize_);
         // Invariant: at the beginning of each loop iteration RowValues contains
         // nullptr in each element.
-        int rowCount = static_cast<int>(rows.Size());
+        int rowCount = std::ssize(rows);
         for (int index = 0; index < rowCount; index++) {
             auto row = rows[index];
             if (CheckKeySwitch(row, index + 1 == rowCount /* isLastRow */)) {
@@ -241,11 +241,10 @@ ISchemalessFormatWriterPtr CreateSchemalessWriterForYamredDsv(
             controlAttributesConfig,
             keyColumnCount);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(EErrorCode::InvalidFormat, "Failed to parse config for YAMRed DSV format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for YAMRed DSV format") << ex;
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NFormats
-

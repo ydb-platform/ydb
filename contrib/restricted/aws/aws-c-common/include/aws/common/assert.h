@@ -10,6 +10,7 @@
 #include <aws/common/macros.h>
 #include <stdio.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
 AWS_EXTERN_C_BEGIN
 
 AWS_COMMON_API
@@ -59,7 +60,7 @@ AWS_EXTERN_C_END
 #if defined(CBMC)
 #    include <assert.h>
 #    define AWS_ASSERT(cond) assert(cond)
-#elif defined(DEBUG_BUILD) || __clang_analyzer__
+#elif defined(DEBUG_BUILD) || defined(__clang_analyzer__)
 #    define AWS_ASSERT(cond) AWS_FATAL_ASSERT(cond)
 #else
 #    define AWS_ASSERT(cond)
@@ -67,7 +68,7 @@ AWS_EXTERN_C_END
 
 #if defined(CBMC)
 #    define AWS_FATAL_ASSERT(cond) AWS_ASSERT(cond)
-#elif __clang_analyzer__
+#elif defined(__clang_analyzer__)
 #    define AWS_FATAL_ASSERT(cond)                                                                                     \
         if (!(cond)) {                                                                                                 \
             abort();                                                                                                   \
@@ -186,5 +187,7 @@ AWS_EXTERN_C_END
 
 #define AWS_OBJECT_PTR_IS_READABLE(ptr) AWS_MEM_IS_READABLE((ptr), sizeof(*(ptr)))
 #define AWS_OBJECT_PTR_IS_WRITABLE(ptr) AWS_MEM_IS_WRITABLE((ptr), sizeof(*(ptr)))
+
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_ASSERT_H */

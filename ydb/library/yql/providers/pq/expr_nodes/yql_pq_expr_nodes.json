@@ -72,7 +72,8 @@
                 {"Index": 2, "Name": "Columns", "Type": "TExprBase"},
                 {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"},
                 {"Index": 4, "Name": "Token", "Type": "TCoSecureParam"},
-                {"Index": 5, "Name": "FilterPredicate", "Type": "TCoAtom"}
+                {"Index": 5, "Name": "FilterPredicate", "Type": "TCoAtom"},
+                {"Index": 6, "Name": "RowType", "Type": "TExprBase"}
             ]
         },
         {

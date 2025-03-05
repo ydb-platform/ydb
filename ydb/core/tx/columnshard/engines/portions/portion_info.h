@@ -100,6 +100,10 @@ public:
     TPortionInfo(TPortionInfo&&) = default;
     TPortionInfo& operator=(TPortionInfo&&) = default;
 
+    ui32 PredictAccessorsMemory(const ISnapshotSchema::TPtr& schema) const {
+        return (GetRecordsCount() / 10000 + 1) * sizeof(TColumnRecord) * schema->GetColumnsCount() + schema->GetIndexesCount() * sizeof(TIndexChunk);
+    }
+
     ui32 PredictMetadataMemorySize(const ui32 columnsCount) const {
         return (GetRecordsCount() / 10000 + 1) * sizeof(TColumnRecord) * columnsCount;
     }
@@ -285,6 +289,16 @@ public:
 
     TPortionMeta& MutableMeta() {
         return Meta;
+    }
+
+    NPortion::EProduced GetProduced() const {
+        if (HasRemoveSnapshot()) {
+            return NPortion::INACTIVE;
+        }
+        if (GetTierNameDef(NBlobOperations::TGlobal::DefaultStorageId) != NBlobOperations::TGlobal::DefaultStorageId) {
+            return NPortion::EVICTED;
+        }
+        return GetMeta().GetProduced();
     }
 
     bool ValidSnapshotInfo() const {

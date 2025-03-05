@@ -10,65 +10,76 @@ class TInsertedPortion {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NOlap::TPortionAccessorConstructor>, PortionInfoConstructor);
     std::optional<NOlap::TPortionDataAccessor> PortionInfo;
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, PKBatch);
 
 public:
     const NOlap::TPortionDataAccessor& GetPortionInfo() const {
         AFL_VERIFY(PortionInfo);
         return *PortionInfo;
     }
-    TInsertedPortion(NOlap::TWritePortionInfoWithBlobsResult&& portion, const std::shared_ptr<arrow::RecordBatch>& pkBatch)
-        : PortionInfoConstructor(portion.DetachPortionConstructor())
-        , PKBatch(pkBatch) {
-        AFL_VERIFY(PKBatch);
+    TInsertedPortion(NOlap::TWritePortionInfoWithBlobsResult&& portion)
+        : PortionInfoConstructor(portion.DetachPortionConstructor()) {
     }
 
     void Finalize(TColumnShard* shard, NTabletFlatExecutor::TTransactionContext& txc);
+};
+
+class TWriteResult {
+private:
+    std::shared_ptr<NEvWrite::TWriteMeta> WriteMeta;
+    YDB_READONLY(ui64, DataSize, 0);
+    YDB_READONLY(bool, NoDataToWrite, false);
+    std::shared_ptr<arrow::RecordBatch> PKBatch;
+    ui32 RecordsCount;
+
+public:
+    const std::shared_ptr<arrow::RecordBatch>& GetPKBatchVerified() const {
+        AFL_VERIFY(PKBatch);
+        return PKBatch;
+    }
+
+    ui32 GetRecordsCount() const {
+        return RecordsCount;
+    }
+
+    const NEvWrite::TWriteMeta& GetWriteMeta() const {
+        return *WriteMeta;
+    }
+
+    NEvWrite::TWriteMeta& MutableWriteMeta() const {
+        return *WriteMeta;
+    }
+
+    const std::shared_ptr<NEvWrite::TWriteMeta>& GetWriteMetaPtr() const {
+        return WriteMeta;
+    }
+
+    TWriteResult(const std::shared_ptr<NEvWrite::TWriteMeta>& writeMeta, const ui64 dataSize, const std::shared_ptr<arrow::RecordBatch>& pkBatch,
+        const bool noDataToWrite, const ui32 recordsCount);
 };
 
 class TInsertedPortions {
 private:
-    NEvWrite::TWriteMeta WriteMeta;
+    YDB_ACCESSOR_DEF(std::vector<TWriteResult>, WriteResults);
     YDB_ACCESSOR_DEF(std::vector<TInsertedPortion>, Portions);
-    YDB_READONLY(ui64, DataSize, 0);
-    YDB_READONLY_DEF(std::vector<NOlap::TInsertWriteId>, InsertWriteIds);
+    YDB_READONLY(ui64, PathId, 0);
 
 public:
-    const NEvWrite::TWriteMeta& GetWriteMeta() const {
-        return WriteMeta;
-    }
-
-    void AddInsertWriteId(const NOlap::TInsertWriteId id) {
-        InsertWriteIds.emplace_back(id);
-    }
-
-    void Finalize(TColumnShard* shard, NTabletFlatExecutor::TTransactionContext& txc);
-
-    TInsertedPortions(const NEvWrite::TWriteMeta& writeMeta, std::vector<TInsertedPortion>&& portions, const ui64 dataSize)
-        : WriteMeta(writeMeta)
-        , Portions(std::move(portions))
-        , DataSize(dataSize) {
-        AFL_VERIFY(!WriteMeta.HasLongTxId());
-        for (auto&& i : Portions) {
-            AFL_VERIFY(i.GetPKBatch());
+    TInsertedPortions(std::vector<TWriteResult>&& writeResults, std::vector<TInsertedPortion>&& portions)
+        : WriteResults(std::move(writeResults))
+        , Portions(std::move(portions)) {
+        AFL_VERIFY(WriteResults.size());
+        std::optional<ui64> pathId;
+        for (auto&& i : WriteResults) {
+            i.GetWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
+            AFL_VERIFY(!i.GetWriteMeta().HasLongTxId());
+            if (!pathId) {
+                pathId = i.GetWriteMeta().GetTableId();
+            } else {
+                AFL_VERIFY(pathId == i.GetWriteMeta().GetTableId());
+            }
         }
-    }
-};
-
-class TFailedWrite {
-private:
-    NEvWrite::TWriteMeta WriteMeta;
-    YDB_READONLY(ui64, DataSize, 0);
-
-public:
-    const NEvWrite::TWriteMeta& GetWriteMeta() const {
-        return WriteMeta;
-    }
-
-    TFailedWrite(const NEvWrite::TWriteMeta& writeMeta, const ui64 dataSize)
-        : WriteMeta(writeMeta)
-        , DataSize(dataSize) {
-        AFL_VERIFY(!WriteMeta.HasLongTxId());
+        AFL_VERIFY(pathId);
+        PathId = *pathId;
     }
 };
 
@@ -80,24 +91,18 @@ class TEvWritePortionResult: public TEventLocal<TEvWritePortionResult, TEvPrivat
 private:
     YDB_READONLY_DEF(NKikimrProto::EReplyStatus, WriteStatus);
     YDB_READONLY_DEF(std::shared_ptr<NOlap::IBlobsWritingAction>, WriteAction);
-    std::vector<TInsertedPortions> InsertedPacks;
-    std::vector<TFailedWrite> Fails;
+    bool Detached = false;
+    TInsertedPortions InsertedData;
 
 public:
-    std::vector<TInsertedPortions>&& DetachInsertedPacks() {
-        return std::move(InsertedPacks);
-    }
-    std::vector<TFailedWrite>&& DetachFails() {
-        return std::move(Fails);
+    const TInsertedPortions& DetachInsertedData() {
+        AFL_VERIFY(!Detached);
+        Detached = true;
+        return std::move(InsertedData);
     }
 
     TEvWritePortionResult(const NKikimrProto::EReplyStatus writeStatus, const std::shared_ptr<NOlap::IBlobsWritingAction>& writeAction,
-        std::vector<TInsertedPortions>&& portions, std::vector<TFailedWrite>&& fails)
-        : WriteStatus(writeStatus)
-        , WriteAction(writeAction)
-        , InsertedPacks(portions)
-        , Fails(fails) {
-    }
+        TInsertedPortions&& insertedData);
 };
 
 }   // namespace NKikimr::NColumnShard::NPrivateEvents::NWrite

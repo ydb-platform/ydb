@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-#include <library/cpp/yt/misc/preprocessor.h>
+#include <library/cpp/yt/misc/static_initializer.h>
 
 namespace NYT::NYTree {
 
@@ -28,7 +28,7 @@ public:
     void Load(TStreamLoadContext& context);
 
 private:
-    // NB: this codes are subject to change! Do not rely on their values. Do not serialize them.
+    // NB: This codes are subject to change! Do not rely on their values. Do not serialize them.
     // Use Save/Load methods instead.
     size_t Code_;
 };
@@ -43,10 +43,7 @@ void InternAttribute(const TString& uninternedKey, TInternedAttributeKey interne
 ////////////////////////////////////////////////////////////////////////////////
 
 #define REGISTER_INTERNED_ATTRIBUTE(uninternedKey, internedKey) \
-    YT_ATTRIBUTE_USED const void* PP_ANONYMOUS_VARIABLE(RegisterInterndAttribute) = [] { \
-            ::NYT::NYTree::InternAttribute(#uninternedKey, internedKey); \
-            return nullptr; \
-        } ();
+    YT_STATIC_INITIALIZER(::NYT::NYTree::InternAttribute(#uninternedKey, internedKey));
 
 ////////////////////////////////////////////////////////////////////////////////
 

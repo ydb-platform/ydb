@@ -5,6 +5,7 @@
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/util/defs.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_factory.h>
@@ -18,6 +19,8 @@ namespace NFake {
         ui64 SectorSize = 0;
         ui64 ChunkSize = 0;
         ui64 DiskSize = 0;
+        bool FormatDisk = true;
+        TString DiskPath;
     };
 
     struct INode {
@@ -55,7 +58,8 @@ namespace NFake {
 
     // StateStorage, NodeWarden, TabletResolver, ResourceBroker, SharedPageCache
     void SetupBasicServices(TTestActorRuntime &runtime, TAppPrepare &app, bool mockDisk = false,
-                            NFake::INode *factory = nullptr, NFake::TStorage storage = {}, const NSharedCache::TSharedCacheConfig* sharedCacheConfig = nullptr, bool forceFollowers = false);
+                            NFake::INode *factory = nullptr, NFake::TStorage storage = {}, const NSharedCache::TSharedCacheConfig* sharedCacheConfig = nullptr, bool forceFollowers = false,
+                            TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies = {});
 
     ///
     class TStrandedPDiskServiceFactory : public IPDiskServiceFactory {

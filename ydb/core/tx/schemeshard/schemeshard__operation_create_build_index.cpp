@@ -1,8 +1,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
-#include "schemeshard_path_element.h"
-#include "schemeshard_utils.h"
+
+#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
@@ -25,6 +24,7 @@ TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTrans
     {
         auto outTx = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable);
         *outTx.MutableLockGuard() = tx.GetLockGuard();
+        outTx.SetInternal(tx.GetInternal());
 
         auto& snapshot = *outTx.MutableInitiateBuildIndexMainTable();
         snapshot.SetTableName(table.LeafName());
@@ -63,8 +63,12 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         checks
             .IsValidLeafName()
             .PathsLimit(2) // index and impl-table
-            .DirChildrenLimit()
-            .ShardsLimit(1); // impl-table
+            .DirChildrenLimit();
+
+        if (!tx.GetInternal()) {
+            checks
+                .ShardsLimit(1); // impl-table
+        }
 
         if (!checks) {
             return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
@@ -96,6 +100,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         *outTx.MutableLockGuard() = tx.GetLockGuard();
         outTx.MutableCreateTableIndex()->CopyFrom(indexDesc);
         outTx.MutableCreateTableIndex()->SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
+        outTx.SetInternal(tx.GetInternal());
 
         if (!indexDesc.HasType()) {
             outTx.MutableCreateTableIndex()->SetType(NKikimrSchemeOp::EIndexTypeGlobal);
@@ -107,6 +112,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     {
         auto outTx = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable);
         *outTx.MutableLockGuard() = tx.GetLockGuard();
+        outTx.SetInternal(tx.GetInternal());
 
         auto& snapshot = *outTx.MutableInitiateBuildIndexMainTable();
         snapshot.SetTableName(table.LeafName());
@@ -119,23 +125,28 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
         auto outTx = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable);
         *outTx.MutableCreateTable() = std::move(implTableDesc);
+        outTx.SetInternal(tx.GetInternal());
 
         return CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx);
     };
 
     if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        NKikimrSchemeOp::TTableDescription indexLevelTableDesc, indexPostingTableDesc;
+        const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
+        NKikimrSchemeOp::TTableDescription indexLevelTableDesc, indexPostingTableDesc, indexPrefixTableDesc;
         // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
-        if (indexDesc.IndexImplTableDescriptionsSize() == 2) {
+        if (indexDesc.IndexImplTableDescriptionsSize() == 2 + prefixVectorIndex) {
             indexLevelTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
-            indexPostingTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
+            indexPostingTableDesc = indexDesc.GetIndexImplTableDescriptions(1);
+            if (prefixVectorIndex) {
+                indexPrefixTableDesc = indexDesc.GetIndexImplTableDescriptions(2);
+            }
         }
+        const THashSet<TString> indexKeyColumns{indexDesc.GetKeyColumnNames().begin(), indexDesc.GetKeyColumnNames().end() - 1};
         result.push_back(createImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
-        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc)));
-        // TODO Maybe better to use partition from main table
-        // This tables are temporary and handled differently in apply_build_index
-        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc, NTableVectorKmeansTreeIndex::BuildPostingTableSuffix0)));
-        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc, NTableVectorKmeansTreeIndex::BuildPostingTableSuffix1)));
+        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(indexKeyColumns, tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc)));
+        if (prefixVectorIndex) {
+            result.push_back(createImplTable(CalcVectorKmeansTreePrefixImplTableDesc(indexKeyColumns, tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPrefixTableDesc)));
+        }
     } else {
         NKikimrSchemeOp::TTableDescription indexTableDesc;
         // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS

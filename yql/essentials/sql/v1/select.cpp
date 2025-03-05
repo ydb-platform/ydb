@@ -95,10 +95,11 @@ TNodePtr BuildSubquery(TSourcePtr source, const TString& alias, bool inSubquery,
 
 class TSourceNode: public INode {
 public:
-    TSourceNode(TPosition pos, TSourcePtr&& source, bool checkExist)
+    TSourceNode(TPosition pos, TSourcePtr&& source, bool checkExist, bool withTables)
         : INode(pos)
         , Source(std::move(source))
         , CheckExist(checkExist)
+        , WithTables(withTables)
     {}
 
     ISource* GetSource() override {
@@ -124,11 +125,29 @@ public:
                     Node = Y("SingleMember", Y("SqlAccess", Q("dict"), Y("Take", Node, Y("Uint64", Q("1"))), Y("Uint64", Q("0"))));
                 } else {
                     ctx.Error(Pos) << "Source used in expression should contain one concrete column";
+                    if (RefPos) {
+                        ctx.Error(*RefPos) << "Source is used here";
+                    }
+
                     return false;
                 }
             }
             src->AddDependentSource(Source.Get());
         }
+        if (Node && WithTables) {
+            TTableList tableList;
+            Source->GetInputTables(tableList);
+
+            TNodePtr inputTables(BuildInputTables(ctx.Pos(), tableList, IsSubquery(), ctx.Scoped));
+            if (!inputTables->Init(ctx, Source.Get())) {
+                return false;
+            }
+
+            auto blockContent = inputTables;
+            blockContent = L(blockContent, Y("return", Node));
+            Node = Y("block", Q(blockContent));
+        }
+
         return true;
     }
 
@@ -146,16 +165,17 @@ public:
     }
 
     TPtr DoClone() const final {
-        return new TSourceNode(Pos, Source->CloneSource(), CheckExist);
+        return new TSourceNode(Pos, Source->CloneSource(), CheckExist, WithTables);
     }
 protected:
     TSourcePtr Source;
     TNodePtr Node;
     bool CheckExist;
+    bool WithTables;
 };
 
-TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist) {
-    return new TSourceNode(pos, std::move(source), checkExist);
+TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist, bool withTables) {
+    return new TSourceNode(pos, std::move(source), checkExist, withTables);
 }
 
 class TFakeSource: public ISource {
@@ -261,10 +281,11 @@ TSourcePtr BuildFakeSource(TPosition pos, bool missingFrom, bool inSubquery) {
 
 class TNodeSource: public ISource {
 public:
-    TNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList)
+    TNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList, bool wrapByTableSource)
         : ISource(pos)
         , Node(node)
         , WrapToList(wrapToList)
+        , WrapByTableSource(wrapByTableSource)
     {
         YQL_ENSURE(Node);
         FakeSource = BuildFakeSource(pos);
@@ -292,21 +313,27 @@ public:
         if (WrapToList) {
             nodeAst = Y("ToList", nodeAst);
         }
+
+        if (WrapByTableSource) {
+            nodeAst = Y("TableSource", nodeAst);
+        }
+
         return nodeAst;
     }
 
     TPtr DoClone() const final {
-        return new TNodeSource(Pos, SafeClone(Node), WrapToList);
+        return new TNodeSource(Pos, SafeClone(Node), WrapToList, WrapByTableSource);
     }
 
 private:
     TNodePtr Node;
-    bool WrapToList;
+    const bool WrapToList;
+    const bool WrapByTableSource;
     TSourcePtr FakeSource;
 };
 
-TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList) {
-    return new TNodeSource(pos, node, wrapToList);
+TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList, bool wrapByTableSource) {
+    return new TNodeSource(pos, node, wrapToList, wrapByTableSource);
 }
 
 class IProxySource: public ISource {
@@ -327,7 +354,10 @@ protected:
     }
 
     void GetInputTables(TTableList& tableList) const override {
-        Source->GetInputTables(tableList);
+        if (Source) {
+            Source->GetInputTables(tableList);
+        }
+
         ISource::GetInputTables(tableList);
     }
 
@@ -565,6 +595,10 @@ public:
                 Node = Y("SingleMember", Y("SqlAccess", Q("dict"), Y("Take", Node, Y("Uint64", Q("1"))), Y("Uint64", Q("0"))));
             } else {
                 ctx.Error(Pos) << "Source used in expression should contain one concrete column";
+                if (RefPos) {
+                    ctx.Error(*RefPos) << "Source is used here";
+                }
+
                 return false;
             }
         }
@@ -912,7 +946,7 @@ TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service
 }
 
 static bool IsComparableExpression(TContext& ctx, const TNodePtr& expr, bool assume, const char* sqlConstruction) {
-    if (assume && !expr->GetColumnName()) {
+    if (assume && !expr->IsPlainColumn()) {
         ctx.Error(expr->GetPos()) << "Only column names can be used in " << sqlConstruction;
         return false;
     }
@@ -925,7 +959,7 @@ static bool IsComparableExpression(TContext& ctx, const TNodePtr& expr, bool ass
         ctx.Error(expr->GetPos()) << "Unable to " << sqlConstruction << " aggregated values";
         return false;
     }
-    if (expr->GetColumnName()) {
+    if (expr->IsPlainColumn()) {
         return true;
     }
     if (expr->GetOpName().empty()) {
@@ -1455,6 +1489,7 @@ public:
         const TVector<TNodePtr>& terms,
         bool distinct,
         const TVector<TNodePtr>& without,
+        bool forceWithout,
         bool selectStream,
         const TWriteSettings& settings,
         TColumnsSets&& uniqueSets,
@@ -1472,6 +1507,7 @@ public:
         , WinSpecs(winSpecs)
         , Terms(terms)
         , Without(without)
+        , ForceWithout(forceWithout)
         , Distinct(distinct)
         , LegacyHoppingWindowSpec(legacyHoppingWindowSpec)
         , SelectStream(selectStream)
@@ -1861,6 +1897,10 @@ public:
             return false;
         }
 
+        if (!ctx.SimpleColumns && Columns.QualifiedAll && !columnName.Contains('.')) {
+            return false;
+        }
+
         if (!Columns.IsColumnPossible(ctx, columnName)) {
             return true;
         }
@@ -1886,7 +1926,7 @@ public:
                 if (Source && Source->GetJoin()) {
                     name = DotJoin(*without->GetSourceName(), name);
                 }
-                terms = L(terms, Y("let", "row", Y("RemoveMember", "row", Q(name))));
+                terms = L(terms, Y("let", "row", Y(ForceWithout ? "ForceRemoveMember" : "RemoveMember", "row", Q(name))));
             }
         }
 
@@ -1903,7 +1943,7 @@ public:
         return new TSelectCore(Pos, Source->CloneSource(), CloneContainer(GroupByExpr),
                 CloneContainer(GroupBy), CompactGroupBy, GroupBySuffix, AssumeSorted, CloneContainer(OrderBy),
                 SafeClone(Having), CloneContainer(WinSpecs), SafeClone(LegacyHoppingWindowSpec),
-                CloneContainer(Terms), Distinct, Without, SelectStream, Settings, TColumnsSets(UniqueSets), TColumnsSets(DistinctSets));
+                CloneContainer(Terms), Distinct, Without, ForceWithout, SelectStream, Settings, TColumnsSets(UniqueSets), TColumnsSets(DistinctSets));
     }
 
 private:
@@ -2263,6 +2303,7 @@ private:
     TNodePtr CompositeTerms;
     TVector<TNodePtr> Terms;
     TVector<TNodePtr> Without;
+    const bool ForceWithout;
     const bool Distinct;
     bool OrderByInit = false;
     TLegacyHoppingWindowSpecPtr LegacyHoppingWindowSpec;
@@ -2677,6 +2718,7 @@ TSourcePtr DoBuildSelectCore(
     TVector<TNodePtr>&& terms,
     bool distinct,
     TVector<TNodePtr>&& without,
+    bool forceWithout,
     bool selectStream,
     const TWriteSettings& settings,
     TColumnsSets&& uniqueSets,
@@ -2684,7 +2726,7 @@ TSourcePtr DoBuildSelectCore(
 ) {
     if (groupBy.empty() || !groupBy.front()->ContentListPtr()) {
         return new TSelectCore(pos, std::move(source), groupByExpr, groupBy, compactGroupBy, groupBySuffix, assumeSorted,
-            orderBy, having, winSpecs, legacyHoppingWindowSpec, terms, distinct, without, selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
+            orderBy, having, winSpecs, legacyHoppingWindowSpec, terms, distinct, without, forceWithout, selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
     }
     if (groupBy.size() == 1) {
         /// actualy no big idea to use grouping function in this case (result allways 0)
@@ -2692,7 +2734,7 @@ TSourcePtr DoBuildSelectCore(
         source = new TNestedProxySource(pos, *contentPtr, source);
         return DoBuildSelectCore(ctx, pos, originalSource, source, groupByExpr, *contentPtr, compactGroupBy, groupBySuffix,
             assumeSorted, orderBy, having, std::move(winSpecs),
-            legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
+            legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), forceWithout, selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
     }
     /// \todo some smart merge logic, generalize common part of grouping (expr, flatten, etc)?
     TIntrusivePtr<TCompositeSelect> compositeSelect = new TCompositeSelect(pos, std::move(source), originalSource->CloneSource(), settings);
@@ -2719,7 +2761,7 @@ TSourcePtr DoBuildSelectCore(
         totalGroups += contentPtr->size();
         TSelectCore* selectCore = new TSelectCore(pos, std::move(proxySource), CloneContainer(groupByExpr),
             CloneContainer(*contentPtr), compactGroupBy, groupBySuffix, assumeSorted, orderBy, SafeClone(having), CloneContainer(winSpecs),
-            legacyHoppingWindowSpec, terms, distinct, without, selectStream, settings, TColumnsSets(uniqueSets), TColumnsSets(distinctSets));
+            legacyHoppingWindowSpec, terms, distinct, without, forceWithout, selectStream, settings, TColumnsSets(uniqueSets), TColumnsSets(distinctSets));
         subselects.emplace_back(selectCore);
     }
     if (totalGroups > ctx.PragmaGroupByLimit) {
@@ -2748,6 +2790,7 @@ TSourcePtr BuildSelectCore(
     TVector<TNodePtr>&& terms,
     bool distinct,
     TVector<TNodePtr>&& without,
+    bool forceWithout,
     bool selectStream,
     const TWriteSettings& settings,
     TColumnsSets&& uniqueSets,
@@ -2755,7 +2798,7 @@ TSourcePtr BuildSelectCore(
 )
 {
     return DoBuildSelectCore(ctx, pos, source, source, groupByExpr, groupBy, compactGroupBy, groupBySuffix, assumeSorted, orderBy,
-        having, std::move(winSpecs), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
+        having, std::move(winSpecs), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), forceWithout, selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
 }
 
 class TUnion: public IRealSource {
@@ -2800,7 +2843,11 @@ public:
     TNodePtr Build(TContext& ctx) override {
         TPtr res;
         if (QuantifierAll) {
-            res = ctx.PositionalUnionAll ? Y("UnionAllPositional") : Y("UnionAll");
+            if (ctx.EmitUnionMerge) {
+                res = ctx.PositionalUnionAll ? Y("UnionMergePositional") : Y("UnionMerge");
+            } else {
+                res = ctx.PositionalUnionAll ? Y("UnionAllPositional") : Y("UnionAll");
+            }
         } else {
             res = ctx.PositionalUnionAll ? Y("UnionPositional") : Y("Union");
         }
@@ -2848,8 +2895,8 @@ private:
 };
 
 TSourcePtr BuildUnion(
-    TPosition pos, 
-    TVector<TSourcePtr>&& sources, 
+    TPosition pos,
+    TVector<TSourcePtr>&& sources,
     bool quantifierAll,
     const TWriteSettings& settings
 ) {

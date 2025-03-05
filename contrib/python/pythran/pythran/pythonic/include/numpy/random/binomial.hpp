@@ -15,13 +15,13 @@ namespace numpy
     types::ndarray<long, pS> binomial(double n, double p, pS const &shape);
 
     auto binomial(double n, double p, long size)
-        -> decltype(binomial(n, p, types::array<long, 1>{{size}}));
+        -> decltype(binomial(n, p, types::array_tuple<long, 1>{{size}}));
 
     long binomial(double n, double p, types::none_type d = types::none_type());
 
     DEFINE_FUNCTOR(pythonic::numpy::random, binomial);
-  }
-}
+  } // namespace random
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

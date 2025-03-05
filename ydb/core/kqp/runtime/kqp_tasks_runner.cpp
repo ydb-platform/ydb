@@ -24,7 +24,7 @@ using namespace NDq;
 
 IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const TType* type,
     NUdf::IApplyContext* applyCtx, const TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TVector<IDqOutput::TPtr>&& outputs)
+    TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui8> minFillPercentage)
 {
     switch (outputDesc.GetTypeCase()) {
         case NDqProto::TTaskOutput::kRangePartition: {
@@ -62,7 +62,7 @@ IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NDqProto::TTaskOutput& outp
         }
 
         default: {
-            return DqBuildOutputConsumer(outputDesc, type, typeEnv, holderFactory, std::move(outputs));
+            return DqBuildOutputConsumer(outputDesc, type, typeEnv, holderFactory, std::move(outputs), minFillPercentage);
         }
     }
 }

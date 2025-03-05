@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/datashard/buffer_data.h>
 #include <ydb/core/tx/datashard/datashard_user_table.h>
 #include <ydb/core/tx/datashard/range_ops.h>
@@ -15,10 +16,11 @@
 
 #include <span>
 
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+// TODO(mbkkt) BUILD_INDEX_DATASHARD
+#define LOG_T(stream) LOG_TRACE_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
+#define LOG_D(stream) LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
+#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
+#define LOG_E(stream) LOG_ERROR_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
 
 namespace NKikimr::NDataShard::NKMeans {
 
@@ -47,7 +49,7 @@ Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const ui8* lhs, const ui8* rh
     return {static_cast<TRes>(ll), static_cast<TRes>(lr), static_cast<TRes>(rr)};
 }
 
-TTableRange CreateRangeFrom(const TUserTable& table, ui32 parent, TCell& from, TCell& to);
+TTableRange CreateRangeFrom(const TUserTable& table, NTableIndex::TClusterId parent, TCell& from, TCell& to);
 
 NTable::TLead CreateLeadFrom(const TTableRange& range);
 
@@ -56,7 +58,7 @@ template <typename T>
 struct TMetric {
     using TCoord = T;
     // TODO(mbkkt) maybe compute floating sum in double? Needs benchmark
-    using TSum = std::conditional_t<std::is_floating_point_v<T>, T, int64_t>;
+    using TSum = std::conditional_t<std::is_floating_point_v<T>, T, i64>;
 
     ui32 Dimensions = 0;
 
@@ -77,6 +79,7 @@ struct TMetric {
 
     void Fill(TString& d, TSum* embedding, ui64& c)
     {
+        Y_ASSERT(c > 0);
         const auto count = static_cast<TSum>(std::exchange(c, 0));
         auto data = GetData(d.MutRef().data());
         for (auto& coord : data) {
@@ -168,12 +171,14 @@ struct TMaxInnerProductSimilarity: TMetric<T> {
 
 template <typename TMetric>
 struct TCalculation: TMetric {
-    ui32 FindClosest(std::span<const TString> clusters, const char* embedding) const
+    ui32 FindClosest(std::span<const TString> clusters, TArrayRef<const char> embedding) const
     {
+        Y_DEBUG_ABORT_UNLESS(this->IsExpectedSize(embedding));
         auto min = this->Init();
         ui32 closest = std::numeric_limits<ui32>::max();
         for (size_t i = 0; const auto& cluster : clusters) {
-            auto distance = this->Distance(cluster.data(), embedding);
+            Y_DEBUG_ABORT_UNLESS(this->IsExpectedSize(cluster));
+            auto distance = this->Distance(cluster.data(), embedding.data());
             if (distance < min) {
                 min = distance;
                 closest = i;
@@ -193,17 +198,17 @@ ui32 FeedEmbedding(const TCalculation<TMetric>& calculation, std::span<const TSt
     if (!calculation.IsExpectedSize(embedding)) {
         return std::numeric_limits<ui32>::max();
     }
-    return calculation.FindClosest(clusters, embedding.data());
+    return calculation.FindClosest(clusters, embedding);
 }
 
-void AddRowMain2Build(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row);
+void AddRowMain2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row);
 
-void AddRowMain2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
+void AddRowMain2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
                         ui32 dataPos);
 
-void AddRowBuild2Build(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row);
+void AddRowBuild2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row);
 
-void AddRowBuild2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
+void AddRowBuild2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
                          ui32 dataPos);
 
 TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,
@@ -217,13 +222,13 @@ MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansReque
 void MakeScan(auto& record, const auto& createScan, const auto& badRequest)
 {
     if (!record.HasEmbeddingColumn()) {
-        badRequest(TStringBuilder() << "Should be specified embedding column");
+        badRequest("Should be specified embedding column");
         return;
     }
 
     const auto& settings = record.GetSettings();
     if (settings.vector_dimension() < 1) {
-        badRequest(TStringBuilder() << "Dimension of vector should be at least one");
+        badRequest("Dimension of vector should be at least one");
         return;
     }
 

@@ -239,7 +239,7 @@ public:
                     || replyStatus == NKikimrProto::CORRUPTED) {
                 DSP_LOG_DEBUG_SX(logCtx, "BPG60", "Got# " << NKikimrProto::EReplyStatus_Name(replyStatus).data()
                     << " orderNumber# " << orderNumber << " vDiskId# " << vdisk.ToString());
-                Blackboard.AddErrorResponse(blobId, orderNumber);
+                Blackboard.AddErrorResponse(blobId, orderNumber, record.GetErrorReason());
                 AtLeastOneResponseWasNotOk = true;
             } else if (replyStatus == NKikimrProto::NOT_YET) {
                 DSP_LOG_DEBUG_SX(logCtx, "BPG67", "Got# NOT_YET orderNumber# " << orderNumber

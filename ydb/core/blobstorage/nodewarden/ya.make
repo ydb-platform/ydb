@@ -6,6 +6,7 @@ SRCS(
     distconf.cpp
     distconf.h
     distconf_binding.cpp
+    distconf_console.cpp
     distconf_dynamic.cpp
     distconf_generate.cpp
     distconf_fsm.cpp
@@ -40,7 +41,7 @@ PEERDIR(
     ydb/core/blobstorage/crypto
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/pdisk
-    ydb/core/control
+    ydb/core/control/lib
     ydb/library/pdisk_io
     ydb/library/yaml_config
     ydb/core/util/actorsys_test

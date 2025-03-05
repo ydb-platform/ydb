@@ -331,7 +331,7 @@
               "+(DS|RA):METADATA-READERS",
               "+(SR):DATA-READERS",
               "+(UR|ER):DATA-WRITERS",
-              "+(CD|CT|WA|AS|RS):DDL-ADMINS",
+              "+(CD|CT|CQ|WA|AS|RS):DDL-ADMINS",
               "+(GAR):ACCESS-ADMINS",
               "+(CDB|DDB):DATABASE-ADMINS"
             ],
@@ -655,6 +655,61 @@
           "AvailabilityDomains":
             [
               1
+            ]
+        },
+      "DefineHostConfig":
+        [
+          {
+            "Drive":
+              [
+                {
+                  "Path":"/dev/disk/by-partlabel/kikimr_nvme_01",
+                  "Type":"SSD"
+                },
+                {
+                  "Path":"/dev/disk/by-partlabel/kikimr_nvme_02",
+                  "Type":"SSD"
+                },
+                {
+                  "Path":"/dev/disk/by-partlabel/kikimr_nvme_03",
+                  "Type":"SSD"
+                },
+                {
+                  "Path":"/dev/disk/by-partlabel/kikimr_nvme_04",
+                  "Type":"SSD"
+                }
+              ]
+          }
+        ],
+      "DefineBox":
+        {
+          "BoxId":1,
+          "Host":
+            [
+              {
+                "EnforcedNodeId":1
+              },
+              {
+                "EnforcedNodeId":2
+              },
+              {
+                "EnforcedNodeId":3
+              },
+              {
+                "EnforcedNodeId":4
+              },
+              {
+                "EnforcedNodeId":5
+              },
+              {
+                "EnforcedNodeId":6
+              },
+              {
+                "EnforcedNodeId":7
+              },
+              {
+                "EnforcedNodeId":8
+              }
             ]
         }
     },

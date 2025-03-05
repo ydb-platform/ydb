@@ -1,4 +1,6 @@
 #include "sensor_service.h"
+
+#include "config.h"
 #include "cube.h"
 #include "exporter.h"
 #include "registry.h"
@@ -135,6 +137,9 @@ public:
         , RootSensorServiceImpl_(New<TSensorServiceImpl>(/*name*/ std::string(), Registry_.Get(), &Exporter_->Lock_))
         , Root_(GetEphemeralNodeFactory(/*shouldHideAttributes*/ true)->CreateMap())
         , SensorTreeUpdateDuration_(Registry_->GetSelfProfiler().Timer("/sensor_service_tree_update_duration"))
+    { }
+
+    void Initialize()
     {
         UpdateSensorTreeExecutor_ = New<TPeriodicExecutor>(
             Exporter_->ControlQueue_->GetInvoker(),
@@ -270,10 +275,12 @@ IYPathServicePtr CreateSensorService(
     TSolomonRegistryPtr registry,
     TSolomonExporterPtr exporter)
 {
-    return New<TSensorService>(
+    auto service = New<TSensorService>(
         std::move(config),
         std::move(registry),
         std::move(exporter));
+    service->Initialize();
+    return service;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

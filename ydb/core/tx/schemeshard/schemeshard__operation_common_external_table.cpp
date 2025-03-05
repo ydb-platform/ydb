@@ -2,6 +2,8 @@
 
 #include <ydb/core/scheme/scheme_types_proto.h>
 
+#include <yql/essentials/minikql/mkql_type_ops.h>
+
 #include <utility>
 
 namespace NKikimr::NSchemeShard::NExternalTable {

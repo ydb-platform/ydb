@@ -204,6 +204,12 @@ struct TEvKqp {
         Ydb::StatusIds::StatusCode Status;
         NYql::TIssues Issues;
     };
+
+    struct TEvProxyPingRequest : public TEventLocal<TEvProxyPingRequest, TKqpEvents::EvProxyPingRequest> {
+    };
+
+    struct TEvProxyPingResponse : public TEventLocal<TEvProxyPingResponse, TKqpEvents::EvProxyPingResponse> {
+    };
 };
 
 } // namespace NKikimr::NKqp

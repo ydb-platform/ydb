@@ -18,7 +18,7 @@ namespace builtins
     {
       return f.isatty();
     }
-  }
-}
+  } // namespace file
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

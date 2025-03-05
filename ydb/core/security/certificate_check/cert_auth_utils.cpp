@@ -246,7 +246,7 @@ X509Ptr GenerateSelfSignedCertificate(PKeyPtr& pkey, const TProps& props) {
 
 
     /* Actually sign the certificate with our key. */
-    errNo = X509_sign(x509.get(), pkey.get(), EVP_sha1());
+    errNo = X509_sign(x509.get(), pkey.get(), EVP_sha256());
     CHECK(errNo, "Error signing certificate.");
 
     return std::move(x509);
@@ -438,7 +438,7 @@ X509Ptr SignRequest(X509REQPtr& request, X509Ptr& rootCert, PKeyPtr& rootKey, co
     }
 
     /* Actually sign the certificate with our key. */
-    errNo = X509_sign(x509.get(), rootKey.get(), EVP_sha1());
+    errNo = X509_sign(x509.get(), rootKey.get(), EVP_sha256());
     CHECK(errNo, "Error signing certificate.");
 
     pktmp = nullptr;

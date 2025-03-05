@@ -71,7 +71,10 @@ public:
         return false;
     }
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver /*waitTimeObserver*/) override
+    void SubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
+    { }
+
+    void UnsubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
     { }
 
     ~TBucket();
@@ -80,7 +83,6 @@ public:
     TWeakPtr<TFairShareQueue> Parent;
     TRingQueue<TEnqueuedAction> Queue;
     THeapItem* HeapIterator = nullptr;
-    i64 WaitTime = 0;
 
     TCpuDuration ExcessTime = 0;
     int CurrentExecutions = 0;
@@ -261,10 +263,10 @@ public:
 
         auto tscp = NProfiling::TTscp::Get();
 
-        TBucketPtr bucket;
+        i64 waitTime = 0;
         {
             auto guard = Guard(SpinLock_);
-            bucket = GetStarvingBucket(action, tscp);
+            auto bucket = GetStarvingBucket(action, tscp);
 
             if (!bucket) {
                 return false;
@@ -276,12 +278,12 @@ public:
             threadState.AccountedAt = tscp.Instant;
 
             action->StartedAt = tscp.Instant;
-            bucket->WaitTime = action->StartedAt - action->EnqueuedAt;
+            waitTime = action->StartedAt - action->EnqueuedAt;
         }
 
         YT_ASSERT(action && !action->Finished);
 
-        WaitTimeCounter_.Record(CpuDurationToDuration(bucket->WaitTime));
+        WaitTimeCounter_.Record(CpuDurationToDuration(waitTime));
         return true;
     }
 
@@ -475,8 +477,8 @@ public:
     TFairShareThread(
         TFairShareQueuePtr queue,
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-        const TString& threadGroupName,
-        const TString& threadName,
+        const std::string& threadGroupName,
+        const std::string& threadName,
         NThreading::EThreadPriority threadPriority,
         int index)
         : TSchedulerThread(
@@ -518,13 +520,13 @@ class TFairShareThreadPool
 public:
     TFairShareThreadPool(
         int threadCount,
-        const TString& threadNamePrefix)
+        const std::string& threadNamePrefix)
         : TThreadPoolBase(threadNamePrefix)
         , Queue_(New<TFairShareQueue>(
             CallbackEventCount_,
             GetThreadTags(ThreadNamePrefix_)))
     {
-        Configure(threadCount);
+        SetThreadCount(threadCount);
         EnsureStarted();
     }
 
@@ -533,9 +535,9 @@ public:
         Shutdown();
     }
 
-    void Configure(int threadCount) override
+    void SetThreadCount(int threadCount) override
     {
-        TThreadPoolBase::Configure(threadCount);
+        TThreadPoolBase::SetThreadCount(threadCount);
     }
 
     IInvokerPtr GetInvoker(const TFairShareThreadPoolTag& tag) override
@@ -560,10 +562,10 @@ private:
         TThreadPoolBase::DoShutdown();
     }
 
-    void DoConfigure(int threadCount) override
+    void DoSetThreadCount(int threadCount) override
     {
         Queue_->Configure(threadCount);
-        TThreadPoolBase::DoConfigure(threadCount);
+        TThreadPoolBase::DoSetThreadCount(threadCount);
     }
 
     TSchedulerThreadPtr SpawnThread(int index) override
@@ -584,7 +586,7 @@ private:
 
 IFairShareThreadPoolPtr CreateFairShareThreadPool(
     int threadCount,
-    const TString& threadNamePrefix)
+    const std::string& threadNamePrefix)
 {
     return New<TFairShareThreadPool>(
         threadCount,

@@ -11,7 +11,7 @@
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/utils/resetable_setting.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/manager/abstract.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
@@ -19,6 +19,7 @@
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
@@ -44,6 +45,7 @@ namespace NKikimr {
 namespace NKikimrReplication {
     class TOAuthToken;
     class TStaticCredentials;
+    class TConsistencySettings_TGlobalConsistency;
 }
 
 namespace NYql {
@@ -204,6 +206,10 @@ struct TIndexDescription {
                 return true;
         }
     }
+
+    std::span<const std::string_view> GetImplTables() const {
+        return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
+    }
 };
 
 struct TColumnFamily {
@@ -221,9 +227,14 @@ struct TTtlSettings {
         Nanoseconds = 4,
     };
 
+    struct TTier {
+        TDuration ApplyAfter;
+        std::optional<TString> StorageName;
+    };
+
     TString ColumnName;
-    TDuration ExpireAfter;
     TMaybe<EUnit> ColumnUnit;
+    std::vector<TTier> Tiers;
 
     static bool TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSettings& settings, TString& error);
 };
@@ -241,7 +252,6 @@ struct TTableSettings {
     TMaybe<TString> KeyBloomFilter;
     TMaybe<TString> ReadReplicasSettings;
     TResetableSetting<TTtlSettings, void> TtlSettings;
-    TResetableSetting<TString, void> Tiering;
     TMaybe<TString> PartitionByHashFunction;
     TMaybe<TString> StoreExternalBlobs;
 
@@ -463,6 +473,8 @@ struct TViewPersistedData {
 };
 
 struct TKikimrTableMetadata : public TThrRefBase {
+    TIntrusivePtr<TKikimrTableMetadata> Next;
+
     bool DoesExist = false;
     TString Cluster;
     TString Name;
@@ -489,15 +501,17 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TVector<TString> KeyColumnNames;
     TVector<TString> ColumnOrder;
 
-    // Indexes and SecondaryGlobalIndexMetadata must be in same order
+    // Indexes and ImplTables must be in same order
     TVector<TIndexDescription> Indexes;
-    TVector<TIntrusivePtr<TKikimrTableMetadata>> SecondaryGlobalIndexMetadata;
+    TVector<TIntrusivePtr<TKikimrTableMetadata>> ImplTables;
 
     TVector<TColumnFamily> ColumnFamilies;
     TTableSettings TableSettings;
 
     TExternalSource ExternalSource;
     TViewPersistedData ViewPersistedData;
+
+    TVector<TString> PartitionedByColumns;
 
     TKikimrTableMetadata(const TString& cluster, const TString& table)
         : Cluster(cluster)
@@ -531,13 +545,27 @@ struct TKikimrTableMetadata : public TThrRefBase {
             orderMap.emplace(col.GetId(), col.GetName());
         }
 
-        Indexes.reserve(message->GetIndexes().size());
-        for(auto& index: message->GetIndexes())
-            Indexes.push_back(TIndexDescription(&index));
+        const auto indexesCount = message->GetIndexes().size();
+        Indexes.reserve(indexesCount);
+        for(auto& index: message->GetIndexes()) {
+            Indexes.emplace_back(&index);
+        }
 
-        SecondaryGlobalIndexMetadata.reserve(message->GetSecondaryGlobalIndexMetadata().size());
-        for(auto& sgim: message->GetSecondaryGlobalIndexMetadata())
-           SecondaryGlobalIndexMetadata.push_back(MakeIntrusive<TKikimrTableMetadata>(&sgim));
+        auto it = message->GetSecondaryGlobalIndexMetadata().begin();
+        ImplTables.reserve(indexesCount);
+        for(int i = 0; i < indexesCount; ++i) {
+            decltype(ImplTables)::value_type* implTable = nullptr;
+            for (const auto& _ : Indexes[i].GetImplTables()) {
+                YQL_ENSURE(it != message->GetSecondaryGlobalIndexMetadata().end());
+                if (implTable) {
+                    (*implTable)->Next = MakeIntrusive<TKikimrTableMetadata>(&*it++);
+                    implTable = &(*implTable)->Next;
+                } else {
+                    implTable = &ImplTables.emplace_back(MakeIntrusive<TKikimrTableMetadata>(&*it++));
+                }
+            }
+        }
+        YQL_ENSURE(it == message->GetSecondaryGlobalIndexMetadata().end());
 
         ColumnOrder.reserve(Columns.size());
         for(auto& [_, name]: orderMap) {
@@ -603,8 +631,12 @@ struct TKikimrTableMetadata : public TThrRefBase {
             index.ToMessage(message->AddIndexes());
         }
 
-        for(auto& IndexTableMetadata: SecondaryGlobalIndexMetadata) {
-            IndexTableMetadata->ToMessage(message->AddSecondaryGlobalIndexMetadata());
+        for(auto implTable: ImplTables) {
+            YQL_ENSURE(implTable);
+            do {
+                implTable->ToMessage(message->AddSecondaryGlobalIndexMetadata());
+                implTable = implTable->Next;
+            } while (implTable);
         }
     }
 
@@ -614,17 +646,22 @@ struct TKikimrTableMetadata : public TThrRefBase {
         return proto.SerializeAsString();
     }
 
-    std::pair<TIntrusivePtr<TKikimrTableMetadata>, TIndexDescription::EIndexState> GetIndexMetadata(const TString& indexName) const {
+    std::pair<TIntrusivePtr<TKikimrTableMetadata>, const TIndexDescription*> GetIndex(std::string_view indexName) const {
         YQL_ENSURE(Indexes.size(), "GetIndexMetadata called for table without indexes");
-        YQL_ENSURE(Indexes.size() == SecondaryGlobalIndexMetadata.size(), "index metadata has not been loaded yet");
+        YQL_ENSURE(Indexes.size() == ImplTables.size(), "index metadata has not been loaded yet");
         for (size_t i = 0; i < Indexes.size(); i++) {
             if (Indexes[i].Name == indexName) {
-                auto metadata = SecondaryGlobalIndexMetadata[i];
-                YQL_ENSURE(metadata, "unexpected empty metadata for index " << indexName);
-                return {metadata, Indexes[i].State};
+                auto implTable = ImplTables[i];
+                YQL_ENSURE(implTable, "unexpected empty metadata for index " << indexName);
+                return {std::move(implTable), &Indexes[i]};
             }
         }
-        return {nullptr, TIndexDescription::EIndexState::Invalid};
+        return {nullptr, nullptr};
+    }
+
+    std::pair<TIntrusivePtr<TKikimrTableMetadata>, TIndexDescription::EIndexState> GetIndexMetadata(std::string_view indexName) const {
+        auto [implTable, index] = GetIndex(indexName);
+        return {std::move(implTable), index ? index->State : TIndexDescription::EIndexState::Invalid};
     }
 
     bool IsOlap() const {
@@ -635,7 +672,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
 struct TCreateUserSettings {
     TString UserName;
     TString Password;
-    bool PasswordEncrypted = false;
+    bool IsHashedPassword = false;
+    bool CanLogin;
 };
 
 struct TModifyPermissionsSettings {
@@ -653,8 +691,9 @@ struct TModifyPermissionsSettings {
 
 struct TAlterUserSettings {
     TString UserName;
-    TString Password;
-    bool PasswordEncrypted = false;
+    std::optional<TString> Password;
+    bool IsHashedPassword = false;
+    std::optional<bool> CanLogin;
 };
 
 struct TDropUserSettings {
@@ -699,6 +738,7 @@ struct TCreateTableStoreSettings {
     TVector<TString> KeyColumnNames;
     TVector<TString> ColumnOrder;
     TVector<TIndexDescription> Indexes;
+    TVector<TColumnFamily> ColumnFamilies;
 };
 
 struct TAlterTableStoreSettings {
@@ -739,6 +779,8 @@ struct TSequenceSettings {
     TMaybe<bool> Cycle;
     TMaybe<TString> OwnedBy;
     TMaybe<TString> DataType;
+    TMaybe<bool> Restart;
+    TMaybe<i64> RestartValue;
 };
 
 struct TCreateSequenceSettings {
@@ -764,16 +806,7 @@ struct TDropExternalTableSettings {
     TString ExternalTable;
 };
 
-struct TReplicationSettings {
-    struct TStateDone {
-        enum class EFailoverMode: ui32 {
-            Consistent = 1,
-            Force = 2,
-        };
-
-        EFailoverMode FailoverMode;
-    };
-
+struct TReplicationSettingsBase {
     struct TOAuthToken {
         TString Token;
         TString TokenSecretName;
@@ -789,12 +822,32 @@ struct TReplicationSettings {
         void Serialize(NKikimrReplication::TStaticCredentials& proto) const;
     };
 
+    struct TStateDone {
+        enum class EFailoverMode: ui32 {
+            Consistent = 1,
+            Force = 2,
+        };
+
+        EFailoverMode FailoverMode;
+    };
+
     TMaybe<TString> ConnectionString;
     TMaybe<TString> Endpoint;
     TMaybe<TString> Database;
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
     TMaybe<TStateDone> StateDone;
+
+    using EFailoverMode = TStateDone::EFailoverMode;
+    TStateDone& EnsureStateDone(EFailoverMode mode = EFailoverMode::Consistent) {
+        if (!StateDone) {
+            StateDone = TStateDone{
+                .FailoverMode = mode,
+            };
+        }
+
+        return *StateDone;
+    }
 
     TOAuthToken& EnsureOAuthToken() {
         if (!OAuthToken) {
@@ -811,16 +864,35 @@ struct TReplicationSettings {
 
         return *StaticCredentials;
     }
+};
 
-    using EFailoverMode = TStateDone::EFailoverMode;
-    TStateDone& EnsureStateDone(EFailoverMode mode = EFailoverMode::Consistent) {
-        if (!StateDone) {
-            StateDone = TStateDone{
-                .FailoverMode = mode,
-            };
+struct TReplicationSettings : public TReplicationSettingsBase {
+
+    struct TRowConsistency {};
+
+    struct TGlobalConsistency {
+        TDuration CommitInterval;
+
+        void Serialize(NKikimrReplication::TConsistencySettings_TGlobalConsistency& proto) const;
+    };
+
+    TMaybe<TRowConsistency> RowConsistency;
+    TMaybe<TGlobalConsistency> GlobalConsistency;
+
+    TRowConsistency& EnsureRowConsistency() {
+        if (!RowConsistency) {
+            RowConsistency = TRowConsistency();
         }
 
-        return *StateDone;
+        return *RowConsistency;
+    }
+
+    TGlobalConsistency& EnsureGlobalConsistency() {
+        if (!GlobalConsistency) {
+            GlobalConsistency = TGlobalConsistency();
+        }
+
+        return *GlobalConsistency;
     }
 };
 
@@ -836,6 +908,26 @@ struct TAlterReplicationSettings {
 };
 
 struct TDropReplicationSettings {
+    TString Name;
+    bool Cascade = false;
+};
+
+struct TTransferSettings : public TReplicationSettingsBase {
+};
+
+struct TCreateTransferSettings {
+    TString Name;
+    TVector<std::tuple<TString, TString, TString>> Targets;
+    TTransferSettings Settings;
+};
+
+struct TAlterTransferSettings {
+    TString Name;
+    TString TranformLambda;
+    TTransferSettings Settings;
+};
+
+struct TDropTransferSettings {
     TString Name;
     bool Cascade = false;
 };
@@ -872,6 +964,10 @@ struct TDropBackupCollectionSettings {
     TString Name;
     TString Prefix;
     bool Cascade = false;
+};
+
+struct TBackupSettings {
+    TString Name;
 };
 
 struct TKikimrListPathItem {
@@ -1056,6 +1152,12 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropReplication(const TString& cluster, const TDropReplicationSettings& settings) = 0;
 
+    virtual NThreading::TFuture<TGenericResult> CreateTransfer(const TString& cluster, const TCreateTransferSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> AlterTransfer(const TString& cluster, const TAlterTransferSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> DropTransfer(const TString& cluster, const TDropTransferSettings& settings) = 0;
+
     virtual NThreading::TFuture<TGenericResult> ModifyPermissions(const TString& cluster, const TModifyPermissionsSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateBackupCollection(const TString& cluster, const TCreateBackupCollectionSettings& settings) = 0;
@@ -1063,6 +1165,12 @@ public:
     virtual NThreading::TFuture<TGenericResult> AlterBackupCollection(const TString& cluster, const TAlterBackupCollectionSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropBackupCollection(const TString& cluster, const TDropBackupCollectionSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> Backup(const TString& cluster, const TBackupSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> BackupIncremental(const TString& cluster, const TBackupSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> Restore(const TString& cluster, const TBackupSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateUser(const TString& cluster, const TCreateUserSettings& settings) = 0;
 
@@ -1117,6 +1225,8 @@ public:
     virtual TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() = 0;
 
     virtual NThreading::TFuture<TExecuteLiteralResult> ExecuteLiteral(const TString& program, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) = 0;
+
+    virtual TExecuteLiteralResult ExecuteLiteralInstant(const TString& program, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) = 0;
 
 public:
     using TCreateDirFunc = std::function<void(const TString&, const TString&, NThreading::TPromise<TGenericResult>)>;

@@ -170,6 +170,11 @@ void TTopicPartitionOperations::SetTabletId(ui64 value)
     TabletId_ = value;
 }
 
+TMaybe<TString> TTopicPartitionOperations::GetTopicName() const
+{
+    return Topic_;
+}
+
 bool TTopicPartitionOperations::HasReadOperations() const
 {
     return !Operations_.empty();
@@ -391,6 +396,17 @@ TSet<ui64> TTopicOperations::GetSendingTabletIds() const
         ids.insert(operations.GetTabletId());
     }
     return ids;
+}
+
+TMaybe<TString> TTopicOperations::GetTabletName(ui64 tabletId) const {
+    TMaybe<TString> topic;
+    for (auto& [_, operations] : Operations_) {
+        if (operations.GetTabletId() == tabletId) {
+            topic = operations.GetTopicName();
+            break;
+        }
+    }
+    return topic;
 }
 
 size_t TTopicOperations::GetSize() const

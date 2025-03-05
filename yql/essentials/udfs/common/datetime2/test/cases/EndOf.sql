@@ -33,15 +33,29 @@ select $format(cast($tsAbove || ',Atlantic/Madeira' as TzTimestamp))
     , $format(DateTime::EndOfMonth(cast($tsAbove || ',Atlantic/Madeira' as TzTimestamp)))
 into result `Timestamp above maximum`;
 
-select
-    $format(DateTime::EndOfYear(`tztimestamp`)),
-    $format(DateTime::EndOfQuarter(`tztimestamp`)),
-    $format(DateTime::EndOfMonth(`tztimestamp`)),
-    $format(DateTime::EndOfWeek(`tztimestamp`)),
-    $format(DateTime::EndOfDay(`tztimestamp`)),
-from (
-    select
-        cast(ftztimestamp as TzTimestamp) as `tztimestamp`
-    from Input
-)
-into result `Other cases`;
+$check = ($arg) -> {
+    return <|
+        soyear:    DateTime::EndOfYear($arg),
+        soquarter: DateTime::EndOfQuarter($arg),
+        somonth:   DateTime::EndOfMonth($arg),
+        soweek:    DateTime::EndOfWeek($arg),
+        soday:     DateTime::EndOfDay($arg),
+        sopt13h:   DateTime::EndOf($arg, Interval("PT13H")),
+        sopt4h:    DateTime::EndOf($arg, Interval("PT4H")),
+        sopt15m:   DateTime::EndOf($arg, Interval("PT15M")),
+        sopt20s:   DateTime::EndOf($arg, Interval("PT20S")),
+        sopt7s:    DateTime::EndOf($arg, Interval("PT7S")),
+    |>
+};
+
+$typeDispatcher = ($row) -> {
+    $tm = $row.tm;
+    return <|
+        explicit: $check(DateTime::Split($tm)),
+        implicit: $check($tm),
+    |>;
+};
+
+$input = SELECT CAST(ftztimestamp as TzTimestamp) as tm FROM Input;
+
+PROCESS $input USING $typeDispatcher(TableRow()) into result `Other cases`;

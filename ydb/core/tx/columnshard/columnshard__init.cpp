@@ -1,7 +1,6 @@
 #include "columnshard_impl.h"
 #include "columnshard_private_events.h"
 #include "columnshard_schema.h"
-#include "columnshard_ttl.h"
 
 #include "bg_tasks/adapter/adapter.h"
 #include "bg_tasks/manager/manager.h"
@@ -17,6 +16,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
 #include <ydb/core/tx/columnshard/transactions/locks_db.h>
+#include <ydb/core/tx/tiering/manager.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -69,6 +69,7 @@ std::shared_ptr<ITxReader> TTxInit::BuildReader() {
     result->AddChildren(std::make_shared<NLoading::TBackgroundSessionsInitializer>("bg_sessions", Self));
     result->AddChildren(std::make_shared<NLoading::TSharingSessionsInitializer>("sharing_sessions", Self));
     result->AddChildren(std::make_shared<NLoading::TInFlightReadsInitializer>("in_flight_reads", Self));
+    result->AddChildren(std::make_shared<NLoading::TTiersManagerInitializer>("tiers_manager", Self));
     return result;
 }
 
@@ -104,9 +105,14 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
 void TTxInit::Complete(const TActorContext& ctx) {
     Self->Counters.GetCSCounters().Initialization.OnTxInitFinished(TMonotonic::Now() - StartInstant);
-    Self->ProgressTxController->OnTabletInit();
-    Self->SwitchToWork(ctx);
-    NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*Self);
+    AFL_VERIFY(!Self->IsTxInitFinished);
+    Self->IsTxInitFinished = true;
+    Self->TrySwitchToWork(ctx);
+    if (Self->SpaceWatcher->SubDomainPathId) {
+        Self->SpaceWatcher->StartWatchingSubDomainPathId();
+    } else {
+        Self->SpaceWatcher->StartFindSubDomainPathId();
+    }
 }
 
 class TTxUpdateSchema: public TTransactionBase<TColumnShard> {
@@ -177,6 +183,7 @@ class TTxApplyNormalizer: public TTransactionBase<TColumnShard> {
 public:
     TTxApplyNormalizer(TColumnShard* self, NOlap::INormalizerChanges::TPtr changes)
         : TBase(self)
+        , IsDryRun(self->NormalizerController.GetNormalizer()->GetIsDryRun())
         , Changes(changes) {
     }
 
@@ -187,6 +194,7 @@ public:
     }
 
 private:
+    const bool IsDryRun;
     bool NormalizerFinished = false;
     NOlap::INormalizerChanges::TPtr Changes;
 };
@@ -194,9 +202,12 @@ private:
 bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&) {
     NActors::TLogContextGuard gLogging =
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "TTxApplyNormalizer::Execute");
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Execute")("details", Self->NormalizerController.DebugString());
-    if (!Changes->ApplyOnExecute(txc, Self->NormalizerController)) {
-        return false;
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Execute")("details", Self->NormalizerController.DebugString())(
+        "dry_run", IsDryRun);
+    if (!IsDryRun) {
+        if (!Changes->ApplyOnExecute(txc, Self->NormalizerController)) {
+            return false;
+        }
     }
 
     if (Self->NormalizerController.GetNormalizer()->DecActiveCounters() == 0) {
@@ -211,9 +222,14 @@ void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())(
         "event", "TTxApplyNormalizer::Complete");
     AFL_VERIFY(!Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "apply_normalizer_changes")(
-        "details", Self->NormalizerController.DebugString())("size", Changes->GetSize());
-    Changes->ApplyOnComplete(Self->NormalizerController);
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "apply_normalizer_changes")("details", Self->NormalizerController.DebugString())(
+        "size", Changes->GetSize())("dry_run", IsDryRun);
+    if (IsDryRun) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "normalizer_changes_dry_run")(
+            "normalizer", Self->NormalizerController.GetNormalizer()->GetClassName())("changes", Changes->DebugString());
+    } else {
+        Changes->ApplyOnComplete(Self->NormalizerController);
+    }
     if (!NormalizerFinished) {
         return;
     }
@@ -258,7 +274,7 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
         }
     }
     {
-        NOlap::TNormalizationController::TInitContext initCtx(Self->Info());
+        NOlap::TNormalizationController::TInitContext initCtx(Self->Info(), Self->TabletID(), Self->SelfId());
         Self->NormalizerController.InitNormalizers(initCtx);
     }
 

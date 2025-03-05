@@ -51,7 +51,7 @@
   TDriver driver(driverConfig);
   ```
 
-  В этом примере используется аутентификационный токен, сохранённый в переменной окружения `YDB_TOKEN`. Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../concepts/auth.md).
+  В этом примере используется аутентификационный токен, сохранённый в переменной окружения `YDB_TOKEN`. Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
 
   Фрагмент кода приложения для создания клиента:
 
@@ -77,7 +77,7 @@
 
   В этом примере используется вспомогательный метод `CloudAuthHelper.getAuthProviderFromEnviron()`, получающий токен из переменных окружения.
   Например, `YDB_ACCESS_TOKEN_CREDENTIALS`.
-  Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../concepts/auth.md).
+  Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
 
   Клиент сервиса топиков ([исходный код](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/TopicClient.java#L34)) работает поверх транспорта {{ ydb-short-name }} и отвечает как за управляющие операции с топиками, так и за создание писателей и читателей.
 
@@ -840,6 +840,23 @@
   List<MetadataItem> metadata = message.getMetadataItems();
   ```
 
+- Python
+
+  Для использования функции передачи метаданных создайте объект `TopicWriterMessage` с аргументом `metadata_items`, как показано ниже:
+
+  ```python
+  message = ydb.TopicWriterMessage(data=f"message-data", metadata_items={"meta-key": "meta-value"})
+  writer.write(message)
+  ```
+
+  Во время чтения метаданные можно получить из поля `metadata_items` объекта `PublicMessage`:
+
+  ```python
+  message = reader.receive_message()
+  for meta_key, meta_value in message.metadata_items.items():
+      print(f"{meta_key}: {meta_value}")
+  ```
+
 {% endlist %}
 
 ### Запись в транзакции {#write-tx}
@@ -1393,7 +1410,11 @@
   }
   ```
 
+  По умолчанию `Commit` — это быстрый вызов: сохраняет данные во внутреннем буфере и сразу возвращает управление, а реальная отправка происходит позже. Поэтому, чтобы не терять последние коммиты перед выходом из программы, читателя нужно закрывать явно с помощью вызова `Reader.Close()`.
+
 - Python
+
+  `commit` - это быстрый вызов: сохраняет данные во внутреннем буфере и сразу возвращает управление, а реальная отправка происходит позже. Поэтому, чтобы не терять последние коммиты перед выходом из программы, читателя нужно закрывать явно.
 
   ```python
   while True:
@@ -1401,6 +1422,8 @@
       process(message)
       reader.commit(message)
   ```
+
+  `commit` - это быстрый вызов: сохраняет данные во внутреннем буфере и сразу возвращает управление, а реальная отправка происходит позже. Поэтому, чтобы не терять последние коммиты перед выходом из программы, читателя нужно закрывать явно.
 
 - Java
 
@@ -1464,6 +1487,8 @@
   }
   ```
 
+  По умолчанию `Commit` - это быстрый вызов: сохраняет данные во внутреннем буфере и сразу возвращает управление, а реальная отправка происходит позже. Поэтому, чтобы не терять последние коммиты перед выходом из программы, читателя нужно закрывать явно.
+
 - Python
 
   ```python
@@ -1472,6 +1497,8 @@
     process(batch)
     reader.commit(batch)
   ```
+
+  `commit` - это быстрый вызов: сохраняет данные во внутреннем буфере и сразу возвращает управление, а реальная отправка происходит позже. Поэтому, чтобы не терять последние коммиты перед выходом из программы, читателя нужно закрывать явно.
 
 - Java (sync)
 
@@ -1971,5 +1998,58 @@
   Если клиент подтверждает обработку сообщений (коммит), то сигналом завершения обработки сообщений из партиции будет подтверждение обработки последнего сообщения этой партиции. В случае, если клиент не подтверждает обработку сообщений, сервер будет периодически прерывать чтение из партиции и переключаться на чтение в другой сессии (если существуют другие сессии, готовые обрабатывать партицию). Это будет продолжаться до тех пор, пока чтение не [начнётся](#client-commit) с конца партиции.
 
   Рекомендуется проверять корректность обработки мягкого прерывания чтения: клиент должен обработать полученные сообщения, подтвердить их обработку (коммит) или сохранить позицию чтения в своей базе, и только после этого вызывать `Confirm()` для события `TStopPartitionSessionEvent`.
+
+- Python
+
+  Включение автомасштабирования топика во время его создания производится с помощью аргумента `auto_partitioning_settings` у `create_topic`:
+
+  ```python
+      driver.topic_client.create_topic(
+          topic,
+          consumers=[consumer],
+          min_active_partitions=10,
+          max_active_partitions=100,
+          auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
+              strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
+              up_utilization_percent=80,
+              down_utilization_percent=20,
+              stabilization_window=datetime.timedelta(seconds=300),
+          ),
+      )
+  ```
+
+  Внесение изменений в существующий топик производится с помощью аргумента `alter_auto_partitioning_settings` у `alter_topic`:
+
+  ```python
+      driver.topic_client.alter_topic(
+          topic_path,
+          alter_auto_partitioning_settings=ydb.TopicAlterAutoPartitioningSettings(
+              set_strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
+              set_up_utilization_percent=80,
+              set_down_utilization_percent=20,
+              set_stabilization_window=datetime.timedelta(seconds=300),
+          ),
+      )
+  ```
+
+  SDK поддерживает два режима чтения топиков с включенным автомасштабированием: режим полной поддержки и режим совместимости. Режим чтения задаётся аргументом `auto_partitioning_support` во время создания читателя. По умолчанию используется режим полной поддержки.
+
+  ```python
+  reader = driver.topic_client.reader(
+      topic,
+      consumer,
+      auto_partitioning_support=True, # Full support is enabled
+  )
+
+  # or
+
+  reader = driver.topic_client.reader(
+      topic,
+      consumer,
+      auto_partitioning_support=False, # Compatibility mode is enabled
+  )
+  ```
+
+  С практической точки зрения для конечного пользователя режимы не отличаются. Режим полной поддержки отличается от режима совместимости тем, кто гарантирует порядок чтения — клиент или сервер. Режим совместимости достигается серверной обработкой и, как правило, работает медленнее.
 
 {% endlist %}

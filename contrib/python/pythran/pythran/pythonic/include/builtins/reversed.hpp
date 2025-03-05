@@ -26,13 +26,13 @@ namespace builtins
       const_iterator begin() const;
       const_iterator end() const;
     };
-  }
+  } // namespace details
 
   template <class Iterable>
   details::reversed<Iterable> reversed(Iterable const &iterable);
 
   DEFINE_FUNCTOR(pythonic::builtins, reversed);
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

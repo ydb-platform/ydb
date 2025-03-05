@@ -12,9 +12,9 @@
 #include "flat_scan_events.h"
 #include "flat_scan_eggs.h"
 #include "flat_exec_commit.h"
-#include "flat_exec_read.h"
 #include "flat_executor_misc.h"
 #include "flat_executor_compaction_logic.h"
+#include "flat_executor_data_cleanup_logic.h"
 #include "flat_executor_gclogic.h"
 #include "flat_bio_events.h"
 #include "flat_bio_stats.h"
@@ -23,7 +23,7 @@
 #include "shared_cache_events.h"
 #include "util_fmt_logger.h"
 
-#include <ydb/core/control/immediate_control_board_wrapper.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
@@ -282,7 +282,7 @@ struct TPendingPartSwitch {
 enum class EPageCollectionRequest : ui64 {
     Undefined = 0,
     Cache = 1,
-    CacheSync,
+    InMemPages,
     PendingInit,
     BootLogic,
 };
@@ -300,14 +300,6 @@ struct TTransactionWaitPad : public TPrivatePageCacheWaitPad {
     ~TTransactionWaitPad();
 
     NWilson::TTraceId GetWaitingTraceId() const noexcept;
-};
-
-struct TCompactionReadWaitPad : public TPrivatePageCacheWaitPad {
-    const ui64 ReadId;
-
-    TCompactionReadWaitPad(ui64 readId)
-        : ReadId(readId)
-    { }
 };
 
 struct TCompactionChangesCtx;
@@ -336,7 +328,6 @@ class TExecutor
             EvUpdateCounters,
             EvCheckYellow,
             EvUpdateCompactions,
-            EvActivateCompactionRead,
             EvActivateCompactionChanges,
             EvBrokenTransaction,
             EvLeaseExtend,
@@ -350,7 +341,6 @@ class TExecutor
         struct TEvUpdateCounters : public TEventLocal<TEvUpdateCounters, EvUpdateCounters> {};
         struct TEvCheckYellow : public TEventLocal<TEvCheckYellow, EvCheckYellow> {};
         struct TEvUpdateCompactions : public TEventLocal<TEvUpdateCompactions, EvUpdateCompactions> {};
-        struct TEvActivateCompactionRead : public TEventLocal<TEvActivateCompactionRead, EvActivateCompactionRead> {};
         struct TEvActivateCompactionChanges : public TEventLocal<TEvActivateCompactionChanges, EvActivateCompactionChanges> {};
         struct TEvBrokenTransaction : public TEventLocal<TEvBrokenTransaction, EvBrokenTransaction> {};
         struct TEvLeaseExtend : public TEventLocal<TEvLeaseExtend, EvLeaseExtend> {};
@@ -405,9 +395,6 @@ class TExecutor
     THolder<TActivationQueue, TActivationQueue::TPtrCleanDestructor> ActivationQueue;
     THolder<TActivationQueue, TActivationQueue::TPtrCleanDestructor> PendingQueue;
 
-    THashMap<ui64, TCompactionReadState> CompactionReads;
-    TDeque<ui64> CompactionReadQueue;
-    bool CompactionReadActivating = false;
     bool CompactionChangesActivating = false;
 
     TMap<TSeat*, TAutoPtr<TSeat>> PostponedTransactions;
@@ -448,6 +435,7 @@ class TExecutor
     THolder<TExecutorGCLogic> GcLogic;
     THolder<TCompactionLogic> CompactionLogic;
     THolder<TExecutorBorrowLogic> BorrowLogic;
+    THolder<TDataCleanupLogic> DataCleanupLogic;
 
     TLoadBlobQueue PendingBlobQueue;
 
@@ -459,10 +447,8 @@ class TExecutor
     TActorId Launcher;
 
     THashMap<TPrivatePageCacheWaitPad*, THolder<TTransactionWaitPad>> TransactionWaitPads;
-    THashMap<TPrivatePageCacheWaitPad*, THolder<TCompactionReadWaitPad>> CompactionReadWaitPads;
 
     ui64 TransactionUniqCounter = 0;
-    ui64 CompactionReadUniqCounter = 0;
 
     bool LogBatchFlushScheduled = false;
     bool NeedFollowerSnapshot = false;
@@ -481,6 +467,8 @@ class TExecutor
     size_t ReadyPartSwitches = 0;
 
     ui64 UsedTabletMemory = 0;
+    ui64 StickyPagesMemory = 0;
+    ui64 TransactionPagesMemory = 0;
 
     TActorContext OwnerCtx() const;
 
@@ -529,8 +517,9 @@ class TExecutor
     void DropSingleCache(const TLogoBlobID&) noexcept;
 
     void TranslateCacheTouchesToSharedCache();
-    void RequestInMemPagesForDatabase();
+    void RequestInMemPagesForDatabase(bool pendingOnly = false);
     void RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartView &partView, const THashSet<NTable::TTag> &stickyColumns);
+    void StickInMemPages(NSharedCache::TEvResult *msg);
     THashSet<NTable::TTag> GetStickyColumns(ui32 tableId);
     void RequestFromSharedCache(TAutoPtr<NPageCollection::TFetch> fetch,
         NBlockIO::EPriority way, EPageCollectionRequest requestCategory);
@@ -558,7 +547,6 @@ class TExecutor
     void Handle(TEvents::TEvFlushLog::TPtr &ev);
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr&);
     void Handle(NSharedCache::TEvResult::TPtr &ev);
-    void Handle(NSharedCache::TEvRequest::TPtr &ev);
     void Handle(NSharedCache::TEvUpdated::TPtr &ev);
     void Handle(NResourceBroker::TEvResourceBroker::TEvResourceAllocated::TPtr&);
     void Handle(NOps::TEvScanStat::TPtr &ev, const TActorContext &ctx);
@@ -577,6 +565,7 @@ class TExecutor
     void Handle(NBlockIO::TEvStat::TPtr &ev, const TActorContext &ctx);
     void Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled);
     void Handle(TEvBlobStorage::TEvGetResult::TPtr&, const TActorContext&);
+    void Handle(TEvTablet::TEvGcForStepAckResponse::TPtr &ev);
 
     void UpdateUsedTabletMemory();
     void UpdateCounters(const TActorContext &ctx);
@@ -600,16 +589,8 @@ class TExecutor
     const NTable::TRowVersionRanges& TableRemovedRowVersions(ui32 table) override;
     ui64 BeginCompaction(THolder<NTable::TCompactionParams> params) override;
     bool CancelCompaction(ui64 compactionId) override;
-    ui64 BeginRead(THolder<NTable::ICompactionRead> read) override;
-    bool CancelRead(ui64 readId) override;
     void RequestChanges(ui32 table) override;
 
-    // Compaction read support
-
-    void PostponeCompactionRead(TCompactionReadState* state);
-    size_t UnpinCompactionReadPages(TCompactionReadState* state);
-    void PlanCompactionReadActivation();
-    void Handle(TEvPrivate::TEvActivateCompactionRead::TPtr& ev, const TActorContext& ctx);
     void PlanCompactionChangesActivation();
     void Handle(TEvPrivate::TEvActivateCompactionChanges::TPtr& ev, const TActorContext& ctx);
     void CommitCompactionChanges(
@@ -659,6 +640,8 @@ public:
     ui64 CompactTable(ui32 tableId) override;
     bool CompactTables() override;
 
+    void CleanupData(ui64 dataCleanupGeneration) override;
+
     void Handle(NMemory::TEvMemTableRegistered::TPtr &ev);
     void Handle(NMemory::TEvMemTableCompact::TPtr &ev);
 
@@ -688,6 +671,7 @@ public:
 
     const TExecutorStats& GetStats() const override;
     NMetrics::TResourceMetrics* GetResourceMetrics() const override;
+    TExecutorCounters* GetCounters() override;
 
     void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> appCounters) override;
 

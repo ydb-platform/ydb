@@ -2,6 +2,8 @@
 
 LIBRARY()
 
+SUBSCRIBER(g:cpp-contrib)
+
 VERSION(14.0.6)
 
 LICENSE(MIT)

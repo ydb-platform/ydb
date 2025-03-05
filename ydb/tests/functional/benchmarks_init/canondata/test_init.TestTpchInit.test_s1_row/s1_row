@@ -1,0 +1,121 @@
+Init tables ...
+--!syntax_v1
+
+CREATE TABLE `/Root/db/Root/db/tpch/s1/customer` (
+    c_acctbal Double,
+    c_address Utf8,
+    c_comment Utf8,
+    c_custkey Int64,
+    c_mktsegment Utf8,
+    c_name Utf8,
+    c_nationkey Int32,
+    c_phone Utf8,
+    PRIMARY KEY (c_custkey)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpch/s1/lineitem` (
+    l_comment Utf8,
+    l_commitdate Date32,
+    l_discount Double,
+    l_extendedprice Double,
+    l_linenumber Int32,
+    l_linestatus Utf8,
+    l_orderkey Int64,
+    l_partkey Int64,
+    l_quantity Double,
+    l_receiptdate Date32,
+    l_returnflag Utf8,
+    l_shipdate Date32,
+    l_shipinstruct Utf8,
+    l_shipmode Utf8,
+    l_suppkey Int64,
+    l_tax Double,
+    PRIMARY KEY (l_orderkey, l_linenumber)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpch/s1/nation` (
+    n_comment Utf8,
+    n_name Utf8,
+    n_nationkey Int32,
+    n_regionkey Int32,
+    PRIMARY KEY (n_nationkey)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+);
+
+CREATE TABLE `/Root/db/Root/db/tpch/s1/orders` (
+    o_clerk Utf8,
+    o_comment Utf8,
+    o_custkey Int64,
+    o_orderdate Date32,
+    o_orderkey Int64,
+    o_orderpriority Utf8,
+    o_orderstatus Utf8,
+    o_shippriority Int32,
+    o_totalprice Double,
+    PRIMARY KEY (o_orderkey)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpch/s1/part` (
+    p_brand Utf8,
+    p_comment Utf8,
+    p_container Utf8,
+    p_mfgr Utf8,
+    p_name Utf8,
+    p_partkey Int64,
+    p_retailprice Double,
+    p_size Int32,
+    p_type Utf8,
+    PRIMARY KEY (p_partkey)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpch/s1/partsupp` (
+    ps_availqty Int32,
+    ps_comment Utf8,
+    ps_partkey Int64,
+    ps_suppkey Int64,
+    ps_supplycost Double,
+    PRIMARY KEY (ps_partkey, ps_suppkey)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpch/s1/region` (
+    r_comment Utf8,
+    r_name Utf8,
+    r_regionkey Int32,
+    PRIMARY KEY (r_regionkey)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+);
+
+CREATE TABLE `/Root/db/Root/db/tpch/s1/supplier` (
+    s_acctbal Double,
+    s_address Utf8,
+    s_comment Utf8,
+    s_name Utf8,
+    s_nationkey Int32,
+    s_phone Utf8,
+    s_suppkey Int64,
+    PRIMARY KEY (s_suppkey)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+Init tables ...Ok

@@ -76,24 +76,10 @@ Showing top 10 nodes out of 53
 Total: 15.02s
 ROUTINE ======================== main in /home/prime/arc/yt/yt/library/ytprof/example/main.cpp
      150ms     13.99s (flat, cum) 93.14% of Total
-         .          .      1:#include <yt/yt/core/concurrency/poller.h>
-         .          .      2:#include <yt/yt/core/concurrency/thread_pool_poller.h>
-         .          .      3:#include <yt/yt/core/concurrency/action_queue.h>
-         .          .      4:#include <yt/yt/core/http/server.h>
-         .          .      5:
-         .          .      6:#include <yt/yt/library/ytprof/http/handler.h>
-         .          .      7:#include <yt/yt/library/ytprof/heap_profiler.h>
-         .          .      8:
-         .          .      9:#include <absl/debugging/stacktrace.h>
-         .          .     10:
-         .          .     11:using namespace NYT;
-         .          .     12:using namespace NYT::NHttp;
-         .          .     13:using namespace NYT::NConcurrency;
-         .          .     14:using namespace NYT::NYTProf;
-         .          .     15:
+     ....
          .          .     16:int main(int argc, char* argv[])
          .          .     17:{
-         .          .     18:    absl::SetStackUnwinder(AbslStackUnwinder);
+         .          .     18:    NBacktrace::SetAbslStackUnwinder();
          .          .     19:    tcmalloc::MallocExtension::SetProfileSamplingRate(2_MB);
          .          .     20:
          .          .     21:    try {
@@ -179,11 +165,11 @@ YTProf поддерживает теги. Теги позволяют фильт
   2. На раннем этапе инициализации приложения, до того как началось выделение больших пользовательских объектов
   написать код конфигурации профайлера.
   ```c++
-  #include <yt/yt/library/ytprof/heap_profiler.h>
-  #include <absl/debugging/stacktrace.h>
+  #include <library/cpp/yt/backtrace/absl_unwinder/absl_unwinder.h>
+  #include <tcmalloc/malloc_extension.h>
 
   int main() {
-    absl::SetStackUnwinder(AbslStackUnwinder);
+    NYT::NBacktrace::SetAbslStackUnwinder();
     tcmalloc::MallocExtension::SetProfileSamplingRate(2_MB);
 
     ...

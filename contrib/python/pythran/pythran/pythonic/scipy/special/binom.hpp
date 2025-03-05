@@ -28,13 +28,13 @@ namespace scipy
         return boost::math::binomial_coefficient<double>(
             n, k, make_policy(promote_double<true>()));
       }
-    }
+    } // namespace details
 
 #define NUMPY_NARY_FUNC_NAME binom
 #define NUMPY_NARY_FUNC_SYM details::binom
 #include "pythonic/types/numpy_nary_expr.hpp"
-  }
-}
+  } // namespace special
+} // namespace scipy
 PYTHONIC_NS_END
 
 #endif

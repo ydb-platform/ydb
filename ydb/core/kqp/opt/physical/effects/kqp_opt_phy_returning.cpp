@@ -156,9 +156,9 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         auto inputExpr = Build<TCoExtractMembers>(ctx, pos)
             .Input(input.Cast())
             .Members(returning.Columns())
-            .Done().Ptr();
+            .Done();
 
-        return TExprBase(ctx.ChangeChild(*returning.Raw(), TKqlReturningList::idx_Update, std::move(inputExpr)));
+        return TExprBase(ctx.ChangeChild(*returning.Raw(), TKqlReturningList::idx_Update, inputExpr.Ptr()));
     };
 
     if (auto maybeList = returning.Update().Maybe<TExprList>()) {
@@ -215,8 +215,9 @@ TExprBase KqpRewriteReturningUpsert(TExprBase node, TExprContext& ctx, const TKq
                 .Build()
             .Table(upsert.Table())
             .Columns(upsert.Columns())
+            .IsBatch(upsert.IsBatch())
             .Settings(upsert.Settings())
-            .ReturningColumns<TCoAtomList>().Build()
+            .ReturningColumns(upsert.ReturningColumns())
             .Done();
 }
 
@@ -236,7 +237,8 @@ TExprBase KqpRewriteReturningDelete(TExprBase node, TExprContext& ctx, const TKq
                 .Input(del.Input())
                 .Build()
             .Table(del.Table())
-            .ReturningColumns<TCoAtomList>().Build()
+            .IsBatch(del.IsBatch())
+            .ReturningColumns(del.ReturningColumns())
             .Done();
 }
 

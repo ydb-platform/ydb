@@ -12,7 +12,9 @@ IGraphTransformer::TStatus ValidateDataSink(const TExprNode::TPtr& node, TExprCo
 IGraphTransformer::TStatus ValidateProviders(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExprContext& ctx, const TTypeAnnotationContext& types);
 
 TAutoPtr<IGraphTransformer> CreateIntentDeterminationTransformer(const TTypeAnnotationContext& types);
-TAutoPtr<IGraphTransformer> CreateExtCallableTypeAnnotationTransformer(TTypeAnnotationContext& types, bool instantOnly = false);
+
+TAutoPtr<IGraphTransformer> CreateExtCallableTypeAnnotationTransformer(TTypeAnnotationContext& types,
+    bool instantOnly = false);
 
 const THashSet<TString>& GetBuiltinFunctions();
 

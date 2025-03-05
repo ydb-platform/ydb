@@ -61,13 +61,13 @@ namespace scipy
 
       template <class T>
       double i0(T x);
-    }
+    } // namespace details
 
 #define NUMPY_NARY_FUNC_NAME i0
 #define NUMPY_NARY_FUNC_SYM details::i0
 #include "pythonic/include/types/numpy_nary_expr.hpp"
-  }
-}
+  } // namespace special
+} // namespace scipy
 PYTHONIC_NS_END
 
 #endif

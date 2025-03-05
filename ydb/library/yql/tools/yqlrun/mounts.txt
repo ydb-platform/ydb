@@ -1,5 +1,0 @@
-MountPoints {
-    MountPoint: "../../../../../../yql/essentials/mount/lib"
-    RootAlias: "/lib"
-    Library: true
-}

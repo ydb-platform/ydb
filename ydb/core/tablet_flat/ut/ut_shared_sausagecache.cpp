@@ -148,6 +148,9 @@ void SetupSharedCache(TMyEnvBase& env, NKikimrSharedCache::TReplacementPolicy po
 
 Y_UNIT_TEST(Limits) {
     TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
     bool bTreeIndex = env->GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
@@ -213,6 +216,9 @@ Y_UNIT_TEST(Limits) {
 
 Y_UNIT_TEST(Limits_Config) {
     TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
     bool bTreeIndex = env->GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
@@ -277,6 +283,9 @@ Y_UNIT_TEST(Limits_Config) {
 
 Y_UNIT_TEST(ThreeLeveledLRU) {
     TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -375,6 +384,9 @@ Y_UNIT_TEST(ThreeLeveledLRU) {
 
 Y_UNIT_TEST(S3FIFO) {
     TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -425,7 +437,7 @@ Y_UNIT_TEST(S3FIFO) {
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 21, 3}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 21, 2}));
 
     RestartAndClearCache(env);
 
@@ -473,6 +485,9 @@ Y_UNIT_TEST(S3FIFO) {
 
 Y_UNIT_TEST(ClockPro) {
     TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -585,6 +600,9 @@ Y_UNIT_TEST(ClockPro) {
 
 Y_UNIT_TEST(ReplacementPolicySwitch) {
     TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -630,6 +648,206 @@ Y_UNIT_TEST(ReplacementPolicySwitch) {
 
     UNIT_ASSERT_GT(counters->ReplacementPolicySize(NKikimrSharedCache::S3FIFO)->Val(), 0);
     UNIT_ASSERT_VALUES_EQUAL(counters->ReplacementPolicySize(NKikimrSharedCache::ThreeLeveledLRU)->Val(), 0);
+}
+
+Y_UNIT_TEST(Compaction_BTreeIndex) {
+    TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+    auto counters = GetSharedPageCounters(env);
+
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
+
+    SetupSharedCache(env, NKikimrSharedCache::S3FIFO);
+
+    // write 100 rows, each ~100KB (~10MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(key, std::move(value)) });
+    }
+
+    Cerr << "...compacting" << Endl;
+    env.SendSync(new NFake::TEvCompact(TableId));
+    Cerr << "...waiting until compacted" << Endl;
+    env.WaitFor<NFake::TEvCompacted>();
+
+    LogCounters(counters);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 98);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 0);
+
+    TRetriedCounters retried;
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 19, 2}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 98);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(2_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 21);
+}
+
+Y_UNIT_TEST(Compaction_FlatIndex) {
+    TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+    auto counters = GetSharedPageCounters(env);
+
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
+
+    SetupSharedCache(env, NKikimrSharedCache::S3FIFO);
+
+    // write 100 rows, each ~100KB (~10MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(key, std::move(value)) });
+    }
+
+    Cerr << "...compacting" << Endl;
+    env.SendSync(new NFake::TEvCompact(TableId));
+    Cerr << "...waiting until compacted" << Endl;
+    env.WaitFor<NFake::TEvCompacted>();
+
+    LogCounters(counters);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 83);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 0);
+
+    TRetriedCounters retried;
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 19}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 83);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(2_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 19);
+}
+
+Y_UNIT_TEST(Compaction_ZeroCache_BTreeIndex) {
+    TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+    auto counters = GetSharedPageCounters(env);
+
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
+
+    SetupSharedCache(env, NKikimrSharedCache::S3FIFO, 0_MB);
+
+    // write 100 rows, each ~100KB (~10MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(key, std::move(value)) });
+    }
+
+    Cerr << "...compacting" << Endl;
+    env.SendSync(new NFake::TEvCompact(TableId));
+    Cerr << "...waiting until compacted" << Endl;
+    env.WaitFor<NFake::TEvCompacted>();
+
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActiveBytes->Val(), 0_MB);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 0);
+
+    TRetriedCounters retried;
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 100, 100, 100}));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActiveBytes->Val(), 0_MB);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 400);
+}
+
+Y_UNIT_TEST(Compaction_ZeroCache_FlatIndex) {
+    TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+    auto counters = GetSharedPageCounters(env);
+
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
+
+    SetupSharedCache(env, NKikimrSharedCache::S3FIFO, 0_MB);
+
+    // write 100 rows, each ~100KB (~10MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(key, std::move(value)) });
+    }
+
+    Cerr << "...compacting" << Endl;
+    env.SendSync(new NFake::TEvCompact(TableId));
+    Cerr << "...waiting until compacted" << Endl;
+    env.WaitFor<NFake::TEvCompacted>();
+
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActiveBytes->Val(), 0_MB);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 2);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 0);
+
+    TRetriedCounters retried;
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100}));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActiveBytes->Val(), 0_MB);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 2);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 100);
 }
 
 }

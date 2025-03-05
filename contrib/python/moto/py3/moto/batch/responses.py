@@ -6,6 +6,9 @@ import json
 
 
 class BatchResponse(BaseResponse):
+    def __init__(self):
+        super().__init__(service_name="batch")
+
     def _error(self, code, message):
         return json.dumps({"__type": code, "message": message}), dict(status=400)
 
@@ -15,17 +18,14 @@ class BatchResponse(BaseResponse):
         :return: Batch Backend
         :rtype: moto.batch.models.BatchBackend
         """
-        return batch_backends[self.region]
+        return batch_backends[self.current_account][self.region]
 
     @property
     def json(self):
         if self.body is None or self.body == "":
             self._json = {}
         elif not hasattr(self, "_json"):
-            try:
-                self._json = json.loads(self.body)
-            except ValueError:
-                print()
+            self._json = json.loads(self.body)
         return self._json
 
     def _get_param(self, param_name, if_none=None):

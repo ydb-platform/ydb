@@ -29,10 +29,10 @@ namespace numpy
     }
 
     inline auto chisquare(double df, long size)
-        -> decltype(chisquare(df, types::array<long, 1>{{size}}))
+        -> decltype(chisquare(df, types::array_tuple<long, 1>{{size}}))
     {
 
-      return chisquare(df, types::array<long, 1>{{size}});
+      return chisquare(df, types::array_tuple<long, 1>{{size}});
     }
 
     inline double chisquare(double df, types::none_type d)

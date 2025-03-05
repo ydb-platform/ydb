@@ -9,6 +9,7 @@ PEERDIR(
 
 SRCS(
     config.cpp
+    GLOBAL configure_service_discovery.cpp
 )
 
 IF (NOT OPENSOURCE)

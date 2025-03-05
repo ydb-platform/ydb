@@ -4,8 +4,8 @@
 
 #include <yt/yt/client/object_client/public.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
-#include <library/cpp/yt/small_containers/compact_flat_map.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
 namespace NYT::NChunkClient {
 
@@ -80,7 +80,6 @@ YT_DEFINE_ERROR_ENUM(
     ((LocationDiskWaitingReplacement)        (751))
     ((ChunkMetaCacheFetchFailed)             (752))
     ((LocationMediumIsMisconfigured)         (753))
-    ((DiskIdsMismatched)                     (754))
     ((LocationDisabled)                      (755))
     ((DiskFailed)                            (756))
     ((DiskWaitingReplacement)                (757))
@@ -92,7 +91,7 @@ YT_DEFINE_ERROR_ENUM(
     ((ReadMetaTimeout)                       (763))
 );
 
-DEFINE_ENUM(EUpdateMode,
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EUpdateMode, i8,
     ((None)                     (0))
     ((Append)                   (1))
     ((Overwrite)                (2))
@@ -117,6 +116,7 @@ constexpr auto InvalidChunkLocationUuid = TChunkLocationUuid(-1, -1);
 constexpr int MinReplicationFactor = 1;
 constexpr int MaxReplicationFactor = 20;
 constexpr int DefaultReplicationFactor = 3;
+constexpr int DefaultIntermediateDataReplicationFactor = 2;
 
 constexpr int MaxMediumCount = 120; // leave some room for sentinels
 
@@ -131,6 +131,7 @@ using TCompactMediumMap = TCompactFlatMap<int, T, 4>;
  *  Additional +8 enables some flexibility during balancing.
  */
 constexpr int TypicalReplicaCount = 24;
+constexpr int SlimTypicalReplicaCount = 3;
 constexpr int GenericChunkReplicaIndex = 16;  // no specific replica; the default one for non-erasure chunks
 
 //! Valid indexes are in range |[0, ChunkReplicaIndexBound)|.
@@ -146,6 +147,7 @@ constexpr int MediumIndexBound = AllMediaIndex + 1;
 
 class TChunkReplicaWithMedium;
 using TChunkReplicaWithMediumList = TCompactVector<TChunkReplicaWithMedium, TypicalReplicaCount>;
+using TChunkReplicaWithMediumSlimList = TCompactVector<TChunkReplicaWithMedium, SlimTypicalReplicaCount>;
 
 class TChunkReplicaWithLocation;
 using TChunkReplicaWithLocationList = TCompactVector<TChunkReplicaWithLocation, TypicalReplicaCount>;
@@ -162,20 +164,20 @@ extern const TString DefaultSlotsMediumName;
 
 DECLARE_REFCOUNTED_STRUCT(IReaderBase)
 
-DECLARE_REFCOUNTED_CLASS(TFetchChunkSpecConfig)
-DECLARE_REFCOUNTED_CLASS(TFetcherConfig)
-DECLARE_REFCOUNTED_CLASS(TChunkSliceFetcherConfig)
-DECLARE_REFCOUNTED_CLASS(TEncodingWriterConfig)
-DECLARE_REFCOUNTED_CLASS(TErasureReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TMultiChunkReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TBlockFetcherConfig)
-DECLARE_REFCOUNTED_CLASS(TReplicationReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TReplicationWriterConfig)
-DECLARE_REFCOUNTED_CLASS(TErasureWriterConfig)
-DECLARE_REFCOUNTED_CLASS(TMultiChunkWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TFetchChunkSpecConfig)
+DECLARE_REFCOUNTED_STRUCT(TFetcherConfig)
+DECLARE_REFCOUNTED_STRUCT(TChunkSliceFetcherConfig)
+DECLARE_REFCOUNTED_STRUCT(TEncodingWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TErasureReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TMultiChunkReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TBlockFetcherConfig)
+DECLARE_REFCOUNTED_STRUCT(TReplicationReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TReplicationWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TErasureWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TMultiChunkWriterConfig)
 DECLARE_REFCOUNTED_CLASS(TEncodingWriterOptions)
-DECLARE_REFCOUNTED_CLASS(TBlockReordererConfig)
-DECLARE_REFCOUNTED_CLASS(TChunkFragmentReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TBlockReordererConfig)
+DECLARE_REFCOUNTED_STRUCT(TChunkFragmentReaderConfig)
 
 struct TCodecDuration;
 class TCodecStatistics;
@@ -194,7 +196,7 @@ DEFINE_ENUM(EChunkAvailabilityPolicy,
 );
 
 // Keep in sync with NChunkServer::ETableChunkFormat.
-DEFINE_ENUM(EChunkFormat,
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EChunkFormat, i8,
     // Sentinels.
     ((Unknown)                             (-1))
 

@@ -7,8 +7,6 @@ using namespace NYql;
 
 namespace NSQLTranslationV1 {
 
-using NALPDefault::SQLv1LexerTokens;
-
 using namespace NSQLv1Generated;
 
 TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
@@ -124,6 +122,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
                 return nullptr;
             }
 
+            named->SetRefPos(Ctx.Pos());
             if (cluster.Empty()) {
                 Ctx.Error() << "No cluster name given and no default cluster is selected";
                 return nullptr;

@@ -3,7 +3,10 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
+
+#include <google/protobuf/port_def.inc>
 
 #include <util/string/join.h>
 
@@ -38,14 +41,14 @@ void TCommandMakeDirectory::Config(TConfig& config) {
     SetFreeArgTitle(0, "<path>", "Path to create");
 }
 
-void TCommandMakeDirectory::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandMakeDirectory::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
 int TCommandMakeDirectory::Run(TConfig& config) {
     NScheme::TSchemeClient client(CreateDriver(config));
-    ThrowOnError(
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.MakeDirectory(
             Path,
             FillSettings(NScheme::TMakeDirectorySettings())
@@ -73,8 +76,8 @@ void TCommandRemoveDirectory::Config(TConfig& config) {
     SetFreeArgTitle(0, "<path>", "Path to remove");
 }
 
-void TCommandRemoveDirectory::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandRemoveDirectory::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -86,26 +89,27 @@ int TCommandRemoveDirectory::Run(TConfig& config) {
     if (Recursive) {
         NTable::TTableClient tableClient(driver);
         NTopic::TTopicClient topicClient(driver);
+        NQuery::TQueryClient queryClient(driver);
         const auto prompt = Prompt.GetOrElse(ERecursiveRemovePrompt::Once);
-        ThrowOnError(RemoveDirectoryRecursive(schemeClient, tableClient, topicClient, Path, prompt, settings));
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(RemoveDirectoryRecursive(schemeClient, tableClient, &topicClient, &queryClient, Path, prompt, settings));
     } else {
         if (Prompt) {
             if (!NConsoleClient::Prompt(*Prompt, Path, NScheme::ESchemeEntryType::Directory)) {
                 return EXIT_SUCCESS;
             }
         }
-        ThrowOnError(schemeClient.RemoveDirectory(Path, settings).GetValueSync());
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(schemeClient.RemoveDirectory(Path, settings).GetValueSync());
     }
 
     return EXIT_SUCCESS;
 }
 
 namespace {
-    void PrintPermissions(const TVector<NScheme::TPermissions>& permissions) {
+    void PrintPermissions(const std::vector<NScheme::TPermissions>& permissions) {
         if (permissions.size()) {
             for (const NScheme::TPermissions& permission : permissions) {
                 Cout << permission.Subject << ":";
-                for (const TString& name : permission.PermissionNames) {
+                for (const std::string& name : permission.PermissionNames) {
                     if (name != *permission.PermissionNames.begin()) {
                         Cout << ",";
                     }
@@ -120,9 +124,9 @@ namespace {
 }
 
 void PrintAllPermissions(
-    const TString& owner,
-    const TVector<NScheme::TPermissions>& permissions,
-    const TVector<NScheme::TPermissions>& effectivePermissions
+    const std::string& owner,
+    const std::vector<NScheme::TPermissions>& permissions,
+    const std::vector<NScheme::TPermissions>& effectivePermissions
 ) {
     Cout << "Owner: " << owner << Endl << Endl << "Permissions: " << Endl;
     PrintPermissions(permissions);
@@ -241,6 +245,10 @@ void TCommandDescribe::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     Database = config.Database;
     ParseOutputFormats();
+}
+
+void TCommandDescribe::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -254,7 +262,7 @@ int TCommandDescribe::Run(TConfig& config) {
     if (!result.IsSuccess()) {
         return TryTopicConsumerDescribeOrFail(driver, result);
     }
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     return PrintPathResponse(driver, result);
 }
 
@@ -275,6 +283,10 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
         return DescribeReplication(driver);
     case NScheme::ESchemeEntryType::View:
         return DescribeView(driver);
+    case NScheme::ESchemeEntryType::ExternalDataSource:
+        return DescribeExternalDataSource(driver);
+    case NScheme::ESchemeEntryType::ExternalTable:
+        return DescribeExternalTable(driver);
     default:
         return DescribeEntryDefault(entry);
     }
@@ -291,11 +303,11 @@ int TCommandDescribe::DescribeEntryDefault(NScheme::TSchemeEntry entry) {
 }
 
 namespace {
-    TString FormatCodecs(const TVector<NYdb::NTopic::ECodec>& codecs) {
+    TString FormatCodecs(const std::vector<NYdb::NTopic::ECodec>& codecs) {
         return JoinSeq(", ", codecs);
     }
 
-    void PrintTopicConsumers(const TVector<NYdb::NTopic::TConsumer>& consumers) {
+    void PrintTopicConsumers(const std::vector<NYdb::NTopic::TConsumer>& consumers) {
         if (consumers.empty()) {
             return;
         }
@@ -330,7 +342,7 @@ namespace {
     void PrintMain(const NTopic::TTopicDescription& topicDescription) {
         Cout << Endl << "Main:";
         Cout << Endl << "RetentionPeriod: " << topicDescription.GetRetentionPeriod().Hours() << " hours";
-        if (topicDescription.GetRetentionStorageMb().Defined()) {
+        if (topicDescription.GetRetentionStorageMb().has_value()) {
             Cout << Endl << "StorageRetention: " << *topicDescription.GetRetentionStorageMb() << " MB";
         }
         Cout << Endl << "PartitionsCount: " << topicDescription.GetTotalPartitionsCount();
@@ -417,7 +429,7 @@ int TCommandDescribe::DescribeTopic(TDriver& driver) {
     settings.IncludeStats(ShowStats || ShowPartitionStats);
 
     auto result = topicClient.DescribeTopic(Path, settings).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     const auto& desc = result.GetTopicDescription();
     return PrintDescription(this, OutputFormat, desc, &TCommandDescribe::PrintTopicResponsePretty);
@@ -426,7 +438,7 @@ int TCommandDescribe::DescribeTopic(TDriver& driver) {
 int TCommandDescribe::DescribeTable(TDriver& driver) {
     NTable::TTableClient client(driver);
     NTable::TCreateSessionResult sessionResult = client.GetSession(NTable::TCreateSessionSettings()).GetValueSync();
-    ThrowOnError(sessionResult);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
     NTable::TDescribeTableResult result = sessionResult.GetSession().DescribeTable(
         Path,
         FillSettings(
@@ -436,7 +448,7 @@ int TCommandDescribe::DescribeTable(TDriver& driver) {
             .WithPartitionStatistics(ShowPartitionStats)
         )
     ).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     auto desc = result.GetTableDescription();
     return PrintDescription(this, OutputFormat, desc, &TCommandDescribe::PrintTableResponsePretty);
@@ -445,7 +457,7 @@ int TCommandDescribe::DescribeTable(TDriver& driver) {
 int TCommandDescribe::DescribeColumnTable(TDriver& driver) {
     NTable::TTableClient client(driver);
     NTable::TCreateSessionResult sessionResult = client.GetSession(NTable::TCreateSessionSettings()).GetValueSync();
-    ThrowOnError(sessionResult);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
     NTable::TDescribeTableResult result = sessionResult.GetSession().DescribeTable(
         Path,
         FillSettings(
@@ -453,7 +465,7 @@ int TCommandDescribe::DescribeColumnTable(TDriver& driver) {
             .WithTableStatistics(ShowStats)
         )
     ).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     auto desc = result.GetTableDescription();
     return PrintDescription(this, OutputFormat, desc, &TCommandDescribe::PrintTableResponsePretty);
@@ -462,11 +474,11 @@ int TCommandDescribe::DescribeColumnTable(TDriver& driver) {
 int TCommandDescribe::PrintCoordinationNodeResponsePretty(const NYdb::NCoordination::TNodeDescription& result) const {
     Cout << Endl << "AttachConsistencyMode: " << result.GetAttachConsistencyMode() << Endl;
     Cout << "ReadConsistencyMode: " << result.GetReadConsistencyMode() << Endl;
-    if (result.GetSessionGracePeriod().Defined()) {
-        Cout << "SessionGracePeriod: " << result.GetSessionGracePeriod() << Endl;
+    if (result.GetSessionGracePeriod().has_value()) {
+        Cout << "SessionGracePeriod: " << result.GetSessionGracePeriod().value() << Endl;
     }
-    if (result.GetSelfCheckPeriod().Defined()) {
-        Cout << "SelfCheckPeriod: " << result.GetSelfCheckPeriod() << Endl;
+    if (result.GetSelfCheckPeriod().has_value()) {
+        Cout << "SelfCheckPeriod: " << result.GetSelfCheckPeriod().value() << Endl;
     }
     Cout << "RatelimiterCountersMode: " << result.GetRateLimiterCountersMode() << Endl;
     return EXIT_SUCCESS;
@@ -547,7 +559,16 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
         break;
     }
 
-    if (const auto& items = desc.GetItems()) {
+    Cout << Endl << "Consistency level: " << desc.GetConsistencyLevel();
+    switch (desc.GetConsistencyLevel()) {
+    case NReplication::TReplicationDescription::EConsistencyLevel::Row:
+        break;
+    case NReplication::TReplicationDescription::EConsistencyLevel::Global:
+        Cout << Endl << "Commit interval: " << desc.GetGlobalConsistency().GetCommitInterval();
+        break;
+    }
+
+    if (const auto& items = desc.GetItems(); !items.empty()) {
         TVector<TString> columnNames = { "#", "Source", "Destination", "Changefeed" };
         if (ShowStats) {
             columnNames.push_back("Lag");
@@ -580,7 +601,7 @@ int TCommandDescribe::DescribeReplication(const TDriver& driver) {
         .IncludeStats(ShowStats);
 
     auto result = client.DescribeReplication(Path, settings).ExtractValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintReplicationResponsePretty);
 }
@@ -593,9 +614,39 @@ int TCommandDescribe::PrintViewResponsePretty(const NYdb::NView::TDescribeViewRe
 int TCommandDescribe::DescribeView(const TDriver& driver) {
     NView::TViewClient client(driver);
     auto result = client.DescribeView(Path, {}).ExtractValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintViewResponsePretty);
+}
+
+int TCommandDescribe::PrintExternalDataSourceResponsePretty(const NYdb::NTable::TExternalDataSourceDescription& description) const {
+    // to do
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::DescribeExternalDataSource(const TDriver& driver) {
+    NTable::TTableClient client(driver);
+    const auto sessionResult = client.CreateSession().ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
+    const auto description = sessionResult.GetSession().DescribeExternalDataSource(Path).ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(description);
+
+    return PrintDescription(this, OutputFormat, description.GetExternalDataSourceDescription(), &TCommandDescribe::PrintExternalDataSourceResponsePretty);
+}
+
+int TCommandDescribe::PrintExternalTableResponsePretty(const NYdb::NTable::TExternalTableDescription& description) const {
+    // to do
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::DescribeExternalTable(const TDriver& driver) {
+    NTable::TTableClient client(driver);
+    const auto sessionResult = client.CreateSession().ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
+    const auto result = sessionResult.GetSession().DescribeExternalTable(Path).ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+    return PrintDescription(this, OutputFormat, result.GetExternalTableDescription(), &TCommandDescribe::PrintExternalTableResponsePretty);
 }
 
 namespace {
@@ -606,7 +657,7 @@ namespace {
         Cerr << Endl;
         TPrettyTable table({ "Name", "Type", "Family", "Key" }, TPrettyTableConfig().WithoutRowDelimiters());
 
-        const TVector<TString>& keyColumns = tableDescription.GetPrimaryKeyColumns();
+        const std::vector<std::string>& keyColumns = tableDescription.GetPrimaryKeyColumns();
         for (const NTable::TTableColumn& column : tableDescription.GetTableColumns()) {
             TString key = "";
             auto itKey = std::find(keyColumns.begin(), keyColumns.end(), column.Name);
@@ -630,7 +681,7 @@ namespace {
     }
 
     void PrintIndexes(const NTable::TTableDescription& tableDescription) {
-        const TVector<NTable::TIndexDescription>& indexes = tableDescription.GetIndexDescriptions();
+        const std::vector<NTable::TIndexDescription>& indexes = tableDescription.GetIndexDescriptions();
         if (!indexes.size()) {
             return;
         }
@@ -682,37 +733,37 @@ namespace {
         const auto commitLog1 = settings.GetTabletCommitLog1();
         const auto external = settings.GetExternal();
         const auto storeExternalBlobs = settings.GetStoreExternalBlobs();
-        if (!commitLog0 && !commitLog1 && !external && !storeExternalBlobs.Defined()) {
+        if (!commitLog0 && !commitLog1 && !external && !storeExternalBlobs.has_value()) {
             return;
         }
         Cout << Endl << "Storage settings: " << Endl;
         if (commitLog0) {
-            Cout << "Internal channel 0 commit log storage pool: " << commitLog0.GetRef() << Endl;
+            Cout << "Internal channel 0 commit log storage pool: " << commitLog0.value() << Endl;
         }
         if (commitLog1) {
-            Cout << "Internal channel 1 commit log storage pool: " << commitLog1.GetRef() << Endl;
+            Cout << "Internal channel 1 commit log storage pool: " << commitLog1.value() << Endl;
         }
         if (external) {
-            Cout << "External blobs storage pool: " << external.GetRef() << Endl;
+            Cout << "External blobs storage pool: " << external.value() << Endl;
         }
         if (storeExternalBlobs) {
             Cout << "Store large values in \"external blobs\": "
-                << (storeExternalBlobs.GetRef() ? "true" : "false") << Endl;
+                << (storeExternalBlobs.value() ? "true" : "false") << Endl;
         }
     }
 
     void PrintColumnFamilies(const NTable::TTableDescription& tableDescription) {
-        if (!tableDescription.GetColumnFamilies()) {
+        if (tableDescription.GetColumnFamilies().empty()) {
             return;
         }
         TPrettyTable table({ "Name", "Data", "Compression", "Keep in memory" },
             TPrettyTableConfig().WithoutRowDelimiters());
 
         for (const NTable::TColumnFamilyDescription& family : tableDescription.GetColumnFamilies()) {
-            TMaybe<TString> data = family.GetData();
+            std::optional<std::string> data = family.GetData();
             TString compression;
             if (family.GetCompression()) {
-                switch (family.GetCompression().GetRef()) {
+                switch (family.GetCompression().value()) {
                 case NTable::EColumnFamilyCompression::None:
                     compression = "None";
                     break;
@@ -721,16 +772,16 @@ namespace {
                     break;
                 default:
                     compression = TStringBuilder() << "unknown("
-                        << static_cast<size_t>(family.GetCompression().GetRef()) << ")";
+                        << static_cast<size_t>(family.GetCompression().value()) << ")";
                 }
             }
             TStringBuilder keepInMemory;
-            if (family.GetKeepInMemory().Defined()) {
-                keepInMemory << keepInMemory << family.GetKeepInMemory().GetRef();
+            if (family.GetKeepInMemory().has_value()) {
+                keepInMemory << keepInMemory << family.GetKeepInMemory().value();
             }
             table.AddRow()
                 .Column(0, family.GetName())
-                .Column(1, data ? data.GetRef() : "")
+                .Column(1, data ? data.value() : "")
                 .Column(2, compression)
                 .Column(3, keepInMemory);
         }
@@ -739,7 +790,7 @@ namespace {
     }
 
     void PrintAttributes(const NTable::TTableDescription& tableDescription) {
-        if (!tableDescription.GetAttributes().size()) {
+        if (tableDescription.GetAttributes().empty()) {
             return;
         }
         TPrettyTable table({ "Name", "Value" }, TPrettyTableConfig().WithoutRowDelimiters());
@@ -794,16 +845,16 @@ namespace {
         const auto& settings = tableDescription.GetPartitioningSettings();
         const auto partBySize = settings.GetPartitioningBySize();
         const auto partByLoad = settings.GetPartitioningByLoad();
-        if (!partBySize.Defined() && !partByLoad.Defined()) {
+        if (!partBySize.has_value() && !partByLoad.has_value()) {
             return;
         }
         const auto partitionSizeMb = settings.GetPartitionSizeMb();
         const auto minPartitions = settings.GetMinPartitionsCount();
         const auto maxPartitions = settings.GetMaxPartitionsCount();
         Cout << Endl << "Auto partitioning settings: " << Endl;
-        Cout << "Partitioning by size: " << (partBySize.GetRef() ? "true" : "false") << Endl;
-        Cout << "Partitioning by load: " << (partByLoad.GetRef() ? "true" : "false") << Endl;
-        if (partBySize.Defined() && partitionSizeMb) {
+        Cout << "Partitioning by size: " << (partBySize.value() ? "true" : "false") << Endl;
+        Cout << "Partitioning by load: " << (partByLoad.value() ? "true" : "false") << Endl;
+        if (partBySize.has_value() && partitionSizeMb) {
             Cout << "Preferred partition size (Mb): " << partitionSizeMb << Endl;
         }
         if (minPartitions) {
@@ -844,8 +895,8 @@ namespace {
     }
 
     void PrintPartitionInfo(const NTable::TTableDescription& tableDescription, bool showBoundaries, bool showStats) {
-        const TVector<NTable::TKeyRange>& ranges = tableDescription.GetKeyRanges();
-        const TVector<NTable::TPartitionStats>& stats = tableDescription.GetPartitionStats();
+        const std::vector<NTable::TKeyRange>& ranges = tableDescription.GetKeyRanges();
+        const std::vector<NTable::TPartitionStats>& stats = tableDescription.GetPartitionStats();
         if (showBoundaries) {
             if (showStats) {
                 Cout << Endl << "Partitions info:" << Endl;
@@ -893,10 +944,10 @@ namespace {
             row.Column(j++, i + 1);
             if (showBoundaries) {
                 const NTable::TKeyRange& keyRange = ranges[i];
-                const TMaybe<NTable::TKeyBound>& from = keyRange.From();
-                const TMaybe<NTable::TKeyBound>& to = keyRange.To();
-                if (from.Defined()) {
-                    const NTable::TKeyBound& bound = from.GetRef();
+                const std::optional<NTable::TKeyBound>& from = keyRange.From();
+                const std::optional<NTable::TKeyBound>& to = keyRange.To();
+                if (from.has_value()) {
+                    const NTable::TKeyBound& bound = from.value();
                     if (bound.IsInclusive()) {
                         row.Column(j++, "[");
                     } else {
@@ -907,8 +958,8 @@ namespace {
                     row.Column(j++, "(");
                     row.Column(j++, "-Inf");
                 }
-                if (to.Defined()) {
-                    const NTable::TKeyBound& bound = to.GetRef();
+                if (to.has_value()) {
+                    const NTable::TKeyBound& bound = to.value();
                     row.Column(j++, FormatValueJson(bound.GetValue(), EBinaryStringEncoding::Unicode));
                     if (bound.IsInclusive()) {
                         row.Column(j++, "]");
@@ -939,9 +990,9 @@ int TCommandDescribe::PrintTableResponsePretty(const NTable::TTableDescription& 
     PrintAttributes(tableDescription);
     PrintTtlSettings(tableDescription);
     PrintPartitioningSettings(tableDescription);
-    if (tableDescription.GetKeyBloomFilter().Defined()) {
+    if (tableDescription.GetKeyBloomFilter().has_value()) {
         Cout << Endl << "Bloom filter by key: "
-            << (tableDescription.GetKeyBloomFilter().GetRef() ? "true" : "false") << Endl;
+            << (tableDescription.GetKeyBloomFilter().value() ? "true" : "false") << Endl;
     }
     PrintReadReplicasSettings(tableDescription);
     PrintPermissionsIfNeeded(tableDescription);
@@ -968,7 +1019,7 @@ std::pair<TString, TString> TCommandDescribe::ParseTopicConsumer() const {
 int TCommandDescribe::TryTopicConsumerDescribeOrFail(TDriver& driver, const NScheme::TDescribePathResult& result) {
     auto [topic, consumer] = ParseTopicConsumer();
     if (!topic || !consumer) {
-        ThrowOnError(result); // no consumer can be found
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result); // no consumer can be found
     }
 
     NScheme::TSchemeClient client(driver);
@@ -977,13 +1028,13 @@ int TCommandDescribe::TryTopicConsumerDescribeOrFail(TDriver& driver, const NSch
         FillSettings(NScheme::TDescribePathSettings())
     ).GetValueSync();
     if (!topicDescribeResult.IsSuccess() || topicDescribeResult.GetEntry().Type != NScheme::ESchemeEntryType::Topic && topicDescribeResult.GetEntry().Type != NScheme::ESchemeEntryType::PqGroup) {
-        ThrowOnError(result); // return previous error, this is not topic
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result); // return previous error, this is not topic
     }
 
     // OK, this is topic, check the consumer
     NYdb::NTopic::TTopicClient topicClient(driver);
     auto consumerDescription = topicClient.DescribeConsumer(topic, consumer, NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(ShowPartitionStats)).GetValueSync();
-    ThrowOnError(consumerDescription);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(consumerDescription);
 
     return PrintDescription(this, OutputFormat, consumerDescription.GetConsumerDescription(), &TCommandDescribe::PrintConsumerResponsePretty);
 }
@@ -1046,11 +1097,15 @@ void TCommandList::Config(TConfig& config) {
 
 void TCommandList::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0, true);
     if (AdvancedMode && FromNewLine) {
         // TODO: add "consider using --format shell"
         throw TMisuseException() << "Options -1 and -l are incompatible";
     }
+}
+
+void TCommandList::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    ParsePath(config, 0, true);
 }
 
 int TCommandList::Run(TConfig& config) {
@@ -1094,6 +1149,8 @@ TCommandPermissions::TCommandPermissions()
     AddCommand(std::make_unique<TCommandPermissionSet>());
     AddCommand(std::make_unique<TCommandChangeOwner>());
     AddCommand(std::make_unique<TCommandPermissionClear>());
+    AddCommand(std::make_unique<TCommandPermissionSetInheritance>());
+    AddCommand(std::make_unique<TCommandPermissionClearInheritance>());
     AddCommand(std::make_unique<TCommandPermissionList>());
 }
 
@@ -1114,9 +1171,8 @@ void TCommandPermissionGrant::Config(TConfig& config) {
 
 void TCommandPermissionGrant::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0);
     Subject = config.ParseResult->GetFreeArgs()[1];
-    if (!Subject) {
+    if (Subject.empty()) {
         throw TMisuseException() << "Missing required argument <subject>";
     }
     if (!PermissionsToGrant.size()) {
@@ -1124,9 +1180,14 @@ void TCommandPermissionGrant::Parse(TConfig& config) {
     }
 }
 
+void TCommandPermissionGrant::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    ParsePath(config, 0);
+}
+
 int TCommandPermissionGrant::Run(TConfig& config) {
     NScheme::TSchemeClient client(CreateDriver(config));
-    ThrowOnError(
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
             Path,
             FillSettings(
@@ -1155,9 +1216,8 @@ void TCommandPermissionRevoke::Config(TConfig& config) {
 
 void TCommandPermissionRevoke::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0);
     Subject = config.ParseResult->GetFreeArgs()[1];
-    if (!Subject) {
+    if (Subject.empty()) {
         throw TMisuseException() << "Missing required argument <subject>";
     }
     if (!PermissionsToRevoke.size()) {
@@ -1165,9 +1225,14 @@ void TCommandPermissionRevoke::Parse(TConfig& config) {
     }
 }
 
+void TCommandPermissionRevoke::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    ParsePath(config, 0);
+}
+
 int TCommandPermissionRevoke::Run(TConfig& config) {
     NScheme::TSchemeClient client(CreateDriver(config));
-    ThrowOnError(
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
             Path,
             FillSettings(
@@ -1196,9 +1261,8 @@ void TCommandPermissionSet::Config(TConfig& config) {
 
 void TCommandPermissionSet::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0);
     Subject = config.ParseResult->GetFreeArgs()[1];
-    if (!Subject) {
+    if (Subject.empty()) {
         throw TMisuseException() << "Missing required argument <subject>";
     }
     if (!PermissionsToSet.size()) {
@@ -1206,9 +1270,14 @@ void TCommandPermissionSet::Parse(TConfig& config) {
     }
 }
 
+void TCommandPermissionSet::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    ParsePath(config, 0);
+}
+
 int TCommandPermissionSet::Run(TConfig& config) {
     NScheme::TSchemeClient client(CreateDriver(config));
-    ThrowOnError(
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
             Path,
             FillSettings(
@@ -1234,16 +1303,20 @@ void TCommandChangeOwner::Config(TConfig& config) {
 
 void TCommandChangeOwner::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParsePath(config, 0);
     Owner = config.ParseResult->GetFreeArgs()[1];
     if (!Owner){
         throw TMisuseException() << "Missing required argument <owner>";
     }
 }
 
+void TCommandChangeOwner::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    ParsePath(config, 0);
+}
+
 int TCommandChangeOwner::Run(TConfig& config) {
     NScheme::TSchemeClient client(CreateDriver(config));
-    ThrowOnError(
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
             Path,
             FillSettings(
@@ -1266,19 +1339,79 @@ void TCommandPermissionClear::Config(TConfig& config) {
     SetFreeArgTitle(0, "<path>", "Path to clear permissions to");
 }
 
-void TCommandPermissionClear::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandPermissionClear::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
 int TCommandPermissionClear::Run(TConfig& config) {
     NScheme::TSchemeClient client(CreateDriver(config));
-    ThrowOnError(
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
             Path,
             FillSettings(
                 NScheme::TModifyPermissionsSettings()
                 .AddClearAcl()
+            )
+        ).GetValueSync()
+    );
+    return EXIT_SUCCESS;
+}
+
+TCommandPermissionSetInheritance::TCommandPermissionSetInheritance()
+    : TYdbOperationCommand("set-inheritance", std::initializer_list<TString>(), "Set to inherit permissions from the parent")
+{}
+
+void TCommandPermissionSetInheritance::Config(TConfig& config) {
+    TYdbOperationCommand::Config(config);
+
+    config.SetFreeArgsNum(1);
+    SetFreeArgTitle(0, "<path>", "Path to set interrupt-inheritance flag for");
+}
+
+void TCommandPermissionSetInheritance::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    ParsePath(config, 0);
+}
+
+int TCommandPermissionSetInheritance::Run(TConfig& config) {
+    NScheme::TSchemeClient client(CreateDriver(config));
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(
+        client.ModifyPermissions(
+            Path,
+            FillSettings(
+                NScheme::TModifyPermissionsSettings()
+                .AddInterruptInheritance(false)
+            )
+        ).GetValueSync()
+    );
+    return EXIT_SUCCESS;
+}
+
+TCommandPermissionClearInheritance::TCommandPermissionClearInheritance()
+    : TYdbOperationCommand("clear-inheritance", std::initializer_list<TString>(), "Set to do not inherit permissions from the parent")
+{}
+
+void TCommandPermissionClearInheritance::Config(TConfig& config) {
+    TYdbOperationCommand::Config(config);
+
+    config.SetFreeArgsNum(1);
+    SetFreeArgTitle(0, "<path>", "Path to set interrupt-inheritance flag for");
+}
+
+void TCommandPermissionClearInheritance::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
+    ParsePath(config, 0);
+}
+
+int TCommandPermissionClearInheritance::Run(TConfig& config) {
+    NScheme::TSchemeClient client(CreateDriver(config));
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(
+        client.ModifyPermissions(
+            Path,
+            FillSettings(
+                NScheme::TModifyPermissionsSettings()
+                .AddInterruptInheritance(true)
             )
         ).GetValueSync()
     );
@@ -1296,8 +1429,8 @@ void TCommandPermissionList::Config(TConfig& config) {
     SetFreeArgTitle(0, "<path>", "Path to list permissions for");
 }
 
-void TCommandPermissionList::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandPermissionList::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -1308,7 +1441,7 @@ int TCommandPermissionList::Run(TConfig& config) {
         Path,
         FillSettings(NScheme::TDescribePathSettings())
     ).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     NScheme::TSchemeEntry entry = result.GetEntry();
     Cout << Endl;
     PrintAllPermissions(entry.Owner, entry.Permissions, entry.EffectivePermissions);

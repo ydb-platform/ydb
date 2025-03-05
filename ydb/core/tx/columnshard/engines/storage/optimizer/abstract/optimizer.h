@@ -98,10 +98,17 @@ protected:
     }
     virtual bool DoIsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
     virtual std::vector<TTaskDescription> DoGetTasksDescription() const = 0;
+    virtual TConclusionStatus DoCheckWriteData() const {
+        return TConclusionStatus::Success();
+    }
 
 public:
     IOptimizerPlanner(const ui64 pathId)
         : PathId(pathId) {
+    }
+
+    TConclusionStatus CheckWriteData() const {
+        return DoCheckWriteData();
     }
 
     std::vector<TTaskDescription> GetTasksDescription() const {

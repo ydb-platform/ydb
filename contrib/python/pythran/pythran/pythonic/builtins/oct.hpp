@@ -26,7 +26,7 @@ namespace builtins
         << std::oct << v;
     return oss.str();
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

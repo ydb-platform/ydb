@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-LeftJoin (MapJoin)-Filter",
+                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -39,7 +39,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[Arg.i1.q1,Arg.i1.q2]"
                                             },
                                             {
                                                 "Condition": "i1.q2 = i2_1.q2",
@@ -48,19 +48,10 @@
                                                         "ExternalPlanNodeId": 8
                                                     },
                                                     {
-                                                        "InternalOperatorId": 2
-                                                    }
-                                                ],
-                                                "Name": "LeftJoin (MapJoin)"
-                                            },
-                                            {
-                                                "Inputs": [
-                                                    {
                                                         "ExternalPlanNodeId": 5
                                                     }
                                                 ],
-                                                "Name": "Filter",
-                                                "Predicate": "Exist(item.i2_1.q2)"
+                                                "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
                                         "PlanNodeId": 9,
@@ -87,6 +78,9 @@
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "InternalOperatorId": 1
+                                                                                    },
+                                                                                    {
+                                                                                        "Other": "ConstantExpression"
                                                                                     }
                                                                                 ],
                                                                                 "Name": "InnerJoin (MapJoin)"
@@ -109,6 +103,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
+                                                                                        "Path": "/Root/postgres_jointest/join0.test_plan/int8_tbl",
                                                                                         "ReadColumns": [
                                                                                             "q1",
                                                                                             "q2"
@@ -150,6 +145,7 @@
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
+                                                                        "Path": "/Root/postgres_jointest/join0.test_plan/int8_tbl",
                                                                         "ReadColumns": [
                                                                             "q1",
                                                                             "q2"

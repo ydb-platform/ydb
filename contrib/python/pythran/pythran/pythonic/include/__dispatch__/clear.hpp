@@ -14,7 +14,7 @@ namespace __dispatch__
   }
 
   DEFINE_FUNCTOR(pythonic::__dispatch__, clear);
-}
+} // namespace __dispatch__
 PYTHONIC_NS_END
 
 #endif

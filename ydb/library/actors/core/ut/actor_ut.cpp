@@ -25,7 +25,6 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     using TSendReceiveActorParams = TActorBenchmark::TSendReceiveActorParams;
 
     Y_UNIT_TEST(WithOnlyOneSharedExecutors) {
-        return;
         THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
         TActorBenchmark::AddBasicPool(setup, 1, 1, true);
 
@@ -134,7 +133,6 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     }
 
     Y_UNIT_TEST(WithOnlyOneSharedAndOneCommonExecutors) {
-        return;
         THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
         TActorBenchmark::AddBasicPool(setup, 2, true, true);
 
@@ -176,7 +174,6 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     }
 
     Y_UNIT_TEST(WithSharedExecutors) {
-        return;
         THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
          TActorBenchmark::AddBasicPool(setup, 2, 1, false);
          TActorBenchmark::AddBasicPool(setup, 2, 1, true);
@@ -497,9 +494,9 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
 
         ui64 ts = GetCycleCountFast();
-        THolder<IHarmonizer> harmonizer(MakeHarmonizer(ts));
+        std::unique_ptr<IHarmonizer> harmonizer = MakeHarmonizer(ts);
         for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
-            setup->Executors[i] = new TBasicExecutorPool(i, 1, 10, "basic", harmonizer.Get());
+            setup->Executors[i] = new TBasicExecutorPool(i, 1, 10, "basic", harmonizer.get());
             harmonizer->AddPool(setup->Executors[i].Get());
         }
         setup->Scheduler = new TBasicSchedulerThread;
@@ -529,6 +526,140 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
 
         UNIT_ASSERT((TEnumProcessKey<TActorActivityTag, IActor::EActorActivity>::GetName(IActor::EActivityType::INTERCONNECT_PROXY_TCP) == "INTERCONNECT_PROXY_TCP"));
         UNIT_ASSERT((TLocalProcessKey<TActorActivityTag, ActorName>::GetName() == ActorName));
+    }
+}
+
+Y_UNIT_TEST_SUITE(TestAliases) {
+    using namespace NThreading;
+
+    struct TSendPingActor : TActorBootstrapped<TSendPingActor> {
+        const TActorId Target;
+        const ui64 Cookie;
+        const TActorId NotifyTo;
+
+        TSendPingActor(const TActorId& target, ui64 cookie, const TActorId& notifyTo)
+            : Target(target)
+            , Cookie(cookie)
+            , NotifyTo(notifyTo)
+        {}
+
+        void Bootstrap() {
+            Cerr << "Actor " << SelfId() << " sending TEvPing to " << Target << Endl;
+            Send(Target, new TEvents::TEvPing, IEventHandle::FlagTrackDelivery, Cookie);
+            Become(&TThis::StateWork);
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvents::TEvPong, Handle);
+                hFunc(TEvents::TEvUndelivered, Handle);
+            }
+        }
+
+        void Handle(TEvents::TEvPong::TPtr& ev) {
+            Cerr << "Actor " << SelfId() << " received TEvPong from " << ev->Sender << Endl;
+            Send(NotifyTo, new TEvents::TEvGone, 0, Cookie);
+            PassAway();
+        }
+
+        void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+            Cerr << "Actor " << SelfId() << " received TEvUndelivered from " << ev->Sender << Endl;
+            Y_ABORT_UNLESS(ev->Sender == Target);
+            Send(NotifyTo, new TEvents::TEvGone, 0, Cookie);
+            PassAway();
+        }
+    };
+
+    struct TTestActor : TActorBootstrapped<TTestActor> {
+        TPromise<void> Done;
+        TActorId MyAlias;
+        std::set<ui64> ReceivedPing;
+        std::set<ui64> ReceivedGone;
+
+        TTestActor(TPromise<void> done)
+            : Done(std::move(done))
+        {}
+
+        void Bootstrap() {
+            MyAlias = RegisterAlias();
+            Cerr << "Actor " << SelfId() << " registered alias " << MyAlias << Endl;
+            Register(new TSendPingActor(MyAlias, 1, SelfId()));
+            Register(new TSendPingActor(MyAlias, 2, SelfId()));
+            Become(&TThis::StateWork);
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvents::TEvPing, Handle);
+                hFunc(TEvents::TEvGone, Handle);
+            }
+        }
+
+        void Handle(TEvents::TEvPing::TPtr& ev) {
+            Cerr << "Actor " << SelfId() << " received TEvPing from " << ev->Sender << Endl;
+            Y_ABORT_UNLESS(ev->Recipient == MyAlias);
+            Y_ABORT_UNLESS(ev->GetRecipientRewrite() == SelfId());
+            Y_ABORT_UNLESS(TActivationContext::AsActorContext().SelfID == SelfId());
+
+            Y_ABORT_UNLESS(ReceivedPing.empty());
+            ReceivedPing.insert(ev->Cookie);
+
+            Send(ev->Sender, new TEvents::TEvPong, 0, ev->Cookie);
+            UnregisterAlias(MyAlias);
+        }
+
+        void Handle(TEvents::TEvGone::TPtr& ev) {
+            Cerr << "Actor " << SelfId() << " received TEvGone from " << ev->Sender << Endl;
+            ReceivedGone.insert(ev->Cookie);
+            if (ReceivedGone.size() >= 2) {
+                Y_ABORT_UNLESS(ReceivedPing.size() == 1);
+                Done.SetValue();
+                PassAway();
+            }
+        }
+    };
+
+    Y_UNIT_TEST(AliasEventDelivery) {
+        THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>();
+        setup->NodeId = 1;
+        setup->ExecutorsCount = 1;
+        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
+
+        ui64 ts = GetCycleCountFast();
+        std::unique_ptr<IHarmonizer> harmonizer = MakeHarmonizer(ts);
+        for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
+            setup->Executors[i] = new TBasicExecutorPool(i, 1, 10, "basic", harmonizer.get());
+            harmonizer->AddPool(setup->Executors[i].Get());
+        }
+        setup->Scheduler = new TBasicSchedulerThread;
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TPromise<void> donePromise = NewPromise<void>();
+        TFuture<void> done = donePromise.GetFuture();
+        actorSystem.Register(new TTestActor(std::move(donePromise)));
+
+        done.GetValueSync();
+        actorSystem.Stop();
+    }
+
+    Y_UNIT_TEST(AliasEventDeliveryInTestRuntime) {
+        TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+
+        TPromise<void> donePromise = NewPromise<void>();
+        TFuture<void> done = donePromise.GetFuture();
+        runtime.Register(new TTestActor(std::move(donePromise)));
+
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return done.HasValue();
+        };
+        options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+        runtime.DispatchEvents(options);
+
+        done.GetValueSync();
     }
 }
 

@@ -76,6 +76,10 @@ void TReplicationSettings::TStaticCredentials::Serialize(NKikimrReplication::TSt
     }
 }
 
+void TReplicationSettings::TGlobalConsistency::Serialize(NKikimrReplication::TConsistencySettings_TGlobalConsistency& proto) const {
+    proto.SetCommitIntervalMilliSeconds(CommitInterval.MilliSeconds());
+}
+
 TFuture<IKikimrGateway::TGenericResult> IKikimrGateway::CreatePath(const TString& path, TCreateDirFunc createDir) {
     auto partsHolder = std::make_shared<TVector<TString>>(NKikimr::SplitPath(path));
     auto& parts = *partsHolder;
@@ -101,16 +105,6 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
         if (name == "columnName") {
             YQL_ENSURE(field.Value().Maybe<TCoAtom>());
             settings.ColumnName = field.Value().Cast<TCoAtom>().StringValue();
-        } else if (name == "expireAfter") {
-            // TODO (yentsovsemyon): remove this clause after extending TTL syntax in YQL
-            YQL_ENSURE(field.Value().Maybe<TCoInterval>());
-            auto value = FromString<i64>(field.Value().Cast<TCoInterval>().Literal().Value());
-            if (value < 0) {
-                error = "Interval value cannot be negative";
-                return false;
-            }
-
-            settings.ExpireAfter = TDuration::FromValue(value);
         } else if (name == "tiers") {
             YQL_ENSURE(field.Value().Maybe<TExprList>());
             auto listNode = field.Value().Cast<TExprList>();
@@ -118,12 +112,14 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
             for (size_t i = 0; i < listNode.Size(); ++i) {
                 auto tierNode = listNode.Item(i);
 
+                std::optional<TString> storageName;
+                TDuration evictionDelay;
                 YQL_ENSURE(tierNode.Maybe<TCoNameValueTupleList>());
                 for (const auto& tierField : tierNode.Cast<TCoNameValueTupleList>()) {
                     auto tierFieldName = tierField.Name().Value();
                     if (tierFieldName == "storageName") {
-                        error = "TTL cannot contain tiered storage: tiering in TTL syntax is not supported";
-                        return false;
+                        YQL_ENSURE(tierField.Value().Maybe<TCoAtom>());
+                        storageName = tierField.Value().Cast<TCoAtom>().StringValue();
                     } else if (tierFieldName == "evictionDelay") {
                         YQL_ENSURE(tierField.Value().Maybe<TCoInterval>());
                         auto value = FromString<i64>(tierField.Value().Cast<TCoInterval>().Literal().Value());
@@ -131,12 +127,14 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
                             error = "Interval value cannot be negative";
                             return false;
                         }
-                        settings.ExpireAfter = TDuration::FromValue(value);
+                        evictionDelay = TDuration::FromValue(value);
                     } else {
                         error = TStringBuilder() << "Unknown field: " << tierFieldName;
                         return false;
                     }
                 }
+
+                settings.Tiers.emplace_back(evictionDelay, storageName);
             }
         } else if (name == "columnUnit") {
             YQL_ENSURE(field.Value().Maybe<TCoAtom>());
@@ -302,7 +300,7 @@ bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::Read
             << "'. It should be one of: "
             << "1) 'PER_AZ:<read_replicas_count>' to set equal read replicas count for every AZ; "
             << "2) 'ANY_AZ:<read_replicas_count>' to set total read replicas count between all AZs; "
-            << "3) '<az1_name>:<read_replicas_count1>, <az2_name>:<read_replicas_count2>, ...' "
+//          << "3) '<az1_name>:<read_replicas_count1>, <az2_name>:<read_replicas_count2>, ...' "
             << "to specify read replicas count for each AZ in cluster.";
         return false;
     }
@@ -310,15 +308,23 @@ bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::Read
 }
 
 void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto) {
-    if (!settings.ColumnUnit) {
-        auto& opts = *proto.mutable_date_type_column();
-        opts.set_column_name(settings.ColumnName);
-        opts.set_expire_after_seconds(settings.ExpireAfter.Seconds());
-    } else {
-        auto& opts = *proto.mutable_value_since_unix_epoch();
-        opts.set_column_name(settings.ColumnName);
-        opts.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(*settings.ColumnUnit));
-        opts.set_expire_after_seconds(settings.ExpireAfter.Seconds());
+    for (const auto& tier : settings.Tiers) {
+        auto* outTier = proto.mutable_tiered_ttl()->add_tiers();
+        if (!settings.ColumnUnit) {
+            auto& expr = *outTier->mutable_date_type_column();
+            expr.set_column_name(settings.ColumnName);
+            expr.set_expire_after_seconds(tier.ApplyAfter.Seconds());
+        } else {
+            auto& expr = *outTier->mutable_value_since_unix_epoch();
+            expr.set_column_name(settings.ColumnName);
+            expr.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(*settings.ColumnUnit));
+            expr.set_expire_after_seconds(tier.ApplyAfter.Seconds());
+        }
+        if (tier.StorageName) {
+            outTier->mutable_evict_to_external_storage()->set_storage(*tier.StorageName);
+        } else {
+            outTier->mutable_delete_();
+        }
     }
 }
 

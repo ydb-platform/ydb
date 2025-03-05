@@ -30,7 +30,7 @@
                                 "Plans": [
                                     {
                                         "CTE Name": "precompute_0_0",
-                                        "Node Type": "Limit-CrossJoin-InnerJoin (MapJoin)-Filter-Filter-ConstantExpr-ConstantExpr",
+                                        "Node Type": "Limit-CrossJoin-InnerJoin (MapJoin)-ConstantExpr-Filter-ConstantExpr",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -71,7 +71,7 @@
                                                         "InternalOperatorId": 2
                                                     },
                                                     {
-                                                        "InternalOperatorId": 6
+                                                        "InternalOperatorId": 5
                                                     }
                                                 ],
                                                 "Name": "CrossJoin"
@@ -80,13 +80,18 @@
                                                 "Condition": "t.thousand = b.Sum0",
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 3
+                                                        "InternalOperatorId": 4
                                                     },
                                                     {
-                                                        "InternalOperatorId": 4
+                                                        "InternalOperatorId": 3
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Inputs": [],
+                                                "Name": "ToFlow",
+                                                "ToFlow": "precompute_0_0"
                                             },
                                             {
                                                 "Inputs": [
@@ -96,20 +101,6 @@
                                                 ],
                                                 "Name": "Filter",
                                                 "Predicate": "Exist(item.thousand)"
-                                            },
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 5
-                                                    }
-                                                ],
-                                                "Name": "Filter",
-                                                "Predicate": "Exist(item.Sum0)"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "ToFlow",
-                                                "ToFlow": "precompute_0_0"
                                             },
                                             {
                                                 "Inputs": [],
@@ -125,6 +116,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                         "ReadColumns": [
                                                             "tenthous",
                                                             "thousand"
@@ -158,7 +150,7 @@
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
-                        "Node Type": "Aggregate-Limit",
+                        "Node Type": "Aggregate-Limit-Aggregate",
                         "Operators": [
                             {
                                 "Inputs": [
@@ -166,7 +158,17 @@
                                         "InternalOperatorId": 1
                                     }
                                 ],
-                                "Name": "Aggregate"
+                                "Name": "Aggregate",
+                                "Phase": "Final"
+                            },
+                            {
+                                "Inputs": [
+                                    {
+                                        "InternalOperatorId": 2
+                                    }
+                                ],
+                                "Limit": "1",
+                                "Name": "Limit"
                             },
                             {
                                 "Inputs": [
@@ -174,8 +176,8 @@
                                         "ExternalPlanNodeId": 3
                                     }
                                 ],
-                                "Limit": "1",
-                                "Name": "Limit"
+                                "Name": "Aggregate",
+                                "Phase": "Final"
                             }
                         ],
                         "PlanNodeId": 4,
@@ -194,7 +196,8 @@
                                                         "ExternalPlanNodeId": 1
                                                     }
                                                 ],
-                                                "Name": "Aggregate"
+                                                "Name": "Aggregate",
+                                                "Phase": "Intermediate"
                                             }
                                         ],
                                         "PlanNodeId": 2,
@@ -205,6 +208,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/postgres_jointest/join0.test_plan/int4_tbl",
                                                         "ReadColumns": [
                                                             "f1"
                                                         ],

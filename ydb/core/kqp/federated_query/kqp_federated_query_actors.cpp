@@ -19,10 +19,9 @@ class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecrets
         std::vector<TString> secretValues;
         secretValues.reserve(SecretIds.size());
         for (const auto& secretId: SecretIds) {
-            TString secretValue;
-            bool isFound = snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretId), secretValue);
-            if (isFound) {
-                secretValues.push_back(secretValue);
+            auto secretValue = snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretId));
+            if (secretValue.IsSuccess()) {
+                secretValues.push_back(secretValue.DetachResult());
                 continue;
             }
 
@@ -32,10 +31,12 @@ class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecrets
                 return;
             }
 
-            isFound = !secretIds.empty() && snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretIds[0]), secretValue);
-            if (isFound) {
-                secretValues.push_back(secretValue);
-                continue;
+            if (!secretIds.empty()) {
+                secretValue = snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretIds[0]));
+                if (secretValue.IsSuccess()) {
+                    secretValues.push_back(secretValue.DetachResult());
+                    continue;
+                }
             }
 
             if (!AskSent) {

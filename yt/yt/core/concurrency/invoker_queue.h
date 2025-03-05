@@ -128,13 +128,13 @@ public:
     TInvokerQueue(
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
         const NProfiling::TTagSet& counterTagSet,
-        NProfiling::IRegistryImplPtr registry = nullptr);
+        NProfiling::IRegistryPtr registry = nullptr);
 
     TInvokerQueue(
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
         const std::vector<NProfiling::TTagSet>& counterTagSets,
         const std::vector<NYTProf::TProfilerTagPtr>& profilerTags,
-        NProfiling::IRegistryImplPtr registry = nullptr);
+        NProfiling::IRegistryPtr registry = nullptr);
 
     void SetThreadId(NThreading::TThreadId threadId);
 
@@ -192,7 +192,7 @@ public:
 
     IInvoker* GetProfilingTagSettingInvoker(int profilingTag);
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver) override;
+    DECLARE_SIGNAL_OVERRIDE(TWaitTimeObserver::TSignature, WaitTimeObserved);
 
 private:
     const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_;
@@ -220,10 +220,9 @@ private:
 
     std::vector<IInvokerPtr> ProfilingTagSettingInvokers_;
 
-    std::atomic<bool> IsWaitTimeObserverSet_;
-    TWaitTimeObserver WaitTimeObserver_;
+    TCallbackList<TWaitTimeObserver::TSignature> WaitTimeObserved_;
 
-    TCountersPtr CreateCounters(const NProfiling::TTagSet& tagSet, NProfiling::IRegistryImplPtr registry);
+    TCountersPtr CreateCounters(const NProfiling::TTagSet& tagSet, NProfiling::IRegistryPtr registry);
 
     void TryDrainProducer(bool force = false);
 };

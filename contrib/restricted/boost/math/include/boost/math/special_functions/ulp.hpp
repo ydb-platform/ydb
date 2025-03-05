@@ -14,6 +14,7 @@
 #include <boost/math/policies/error_handling.hpp>
 #include <boost/math/special_functions/fpclassify.hpp>
 #include <boost/math/special_functions/next.hpp>
+#include <boost/math/tools/precision.hpp>
 
 namespace boost{ namespace math{ namespace detail{
 

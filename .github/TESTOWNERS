@@ -17,6 +17,8 @@
 
 #Column Tables Development Team @zverevgeny TEAM:@ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
+/ydb/tests/olap @ydb-platform/cs
+/ydb/core/kqp/ut/olap @ydb-platform/cs
 
 #Distributed System Infrastructure Team @ijon TEAM:@ydb-platform/system-infra
 /ydb/core/mind/hive @ydb-platform/system-infra
@@ -55,8 +57,8 @@
 #YDB Postgres Compatibility @rekby TEAM:@ydb-platform/postgres-compatibility
 /ydb/tests/postgres_integrations @ydb-platform/postgres-compatibility
 
-#YDB Engineering Team @maximyurchuk 
-   # - tbd
+#YDB Engineering Team @maximyurchuk TEAM:@ydb-platform/engineering
+ydb/tests/functional/tpc @ydb-platform/engineering
 
 #Orphan components @spuchin @maximyurchuk @kirrysin @ydb-platform/duty
 /ydb/services/ydb @ydb-platform/duty
@@ -109,3 +111,5 @@
 #@ydb-platform/ui-backend
 /ydb/core/viewer @ydb-platform/ui-backend
 /ydb/core/protos/node_whiteboard.proto @ydb-platform/ui-backend
+
+/ydb/tests/sql @slonn

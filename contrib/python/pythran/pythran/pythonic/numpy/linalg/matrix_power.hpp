@@ -5,8 +5,8 @@
 
 #include "pythonic/numpy/array.hpp"
 #include "pythonic/numpy/asarray.hpp"
-#include "pythonic/numpy/identity.hpp"
 #include "pythonic/numpy/dot.hpp"
+#include "pythonic/numpy/identity.hpp"
 
 #include "pythonic/builtins/NotImplementedError.hpp"
 PYTHONIC_NS_BEGIN
@@ -40,11 +40,11 @@ namespace numpy
           return numpy::functor::dot{}(tmp, tmp);
         }
       }
-    }
+    } // namespace details
 
     template <class E>
-    auto matrix_power(E const &expr, long n)
-        -> decltype(numpy::functor::array{}(expr))
+    auto matrix_power(E const &expr,
+                      long n) -> decltype(numpy::functor::array{}(expr))
     {
       if (n == 0)
         return numpy::functor::identity{}(expr.template shape<0>(),
@@ -55,8 +55,8 @@ namespace numpy
       }
       throw pythonic::builtins::NotImplementedError("negative power");
     }
-  }
-}
+  } // namespace linalg
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

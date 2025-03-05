@@ -19,6 +19,7 @@ that they implement the appropriate interface.
 """
 
 from zope.interface import classImplements
+from zope.interface._compat import PY313_OR_OLDER
 from zope.interface.common import collections
 from zope.interface.common import io
 from zope.interface.common import numbers
@@ -67,17 +68,18 @@ class ITextString(collections.ISequence):
     extra_classes = (str,)
 
 
-class IByteString(collections.IByteString):
-    """
-    Interface for immutable byte strings.
+if PY313_OR_OLDER:
+    class IByteString(collections.IByteString):
+        """
+        Interface for immutable byte strings.
 
-    On all Python versions this is :class:`bytes`.
+        On all Python versions this is :class:`bytes`.
 
-    Unlike :class:`zope.interface.common.collections.IByteString`
-    (the parent of this interface) this does *not* include
-    :class:`bytearray`.
-    """
-    extra_classes = (bytes,)
+        Unlike :class:`zope.interface.common.collections.IByteString`
+        (the parent of this interface) this does *not* include
+        :class:`bytearray`.
+        """
+        extra_classes = (bytes,)
 
 
 class INativeString(ITextString):

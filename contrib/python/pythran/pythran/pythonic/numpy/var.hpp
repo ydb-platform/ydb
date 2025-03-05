@@ -3,17 +3,17 @@
 
 #include "pythonic/include/numpy/var.hpp"
 
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/types/ndarray.hpp"
 #include "pythonic/builtins/None.hpp"
 #include "pythonic/builtins/ValueError.hpp"
+#include "pythonic/builtins/pythran/abssqr.hpp"
 #include "pythonic/numpy/add.hpp"
 #include "pythonic/numpy/conjugate.hpp"
-#include "pythonic/numpy/subtract.hpp"
-#include "pythonic/numpy/mean.hpp"
-#include "pythonic/builtins/pythran/abssqr.hpp"
-#include "pythonic/numpy/sum.hpp"
 #include "pythonic/numpy/empty_like.hpp"
+#include "pythonic/numpy/mean.hpp"
+#include "pythonic/numpy/subtract.hpp"
+#include "pythonic/numpy/sum.hpp"
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 #include <algorithm>
 
@@ -24,8 +24,8 @@ namespace numpy
 
   template <class E>
   auto var(E const &expr, types::none_type axis, types::none_type dtype,
-           types::none_type out, long ddof)
-      -> decltype(var_type<E>(std::real(mean(expr))))
+           types::none_type out,
+           long ddof) -> decltype(var_type<E>(std::real(mean(expr))))
   {
     auto m = mean(expr);
     auto t = pythonic::numpy::functor::subtract{}(expr, m);
@@ -57,7 +57,7 @@ namespace numpy
           _enlarge_copy_minus(t.fast(i), e.fast(i), m.fast(j), axis,
                               utils::int_<N - 1>());
     }
-  }
+  } // namespace
 
   template <class E>
   auto var(E const &expr, long axis, types::none_type dtype,
@@ -70,7 +70,7 @@ namespace numpy
       return sum(builtins::pythran::functor::abssqr{}(t), axis) /=
              var_type<E>(expr.template shape<0>() - ddof);
     } else {
-      types::array<long, E::value> shp = sutils::getshape(expr);
+      types::array_tuple<long, E::value> shp = sutils::getshape(expr);
       shp[axis] = 1;
       auto mp = m.reshape(shp);
 
@@ -80,7 +80,7 @@ namespace numpy
              var_type<E>(sutils::getshape(expr)[axis] - ddof);
     }
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

@@ -521,6 +521,96 @@ Y_UNIT_TEST_SUITE(TMiniKQLVariantTest) {
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
+
+    Y_UNIT_TEST(TestDynamicVariantTuple) {
+        TSetup<false> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        const TStringBuf str1 = "VERY LONG STRING!!!";
+        const TStringBuf str2 = "SHORT";
+        const auto data1 = pb.NewDataLiteral<NUdf::EDataSlot::String>(str1);
+        const auto data2 = pb.NewDataLiteral<NUdf::EDataSlot::String>(str2);
+        const auto data3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("");
+        const auto dataType = pb.NewDataType(NUdf::TDataType<char*>::Id);
+        const auto tupleType = pb.NewTupleType({dataType, dataType});
+        const auto varType = pb.NewVariantType(tupleType);
+        const auto var1 = pb.DynamicVariant(data1, pb.NewDataLiteral<ui32>(0), varType);
+        const auto var2 = pb.DynamicVariant(data2, pb.NewDataLiteral<ui32>(1), varType);
+        const auto var3 = pb.DynamicVariant(data3, pb.NewDataLiteral<ui32>(2), varType);
+        const auto list = pb.AsList({var1, var2, var3});
+        const auto pgmReturn = list;
+
+        const auto graph = setup.BuildGraph(pgmReturn);
+        const auto iterator = graph->GetValue().GetListIterator();
+        NUdf::TUnboxedValue item;
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetVariantIndex(), 0);
+        auto itemVar1 = item.GetVariantItem();
+        UNIT_ASSERT(itemVar1.IsString());
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(itemVar1.AsStringRef()), str1);
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetVariantIndex(), 1);
+        auto itemVar2 = item.GetVariantItem();
+        UNIT_ASSERT(itemVar2.IsEmbedded());
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(itemVar2.AsStringRef()), str2);
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(!item);
+        UNIT_ASSERT(!iterator.Next(item));
+        UNIT_ASSERT(!iterator.Next(item));
+    }
+
+    Y_UNIT_TEST(TestDynamicVariantStruct) {
+        TSetup<false> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        const auto data1 = pb.NewDataLiteral<ui32>(10);
+        const auto data2 = pb.NewDataLiteral<ui32>(20);
+        const auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
+        const auto structType = pb.NewStructType({{"x", dataType}, {"y", dataType }});
+        const auto varType = pb.NewVariantType(structType);
+        const auto var1 = pb.DynamicVariant(data1, pb.NewDataLiteral<NUdf::EDataSlot::Utf8>("x"), varType);
+        const auto var2 = pb.DynamicVariant(data2, pb.NewDataLiteral<NUdf::EDataSlot::Utf8>("z"), varType);
+        const auto list = pb.AsList({var1, var2});
+        const auto pgmReturn = list;
+
+        const auto graph = setup.BuildGraph(pgmReturn);
+        const auto iterator = graph->GetValue().GetListIterator();
+        NUdf::TUnboxedValue item;
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(item);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetVariantIndex(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetVariantItem().template Get<ui32>(), 10U);
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(!item);
+        UNIT_ASSERT(!iterator.Next(item));
+        UNIT_ASSERT(!iterator.Next(item));
+    }
+
+    Y_UNIT_TEST(TestDynamicVariantStructWithNullIndex) {
+        TSetup<false> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        const auto data1 = pb.NewDataLiteral<ui32>(10);
+        const auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
+        const auto structType = pb.NewStructType({{"x", dataType}, {"y", dataType }});
+        const auto varType = pb.NewVariantType(structType);
+        const auto var1 = pb.DynamicVariant(data1, pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<NUdf::TUtf8>::Id), varType);
+        const auto list = pb.AsList({var1});
+        const auto pgmReturn = list;
+
+        const auto graph = setup.BuildGraph(pgmReturn);
+        const auto iterator = graph->GetValue().GetListIterator();
+        NUdf::TUnboxedValue item;
+
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(!item);
+        UNIT_ASSERT(!iterator.Next(item));
+        UNIT_ASSERT(!iterator.Next(item));
+    }
 }
 
 }

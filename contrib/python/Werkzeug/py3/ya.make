@@ -2,9 +2,13 @@
 
 PY3_LIBRARY()
 
-VERSION(2.0.3)
+VERSION(2.2.3)
 
 LICENSE(BSD-3-Clause)
+
+PEERDIR(
+    contrib/python/MarkupSafe
+)
 
 NO_LINT()
 
@@ -24,7 +28,6 @@ PY_SRCS(
     werkzeug/debug/repr.py
     werkzeug/debug/tbtools.py
     werkzeug/exceptions.py
-    werkzeug/filesystem.py
     werkzeug/formparser.py
     werkzeug/http.py
     werkzeug/local.py
@@ -35,8 +38,14 @@ PY_SRCS(
     werkzeug/middleware/profiler.py
     werkzeug/middleware/proxy_fix.py
     werkzeug/middleware/shared_data.py
-    werkzeug/routing.py
+    werkzeug/routing/__init__.py
+    werkzeug/routing/converters.py
+    werkzeug/routing/exceptions.py
+    werkzeug/routing/map.py
+    werkzeug/routing/matcher.py
+    werkzeug/routing/rules.py
     werkzeug/sansio/__init__.py
+    werkzeug/sansio/http.py
     werkzeug/sansio/multipart.py
     werkzeug/sansio/request.py
     werkzeug/sansio/response.py
@@ -47,20 +56,10 @@ PY_SRCS(
     werkzeug/testapp.py
     werkzeug/urls.py
     werkzeug/user_agent.py
-    werkzeug/useragents.py
     werkzeug/utils.py
     werkzeug/wrappers/__init__.py
-    werkzeug/wrappers/accept.py
-    werkzeug/wrappers/auth.py
-    werkzeug/wrappers/base_request.py
-    werkzeug/wrappers/base_response.py
-    werkzeug/wrappers/common_descriptors.py
-    werkzeug/wrappers/cors.py
-    werkzeug/wrappers/etag.py
-    werkzeug/wrappers/json.py
     werkzeug/wrappers/request.py
     werkzeug/wrappers/response.py
-    werkzeug/wrappers/user_agent.py
     werkzeug/wsgi.py
 )
 
@@ -68,15 +67,12 @@ RESOURCE_FILES(
     PREFIX contrib/python/Werkzeug/py3/
     .dist-info/METADATA
     .dist-info/top_level.txt
-    werkzeug/debug/shared/FONT_LICENSE
     werkzeug/debug/shared/ICON_LICENSE.md
     werkzeug/debug/shared/console.png
     werkzeug/debug/shared/debugger.js
     werkzeug/debug/shared/less.png
     werkzeug/debug/shared/more.png
-    werkzeug/debug/shared/source.png
     werkzeug/debug/shared/style.css
-    werkzeug/debug/shared/ubuntu.ttf
     werkzeug/py.typed
 )
 

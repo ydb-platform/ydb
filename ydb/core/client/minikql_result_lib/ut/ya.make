@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/core/client/minikql_result_lib)
 
 FORK_SUBTESTS()
 
-TIMEOUT(300)
-
 SIZE(MEDIUM)
 
 SRCS(

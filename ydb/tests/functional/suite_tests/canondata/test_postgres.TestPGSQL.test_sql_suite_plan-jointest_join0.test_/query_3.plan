@@ -9,7 +9,7 @@
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
-                        "Node Type": "Aggregate-Limit",
+                        "Node Type": "Aggregate-Limit-Aggregate",
                         "Operators": [
                             {
                                 "Inputs": [
@@ -17,7 +17,17 @@
                                         "InternalOperatorId": 1
                                     }
                                 ],
-                                "Name": "Aggregate"
+                                "Name": "Aggregate",
+                                "Phase": "Final"
+                            },
+                            {
+                                "Inputs": [
+                                    {
+                                        "InternalOperatorId": 2
+                                    }
+                                ],
+                                "Limit": "1",
+                                "Name": "Limit"
                             },
                             {
                                 "Inputs": [
@@ -25,8 +35,8 @@
                                         "ExternalPlanNodeId": 10
                                     }
                                 ],
-                                "Limit": "1",
-                                "Name": "Limit"
+                                "Name": "Aggregate",
+                                "Phase": "Final"
                             }
                         ],
                         "PlanNodeId": 11,
@@ -37,7 +47,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Aggregate-InnerJoin (MapJoin)-Filter-Filter",
+                                        "Node Type": "Aggregate-InnerJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -45,7 +55,8 @@
                                                         "InternalOperatorId": 1
                                                     }
                                                 ],
-                                                "Name": "Aggregate"
+                                                "Name": "Aggregate",
+                                                "Phase": "Intermediate"
                                             },
                                             {
                                                 "Condition": "a.hundred = b.thousand",
@@ -54,7 +65,7 @@
                                                         "InternalOperatorId": 2
                                                     },
                                                     {
-                                                        "InternalOperatorId": 3
+                                                        "ExternalPlanNodeId": 5
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
@@ -67,15 +78,6 @@
                                                 ],
                                                 "Name": "Filter",
                                                 "Predicate": "Exist(item.hundred)"
-                                            },
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "ExternalPlanNodeId": 5
-                                                    }
-                                                ],
-                                                "Name": "Filter",
-                                                "Predicate": "Exist(item.thousand)"
                                             }
                                         ],
                                         "PlanNodeId": 9,
@@ -104,7 +106,7 @@
                                                                                     }
                                                                                 ],
                                                                                 "Name": "Filter",
-                                                                                "Predicate": "Exist(item.thousand) And item.fivethous % 10 < 10"
+                                                                                "Predicate": "Exist(item.thousand) AND item.fivethous % 10 < 10"
                                                                             }
                                                                         ],
                                                                         "PlanNodeId": 2,
@@ -115,6 +117,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
+                                                                                        "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                                         "ReadColumns": [
                                                                                             "fivethous",
                                                                                             "hundred",
@@ -157,6 +160,7 @@
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
+                                                                        "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                         "ReadColumns": [
                                                                             "fivethous",
                                                                             "hundred",

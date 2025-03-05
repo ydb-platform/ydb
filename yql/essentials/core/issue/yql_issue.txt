@@ -128,6 +128,10 @@ ids {
   severity: S_ERROR
 }
 ids {
+  code: CORE_RUNTIME_ERROR
+  severity: S_ERROR
+}
+ids {
   code: KIKIMR_LOCKS_INVALIDATED
   severity: S_ERROR
   format: "Transaction locks invalidated."
@@ -682,4 +686,12 @@ ids {
 ids {
   code: CORE_TOP_UNSUPPORTED_BLOCK_CALLABLES
   severity: S_INFO
+}
+ids {
+  code: CBO_ENUM_LIMIT_REACHED
+  severity: S_WARNING
+}
+ids {
+  code: CBO_MISSING_TABLE_STATS
+  severity: S_WARNING
 }

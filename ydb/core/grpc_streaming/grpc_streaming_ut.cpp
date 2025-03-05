@@ -95,12 +95,13 @@ public:
 
         Server->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
 
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(MakeIntrusive<::NMonitoring::TDynamicCounters>());
+
         NYdbGrpc::TServerOptions options;
         options.SetPort(grpc);
         GRpcServer.Reset(new NYdbGrpc::TGRpcServer(options));
 
         auto* as = Server->GetRuntime()->GetAnyNodeActorSystem();
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(MakeIntrusive<::NMonitoring::TDynamicCounters>());
 
         GRpcServer->AddService(new TStreamingService<TImplActor>(as, counters));
         GRpcServer->Start();

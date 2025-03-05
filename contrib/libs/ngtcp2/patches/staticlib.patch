@@ -1,0 +1,11 @@
+--- a/lib/includes/ngtcp2/ngtcp2.h
++++ b/lib/includes/ngtcp2/ngtcp2.h
+@@ -64,7 +64,7 @@
+ 
+ #include <ngtcp2/version.h>
+ 
+-#ifdef NGTCP2_STATICLIB
++#if 1
+ #  define NGTCP2_EXTERN
+ #elif defined(WIN32)
+ #  ifdef BUILDING_NGTCP2

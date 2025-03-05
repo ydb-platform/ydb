@@ -29,7 +29,7 @@ Next, from the same working directory, run the following command to start the te
 Main driver initialization parameters
 
 * A connection string containing details about an [endpoint](../../../concepts/connect.md#endpoint) and [database](../../../concepts/connect.md#database). This is the only parameter that is required.
-* [Authentication](../../../recipes/ydb-sdk/auth.md#auth-provider) provider. Unless explicitly specified, an [anonymous connection](../../../concepts/auth.md) is used.
+* [Authentication](../../../recipes/ydb-sdk/auth.md#auth-provider) provider. Unless explicitly specified, an [anonymous connection](../../../security/authentication.md) is used.
 * [Session pool](../../../recipes/ydb-sdk/session-pool-limit.md) settings
 
 App code snippet for driver initialization:

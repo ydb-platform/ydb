@@ -9,6 +9,8 @@
 
 #include <aws/common/atomics.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 typedef void(aws_simple_completion_callback)(void *);
 
 /*
@@ -55,5 +57,6 @@ AWS_COMMON_API void *aws_ref_count_acquire(struct aws_ref_count *ref_count);
 AWS_COMMON_API size_t aws_ref_count_release(struct aws_ref_count *ref_count);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_REF_COUNT_H */

@@ -1,12 +1,13 @@
 #include "client_writer.h"
 
 #include "retryful_writer.h"
-#include "retryless_writer.h"
 #include "retryful_writer_v2.h"
+#include "retryless_writer.h"
 
-#include <yt/cpp/mapreduce/interface/io.h>
 #include <yt/cpp/mapreduce/common/fwd.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
+
+#include <yt/cpp/mapreduce/interface/io.h>
 
 namespace NYT {
 
@@ -14,6 +15,7 @@ namespace NYT {
 
 TClientWriter::TClientWriter(
     const TRichYPath& path,
+    const IRawClientPtr& rawClient,
     IClientRetryPolicyPtr clientRetryPolicy,
     ITransactionPingerPtr transactionPinger,
     const TClientContext& context,
@@ -38,6 +40,7 @@ TClientWriter::TClientWriter(
             auto serializedWriterOptions = FormIORequestParameters(options);
 
             RawWriter_ = MakeIntrusive<NPrivate::TRetryfulWriterV2>(
+                    rawClient,
                     std::move(clientRetryPolicy),
                     std::move(transactionPinger),
                     context,
@@ -50,6 +53,7 @@ TClientWriter::TClientWriter(
                     options.CreateTransaction_);
         } else {
             RawWriter_.Reset(new TRetryfulWriter(
+                rawClient,
                 std::move(clientRetryPolicy),
                 std::move(transactionPinger),
                 context,

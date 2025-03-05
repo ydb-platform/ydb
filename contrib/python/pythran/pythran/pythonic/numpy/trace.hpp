@@ -31,7 +31,7 @@ namespace numpy
         res += expr.fast(i).fast(i);
     return res;
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

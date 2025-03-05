@@ -1,83 +1,83 @@
 #pragma once
 
-#include "schemeshard.h"
-#include "schemeshard_private.h"
+#include <util/generic/string.h>
+#include <util/generic/ptr.h>
+#include <util/generic/set.h>
+
+#include <ydb/library/actors/core/event.h>  // for TEventHandler
+
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_types.h"
 #include "schemeshard__operation_side_effects.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_db_changes.h"
 
-#include <ydb/core/base/hive.h>
-#include <ydb/core/kesus/tablet/events.h>
-#include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tx/replication/controller/public_events.h>
-#include <ydb/core/tx/sequenceshard/public/events.h>
-#include <ydb/core/tx/tx_processing.h>
-#include <ydb/core/blob_depot/events.h>
-
-#include <ydb/core/blockstore/core/blockstore.h>
-#include <ydb/core/filestore/core/filestore.h>
-
-#include <util/generic/ptr.h>
-#include <util/generic/set.h>
 
 #define SCHEMESHARD_INCOMING_EVENTS(action) \
-    action(TEvHive::TEvCreateTabletReply,        NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \
-    action(TEvHive::TEvAdoptTabletReply,         NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \
-    action(TEvHive::TEvDeleteTabletReply,        NSchemeShard::TXTYPE_FREE_TABLET_RESULT)                \
-    action(TEvHive::TEvDeleteOwnerTabletsReply,           NSchemeShard::TXTYPE_FREE_OWNER_TABLETS_RESULT)\
-    action(TEvHive::TEvUpdateTabletsObjectReply, NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \
-    action(TEvHive::TEvUpdateDomainReply,        NSchemeShard::TXTYPE_UPDATE_DOMAIN_REPLY)               \
+    action(TEvHive, TEvCreateTabletReply,        NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \
+    action(TEvHive, TEvAdoptTabletReply,         NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \
+    action(TEvHive, TEvDeleteTabletReply,        NSchemeShard::TXTYPE_FREE_TABLET_RESULT)                \
+    action(TEvHive, TEvDeleteOwnerTabletsReply,  NSchemeShard::TXTYPE_FREE_OWNER_TABLETS_RESULT)         \
+    action(TEvHive, TEvUpdateTabletsObjectReply, NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \
+    action(TEvHive, TEvUpdateDomainReply,        NSchemeShard::TXTYPE_UPDATE_DOMAIN_REPLY)               \
 \
-    action(TEvDataShard::TEvProposeTransactionResult,     NSchemeShard::TXTYPE_DATASHARD_PROPOSE_RESULT) \
-    action(TEvDataShard::TEvSchemaChanged,       NSchemeShard::TXTYPE_DATASHARD_SCHEMA_CHANGED)          \
-    action(TEvDataShard::TEvStateChanged,        NSchemeShard::TXTYPE_DATASHARD_STATE_RESULT)            \
-    action(TEvDataShard::TEvInitSplitMergeDestinationAck, NSchemeShard::TXTYPE_INIT_SPLIT_DST_ACK)       \
-    action(TEvDataShard::TEvSplitAck,            NSchemeShard::TXTYPE_SPLIT_ACK)                         \
-    action(TEvDataShard::TEvSplitPartitioningChangedAck,  NSchemeShard::TXTYPE_SPLIT_PARTITIONING_CHANGED_DST_ACK) \
+    action(TEvDataShard, TEvProposeTransactionResult,     NSchemeShard::TXTYPE_DATASHARD_PROPOSE_RESULT)           \
+    action(TEvDataShard, TEvSchemaChanged,                NSchemeShard::TXTYPE_DATASHARD_SCHEMA_CHANGED)           \
+    action(TEvDataShard, TEvStateChanged,                 NSchemeShard::TXTYPE_DATASHARD_STATE_RESULT)             \
+    action(TEvDataShard, TEvInitSplitMergeDestinationAck, NSchemeShard::TXTYPE_INIT_SPLIT_DST_ACK)                 \
+    action(TEvDataShard, TEvSplitAck,                     NSchemeShard::TXTYPE_SPLIT_ACK)                          \
+    action(TEvDataShard, TEvSplitPartitioningChangedAck,  NSchemeShard::TXTYPE_SPLIT_PARTITIONING_CHANGED_DST_ACK) \
 \
-    action(TEvColumnShard::TEvProposeTransactionResult,   NSchemeShard::TXTYPE_COLUMNSHARD_PROPOSE_RESULT)              \
-    action(TEvColumnShard::TEvNotifyTxCompletionResult,   NSchemeShard::TXTYPE_COLUMNSHARD_NOTIFY_TX_COMPLETION_RESULT) \
+    action(TEvColumnShard, TEvProposeTransactionResult,   NSchemeShard::TXTYPE_COLUMNSHARD_PROPOSE_RESULT)              \
+    action(TEvColumnShard, TEvNotifyTxCompletionResult,   NSchemeShard::TXTYPE_COLUMNSHARD_NOTIFY_TX_COMPLETION_RESULT) \
 \
-    action(NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_CREATE_SEQUENCE_RESULT)   \
-    action(NSequenceShard::TEvSequenceShard::TEvDropSequenceResult,     NSchemeShard::TXTYPE_SEQUENCESHARD_DROP_SEQUENCE_RESULT)     \
-    action(NSequenceShard::TEvSequenceShard::TEvUpdateSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_UPDATE_SEQUENCE_RESULT)   \
-    action(NSequenceShard::TEvSequenceShard::TEvFreezeSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_FREEZE_SEQUENCE_RESULT)   \
-    action(NSequenceShard::TEvSequenceShard::TEvRestoreSequenceResult,  NSchemeShard::TXTYPE_SEQUENCESHARD_RESTORE_SEQUENCE_RESULT)  \
-    action(NSequenceShard::TEvSequenceShard::TEvRedirectSequenceResult, NSchemeShard::TXTYPE_SEQUENCESHARD_REDIRECT_SEQUENCE_RESULT) \
-    action(NSequenceShard::TEvSequenceShard::TEvGetSequenceResult, NSchemeShard::TXTYPE_SEQUENCESHARD_GET_SEQUENCE_RESULT) \
+    action(NSequenceShard::TEvSequenceShard, TEvCreateSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_CREATE_SEQUENCE_RESULT)   \
+    action(NSequenceShard::TEvSequenceShard, TEvDropSequenceResult,     NSchemeShard::TXTYPE_SEQUENCESHARD_DROP_SEQUENCE_RESULT)     \
+    action(NSequenceShard::TEvSequenceShard, TEvUpdateSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_UPDATE_SEQUENCE_RESULT)   \
+    action(NSequenceShard::TEvSequenceShard, TEvFreezeSequenceResult,   NSchemeShard::TXTYPE_SEQUENCESHARD_FREEZE_SEQUENCE_RESULT)   \
+    action(NSequenceShard::TEvSequenceShard, TEvRestoreSequenceResult,  NSchemeShard::TXTYPE_SEQUENCESHARD_RESTORE_SEQUENCE_RESULT)  \
+    action(NSequenceShard::TEvSequenceShard, TEvRedirectSequenceResult, NSchemeShard::TXTYPE_SEQUENCESHARD_REDIRECT_SEQUENCE_RESULT) \
+    action(NSequenceShard::TEvSequenceShard, TEvGetSequenceResult,      NSchemeShard::TXTYPE_SEQUENCESHARD_GET_SEQUENCE_RESULT)      \
 \
-    action(NReplication::TEvController::TEvCreateReplicationResult, NSchemeShard::TXTYPE_CREATE_REPLICATION_RESULT) \
-    action(NReplication::TEvController::TEvAlterReplicationResult,  NSchemeShard::TXTYPE_ALTER_REPLICATION_RESULT)  \
-    action(NReplication::TEvController::TEvDropReplicationResult,   NSchemeShard::TXTYPE_DROP_REPLICATION_RESULT)   \
+    action(NReplication::TEvController, TEvCreateReplicationResult, NSchemeShard::TXTYPE_CREATE_REPLICATION_RESULT) \
+    action(NReplication::TEvController, TEvAlterReplicationResult,  NSchemeShard::TXTYPE_ALTER_REPLICATION_RESULT)  \
+    action(NReplication::TEvController, TEvDropReplicationResult,   NSchemeShard::TXTYPE_DROP_REPLICATION_RESULT)   \
 \
-    action(TEvSubDomain::TEvConfigureStatus,     NSchemeShard::TXTYPE_SUBDOMAIN_CONFIGURE_RESULT)        \
+    action(TEvSubDomain, TEvConfigureStatus,     NSchemeShard::TXTYPE_SUBDOMAIN_CONFIGURE_RESULT) \
 \
-    action(TEvSchemeShard::TEvInitTenantSchemeShardResult,   NSchemeShard::TXTYPE_SUBDOMAIN_CONFIGURE_RESULT)  \
-    action(TEvSchemeShard::TEvMigrateSchemeShardResult,      NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
-    action(TEvSchemeShard::TEvPublishTenantAsReadOnlyResult, NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
-    action(TEvPrivate::TEvCommitTenantUpdate,                    NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
-    action(TEvPrivate::TEvUndoTenantUpdate,                      NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
-    action(TEvSchemeShard::TEvPublishTenantResult,           NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
-    action(TEvSchemeShard::TEvRewriteOwnerResult,            NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
-    action(TEvDataShard::TEvMigrateSchemeShardResponse,          NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
+    action(NSchemeShard::TEvSchemeShard, TEvInitTenantSchemeShardResult,   NSchemeShard::TXTYPE_SUBDOMAIN_CONFIGURE_RESULT)  \
+    action(NSchemeShard::TEvSchemeShard, TEvMigrateSchemeShardResult,      NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
+    action(NSchemeShard::TEvSchemeShard, TEvPublishTenantAsReadOnlyResult, NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
+    action(NSchemeShard::TEvPrivate, TEvCommitTenantUpdate,                NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
+    action(NSchemeShard::TEvPrivate, TEvUndoTenantUpdate,                  NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
+    action(NSchemeShard::TEvSchemeShard, TEvPublishTenantResult,           NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
+    action(NSchemeShard::TEvSchemeShard, TEvRewriteOwnerResult,            NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
+    action(TEvDataShard, TEvMigrateSchemeShardResponse,                    NSchemeShard::TXTYPE_SUBDOMAIN_MIGRATE_RESULT)    \
 \
-    action(TEvBlockStore::TEvUpdateVolumeConfigResponse,  NSchemeShard::TXTYPE_BLOCKSTORE_CONFIG_RESULT) \
-    action(TEvFileStore::TEvUpdateConfigResponse,         NSchemeShard::TXTYPE_FILESTORE_CONFIG_RESULT)  \
-    action(NKesus::TEvKesus::TEvSetConfigResult,          NSchemeShard::TXTYPE_KESUS_CONFIG_RESULT)      \
-    action(TEvPersQueue::TEvDropTabletReply,              NSchemeShard::TXTYPE_DROP_TABLET_RESULT)       \
-    action(TEvPersQueue::TEvUpdateConfigResponse,         NSchemeShard::TXTYPE_PERSQUEUE_CONFIG_RESULT)  \
-    action(TEvPersQueue::TEvProposeTransactionResult,     NSchemeShard::TXTYPE_PERSQUEUE_PROPOSE_RESULT) \
-    action(TEvBlobDepot::TEvApplyConfigResult,            NSchemeShard::TXTYPE_BLOB_DEPOT_CONFIG_RESULT) \
+    action(TEvBlockStore, TEvUpdateVolumeConfigResponse,  NSchemeShard::TXTYPE_BLOCKSTORE_CONFIG_RESULT) \
+    action(TEvFileStore, TEvUpdateConfigResponse,         NSchemeShard::TXTYPE_FILESTORE_CONFIG_RESULT)  \
+    action(NKesus::TEvKesus, TEvSetConfigResult,          NSchemeShard::TXTYPE_KESUS_CONFIG_RESULT)      \
+    action(TEvPersQueue, TEvDropTabletReply,              NSchemeShard::TXTYPE_DROP_TABLET_RESULT)       \
+    action(TEvPersQueue, TEvUpdateConfigResponse,         NSchemeShard::TXTYPE_PERSQUEUE_CONFIG_RESULT)  \
+    action(TEvPersQueue, TEvProposeTransactionResult,     NSchemeShard::TXTYPE_PERSQUEUE_PROPOSE_RESULT) \
+    action(TEvBlobDepot, TEvApplyConfigResult,            NSchemeShard::TXTYPE_BLOB_DEPOT_CONFIG_RESULT) \
 \
-    action(TEvPrivate::TEvOperationPlan,                   NSchemeShard::TXTYPE_PLAN_STEP)                             \
-    action(TEvPrivate::TEvCompletePublication, NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_PUBLICATION) \
-    action(TEvPrivate::TEvCompleteBarrier,     NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_BARRIER)     \
+    action(NSchemeShard::TEvPrivate, TEvOperationPlan,       NSchemeShard::TXTYPE_PLAN_STEP)                             \
+    action(NSchemeShard::TEvPrivate, TEvCompletePublication, NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_PUBLICATION) \
+    action(NSchemeShard::TEvPrivate, TEvCompleteBarrier,     NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_BARRIER)     \
 \
-    action(TEvPersQueue::TEvProposeTransactionAttachResult, NSchemeShard::TXTYPE_PERSQUEUE_PROPOSE_ATTACH_RESULT)
+    action(TEvDataShard, TEvProposeTransactionAttachResult, NSchemeShard::TXTYPE_PERSQUEUE_PROPOSE_ATTACH_RESULT)
+
+
+//NOTE: Forward declare all events that schemeshard should be able to receive
+#define EventForwardDecl(NS, TEvType, ...) \
+    namespace NKikimr::NS { \
+        struct TEvType; \
+        using TEvType ## __HandlePtr = TAutoPtr<TEventHandle<TEvType>>; \
+    }
+
+    SCHEMESHARD_INCOMING_EVENTS(EventForwardDecl)
+#undef EventForwardDecl
 
 
 namespace NKikimr {
@@ -95,6 +95,7 @@ public:
     TStorageChanges& DbChanges;
 
     TMaybe<NACLib::TUserToken> UserToken;
+    TString PeerName;
     bool IsAllowedPrivateTables = false;
 
 private:
@@ -172,8 +173,8 @@ public:
     template <EventBasePtr TEvPtr>
     static TString DebugReply(const TEvPtr& ev);
 
-#define DefaultHandleReply(TEvType, ...) \
-    virtual bool HandleReply(TEvType::TPtr& ev, TOperationContext& context);
+#define DefaultHandleReply(NS, TEvType, ...) \
+    virtual bool HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context);
 
     SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
 #undef DefaultHandleReply
@@ -190,8 +191,8 @@ class TSubOperationState: public ISubOperationState {
 public:
     using TPtr = THolder<TSubOperationState>;
 
-#define DefaultHandleReply(TEvType, ...) \
-    bool HandleReply(TEvType::TPtr& ev, TOperationContext& context) override;
+#define DefaultHandleReply(NS, TEvType, ...) \
+    bool HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) override;
 
     SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
 #undef DefaultHandleReply
@@ -248,8 +249,8 @@ class TSubOperation: public TSubOperationBase {
 
 protected:
     virtual TTxState::ETxState NextState(TTxState::ETxState state) const = 0;
-    virtual TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) = 0;
 
+    virtual TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) = 0;
     virtual TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext&) {
         return SelectStateFunc(state);
     }
@@ -290,8 +291,8 @@ public:
         return Progress(context, &ISubOperationState::ProgressState);
     }
 
-    #define DefaultHandleReply(TEvType, ...) \
-        bool HandleReply(TEvType::TPtr& ev, TOperationContext& context) override;
+    #define DefaultHandleReply(NS, TEvType, ...) \
+        bool HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) override;
 
         SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
     #undef DefaultHandleReply
@@ -439,6 +440,7 @@ ISubOperation::TPtr CreateDropCdcStreamAtTable(TOperationId id, TTxState::ETxSta
 // Create
 TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+bool CreateAlterContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
 TVector<ISubOperation::TPtr> CreateDropContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateBackup(TOperationId id, const TTxTransaction& tx);
@@ -459,6 +461,11 @@ ISubOperation::TPtr CreateDropTableIndex(TOperationId id, TTxState::ETxState sta
 ISubOperation::TPtr CreateAlterTableIndex(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterTableIndex(TOperationId id, TTxState::ETxState state);
 
+bool CreateConsistentCopyTables(
+    TOperationId nextId,
+    const TTxTransaction& tx,
+    TOperationContext& context,
+    TVector<ISubOperation::TPtr>& result);
 TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx);
@@ -611,6 +618,8 @@ ISubOperation::TPtr CreateCopySequence(TOperationId id, const TTxTransaction& tx
 ISubOperation::TPtr CreateCopySequence(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateAlterSequence(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterSequence(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateMoveSequence(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateMoveSequence(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState state);
@@ -618,6 +627,13 @@ ISubOperation::TPtr CreateAlterReplication(TOperationId id, const TTxTransaction
 ISubOperation::TPtr CreateAlterReplication(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateDropReplication(TOperationId id, const TTxTransaction& tx, bool cascade);
 ISubOperation::TPtr CreateDropReplication(TOperationId id, TTxState::ETxState state, bool cascade);
+
+ISubOperation::TPtr CreateNewTransfer(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewTransfer(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateAlterTransfer(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterTransfer(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateDropTransfer(TOperationId id, const TTxTransaction& tx, bool cascade);
+ISubOperation::TPtr CreateDropTransfer(TOperationId id, TTxState::ETxState state, bool cascade);
 
 ISubOperation::TPtr CreateNewBlobDepot(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateNewBlobDepot(TOperationId id, TTxState::ETxState state);
@@ -644,6 +660,8 @@ ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxSt
 ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table);
 
 TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr> CreateRestoreMultipleIncrementalBackups(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+bool CreateRestoreMultipleIncrementalBackups(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, bool dstCreatedInSameOp, TVector<ISubOperation::TPtr>& result);
 
 // BackupCollection
 // Create
@@ -652,7 +670,11 @@ ISubOperation::TPtr CreateNewBackupCollection(TOperationId id, TTxState::ETxStat
 // Drop
 ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, TTxState::ETxState state);
+// Restore
+TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 
+TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 
 }
 }

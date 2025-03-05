@@ -18,29 +18,33 @@ TCommandGetToken::TCommandGetToken()
 
 void TCommandGetToken::Config(TConfig& config) {
     TYdbSimpleCommand::Config(config);
-    config.Opts->AddLongOption('f', "force", "Print token without prompt").NoArgument().StoreTrue(&ForceMode);
+    config.Opts->AddLongOption('f', "force", "Print token without prompt").NoArgument().StoreTrue(&config.AssumeYes);
     config.SetFreeArgsNum(0);
 }
 
-int TCommandGetToken::Run(TConfig& config) {
-    auto credentialsProviderFactory = config.CredentialsGetter(config);
-
-    if (!ForceMode) {
+bool TCommandGetToken::Prompt(TConfig& config) {
+    Y_UNUSED(config);
+    if (!config.AssumeYes) {
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
         Cout << colors.RedColor() << "Caution: Your auth token will be printed to console." << colors.OldColor()
-            << " Use \"--force\" (\"-f\") option to print without prompting." << Endl
-            << "Do you want to proceed (y/n)? : ";
-        if (!AskYesOrNo()) {
-            return EXIT_FAILURE;
+            << " Use \"--force\" (\"-f\") option to print without prompting." << Endl;
+
+        if (!AskPrompt("Do you want to proceed?", false)) {
+            return false;
         }
     }
 
+    return true;
+}
+
+int TCommandGetToken::Run(TConfig& config) {
+    auto credentialsProviderFactory = config.GetSingletonCredentialsProviderFactory();
     if (credentialsProviderFactory) {
         auto driver = CreateDriver(config);
         TDummyClient client(driver);
 
         auto authInfo = credentialsProviderFactory->CreateProvider(client.GetCoreFacility())->GetAuthInfo();
-        if (authInfo) {
+        if (!authInfo.empty()) {
             Cout << authInfo << Endl;
             return EXIT_SUCCESS;
         }

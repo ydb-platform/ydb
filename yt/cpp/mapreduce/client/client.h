@@ -5,6 +5,7 @@
 #include "transaction_pinger.h"
 
 #include <yt/cpp/mapreduce/interface/client.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 
 #include <yt/cpp/mapreduce/http/context.h>
 #include <yt/cpp/mapreduce/http/requests.h>
@@ -29,6 +30,7 @@ class TClientBase
 {
 public:
     TClientBase(
+        IRawClientPtr rawClient,
         const TClientContext& context,
         const TTransactionId& transactionId,
         IClientRetryPolicyPtr retryPolicy);
@@ -220,7 +222,7 @@ public:
 
     TBatchRequestPtr CreateBatchRequest() override;
 
-    IClientPtr GetParentClient() override;
+    IRawClientPtr GetRawClient() const;
 
     const TClientContext& GetContext() const;
 
@@ -232,6 +234,7 @@ protected:
     virtual TClientPtr GetParentClientImpl() = 0;
 
 protected:
+    const IRawClientPtr RawClient_;
     const TClientContext Context_;
     TTransactionId TransactionId_;
     IClientRetryPolicyPtr ClientRetryPolicy_;
@@ -287,6 +290,7 @@ public:
     //
     // Start a new transaction.
     TTransaction(
+        const IRawClientPtr& rawClient,
         TClientPtr parentClient,
         const TClientContext& context,
         const TTransactionId& parentTransactionId,
@@ -295,6 +299,7 @@ public:
     //
     // Attach an existing transaction.
     TTransaction(
+        const IRawClientPtr& rawClient,
         TClientPtr parentClient,
         const TClientContext& context,
         const TTransactionId& transactionId,
@@ -321,12 +326,14 @@ public:
 
     ITransactionPingerPtr GetTransactionPinger() override;
 
+    IClientPtr GetParentClient(bool ignoreGlobalTx) override;
+
 protected:
     TClientPtr GetParentClientImpl() override;
 
 private:
     ITransactionPingerPtr TransactionPinger_;
-    THolder<TPingableTransaction> PingableTx_;
+    std::unique_ptr<TPingableTransaction> PingableTx_;
     TClientPtr ParentClient_;
 };
 
@@ -338,6 +345,7 @@ class TClient
 {
 public:
     TClient(
+        IRawClientPtr rawClient,
         const TClientContext& context,
         const TTransactionId& globalId,
         IClientRetryPolicyPtr retryPolicy);
@@ -480,6 +488,8 @@ public:
 
     ITransactionPingerPtr GetTransactionPinger() override;
 
+    IClientPtr GetParentClient(bool ignoreGlobalTx) override;
+
     // Helper methods
     TYtPoller& GetYtPoller();
 
@@ -487,26 +497,29 @@ protected:
     TClientPtr GetParentClientImpl() override;
 
 private:
-    template <class TOptions>
-    void SetTabletParams(
-        THttpHeader& header,
-        const TYPath& path,
-        const TOptions& options);
-
     void CheckShutdown() const;
 
+private:
     ITransactionPingerPtr TransactionPinger_;
 
     std::atomic<bool> Shutdown_ = false;
     TMutex Lock_;
-    THolder<TYtPoller> YtPoller_;
+    std::unique_ptr<TYtPoller> YtPoller_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void SetupClusterContext(
+    TClientContext& context,
+    const TString& serverName);
+
+TClientContext CreateClientContext(
+    const TString& serverName,
+    const TCreateClientOptions& options);
+
 TClientPtr CreateClientImpl(
     const TString& serverName,
-    const TCreateClientOptions& options = TCreateClientOptions());
+    const TCreateClientOptions& options = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

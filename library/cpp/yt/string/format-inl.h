@@ -10,7 +10,8 @@
 
 #include <library/cpp/yt/assert/assert.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
 
@@ -163,6 +164,10 @@ template <class... Ts>
 constexpr bool CKnownKVRange<THashMap<Ts...>> = true;
 template <class... Ts>
 constexpr bool CKnownKVRange<THashMultiMap<Ts...>> = true;
+template <class... Ts>
+constexpr bool CKnownKVRange<TCompactFlatMap<Ts...>> = true;
+template <class K, class V, size_t N>
+constexpr bool CKnownKVRange<TCompactFlatMap<K, V, N>> = true;
 
 // TODO(arkady-e1ppa): Uncomment me when
 // https://github.com/llvm/llvm-project/issues/58534 is shipped.
@@ -228,6 +233,43 @@ void FormatKeyValueRange(TStringBuilderBase* builder, const TRange& range, const
         ++index;
     }
     builder->AppendChar('}');
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TRange, class TValueGetter, class TIntervalFormatter>
+void FormatCompactIntervalRange(
+    TStringBuilderBase* builder,
+    const TRange& range,
+    const TValueGetter& valueGetter,
+    const TIntervalFormatter& intervalFormatter)
+{
+    if (range.begin() == range.end()) {
+        builder->AppendString("[]");
+        return;
+    }
+
+    builder->AppendChar('[');
+
+    auto first = range.begin();
+    auto last = first;
+    auto current = first + 1;
+
+    while (current != range.end()) {
+        if (valueGetter(current) != valueGetter(last) + 1) {
+            bool firstInterval = first == range.begin();
+            intervalFormatter(builder, first, last, valueGetter, firstInterval);
+            first = current;
+        }
+
+        last = current;
+        ++current;
+    }
+
+    bool firstInterval = first == range.begin();
+    intervalFormatter(builder, first, last, valueGetter, firstInterval);
+
+    builder->AppendChar(']');
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -301,6 +343,59 @@ TFormatterWrapper<TFormatter> MakeFormatterWrapper(
     return TFormatterWrapper<TFormatter>{
         .Formatter = std::move(formatter)
     };
+}
+
+template <class TRange, class TValueGetter, class TIntervalFormatter>
+auto TCompactIntervalView<TRange, TValueGetter, TIntervalFormatter>::begin() const
+    -> TBegin
+{
+    return RangeBegin;
+}
+
+template <class TRange, class TValueGetter, class TIntervalFormatter>
+auto TCompactIntervalView<TRange, TValueGetter, TIntervalFormatter>::end() const
+    -> TEnd
+{
+    return RangeEnd;
+}
+
+template <class TRange>
+auto TDefaultValueGetter<TRange>::operator()(const TIterator& iterator) const
+    -> typename std::iterator_traits<TIterator>::value_type
+{
+    return *iterator;
+}
+
+template <class TRange, class TValueGetter>
+void TDefaultIntervalFormatter<TRange, TValueGetter>::operator()(
+    TStringBuilderBase* builder,
+    const TIterator& first,
+    const TIterator& last,
+    const TValueGetter& valueGetter,
+    bool firstInterval) const
+{
+    if (!firstInterval) {
+        builder->AppendString(DefaultJoinToStringDelimiter);
+    }
+
+    if (first == last) {
+        builder->AppendFormat("%v", valueGetter(first));
+    } else {
+        builder->AppendFormat("%v-%v", valueGetter(first), valueGetter(last));
+    }
+}
+
+template <class TRange, class TValueGetter, class TIntervalFormatter>
+TCompactIntervalView<TRange, TValueGetter, TIntervalFormatter> MakeCompactIntervalView(
+    const TRange& range,
+    TValueGetter&& valueGetter,
+    TIntervalFormatter&& intervalFormatter)
+{
+    return TCompactIntervalView<TRange, TValueGetter, TIntervalFormatter>{
+        range.begin(),
+        range.end(),
+        std::forward<TValueGetter>(valueGetter),
+        std::forward<TIntervalFormatter>(intervalFormatter)};
 }
 
 template <class... TArgs>
@@ -671,6 +766,27 @@ void FormatValue(
     const TFormatterWrapper<TFormatter>& wrapper,
     TStringBuf spec);
 
+// TCompactIntervalView
+
+template <class TRange, class TValueGetter, class TIntervalFormatter>
+concept CCompactIntervalView = requires (
+    TRange range,
+    TValueGetter valueGetter,
+    TIntervalFormatter intervalFormatter)
+{
+    { valueGetter(range.begin()) } -> std::integral;
+    {
+        intervalFormatter(nullptr, range.begin(), range.begin(), valueGetter, true)
+    } -> std::same_as<void>;
+};
+
+template <class TRange, class TValueGetter, class TIntervalFormatter>
+    requires CCompactIntervalView<TRange, TValueGetter, TIntervalFormatter>
+void FormatValue(
+    TStringBuilderBase* builder,
+    const TCompactIntervalView<TRange, TValueGetter, TIntervalFormatter>& compactIntervalView,
+    TStringBuf spec);
+
 // TLazyMultiValueFormatter
 template <class... TArgs>
 void FormatValue(
@@ -722,7 +838,7 @@ void FormatValue(TStringBuilderBase* builder, const std::tuple<Ts...>& value, TS
     [&] <size_t... Idx> (std::index_sequence<Idx...>) {
         ([&] {
             FormatValue(builder, std::get<Idx>(value), spec);
-            if constexpr (Idx != sizeof...(Ts)) {
+            if constexpr (Idx != sizeof...(Ts) - 1) {
                 builder->AppendString(TStringBuf(", "));
             }
         } (), ...);
@@ -771,6 +887,21 @@ void FormatValue(
     TStringBuf /*spec*/)
 {
     NYT::FormatRange(builder, formattableView, formattableView.Formatter, formattableView.Limit);
+}
+
+// TCompactIntervalView
+template <class TRange, class TValueGetter, class TIntervalFormatter>
+    requires CCompactIntervalView<TRange, TValueGetter, TIntervalFormatter>
+void FormatValue(
+    TStringBuilderBase* builder,
+    const TCompactIntervalView<TRange, TValueGetter, TIntervalFormatter>& compactIntervalView,
+    TStringBuf /*spec*/)
+{
+    NYT::FormatCompactIntervalRange(
+        builder,
+        compactIntervalView,
+        compactIntervalView.ValueGetter,
+        compactIntervalView.IntervalFormatter);
 }
 
 // TFormatterWrapper
@@ -871,12 +1002,43 @@ concept CFormatter = CInvocable<T, void(size_t, TStringBuilderBase*, TStringBuf)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <CFormatter TFormatter>
-void RunFormatter(
+void RunFormatterAt(
+    const TFormatter& formatter,
+    size_t index,
+    TStringBuilderBase* builder,
+    TStringBuf spec,
+    bool singleQuotes,
+    bool doubleQuotes)
+{
+    // 'n' means 'nothing'; skip the argument.
+    if (!spec.Contains('n')) {
+        if (singleQuotes) {
+            builder->AppendChar('\'');
+        }
+        if (doubleQuotes) {
+            builder->AppendChar('"');
+        }
+
+        formatter(index, builder, spec);
+
+        if (singleQuotes) {
+            builder->AppendChar('\'');
+        }
+        if (doubleQuotes) {
+            builder->AppendChar('"');
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <CFormatter TFormatter>
+void RunFormatterFullScan(
     TStringBuilderBase* builder,
     TStringBuf format,
-    const TFormatter& formatter)
+    const TFormatter& formatter,
+    int argIndex = 0)
 {
-    size_t argIndex = 0;
     auto current = std::begin(format);
     auto end = std::end(format);
     while (true) {
@@ -912,27 +1074,13 @@ void RunFormatter(
         bool singleQuotes = false;
         bool doubleQuotes = false;
 
+        static constexpr TStringBuf conversionSpecifiers =
+            "diuoxXfFeEgGaAcspn";
+
         while (
             argFormatEnd != end &&
-            *argFormatEnd != GenericSpecSymbol &&     // value in generic format
-            *argFormatEnd != 'd' &&                   // others are standard specifiers supported by printf
-            *argFormatEnd != 'i' &&
-            *argFormatEnd != 'u' &&
-            *argFormatEnd != 'o' &&
-            *argFormatEnd != 'x' &&
-            *argFormatEnd != 'X' &&
-            *argFormatEnd != 'f' &&
-            *argFormatEnd != 'F' &&
-            *argFormatEnd != 'e' &&
-            *argFormatEnd != 'E' &&
-            *argFormatEnd != 'g' &&
-            *argFormatEnd != 'G' &&
-            *argFormatEnd != 'a' &&
-            *argFormatEnd != 'A' &&
-            *argFormatEnd != 'c' &&
-            *argFormatEnd != 's' &&
-            *argFormatEnd != 'p' &&
-            *argFormatEnd != 'n')
+            *argFormatEnd != GenericSpecSymbol &&            // value in generic format
+            !conversionSpecifiers.Contains(*argFormatEnd)) // others are standard specifiers supported by printf
         {
             switch (*argFormatEnd) {
                 case 'q':
@@ -952,27 +1100,162 @@ void RunFormatter(
             ++argFormatEnd;
         }
 
-        // 'n' means 'nothing'; skip the argument.
-        if (*argFormatBegin != 'n') {
-            // Format argument.
-            TStringBuf argFormat(argFormatBegin, argFormatEnd);
-            if (singleQuotes) {
-                builder->AppendChar('\'');
-            }
-            if (doubleQuotes) {
-                builder->AppendChar('"');
-            }
-            formatter(argIndex++, builder, argFormat);
-            if (singleQuotes) {
-                builder->AppendChar('\'');
-            }
-            if (doubleQuotes) {
-                builder->AppendChar('"');
-            }
-        }
+        RunFormatterAt(
+            formatter,
+            argIndex++,
+            builder,
+            TStringBuf{argFormatBegin, argFormatEnd},
+            singleQuotes,
+            doubleQuotes);
 
         current = argFormatEnd;
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <CFormatter TFormatter, class... TArgs>
+void RunFormatter(
+    TStringBuilderBase* builder,
+    TBasicFormatString<TArgs...> formatString,
+    const TFormatter& formatter)
+{
+    auto isValidLocations = [] (const auto& t) {
+        return std::get<0>(t) != std::get<1>(t);
+    };
+    // Generally marker is simply "%v" e.g. 2 symbols.
+    // We assume it is used to insert something for roughly 5 symbols
+    // of size.
+    builder->Preallocate(std::size(formatString.Get()) + sizeof...(TArgs) * (5 - 2));
+
+    // Empty marker positions -- fallback to the normal impl.
+    if constexpr (sizeof...(TArgs) != 0) {
+        if (!isValidLocations(formatString.Markers[0])) {
+            RunFormatterFullScan(builder, formatString.Get(), formatter);
+            return;
+        }
+    } else {
+        if (formatString.Escapes[0] == -2) {
+            RunFormatterFullScan(builder, formatString.Get(), formatter);
+            return;
+        }
+    }
+
+    int escapesFound = 0;
+    int currentPos = 0;
+
+    auto beginIt = formatString.Get().begin();
+    auto size = formatString.Get().size();
+
+    const auto& [markers, escapes] = std::tie(formatString.Markers, formatString.Escapes);
+
+    auto appendVerbatim = [&] (int offsetToEnd) {
+        builder->AppendString(TStringBuf{beginIt + currentPos, beginIt + offsetToEnd});
+    };
+
+    auto processEscape = [&] () mutable {
+        // OpenMP doesn't support structured bindings :(.
+        auto escapePos = formatString.Escapes[escapesFound];
+
+        // Append everything that's present until %%.
+        appendVerbatim(escapePos);
+
+        // Append '%'.
+        builder->AppendChar('%');
+
+        // Advance position to first '%' pos + 2.
+        currentPos = escapePos + 2;
+    };
+
+    int argIndex = 0;
+
+    while(argIndex < std::ssize(markers)) {
+        auto [markerStart, markerEnd] = markers[argIndex];
+
+        if (
+            escapes[escapesFound] != -1 &&
+            escapes[escapesFound] - currentPos < markerStart - currentPos)
+        {
+            // Escape sequence is closer.
+            processEscape();
+            ++escapesFound;
+        } else {
+            // Normal marker is closer.
+
+            // Append everything that's present until marker start.
+            appendVerbatim(markerStart);
+
+            // Parsing format string.
+
+            // We skip '%' here since spec does not contain it.
+            auto spec = TStringBuf{beginIt + markerStart + 1, beginIt + markerEnd};
+            bool singleQuotes = false;
+            bool doubleQuotes = false;
+            for (auto c : spec) {
+                if (c == 'q') {
+                    singleQuotes = true;
+                }
+                if (c == 'Q') {
+                    doubleQuotes = true;
+                }
+            }
+            RunFormatterAt(
+                formatter,
+                argIndex,
+                builder,
+                spec,
+                singleQuotes,
+                doubleQuotes);
+
+            // Advance position past marker's end.
+            currentPos = markerEnd;
+            ++argIndex;
+            continue;
+        }
+
+        // Check if the number of escapes we have found has exceeded the recorded limit
+        // e.g. we have to manually scan the rest of the formatString.
+        if (escapesFound == std::ssize(escapes)) {
+            break;
+        }
+    }
+
+    // Process remaining escapes.
+    while (escapesFound < std::ssize(escapes)) {
+        if (escapes[escapesFound] == -1) {
+            break;
+        }
+
+        processEscape();
+        ++escapesFound;
+    }
+
+    // We either ran out of markers or reached the limit of allowed
+    // escape sequences.
+
+    // Happy path: no limit on escape sequences.
+    if (escapesFound != std::ssize(escapes)) {
+        // Append whatever's left until the end.
+        appendVerbatim(size);
+        return;
+    }
+
+    // Sad path: we have to fully parse remainder of format.
+    RunFormatterFullScan(builder, TStringBuf{beginIt + currentPos, beginIt + size}, formatter, argIndex);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// For benchmarking purposes.
+template <class... TArgs>
+TString FormatOld(TFormatString<TArgs...> format, TArgs&&... args)
+{
+    TStringBuilder builder;
+    if constexpr ((CFormattable<TArgs> && ...)) {
+        NYT::NDetail::TValueFormatter<0, TArgs...> formatter(args...);
+        NYT::NDetail::RunFormatterFullScan(&builder, format.Get(), formatter);
+    }
+    return builder.Flush();
 }
 
 } // namespace NDetail
@@ -991,7 +1274,7 @@ void Format(TStringBuilderBase* builder, TFormatString<TArgs...> format, TArgs&&
     // a second error.
     if constexpr ((CFormattable<TArgs> && ...)) {
         NYT::NDetail::TValueFormatter<0, TArgs...> formatter(args...);
-        NYT::NDetail::RunFormatter(builder, format.Get(), formatter);
+        NYT::NDetail::RunFormatter(builder, format, formatter);
     }
 }
 
@@ -1012,7 +1295,7 @@ void FormatVector(
     const TVector& vec)
 {
     NYT::NDetail::TRangeFormatter<typename TVector::value_type> formatter(vec);
-    NYT::NDetail::RunFormatter(builder, format, formatter);
+    NYT::NDetail::RunFormatterFullScan(builder, format, formatter);
 }
 
 template <class TVector>
@@ -1022,7 +1305,7 @@ void FormatVector(
     const TVector& vec)
 {
     NYT::NDetail::TRangeFormatter<typename TVector::value_type> formatter(vec);
-    NYT::NDetail::RunFormatter(builder, format, formatter);
+    NYT::NDetail::RunFormatterFullScan(builder, format, formatter);
 }
 
 template <size_t Length, class TVector>

@@ -2,8 +2,8 @@
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/udf/udf_types.h>
@@ -39,6 +39,13 @@ static constexpr const char* testShardingVariants[] = {
     R"(["timestamp", "uid"])",
     R"(["timestamp", "resource_type", "resource_id", "uid"])"
 };
+
+NKikimrConfig::TAppConfig GetAppConfig() {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableFeatureFlags()->SetEnableColumnStore(true);
+    return appConfig;
+}
+
 }
 
 Y_UNIT_TEST_SUITE(YdbOlapStore) {
@@ -321,20 +328,21 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
     template<bool NotNull>
     void TestBulkUpsert(EPrimitiveType pkFirstType) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
-        auto connection = ConnectToServer(server);
+        TClient annoyingClient(*server.ServerSettings);
+        annoyingClient.GrantConnect("alice@builtin");
+        annoyingClient.GrantConnect("bob@builtin");
 
         TTestOlapTableOptions opts;
         opts.TsType = pkFirstType;
         opts.HashFunction = "HASH_FUNCTION_MODULO_N";
         CreateOlapTable<NotNull>(*server.ServerSettings, "log1", opts);
 
-        TClient annoyingClient(*server.ServerSettings);
         annoyingClient.ModifyOwner("/Root/OlapStore", "log1", "alice@builtin");
 
+        auto connection = ConnectToServer(server);
         {
             NYdb::NTable::TTableClient client(connection, NYdb::NTable::TClientSettings().AuthToken("bob@builtin"));
 
@@ -381,8 +389,8 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
     template<bool NotNull>
     void TestManyTables(const TString& sharding) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
@@ -419,8 +427,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
     template<bool NotNull>
     void TestDuplicateRows(const TString& sharding) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
@@ -472,8 +479,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
     template<bool NotNull>
     void TestQuery(const TString& query, const TString& sharding) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig, {}, {}, false, nullptr);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig(), {}, {}, false, nullptr);
 
         auto connection = ConnectToServer(server);
 

@@ -27,7 +27,6 @@ message TLoadControlConfig {
     bool Strict = 7;                       // default false, whether to deny execution in load level unavailable
     uint32 CpuNumber = 8;
     string MonitoringEndpoint = 9;         // if defined, will be used as REST API instead of default GRPC
-    TYdbStorageConfig DatabaseConnection = 10;
 }
 
 message TWorkloadManagerConfig {
@@ -36,11 +35,16 @@ message TWorkloadManagerConfig {
         int32 ConcurrentQueryLimit = 2;
         int32 QueueSize = 3;
         double DatabaseLoadCpuThreshold = 4;
+        double TotalCpuLimitPercentPerNode = 5;
     }
 
     bool Enable = 1;
     string ExecutionResourcePool = 2;
     repeated TResourcePool ResourcePool = 3;
+}
+
+message TAccessConfig {
+    repeated string ExternalSourcesAccessSID = 1;
 }
 
 message TComputeDatabaseConfig {
@@ -51,6 +55,7 @@ message TComputeDatabaseConfig {
     string Tenant = 2;
     TLoadControlConfig LoadControlConfig = 4;
     TWorkloadManagerConfig WorkloadManagerConfig = 5;
+    TAccessConfig AccessConfig = 8;
 }
 
 message TDatabaseMapping {

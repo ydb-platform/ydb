@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     GLOBAL constructor.cpp
+    GLOBAL zero_level.cpp
 )
 
 PEERDIR(

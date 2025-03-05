@@ -10,7 +10,7 @@ namespace math
 {
   double gamma(double x);
   DEFINE_FUNCTOR(pythonic::math, gamma);
-}
+} // namespace math
 PYTHONIC_NS_END
 
 #endif

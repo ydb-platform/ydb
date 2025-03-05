@@ -3,9 +3,9 @@
 
 #include "pythonic/include/numpy/isscalar.hpp"
 
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/types/traits.hpp"
 #include "pythonic/types/str.hpp"
+#include "pythonic/types/traits.hpp"
+#include "pythonic/utils/functor.hpp"
 
 #include <type_traits>
 
@@ -18,7 +18,7 @@ namespace numpy
   {
     return types::is_dtype<E>::value || std::is_same<E, types::str>::value;
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

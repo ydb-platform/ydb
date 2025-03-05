@@ -3,9 +3,9 @@
 
 #include "pythonic/include/numpy/diff.hpp"
 
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/types/ndarray.hpp"
 #include "pythonic/numpy/asarray.hpp"
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -14,7 +14,7 @@ namespace numpy
   namespace details
   {
     template <class E>
-    types::ndarray<typename E::dtype, types::array<long, E::value>>
+    types::ndarray<typename E::dtype, types::array_tuple<long, E::value>>
     diff(E const &arr, long n, long axis)
     {
       auto shape = sutils::getshape(arr);
@@ -50,9 +50,9 @@ namespace numpy
       else
         return diff(out, n - 1, axis);
     }
-  }
+  } // namespace details
   template <class E>
-  types::ndarray<typename E::dtype, types::array<long, E::value>>
+  types::ndarray<typename E::dtype, types::array_tuple<long, E::value>>
   diff(E const &expr, long n, long axis)
   {
     if (axis < 0)
@@ -60,7 +60,7 @@ namespace numpy
     // that's the only allocation that should happen
     return details::diff(array(expr), n, axis);
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

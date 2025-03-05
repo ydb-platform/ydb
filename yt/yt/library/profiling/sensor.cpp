@@ -262,23 +262,23 @@ bool TSensorOptions::IsCompatibleWith(const TSensorOptions& other) const
 namespace NDetail {
 
 template <bool UseWeakPtr>
-TRegistryHolderBase<UseWeakPtr>::TRegistryHolderBase(const IRegistryImplPtr& impl)
+TRegistryHolderBase<UseWeakPtr>::TRegistryHolderBase(const IRegistryPtr& impl)
     : Impl_(impl)
 { }
 
 template <bool UseWeakPtr>
-const IRegistryImplPtr& TRegistryHolderBase<UseWeakPtr>::GetRegistry() const
+const IRegistryPtr& TRegistryHolderBase<UseWeakPtr>::GetRegistry() const
 {
     return Impl_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRegistryHolderBase<true>::TRegistryHolderBase(const IRegistryImplPtr& impl)
+TRegistryHolderBase<true>::TRegistryHolderBase(const IRegistryPtr& impl)
     : Impl_(impl)
 { }
 
-IRegistryImplPtr TRegistryHolderBase<true>::GetRegistry() const
+IRegistryPtr TRegistryHolderBase<true>::GetRegistry() const
 {
     return Impl_.Lock();
 }
@@ -294,7 +294,7 @@ template class TRegistryHolderBase<false>;
 
 template <bool UseWeakPtr>
 TProfiler<UseWeakPtr>::TProfiler(
-    const IRegistryImplPtr& impl,
+    const IRegistryPtr& impl,
     const std::string& prefix,
     const std::string& _namespace)
     : TBase(impl)
@@ -308,7 +308,7 @@ TProfiler<UseWeakPtr>::TProfiler(
     const std::string& prefix,
     const std::string& _namespace,
     const TTagSet& tags,
-    const IRegistryImplPtr& impl,
+    const IRegistryPtr& impl,
     TSensorOptions options)
     : TBase(impl ? impl : GetGlobalRegistry())
     , Enabled_(true)

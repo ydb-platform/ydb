@@ -15,7 +15,7 @@ namespace builtins
     long fileno(types::file const &f);
 
     DEFINE_FUNCTOR(pythonic::builtins::file, fileno);
-  }
-}
+  } // namespace file
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

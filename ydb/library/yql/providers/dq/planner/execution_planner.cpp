@@ -544,7 +544,13 @@ namespace NYql::NDqs {
         TVector<TString> parts;
         if (auto dqIntegration = (*datasource)->GetDqIntegration()) {
             TString clusterName;
-            _MaxDataSizePerJob = Max(_MaxDataSizePerJob, dqIntegration->Partition(*Settings, maxPartitions, *read, parts, &clusterName, ExprContext, canFallback));
+            IDqIntegration::TPartitionSettings settings {
+                .DataSizePerJob = Settings->DataSizePerJob.Get().GetOrElse(TDqSettings::TDefault::DataSizePerJob),
+                .MaxPartitions = maxPartitions,
+                .EnableComputeActor = Settings->EnableComputeActor.Get(),
+                .CanFallback = canFallback
+            };
+            _MaxDataSizePerJob = Max(_MaxDataSizePerJob, dqIntegration->Partition(*read, parts, &clusterName, ExprContext, settings));
             TMaybe<::google::protobuf::Any> sourceSettings;
             TString sourceType;
             if (dqSource) {
@@ -585,7 +591,7 @@ namespace NYql::NDqs {
         YQL_ENSURE(dataSource);
         auto dqIntegration = (*dataSource)->GetDqIntegration();
         YQL_ENSURE(dqIntegration);
-        
+
         google::protobuf::Any providerSpecificLookupSourceSettings;
         TString sourceType;
         dqIntegration->FillLookupSourceSettings(*rightInput.Raw(), providerSpecificLookupSourceSettings, sourceType);
@@ -602,7 +608,7 @@ namespace NYql::NDqs {
         settings.SetRightLabel(streamLookup.RightLabel().StringValue());
         settings.SetJoinType(streamLookup.JoinType().StringValue());
         for (const auto& k: streamLookup.LeftJoinKeyNames()) {
-            *settings.AddLeftJoinKeyNames() = RemoveAliases(k.StringValue());
+            *settings.AddLeftJoinKeyNames() = streamLookup.LeftLabel().StringValue().empty() ? k.StringValue() : RemoveAliases(k.StringValue());
         }
         for (const auto& k: streamLookup.RightJoinKeyNames()) {
             *settings.AddRightJoinKeyNames() = RemoveAliases(k.StringValue());
@@ -613,9 +619,9 @@ namespace NYql::NDqs {
         const auto narrowOutputRowType = GetSeqItemType(streamLookup.Ptr()->GetTypeAnn());
         Y_ABORT_UNLESS(narrowOutputRowType->GetKind() == ETypeAnnotationKind::Struct);
         settings.SetNarrowOutputRowType(NYql::NCommon::GetSerializedTypeAnnotation(narrowOutputRowType));
-        settings.SetMaxDelayedRows(1'000'000); //TODO configure me
-        settings.SetCacheLimit(1'000'000); //TODO configure me
-        settings.SetCacheTtlSeconds(60); //TODO configure me
+        settings.SetCacheLimit(FromString<ui64>(streamLookup.MaxCachedRows().StringValue()));
+        settings.SetCacheTtlSeconds(FromString<ui64>(streamLookup.TTL().StringValue()));
+        settings.SetMaxDelayedRows(FromString<ui64>(streamLookup.MaxDelayedRows().StringValue()));
 
         const auto inputRowType = GetSeqItemType(streamLookup.Output().Stage().Program().Ref().GetTypeAnn());
         const auto outputRowType = GetSeqItemType(stage.Program().Args().Arg(inputIndex).Ref().GetTypeAnn());

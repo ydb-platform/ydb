@@ -13,9 +13,8 @@ import functools
 from google.protobuf.text_format import Parse
 from ydb.core.protos import blobstorage_config_pb2
 import ydb.core.protos.msgbus_pb2 as msgbus
-import ydb.core.protos.flat_scheme_op_pb2 as flat_scheme_op_pb2
 import ydb.core.protos.grpc_pb2_grpc as grpc_server
-from ydb.core.protos import flat_scheme_op_pb2 as flat_scheme_op
+from ydb.core.protos.schemeshard import operations_pb2 as schemeshard_pb2
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.public.api.grpc.draft import ydb_tablet_v1_pb2_grpc as grpc_tablet_service
 from ydb.public.api.protos.draft.ydb_tablet_pb2 import RestartTabletRequest
@@ -179,7 +178,7 @@ class KiKiMRMessageBusClient(object):
         scheme_transaction = request.Transaction
         scheme_operation = scheme_transaction.ModifyScheme
         scheme_operation.WorkingDir = '/'
-        scheme_operation.OperationType = flat_scheme_op.ESchemeOpAlterSubDomain
+        scheme_operation.OperationType = schemeshard_pb2.ESchemeOpAlterSubDomain
         domain_description = scheme_operation.SubDomain
         domain_description.Name = domain_name
         for name, kind in spools.items():
@@ -207,7 +206,7 @@ class KiKiMRMessageBusClient(object):
 
     def add_attr(self, working_dir, name, attributes, token=None):
         request = msgbus.TSchemeOperation()
-        request.Transaction.ModifyScheme.OperationType = flat_scheme_op_pb2.ESchemeOpAlterUserAttributes
+        request.Transaction.ModifyScheme.OperationType = schemeshard_pb2.ESchemeOpAlterUserAttributes
         request.Transaction.ModifyScheme.WorkingDir = working_dir
         request.Transaction.ModifyScheme.AlterUserAttributes.PathName = name
 
@@ -255,8 +254,10 @@ class KiKiMRMessageBusClient(object):
             raise RuntimeError('console_request failed: %s: %s' % (response.Status.Code, response.Status.Reason))
         return response
 
-    def add_config_item(self, config, cookie=None, raise_on_error=True):
+    def add_config_item(self, config, cookie=None, raise_on_error=True, token=None):
         request = msgbus.TConsoleRequest()
+        if token is not None:
+            request.SecurityToken = token
         action = request.ConfigureRequest.Actions.add()
         item = action.AddConfigItem.ConfigItem
         if isinstance(config, str) or isinstance(config, bytes):

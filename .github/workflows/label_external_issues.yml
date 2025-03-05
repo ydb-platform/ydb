@@ -7,16 +7,47 @@ jobs:
   label-external-issues:
     name: Label issue from external user
     runs-on: ubuntu-latest
-    # https://docs.github.com/en/graphql/reference/enums#commentauthorassociation
-    if: ${{ !contains(fromJson('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.issue.author_association) }}
     steps:
       - name: add external label
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
-            github.rest.issues.addLabels({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              labels: ['external']
-            })
+            const issueAuthor = context.payload.issue.user.login
+            
+            if (context.repo.owner == issueAuthor) {
+              console.log("Issue author is here");
+              return
+            }
+            
+            const org = context.repo.owner;
+            
+            const isOrgMember = async function () {
+              try {
+                const response = await github.rest.orgs.checkMembershipForUser({
+                  org,
+                  username: issueAuthor,
+                });
+                return response.status == 204;
+              } catch (error) {
+                if (error.status && error.status == 404) {
+                  return false;
+                }
+                throw error;
+              }
+            }
+            
+            console.log(`Checking membership for user: ${issueAuthor} in organization: ${org}`);
+            
+            if (!await isOrgMember()) {
+              console.log(`User ${issueAuthor} is not a member of the organization.`)
+            
+              github.rest.issues.addLabels({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: ['external']
+              })
+            } else {
+              console.log(`User ${issueAuthor} is a member of the organization.`)
+            }

@@ -3,8 +3,8 @@
 
 #include "pythonic/include/cmath/exp.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/complex.hpp"
+#include "pythonic/utils/functor.hpp"
 
 #include <cmath>
 

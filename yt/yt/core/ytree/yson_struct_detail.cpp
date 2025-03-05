@@ -29,6 +29,10 @@ bool ShouldThrow(EUnrecognizedStrategy strategy)
 
 void TYsonStructMeta::SetDefaultsOfInitializedStruct(TYsonStructBase* target) const
 {
+    if (auto* bitmap = target->GetSetFieldsBitmap()) {
+        bitmap->Initialize(ssize(Parameters_));
+    }
+
     for (const auto& [_, parameter] : SortedParameters_) {
         parameter->SetDefaultsInitialized(target);
     }
@@ -38,22 +42,22 @@ void TYsonStructMeta::SetDefaultsOfInitializedStruct(TYsonStructBase* target) co
     }
 }
 
-const THashSet<TString>& TYsonStructMeta::GetRegisteredKeys() const
+const THashSet<std::string>& TYsonStructMeta::GetRegisteredKeys() const
 {
     return RegisteredKeys_;
 }
 
-const THashMap<TString, IYsonStructParameterPtr>& TYsonStructMeta::GetParameterMap() const
+const THashMap<std::string, IYsonStructParameterPtr>& TYsonStructMeta::GetParameterMap() const
 {
     return Parameters_;
 }
 
-const std::vector<std::pair<TString, IYsonStructParameterPtr>>& TYsonStructMeta::GetParameterSortedList() const
+const std::vector<std::pair<std::string, IYsonStructParameterPtr>>& TYsonStructMeta::GetParameterSortedList() const
 {
     return SortedParameters_;
 }
 
-IYsonStructParameterPtr TYsonStructMeta::GetParameter(const TString& keyOrAlias) const
+IYsonStructParameterPtr TYsonStructMeta::GetParameter(const std::string& keyOrAlias) const
 {
     auto it = Parameters_.find(keyOrAlias);
     if (it != Parameters_.end()) {
@@ -68,7 +72,7 @@ IYsonStructParameterPtr TYsonStructMeta::GetParameter(const TString& keyOrAlias)
     THROW_ERROR_EXCEPTION("Key or alias %Qv not found in yson struct", keyOrAlias);
 }
 
-void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const TString& key, const NYTree::INodePtr& node) const
+void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const std::string& key, const NYTree::INodePtr& node) const
 {
     const auto& parameter = GetParameter(key);
     auto validate = [&] {
@@ -126,7 +130,7 @@ void TYsonStructMeta::LoadStruct(
     auto mapNode = node->AsMap();
     auto unrecognizedStrategy = target->InstanceUnrecognizedStrategy_.template value_or(MetaUnrecognizedStrategy_);
     for (const auto& [name, parameter] : SortedParameters_) {
-        TString key = name;
+        std::string key = name;
         auto child = mapNode->FindChild(name); // can be NULL
         for (const auto& alias : parameter->GetAliases()) {
             auto otherChild = mapNode->FindChild(alias);
@@ -203,7 +207,7 @@ void TYsonStructMeta::LoadStruct(
         InsertOrCrash(pendingParameters, parameter.Get());
     }
 
-    THashMap<TString, TString> aliasedData;
+    THashMap<std::string, std::string> aliasedData;
 
     auto processPossibleAlias = [&] (
         IYsonStructParameter* parameter,
@@ -237,7 +241,7 @@ void TYsonStructMeta::LoadStruct(
         EmplaceOrCrash(aliasedData, canonicalKey, std::move(data));
     };
 
-    auto processUnrecognized = [&] (const TString& key, NYson::TYsonPullParserCursor* cursor) {
+    auto processUnrecognized = [&] (const std::string& key, NYson::TYsonPullParserCursor* cursor) {
         if (unrecognizedStrategy == EUnrecognizedStrategy::Drop) {
             cursor->SkipComplexValue();
             return;
@@ -256,7 +260,7 @@ void TYsonStructMeta::LoadStruct(
     };
 
     cursor->ParseMap([&] (NYson::TYsonPullParserCursor* cursor) {
-        auto key = ExtractTo<TString>(cursor);
+        auto key = ExtractTo<std::string>(cursor);
         auto it = keyToParameter.find(key);
         if (it == keyToParameter.end()) {
             processUnrecognized(key, cursor);
@@ -300,7 +304,7 @@ IMapNodePtr TYsonStructMeta::GetRecursiveUnrecognized(const TYsonStructBase* tar
     return result;
 }
 
-void TYsonStructMeta::RegisterParameter(TString key, IYsonStructParameterPtr parameter)
+void TYsonStructMeta::RegisterParameter(std::string key, IYsonStructParameterPtr parameter)
 {
     YT_VERIFY(Parameters_.template emplace(std::move(key), std::move(parameter)).second);
 }
@@ -352,7 +356,7 @@ void TYsonStructMeta::FinishInitialization(const std::type_info& structType)
         }
     }
 
-    SortedParameters_ = std::vector<std::pair<TString, IYsonStructParameterPtr>>(Parameters_.begin(), Parameters_.end());
+    SortedParameters_ = std::vector<std::pair<std::string, IYsonStructParameterPtr>>(Parameters_.begin(), Parameters_.end());
     std::sort(
         SortedParameters_.begin(),
         SortedParameters_.end(),

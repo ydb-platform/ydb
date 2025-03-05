@@ -17,7 +17,7 @@ namespace NKikimr {
             HugeBackground = 2      // huge blog, write it with low priority
         };
 
-        EHandleType HandleType(const ui32 minREALHugeBlobSize, NKikimrBlobStorage::EPutHandleClass handleClass,
+        EHandleType HandleType(const ui32 minHugeBlobInBytes, NKikimrBlobStorage::EPutHandleClass handleClass,
                                ui32 originalBufSizeWithoutOverhead, bool addHeader);
 
     } // NPriPut

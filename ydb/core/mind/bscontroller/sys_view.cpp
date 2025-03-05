@@ -1,6 +1,7 @@
 #include "sys_view.h"
 #include "group_geometry_info.h"
 #include "storage_stats_calculator.h"
+#include "group_layout_checker.h"
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/base/utility.h>
@@ -327,7 +328,8 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
 
 void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId, const NKikimrBlobStorage::TVDiskMetrics& m,
         std::optional<NKikimrBlobStorage::EVDiskStatus> status, NKikimrBlobStorage::TVDiskKind::EVDiskKind kind,
-        bool isBeingDeleted) {
+        bool isBeingDeleted)
+{
     pb->SetGroupId(vdiskId.GroupID.GetRawId());
     pb->SetGroupGeneration(vdiskId.GroupGeneration);
     pb->SetFailRealm(vdiskId.FailRealm);
@@ -350,6 +352,12 @@ void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId,
     }
     if (m.HasDiskSpace()) {
         pb->SetDiskSpace(NKikimrWhiteboard::EFlag_Name(m.GetDiskSpace()));
+    }
+    if (m.HasIsThrottling()) {
+        pb->SetIsThrottling(m.GetIsThrottling());
+    }
+    if (m.GetThrottlingRate()) {
+        pb->SetThrottlingRate(m.GetThrottlingRate());
     }
     pb->SetKind(NKikimrBlobStorage::TVDiskKind::EVDiskKind_Name(kind));
     if (isBeingDeleted) {
@@ -391,6 +399,8 @@ void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageContro
     if (latencyStats.GetFast) {
         info->SetGetFastLatency(latencyStats.GetFast->MicroSeconds());
     }
+
+    info->SetLayoutCorrect(groupInfo->LayoutCorrect);
 }
 
 void CopyInfo(NKikimrSysView::TStoragePoolInfo* info, const TBlobStorageController::TStoragePoolInfo& poolInfo) {
@@ -510,6 +520,7 @@ void TBlobStorageController::UpdateSystemViews() {
 
                     const NKikimrBlobStorage::TVDiskMetrics zero;
                     std::vector<TGroupDiskInfo> disks;
+                    std::vector<TPDiskId> pdiskIds;
                     for (const auto& realm : group.GetRings()) {
                         for (const auto& domain : realm.GetFailDomains()) {
                             for (const auto& location : domain.GetVDiskLocations()) {
@@ -525,10 +536,28 @@ void TBlobStorageController::UpdateSystemViews() {
                                 if (disk.VDiskMetrics && disk.PDiskMetrics) {
                                     disks.push_back(std::move(disk));
                                 }
+                                pdiskIds.emplace_back(location.GetNodeID(), location.GetPDiskID());
                             }
                         }
                     }
                     CalculateGroupUsageStats(pb, disks, (TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies());
+
+                    if (auto groupInfo = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr)) {
+                        NLayoutChecker::TGroupLayout layout(groupInfo->GetTopology());
+                        NLayoutChecker::TDomainMapper mapper;
+                        TGroupGeometryInfo geom(groupInfo->Type, SelfManagementEnabled
+                            ? StorageConfig.GetSelfManagementConfig().GetGeometry()
+                            : NKikimrBlobStorage::TGroupGeometry());
+
+                        Y_DEBUG_ABORT_UNLESS(pdiskIds.size() == groupInfo->GetTotalVDisksNum());
+
+                        for (size_t i = 0; i < pdiskIds.size(); ++i) {
+                            const TPDiskId pdiskId = pdiskIds[i];
+                            layout.AddDisk({mapper, HostRecords->GetLocation(pdiskId.NodeId), pdiskId, geom}, i);
+                        }
+
+                        pb->SetLayoutCorrect(layout.IsCorrect());
+                    }
                 }
             }
         }

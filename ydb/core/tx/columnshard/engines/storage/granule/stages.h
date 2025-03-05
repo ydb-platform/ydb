@@ -58,6 +58,11 @@ public:
         auto& constructor = MutableConstructor(chunk.GetPortionId());
         constructor.MutableRecords().emplace_back(std::move(chunk));
     }
+    void Add(TColumnChunkLoadContextV2&& chunk) {
+        for (auto&& i : chunk.BuildRecordsV1()) {
+            Add(std::move(i));
+        }
+    }
 };
 
 class TGranuleOnlyPortionsReader: public ITxReader {

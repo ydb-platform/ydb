@@ -3,7 +3,7 @@
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
-#include <ydb/core/control/immediate_control_board_wrapper.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 #include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
@@ -30,6 +30,11 @@ struct TPDiskSchedulerConfig {
     ui64 LoadWeight = LoadWeightDefault;
     ui64 LowReadWeight = LowWeightDefault;
 
+    size_t MaxChunkReadsPerCycle = 16;
+    double MaxChunkReadsDurationPerCycleMs = 0.25;
+    size_t MaxChunkWritesPerCycle = 8;
+    double MaxChunkWritesDurationPerCycleMs = 1;
+
     TString ToString(bool isMultiline) const {
         const char *x = isMultiline ? "\n" : "";
         TStringStream str;
@@ -44,6 +49,10 @@ struct TPDiskSchedulerConfig {
         str << " OtherReadWeight# " << OtherReadWeight << x;
         str << " LoadWeight# " << LoadWeight << x;
         str << " LowReadWeight# " << LowReadWeight << x;
+        str << " MaxChunkReadsPerCycle# " << MaxChunkReadsPerCycle << x;
+        str << " MaxChunkReadsDurationPerCycleMs# " << MaxChunkReadsDurationPerCycleMs << x;
+        str << " MaxChunkWritesPerCycle# " << MaxChunkWritesPerCycle << x;
+        str << " MaxChunkWritesDurationPerCycleMs# " << MaxChunkWritesDurationPerCycleMs << x;
         str << "}" << x;
         return str.Str();
     }
@@ -156,8 +165,11 @@ struct TPDiskConfig : public TThrRefBase {
     NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
     ui32 CompletionThreadsCount = 1;
+    bool UseNoopScheduler = false;
 
     bool MetadataOnly = false;
+
+    bool ReadOnly = false;
 
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
@@ -312,6 +324,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " MaxMetadataMegabytes# " << MaxMetadataMegabytes << x;
         str << " SpaceColorBorder# " << SpaceColorBorder << x;
         str << " CompletionThreadsCount# " << CompletionThreadsCount << x;
+        str << " UseNoopScheduler# " << (UseNoopScheduler ? "true" : "false") << x;
         str << "}";
         return str.Str();
     }
@@ -399,6 +412,10 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasCompletionThreadsCount()) {
             CompletionThreadsCount = cfg->GetCompletionThreadsCount();
+        }
+
+        if (cfg->HasUseNoopScheduler()) {
+            UseNoopScheduler = cfg->GetUseNoopScheduler();
         }
     }
 };

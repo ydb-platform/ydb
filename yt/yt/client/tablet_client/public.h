@@ -93,6 +93,7 @@ YT_DEFINE_ERROR_ENUM(
     ((BundleIsBanned)                         (1739))
     ((TabletServantIsNotActive)               (1740))
     ((UniqueIndexConflict)                    (1741))
+    ((TabletReplicationEraMismatch)           (1742))
 );
 
 DEFINE_ENUM(EInMemoryMode,
@@ -220,12 +221,6 @@ DEFINE_ENUM(ETabletServiceFeatures,
     ((SharedWriteLocks)         (1))
 );
 
-DEFINE_ENUM(ESecondaryIndexKind,
-    ((FullSync)                 (0))
-    ((Unfolding)                (1))
-    ((Unique)                   (2))
-);
-
 DEFINE_ENUM(ERowMergerType,
     ((Legacy)               (0))
     ((Watermark)            (1))
@@ -238,10 +233,27 @@ struct TWatermarkRuntimeData;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TTableMountCacheConfig)
-DECLARE_REFCOUNTED_CLASS(TTableMountCacheDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TRemoteDynamicStoreReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TRetryingRemoteDynamicStoreReaderConfig)
+DEFINE_ENUM(ESecondaryIndexKind,
+    ((FullSync)                 (0))
+    ((Unfolding)                (1))
+    ((Unique)                   (2))
+);
+
+struct TIndexInfo;
+
+DEFINE_ENUM(ETableToIndexCorrespondence,
+    ((Invalid)                  (0))
+    ((Injective)                (1))
+    ((Bijective)                (2))
+    ((Unknown)                  (3))
+);
+
+////////////////////////////////////////////////////////////////////////////////
+
+DECLARE_REFCOUNTED_STRUCT(TTableMountCacheConfig)
+DECLARE_REFCOUNTED_STRUCT(TTableMountCacheDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TRemoteDynamicStoreReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TRetryingRemoteDynamicStoreReaderConfig)
 DECLARE_REFCOUNTED_CLASS(TReplicatedTableOptions)
 DECLARE_REFCOUNTED_CLASS(TReplicationCollocationOptions)
 

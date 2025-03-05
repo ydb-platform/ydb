@@ -5,6 +5,7 @@
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/blob.h>
+#include <ydb/core/persqueue/blob_refcounter.h>
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/metering_sink.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
@@ -21,7 +22,7 @@
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <util/generic/maybe.h>
 
-namespace NYdb {
+namespace NYdb::inline V3 {
     class ICredentialsProviderFactory;
 }
 
@@ -73,9 +74,10 @@ namespace NPQ {
 
     struct TDataKey {
         TKey Key;
-        ui32 Size;
+        ui32 Size = 0;
         TInstant Timestamp;
-        ui64 CumulativeSize;
+        ui64 CumulativeSize = 0;
+        TBlobKeyTokenPtr BlobKeyToken = nullptr;
     };
 
     struct TErrorInfo {
@@ -186,7 +188,7 @@ struct TEvPQ {
         EvGetWriteInfoRequest,
         EvGetWriteInfoResponse,
         EvGetWriteInfoError,
-	EvTxBatchComplete,
+	    EvTxBatchComplete,
         EvReadingPartitionStatusRequest,
         EvProcessChangeOwnerRequests,
         EvWakeupReleasePartition,
@@ -196,6 +198,7 @@ struct TEvPQ {
         EvDeletePartition,
         EvDeletePartitionDone,
         EvTransactionCompleted,
+        EvListAllTopicsResponse,
         EvEnd
     };
 
@@ -489,19 +492,17 @@ struct TEvPQ {
     };
 
     struct TEvBlobRequest : public TEventLocal<TEvBlobRequest, EvBlobRequest> {
-        TEvBlobRequest(const TString& user, const ui64 cookie, const NPQ::TPartitionId& partition, const ui64 readOffset,
+        TEvBlobRequest(const TString& user, const ui64 cookie, const NPQ::TPartitionId& partition,
                        TVector<NPQ::TRequestedBlob>&& blobs)
         : User(user)
         , Cookie(cookie)
         , Partition(partition)
-        , ReadOffset(readOffset)
         , Blobs(std::move(blobs))
         {}
 
         TString User;
         ui64 Cookie;
         NPQ::TPartitionId Partition;
-        ui64 ReadOffset;
         TVector<NPQ::TRequestedBlob> Blobs;
     };
 
@@ -823,6 +824,7 @@ struct TEvPQ {
         ui64 TxId;
         TVector<NKikimrPQ::TPartitionOperation> Operations;
         TActorId SupportivePartitionActor;
+        bool ForcePredicateFalse = false;
     };
 
     struct TEvTxCalcPredicateResult : public TEventLocal<TEvTxCalcPredicateResult, EvTxCalcPredicateResult> {
@@ -1067,6 +1069,7 @@ struct TEvPQ {
     };
 
     struct TEvGetWriteInfoRequest : public TEventLocal<TEvGetWriteInfoRequest, EvGetWriteInfoRequest> {
+        TActorId OriginalPartition;
     };
 
     struct TEvGetWriteInfoResponse : public TEventLocal<TEvGetWriteInfoResponse, EvGetWriteInfoResponse> {
@@ -1083,6 +1086,8 @@ struct TEvPQ {
         }
 
         ui32 Cookie; // InternalPartitionId
+        TActorId SupportivePartition;
+
         NPQ::TSourceIdMap SrcIdInfo;
         std::deque<NPQ::TDataKey> BodyKeys;
         TVector<NPQ::TClientBlob> BlobsFromHead;
@@ -1099,6 +1104,7 @@ struct TEvPQ {
     struct TEvGetWriteInfoError : public TEventLocal<TEvGetWriteInfoError, EvGetWriteInfoError> {
         ui32 Cookie; // InternalPartitionId
         TString Message;
+        TActorId SupportivePartition;
 
         TEvGetWriteInfoError(ui32 cookie, TString message) :
             Cookie(cookie),
@@ -1176,6 +1182,16 @@ struct TEvPQ {
         }
 
         TMaybe<NPQ::TWriteId> WriteId;
+    };
+
+    struct TEvListAllTopicsResponse : TEventLocal<TEvListAllTopicsResponse, EvListAllTopicsResponse> {
+        explicit TEvListAllTopicsResponse() = default;
+        explicit TEvListAllTopicsResponse(Ydb::StatusIds status, const TString& error);
+
+        TVector<TString> Topics;
+        bool HaveMoreTopics = false;
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        TString Error;
     };
 };
 

@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               KeyColumnNames: ["embedding"]
               DataColumnNames: ["covered"]
               Type: EIndexTypeGlobalVectorKmeansTree
-              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } } }
+              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 }, clusters: 4, levels: 5 } }
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -45,25 +45,27 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
               NLs::IndexKeys({"embedding"}),
               NLs::IndexDataColumns({"covered"}),
-              NLs::VectorIndexDescription(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+              NLs::KMeansTreeDescription(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
                                           Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
-                                          1024
+                                          1024,
+                                          4,
+                                          5
                                           ),
             });
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplLevelTable"),
             { NLs::PathExist,
-              NLs::CheckColumns(LevelTable, {LevelTable_ParentColumn, LevelTable_IdColumn, LevelTable_EmbeddingColumn}, {}, {LevelTable_ParentColumn, LevelTable_IdColumn}, true) });
+              NLs::CheckColumns(LevelTable, {ParentColumn, IdColumn, CentroidColumn}, {}, {ParentColumn, IdColumn}, true) });
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplPostingTable"),
             { NLs::PathExist,
-              NLs::CheckColumns(PostingTable, {PostingTable_ParentColumn, "id", "covered"}, {}, {PostingTable_ParentColumn, "id"}, true) });
+              NLs::CheckColumns(PostingTable, {ParentColumn, "id", "covered"}, {}, {ParentColumn, "id"}, true) });
 
 
         TVector<ui64> dropTxIds;
         TestDropTable(runtime, dropTxIds.emplace_back(++txId), "/MyRoot", "vectors");
-        env.TestWaitNotification(runtime, dropTxIds);              
-    } 
+        env.TestWaitNotification(runtime, dropTxIds);
+    }
 
     Y_UNIT_TEST(CreateTableCoveredEmbedding) {
         TTestBasicRuntime runtime;
@@ -83,7 +85,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               KeyColumnNames: ["embedding"]
               DataColumnNames: ["embedding"]
               Type: EIndexTypeGlobalVectorKmeansTree
-              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } } }
+              VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 }, clusters: 4, levels: 5 } }
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -94,19 +96,21 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
               NLs::IndexKeys({"embedding"}),
               NLs::IndexDataColumns({"embedding"}),
-              NLs::VectorIndexDescription(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+              NLs::KMeansTreeDescription(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
                                           Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
-                                          1024
+                                          1024,
+                                          4,
+                                          5
                                           ),
             });
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplLevelTable"),
             { NLs::PathExist,
-              NLs::CheckColumns(LevelTable, {LevelTable_ParentColumn, LevelTable_IdColumn, LevelTable_EmbeddingColumn}, {}, {LevelTable_ParentColumn, LevelTable_IdColumn}, true) });
+              NLs::CheckColumns(LevelTable, {ParentColumn, IdColumn, CentroidColumn}, {}, {ParentColumn, IdColumn}, true) });
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplPostingTable"),
             { NLs::PathExist,
-              NLs::CheckColumns(PostingTable, {PostingTable_ParentColumn, "id", "embedding"}, {}, {PostingTable_ParentColumn, "id"}, true) });
+              NLs::CheckColumns(PostingTable, {ParentColumn, "id", "embedding"}, {}, {ParentColumn, "id"}, true) });
     }
 
     Y_UNIT_TEST(CreateTableMultiColumn) {
@@ -146,12 +150,12 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplLevelTable"),
             { NLs::PathExist,
-              NLs::CheckColumns(LevelTable, {LevelTable_ParentColumn, LevelTable_IdColumn, LevelTable_EmbeddingColumn}, {}, {LevelTable_ParentColumn, LevelTable_IdColumn}, true) });
+              NLs::CheckColumns(LevelTable, {ParentColumn, IdColumn, CentroidColumn}, {}, {ParentColumn, IdColumn}, true) });
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/idx_vector/indexImplPostingTable"),
             { NLs::PathExist,
-              NLs::CheckColumns(PostingTable, {PostingTable_ParentColumn, "id1", "id2", "covered1", "covered2"}, {}, {PostingTable_ParentColumn, "id1", "id2"}, true) });
-    } 
+              NLs::CheckColumns(PostingTable, {ParentColumn, "id1", "id2", "covered1", "covered2"}, {}, {ParentColumn, "id1", "id2"}, true) });
+    }
 
     Y_UNIT_TEST(VectorKmeansTreePostingImplTable) {
       // partition
@@ -173,8 +177,8 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
 
       }
       NTableIndex::TTableColumns implTableColumns = {{"data2", "data1"}, {}};
-      auto desc = CalcVectorKmeansTreePostingImplTableDesc(baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc, "something");
-      std::string_view expected[] = {NTableIndex::NTableVectorKmeansTreeIndex::PostingTable_ParentColumn, "data1", "data2"};
+      auto desc = CalcVectorKmeansTreePostingImplTableDesc({}, baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc, "something");
+      std::string_view expected[] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, "data1", "data2"};
       for (size_t i = 0; auto& column : desc.GetColumns()) {
         UNIT_ASSERT_STRINGS_EQUAL(column.GetName(), expected[i]);
         ++i;
@@ -186,7 +190,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        // base table column should not contains reserved name ParentIdColumn
+        // base table column should not contains reserved name ParentColumn
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
               Name: "vectors"
@@ -200,7 +204,7 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               Type: EIndexTypeGlobalVectorKmeansTree
               VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } } }
             }
-        )", NTableIndex::NTableVectorKmeansTreeIndex::PostingTable_ParentColumn, NTableIndex::NTableVectorKmeansTreeIndex::PostingTable_ParentColumn), {NKikimrScheme::StatusInvalidParameter});
+        )", NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn), {NKikimrScheme::StatusInvalidParameter});
 
         // pk should not be covered
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -218,5 +222,5 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               VectorIndexKmeansTreeDescription: { Settings: { settings: { metric: DISTANCE_COSINE, vector_type: VECTOR_TYPE_FLOAT, vector_dimension: 1024 } } }
             }
         )", {NKikimrScheme::StatusInvalidParameter});
-    }     
+    }
 }

@@ -1,39 +1,22 @@
-diff --git a/include/__config b/include/__config
-index 3b1c3a6..0b4f9ef 100644
---- a/include/__config
-+++ b/include/__config
-@@ -1063,7 +1063,7 @@ _LIBCPP_BEGIN_NAMESPACE_STD _LIBCPP_END_NAMESPACE_STD
- #  ifndef _LIBCPP_HAS_NO_ASAN
-     extern "C" _LIBCPP_EXPORTED_FROM_ABI void
-     __sanitizer_annotate_contiguous_container(const void*, const void*, const void*, const void*);
--#    if _LIBCPP_CLANG_VER >= 1600
-+#    if _LIBCPP_CLANG_VER >= 1600 && !defined(_LIBCPP_NO_ASAN_CONTIGUOUS_CONTAINER_FEATURES)
- extern "C" _LIBCPP_EXPORTED_FROM_ABI void __sanitizer_annotate_double_ended_contiguous_container(
-     const void*, const void*, const void*, const void*, const void*, const void*);
- extern "C" _LIBCPP_EXPORTED_FROM_ABI int
-diff --git a/include/deque b/include/deque
-index 951bab9..d4ffc7f 100644
---- a/include/deque
-+++ b/include/deque
-@@ -968,7 +968,7 @@ public:
- // __asan_annotate_container_with_allocator to false.
- // For more details, see the "Using libc++" documentation page or
- // the documentation for __sanitizer_annotate_contiguous_container.
--#if !defined(_LIBCPP_HAS_NO_ASAN) && _LIBCPP_CLANG_VER >= 1600
-+#if !defined(_LIBCPP_HAS_NO_ASAN) && _LIBCPP_CLANG_VER >= 1600 && !defined(_LIBCPP_NO_ASAN_CONTIGUOUS_CONTAINER_FEATURES)
-     // TODO LLVM18: Remove the special-casing
-     _LIBCPP_HIDE_FROM_ABI void __annotate_double_ended_contiguous_container(
-         const void* __beg,
-diff --git a/include/vector b/include/vector
-index 659b035..3153e89 100644
---- a/include/vector
-+++ b/include/vector
-@@ -861,7 +861,7 @@ private:
-     // __asan_annotate_container_with_allocator to false.
-     // For more details, see the "Using libc++" documentation page or
-     // the documentation for __sanitizer_annotate_contiguous_container.
--#ifndef _LIBCPP_HAS_NO_ASAN
-+#if !defined(_LIBCPP_HAS_NO_ASAN) && !defined(_LIBCPP_NO_ASAN_CONTIGUOUS_CONTAINER_FEATURES)
-     _LIBCPP_CONSTEXPR_SINCE_CXX20
-     void __annotate_contiguous_container(const void *__beg, const void *__end,
-                                          const void *__old_mid,
+diff --git a/include/__debug_utils/sanitizers.h b/include/__debug_utils/sanitizers.h
+index d8547e3..f72b399 100644
+--- a/include/__debug_utils/sanitizers.h
++++ b/include/__debug_utils/sanitizers.h
+@@ -57,7 +57,7 @@ _LIBCPP_HIDE_FROM_ABI void __annotate_double_ended_contiguous_container(
+     const void* __last_old_contained,
+     const void* __first_new_contained,
+     const void* __last_new_contained) {
+-#ifdef _LIBCPP_HAS_NO_ASAN
++#if !defined(_LIBCPP_HAS_NO_ASAN) || defined(_LIBCPP_NO_ASAN_CONTIGUOUS_CONTAINER_FEATURES)
+   (void)__first_storage;
+   (void)__last_storage;
+   (void)__first_old_contained;
+@@ -86,7 +86,7 @@ _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 void __annotate_contiguous_c
+     const void* __last_storage,
+     const void* __old_last_contained,
+     const void* __new_last_contained) {
+-#ifdef _LIBCPP_HAS_NO_ASAN
++#if !defined(_LIBCPP_HAS_NO_ASAN) || defined(_LIBCPP_NO_ASAN_CONTIGUOUS_CONTAINER_FEATURES)
+   (void)__first_storage;
+   (void)__last_storage;
+   (void)__old_last_contained;

@@ -1,0 +1,597 @@
+Init tables ...
+--!syntax_v1
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/customer_address` (
+    ca_address_sk Int64,
+    ca_address_id Utf8,
+    ca_street_number Utf8,
+    ca_street_name Utf8,
+    ca_street_type Utf8,
+    ca_suite_number Utf8,
+    ca_city Utf8,
+    ca_county Utf8,
+    ca_state Utf8,
+    ca_zip Utf8,
+    ca_country Utf8,
+    ca_gmt_offset Double,
+    ca_location_type Utf8,
+    PRIMARY KEY (ca_address_sk)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/customer_demographics` (
+    cd_demo_sk Int64,
+    cd_gender Utf8,
+    cd_marital_status Utf8,
+    cd_education_status Utf8,
+    cd_purchase_estimate Int64,
+    cd_credit_rating Utf8,
+    cd_dep_count Int64,
+    cd_dep_employed_count Int64,
+    cd_dep_college_count Int64,
+    PRIMARY KEY (cd_demo_sk)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/date_dim` (
+    d_date_sk Int64,
+    d_date_id Utf8,
+    d_date Utf8,
+    d_month_seq Int64,
+    d_week_seq Int64,
+    d_quarter_seq Int64,
+    d_year Int64,
+    d_dow Int64,
+    d_moy Int64,
+    d_dom Int64,
+    d_qoy Int64,
+    d_fy_year Int64,
+    d_fy_quarter_seq Int64,
+    d_fy_week_seq Int64,
+    d_day_name Utf8,
+    d_quarter_name Utf8,
+    d_holiday Utf8,
+    d_weekend Utf8,
+    d_following_holiday Utf8,
+    d_first_dom Int64,
+    d_last_dom Int64,
+    d_same_day_ly Int64,
+    d_same_day_lq Int64,
+    d_current_day Utf8,
+    d_current_week Utf8,
+    d_current_month Utf8,
+    d_current_quarter Utf8,
+    d_current_year Utf8,
+    PRIMARY KEY (d_date_sk)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/warehouse` (
+    w_warehouse_sk Int64,
+    w_warehouse_id Utf8,
+    w_warehouse_name Utf8,
+    w_warehouse_sq_ft Int64,
+    w_street_number Utf8,
+    w_street_name Utf8,
+    w_street_type Utf8,
+    w_suite_number Utf8,
+    w_city Utf8,
+    w_county Utf8,
+    w_state Utf8,
+    w_zip Utf8,
+    w_country Utf8,
+    w_gmt_offset Double,
+    PRIMARY KEY (w_warehouse_sk)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/ship_mode` (
+    sm_ship_mode_sk Int64,
+    sm_ship_mode_id Utf8,
+    sm_type Utf8,
+    sm_code Utf8,
+    sm_carrier Utf8,
+    sm_contract Utf8,
+    PRIMARY KEY (sm_ship_mode_sk)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/time_dim` (
+    t_time_sk Int64,
+    t_time_id Utf8,
+    t_time Int64,
+    t_hour Int64,
+    t_minute Int64,
+    t_second Int64,
+    t_am_pm Utf8,
+    t_shift Utf8,
+    t_sub_shift Utf8,
+    t_meal_time Utf8,
+    PRIMARY KEY (t_time_sk)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/reason` (
+    r_reason_sk Int64,
+    r_reason_id Utf8,
+    r_reason_desc Utf8,
+    PRIMARY KEY (r_reason_sk)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/income_band` (
+    ib_income_band_sk Int64,
+    ib_lower_bound Int64,
+    ib_upper_bound Int64,
+    PRIMARY KEY (ib_income_band_sk)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/item` (
+    i_item_sk Int64,
+    i_item_id Utf8,
+    i_rec_start_date Date32,
+    i_rec_end_date Date32,
+    i_item_desc Utf8,
+    i_current_price Double,
+    i_wholesale_cost Double,
+    i_brand_id Int64,
+    i_brand Utf8,
+    i_class_id Int64,
+    i_class Utf8,
+    i_category_id Int64,
+    i_category Utf8,
+    i_manufact_id Int64,
+    i_manufact Utf8,
+    i_size Utf8,
+    i_formulation Utf8,
+    i_color Utf8,
+    i_units Utf8,
+    i_container Utf8,
+    i_manager_id Int64,
+    i_product_name Utf8,
+    PRIMARY KEY (i_item_sk)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/store` (
+    s_store_sk Int64,
+    s_store_id Utf8,
+    s_rec_start_date Date32,
+    s_rec_end_date Date32,
+    s_closed_date_sk Int64,
+    s_store_name Utf8,
+    s_number_employees Int64,
+    s_floor_space Int64,
+    s_hours Utf8,
+    s_manager Utf8,
+    s_market_id Int64,
+    s_geography_class Utf8,
+    s_market_desc Utf8,
+    s_market_manager Utf8,
+    s_division_id Int64,
+    s_division_name Utf8,
+    s_company_id Int64,
+    s_company_name Utf8,
+    s_street_number Utf8,
+    s_street_name Utf8,
+    s_street_type Utf8,
+    s_suite_number Utf8,
+    s_city Utf8,
+    s_county Utf8,
+    s_state Utf8,
+    s_zip Utf8,
+    s_country Utf8,
+    s_gmt_offset Double,
+    s_tax_precentage Double,
+    PRIMARY KEY (s_store_sk)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/call_center` (
+    cc_call_center_sk Int64,
+    cc_call_center_id Utf8,
+    cc_rec_start_date Date32,
+    cc_rec_end_date Date32,
+    cc_closed_date_sk Int64,
+    cc_open_date_sk Int64,
+    cc_name Utf8,
+    cc_class Utf8,
+    cc_employees Int64,
+    cc_sq_ft Int64,
+    cc_hours Utf8,
+    cc_manager Utf8,
+    cc_mkt_id Int64,
+    cc_mkt_class Utf8,
+    cc_mkt_desc Utf8,
+    cc_market_manager Utf8,
+    cc_division Int64,
+    cc_division_name Utf8,
+    cc_company Int64,
+    cc_company_name Utf8,
+    cc_street_number Utf8,
+    cc_street_name Utf8,
+    cc_street_type Utf8,
+    cc_suite_number Utf8,
+    cc_city Utf8,
+    cc_county Utf8,
+    cc_state Utf8,
+    cc_zip Utf8,
+    cc_country Utf8,
+    cc_gmt_offset Double,
+    cc_tax_percentage Double,
+    PRIMARY KEY (cc_call_center_sk)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/customer` (
+    c_customer_sk Int64,
+    c_customer_id Utf8,
+    c_current_cdemo_sk Int64,
+    c_current_hdemo_sk Int64,
+    c_current_addr_sk Int64,
+    c_first_shipto_date_sk Int64,
+    c_first_sales_date_sk Int64,
+    c_salutation Utf8,
+    c_first_name Utf8,
+    c_last_name Utf8,
+    c_preferred_cust_flag Utf8,
+    c_birth_day Int64,
+    c_birth_month Int64,
+    c_birth_year Int64,
+    c_birth_country Utf8,
+    c_login Utf8,
+    c_email_address Utf8,
+    c_last_review_date Utf8,
+    PRIMARY KEY (c_customer_sk)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/web_site` (
+    web_site_sk Int64,
+    web_site_id Utf8,
+    web_rec_start_date Date32,
+    web_rec_end_date Date32,
+    web_name Utf8,
+    web_open_date_sk Int64,
+    web_close_date_sk Int64,
+    web_class Utf8,
+    web_manager Utf8,
+    web_mkt_id Int64,
+    web_mkt_class Utf8,
+    web_mkt_desc Utf8,
+    web_market_manager Utf8,
+    web_company_id Int64,
+    web_company_name Utf8,
+    web_street_number Utf8,
+    web_street_name Utf8,
+    web_street_type Utf8,
+    web_suite_number Utf8,
+    web_city Utf8,
+    web_county Utf8,
+    web_state Utf8,
+    web_zip Utf8,
+    web_country Utf8,
+    web_gmt_offset Double,
+    web_tax_percentage Double,
+    PRIMARY KEY (web_site_sk)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/store_returns` (
+    sr_returned_date_sk Int64,
+    sr_return_time_sk Int64,
+    sr_item_sk Int64,
+    sr_customer_sk Int64,
+    sr_cdemo_sk Int64,
+    sr_hdemo_sk Int64,
+    sr_addr_sk Int64,
+    sr_store_sk Int64,
+    sr_reason_sk Int64,
+    sr_ticket_number Int64,
+    sr_return_quantity Int64,
+    sr_return_amt Double,
+    sr_return_tax Double,
+    sr_return_amt_inc_tax Double,
+    sr_fee Double,
+    sr_return_ship_cost Double,
+    sr_refunded_cash Double,
+    sr_reversed_charge Double,
+    sr_store_credit Double,
+    sr_net_loss Double,
+    PRIMARY KEY (sr_item_sk, sr_ticket_number)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/household_demographics` (
+    hd_demo_sk Int64,
+    hd_income_band_sk Int64,
+    hd_buy_potential Utf8,
+    hd_dep_count Int64,
+    hd_vehicle_count Int64,
+    PRIMARY KEY (hd_demo_sk)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/web_page` (
+    wp_web_page_sk Int64,
+    wp_web_page_id Utf8,
+    wp_rec_start_date Date32,
+    wp_rec_end_date Date32,
+    wp_creation_date_sk Int64,
+    wp_access_date_sk Int64,
+    wp_autogen_flag Utf8,
+    wp_customer_sk Int64,
+    wp_url Utf8,
+    wp_type Utf8,
+    wp_char_count Int64,
+    wp_link_count Int64,
+    wp_image_count Int64,
+    wp_max_ad_count Int64,
+    PRIMARY KEY (wp_web_page_sk)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/promotion` (
+    p_promo_sk Int64,
+    p_promo_id Utf8,
+    p_start_date_sk Int64,
+    p_end_date_sk Int64,
+    p_item_sk Int64,
+    p_cost Double,
+    p_response_target Int64,
+    p_promo_name Utf8,
+    p_channel_dmail Utf8,
+    p_channel_email Utf8,
+    p_channel_catalog Utf8,
+    p_channel_tv Utf8,
+    p_channel_radio Utf8,
+    p_channel_press Utf8,
+    p_channel_event Utf8,
+    p_channel_demo Utf8,
+    p_channel_details Utf8,
+    p_purpose Utf8,
+    p_discount_active Utf8,
+    PRIMARY KEY (p_promo_sk)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/catalog_page` (
+    cp_catalog_page_sk Int64,
+    cp_catalog_page_id Utf8,
+    cp_start_date_sk Int64,
+    cp_end_date_sk Int64,
+    cp_department Utf8,
+    cp_catalog_number Int64,
+    cp_catalog_page_number Int64,
+    cp_description Utf8,
+    cp_type Utf8,
+    PRIMARY KEY (cp_catalog_page_sk)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/inventory` (
+    inv_date_sk Int64,
+    inv_item_sk Int64,
+    inv_warehouse_sk Int64,
+    inv_quantity_on_hand Int64,
+    PRIMARY KEY (inv_date_sk, inv_item_sk, inv_warehouse_sk)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/catalog_returns` (
+    cr_returned_date_sk Int64,
+    cr_returned_time_sk Int64,
+    cr_item_sk Int64,
+    cr_refunded_customer_sk Int64,
+    cr_refunded_cdemo_sk Int64,
+    cr_refunded_hdemo_sk Int64,
+    cr_refunded_addr_sk Int64,
+    cr_returning_customer_sk Int64,
+    cr_returning_cdemo_sk Int64,
+    cr_returning_hdemo_sk Int64,
+    cr_returning_addr_sk Int64,
+    cr_call_center_sk Int64,
+    cr_catalog_page_sk Int64,
+    cr_ship_mode_sk Int64,
+    cr_warehouse_sk Int64,
+    cr_reason_sk Int64,
+    cr_order_number Int64,
+    cr_return_quantity Int64,
+    cr_return_amount Double,
+    cr_return_tax Double,
+    cr_return_amt_inc_tax Double,
+    cr_fee Double,
+    cr_return_ship_cost Double,
+    cr_refunded_cash Double,
+    cr_reversed_charge Double,
+    cr_store_credit Double,
+    cr_net_loss Double,
+    PRIMARY KEY (cr_item_sk, cr_order_number)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/web_returns` (
+    wr_returned_date_sk Int64,
+    wr_returned_time_sk Int64,
+    wr_item_sk Int64,
+    wr_refunded_customer_sk Int64,
+    wr_refunded_cdemo_sk Int64,
+    wr_refunded_hdemo_sk Int64,
+    wr_refunded_addr_sk Int64,
+    wr_returning_customer_sk Int64,
+    wr_returning_cdemo_sk Int64,
+    wr_returning_hdemo_sk Int64,
+    wr_returning_addr_sk Int64,
+    wr_web_page_sk Int64,
+    wr_reason_sk Int64,
+    wr_order_number Int64,
+    wr_return_quantity Int64,
+    wr_return_amt Double,
+    wr_return_tax Double,
+    wr_return_amt_inc_tax Double,
+    wr_fee Double,
+    wr_return_ship_cost Double,
+    wr_refunded_cash Double,
+    wr_reversed_charge Double,
+    wr_account_credit Double,
+    wr_net_loss Double,
+    PRIMARY KEY (wr_item_sk, wr_order_number)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/web_sales` (
+    ws_sold_date_sk Int64,
+    ws_sold_time_sk Int64,
+    ws_ship_date_sk Int64,
+    ws_item_sk Int64,
+    ws_bill_customer_sk Int64,
+    ws_bill_cdemo_sk Int64,
+    ws_bill_hdemo_sk Int64,
+    ws_bill_addr_sk Int64,
+    ws_ship_customer_sk Int64,
+    ws_ship_cdemo_sk Int64,
+    ws_ship_hdemo_sk Int64,
+    ws_ship_addr_sk Int64,
+    ws_web_page_sk Int64,
+    ws_web_site_sk Int64,
+    ws_ship_mode_sk Int64,
+    ws_warehouse_sk Int64,
+    ws_promo_sk Int64,
+    ws_order_number Int64,
+    ws_quantity Int64,
+    ws_wholesale_cost Double,
+    ws_list_price Double,
+    ws_sales_price Double,
+    ws_ext_discount_amt Double,
+    ws_ext_sales_price Double,
+    ws_ext_wholesale_cost Double,
+    ws_ext_list_price Double,
+    ws_ext_tax Double,
+    ws_coupon_amt Double,
+    ws_ext_ship_cost Double,
+    ws_net_paid Double,
+    ws_net_paid_inc_tax Double,
+    ws_net_paid_inc_ship Double,
+    ws_net_paid_inc_ship_tax Double,
+    ws_net_profit Double,
+    PRIMARY KEY (ws_item_sk, ws_order_number)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/catalog_sales` (
+    cs_sold_date_sk Int64,
+    cs_sold_time_sk Int64,
+    cs_ship_date_sk Int64,
+    cs_bill_customer_sk Int64,
+    cs_bill_cdemo_sk Int64,
+    cs_bill_hdemo_sk Int64,
+    cs_bill_addr_sk Int64,
+    cs_ship_customer_sk Int64,
+    cs_ship_cdemo_sk Int64,
+    cs_ship_hdemo_sk Int64,
+    cs_ship_addr_sk Int64,
+    cs_call_center_sk Int64,
+    cs_catalog_page_sk Int64,
+    cs_ship_mode_sk Int64,
+    cs_warehouse_sk Int64,
+    cs_item_sk Int64,
+    cs_promo_sk Int64,
+    cs_order_number Int64,
+    cs_quantity Int64,
+    cs_wholesale_cost Double,
+    cs_list_price Double,
+    cs_sales_price Double,
+    cs_ext_discount_amt Double,
+    cs_ext_sales_price Double,
+    cs_ext_wholesale_cost Double,
+    cs_ext_list_price Double,
+    cs_ext_tax Double,
+    cs_coupon_amt Double,
+    cs_ext_ship_cost Double,
+    cs_net_paid Double,
+    cs_net_paid_inc_tax Double,
+    cs_net_paid_inc_ship Double,
+    cs_net_paid_inc_ship_tax Double,
+    cs_net_profit Double,
+    PRIMARY KEY (cs_item_sk, cs_order_number)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpcds/s1/store_sales` (
+    ss_sold_date_sk Int64,
+    ss_sold_time_sk Int64,
+    ss_item_sk Int64,
+    ss_customer_sk Int64,
+    ss_cdemo_sk Int64,
+    ss_hdemo_sk Int64,
+    ss_addr_sk Int64,
+    ss_store_sk Int64,
+    ss_promo_sk Int64,
+    ss_ticket_number Int64,
+    ss_quantity Int64,
+    ss_wholesale_cost Double,
+    ss_list_price Double,
+    ss_sales_price Double,
+    ss_ext_discount_amt Double,
+    ss_ext_sales_price Double,
+    ss_ext_wholesale_cost Double,
+    ss_ext_list_price Double,
+    ss_ext_tax Double,
+    ss_coupon_amt Double,
+    ss_net_paid Double,
+    ss_net_paid_inc_tax Double,
+    ss_net_profit Double,
+    PRIMARY KEY (ss_item_sk, ss_ticket_number)
+)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+Init tables ...Ok

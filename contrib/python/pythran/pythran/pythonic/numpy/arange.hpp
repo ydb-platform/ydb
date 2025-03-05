@@ -4,8 +4,8 @@
 #include "pythonic/include/numpy/arange.hpp"
 
 #include "pythonic/operator_/pos.hpp"
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -32,7 +32,7 @@ namespace numpy
   {
     return arange<T, T, T, types::dtype_t<T>>(T(0), end);
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

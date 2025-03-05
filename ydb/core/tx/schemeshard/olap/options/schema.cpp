@@ -4,8 +4,8 @@ namespace NKikimr::NSchemeShard {
 
 bool TOlapOptionsDescription::ApplyUpdate(const TOlapOptionsUpdate& schemaUpdate, IErrorCollector& /*errors*/) {
     SchemeNeedActualization = schemaUpdate.GetSchemeNeedActualization();
-    if (!!schemaUpdate.GetExternalGuaranteeExclusivePK()) {
-        ExternalGuaranteeExclusivePK = *schemaUpdate.GetExternalGuaranteeExclusivePK();
+    if (!!schemaUpdate.GetScanReaderPolicyName()) {
+        ScanReaderPolicyName = *schemaUpdate.GetScanReaderPolicyName();
     }
     if (schemaUpdate.GetCompactionPlannerConstructor().HasObject()) {
         CompactionPlannerConstructor = schemaUpdate.GetCompactionPlannerConstructor();
@@ -18,8 +18,8 @@ bool TOlapOptionsDescription::ApplyUpdate(const TOlapOptionsUpdate& schemaUpdate
 
 void TOlapOptionsDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
     SchemeNeedActualization = tableSchema.GetOptions().GetSchemeNeedActualization();
-    if (tableSchema.GetOptions().HasExternalGuaranteeExclusivePK()) {
-        ExternalGuaranteeExclusivePK = tableSchema.GetOptions().GetExternalGuaranteeExclusivePK();
+    if (tableSchema.GetOptions().HasScanReaderPolicyName()) {
+        ScanReaderPolicyName = tableSchema.GetOptions().GetScanReaderPolicyName();
     }
     if (tableSchema.GetOptions().HasCompactionPlannerConstructor()) {
         AFL_VERIFY(CompactionPlannerConstructor.DeserializeFromProto(tableSchema.GetOptions().GetCompactionPlannerConstructor()));
@@ -31,8 +31,8 @@ void TOlapOptionsDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& t
 
 void TOlapOptionsDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const {
     tableSchema.MutableOptions()->SetSchemeNeedActualization(SchemeNeedActualization);
-    if (ExternalGuaranteeExclusivePK) {
-        tableSchema.MutableOptions()->SetExternalGuaranteeExclusivePK(ExternalGuaranteeExclusivePK);
+    if (ScanReaderPolicyName) {
+        tableSchema.MutableOptions()->SetScanReaderPolicyName(*ScanReaderPolicyName);
     }
     if (CompactionPlannerConstructor.HasObject()) {
         CompactionPlannerConstructor.SerializeToProto(*tableSchema.MutableOptions()->MutableCompactionPlannerConstructor());
@@ -42,7 +42,10 @@ void TOlapOptionsDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tab
     }
 }
 
-bool TOlapOptionsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema& /*opSchema*/, IErrorCollector& /*errors*/) const {
+bool TOlapOptionsDescription::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& /*errors*/) const {
+    if (!opSchema.HasOptions()) {
+        return true;
+    }
     return true;
 }
 

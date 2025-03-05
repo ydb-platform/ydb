@@ -1,6 +1,8 @@
 #include "partition_scale_request.h"
 #include "read_balancer_log.h"
 
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+
 namespace NKikimr {
 namespace NPQ {
 
@@ -114,7 +116,7 @@ void TPartitionScaleRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus:
         NTabletPipe::TClientConfig clientConfig;
         clientConfig.RetryPolicy = {.RetryLimitCount = 3};
         if (!SchemePipeActorId) {
-            SchemePipeActorId = ctx.ExecutorThread.RegisterActor(NTabletPipe::CreateClient(ctx.SelfID, msg->Record.GetSchemeShardTabletId(), clientConfig));
+            SchemePipeActorId = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, msg->Record.GetSchemeShardTabletId(), clientConfig));
         }
 
         auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(msg->Record.GetTxId());

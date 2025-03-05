@@ -1,0 +1,8 @@
+IF (OS_LINUX)
+    LIBRARY(oom_helper)
+    SRCS(inject.cpp)
+    END()
+ELSE()
+    LIBRARY()
+    END()
+ENDIF()

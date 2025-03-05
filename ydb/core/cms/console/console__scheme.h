@@ -51,6 +51,7 @@ struct Schema : NIceDb::Schema {
         struct DatabaseQuotas : Column<27, NScheme::NTypeIds::String> {};
         struct IsExternalStatisticsAggregator : Column<28, NScheme::NTypeIds::Bool> {};
         struct IsExternalBackupController : Column<29, NScheme::NTypeIds::Bool> {};
+        struct ScaleRecommenderPolicies : Column<30, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Path>;
         using TColumns = TableColumns<Path, State, Coordinators, Mediators, PlanResolution,
@@ -58,7 +59,7 @@ struct Schema : NIceDb::Schema {
             Attributes, Generation, SchemeShardId, PathId, ErrorCode, IsExternalSubDomain, IsExternalHive,
             AreResourcesShared, SharedDomainSchemeShardId, SharedDomainPathId, IsExternalSysViewProcessor,
             SchemaOperationQuotas, CreateIdempotencyKey, AlterIdempotencyKey, DatabaseQuotas, IsExternalStatisticsAggregator,
-            IsExternalBackupController>;
+            IsExternalBackupController, ScaleRecommenderPolicies>;
     };
 
     struct TenantPools : Table<3> {
@@ -128,7 +129,6 @@ struct Schema : NIceDb::Schema {
         struct Config : Column<10, NScheme::NTypeIds::String> {};
         struct Cookie : Column<11, NScheme::NTypeIds::String> {};
 
-
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<Id, Generation, Kind, NodeIds, Hosts, Tenant, NodeType, Order, Merge, Config, Cookie>;
     };
@@ -143,7 +143,6 @@ struct Schema : NIceDb::Schema {
         struct NodeType : Column<7, NScheme::NTypeIds::Utf8> {};
         struct ItemKinds : Column<8, NScheme::NTypeIds::String> { using Type = TVector<ui32>; };
         struct LastProvidedConfig : Column<9, NScheme::NTypeIds::String> { using Type = TVector<std::pair<ui64, ui64>>; };
-
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<Id, TabletId, ServiceId, NodeId, Host, Tenant, NodeType, ItemKinds, LastProvidedConfig>;
@@ -165,9 +164,18 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Version, Config, Dropped>;
     };
 
+    struct DatabaseYamlConfigs : Table<104> {
+        struct Path : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Version : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Config : Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<Path, Version>;
+        using TColumns = TableColumns<Path, Version, Config>;
+    };
+
     using TTables = SchemaTables<Config, Tenants, TenantPools, TenantUnits, RemovedTenants,
                                  RegisteredUnits, LogRecords, ConfigItems, ConfigSubscriptions, DisabledValidators,
-                                 YamlConfig>;
+                                 YamlConfig, DatabaseYamlConfigs>;
     using TSettings = SchemaSettings<ExecutorLogBatching<true>,
                                      ExecutorLogFlushPeriod<TDuration::MicroSeconds(512).GetValue()>>;
 };

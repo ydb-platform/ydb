@@ -32,6 +32,7 @@ message TPartitionMeta {
     optional uint64 EndOffset = 2;
     optional bool SubDomainOutOfSpace = 3 [default = false];
     optional TPartitionCounterData CounterData = 4;
+    optional uint64 EndWriteTimestamp = 5;
 }
 
 message TPartitionTxMeta {
@@ -61,7 +62,7 @@ message TPQConfig {
 
     optional NKikimrClient.TKeyValueRequest.ETactic Tactic = 13 [default = MAX_THROUGHPUT];
 
-    optional bool RequireCredentialsInNewProtocol = 14 [default = true];
+    optional bool RequireCredentialsInNewProtocol = 14 [default = false];
 
     optional string ClusterTablePath = 15 [default = ""];
     optional string VersionTablePath = 16 [default = ""];
@@ -206,6 +207,8 @@ message TPQConfig {
 
     optional uint64 BalancerWakeupIntervalSec = 54 [default = 30];
     optional uint64 BalancerStatsWakeupIntervalSec = 55 [default = 5];
+
+    optional uint64 MaxWriteSessionBytesInflight = 57 [default = 1000000];
 }
 
 message TChannelProfile {
@@ -863,6 +866,9 @@ message THasDataInfo {
     optional uint64 Cookie = 5;
 
     optional string ClientId = 6;
+
+    optional int32 MaxTimeLagMs = 7; // optional, default = infinity, why we use int instead of uint?
+    optional uint64 ReadTimestampMs = 8; //optional, default = 0
 }
 
 message THasDataInfoResponse { //signal

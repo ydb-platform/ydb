@@ -1,0 +1,137 @@
+Init tables ...
+--!syntax_v1
+
+CREATE TABLE `/Root/db/Root/db/tpch/s1/customer` (
+    c_acctbal Double NOT NULL,
+    c_address Utf8 NOT NULL,
+    c_comment Utf8 NOT NULL,
+    c_custkey Int64 NOT NULL,
+    c_mktsegment Utf8 NOT NULL,
+    c_name Utf8 NOT NULL,
+    c_nationkey Int32 NOT NULL,
+    c_phone Utf8 NOT NULL,
+    PRIMARY KEY (c_custkey)
+)
+PARTITION BY HASH (c_custkey)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpch/s1/lineitem` (
+    l_comment Utf8 NOT NULL,
+    l_commitdate Date32 NOT NULL,
+    l_discount Double NOT NULL,
+    l_extendedprice Double NOT NULL,
+    l_linenumber Int32 NOT NULL,
+    l_linestatus Utf8 NOT NULL,
+    l_orderkey Int64 NOT NULL,
+    l_partkey Int64 NOT NULL,
+    l_quantity Double NOT NULL,
+    l_receiptdate Date32 NOT NULL,
+    l_returnflag Utf8 NOT NULL,
+    l_shipdate Date32 NOT NULL,
+    l_shipinstruct Utf8 NOT NULL,
+    l_shipmode Utf8 NOT NULL,
+    l_suppkey Int64 NOT NULL,
+    l_tax Double NOT NULL,
+    PRIMARY KEY (l_orderkey, l_linenumber)
+)
+PARTITION BY HASH (l_orderkey, l_linenumber)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpch/s1/nation` (
+    n_comment Utf8 NOT NULL,
+    n_name Utf8 NOT NULL,
+    n_nationkey Int32 NOT NULL,
+    n_regionkey Int32 NOT NULL,
+    PRIMARY KEY (n_nationkey)
+)
+PARTITION BY HASH (n_nationkey)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+);
+
+CREATE TABLE `/Root/db/Root/db/tpch/s1/orders` (
+    o_clerk Utf8 NOT NULL,
+    o_comment Utf8 NOT NULL,
+    o_custkey Int64 NOT NULL,
+    o_orderdate Date32 NOT NULL,
+    o_orderkey Int64 NOT NULL,
+    o_orderpriority Utf8 NOT NULL,
+    o_orderstatus Utf8 NOT NULL,
+    o_shippriority Int32 NOT NULL,
+    o_totalprice Double NOT NULL,
+    PRIMARY KEY (o_orderkey)
+)
+PARTITION BY HASH (o_orderkey)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpch/s1/part` (
+    p_brand Utf8 NOT NULL,
+    p_comment Utf8 NOT NULL,
+    p_container Utf8 NOT NULL,
+    p_mfgr Utf8 NOT NULL,
+    p_name Utf8 NOT NULL,
+    p_partkey Int64 NOT NULL,
+    p_retailprice Double NOT NULL,
+    p_size Int32 NOT NULL,
+    p_type Utf8 NOT NULL,
+    PRIMARY KEY (p_partkey)
+)
+PARTITION BY HASH (p_partkey)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpch/s1/partsupp` (
+    ps_availqty Int32 NOT NULL,
+    ps_comment Utf8 NOT NULL,
+    ps_partkey Int64 NOT NULL,
+    ps_suppkey Int64 NOT NULL,
+    ps_supplycost Double NOT NULL,
+    PRIMARY KEY (ps_partkey, ps_suppkey)
+)
+PARTITION BY HASH (ps_partkey, ps_suppkey)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+CREATE TABLE `/Root/db/Root/db/tpch/s1/region` (
+    r_comment Utf8 NOT NULL,
+    r_name Utf8 NOT NULL,
+    r_regionkey Int32 NOT NULL,
+    PRIMARY KEY (r_regionkey)
+)
+PARTITION BY HASH (r_regionkey)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+);
+
+CREATE TABLE `/Root/db/Root/db/tpch/s1/supplier` (
+    s_acctbal Double NOT NULL,
+    s_address Utf8 NOT NULL,
+    s_comment Utf8 NOT NULL,
+    s_name Utf8 NOT NULL,
+    s_nationkey Int32 NOT NULL,
+    s_phone Utf8 NOT NULL,
+    s_suppkey Int64 NOT NULL,
+    PRIMARY KEY (s_suppkey)
+)
+PARTITION BY HASH (s_suppkey)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+
+Init tables ...Ok

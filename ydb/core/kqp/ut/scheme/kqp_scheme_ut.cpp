@@ -7,10 +7,10 @@
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_replication.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb-cpp-sdk/client/draft/ydb_replication.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/testlib/common_helper.h>
 #include <yql/essentials/types/uuid/uuid.h>
@@ -597,6 +597,102 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TouchIndexAfterMoveTable(true);
     }
 
+    Y_UNIT_TEST(MoveTableWithSerialTypes) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithSerial";
+        TString newTableName = "/Root/TableWithSerialMoved";
+        {
+            auto query = TStringBuilder() << R"(
+                CREATE TABLE `)" << tableName << R"(` (
+                    Key Serial,
+                    Value Int32,
+                    PRIMARY KEY (Key)
+                );)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto queryUpsert = TStringBuilder() << R"(
+                INSERT INTO `)" << tableName << R"(` (Value) VALUES (1), (2), (3);
+            )";
+            auto result = session.ExecuteDataQuery(queryUpsert, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto querySelect = TStringBuilder() << R"(
+                SELECT * FROM `)" << tableName << R"(`;
+            )";
+            auto result = session.ExecuteDataQuery(querySelect, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"([
+                [1;[1]];[2;[2]];[3;[3]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+        {
+            TDescribeTableResult describe = session.DescribeTable(tableName, TDescribeTableSettings().WithSetVal(true)).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            const auto& tableDescription = describe.GetTableDescription();
+            bool hasSerial = false;
+            for (const auto& column : tableDescription.GetTableColumns()) {
+                if (column.Name == "Key") {
+                    UNIT_ASSERT(column.SequenceDescription.has_value());
+                    hasSerial = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT(hasSerial);
+        }
+        {
+            auto query = TStringBuilder() << R"(
+                ALTER TABLE `)" << tableName << R"(` RENAME TO `)" << newTableName << R"(`;
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describeResult = session.DescribeTable(tableName).GetValueSync();
+            UNIT_ASSERT(!describeResult.IsSuccess());
+        }
+        {
+            TDescribeTableResult describe = session.DescribeTable(newTableName, TDescribeTableSettings().WithSetVal(true)).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            const auto& tableDescription = describe.GetTableDescription();
+            bool hasSerial = false;
+            for (const auto& column : tableDescription.GetTableColumns()) {
+                if (column.Name == "Key") {
+                    UNIT_ASSERT(column.SequenceDescription.has_value());
+                    UNIT_ASSERT(column.SequenceDescription->SetVal.has_value());
+                    UNIT_ASSERT_VALUES_EQUAL(column.SequenceDescription->SetVal->NextValue, 4);
+                    UNIT_ASSERT_VALUES_EQUAL(column.SequenceDescription->SetVal->NextUsed, false);
+                    hasSerial = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT(hasSerial);
+        }
+        {
+            auto queryUpsert = TStringBuilder() << R"(
+                INSERT INTO `)" << newTableName << R"(` (Value) VALUES (4), (5), (6);
+            )";
+            auto result = session.ExecuteDataQuery(queryUpsert, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto querySelect = TStringBuilder() << R"(
+                SELECT * FROM `)" << newTableName << R"(`;
+            )";
+            auto result = session.ExecuteDataQuery(querySelect, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"([
+                [1;[1]];[2;[2]];[3;[3]];[4;[4]];[5;[5]];[6;[6]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     void CheckInvalidationAfterDropCreateTable(bool withCompatSchema) {
         TKikimrRunner kikimr;
 
@@ -780,10 +876,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             const auto& partSettings = describe.GetTableDescription().GetPartitioningSettings();
-            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), false);
-            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false);
+            UNIT_ASSERT(partSettings.GetPartitioningBySize().has_value());
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().value(), false);
+            UNIT_ASSERT(partSettings.GetPartitioningByLoad().has_value());
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().value(), false);
         }
     }
 
@@ -963,10 +1059,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             const auto& partSettings = describe.GetTableDescription().GetPartitioningSettings();
-            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), true);
-            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false);
+            UNIT_ASSERT(partSettings.GetPartitioningBySize().has_value());
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().value(), true);
+            UNIT_ASSERT(partSettings.GetPartitioningByLoad().has_value());
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().value(), false);
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetMinPartitionsCount(), 1);
             UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitionSizeMb(), 2048);
         }
@@ -976,10 +1072,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             const auto& partSettings = describe.GetTableDescription().GetPartitioningSettings();
-            UNIT_ASSERT(partSettings.GetPartitioningBySize().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().GetRef(), false);
-            UNIT_ASSERT(partSettings.GetPartitioningByLoad().Defined());
-            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().GetRef(), false);
+            UNIT_ASSERT(partSettings.GetPartitioningBySize().has_value());
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningBySize().value(), false);
+            UNIT_ASSERT(partSettings.GetPartitioningByLoad().has_value());
+            UNIT_ASSERT_VALUES_EQUAL(partSettings.GetPartitioningByLoad().value(), false);
         }
     }
 
@@ -1539,7 +1635,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ALTER TABLE `)" << tableName << R"(` DROP COLUMN Ts;)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Can't drop TTL column");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Can't drop TTL column", result.GetIssues().ToString());
         }
 
         {
@@ -1698,13 +1794,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto parser = TValueParser(val);
             parser.OpenTuple();
             UNIT_ASSERT(parser.TryNextElement());
-            return parser.GetOptionalUint64().GetRef();
+            return parser.GetOptionalUint64().value();
         };
 
-        const TVector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges();
+        const std::vector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges();
 
         size_t n = 0;
-        const TVector<ui64> expectedRanges = { 10ul, 100ul, 1000ul, 10000ul };
+        const std::vector<ui64> expectedRanges = { 10ul, 100ul, 1000ul, 10000ul };
 
         for (const auto& range : keyRanges) {
             if (n == 0) {
@@ -1764,13 +1860,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto parser = TValueParser(val);
             parser.OpenTuple();
             UNIT_ASSERT(parser.TryNextElement());
-            return parser.GetOptionalInt64().GetRef();
+            return parser.GetOptionalInt64().value();
         };
 
-        const TVector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges();
+        const std::vector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges();
 
         size_t n = 0;
-        const TVector<i64> expectedRanges = { 0l, 10l, 10000l };
+        const std::vector<i64> expectedRanges = { 0l, 10l, 10000l };
 
         for (const auto& range : keyRanges) {
             if (n == 0) {
@@ -1819,16 +1915,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto parser = TValueParser(val);
             parser.OpenTuple();
             UNIT_ASSERT(parser.TryNextElement());
-            ui64 pk1 = parser.GetOptionalUint64().GetRef();
+            ui64 pk1 = parser.GetOptionalUint64().value();
             UNIT_ASSERT(parser.TryNextElement());
             auto pk2 = parser.GetOptionalString();
-            return std::pair<ui64, TMaybe<TString>>(pk1, pk2);
+            return std::pair<ui64, std::optional<std::string>>(pk1, pk2);
         };
 
-        const TVector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges();
+        const std::vector<TKeyRange>& keyRanges = describeResult.GetTableDescription().GetKeyRanges();
 
         size_t n = 0;
-        const TVector<std::pair<ui64, TString>> expectedRanges = {
+        const std::vector<std::pair<ui64, TString>> expectedRanges = {
             { 10ul, "" },
             { 100ul, "123" },
             { 1000ul, "cde" }
@@ -1843,8 +1939,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 const auto& [expectedPk1, expectedPk2] = expectedRanges[n - 1];
 
                 UNIT_ASSERT_VALUES_EQUAL(pk1, expectedPk1);
-                if (pk2.Defined()) {
-                    UNIT_ASSERT_VALUES_EQUAL(pk2.GetRef(), expectedPk2);
+                if (pk2.has_value()) {
+                    UNIT_ASSERT_VALUES_EQUAL(pk2.value(), expectedPk2);
                 } else {
                     UNIT_ASSERT_VALUES_EQUAL("", expectedPk2);
                 }
@@ -1857,8 +1953,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 const auto&[expectedPk1, expectedPk2] = expectedRanges[n];
 
                 UNIT_ASSERT_VALUES_EQUAL(pk1, expectedPk1);
-                if (pk2.Defined()) {
-                    UNIT_ASSERT_VALUES_EQUAL(pk2.GetRef(), expectedPk2);
+                if (pk2.has_value()) {
+                    UNIT_ASSERT_VALUES_EQUAL(pk2.value(), expectedPk2);
                 } else {
                     UNIT_ASSERT_VALUES_EQUAL("", expectedPk2);
                 }
@@ -2050,7 +2146,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         for (const auto& family : columnFamilies) {
             if (family.GetName() == "Family1") {
                 UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
-                UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::None);
+                UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::None);
             } else {
                 UNIT_ASSERT(family.GetName() == "default" || family.GetName() == "Family2");
             }
@@ -2078,7 +2174,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field `COMPRESSION_LEVEL` is not supported for OLTP tables");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Field `COMPRESSION_LEVEL` is not supported for OLTP tables", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(AlterCompressionLevelInColumnFamily) {
@@ -2108,7 +2204,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ALTER FAMILY Family1 SET COMPRESSION_LEVEL 5;)";
         auto resultAlter = session.ExecuteSchemeQuery(queryAlter).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(resultAlter.GetStatus(), EStatus::BAD_REQUEST, resultAlter.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(resultAlter.GetIssues().ToString(), "Field `COMPRESSION_LEVEL` is not supported for OLTP tables");
+        UNIT_ASSERT_STRING_CONTAINS_C(resultAlter.GetIssues().ToString(), "Field `COMPRESSION_LEVEL` is not supported for OLTP tables", resultAlter.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(AddColumnFamilyWithCompressionLevel) {
@@ -2142,7 +2238,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );)";
         auto resultAlter = session.ExecuteSchemeQuery(queryAlter).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(resultAlter.GetStatus(), EStatus::BAD_REQUEST, resultAlter.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(resultAlter.GetIssues().ToString(), "Field `COMPRESSION_LEVEL` is not supported for OLTP tables");
+        UNIT_ASSERT_STRING_CONTAINS_C(resultAlter.GetIssues().ToString(), "Field `COMPRESSION_LEVEL` is not supported for OLTP tables", resultAlter.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CreateTableWithDefaultFamily) {
@@ -2177,11 +2273,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             for (const auto& family : columnFamilies) {
                 if (family.GetName() == "Family1") {
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::None);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::None);
                 } else {
                     UNIT_ASSERT(family.GetName() == "default");
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::LZ4);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::LZ4);
                 }
             }
         }
@@ -2209,14 +2305,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             for (const auto& family : columnFamilies) {
                 if (family.GetName() == "Family1") {
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::LZ4);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::LZ4);
                 } else if (family.GetName() == "Family2") {
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::None);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::None);
                 } else {
                     UNIT_ASSERT(family.GetName() == "default");
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
-                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression(), EColumnFamilyCompression::LZ4);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::LZ4);
                 }
             }
             const auto& columns = describeResult.GetTableDescription().GetColumns();
@@ -2249,7 +2345,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto describeResult = session.DescribeTable(tableName).GetValueSync();
         UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-        UNIT_ASSERT(describeResult.GetTableDescription().GetStorageSettings().GetStoreExternalBlobs().GetOrElse(false));
+        UNIT_ASSERT(describeResult.GetTableDescription().GetStorageSettings().GetStoreExternalBlobs().value_or(false));
     }
 
     Y_UNIT_TEST(CreateAndAlterTableComplex) {
@@ -2384,22 +2480,22 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             if (precision == 0) {
                 UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), "Invalid decimal precision");
+                UNIT_ASSERT_STRING_CONTAINS_C(createResult.GetIssues().ToString(), "Invalid decimal precision", createResult.GetIssues().ToString());
                 return;
             }
             if (precision == 33) {
                 UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), "Invalid decimal parameters");
+                UNIT_ASSERT_STRING_CONTAINS_C(createResult.GetIssues().ToString(), "Invalid decimal parameters", createResult.GetIssues().ToString());
                 return;
             }
             if (precision == 36) {
                 UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), "Invalid decimal precision");
+                UNIT_ASSERT_STRING_CONTAINS_C(createResult.GetIssues().ToString(), "Invalid decimal precision", createResult.GetIssues().ToString());
                 return;
             }
             if (precision == 999) {
                 UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToString(), " Invalid decimal precision");
+                UNIT_ASSERT_STRING_CONTAINS_C(createResult.GetIssues().ToString(), " Invalid decimal precision", createResult.GetIssues().ToString());
                 return;
             }
 
@@ -2408,7 +2504,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
             UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
             auto tableDesc = describe.GetTableDescription();
-            TVector<TTableColumn> columns = tableDesc.GetTableColumns();
+            std::vector<TTableColumn> columns = tableDesc.GetTableColumns();
             UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
             TType valueType = columns[1].Type;
             TTypeParser parser(valueType);
@@ -2453,7 +2549,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
             UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
             auto tableDesc = describe.GetTableDescription();
-            TVector<TTableColumn> columns = tableDesc.GetTableColumns();
+            std::vector<TTableColumn> columns = tableDesc.GetTableColumns();
             UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
             TType valueType = columns[1].Type;
             TTypeParser parser(valueType);
@@ -2481,6 +2577,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         featureFlags.SetEnableVectorIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_DEBUG);
+
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
@@ -2489,7 +2587,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         const auto subtypeStr = IndexSubtypeSqlString(type).data();
         const auto withStr = IndexWithSqlString(type).data();
 
-        // Non-covered index
+        // Non-covered index, single column
         {
             auto status = session.ExecuteSchemeQuery(Sprintf(R"(
                 --!syntax_v1
@@ -2510,10 +2608,15 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 0);
 
             if (type == EIndexTypeSql::GlobalVectorKMeansTree) {
-                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetVectorIndexSettings()).Settings;
+                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetIndexSettings()).Settings;
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, TVectorIndexSettings::EMetric::InnerProduct);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
+
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             }
         }
 
@@ -2532,7 +2635,58 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 0);
         }
 
-        // Covered index
+        // Non-covered index, multiple columns
+        {
+            auto status = session.ExecuteSchemeQuery(Sprintf(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/Test` ADD INDEX CommentIndex %s %s ON (Group, Comment) %s;
+            )", typeStr, subtypeStr, withStr)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexName(), "CommentIndex");
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexType(), IndexTypeSqlToIndexType(type));
+            std::vector<std::string> indexColumns{"Group", "Comment"};
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns(), indexColumns);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 0);
+
+            if (type == EIndexTypeSql::GlobalVectorKMeansTree) {
+                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetIndexSettings()).Settings;
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, TVectorIndexSettings::EMetric::InnerProduct);
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
+
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PrefixTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            }
+        }
+
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/Test` DROP INDEX CommentIndex;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 0);
+        }
+
+        // Covered index, single column
         {
             auto status = session.ExecuteSchemeQuery(Sprintf(R"(
                 --!syntax_v1
@@ -2552,11 +2706,82 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 1);
 
             if (type == EIndexTypeSql::GlobalVectorKMeansTree) {
-                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetVectorIndexSettings()).Settings;
+                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetIndexSettings()).Settings;
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, TVectorIndexSettings::EMetric::InnerProduct);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
+
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+           }
+        }
+
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/Test` DROP INDEX NameIndex;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 0);
+        }
+
+        // Covered index, multiple columns
+        {
+            auto status = session.ExecuteSchemeQuery(Sprintf(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/Test` ADD INDEX CommentIndex %s %s ON (Group, Comment) COVER (Amount) %s;
+            )", typeStr, subtypeStr, withStr)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexName(), "CommentIndex");
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexType(), IndexTypeSqlToIndexType(type));
+            std::vector<std::string> indexColumns{"Group", "Comment"};
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns(), indexColumns);
+            std::vector<std::string> dataColumns{"Amount"};
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns(), dataColumns);
+
+            if (type == EIndexTypeSql::GlobalVectorKMeansTree) {
+                const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.back().GetIndexSettings()).Settings;
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, TVectorIndexSettings::EMetric::InnerProduct);
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Float);
+                UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
+
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PrefixTable).GetValueSync();
+                UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             }
+        }
+
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/Test` DROP INDEX CommentIndex;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 0);
         }
     }
 
@@ -2649,7 +2874,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                         ALTER TABLE `/Root/TestTable` ALTER INDEX vector_idx SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT 1;
                     )").ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Only index with one impl table is supported" );
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Only index with one impl table is supported", result.GetIssues().ToString());
         }
     }
 
@@ -2663,7 +2888,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                         ALTER TABLE `/Root/SecondaryKeys` ALTER INDEX WrongIndexName SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT 1;
                     )").ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown index name: WrongIndexName");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Unknown index name: WrongIndexName", result.GetIssues().ToString());
         }
     }
 
@@ -2681,14 +2906,17 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 )
             ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-                "Error: Cannot find table 'db.[/Root/SecondaryKeys/Index/indexImplTable]' because it does not exist or you do not have access permissions."
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Error: Cannot find table 'db.[/Root/SecondaryKeys/Index/indexImplTable]' because it does not exist or you do not have access permissions.",
+                result.GetIssues().ToString()
             );
         }
     }
 
     Y_UNIT_TEST(AlterIndexImplTableUsingPublicAPI) {
         TKikimrRunner kikimr;
+        kikimr.GetTestClient().GrantConnect("user@builtin");
+
         auto adminSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(adminSession);
 
@@ -2724,8 +2952,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto result = userSession.AlterTable("/Root/SecondaryKeys/Index/indexImplTable", tableSettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-                "Error: Access denied for user@builtin to path Root/SecondaryKeys/Index/indexImplTable"
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Error: Access denied for user@builtin on path /Root/SecondaryKeys/Index/indexImplTable",
+                result.GetIssues().ToString()
             );
         }
         // grant necessary permission
@@ -2748,8 +2977,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto result = userSession.AlterTable("/Root/SecondaryKeys/Index/indexImplTable", forbiddenSettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-                "Error: Check failed: path: '/Root/SecondaryKeys/Index/indexImplTable', error: path is not a common path"
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Error: Check failed: path: '/Root/SecondaryKeys/Index/indexImplTable', error: path is not a common path",
+                result.GetIssues().ToString()
             );
         }
         // become superuser
@@ -2906,7 +3136,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Embedding");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 0);
-            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetVectorIndexSettings()).Settings;
+            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetIndexSettings()).Settings;
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::InnerProduct);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
@@ -2958,7 +3188,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Embedding");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns()[0], "Covered");
-            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetVectorIndexSettings()).Settings;
+            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetIndexSettings()).Settings;
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::InnerProduct);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
@@ -3027,7 +3257,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 .AddNullableColumn("Key", EPrimitiveType::Uint64)
                 .AddNullableColumn("Embedding", EPrimitiveType::String)
                 .SetPrimaryKeyColumn("Key")
-                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {TVectorIndexSettings{ 
+                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {TVectorIndexSettings{
                     NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
                     NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
                     1024,
@@ -3047,7 +3277,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Embedding");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 0);
-            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetVectorIndexSettings()).Settings;
+            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetIndexSettings()).Settings;
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
@@ -3067,7 +3297,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 .AddNullableColumn("Embedding", EPrimitiveType::String)
                 .AddNullableColumn("Covered", EPrimitiveType::String)
                 .SetPrimaryKeyColumn("Key")
-                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {"Covered"}, {TVectorIndexSettings{ 
+                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {"Covered"}, {TVectorIndexSettings{
                     NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
                     NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
                     1024,
@@ -3088,7 +3318,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Embedding");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns()[0], "Covered");
-            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetVectorIndexSettings()).Settings;
+            const auto& vectorIndexSettings = std::get<TKMeansTreeSettings>(indexDesc.GetIndexSettings()).Settings;
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Float);
             UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 1024);
@@ -3121,22 +3351,22 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             if (precision == 0) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid decimal precision");
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Invalid decimal precision", result.GetIssues().ToString());
                 return;
             }
             if (precision == 33) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid decimal parameters");
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Invalid decimal parameters", result.GetIssues().ToString());
                 return;
             }
             if (precision == 36) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid decimal precision");
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Invalid decimal precision", result.GetIssues().ToString());
                 return;
             }
             if (precision == 999) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), " Invalid decimal precision");
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), " Invalid decimal precision", result.GetIssues().ToString());
                 return;
             }
 
@@ -3156,7 +3386,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
         UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
         auto tableDesc = describe.GetTableDescription();
-        TVector<TTableColumn> columns = tableDesc.GetTableColumns();
+        std::vector<TTableColumn> columns = tableDesc.GetTableColumns();
         UNIT_ASSERT_VALUES_EQUAL(columns.size(), 7);
 
         auto checkColumn = [&] (ui64 columnIdx, ui32 precision, ui32 scale) {
@@ -3220,7 +3450,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
         UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
         auto tableDesc = describe.GetTableDescription();
-        TVector<TTableColumn> columns = tableDesc.GetTableColumns();
+        std::vector<TTableColumn> columns = tableDesc.GetTableColumns();
         UNIT_ASSERT_VALUES_EQUAL(columns.size(), 13);
 
         auto checkColumn = [&] (ui64 columnIdx, const TString& typeName) {
@@ -3268,6 +3498,304 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(CreateAlterUserWithHash) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user1 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user2 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "wrongSaltLength",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Length of field \'salt\' is 15, but it must be equal 24");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user3 HASH '{
+                    "hash": "wrongHashLength",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Length of field \'hash\' is 15, but it must be equal 44");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user4 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "wrongtype"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field \'type\' must be equal \"argon2id\"");
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user5 HASH '{{{{}}}
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                ';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hash value; it should be in JSON-format");
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user6 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id",
+                    "some_strange_field": "some_strange_value"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "There should be strictly three fields here: salt, hash and type");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user7 HASH '{
+                    "hash": "Field not in base64format but with 44 length",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field \'hash\' must be in base64 format");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user8 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "Not in base64 format =) ",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field \'salt\' must be in base64 format");
+        }
+
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user9;
+                ALTER USER user9 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user10;
+                ALTER USER user10 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "wrongSaltLength",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Length of field \'salt\' is 15, but it must be equal 24");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user11;
+                ALTER USER user11 HASH '{
+                    "hash": "wrongHashLength",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Length of field \'hash\' is 15, but it must be equal 44");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user12;
+                ALTER USER user12 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "wrongtype"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field \'type\' must be equal \"argon2id\"");
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user13;
+                ALTER USER user13 HASH '{{{{}}}
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                ';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot parse hash value; it should be in JSON-format");
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user14;
+                ALTER USER user14 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id",
+                    "some_strange_field": "some_strange_value"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "There should be strictly three fields here: salt, hash and type");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user15;
+                ALTER USER user15 HASH '{
+                    "hash": "Field not in base64format but with 44 length",
+                    "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field \'hash\' must be in base64 format");
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+                CREATE USER user16;
+                ALTER USER user16 HASH '{
+                    "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                    "salt": "Not in base64 format =) ",
+                    "type": "argon2id"
+                }';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Field \'salt\' must be in base64 format");
+        }
+    }
+
+    Y_UNIT_TEST(CreateAlterUserLoginNoLogin) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        {
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                CREATE USER user1 ENCRYPTED PASSWORD '123' LOGIN;
+            )";
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                CREATE USER user2 ENCRYPTED PASSWORD '123' NOLOGIN;
+            )";
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                CREATE USER user3 ENCRYPTED PASSWORD '123';
+                ALTER USER user3 NOLOGIN;
+            )";
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                CREATE USER user4 ENCRYPTED PASSWORD '123' NOLOGIN;
+                ALTER USER user4 LOGIN;
+            )";
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                CREATE USER user5 someNonExistentOption;
+            )";
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "extraneous input \'someNonExistentOption\'");
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                CREATE USER user6;
+                ALTER USER user6 someNonExistentOption;
+            )";
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "mismatched input \'someNonExistentOption\'");
+        }
+    }
+
     struct ExpectedPermissions {
         TString Path;
         THashMap<TString, TVector<TString>> Permissions;
@@ -3303,6 +3831,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE USER user1 PASSWORD 'password1';
+            CREATE USER user2 PASSWORD 'password2';
+            CREATE USER user3 PASSWORD 'password3';
+            CREATE USER user4 PASSWORD 'password4';
+            CREATE USER user5 PASSWORD 'password5';
+            CREATE USER user6 PASSWORD 'password6';
+            CREATE USER user7 PASSWORD 'password7';
+            CREATE USER user8 PASSWORD 'password8';
+            CREATE USER user9 PASSWORD 'password9';
+            )";
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -3699,11 +4244,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
+            CREATE USER user1 PASSWORD 'password1';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
             GRANT ROW SELECT ON `/Root` TO user1;
             )";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unexpected token 'ROW'");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "extraneous input 'ROW'", result.GetIssues().ToString());
             CheckPermissions(session, {{.Path = "/Root", .Permissions = {}}});
         }
 
@@ -3714,7 +4267,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unexpected token '`ydb.database.connect`'");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "mismatched input '`ydb.database.connect`'", result.GetIssues().ToString());
             CheckPermissions(session, {{.Path = "/Root", .Permissions = {}}});
         }
 
@@ -3725,7 +4278,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unexpected token 'READ'");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "extraneous input 'READ'", result.GetIssues().ToString());
             CheckPermissions(session, {{.Path = "/Root", .Permissions = {}}});
         }
 
@@ -3736,8 +4289,101 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown permission name: ");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Unknown permission name: ", result.GetIssues().ToString());
             CheckPermissions(session, {{.Path = "/Root", .Permissions = {}}});
+        }
+    }
+
+    Y_UNIT_TEST(ModifyPermissionsByRelativePath) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE USER ydbuser PASSWORD 'password1';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            {
+                const TString query = R"(
+                    CREATE TABLE `MyApp/Orders` (
+                        id Int32 NOT NULL,
+                        value Int32,
+                        PRIMARY KEY (id)
+                    );
+                )";
+
+                auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+
+            {
+                const TString query = R"(
+                    GRANT SELECT ON `MyApp/Orders` TO ydbuser;
+                )";
+
+                auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+
+            {
+                const TString query = R"(
+                    REVOKE SELECT ON `MyApp/Orders` FROM ydbuser;
+                )";
+
+                auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ModifyPermissionsByRelativePathQueryClient) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto runnerSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TTestHelper testHelper(runnerSettings);
+        auto client = testHelper.GetKikimr().GetQueryClient();
+        auto db = testHelper.GetKikimr().GetTableClient();
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("value").SetType(NScheme::NTypeIds::Int32)
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/MyApp/Orders").SetPrimaryKey({ "id" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE USER ydbuser PASSWORD 'password1';
+            )";
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            {
+                const TString query = R"(
+                    GRANT SELECT ON `MyApp/Orders` TO ydbuser;
+                )";
+
+                auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+
+            {
+                const TString query = R"(
+                    REVOKE SELECT ON `MyApp/Orders` FROM ydbuser;
+                )";
+
+                auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
         }
     }
 
@@ -3748,12 +4394,20 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
+            CREATE USER user1 PASSWORD 'password1';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
             GRANT CONNECT, LIST ON `/Root`, `/UnknownPath` TO user1;
             )";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path does not exist");
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Error for the path: /UnknownPath");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Path does not exist", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Error for the path: /UnknownPath", result.GetIssues().ToString());
             CheckPermissions(session, {{.Path = "/Root", .Permissions = {{"user1", {"ydb.database.connect", "ydb.generic.list"}}}}});
         }
     }
@@ -3772,8 +4426,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(CreateAndDropUser) {
+    Y_UNIT_TEST_TWIN(CreateAndDropUser, StrictAclCheck) {
         TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableStrictAclCheck(StrictAclCheck);
         auto db = kikimr.GetTableClient();
         {
             // Drop non-existing user force
@@ -3841,6 +4496,36 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            // Drop user with ACL
+            auto session = db.CreateSession().GetValueSync().GetSession();
+
+            TString query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE USER user2 PASSWORD NULL;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            query = TStringBuilder() << R"(
+            --!syntax_v1
+            GRANT ALL ON `/Root` TO user2;
+            )";
+            result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            query = TStringBuilder() << R"(
+            --!syntax_v1
+            DROP USER user2;
+            )";
+            result = session.ExecuteSchemeQuery(query).GetValueSync();
+            if (!StrictAclCheck) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Error: User user2 has an ACL record on /Root and can't be removed");
+            }
         }
     }
 
@@ -4035,7 +4720,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
         UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         const auto tableDesc = session.DescribeTable(tableName).GetValueSync().GetTableDescription();
-        TVector<TTableColumn> columns = tableDesc.GetTableColumns();
+        std::vector<TTableColumn> columns = tableDesc.GetTableColumns();
         UNIT_ASSERT_VALUES_EQUAL(columns.size(), 3);
         TTableColumn& familyColumn = columns[2];
         UNIT_ASSERT_EQUAL(familyColumn.Name, "FAMILY");
@@ -4692,7 +5377,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto& changefeeds = result.GetTableDescription().GetChangefeedDescriptions();
             UNIT_ASSERT_VALUES_EQUAL(changefeeds.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(changefeeds.at(0), changefeed);
-            UNIT_ASSERT_VALUES_EQUAL(changefeeds.at(0).GetAttributes(), changefeed.GetAttributes());
+            UNIT_ASSERT(changefeeds.at(0).GetAttributes() == changefeed.GetAttributes());
         }
     }
 
@@ -4737,6 +5422,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(DescribeIndexTable) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
+        auto scheme = NYdb::NScheme::TSchemeClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         {
@@ -4752,6 +5438,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto desc = scheme.DescribePath("/Root/table/SyncIndex").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetEntry().Name, "SyncIndex");
         }
         {
             auto desc = session.DescribeTable("/Root/table/SyncIndex").ExtractValueSync();
@@ -4815,6 +5506,30 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT(desc.GetEntry().CreatedAt > createdAt);
         }
     }
+
+    Y_UNIT_TEST(NEG_CreateTableWithUnsupportedStoreType) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TKikimrRunner kikimr(runnerSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableStoreName = "/Root/TableStoreTest";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE SomeTable (
+                Key Timestamp NOT NULL,
+                Value1 String,
+                Value2 Int64 NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                STORE = UNSUPPORTED
+            );
+        )";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    }
+
 
     Y_UNIT_TEST(CreateAlterDropTableStore) {
         TKikimrSettings runnerSettings;
@@ -5133,7 +5848,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
 
-        { // no partition by
+        { // nullable pk columns are disabled by default
+            kikimr.GetTestServer().GetRuntime()->GetAppData().ColumnShardConfig.SetAllowNullableColumnsInPK(false);
             auto query = TStringBuilder() << R"(
                 --!syntax_v1
                 CREATE TABLE `)" << tableName << R"(` (
@@ -5168,8 +5884,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(AlterColumnTableTtl) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
+        auto runnerSettings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(runnerSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -5244,15 +5961,18 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
         runnerSettings.SetEnableTieringInColumnShard(true);
-        TKikimrRunner kikimr(runnerSettings);
-        auto db = kikimr.GetTableClient();
+        TTestHelper testHelper(runnerSettings);
+        auto db = testHelper.GetKikimr().GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         TString tableName = "/Root/ColumnTableTest";
+
+        testHelper.CreateTier("tier1");
+        testHelper.CreateTier("tier2");
 
         auto query = TStringBuilder() << R"(
             --!syntax_v1
             CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64 NOT NULL,
+                Key Timestamp NOT NULL,
                 Value1 String,
                 Value2 Int64 NOT NULL,
                 PRIMARY KEY (Key)
@@ -5261,23 +5981,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             WITH (
                 STORE = COLUMN,
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10,
-                TIERING = 'tiering1'
+                TTL = Interval("PT10S") TO EXTERNAL DATA SOURCE `/Root/tier1` ON Key
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-#if 0 // TODO
         { // describe table
             auto desc = session.DescribeTable(tableName).ExtractValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
 
-            auto tiering = desc.GetTableDescription().GetTiering();
-            UNIT_ASSERT(tiering);
-            UNIT_ASSERT_VALUES_EQUAL(*tiering, "tiering1");
+            UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
+            auto ttl = desc.GetTableDescription().GetTtlSettings();
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(), "/Root/tier1");
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TDateTypeColumnModeSettings>(ttl->GetTiers()[0].GetExpression()).GetExpireAfter(), TDuration::Seconds(10));
         }
-#endif
         auto query2 = TStringBuilder() << R"(
             --!syntax_v1
-            ALTER TABLE `)" << tableName << R"(` SET(TIERING = 'tiering2');)";
+            ALTER TABLE `)" << tableName << R"(` SET (TTL = Interval("PT10S") TO EXTERNAL DATA SOURCE `/Root/tier2` ON Key);)";
         result = session.ExecuteSchemeQuery(query2).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -5285,14 +6005,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto desc = session.DescribeTable(tableName).ExtractValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
 
-            auto tiering = desc.GetTableDescription().GetTiering();
-            UNIT_ASSERT(tiering);
-            UNIT_ASSERT_VALUES_EQUAL(*tiering, "tiering2");
+            UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
+            auto ttl = desc.GetTableDescription().GetTtlSettings();
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(), "/Root/tier2");
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TDateTypeColumnModeSettings>(ttl->GetTiers()[0].GetExpression()).GetExpireAfter(), TDuration::Seconds(10));
         }
 
         auto query3 = TStringBuilder() << R"(
             --!syntax_v1
-            ALTER TABLE `)" << tableName << R"(` RESET (TIERING);)";
+            ALTER TABLE `)" << tableName << R"(` RESET (TTL);)";
         result = session.ExecuteSchemeQuery(query3).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -5300,13 +6022,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto desc = session.DescribeTable(tableName).ExtractValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
 
-            auto tiering = desc.GetTableDescription().GetTiering();
-            UNIT_ASSERT(!tiering);
+            auto ttl = desc.GetTableDescription().GetTtlSettings();
+            UNIT_ASSERT(!ttl);
         }
 
         auto query4 = TStringBuilder() << R"(
             --!syntax_v1
-            ALTER TABLE `)" << tableName << R"(` SET (TIERING = 'tiering1');)";
+            ALTER TABLE `)" << tableName << R"(` SET (TTL = Interval("PT10S") TO EXTERNAL DATA SOURCE `/Root/tier1` ON Key);)";
         result = session.ExecuteSchemeQuery(query4).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -5314,9 +6036,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto desc = session.DescribeTable(tableName).ExtractValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
 
-            auto tiering = desc.GetTableDescription().GetTiering();
-            UNIT_ASSERT(tiering);
-            UNIT_ASSERT_VALUES_EQUAL(*tiering, "tiering1");
+            UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
+            auto ttl = desc.GetTableDescription().GetTtlSettings();
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(), "/Root/tier1");
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TDateTypeColumnModeSettings>(ttl->GetTiers()[0].GetExpression()).GetExpireAfter(), TDuration::Seconds(10));
         }
 
         auto query5 = TStringBuilder() << R"(
@@ -5324,6 +6048,271 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             DROP TABLE `)" << tableName << R"(`;)";
         result = session.ExecuteSchemeQuery(query5).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(AlterSequence) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TKikimrRunner kikimr(runnerSettings);
+        auto client = kikimr.GetQueryClient();
+
+        TString tableName = "/Root/TableTest";
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                CREATE TABLE `)" << tableName << R"(` (
+                    Key Serial,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TString sequencePath = "/Root/TableTest/_serial_column_Key";
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                ALTER SEQUENCE IF EXISTS `)" << sequencePath << R"(`
+                    START WITH 50
+                    INCREMENT BY 11;
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto runtime = kikimr.GetTestServer().GetRuntime();
+            TActorId sender = runtime->AllocateEdgeActor();
+            auto describeResult = DescribeTable(&kikimr.GetTestServer(), sender, sequencePath);
+            UNIT_ASSERT_VALUES_EQUAL(describeResult.GetStatus(), NKikimrScheme::StatusSuccess);
+            auto& sequenceDescription = describeResult.GetPathDescription().GetSequenceDescription();
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetName(), "_serial_column_Key");
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMinValue(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetMaxValue(), 9223372036854775807);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetStartValue(), 50);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCache(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetIncrement(), 11);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetCycle(), false);
+            UNIT_ASSERT_VALUES_EQUAL(sequenceDescription.GetDataType(), "Int64");
+        }
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                ALTER SEQUENCE IF EXISTS `)" << sequencePath << R"(`
+                    RESTART WITH 1000;
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                ALTER SEQUENCE IF EXISTS `/Root/seq`
+                    RESTART WITH 1000;
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                ALTER SEQUENCE `/Root/seq`
+                    START WITH 2000;
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+        }
+    }
+
+    Y_UNIT_TEST(AlterSequenceRestartWith) {
+       TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TKikimrRunner kikimr(runnerSettings);
+        auto client = kikimr.GetQueryClient();
+
+        TString tableName = "/Root/TableTest";
+
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        auto tableClient = kikimr.GetTableClient();
+        auto tableClientSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                CREATE TABLE `)" << tableName << R"(` (
+                    Key Int64,
+                    Value Serial,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                INSERT INTO `)" << tableName << R"(` (Key, Value) VALUES (1, 1);
+            )";
+
+            auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                SELECT * FROM `)" << tableName << R"(`;
+            )";
+
+            auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [[[1];1]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                INSERT INTO `)" << tableName << R"(` (Key) VALUES (2), (3);
+            )";
+
+            auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                SELECT * FROM `)" << tableName << R"(`;
+            )";
+
+            auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [[[1];1];[[2];1];[[3];2]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        TString sequencePath = "/Root/TableTest/_serial_column_Value";
+
+        {
+            const auto queryAlter = TStringBuilder() << R"(
+                --!syntax_v1
+                ALTER SEQUENCE IF EXISTS `)" << sequencePath << R"(`
+                    RESTART 105
+                    INCREMENT 2;
+            )";
+
+            auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
+        }
+
+        {
+            const auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                INSERT INTO `)" << tableName << R"(` (Key) VALUES (105), (107);
+            )";
+
+            auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                SELECT * FROM `)" << tableName << R"(`;
+            )";
+
+            auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [[[1];1];[[2];1];[[3];2];[[105];105];[[107];107]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const auto queryAlter = TStringBuilder() << R"(
+                --!syntax_v1
+                ALTER SEQUENCE IF EXISTS `)" << sequencePath << R"(`
+                    START 206;
+            )";
+
+            auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
+        }
+
+        {
+            const auto queryAlter = TStringBuilder() << R"(
+                --!syntax_v1
+                ALTER SEQUENCE IF EXISTS `)" << sequencePath << R"(`
+                    RESTART;
+            )";
+
+            auto resultAlter = session.ExecuteQuery(queryAlter, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultAlter.IsSuccess(), resultAlter.GetIssues().ToString());
+        }
+
+        {
+            const auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                INSERT INTO `)" << tableName << R"(` (Key) VALUES (206), (208);
+            )";
+
+            auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                SELECT * FROM `)" << tableName << R"(`;
+            )";
+
+            auto result = tableClientSession.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [[[1];1];[[2];1];[[3];2];[[105];105];[[107];107];[[206];206];[[208];208]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
     }
 
     Y_UNIT_TEST(Int8Int16) {
@@ -5383,19 +6372,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             for (size_t i = 0; parser.TryNextRow(); ++i) {
                 {
                     auto& c = parser.ColumnParser("CUint8");
-                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalUint8().Get());
+                    UNIT_ASSERT_VALUES_EQUAL(i, c.GetOptionalUint8().value());
                 }
                 {
                     auto& c = parser.ColumnParser("CInt8");
-                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalInt8().Get());
+                    UNIT_ASSERT_VALUES_EQUAL(i, c.GetOptionalInt8().value());
                 }
                 {
                     auto& c = parser.ColumnParser("CUint16");
-                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalUint16().Get());
+                    UNIT_ASSERT_VALUES_EQUAL(i, c.GetOptionalUint16().value());
                 }
                 {
                     auto& c = parser.ColumnParser("CInt16");
-                    UNIT_ASSERT_VALUES_EQUAL(i, *c.GetOptionalInt16().Get());
+                    UNIT_ASSERT_VALUES_EQUAL(i, c.GetOptionalInt16().value());
                 }
             }
         }
@@ -5497,12 +6486,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto checkDisabled = [](const auto& result, NYdb::EStatus status) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "External data sources are disabled for serverless domains. Please contact your system administrator to enable it");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External data sources are disabled for serverless domains. Please contact your system administrator to enable it", result.GetIssues().ToString());
         };
 
         auto checkNotFound = [](const auto& result, NYdb::EStatus status) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path does not exist");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Path does not exist", result.GetIssues().ToString());
         };
 
         const auto& createSourceSql = R"(
@@ -5624,8 +6613,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 AUTH_METHOD="NONE"
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "External data sources are disabled. Please contact your system administrator to enable it");
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External data sources are disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CreateExternalDataSourceValidationAuthMethod) {
@@ -5642,7 +6631,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown AUTH_METHOD = UNKNOWN");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Unknown AUTH_METHOD = UNKNOWN", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CreateExternalDataSourceValidationLocation) {
@@ -5662,7 +6651,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "It is not allowed to access hostname 'my-bucket'");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "It is not allowed to access hostname 'my-bucket'", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(DropExternalDataSource) {
@@ -5702,7 +6691,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"( DROP EXTERNAL DATA SOURCE `)" << externalDataSourceName << "`";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "External data sources are disabled. Please contact your system administrator to enable it");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External data sources are disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(DoubleCreateExternalDataSource) {
@@ -5742,7 +6731,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Check failed: path: '/Root/ExternalDataSource', error: path exist");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Check failed: path: '/Root/ExternalDataSource', error: path exist", result.GetIssues().ToString());
         }
     }
 
@@ -5794,7 +6783,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "External tables are disabled. Please contact your system administrator to enable it");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External tables are disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CreateExternalTableCheckPrimaryKey) {
@@ -5812,7 +6801,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "PRIMARY KEY is not supported for external table");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "PRIMARY KEY is not supported for external table", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CreateExternalTableValidation) {
@@ -5830,7 +6819,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "DATA_SOURCE requires key");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "DATA_SOURCE requires key", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(DropExternalTable) {
@@ -5887,7 +6876,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto query = TStringBuilder() << R"( DROP EXTERNAL TABLE `/Root/ExternalDataSource`)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "External table are disabled. Please contact your system administrator to enable it");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External table are disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CreateExternalTableWithSettings) {
@@ -6032,7 +7021,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Check failed: path: '/Root/ExternalTable', error: path exist");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Check failed: path: '/Root/ExternalTable', error: path exist", result.GetIssues().ToString());
         }
     }
 
@@ -6074,7 +7063,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = TStringBuilder() << R"( DROP EXTERNAL DATA SOURCE `)" << externalDataSourceName << "`";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Other entities depend on this data source, please remove them at the beginning: /Root/ExternalTable");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Other entities depend on this data source, please remove them at the beginning: /Root/ExternalTable", result.GetIssues().ToString());
         }
     }
 
@@ -6107,7 +7096,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "CONNECTION_STRING and ENDPOINT/DATABASE are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "CONNECTION_STRING and ENDPOINT/DATABASE are mutually exclusive", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -6121,7 +7110,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Neither CONNECTION_STRING nor ENDPOINT/DATABASE are provided");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "Neither CONNECTION_STRING nor ENDPOINT/DATABASE are provided", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -6135,7 +7124,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Neither CONNECTION_STRING nor ENDPOINT/DATABASE are provided");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "Neither CONNECTION_STRING nor ENDPOINT/DATABASE are provided", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -6152,7 +7141,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -6168,7 +7157,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and TOKEN_SECRET_NAME are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN and TOKEN_SECRET_NAME are mutually exclusive", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -6184,7 +7173,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )";
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -6199,7 +7188,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "USER is not provided");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "USER is not provided", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -6214,7 +7203,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "PASSWORD or PASSWORD_SECRET_NAME are not provided");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "PASSWORD or PASSWORD_SECRET_NAME are not provided", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -6229,7 +7218,38 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "STATE is not supported in CREATE");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "STATE is not supported in CREATE", result.GetIssues().ToOneLineString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    CONSISTENCY_LEVEL = "FOO"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "Unknown consistency level", result.GetIssues().ToOneLineString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    CONSISTENCY_LEVEL = "ROW",
+                    COMMIT_INTERVAL = Interval("PT10S")
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "Ambiguous consistency level", result.GetIssues().ToOneLineString());
         }
 
         // positive
@@ -6363,7 +7383,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Check failed: path: '/Root/replication', error: path hasn't been resolved, nearest resolved path: '/Root'");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "Check failed: path: '/Root/replication', error: path hasn't been resolved, nearest resolved path: '/Root'", result.GetIssues().ToOneLineString());
         }
 
         {
@@ -6408,7 +7428,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Unknown replication state: foo");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "Unknown replication state: foo", result.GetIssues().ToOneLineString());
         }
 
         // invalid failover mode
@@ -6423,7 +7443,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Unknown failover mode: foo");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "Unknown failover mode: foo", result.GetIssues().ToOneLineString());
         }
 
         // alter config in StandBy state
@@ -6438,7 +7458,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Please ensure the replication is not in StandBy state before attempting to modify its settings. Modifications are not allowed in StandBy state");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "Please ensure the replication is not in StandBy state before attempting to modify its settings. Modifications are not allowed in StandBy state", result.GetIssues().ToOneLineString());
         }
 
         // alter state and config
@@ -6455,7 +7475,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "It is not allowed to change both settings and the state of the replication in the same query. Please submit separate queries for each action");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "It is not allowed to change both settings and the state of the replication in the same query. Please submit separate queries for each action", result.GetIssues().ToOneLineString());
         }
 
         // check alter state
@@ -6472,7 +7492,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-            while (true) {
+            for (size_t i = 10; i--;) {
                 const auto result = repl.DescribeReplication("/Root/replication").ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -6481,6 +7501,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     break;
                 }
 
+                UNIT_ASSERT_C(i, "Alter timeout");
                 Sleep(TDuration::Seconds(1));
             }
         }
@@ -6499,7 +7520,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "CONNECTION_STRING and ENDPOINT/DATABASE are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "CONNECTION_STRING and ENDPOINT/DATABASE are mutually exclusive", result.GetIssues().ToOneLineString());
         }
 
         // alter connection params
@@ -6556,7 +7577,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive", result.GetIssues().ToOneLineString());
         }
 
         // TOKEN and TOKEN_SECRET_NAME are mutually exclusive
@@ -6572,7 +7593,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and TOKEN_SECRET_NAME are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN and TOKEN_SECRET_NAME are mutually exclusive", result.GetIssues().ToOneLineString());
         }
 
         // PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive
@@ -6589,7 +7610,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive", result.GetIssues().ToOneLineString());
         }
 
         // check alter credentials
@@ -6631,7 +7652,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "User is not set");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "User is not set", result.GetIssues().ToOneLineString());
         }
 
         {
@@ -6645,7 +7666,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "User is not set");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "User is not set", result.GetIssues().ToOneLineString());
         }
 
         {
@@ -6885,6 +7906,629 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         AsyncReplicationConnectionParams(kikimr, Sprintf(R"(ENDPOINT = "%s", DATABASE = "/Root")", kikimr.GetEndpoint().c_str()));
     }
 
+    Y_UNIT_TEST(CreateTransfer) {
+        TKikimrSettings serverSettings;
+        serverSettings.FeatureFlags.SetEnableTopicTransfer(true);
+        serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // negative
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer`
+                  FROM `/Root/topic` TO `/Root/table`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    ENDPOINT = "localhost:2135",
+                    DATABASE = "/Root"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "CONNECTION_STRING and ENDPOINT/DATABASE are mutually exclusive");
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer`
+                  FROM `/Root/topic` TO `/Root/table`
+                WITH (
+                    ENDPOINT = "localhost:2135"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Neither CONNECTION_STRING nor ENDPOINT/DATABASE are provided");
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer`
+                  FROM `/Root/topic` TO `/Root/table`
+                WITH (
+                    DATABASE = "/Root"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Neither CONNECTION_STRING nor ENDPOINT/DATABASE are provided");
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer`
+                  FROM `/Root/topic` TO `/Root/table`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    TOKEN = "foo",
+                    USER = "user",
+                    PASSWORD = "bar"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive");
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer`
+                  FROM `/Root/topic` TO `/Root/table`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    TOKEN = "foo",
+                    TOKEN_SECRET_NAME = "bar"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and TOKEN_SECRET_NAME are mutually exclusive");
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer`
+                  FROM `/Root/topic` TO `/Root/table`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    USER = "user",
+                    PASSWORD = "bar",
+                    PASSWORD_SECRET_NAME = "baz"
+                );
+            )";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive");
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer`
+                  FROM `/Root/topic` TO `/Root/table`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    PASSWORD = "bar"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "USER is not provided");
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer`
+                  FROM `/Root/topic` TO `/Root/table`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    USER = "user"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "PASSWORD or PASSWORD_SECRET_NAME are not provided");
+        }
+
+        // positive
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic`;
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer`
+                  FROM `/Root/topic` TO `/Root/table`
+                WITH (
+                    ENDPOINT = "%s",
+                    DATABASE = "/Root"
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                $a = "a"; -- CA РусоТекс1
+                ; -- Озер нон ассии
+                $b = () -> { -- CB
+                    return $a;
+                };
+                CREATE TRANSFER `/Root/transfer1`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> {
+                    -- CL
+                    RETURN $b($x);
+                  }
+                  WITH (
+                    ENDPOINT = "%s",
+                    DATABASE = "/Root"
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(AlterTransfer) {
+        using namespace NReplication;
+
+        TKikimrSettings serverSettings;
+        serverSettings.FeatureFlags.SetEnableTopicTransfer(true);
+        serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
+        TKikimrRunner kikimr(serverSettings);
+        auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NActors::NLog::PRI_TRACE);
+
+        // path does not exist
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    STATE = "DONE"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Check failed: path: '/Root/transfer', error: path hasn't been resolved, nearest resolved path: '/Root'");
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic`;
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer`
+                    FROM `/Root/topic` TO `/Root/table`
+                WITH (
+                    ENDPOINT = "%s",
+                    DATABASE = "/Root",
+                    TOKEN = "root@builtin"
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // invalid state
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    STATE = "foo"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Unknown transfer state: foo");
+        }
+
+        // alter state and config
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    STATE = "DONE",
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "It is not allowed to change both settings and the state of the replication in the same query. Please submit separate queries for each action");
+        }
+
+        // Connection string and Endpoint/Database are mutually exclusive
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/local",
+                    ENDPOINT = "localhost:2135",
+                    DATABASE = "/local"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "CONNECTION_STRING and ENDPOINT/DATABASE are mutually exclusive");
+        }
+
+        // check alter state
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    STATE = "DONE",
+                    FAILOVER_MODE = "FORCE"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            for (size_t i = 10; i--;) {
+                const auto result = repl.DescribeReplication("/Root/transfer").ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+                const auto& desc = result.GetReplicationDescription();
+                if (desc.GetState() == TReplicationDescription::EState::Done) {
+                    break;
+                }
+
+                //UNIT_ASSERT_C(i, "Alter timeout");
+                Sleep(TDuration::Seconds(1));
+            }
+        }
+
+        // alter connection params
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    DATABASE = "/local"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    ENDPOINT = "localhost:2136"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Token and User/Password are mutually exclusive
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    TOKEN = "foo",
+                    USER = "user",
+                    PASSWORD = "password"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive");
+        }
+
+        // TOKEN and TOKEN_SECRET_NAME are mutually exclusive
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    TOKEN = "token",
+                    TOKEN_SECRET_NAME = "token_secret_name"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and TOKEN_SECRET_NAME are mutually exclusive");
+        }
+
+        // PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    USER = "user",
+                    PASSWORD = "password",
+                    PASSWORD_SECRET_NAME = "password_secret_name"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive");
+        }
+
+        // check alter credentials
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    TOKEN = "foo"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    TOKEN_SECRET_NAME = "mysecret"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // set password witout user
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    PASSWORD = "password"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "User is not set");
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    PASSWORD_SECRET_NAME = "password_secret_name"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "User is not set");
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    USER = "user"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    PASSWORD = "password"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    PASSWORD_SECRET_NAME = "password_secret_name"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    USER = "new_user",
+                    PASSWORD = "new_password"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET USING ($x) -> {
+                    RETURN CAST($x as String);
+                };
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+    }
+
+    Y_UNIT_TEST(DropTransfer) {
+        TKikimrSettings serverSettings;
+        serverSettings.FeatureFlags.SetEnableTopicTransfer(true);
+        serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic`;
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer`
+                  FROM `/Root/topic` TO `/Root/table`
+                WITH (
+                    ENDPOINT = "%s",
+                    DATABASE = "/Root"
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        while (true) {
+            auto describe = session.DescribeTable("/Root/transfer").GetValueSync();
+            if (describe.GetStatus() == EStatus::SUCCESS) {
+                break;
+            }
+
+            Sleep(TDuration::Seconds(1));
+        }
+
+        // ok
+        {
+            auto query = R"(
+                --!syntax_v1
+                DROP TRANSFER `/Root/transfer` CASCADE
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describe = session.DescribeTable("/Root/transfer").GetValueSync();
+            UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(DisableResourcePools) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(false);
@@ -6900,7 +8544,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             Cerr << "Check query:\n" << query << "\n";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), status);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), error);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), error, result.GetIssues().ToString());
         };
 
         auto checkDisabled = [checkQuery](const TString& query) {
@@ -6935,12 +8579,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto checkDisabled = [](const auto& result) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pools are disabled for serverless domains. Please contact your system administrator to enable it");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Resource pools are disabled for serverless domains. Please contact your system administrator to enable it", result.GetIssues().ToString());
         };
 
         auto checkNotFound = [](const auto& result) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path does not exist");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Path does not exist", result.GetIssues().ToString());
         };
 
         const auto& createSql = R"(
@@ -6993,44 +8637,47 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             CREATE RESOURCE POOL `MyFolder/MyResourcePool` WITH (
                 CONCURRENT_QUERY_LIMIT=20
             );)").GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool id should not contain '/' symbol");
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Resource pool id should not contain '/' symbol", result.GetIssues().ToString());
 
         result = session.ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL MyResourcePool WITH (
                 ANOTHER_LIMIT=20
             );)").GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown property: another_limit");
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Unknown property: another_limit", result.GetIssues().ToString());
 
         result = session.ExecuteSchemeQuery(R"(
             ALTER RESOURCE POOL MyResourcePool
                 SET (ANOTHER_LIMIT = 5),
                 RESET (SOME_LIMIT);
             )").GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown property: another_limit, some_limit");
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Unknown property: another_limit, some_limit", result.GetIssues().ToString());
 
         result = session.ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL MyResourcePool WITH (
                 CONCURRENT_QUERY_LIMIT="StringValue"
             );)").GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Failed to parse property concurrent_query_limit:");
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Failed to parse property concurrent_query_limit:", result.GetIssues().ToString());
 
         result = session.ExecuteSchemeQuery(TStringBuilder() << R"(
             CREATE RESOURCE POOL MyResourcePool WITH (
                 CONCURRENT_QUERY_LIMIT=)" << NResourcePool::POOL_MAX_CONCURRENT_QUERY_LIMIT + 1 << R"(
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Invalid resource pool configuration, concurrent_query_limit is " << NResourcePool::POOL_MAX_CONCURRENT_QUERY_LIMIT + 1 << ", that exceeds limit in " << NResourcePool::POOL_MAX_CONCURRENT_QUERY_LIMIT);
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), 
+            TStringBuilder() << "Invalid resource pool configuration, concurrent_query_limit is " << NResourcePool::POOL_MAX_CONCURRENT_QUERY_LIMIT + 1 << ", that exceeds limit in " << NResourcePool::POOL_MAX_CONCURRENT_QUERY_LIMIT,
+            result.GetIssues().ToString()
+        );
 
         result = session.ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL MyResourcePool WITH (
                 QUEUE_SIZE=1
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid resource pool configuration, queue_size unsupported without concurrent_query_limit or database_load_cpu_threshold");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Invalid resource pool configuration, queue_size unsupported without concurrent_query_limit or database_load_cpu_threshold", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CreateResourcePool) {
@@ -7097,7 +8744,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Check failed: path: '/Root/.metadata/workload_manager/pools/MyResourcePool', error: path exist");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Check failed: path: '/Root/.metadata/workload_manager/pools/MyResourcePool', error: path exist", result.GetIssues().ToString());
         }
     }
 
@@ -7233,7 +8880,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), status);
             if (status != EStatus::SUCCESS) {
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), error);
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), error, result.GetIssues().ToString());
             }
         };
 
@@ -7269,12 +8916,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto checkDisabled = [](const auto& result) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool classifiers are disabled for serverless domains. Please contact your system administrator to enable it");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Resource pool classifiers are disabled for serverless domains. Please contact your system administrator to enable it", result.GetIssues().ToString());
         };
 
         auto checkNotFound = [](const auto& result) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database", result.GetIssues().ToString());
         };
 
         const auto& createSql = R"(
@@ -7329,7 +8976,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ANOTHER_PROPERTY=20
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown property: another_property");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Unknown property: another_property", result.GetIssues().ToString());
 
         result = session.ExecuteSchemeQuery(R"(
             ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
@@ -7337,7 +8984,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 RESET (SOME_PROPERTY);
             )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown property: another_property, some_property");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Unknown property: another_property, some_property", result.GetIssues().ToString());
 
         result = session.ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
@@ -7345,28 +8992,28 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 RANK="StringValue"
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Failed to parse property rank:");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Failed to parse property rank:", result.GetIssues().ToString());
 
         result = session.ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
                 RANK="0"
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing required property resource_pool");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Missing required property resource_pool", result.GetIssues().ToString());
 
         result = session.ExecuteSchemeQuery(R"(
             ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
                 RESET (RESOURCE_POOL);
             )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot reset required property resource_pool");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Cannot reset required property resource_pool", result.GetIssues().ToString());
 
         result = session.ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL CLASSIFIER `MyResource/PoolClassifier` WITH (
                 RESOURCE_POOL="test"
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Symbol '/' is not allowed in the resource pool classifier name 'MyResource/PoolClassifier'");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Symbol '/' is not allowed in the resource pool classifier name 'MyResource/PoolClassifier'", result.GetIssues().ToString());
 
         result = session.ExecuteSchemeQuery(TStringBuilder() << R"(
             CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
@@ -7374,7 +9021,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 MEMBER_NAME=")" << BUILTIN_ACL_METADATA << R"("
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Invalid resource pool classifier configuration, cannot create classifier for system user " << BUILTIN_ACL_METADATA);
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), 
+            TStringBuilder() << "Invalid resource pool classifier configuration, cannot create classifier for system user " << BUILTIN_ACL_METADATA,
+            result.GetIssues().ToString()
+        );
     }
 
     Y_UNIT_TEST(ResourcePoolClassifiersRankValidation) {
@@ -7403,7 +9053,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 RANK=42
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool classifier rank check failed, status: ALREADY_EXISTS, reason: { <main>: Error: Classifier with rank 42 already exists, its name ClassifierRank42 }");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Resource pool classifier rank check failed, status: ALREADY_EXISTS, reason: { <main>: Error: Classifier with rank 42 already exists, its name ClassifierRank42 }", result.GetIssues().ToString());
 
         // Create with high rank
         result = session.ExecuteSchemeQuery(R"(
@@ -7420,7 +9070,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 MEMBER_NAME="test@user"
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "The rank could not be set automatically, the maximum rank of the resource pool classifier is too high: 9223372036854775807");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "The rank could not be set automatically, the maximum rank of the resource pool classifier is too high: 9223372036854775807", result.GetIssues().ToString());
 
         // Try to alter to exist rank
         result = session.ExecuteSchemeQuery(R"(
@@ -7428,7 +9078,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 RANK=42
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool classifier rank check failed, status: ALREADY_EXISTS, reason: { <main>: Error: Classifier with rank 42 already exists, its name ClassifierRank42 }");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Resource pool classifier rank check failed, status: ALREADY_EXISTS, reason: { <main>: Error: Classifier with rank 42 already exists, its name ClassifierRank42 }", result.GetIssues().ToString());
 
         // Try to reset classifier rank
         result = session.ExecuteSchemeQuery(R"(
@@ -7436,7 +9086,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 RANK
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "The rank could not be set automatically, the maximum rank of the resource pool classifier is too high: 9223372036854775807");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "The rank could not be set automatically, the maximum rank of the resource pool classifier is too high: 9223372036854775807", result.GetIssues().ToString());
     }
 
     TString FetchResourcePoolClassifiers(TTestActorRuntime& runtime, ui32 nodeIndex) {
@@ -7539,7 +9189,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Conflict with existing key");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Conflict with existing key", result.GetIssues().ToString());
         }
     }
 
@@ -7619,7 +9269,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database with id /Root");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database with id /Root", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(DropResourcePoolClassifier) {
@@ -7666,7 +9316,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto query = "DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database with id /Root");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database with id /Root", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(DisableMetadataObjectsOnServerless) {
@@ -7677,7 +9327,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto checkDisabled = [](const auto& result) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Objects SECRET are disabled for serverless domains. Please contact your system administrator to enable it");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Objects SECRET are disabled for serverless domains. Please contact your system administrator to enable it", result.GetIssues().ToString());
         };
 
         const auto& createSql = "CREATE OBJECT MySecretObject (TYPE SECRET) WITH (value=\"qwerty\");";
@@ -7726,7 +9376,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Backup collections are disabled. Please contact your system administrator to enable it");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "Backup collections are disabled. Please contact your system administrator to enable it", result.GetIssues().ToOneLineString());
         }
     }
 
@@ -7755,7 +9405,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Backup collections must be placed in");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "Backup collections must be placed in", result.GetIssues().ToOneLineString());
         }
 
         // positive
@@ -7934,9 +9584,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
 
-        // const auto ruleName = testHelper.CreateTieringRule("tier1", "created_att");
-        const auto ruleName = testHelper.CreateTieringRule("tier1", "created_at");
-        testHelper.SetTiering(tableName, ruleName);
+        testHelper.SetTiering(tableName, "/Root/tier1", "created_at");
 
         while (csController->GetTieringUpdates().Val() == 0) {
             Cout << "Wait tiering..." << Endl;
@@ -7947,9 +9595,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     }
 
     Y_UNIT_TEST(AddColumnWithTtl) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(runnerSettings);
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
@@ -7961,6 +9610,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper::TColumnTable testTable;
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id", "id_second"}).SetSharding({"id"}).SetSchema(schema);
         testHelper.CreateTable(testTable);
+        testHelper.CreateTier("tier1");
 
         {
             auto alterQuery = TStringBuilder() << R"(
@@ -8002,16 +9652,27 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL(columns.size(), 5);
             UNIT_ASSERT_VALUES_EQUAL(description.GetTtlSettings()->GetDateTypeColumn().GetExpireAfter(), TDuration::Hours(1));
         }
-        testHelper.SetTiering("/Root/ColumnTableTest", "tiering1");
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "`SET (TTL = Interval(\"PT10S\") TO EXTERNAL DATA SOURCE `/Root/tier1`, Interval(\"PT1H\") DELETE ON created_at);";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
         {
             auto settings = TDescribeTableSettings().WithTableStatistics(true);
             auto describeResult = testHelper.GetSession().DescribeTable("/Root/ColumnTableTest", settings).GetValueSync();
             UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
 
             const auto& description = describeResult.GetTableDescription();
-            UNIT_ASSERT(description.GetTiering());
-            UNIT_ASSERT_VALUES_EQUAL(*description.GetTiering(), "tiering1");
-            UNIT_ASSERT_VALUES_EQUAL(description.GetTtlSettings()->GetDateTypeColumn().GetExpireAfter(), TDuration::Hours(1));
+            UNIT_ASSERT(describeResult.GetTableDescription().GetTtlSettings());
+            auto ttl = describeResult.GetTableDescription().GetTtlSettings();
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 2);
+            auto evictTier = ttl->GetTiers()[0];
+            UNIT_ASSERT(std::holds_alternative<TTtlEvictToExternalStorageAction>(evictTier.GetAction()));
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(evictTier.GetAction()).GetStorage(), "/Root/tier1");
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TDateTypeColumnModeSettings>(evictTier.GetExpression()).GetExpireAfter(), TDuration::Seconds(10));
+            auto deleteTier = ttl->GetTiers()[1];
+            UNIT_ASSERT(std::holds_alternative<TTtlDeleteAction>(deleteTier.GetAction()));
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TDateTypeColumnModeSettings>(deleteTier.GetExpression()).GetExpireAfter(), TDuration::Hours(1));
         }
         {
             auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() <<  R"(` RESET (TTL);)";
@@ -8024,18 +9685,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
 
             const auto& description = describeResult.GetTableDescription();
-            UNIT_ASSERT(description.GetTiering());
-            UNIT_ASSERT_VALUES_EQUAL(*description.GetTiering(), "tiering1");
-            UNIT_ASSERT(!description.GetTtlSettings());
-        }
-        testHelper.ResetTiering("/Root/ColumnTableTest");
-        {
-            auto settings = TDescribeTableSettings().WithTableStatistics(true);
-            auto describeResult = testHelper.GetSession().DescribeTable("/Root/ColumnTableTest", settings).GetValueSync();
-            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-
-            const auto& description = describeResult.GetTableDescription();
-            UNIT_ASSERT(!description.GetTiering());
             UNIT_ASSERT(!description.GetTtlSettings());
         }
     }
@@ -8615,8 +10264,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     }
 
     Y_UNIT_TEST(DropTtlColumn) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
+        auto runnerSettings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -8935,6 +10585,1330 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
         csController->WaitIndexation(TDuration::Seconds(5));
     }
+
+    Y_UNIT_TEST(CreateWithoutColumnFamily) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+
+        TString tableName = "/Root/TableWithoutColumnFamily";
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true),
+                TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema);
+            testHelper.CreateTable(testTable);
+        }
+
+        auto& runner = testHelper.GetKikimr();
+        auto tableClient = runner.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+        auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+        TTestHelper::TColumnFamily defaultFamily = TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default");
+
+        UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 1);
+        TTestHelper::TColumnFamily defaultFromScheme;
+        UNIT_ASSERT(defaultFromScheme.DeserializeFromProto(schema.GetColumnFamilies(0)));
+        {
+            TString errorMessage;
+            UNIT_ASSERT_C(defaultFromScheme.IsEqual(defaultFamily, errorMessage), errorMessage);
+        }
+    }
+
+    // Field `Data` is not used in ColumnFamily for ColumnTable
+    Y_UNIT_TEST(ColumnFamilyWithFieldData) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+        TString tableName = "/Root/TableWithoutColumnFamily";
+
+        {
+            TTestHelper::TCompression plainCompression =
+                TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+            TTestHelper::TColumnFamily defaultFamily =
+                TTestHelper::TColumnFamily().SetId(0).SetData("test").SetFamilyName("default").SetCompression(plainCompression);
+
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true),
+                TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies({ defaultFamily });
+            testHelper.CreateTable(testTable, EStatus::GENERIC_ERROR);
+        }
+
+        {
+            TTestHelper::TCompression plainCompression =
+                TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+            TTestHelper::TColumnFamily defaultFamily =
+                TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(plainCompression);
+
+            TTestHelper::TCompression lz4Compression =
+                TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+            TTestHelper::TColumnFamily family1 =
+                TTestHelper::TColumnFamily().SetId(1).SetData("test").SetFamilyName("family1").SetCompression(lz4Compression);
+
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema()
+                    .SetName("Value1")
+                    .SetType(NScheme::NTypeIds::String)
+                    .SetNullable(true)
+                    .SetColumnFamilyName(family1.GetFamilyName()),
+                TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies({ defaultFamily, family1 });
+            testHelper.CreateTable(testTable, EStatus::GENERIC_ERROR);
+        }
+
+        {
+            TTestHelper::TCompression plainCompression =
+                TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+            TTestHelper::TColumnFamily defaultFamily =
+                TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(plainCompression);
+
+            TTestHelper::TCompression lz4Compression =
+                TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+            TTestHelper::TColumnFamily family1 = TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(lz4Compression);
+
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema()
+                    .SetName("Value1")
+                    .SetType(NScheme::NTypeIds::String)
+                    .SetNullable(true)
+                    .SetColumnFamilyName(family1.GetFamilyName()),
+                TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies({ defaultFamily, family1 });
+            testHelper.CreateTable(testTable);
+
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                    ALTER FAMILY ")" << family1.GetFamilyName()
+                                          << R"( SET COMPRESSION "lz4";)";
+            auto session = testHelper.GetSession();
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(CreateWithDefaultColumnFamily) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+
+        TString tableName = "/Root/TableWithDefaultColumnFamily";
+        TTestHelper::TCompression zstdCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD).SetCompressionLevel(5);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(zstdCompression),
+        };
+
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true),
+                TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable);
+        }
+
+        auto& runner = testHelper.GetKikimr();
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+        auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+        auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+
+        UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), families.size());
+        TTestHelper::TColumnFamily defaultFromScheme;
+        UNIT_ASSERT(defaultFromScheme.DeserializeFromProto(schema.GetColumnFamilies(0)));
+        {
+            TString errorMessage;
+            UNIT_ASSERT_C(defaultFromScheme.IsEqual(families[0], errorMessage), errorMessage);
+        }
+
+        for (const auto& column : schema.GetColumns()) {
+            UNIT_ASSERT(column.HasSerializer());
+            UNIT_ASSERT_EQUAL_C(
+                column.GetColumnFamilyId(), 0, TStringBuilder() << "family for column " << column.GetName() << " is not default");
+            TTestHelper::TCompression compression;
+            UNIT_ASSERT(compression.DeserializeFromProto(column.GetSerializer()));
+            TString errorMessage;
+            UNIT_ASSERT_C(compression.IsEqual(families[0].GetCompression(), errorMessage), errorMessage);
+        }
+    }
+
+    Y_UNIT_TEST(CrateWithWrongCodec) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+
+        TString tableName = "/Root/TableWithWrongCodec";
+        TTestHelper::TCompression zstdCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD).SetCompressionLevel(100);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(zstdCompression),
+        };
+
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true),
+                TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable, EStatus::SCHEME_ERROR);
+        }
+
+        TTestHelper::TCompression lz4Compression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4).SetCompressionLevel(100);
+        families[0].SetCompression(lz4Compression);
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true),
+                TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable, EStatus::SCHEME_ERROR);
+        }
+
+        {
+            auto session = testHelper.GetSession();
+            auto createQuery = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64 NOT NULL,
+                Value1 String,
+                Value2 Uint32,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                    COMPRESSION="snappy"
+                )) WITH (STORE = COLUMN);)";
+            auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(AlterCompressionType) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+
+        TString tableName = "/Root/TableWithColumnFamily";
+        TTestHelper::TCompression plainCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+        TTestHelper::TCompression zstdCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD).SetCompressionLevel(3);
+        TTestHelper::TCompression lz4Compression = TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(plainCompression),
+            TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(zstdCompression),
+            TTestHelper::TColumnFamily().SetId(2).SetFamilyName("family2").SetCompression(lz4Compression),
+        };
+
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema()
+                    .SetName("Value1")
+                    .SetType(NScheme::NTypeIds::String)
+                    .SetNullable(true)
+                    .SetColumnFamilyName(families[1].GetFamilyName()),
+                TTestHelper::TColumnSchema()
+                    .SetName("Value2")
+                    .SetType(NScheme::NTypeIds::Uint32)
+                    .SetNullable(true)
+                    .SetColumnFamilyName(families[2].GetFamilyName())
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable);
+        }
+
+        auto session = testHelper.GetSession();
+
+        families[1].MutableCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4).SetCompressionLevel({});
+        auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                ALTER FAMILY family1 SET COMPRESSION "lz4";)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto& runner = testHelper.GetKikimr();
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+        auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+        auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+
+        UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), families.size());
+        for (ui32 i = 0; i < families.size(); i++) {
+            TTestHelper::TColumnFamily familyFromScheme;
+            UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
+            TString errorMessage;
+            UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+        }
+
+        auto columns = schema.GetColumns();
+        for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+            UNIT_ASSERT(columns[i].HasSerializer());
+            UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), i,
+                TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[i].GetFamilyName() << "`");
+            TTestHelper::TCompression compression;
+            UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
+            TString errorMessage;
+            UNIT_ASSERT_C(compression.IsEqual(families[i].GetCompression(), errorMessage), errorMessage);
+        }
+    }
+
+    Y_UNIT_TEST(AlterCompressionLevel) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+
+        TString tableName = "/Root/TableWithColumnFamily";
+        TTestHelper::TCompression zstdCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD).SetCompressionLevel(5);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(zstdCompression),
+        };
+
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true),
+                TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable);
+        }
+
+        families[0].MutableCompression().SetCompressionLevel(6);
+        auto alterFamilyCompressionLevel = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                    ALTER FAMILY default SET COMPRESSION_LEVEL 6;)";
+        auto session = testHelper.GetSession();
+        auto result = session.ExecuteSchemeQuery(alterFamilyCompressionLevel).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto& runner = testHelper.GetKikimr();
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+        auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+        auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+
+        UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), families.size());
+        TTestHelper::TColumnFamily defaultFromScheme;
+        UNIT_ASSERT(defaultFromScheme.DeserializeFromProto(schema.GetColumnFamilies(0)));
+        {
+            TString errorMessage;
+            UNIT_ASSERT_C(defaultFromScheme.IsEqual(families[0], errorMessage), errorMessage);
+        }
+
+        for (const auto& column : schema.GetColumns()) {
+            UNIT_ASSERT(column.HasSerializer());
+            UNIT_ASSERT_EQUAL_C(
+                column.GetColumnFamilyId(), 0, TStringBuilder() << "family for column " << column.GetName() << " is not default");
+            TTestHelper::TCompression compression;
+            UNIT_ASSERT(compression.DeserializeFromProto(column.GetSerializer()));
+            TString errorMessage;
+            UNIT_ASSERT_C(compression.IsEqual(families[0].GetCompression(), errorMessage), errorMessage);
+        }
+    }
+
+    Y_UNIT_TEST(AlterCompressionLevelError) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+
+        TString tableName = "/Root/TableWithColumnFamily";
+        TTestHelper::TCompression lz4Compression = TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(lz4Compression),
+        };
+
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true),
+                TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable);
+        }
+
+        families[0].MutableCompression().SetCompressionLevel(6);
+        auto alterFamilyCompressionLevel = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                    ALTER FAMILY default SET COMPRESSION_LEVEL 6;)";
+        auto session = testHelper.GetSession();
+        auto result = session.ExecuteSchemeQuery(alterFamilyCompressionLevel).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(CreateWithColumnFamily) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+
+        TString tableName = "/Root/TableWithColumnFamily";
+        TTestHelper::TCompression plainCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+        TTestHelper::TCompression zstdCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD).SetCompressionLevel(3);
+        TTestHelper::TCompression lz4Compression = TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(plainCompression),
+            TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(zstdCompression),
+            TTestHelper::TColumnFamily().SetId(2).SetFamilyName("family2").SetCompression(lz4Compression),
+        };
+
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema()
+                    .SetName("Value1")
+                    .SetType(NScheme::NTypeIds::String)
+                    .SetNullable(true)
+                    .SetColumnFamilyName(families[1].GetFamilyName()),
+                TTestHelper::TColumnSchema()
+                    .SetName("Value2")
+                    .SetType(NScheme::NTypeIds::Uint32)
+                    .SetNullable(true)
+                    .SetColumnFamilyName(families[2].GetFamilyName())
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable);
+        }
+
+        auto& runner = testHelper.GetKikimr();
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+        auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+        auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+
+        UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), families.size());
+        for (ui32 i = 0; i < families.size(); i++) {
+            TTestHelper::TColumnFamily familyFromScheme;
+            UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
+            TString errorMessage;
+            UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+        }
+
+        auto columns = schema.GetColumns();
+        for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+            UNIT_ASSERT(columns[i].HasSerializer());
+            UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), i,
+                TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[i].GetFamilyName() << "`");
+            TTestHelper::TCompression compression;
+            UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
+            TString errorMessage;
+            UNIT_ASSERT_C(compression.IsEqual(families[i].GetCompression(), errorMessage), errorMessage);
+        }
+    }
+
+    Y_UNIT_TEST(AddColumnFamily) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+
+        TString tableName = "/Root/TableWithColumnFamily";
+        TTestHelper::TCompression plainCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+        TTestHelper::TCompression zstdCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD).SetCompressionLevel(1);
+        TTestHelper::TCompression lz4Compression = TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(plainCompression),
+        };
+
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true),
+                TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable);
+        }
+
+        auto session = testHelper.GetSession();
+        auto& runner = testHelper.GetKikimr();
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+        {
+            families.push_back(TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(zstdCompression));
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                    ADD FAMILY family1 (
+                        COMPRESSION = "zstd");)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+            UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), families.size());
+            for (ui32 i = 0; i < families.size(); i++) {
+                TTestHelper::TColumnFamily familyFromScheme;
+                UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
+                TString errorMessage;
+                UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+            }
+        }
+
+        {
+            families.push_back(TTestHelper::TColumnFamily().SetId(2).SetFamilyName("family2").SetCompression(lz4Compression));
+            families.push_back(TTestHelper::TColumnFamily().SetId(3).SetFamilyName("family3").SetCompression(zstdCompression));
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                    ADD FAMILY family2 (
+                        COMPRESSION = "lz4"),
+                    ADD FAMILY family3 (
+                        COMPRESSION = "zstd");)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+            UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), families.size());
+            for (ui32 i = 0; i < families.size(); i++) {
+                TTestHelper::TColumnFamily familyFromScheme;
+                UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
+                TString errorMessage;
+                UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(AddColumnWithoutColumnFamily) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+
+        TString tableName = "/Root/TableWithColumnFamily";
+        TTestHelper::TCompression zstdCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD).SetCompressionLevel(1);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(zstdCompression),
+        };
+
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true),
+                TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable);
+        }
+
+        auto session = testHelper.GetSession();
+        auto& runner = testHelper.GetKikimr();
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        {
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                    ADD COLUMN Value3 Uint32;)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+            UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), families.size());
+            for (ui32 i = 0; i < families.size(); i++) {
+                TTestHelper::TColumnFamily familyFromScheme;
+                UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
+                TString errorMessage;
+                UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+            }
+
+            auto columns = schema.GetColumns();
+            for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+                UNIT_ASSERT(columns[i].HasSerializer());
+                UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), 0,
+                    TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[0].GetFamilyName()
+                                     << "`");
+                TTestHelper::TCompression compression;
+                UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
+                TString errorMessage;
+                UNIT_ASSERT_C(compression.IsEqual(families[0].GetCompression(), errorMessage), errorMessage);
+            }
+        }
+
+    }
+
+    Y_UNIT_TEST(AddColumnWithColumnFamily) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+
+        TString tableName = "/Root/TableWithColumnFamily";
+        TTestHelper::TCompression plainCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+        TTestHelper::TCompression zstdCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD).SetCompressionLevel(1);
+        TTestHelper::TCompression lz4Compression = TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(plainCompression),
+        };
+
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true),
+                TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable);
+        }
+
+        auto session = testHelper.GetSession();
+        auto& runner = testHelper.GetKikimr();
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+        {
+            families.push_back(TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(zstdCompression));
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                    ADD FAMILY family1 (
+                        COMPRESSION = "zstd");)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                    ADD COLUMN Value3 Uint32 FAMILY family1;)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+            UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), families.size());
+            for (ui32 i = 0; i < families.size(); i++) {
+                TTestHelper::TColumnFamily familyFromScheme;
+                UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
+                TString errorMessage;
+                UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+            }
+
+            auto columns = schema.GetColumns();
+            for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+                UNIT_ASSERT(columns[i].HasSerializer());
+                ui32 indexFamily = 0;
+                if (columns[i].GetName() == "Value3") {
+                    indexFamily = 1;
+                }
+                UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), indexFamily,
+                    TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[indexFamily].GetFamilyName()
+                                     << "`");
+                TTestHelper::TCompression compression;
+                UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
+                TString errorMessage;
+                UNIT_ASSERT_C(compression.IsEqual(families[indexFamily].GetCompression(), errorMessage), errorMessage);
+            }
+        }
+
+        {
+            families.push_back(TTestHelper::TColumnFamily().SetId(2).SetFamilyName("family2").SetCompression(lz4Compression));
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                    ADD FAMILY family2 (
+                        COMPRESSION = "lz4"),
+                    ADD COLUMN Value4 Uint32 FAMILY family2,
+                    ADD COLUMN Value5 Uint32 FAMILY family1;)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+            UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), families.size());
+            for (ui32 i = 0; i < families.size(); i++) {
+                TTestHelper::TColumnFamily familyFromScheme;
+                UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
+                TString errorMessage;
+                UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+            }
+
+            auto columns = schema.GetColumns();
+            for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+                UNIT_ASSERT(columns[i].HasSerializer());
+                ui32 indexFamily = 0;
+                if (columns[i].GetName() == "Value3" || columns[i].GetName() == "Value5") {
+                    indexFamily = 1;
+                } else if (columns[i].GetName() == "Value4") {
+                    indexFamily = 2;
+                }
+                UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), indexFamily,
+                    TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[indexFamily].GetFamilyName()
+                                     << "`");
+                TTestHelper::TCompression compression;
+                UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
+                TString errorMessage;
+                UNIT_ASSERT_C(compression.IsEqual(families[indexFamily].GetCompression(), errorMessage), errorMessage);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(SetColumnFamily) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+
+        TString tableName = "/Root/TableWithColumnFamily";
+        TTestHelper::TCompression plainCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+        TTestHelper::TCompression zstdCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD).SetCompressionLevel(1);
+        TTestHelper::TCompression lz4Compression = TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(plainCompression),
+            TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(zstdCompression),
+        };
+
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true),
+                TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable);
+        }
+
+        auto session = testHelper.GetSession();
+        auto& runner = testHelper.GetKikimr();
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        {
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                    ALTER COLUMN Value1 SET FAMILY family1;)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+
+            auto columns = schema.GetColumns();
+            for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+                UNIT_ASSERT(columns[i].HasSerializer());
+                ui32 indexFamily = 0;
+                if (columns[i].GetName() == "Value1") {
+                    indexFamily = 1;
+                }
+
+                UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), indexFamily,
+                    TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[indexFamily].GetFamilyName()
+                                     << "`");
+                TTestHelper::TCompression compression;
+                UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
+                TString errorMessage;
+                UNIT_ASSERT_C(compression.IsEqual(families[indexFamily].GetCompression(), errorMessage), errorMessage);
+            }
+        }
+
+        {
+            families.push_back(TTestHelper::TColumnFamily().SetId(2).SetFamilyName("family2").SetCompression(lz4Compression));
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                    ADD FAMILY family2 (
+                        COMPRESSION = "lz4"),
+                    ALTER COLUMN Value2 SET FAMILY family2;)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+            UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), families.size());
+            for (ui32 i = 0; i < families.size(); i++) {
+                TTestHelper::TColumnFamily familyFromScheme;
+                UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
+                TString errorMessage;
+                UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+            }
+
+            auto columns = schema.GetColumns();
+            for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+                UNIT_ASSERT(columns[i].HasSerializer());
+                ui32 indexFamily = 0;
+                if (columns[i].GetName() == "Value1") {
+                    indexFamily = 1;
+                } else if (columns[i].GetName() == "Value2") {
+                    indexFamily = 2;
+                }
+
+                UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), indexFamily,
+                    TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[indexFamily].GetFamilyName()
+                                     << "`");
+                TTestHelper::TCompression compression;
+                UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
+                TString errorMessage;
+                UNIT_ASSERT_C(compression.IsEqual(families[indexFamily].GetCompression(), errorMessage), errorMessage);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(WithoutDefaultColumnFamily) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+        TString tableName = "/Root/TableWithFamily";
+
+        TTestHelper::TCompression lz4Compression = TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(lz4Compression),
+        };
+
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema()
+                    .SetName("Value1")
+                    .SetType(NScheme::NTypeIds::String)
+                    .SetNullable(true)
+                    .SetColumnFamilyName(families[0].GetFamilyName()),
+                TTestHelper::TColumnSchema()
+                    .SetName("Value2")
+                    .SetType(NScheme::NTypeIds::Uint32)
+                    .SetNullable(true)
+                    .SetColumnFamilyName(families[0].GetFamilyName())
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable);
+        }
+
+        families.push_back(TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default"));
+        auto& runner = testHelper.GetKikimr();
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+        auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+        auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+        UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), families.size());
+        for (ui32 i = 0; i < families.size(); i++) {
+            TTestHelper::TColumnFamily familyFromScheme;
+            UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
+            ui32 familyIndex = 0;
+            if (familyFromScheme.GetFamilyName() == "default") {
+                familyIndex = 1;
+            }
+            TString errorMessage;
+            UNIT_ASSERT_C(familyFromScheme.IsEqual(families[familyIndex], errorMessage), errorMessage);
+        }
+    }
+
+    Y_UNIT_TEST(UnknownColumnFamily) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+        TString tableName = "/Root/TableWithFamily";
+
+        TTestHelper::TCompression plainCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(plainCompression),
+        };
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true).SetColumnFamilyName("family1"),
+            TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true).SetColumnFamilyName("family1")
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+        testHelper.CreateTable(testTable, EStatus::GENERIC_ERROR);
+    }
+
+    Y_UNIT_TEST(PrimaryKeyNotDefaultColumnFamily) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+        TString tableName = "/Root/TableWithFamily";
+
+        TTestHelper::TCompression plainCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+        TTestHelper::TCompression zstdCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD).SetCompressionLevel(1);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(plainCompression),
+            TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(zstdCompression),
+        };
+
+        {
+            TVector<TTestHelper::TColumnSchema> schema = { TTestHelper::TColumnSchema()
+                                                               .SetName("Key")
+                                                               .SetType(NScheme::NTypeIds::Uint64)
+                                                               .SetColumnFamilyName(families[1].GetFamilyName())
+                                                               .SetNullable(false),
+                TTestHelper::TColumnSchema()
+                    .SetName("Value1")
+                    .SetType(NScheme::NTypeIds::String)
+                    .SetNullable(true)
+                    .SetColumnFamilyName(families[1].GetFamilyName()),
+                TTestHelper::TColumnSchema()
+                    .SetName("Value2")
+                    .SetType(NScheme::NTypeIds::Uint32)
+                    .SetNullable(true)
+                    .SetColumnFamilyName(families[1].GetFamilyName()) };
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable);
+        }
+
+        auto& runner = testHelper.GetKikimr();
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+        auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+        auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+
+        UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), families.size());
+        for (ui32 i = 0; i < families.size(); i++) {
+            TTestHelper::TColumnFamily familyFromScheme;
+            UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
+            TString errorMessage;
+            UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+        }
+
+        auto columns = schema.GetColumns();
+        for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+            UNIT_ASSERT(columns[i].HasSerializer());
+            UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), 1,
+                TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[1].GetFamilyName() << "`");
+            TTestHelper::TCompression compression;
+            UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
+            TString errorMessage;
+            UNIT_ASSERT_C(compression.IsEqual(families[1].GetCompression(), errorMessage), errorMessage);
+        }
+    }
+
+    Y_UNIT_TEST(SetNotDefaultColumnFamilyForPrimaryKey) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+        TString tableName = "/Root/TableWithFamily";
+
+        TTestHelper::TCompression plainCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+        TTestHelper::TCompression zstdCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD).SetCompressionLevel(1);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(plainCompression),
+            TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(zstdCompression),
+        };
+
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema()
+                    .SetName("Value1")
+                    .SetType(NScheme::NTypeIds::String)
+                    .SetNullable(true)
+                    .SetColumnFamilyName(families[1].GetFamilyName()),
+                TTestHelper::TColumnSchema()
+                    .SetName("Value2")
+                    .SetType(NScheme::NTypeIds::Uint32)
+                    .SetNullable(true)
+                    .SetColumnFamilyName(families[1].GetFamilyName())
+            };
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable);
+        }
+
+        auto session = testHelper.GetSession();
+        auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                    ALTER COLUMN Key SET FAMILY family1;)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto& runner = testHelper.GetKikimr();
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+        auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+        auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+
+        UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), families.size());
+        for (ui32 i = 0; i < families.size(); i++) {
+            TTestHelper::TColumnFamily familyFromScheme;
+            UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
+            TString errorMessage;
+            UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+        }
+
+        auto columns = schema.GetColumns();
+        for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+            UNIT_ASSERT(columns[i].HasSerializer());
+            UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), 1,
+                TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[1].GetFamilyName() << "`");
+            TTestHelper::TCompression compression;
+            UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
+            TString errorMessage;
+            UNIT_ASSERT_C(compression.IsEqual(families[1].GetCompression(), errorMessage), errorMessage);
+        }
+    }
+
+    Y_UNIT_TEST(AddExsitsColumnFamily) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+
+        TString tableName = "/Root/TableWithFamily";
+        TTestHelper::TCompression plainCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+        TTestHelper::TCompression lz4Compression = TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(plainCompression),
+            TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(lz4Compression),
+            TTestHelper::TColumnFamily().SetId(2).SetFamilyName("family2").SetCompression(lz4Compression),
+        };
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema()
+                .SetName("Value1")
+                .SetType(NScheme::NTypeIds::String)
+                .SetNullable(true)
+                .SetColumnFamilyName(families[1].GetFamilyName()),
+            TTestHelper::TColumnSchema()
+                .SetName("Value2")
+                .SetType(NScheme::NTypeIds::Uint32)
+                .SetNullable(true)
+                .SetColumnFamilyName(families[1].GetFamilyName())
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+        testHelper.CreateTable(testTable);
+
+        auto session = testHelper.GetSession();
+        {
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                        ADD FAMILY family1 (COMPRESSION = "lz4")";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName
+                                          << R"(` ADD FAMILY family3 (COMPRESSION = "lz4"), ADD FAMILY family3 (COMPRESSION = "zstd")";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(AddColumnFamilyWithNotSupportedCodec) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+
+        TString tableName = "/Root/TableWithFamily";
+        TTestHelper::TCompression plainCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+        TTestHelper::TCompression lz4Compression = TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(plainCompression),
+            TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(lz4Compression),
+            TTestHelper::TColumnFamily().SetId(2).SetFamilyName("family2").SetCompression(lz4Compression),
+        };
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema()
+                .SetName("Value1")
+                .SetType(NScheme::NTypeIds::String)
+                .SetNullable(true)
+                .SetColumnFamilyName(families[1].GetFamilyName()),
+            TTestHelper::TColumnSchema()
+                .SetName("Value2")
+                .SetType(NScheme::NTypeIds::Uint32)
+                .SetNullable(true)
+                .SetColumnFamilyName(families[1].GetFamilyName())
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+        testHelper.CreateTable(testTable);
+
+        auto session = testHelper.GetSession();
+        {
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                        ADD FAMILY family1 (COMPRESSION = "snappy")";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                        ADD FAMILY family1 (COMPRESSION = "lz4", COMPRESSION_LEVEL = 5)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(TwoSimilarColumnFamilies) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+
+        TString tableName = "/Root/TableWithFamily";
+        TTestHelper::TCompression plainCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+        TTestHelper::TCompression lz4Compression = TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(plainCompression),
+            TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(lz4Compression),
+            TTestHelper::TColumnFamily().SetId(2).SetFamilyName("family1").SetCompression(lz4Compression),
+        };
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema()
+                .SetName("Value1")
+                .SetType(NScheme::NTypeIds::String)
+                .SetNullable(true)
+                .SetColumnFamilyName(families[1].GetFamilyName()),
+            TTestHelper::TColumnSchema()
+                .SetName("Value2")
+                .SetType(NScheme::NTypeIds::Uint32)
+                .SetNullable(true)
+                .SetColumnFamilyName(families[1].GetFamilyName())
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+        testHelper.CreateTable(testTable, EStatus::GENERIC_ERROR);
+    }
+
+    Y_UNIT_TEST(CreateTableStoreWithFamily) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+
+        TString tableName = "/Root/TableStoreWithColumnFamily";
+        TTestHelper::TCompression plainCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+        TTestHelper::TCompression zstdCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD).SetCompressionLevel(1);
+        TTestHelper::TCompression lz4Compression = TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(plainCompression),
+            TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(zstdCompression),
+            TTestHelper::TColumnFamily().SetId(2).SetFamilyName("family2").SetCompression(lz4Compression),
+        };
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema()
+                .SetName("Value1")
+                .SetType(NScheme::NTypeIds::String)
+                .SetNullable(true)
+                .SetColumnFamilyName(families[1].GetFamilyName()),
+            TTestHelper::TColumnSchema()
+                .SetName("Value2")
+                .SetType(NScheme::NTypeIds::Uint32)
+                .SetNullable(true)
+                .SetColumnFamilyName(families[2].GetFamilyName())
+        };
+
+        TTestHelper::TColumnTableStore testTable;
+        testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+        testHelper.CreateTable(testTable, EStatus::GENERIC_ERROR);
+    }
+
+    Y_UNIT_TEST(CreateTableWithDefaultFamilyWithoutSettings) {
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+        TString tableName = "/Root/ColumnTableTest";
+        auto session = testHelper.GetSession();
+        auto createQuery = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+            Key Uint64 NOT NULL,
+            Value1 String,
+            Value2 Uint32,
+            PRIMARY KEY (Key),
+            FAMILY default ())
+            WITH (STORE = COLUMN);)";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto& runner = testHelper.GetKikimr();
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+        auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+        TTestHelper::TColumnFamily defaultFamily = TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default");
+
+        UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 1);
+        TTestHelper::TColumnFamily defaultFromScheme;
+        UNIT_ASSERT(defaultFromScheme.DeserializeFromProto(schema.GetColumnFamilies(0)));
+        {
+            TString errorMessage;
+            UNIT_ASSERT_C(defaultFromScheme.IsEqual(defaultFamily, errorMessage), errorMessage);
+        }
+    }
+
+    Y_UNIT_TEST(CreateTableWithFamilyWithOnlyCompressionLevel) {
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+        TString tableName = "/Root/ColumnTableTest";
+        auto session = testHelper.GetSession();
+        auto createQuery = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+            Key Uint64 NOT NULL,
+            Value1 String,
+            Value2 Uint32,
+            PRIMARY KEY (Key),
+            FAMILY family1 (
+                COMPRESSION_LEVEL = 2
+            ))
+            WITH (STORE = COLUMN);)";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(CreateTableNonDefaultFamilyWithoutCompression) {
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+        TString tableName = "/Root/ColumnTableTest";
+        auto session = testHelper.GetSession();
+        auto createQuery = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+            Key Uint64 NOT NULL,
+            Value1 String,
+            Value2 Uint32,
+            PRIMARY KEY (Key),
+            FAMILY family1 (
+            ))
+            WITH (STORE = COLUMN);)";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(DropColumnAndResetTtl) {
+        auto runnerSettings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("timestamp").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false)
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            auto alterQuery = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER OBJECT `)" << testTable.GetName() << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
+                NAME=max_pk_int, TYPE=MAX, FEATURES=`{\"column_name\": \"timestamp\"}`))";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "`SET (TTL = Interval(\"PT1H\") ON timestamp);";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` DROP COLUMN timestamp, RESET (TTL);";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(InitTtlSettingsOnShardStart) {
+        auto runnerSettings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("timestamp").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false)
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            auto alterQuery = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER OBJECT `)" << testTable.GetName() << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
+                NAME=max_pk_int, TYPE=MAX, FEATURES=`{\"column_name\": \"timestamp\"}`))";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "`SET (TTL = Interval(\"PT1H\") ON timestamp);";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` RESET (TTL);";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` DROP COLUMN timestamp;";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        testHelper.RebootTablets("/Root/ColumnTableTest");
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapTypes) {
@@ -9123,7 +12097,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         testHelper.ReadData("SELECT id FROM `/Root/ColumnTableTest` WHERE dec=CAST(\"-nan\" As Decimal(35, 10))", "[]");
         testHelper.ReadData("SELECT dec FROM `/Root/ColumnTableTest` WHERE id > 5 ORDER BY dec", "[[\"-inf\"];[\"155555555555555.1\"];[\"255555555555555.1\"];[\"1255555555555555.1\"];[\"1555555555555555.1\"];[\"inf\"]]");
     }
-        
+
     Y_UNIT_TEST(DecimalCsv) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -9242,11 +12216,6 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
             tableInserter.AddRow().Add(1).AddNull().Add(jsonString);
             tableInserter.AddRow().Add(2).Add(jsonString).Add(jsonBin);
             testHelper.BulkUpsert(testTable, tableInserter);
-        }
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(3).Add(jsonBin).AddNull();
-            testHelper.BulkUpsert(testTable, tableInserter, Ydb::StatusIds::SCHEME_ERROR);
         }
     }
 }

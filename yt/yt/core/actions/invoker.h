@@ -1,8 +1,10 @@
 #pragma once
 
 #include "callback.h"
+#include "signal.h"
 
 #include <yt/yt/core/threading/public.h>
+
 #include <library/cpp/yt/memory/range.h>
 
 #include <type_traits>
@@ -38,11 +40,11 @@ struct IInvoker
      */
     virtual bool IsSerialized() const = 0;
 
-    using TWaitTimeObserver = std::function<void(TDuration waitTime)>;
-    //! Registers a callback that could be invoked to inform
-    //! of the current wait time for invocations via this invoker.
+    //! Invoked to inform of the current wait time for invocations via this invoker.
     //! These invocations, however, are not guaranteed.
-    virtual void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver) = 0;
+    using TWaitTimeObserver = TCallback<void(TDuration waitTime)>;
+
+    DECLARE_INTERFACE_SIGNAL(TWaitTimeObserver::TSignature, WaitTimeObserved);
 };
 
 DEFINE_REFCOUNTED_TYPE(IInvoker)

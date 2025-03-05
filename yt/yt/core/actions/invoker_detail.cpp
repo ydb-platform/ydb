@@ -18,15 +18,11 @@ TInvokerWrapper<VirtualizeBase>::TInvokerWrapper(IInvokerPtr underlyingInvoker)
 }
 
 template <bool VirtualizeBase>
-void TInvokerWrapper<VirtualizeBase>::Invoke(TClosure callback)
-{
-    return UnderlyingInvoker_->Invoke(std::move(callback));
-}
-
-template <bool VirtualizeBase>
 void TInvokerWrapper<VirtualizeBase>::Invoke(TMutableRange<TClosure> callbacks)
 {
-    return UnderlyingInvoker_->Invoke(callbacks);
+    for (auto& callback : callbacks) {
+        static_cast<IInvoker*>(this)->Invoke(std::move(callback));
+    }
 }
 
 template <bool VirtualizeBase>
@@ -50,9 +46,15 @@ bool TInvokerWrapper<VirtualizeBase>::IsSerialized() const
 }
 
 template <bool VirtualizeBase>
-void TInvokerWrapper<VirtualizeBase>::RegisterWaitTimeObserver(IInvoker::TWaitTimeObserver waitTimeObserver)
+void TInvokerWrapper<VirtualizeBase>::SubscribeWaitTimeObserved(const IInvoker::TWaitTimeObserver& callback)
 {
-    return UnderlyingInvoker_->RegisterWaitTimeObserver(waitTimeObserver);
+    return UnderlyingInvoker_->SubscribeWaitTimeObserved(callback);
+}
+
+template <bool VirtualizeBase>
+void TInvokerWrapper<VirtualizeBase>::UnsubscribeWaitTimeObserved(const IInvoker::TWaitTimeObserver& callback)
+{
+    return UnderlyingInvoker_->SubscribeWaitTimeObserved(callback);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -64,7 +66,7 @@ template struct NDetail::TMaybeVirtualInvokerBase<false>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TInvokerProfileWrapper::TInvokerProfileWrapper(NProfiling::IRegistryImplPtr registry, const TString& invokerFamily, const NProfiling::TTagSet& tagSet)
+TInvokerProfileWrapper::TInvokerProfileWrapper(NProfiling::IRegistryPtr registry, const TString& invokerFamily, const NProfiling::TTagSet& tagSet)
 {
     auto profiler = NProfiling::TProfiler("/invoker", NProfiling::TProfiler::DefaultNamespace, tagSet, registry).WithHot();
     WaitTimer_ = profiler.Timer(invokerFamily + "/wait");

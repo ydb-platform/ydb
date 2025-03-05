@@ -178,10 +178,10 @@ private:
 
         THashMap<TString, INodePtr> combinedServiceResults;
         for (const auto& serviceResult : serviceResults) {
-            if (static_cast<i64>(serviceResult.size() + combinedServiceResults.size()) > limit) {
+            if (std::ssize(serviceResult) + std::ssize(combinedServiceResults) > limit) {
                 combinedServiceResults.insert(
                     serviceResult.begin(),
-                    std::next(serviceResult.begin(), limit - static_cast<i64>(serviceResult.size())));
+                    std::next(serviceResult.begin(), limit - std::ssize(serviceResult)));
                 incomplete = true;
                 break;
             } else {
@@ -244,11 +244,11 @@ private:
 
         std::vector<IStringNodePtr> combinedServiceResults;
         for (const auto& serviceResult : serviceResults) {
-            if (static_cast<i64>(combinedServiceResults.size() + serviceResult.size()) > limit) {
+            if (std::ssize(combinedServiceResults) + std::ssize(serviceResult) > limit) {
                 combinedServiceResults.insert(
                     combinedServiceResults.end(),
                     serviceResult.begin(),
-                    std::next(serviceResult.begin(), limit - static_cast<i64>(combinedServiceResults.size())));
+                    std::next(serviceResult.begin(), limit - std::ssize(combinedServiceResults)));
                 incomplete = true;
                 break;
             } else {
@@ -311,7 +311,7 @@ private:
         TKeyMappingOrError newKeyMappingOrError;
         auto& newKeyMapping = newKeyMappingOrError.Value();
 
-        for (int index = 0; index < static_cast<int>(Services_.size()); ++index) {
+        for (int index = 0; index < std::ssize(Services_); ++index) {
             for (const auto& key : serviceLists[index]) {
                 auto pair = newKeyMapping.emplace(key, Services_[index]);
                 if (!pair.second) {

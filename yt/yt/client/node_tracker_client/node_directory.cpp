@@ -15,7 +15,7 @@
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/yt/misc/hash.h>
 
@@ -344,31 +344,13 @@ void ToProto(NNodeTrackerClient::NProto::TNodeDescriptor* protoDescriptor, const
 
     ToProto(protoDescriptor->mutable_addresses(), descriptor.Addresses());
 
-    if (auto host = descriptor.GetHost()) {
-        protoDescriptor->set_host(ToProto(*host));
-    } else {
-        protoDescriptor->clear_host();
-    }
-
-    if (auto rack = descriptor.GetRack()) {
-        protoDescriptor->set_rack(ToProto(*rack));
-    } else {
-        protoDescriptor->clear_rack();
-    }
-
-    if (auto dataCenter = descriptor.GetDataCenter()) {
-        protoDescriptor->set_data_center(ToProto(*dataCenter));
-    } else {
-        protoDescriptor->clear_data_center();
-    }
+    YT_OPTIONAL_SET_PROTO(protoDescriptor, host, descriptor.GetHost());
+    YT_OPTIONAL_SET_PROTO(protoDescriptor, rack, descriptor.GetRack());
+    YT_OPTIONAL_SET_PROTO(protoDescriptor, data_center, descriptor.GetDataCenter());
 
     ToProto(protoDescriptor->mutable_tags(), descriptor.GetTags());
 
-    if (auto lastHeartbeatTime = descriptor.GetLastSeenTime()) {
-        protoDescriptor->set_last_seen_time(ToProto(*lastHeartbeatTime));
-    } else {
-        protoDescriptor->clear_last_seen_time();
-    }
+    YT_OPTIONAL_SET_PROTO(protoDescriptor, last_seen_time, descriptor.GetLastSeenTime());
 }
 
 void FromProto(NNodeTrackerClient::TNodeDescriptor* descriptor, const NNodeTrackerClient::NProto::TNodeDescriptor& protoDescriptor)

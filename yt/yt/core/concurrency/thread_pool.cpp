@@ -95,8 +95,8 @@ public:
     TThreadPoolThread(
         TIntrusivePtr<TInvokerQueueAdapter> queue,
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-        const TString& threadGroupName,
-        const TString& threadName,
+        const std::string& threadGroupName,
+        const std::string& threadName,
         const TThreadPoolOptions& options)
         : TSchedulerThread(
             callbackEventCount,
@@ -144,7 +144,7 @@ class TThreadPool
 public:
     TThreadPool(
         int threadCount,
-        const TString& threadNamePrefix,
+        const std::string& threadNamePrefix,
         const TThreadPoolOptions& options)
         : TThreadPoolBase(threadNamePrefix)
         , Options_(options)
@@ -154,7 +154,7 @@ public:
             options.PollingPeriod))
         , Invoker_(Queue_)
     {
-        Configure(threadCount);
+        SetThreadCount(threadCount);
     }
 
     ~TThreadPool()
@@ -168,14 +168,14 @@ public:
         return Invoker_;
     }
 
-    void Configure(int threadCount) override
+    void SetThreadCount(int threadCount) override
     {
-        TThreadPoolBase::Configure(threadCount);
+        TThreadPoolBase::SetThreadCount(threadCount);
     }
 
-    void Configure(TDuration pollingPeriod) override
+    void SetPollingPeriod(TDuration pollingPeriod) override
     {
-        Queue_->Reconfigure(pollingPeriod);
+        Queue_->SetPollingPeriod(pollingPeriod);
     }
 
     int GetThreadCount() override
@@ -216,7 +216,7 @@ private:
 
 IThreadPoolPtr CreateThreadPool(
     int threadCount,
-    const TString& threadNamePrefix,
+    const std::string& threadNamePrefix,
     const TThreadPoolOptions& options)
 {
     return New<TThreadPool>(

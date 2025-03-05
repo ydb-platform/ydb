@@ -26,7 +26,7 @@ namespace types
 
   using true_immediate = immediate<bool, true>;
   using false_immediate = immediate<bool, false>;
-}
+} // namespace types
 
 PYTHONIC_NS_END
 

@@ -5,6 +5,8 @@
 
 #include "schemeshard_impl.h"
 
+#include "schemeshard_utils.h"  // for TransactionTemplate
+
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -71,7 +73,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         op->SetBuildIndexId(config.GetBuildIndexId());
         if (!indexName.empty()) {
             TPath index = table.Child(indexName);
-            PathIdFromPathId(index.Base()->PathId, op->MutableOutcome()->MutableApply()->MutableIndexPathId());
+            index.Base()->PathId.ToProto(op->MutableOutcome()->MutableApply()->MutableIndexPathId());
         }
 
         result.push_back(CreateFinalizeBuildIndexMainTable(NextPartId(nextId, result), finalize));
@@ -130,7 +132,7 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
 
         if (!indexName.empty()) {
             TPath index = table.Child(indexName);
-            PathIdFromPathId(index.Base()->PathId, op->MutableOutcome()->MutableCancel()->MutableIndexPathId());
+            index.Base()->PathId.ToProto(op->MutableOutcome()->MutableCancel()->MutableIndexPathId());
         }
 
         result.push_back(CreateFinalizeBuildIndexMainTable(NextPartId(nextId, result), finalize));

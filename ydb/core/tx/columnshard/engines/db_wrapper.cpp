@@ -4,7 +4,6 @@
 #include "portions/constructor_portion.h"
 
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/sharding/sharding.h>
 
@@ -46,10 +45,12 @@ bool TDbWrapper::Load(TInsertTableAccessor& insertTable, const TInstant& loadTim
 }
 
 void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) {
+    if (!AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage() && !AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
+        return;
+    }
     NIceDb::TNiceDb db(Database);
     using IndexColumnsV1 = NColumnShard::Schema::IndexColumnsV1;
     auto rowProto = row.GetMeta().SerializeToProto();
-    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage() || AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage());
     if (AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage()) {
         db.Table<IndexColumnsV1>()
             .Key(portion.GetPathId(), portion.GetPortionId(), row.ColumnId, row.Chunk)
@@ -118,16 +119,16 @@ void TDbWrapper::EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRe
     }
 }
 
-bool TDbWrapper::LoadColumns(const std::optional<ui64> pathId, const std::function<void(TColumnChunkLoadContextV1&&)>& callback) {
+bool TDbWrapper::LoadColumns(const std::optional<ui64> pathId, const std::function<void(TColumnChunkLoadContextV2&&)>& callback) {
     NIceDb::TNiceDb db(Database);
-    using IndexColumnsV1 = NColumnShard::Schema::IndexColumnsV1;
+    using IndexColumnsV2 = NColumnShard::Schema::IndexColumnsV2;
     const auto pred = [&](auto& rowset) {
         if (!rowset.IsReady()) {
             return false;
         }
 
         while (!rowset.EndOfSet()) {
-            NOlap::TColumnChunkLoadContextV1 chunkLoadContext(rowset);
+            NOlap::TColumnChunkLoadContextV2 chunkLoadContext(rowset);
             callback(std::move(chunkLoadContext));
 
             if (!rowset.Next()) {
@@ -137,10 +138,10 @@ bool TDbWrapper::LoadColumns(const std::optional<ui64> pathId, const std::functi
         return true;
     };
     if (pathId) {
-        auto rowset = db.Table<IndexColumnsV1>().Prefix(*pathId).Select();
+        auto rowset = db.Table<IndexColumnsV2>().Prefix(*pathId).Select();
         return pred(rowset);
     } else {
-        auto rowset = db.Table<IndexColumnsV1>().Select();
+        auto rowset = db.Table<IndexColumnsV2>().Select();
         return pred(rowset);
     }
 }
@@ -290,7 +291,6 @@ TConclusion<THashMap<ui64, std::map<NOlap::TSnapshot, TGranuleShardingInfo>>> TD
 void TDbWrapper::WriteColumns(const NOlap::TPortionInfo& portion, const NKikimrTxColumnShard::TIndexPortionAccessor& proto) {
     NIceDb::TNiceDb db(Database);
     using IndexColumnsV2 = NColumnShard::Schema::IndexColumnsV2;
-    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
     db.Table<IndexColumnsV2>()
         .Key(portion.GetPathId(), portion.GetPortionId())
         .Update(NIceDb::TUpdate<IndexColumnsV2::Metadata>(proto.SerializeAsString()));

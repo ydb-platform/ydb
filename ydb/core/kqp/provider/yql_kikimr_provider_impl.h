@@ -46,6 +46,10 @@ private:
     virtual TStatus HandleAlterReplication(NNodes::TKiAlterReplication node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropReplication(NNodes::TKiDropReplication node, TExprContext& ctx) = 0;
 
+    virtual TStatus HandleCreateTransfer(NNodes::TKiCreateTransfer node, TExprContext& ctx) = 0;
+    virtual TStatus HandleAlterTransfer(NNodes::TKiAlterTransfer node, TExprContext& ctx) = 0;
+    virtual TStatus HandleDropTransfer(NNodes::TKiDropTransfer node, TExprContext& ctx) = 0;
+
     virtual TStatus HandleCreateUser(NNodes::TKiCreateUser node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterUser(NNodes::TKiAlterUser node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropUser(NNodes::TKiDropUser node, TExprContext& ctx) = 0;
@@ -79,6 +83,9 @@ private:
     virtual TStatus HandleCreateBackupCollection(NNodes::TKiCreateBackupCollection node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterBackupCollection(NNodes::TKiAlterBackupCollection node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropBackupCollection(NNodes::TKiDropBackupCollection node, TExprContext& ctx) = 0;
+    virtual TStatus HandleBackup(NNodes::TKiBackup node, TExprContext& ctx) = 0;
+    virtual TStatus HandleBackupIncremental(NNodes::TKiBackupIncremental node, TExprContext& ctx) = 0;
+    virtual TStatus HandleRestore(NNodes::TKiRestore node, TExprContext& ctx) = 0;
 };
 
 class TKikimrKey {
@@ -94,6 +101,8 @@ public:
         PGObject,
         Replication,
         BackupCollection,
+        Sequence,
+        Transfer,
     };
 
     struct TViewDescription {
@@ -127,9 +136,21 @@ public:
         return Target;
     }
 
+    TString GetSequencePath() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Sequence);
+        return Target;
+    }
+
     TString GetReplicationPath() const {
         Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
         Y_DEBUG_ABORT_UNLESS(KeyType == Type::Replication);
+        return Target;
+    }
+
+    TString GetTransferPath() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Transfer);
         return Target;
     }
 

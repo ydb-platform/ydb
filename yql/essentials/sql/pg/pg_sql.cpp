@@ -29,6 +29,7 @@ extern "C" {
 #include "utils.h"
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/sql/settings/partitioning.h>
+#include <yql/essentials/sql/settings/translator.h>
 #include <yql/essentials/parser/pg_wrapper/interface/config.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/parser/pg_wrapper/interface/utils.h>
@@ -1665,7 +1666,7 @@ public:
         const auto select = ParseSelectStmt(
             &selectStmt,
             {
-                .Inner = true, 
+                .Inner = true,
                 .AllowEmptyResSet = true,
                 .EmitPgStar = true,
                 .FillTargetColumns = false,
@@ -2971,7 +2972,7 @@ public:
         return State.Statements.back();
     }
 
-    [[nodiscard]] 
+    [[nodiscard]]
     TAstNode* ParseAlterTableStmt(const AlterTableStmt* value) {
         std::vector<TAstNode*> options;
         TString mode = (value->missing_ok) ? "alter_if_exists" : "alter";
@@ -3015,7 +3016,7 @@ public:
                                 return nullptr;
                             }
                             const A_Const* localConst = nullptr;
-                            if (NodeTag(rawArg) == T_TypeCast) { 
+                            if (NodeTag(rawArg) == T_TypeCast) {
                                 auto localCast = CAST_NODE(TypeCast, rawArg)->arg;
                                 if (NodeTag(localCast) != T_A_Const) {
                                     AddError(TStringBuilder() << "Expected a_const in cast, but got something wrong: " << NodeTag(localCast));
@@ -3043,7 +3044,7 @@ public:
                             NodeNotImplemented(def);
                             return nullptr;
                     }
-			        break;
+                    break;
                 }
                 default:
                     NodeNotImplemented(rawNode);
@@ -3054,7 +3055,7 @@ public:
         std::vector<TAstNode*> actions { QL(QA("alterColumns"), QVL(alterColumns.data(), alterColumns.size())) };
 
         options.push_back(
-            QL(QA("actions"), 
+            QL(QA("actions"),
                QVL(actions.data(), actions.size())
             )
         );
@@ -4037,7 +4038,7 @@ public:
             for (const auto& s : argStrs) {
                 concatArgs.push_back(L(A("Key"), QL(QA("table"),L(A("String"), QAX(s)))));
             }
-            
+
             key = VL(concatArgs);
         } else if (lowerName == "concat_view") {
             if (argStrs.size() % 2 != 0) {
@@ -4048,11 +4049,11 @@ public:
             TVector<TAstNode*> concatArgs;
             concatArgs.push_back(A("MrTableConcat"));
             for (ui32 i = 0; i < argStrs.size(); i += 2) {
-                concatArgs.push_back(L(A("Key"), 
+                concatArgs.push_back(L(A("Key"),
                     QL(QA("table"),L(A("String"), QAX(argStrs[i]))),
                     QL(QA("view"),L(A("String"), QAX(argStrs[i + 1])))));
             }
-            
+
             key = VL(concatArgs);
         } else if (lowerName == "range") {
             if (argStrs.size() > 5) {
@@ -4094,8 +4095,8 @@ public:
                     A("item"));
             } else {
                 expr = L(A("Apply"),L(A("Udf"),QA("Re2.Match"),
-                    QL(L(A("Apply"), 
-                        L(A("Udf"), QA("Re2.PatternFromLike")), 
+                    QL(L(A("Apply"),
+                        L(A("Udf"), QA("Re2.PatternFromLike")),
                         L(A("String"),QAX(argStrs[1]))),L(A("Null")))),
                     A("item"));
             }
@@ -5806,8 +5807,8 @@ public:
 
         if (!leftType) {
             return false;
-        } 
-        
+        }
+
         if (procedureName.empty()) {
             return false;
         }
@@ -6194,13 +6195,13 @@ public:
         desc.Family = familyName;
         TVector<NPg::TAmOpDesc> ops;
         TVector<NPg::TAmProcDesc> procs;
-        
+
         for (int i = 0; i < ListLength(value->items); ++i) {
             auto node = LIST_CAST_NTH(CreateOpClassItem, value->items, i);
             if (node->itemtype != OPCLASS_ITEM_OPERATOR && node->itemtype != OPCLASS_ITEM_FUNCTION) {
                 continue;
             }
-            
+
             if (ListLength(node->name->objname) != 1) {
                 return false;
             }
@@ -6355,7 +6356,7 @@ public:
         }
 
         if (!root) {
-            Cerr << "Can't parse SQL for function: " << proc.Name << ", " << results[0].Issues.ToString();
+            //Cerr << "Can't parse SQL for function: " << proc.Name << ", " << results[0].Issues.ToString();
             return;
         }
 
@@ -6420,6 +6421,49 @@ std::unique_ptr<NYql::NPg::ISystemFunctionsParser> CreateSystemFunctionsParser()
 
 std::unique_ptr<NYql::NPg::ISqlLanguageParser> CreateSqlLanguageParser() {
     return std::make_unique<TSqlLanguageParser>();
+}
+
+class TTranslator : public NSQLTranslation::ITranslator {
+public:
+    NSQLTranslation::ILexer::TPtr MakeLexer(const NSQLTranslation::TTranslationSettings& settings) final {
+        Y_UNUSED(settings);
+        ythrow yexception() << "Unsupported method";
+    }
+
+    NYql::TAstParseResult TextToAst(const TString& query, const NSQLTranslation::TTranslationSettings& settings,
+        NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo) final {
+        Y_UNUSED(warningRules);
+        return PGToYql(query, settings, stmtParseInfo);
+    }
+
+    google::protobuf::Message* TextToMessage(const TString& query, const TString& queryName,
+        NYql::TIssues& issues, size_t maxErrors, const NSQLTranslation::TTranslationSettings& settings) final {
+        Y_UNUSED(query);
+        Y_UNUSED(queryName);
+        Y_UNUSED(issues);
+        Y_UNUSED(maxErrors);
+        Y_UNUSED(settings);
+        ythrow yexception() << "Unsupported method";
+    }
+
+    NYql::TAstParseResult TextAndMessageToAst(const TString& query, const google::protobuf::Message& protoAst,
+        const NSQLTranslation::TSQLHints& hints, const NSQLTranslation::TTranslationSettings& settings) final {
+        Y_UNUSED(query);
+        Y_UNUSED(protoAst);
+        Y_UNUSED(hints);
+        Y_UNUSED(settings);
+        ythrow yexception() << "Unsupported method";
+    }
+
+    TVector<NYql::TAstParseResult> TextToManyAst(const TString& query, const NSQLTranslation::TTranslationSettings& settings,
+        NYql::TWarningRules* warningRules, TVector<NYql::TStmtParseInfo>* stmtParseInfo) final {
+        Y_UNUSED(warningRules);
+        return PGToYqlStatements(query, settings, stmtParseInfo);
+    }
+};
+
+NSQLTranslation::TTranslatorPtr MakeTranslator() {
+    return MakeIntrusive<TTranslator>();
 }
 
 } // NSQLTranslationPG

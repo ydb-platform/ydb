@@ -1,28 +1,30 @@
-import "ydb/core/scheme/protos/type_info.proto";
-import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/protos/bind_channel_storage_pool.proto";
+import "ydb/core/protos/blob_depot_config.proto";
+import "ydb/core/protos/blockstore_config.proto";
+import "ydb/core/protos/channel_purpose.proto";
+import "ydb/core/protos/compaction.proto";
+import "ydb/core/protos/filestore_config.proto";
+import "ydb/core/protos/follower_group.proto";
+import "ydb/core/protos/index_builder.proto";
 import "ydb/core/protos/pqconfig.proto";
 import "ydb/core/protos/replication.proto";
-import "ydb/core/protos/compaction.proto";
+import "ydb/core/protos/s3_settings.proto";
+import "ydb/core/protos/schemeshard/operations.proto";
+import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/table_stats.proto";
 import "ydb/core/protos/tablet.proto";
-import "ydb/core/protos/subdomains.proto";
-import "ydb/core/protos/blockstore_config.proto";
-import "ydb/core/protos/filestore_config.proto";
-import "ydb/core/protos/channel_purpose.proto";
-import "ydb/core/protos/follower_group.proto";
-import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/core/protos/yql_translation_settings.proto";
-import "ydb/public/api/protos/ydb_coordination.proto";
-import "ydb/public/api/protos/ydb_export.proto";
-import "ydb/public/api/protos/ydb_table.proto";
-import "ydb/public/api/protos/ydb_value.proto";
-import "ydb/library/actors/protos/actors.proto";
-import "ydb/library/mkql_proto/protos/minikql.proto";
-import "ydb/core/protos/index_builder.proto";
-import "ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.proto";
+import "ydb/core/scheme/protos/pathid.proto";
+import "ydb/core/scheme/protos/type_info.proto";
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
+import "ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.proto";
+import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/formats/arrow/protos/accessor.proto";
+import "ydb/library/mkql_proto/protos/minikql.proto";
+import "ydb/public/api/protos/ydb_coordination.proto";
+import "ydb/public/api/protos/ydb_table.proto";
+import "ydb/public/api/protos/ydb_topic.proto";
+import "ydb/public/api/protos/ydb_value.proto";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
@@ -221,11 +223,24 @@ message TTTLSettings {
         optional uint32 MaxShardsInFlight = 6 [default = 0]; // zero means no limit
     }
 
+    message TEvictionToExternalStorageSettings {
+        optional string Storage = 1;
+    }
+
+    message TTier {
+        optional uint32 ApplyAfterSeconds = 1;
+        oneof Action {
+            google.protobuf.Empty Delete = 2;
+            TEvictionToExternalStorageSettings EvictToExternalStorage = 3;
+        }
+    }
+
     message TEnabled {
         optional string ColumnName = 1;
-        optional uint32 ExpireAfterSeconds = 2;
+        optional uint32 ExpireAfterSeconds = 2 [deprecated = true];
         optional EUnit ColumnUnit = 3;
         optional TSysSettings SysSettings = 4;
+        repeated TTier Tiers = 5;
     }
 
     message TDisabled {
@@ -236,7 +251,7 @@ message TTTLSettings {
         TDisabled Disabled = 2;
     }
 
-    optional string UseTiering = 3;
+    reserved 3;
 }
 
 message TTableReplicationConfig {
@@ -245,14 +260,14 @@ message TTableReplicationConfig {
         REPLICATION_MODE_READ_ONLY = 1;
     }
 
-    enum EConsistency {
-        CONSISTENCY_UNKNOWN = 0;
-        CONSISTENCY_STRONG = 1;
-        CONSISTENCY_WEAK = 2;
+    enum EConsistencyLevel {
+        CONSISTENCY_LEVEL_UNKNOWN = 0;
+        CONSISTENCY_LEVEL_GLOBAL = 1;
+        CONSISTENCY_LEVEL_ROW = 2;
     }
 
     optional EReplicationMode Mode = 1;
-    optional EConsistency Consistency = 2;
+    optional EConsistencyLevel ConsistencyLevel = 2;
 }
 
 message TTableIncrementalBackupConfig {
@@ -303,6 +318,7 @@ message TTableDescription {
 
     optional bool OmitFollowers = 36 [default = false]; // used with CopyFromTable
     optional bool IsBackup = 37 [default = false];
+    optional bool IsRestore = 45 [default = false];
 
     repeated TCdcStreamDescription CdcStreams = 38;
     repeated TSequenceDescription Sequences = 39;
@@ -318,6 +334,7 @@ message TTableDescription {
     // on table creation to allow system column names (started with __ydb_)
     // It won't be present on describes and won't be preserved
     optional bool SystemColumnNamesAllowed = 42;
+    optional bool AllowUnderSameOperation = 44 [default = false];
 }
 
 message TDictionaryEncodingSettings {
@@ -346,6 +363,7 @@ message TOlapColumnDiff {
     optional string StorageId = 6;
     optional string DefaultValue = 7;
     optional NKikimrArrowAccessorProto.TRequestedConstructor DataAccessorConstructor = 8;
+    optional string ColumnFamilyName = 9;
 }
 
 message TOlapColumnDescription {
@@ -366,11 +384,38 @@ message TOlapColumnDescription {
     optional string StorageId = 11;
     optional NKikimrColumnShardColumnDefaults.TColumnDefault DefaultValue = 12;
     optional NKikimrArrowAccessorProto.TConstructor DataAccessorConstructor = 13;
+    optional uint32 ColumnFamilyId = 14;
+    optional string ColumnFamilyName = 15;
+}
+
+message TIndexDataExtractor {
+    optional string ClassName = 1;
+    message TDefault {
+    }
+
+    message TSubColumn {
+        optional string SubColumnName = 1;
+    }
+
+    oneof Implementation {
+        TDefault Default = 20;
+        TSubColumn SubColumn = 21;
+    }
 }
 
 message TRequestedBloomFilter {
     optional double FalsePositiveProbability = 1 [default = 0.1];
     repeated string ColumnNames = 3;
+    optional TIndexDataExtractor DataExtractor = 4;
+}
+
+message TRequestedBloomNGrammFilter {
+    optional uint32 NGrammSize = 1;
+    optional uint32 FilterSizeBytes = 2;
+    optional uint32 HashesCount = 3;
+    optional string ColumnName = 4;
+    optional uint32 RecordsCount = 5;
+    optional TIndexDataExtractor DataExtractor = 6;
 }
 
 message TRequestedMaxIndex {
@@ -392,6 +437,7 @@ message TOlapIndexRequested {
         TRequestedBloomFilter BloomFilter = 40;
         TRequestedMaxIndex MaxIndex = 41;
         TRequestedCountMinSketch CountMinSketch = 42;
+        TRequestedBloomNGrammFilter BloomNGrammFilter = 43;
     }
 }
 
@@ -399,6 +445,16 @@ message TBloomFilter {
     optional double FalsePositiveProbability = 1 [default = 0.1];
     optional uint64 MaxBytesCount = 2 [default = 8196];
     repeated uint32 ColumnIds = 3;
+    optional TIndexDataExtractor DataExtractor = 4;
+}
+
+message TBloomNGrammFilter {
+    optional uint32 NGrammSize = 1;
+    optional uint32 FilterSizeBytes = 2;
+    optional uint32 HashesCount = 3;
+    optional uint32 ColumnId = 4;
+    optional uint32 RecordsCount = 5;
+    optional TIndexDataExtractor DataExtractor = 6;
 }
 
 message TMaxIndex {
@@ -423,6 +479,7 @@ message TOlapIndexDescription {
         TBloomFilter BloomFilter = 41;
         TMaxIndex MaxIndex = 42;
         TCountMinSketch CountMinSketch = 43;
+        TBloomNGrammFilter BloomNGrammFilter = 44;
     }
 }
 
@@ -438,8 +495,23 @@ enum EOlapProgramType {
 
 message TStorageTierConfig {
     optional string Name = 1;
-    optional TS3Settings ObjectStorage = 2;
+    optional NKikimrSchemeOp.TS3Settings ObjectStorage = 2;
     optional TCompressionOptions Compression = 3;
+}
+
+message TCompactionLevelConstructorContainer {
+    optional string ClassName = 1;
+
+    message TZeroLevel {
+        optional uint32 PortionsLiveDurationSeconds = 1;
+        optional uint64 ExpectedBlobsSize = 2;
+        optional uint64 PortionsCountAvailable = 3;
+    }
+
+    oneof Implementation {
+        TZeroLevel ZeroLevel = 10;
+    }
+
 }
 
 message TCompactionPlannerConstructorContainer {
@@ -455,7 +527,7 @@ message TCompactionPlannerConstructorContainer {
     }
 
     message TLCOptimizer {
-
+        repeated TCompactionLevelConstructorContainer Levels = 1;
     }
 
     oneof Implementation {
@@ -484,9 +556,9 @@ message TMetadataManagerConstructorContainer {
 
 message TColumnTableSchemeOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
-    optional bool ExternalGuaranteeExclusivePK = 2 [default = false];
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
+    optional string ScanReaderPolicyName = 5;
 }
 
 message TColumnTableSchema {
@@ -506,6 +578,10 @@ message TColumnTableSchema {
 
     repeated TOlapIndexDescription Indexes = 10;
     optional TColumnTableSchemeOptions Options = 12;
+
+    repeated TFamilyDescription ColumnFamilies = 13;
+    // Internal fields
+    optional uint32 NextColumnFamilyId = 14;
 }
 
 message TColumnTableSchemaDiff {
@@ -524,9 +600,9 @@ message TColumnTableSchemaDiff {
 
 message TColumnTableRequestedOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
-    optional bool ExternalGuaranteeExclusivePK = 2;
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
+    optional string ScanReaderPolicyName = 5;
 }
 
 message TAlterColumnTableSchema {
@@ -537,6 +613,8 @@ message TAlterColumnTableSchema {
     repeated TOlapIndexRequested UpsertIndexes = 8;
     repeated string DropIndexes = 9;
     optional TColumnTableRequestedOptions Options = 12;
+    repeated TFamilyDescription AddColumnFamily = 13;
+    repeated TFamilyDescription AlterColumnFamily = 14;
 }
 
 // Schema presets are used to manage multiple tables with the same schema
@@ -570,10 +648,11 @@ message TColumnDataLifeCycle {
     message TTtl {
         optional string ColumnName = 1;
         oneof Expire {
-            uint32 ExpireAfterSeconds = 2;
+            uint32 ExpireAfterSeconds = 2 [deprecated = true]; // ignored if Tiers are not empty
             uint64 ExpireAfterBytes = 4;
         }
         optional TTTLSettings.EUnit ColumnUnit = 3;
+        repeated TTTLSettings.TTier Tiers = 5;
     }
 
     message TDisabled {
@@ -587,7 +666,7 @@ message TColumnDataLifeCycle {
     // Incremented on each settings change
     optional uint64 Version = 3 [default = 1];
 
-    optional string UseTiering = 5;
+    reserved 5;
 }
 
 message TColumnTableTtlSettingsPreset {
@@ -790,11 +869,15 @@ message TReshardColumnTable {
 message TLoginCreateUser {
     optional string User = 1;
     optional string Password = 2;
+    optional bool CanLogin = 3 [default = true];
+    optional bool IsHashedPassword = 4 [default = false];
 }
 
 message TLoginModifyUser {
     optional string User = 1;
     optional string Password = 2;
+    optional bool CanLogin = 3;
+    optional bool IsHashedPassword = 4 [default = false];
 }
 
 message TLoginRemoveUser {
@@ -947,10 +1030,18 @@ message TDropContinuousBackup {
 }
 
 message TRestoreIncrementalBackup {
-    optional string SrcTableName = 1;
+    optional string SrcTablePath = 1; // Absolute path
     optional NKikimrProto.TPathID SrcPathId = 3;
 
-    optional string DstTableName = 2;
+    optional string DstTablePath = 2; // Absolute path
+    optional NKikimrProto.TPathID DstPathId = 4;
+}
+
+message TRestoreMultipleIncrementalBackups {
+    repeated string SrcTablePaths = 1; // Absolute path
+    repeated NKikimrProto.TPathID SrcPathIds = 3;
+
+    optional string DstTablePath = 2; // Absolute path
     optional NKikimrProto.TPathID DstPathId = 4;
 }
 
@@ -1070,6 +1161,7 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
 
     // additionally creates cdc stream on src table consistently with taking snapshot
     optional TCreateCdcStream CreateSrcCdcStream = 6;
+    optional bool AllowUnderSameOperation = 7 [default = false];
 }
 
 message TConsistentTableCopyingConfig {
@@ -1089,62 +1181,9 @@ message TYTSettings {
     optional bool UseTypeV3 = 8;
 };
 
-message TSecretId {
-    optional string Id = 1;
-    optional string OwnerId = 2;
-}
-
-message TSecretValue {
-    optional string Data = 1;
-}
-
-message TSecretableVariable {
-    oneof Data {
-        TSecretId SecretId = 1;
-        TSecretValue Value = 2;
-    }
-}
-
-message TS3Settings {
-    enum EScheme {
-        HTTP = 0;
-        HTTPS = 1;
-    }
-
-    optional string Endpoint = 1;
-    optional EScheme Scheme = 2 [default = HTTPS];
-    optional string Bucket = 3;
-    optional string ObjectKeyPattern = 4; // dst for backup, src for restore
-    optional string AccessKey = 5;
-    optional string SecretKey = 6;
-    optional Ydb.Export.ExportToS3Settings.StorageClass StorageClass = 7 [default = STANDARD];
-    optional bool VerifySSL = 8;
-    optional string ProxyHost = 9;
-    optional uint32 ProxyPort = 10;
-    optional EScheme ProxyScheme = 11;
-    optional string Region = 12;
-    optional TSecretableVariable SecretableAccessKey = 13;
-    optional TSecretableVariable SecretableSecretKey = 14;
-    optional bool UseVirtualAddressing = 15 [default = true];
-
-    message TLimits {
-        optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB
-        optional uint32 MinWriteBatchSize = 2 [default = 5242880]; // 5 MB
-        reserved 3; // ReadBufferSizeLimit
-    };
-
-    optional TLimits Limits = 100;
-    optional uint32 RequestTimeoutMs = 101;
-    optional uint32 HttpRequestTimeoutMs = 102;
-    optional uint32 ConnectionTimeoutMs = 103;
-
-    optional uint32 ExecutorThreadsCount = 104 [default = 32];
-    optional uint32 MaxConnectionsCount = 105 [default = 32];
-};
-
 message TTaskCleaner {
     optional uint64 PathId = 1;
-    optional TS3Settings StorageSettings = 2;
+    optional NKikimrSchemeOp.TS3Settings StorageSettings = 2;
     optional string TieringId = 3;
 }
 
@@ -1160,10 +1199,11 @@ message TBackupTask {
 
     oneof Settings {
         TYTSettings YTSettings = 4;
-        TS3Settings S3Settings = 9;
+        NKikimrSchemeOp.TS3Settings S3Settings = 9;
     }
 
     optional TPathDescription Table = 10; // for further restore
+    repeated TPathDescription ChangefeedUnderlyingTopics = 17; // for further restore
 
     message TScanSettings {
         optional uint64 RowsBatchSize = 1 [default = 0]; // no limit
@@ -1178,10 +1218,13 @@ message TBackupTask {
         optional int32 Level = 2;
     }
 
-    optional TCompressionOptions Compression = 13; // currently available for s3
-
     optional uint64 SnapshotStep = 14;
     optional uint64 SnapshotTxId = 15;
+
+    // currently available only for s3:
+    optional TCompressionOptions Compression = 13;
+    optional bool EnableChecksums = 16;
+    optional bool EnablePermissions = 18;
 }
 
 message TRestoreTask {
@@ -1192,8 +1235,10 @@ message TRestoreTask {
     optional uint32 NumberOfRetries = 5;
 
     oneof Settings {
-        TS3Settings S3Settings = 6;
+        NKikimrSchemeOp.TS3Settings S3Settings = 6;
     }
+
+    optional bool ValidateChecksums = 7; // currently available for s3
 }
 
 message TPersQueueGroupAllocate {
@@ -1336,6 +1381,7 @@ message TSolomonVolumeDescription {
     optional uint64 PathId = 2;
     optional uint64 PartitionCount = 3;
     repeated TPartition Partitions = 4;
+    repeated NKikimrStoragePool.TChannelBind BoundChannels = 5;
 }
 
 message TCreateSolomonVolume {
@@ -1432,6 +1478,7 @@ message TSequenceDescription {
     optional bool Cycle = 10; // true when cycle on overflow is allowed
     optional TSetVal SetVal = 11; // SetVal(NextValue, NextUsed) is executed atomically when creating
     optional string DataType = 12; // data type of the sequence: Int64/pgint8, Int32/pgint4, Int16/pgint2, defaults to Int64/pgint8
+    optional bool Restart = 13; // flag for changing the current value of the sequence with SetVal if it is set, or start value otherwise
 }
 
 message TSequenceSharding {
@@ -1446,6 +1493,7 @@ message TReplicationDescription {
     optional uint64 Version = 4;
     optional uint64 ControllerId = 5; // replication controller's tablet id
     optional NKikimrReplication.TReplicationState State = 6;
+    optional string TransferTransformLambda = 7;
 }
 
 message TBlobDepotDescription {
@@ -1454,168 +1502,6 @@ message TBlobDepotDescription {
     optional uint64 Version = 3;
     optional NKikimrBlobDepot.TBlobDepotConfig Config = 4;
     optional fixed64 TabletId = 5; // for unsharded mode
-}
-
-enum EOperationType {
-    ESchemeOpMkDir = 1;
-    ESchemeOpCreateTable = 2;
-    ESchemeOpCreatePersQueueGroup = 3;
-    ESchemeOpDropTable = 4;
-    ESchemeOpDropPersQueueGroup = 5;
-    ESchemeOpAlterTable = 6;
-    ESchemeOpAlterPersQueueGroup = 7;
-    ESchemeOpModifyACL = 8;
-    ESchemeOpRmDir = 9;
-    ESchemeOpSplitMergeTablePartitions = 10;
-    ESchemeOpBackup = 11;
-    ESchemeOpCreateSubDomain = 12;
-    ESchemeOpDropSubDomain = 13;
-    ESchemeOpCreateRtmrVolume = 14;
-    ESchemeOpCreateBlockStoreVolume = 15;
-    ESchemeOpAlterBlockStoreVolume = 16;
-    ESchemeOpAssignBlockStoreVolume = 17;
-    ESchemeOpDropBlockStoreVolume = 18;
-    ESchemeOpCreateKesus = 19;
-    ESchemeOpDropKesus = 20;
-    ESchemeOpForceDropSubDomain = 21;
-    ESchemeOpCreateSolomonVolume = 22;
-    ESchemeOpDropSolomonVolume = 23;
-    ESchemeOpAlterKesus = 24;
-    ESchemeOpAlterSubDomain = 25;
-    ESchemeOpAlterUserAttributes = 26;
-
-    // *************
-    // Unsafe operation. Nornally it is used for deleting database. It called by CMS, and CMS takes care of remaining resourses.
-    // If you apply it manually to an ordinary path in cases of emergenses, be aware of:
-    // 1 -- data transactions are ignored. Distributed transactions colud be broken so progress on other shards would be blocked forever
-    // 2 -- boorowed/loans blobs could be lost forever.
-    //
-    ESchemeOpForceDropUnsafe = 27;
-    //
-    // *************
-
-    ESchemeOpCreateIndexedTable = 28;
-    ESchemeOpCreateTableIndex = 29;
-    ESchemeOpCreateConsistentCopyTables = 30;
-    ESchemeOpDropTableIndex = 31;
-    ESchemeOpCreateExtSubDomain = 32;
-    ESchemeOpAlterExtSubDomain = 33;
-    ESchemeOpForceDropExtSubDomain = 34;
-    ESchemeOp_DEPRECATED_35 = 35;
-    ESchemeOpUpgradeSubDomain = 36;
-    ESchemeOpUpgradeSubDomainDecision = 37;
-    ESchemeOpCreateIndexBuild = 38;
-    ESchemeOpInitiateBuildIndexMainTable = 39;
-    ESchemeOpCreateLock = 40;
-    ESchemeOpApplyIndexBuild = 41;
-    ESchemeOpFinalizeBuildIndexMainTable = 42;
-    ESchemeOpAlterTableIndex = 43;
-    ESchemeOpAlterSolomonVolume = 44;
-    ESchemeOpDropLock = 45;
-
-    ESchemeOpFinalizeBuildIndexImplTable = 46;
-    ESchemeOpInitiateBuildIndexImplTable = 47;
-
-    ESchemeOpDropIndex = 48;
-    ESchemeOpDropTableIndexAtMainTable = 49;
-
-    ESchemeOpCancelIndexBuild = 50;
-
-    ESchemeOpCreateFileStore = 51;
-    ESchemeOpAlterFileStore = 52;
-    ESchemeOpDropFileStore = 53;
-
-    ESchemeOpRestore = 54;
-
-    ESchemeOpCreateColumnStore = 55;
-    ESchemeOpAlterColumnStore = 56;
-    ESchemeOpDropColumnStore = 57;
-    ESchemeOpCreateColumnTable = 58;
-    ESchemeOpAlterColumnTable = 59;
-    ESchemeOpDropColumnTable = 60;
-
-    ESchemeOpAlterLogin = 61;
-
-    /// CDC
-    // Create
-    ESchemeOpCreateCdcStream = 62;
-    ESchemeOpCreateCdcStreamImpl = 63;
-    ESchemeOpCreateCdcStreamAtTable = 64;
-    // Alter
-    ESchemeOpAlterCdcStream = 65;
-    ESchemeOpAlterCdcStreamImpl = 66;
-    ESchemeOpAlterCdcStreamAtTable = 67;
-    // Drop
-    ESchemeOpDropCdcStream = 68;
-    ESchemeOpDropCdcStreamImpl = 69;
-    ESchemeOpDropCdcStreamAtTable = 70;
-
-    ESchemeOpMoveTable = 71;
-    ESchemeOpMoveTableIndex = 72;
-
-    // Sequences
-    ESchemeOpCreateSequence = 73;
-    ESchemeOpAlterSequence = 74;
-    ESchemeOpDropSequence = 75;
-
-    // Replication
-    ESchemeOpCreateReplication = 76;
-    ESchemeOpAlterReplication = 77;
-    ESchemeOpDropReplicationCascade = 78;
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // BlobDepot
-    ESchemeOpCreateBlobDepot = 79;
-    ESchemeOpAlterBlobDepot = 80;
-    ESchemeOpDropBlobDepot = 81;
-
-    // Move index
-    ESchemeOpMoveIndex = 82;
-
-    reserved 83, 84; // ESchemeOpAllocatePersQueueGroup and ESchemeOpDeallocatePersQueueGroup
-
-    // AlterExtSubDomain suboperations
-    ESchemeOpAlterExtSubDomainCreateHive = 85;
-
-    // External Table
-    ESchemeOpCreateExternalTable = 86;
-    ESchemeOpDropExternalTable = 87;
-    ESchemeOpAlterExternalTable = 88;
-
-    // External Data Source
-    ESchemeOpCreateExternalDataSource = 89;
-    ESchemeOpDropExternalDataSource = 90;
-    ESchemeOpAlterExternalDataSource = 91;
-
-    ESchemeOpCreateColumnBuild = 92;
-
-    // View
-    ESchemeOpCreateView = 93;
-    ESchemeOpAlterView = 94;
-    ESchemeOpDropView = 95;
-
-    ESchemeOpDropReplication = 96;
-
-    /// ContinuousBackup
-    // Create
-    ESchemeOpCreateContinuousBackup = 97;
-    // Alter
-    ESchemeOpAlterContinuousBackup = 98;
-    // Drop
-    ESchemeOpDropContinuousBackup = 99;
-
-    // Resource Pool
-    ESchemeOpCreateResourcePool = 100;
-    ESchemeOpDropResourcePool = 101;
-    ESchemeOpAlterResourcePool = 102;
-
-    ESchemeOpRestoreIncrementalBackup = 103;
-    ESchemeOpRestoreIncrementalBackupAtTable = 104;
-
-    // BackupCollection
-    ESchemeOpCreateBackupCollection = 105;
-    ESchemeOpAlterBackupCollection = 106;
-    ESchemeOpDropBackupCollection = 107;
 }
 
 message TApplyIf {
@@ -1798,11 +1684,18 @@ message TModifyScheme {
 
     optional TResourcePoolDescription CreateResourcePool = 72;
 
-    optional TRestoreIncrementalBackup RestoreIncrementalBackup = 73;
+    optional TRestoreMultipleIncrementalBackups RestoreMultipleIncrementalBackups = 73;
 
     optional TBackupCollectionDescription CreateBackupCollection = 74;
     optional TBackupCollectionDescription AlterBackupCollection = 75;
     optional TBackupCollectionDescription DropBackupCollection = 76;
+    optional TBackupBackupCollection BackupBackupCollection = 78;
+    optional TBackupBackupCollection BackupIncrementalBackupCollection = 79;
+    optional TBackupBackupCollection RestoreBackupCollection = 80;
+
+    optional TMove MoveSequence = 77;
+
+    // Some entries are grouped by semantics, so are out of order
 }
 
 message TCopySequence {
@@ -1869,6 +1762,7 @@ enum EPathType {
     EPathTypeView = 20;
     EPathTypeResourcePool = 21;
     EPathTypeBackupCollection = 22;
+    EPathTypeTransfer = 23;
 }
 
 enum EPathSubType {
@@ -1945,6 +1839,7 @@ message TDirEntry {
     optional uint64 PathVersion = 13;
     optional EPathSubType PathSubType = 14;
     optional TPathVersion Version = 15;
+    optional bool ChildrenExist = 16;
 
     optional uint64 BalancerTabletID = 999; //temporary optimization for old PQ read/write protocol. Must be removed later
 }
@@ -2192,4 +2087,18 @@ message TBackupCollectionDescription {
     oneof Storage {
         google.protobuf.Empty Cluster = 7;
     }
+}
+
+message TBackupBackupCollection {
+    optional string Name = 1;
+    optional NKikimrProto.TPathID PathId = 2;
+    optional string TargetDir = 3; // must be set on Rewrite
+}
+
+message TImportTableChangefeeds {
+    message TImportChangefeedTopic {
+        optional Ydb.Table.ChangefeedDescription Changefeed = 1;
+        optional Ydb.Topic.DescribeTopicResult Topic = 2;
+    }
+    repeated TImportChangefeedTopic Changefeeds = 1;
 }

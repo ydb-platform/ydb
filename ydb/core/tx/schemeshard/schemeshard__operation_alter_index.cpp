@@ -1,5 +1,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard_impl.h"
 
 namespace {
 
@@ -14,7 +15,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TAlterTableIndex TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:

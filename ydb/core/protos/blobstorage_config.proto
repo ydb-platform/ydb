@@ -400,8 +400,31 @@ message TWipeVDisk {
     NKikimrBlobStorage.TVDiskID VDiskId = 2;
 }
 
+message TPDiskLocation {
+    string Fqdn = 1; // fully qualified domain name of the host
+    string Path = 2; // absolute path to the device as enlisted in PDisk configuration
+}
+
 message TRestartPDisk {
-    NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+    oneof PDisk {
+        NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+        TPDiskLocation TargetPDiskLocation = 2;   
+    }
+}
+
+message TSetPDiskReadOnly {
+    oneof PDisk {
+        NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+        TPDiskLocation TargetPDiskLocation = 2;
+    }
+    bool Value = 3;
+}
+
+message TStopPDisk {
+    oneof PDisk {
+        NKikimrBlobStorage.TPDiskId TargetPDiskId = 1;
+        TPDiskLocation TargetPDiskLocation = 2;
+    }
 }
 
 message TSetScrubPeriodicity {
@@ -472,6 +495,7 @@ message TAllocateVirtualGroup {
     }
     repeated NKikimrBlobDepot.TChannelProfile ChannelProfiles = 5;
     uint64 BlobDepotId = 6; // when the tablet is already created; for testing purposes only
+    optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 8; // if S3 is used as a backend for this instance
 }
 
 message TDecommitGroups {
@@ -492,6 +516,9 @@ message TSetVDiskReadOnly {
     NKikimrBlobStorage.TVDiskID VDiskId = 2;
     bool Value = 3;
 }
+
+message TGetInterfaceVersion
+{}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // INTERFACE PART
@@ -537,6 +564,9 @@ message TConfigRequest {
             TCancelVirtualGroup CancelVirtualGroup = 44;
             TSetVDiskReadOnly SetVDiskReadOnly = 47;
             TRestartPDisk RestartPDisk = 48;
+            TSetPDiskReadOnly SetPDiskReadOnly = 49;
+            TStopPDisk StopPDisk = 50;
+            TGetInterfaceVersion GetInterfaceVersion = 51;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
@@ -617,6 +647,7 @@ message TBaseConfig {
         EDecommitStatus DecommitStatus = 16;
         string ExpectedSerial = 17;
         string LastSeenSerial = 18;
+        bool ReadOnly = 19;
     }
     message TVSlot {
         message TDonorDisk {
@@ -770,6 +801,7 @@ message TConfigResponse {
         TDeclareIntent Intent = 15;
         bool Already = 16;
         TUpdateSettings Settings = 18;
+        uint32 InterfaceVersion = 19;
     }
 
     repeated TStatus Status = 1;

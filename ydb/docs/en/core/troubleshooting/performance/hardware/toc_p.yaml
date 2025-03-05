@@ -1,0 +1,9 @@
+items:
+    - name: CPU
+      href: cpu-bottleneck.md
+    - name: Memory
+      href: insufficient-memory.md
+    - name: I/O bandwidth
+      href: io-bandwidth.md
+    - name: Disk space
+      href: disk-space.md

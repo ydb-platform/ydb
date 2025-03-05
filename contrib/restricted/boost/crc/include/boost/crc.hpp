@@ -50,22 +50,36 @@ namespace crc_detail {
 
 struct uint_t_8
 {
-    typedef std::uint8_t fast;
+    typedef std::uint_least8_t fast; // matches boost::uint_t<8>::fast
 };
 
 struct uint_t_16
 {
-    typedef std::uint16_t fast;
+    typedef std::uint_least16_t fast; // matches boost::uint_t<16>::fast
 };
 
 struct uint_t_32
 {
-    typedef std::uint32_t fast;
+    typedef std::uint_least32_t fast; // matches boost::uint_t<32>::fast
 };
+
+template<class T> struct remap_long_long
+{
+    typedef T type;
+};
+
+#if ULONG_MAX == ULLONG_MAX
+
+template<> struct remap_long_long<unsigned long long>
+{
+    typedef unsigned long type;
+};
+
+#endif
 
 struct uint_t_64
 {
-    typedef std::uint64_t fast;
+    typedef remap_long_long<std::uint_least64_t>::type fast; // matches boost::uint_t<64>::fast
 };
 
 struct uint_t_none

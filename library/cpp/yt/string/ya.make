@@ -15,7 +15,7 @@ PEERDIR(
     library/cpp/yt/assert
     library/cpp/yt/exception
     library/cpp/yt/misc
-    library/cpp/yt/small_containers
+    library/cpp/yt/compact_containers
 )
 
 CHECK_DEPENDENT_DIRS(
@@ -26,7 +26,7 @@ CHECK_DEPENDENT_DIRS(
     util
     library/cpp/yt/assert
     library/cpp/yt/misc
-    library/cpp/yt/small_containers
+    library/cpp/yt/compact_containers
 )
 
 END()

@@ -24,7 +24,7 @@ union TUnversionedValueData
     //! |Boolean| value.
     bool Boolean;
     //! String value for |String| type or YSON-encoded value for |Any| type.
-    //! NB: string is not zero-terminated, so never use it as a TString.
+    //! NB: String is not zero-terminated, so never use it as a TString.
     //! Use #TUnversionedValue::AsStringBuf() or #TUnversionedValue::AsString() instead.
     const char* String;
 };

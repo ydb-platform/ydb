@@ -28,10 +28,10 @@ namespace numpy
       return result;
     }
 
-    inline auto random(long size)
-        -> decltype(random(types::array<long, 1>{{size}}))
+    inline auto
+    random(long size) -> decltype(random(types::array_tuple<long, 1>{{size}}))
     {
-      return random(types::array<long, 1>{{size}});
+      return random(types::array_tuple<long, 1>{{size}});
     }
 
     inline double random(types::none_type d)

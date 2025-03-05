@@ -124,13 +124,15 @@ public:
         auto keys = GetPartitionKeys(partBy);
 
         auto sinkSettingsBuilder = Build<TExprList>(ctx, target.Pos());
-        if (partBy)
+        if (partBy) {
             sinkSettingsBuilder.Add(std::move(partBy));
+        }
 
         auto compression = GetCompression(settings);
         const auto& extension = GetExtension(target.Format().Value(), compression ? compression->Tail().Content() : ""sv);
-        if (compression)
+        if (compression) {
             sinkSettingsBuilder.Add(std::move(compression));
+        }
 
         auto sinkOutputSettingsBuilder = Build<TExprList>(ctx, target.Pos());
         if (auto csvDelimiter = GetCsvDelimiter(settings)) {
@@ -199,7 +201,7 @@ public:
             }
         }
 
-        if (!FindNode(input.Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable(TCoDataSource::CallableName()); })) {
+        if (IsDqPureExpr(input)) {
             YQL_CLOG(INFO, ProviderS3) << "Rewrite pure S3WriteObject `" << cluster << "`.`" << target.Path().StringValue() << "` as stage with sink.";
             return keys.empty() ?
                 Build<TDqStage>(ctx, writePos)
@@ -305,23 +307,26 @@ public:
                 .Build()
             .Done();
 
-        auto outputsBuilder = Build<TDqStageOutputsList>(ctx, target.Pos());
-        if (inputStage.Outputs() && keys.empty()) {
-            outputsBuilder.InitFrom(inputStage.Outputs().Cast());
-        }
-        outputsBuilder.Add(sink);
+        auto outputsBuilder = Build<TDqStageOutputsList>(ctx, target.Pos())
+            .Add(sink);
 
         if (keys.empty()) {
-            const auto outputBuilder = Build<TS3SinkOutput>(ctx, target.Pos())
-                .Input(inputStage.Program().Body().Ptr())
-                .Format(target.Format())
-                .KeyColumns().Add(std::move(keys)).Build()
-                .Settings(sinkOutputSettingsBuilder.Done())
-                .Done();
-
             return Build<TDqStage>(ctx, writePos)
-                .InitFrom(inputStage)
-                .Program(ctx.DeepCopyLambda(inputStage.Program().Ref(), outputBuilder.Ptr()))
+                .Inputs()
+                    .Add<TDqCnMap>()
+                        .Output(dqUnion.Output())
+                        .Build()
+                    .Build()
+                .Program<TCoLambda>()
+                    .Args({"in"})
+                    .Body<TS3SinkOutput>()
+                        .Input("in")
+                        .Format(target.Format())
+                        .KeyColumns().Add(std::move(keys)).Build()
+                        .Settings(sinkOutputSettingsBuilder.Done())
+                        .Build()
+                    .Build()
+                .Settings().Build()
                 .Outputs(outputsBuilder.Done())
                 .Done();
         } else {

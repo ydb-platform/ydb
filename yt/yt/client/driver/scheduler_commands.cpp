@@ -25,7 +25,7 @@ using namespace NJobTrackerClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, JobShellStructuredLogger, "JobShell");
+static YT_DEFINE_GLOBAL(const NLogging::TLogger, JobShellStructuredLogger, "JobShell");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -490,6 +490,26 @@ void TListJobsCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& { return command->Options.WithMonitoringDescriptor; })
         .Optional(/*init*/ false);
 
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
+        "operation_incarnation",
+        [] (TThis* command) -> auto& { return command->Options.OperationIncarnation; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(
+        "from_time",
+        [] (TThis* command) -> auto& { return command->Options.FromTime; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(
+        "to_time",
+        [] (TThis* command) -> auto& { return command->Options.ToTime; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "continuation_token",
+        [] (TThis* command) -> auto& { return command->Options.ContinuationToken; })
+        .Optional(/*init*/ false);
+
     registrar.ParameterWithUniversalAccessor<TJobId>(
         "job_competition_id",
         [] (TThis* command) -> auto& { return command->Options.JobCompetitionId; })
@@ -593,6 +613,7 @@ void TListJobsCommand::DoExecute(ICommandContextPtr context)
                 }
             })
             .Item("errors").Value(result.Errors)
+            .Item("continuation_token").Value(result.ContinuationToken)
         .EndMap());
 }
 
@@ -835,6 +856,12 @@ void TSuspendOperationCommand::Register(TRegistrar registrar)
             return command->Options.AbortRunningJobs;
         })
         .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "reason",
+        [] (TThis* command) -> auto& {
+            return command->Options.Reason;
+        })
+        .Optional();
 }
 
 void TSuspendOperationCommand::DoExecute(ICommandContextPtr context)
@@ -885,6 +912,24 @@ void TUpdateOperationParametersCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TPatchOperationSpecCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("patches", &TThis::Patches);
+}
+
+void TPatchOperationSpecCommand::DoExecute(ICommandContextPtr context)
+{
+    auto asyncResult = context->GetClient()->PatchOperationSpec(
+        OperationIdOrAlias,
+        Patches,
+        Options);
+
+    WaitFor(asyncResult)
+        .ThrowOnError();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TGetOperationCommand::Register(TRegistrar registrar)
 {
     registrar.ParameterWithUniversalAccessor<std::optional<THashSet<TString>>>(
@@ -899,6 +944,7 @@ void TGetOperationCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& {
             return command->Options.IncludeRuntime;
         })
+        // COMPAT(ignat): remove this alias.
         .Alias("include_scheduler")
         .Optional(/*init*/ false);
 

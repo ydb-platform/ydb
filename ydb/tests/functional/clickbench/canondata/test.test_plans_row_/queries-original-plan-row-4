@@ -35,7 +35,7 @@
                         "PlanNodeType": "Materialize",
                         "Plans": [
                             {
-                                "Node Type": "Aggregate-Limit",
+                                "Node Type": "Aggregate-Limit-Aggregate",
                                 "Operators": [
                                     {
                                         "Inputs": [
@@ -43,7 +43,17 @@
                                                 "InternalOperatorId": 1
                                             }
                                         ],
-                                        "Name": "Aggregate"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
+                                    },
+                                    {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 2
+                                            }
+                                        ],
+                                        "Limit": "1",
+                                        "Name": "Limit"
                                     },
                                     {
                                         "Inputs": [
@@ -51,8 +61,8 @@
                                                 "ExternalPlanNodeId": 4
                                             }
                                         ],
-                                        "Limit": "1",
-                                        "Name": "Limit"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
                                     }
                                 ],
                                 "PlanNodeId": 5,
@@ -63,15 +73,25 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "Aggregate",
+                                                "Node Type": "Aggregate-Aggregate",
                                                 "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Intermediate"
+                                                    },
                                                     {
                                                         "Inputs": [
                                                             {
                                                                 "ExternalPlanNodeId": 2
                                                             }
                                                         ],
-                                                        "Name": "Aggregate"
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Final"
                                                     }
                                                 ],
                                                 "PlanNodeId": 3,
@@ -95,11 +115,13 @@
                                                                                 "InternalOperatorId": 1
                                                                             }
                                                                         ],
-                                                                        "Name": "Aggregate"
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Intermediate"
                                                                     },
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
+                                                                        "Path": "/local/clickbench/plans/row/hits",
                                                                         "ReadColumns": [
                                                                             "UserID"
                                                                         ],

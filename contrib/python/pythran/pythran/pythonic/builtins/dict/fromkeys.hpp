@@ -21,14 +21,14 @@ namespace builtins
     fromkeys(Iterable &&iter, V const &v)
     {
       types::dict<typename std::remove_reference<Iterable>::type::value_type,
-                  V> D =
-          types::empty_dict(); // Allocate default capacity to dict
+                  V>
+          D = types::empty_dict(); // Allocate default capacity to dict
       for (auto const &i : iter)
         D[i] = v;
       return D;
     }
-  }
-}
+  } // namespace dict
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

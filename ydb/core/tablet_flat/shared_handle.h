@@ -19,7 +19,7 @@ public:
     /**
      * Returns true if handle is initialized
      *
-     * Unitialized handle may not be shared with other threads.
+     * Uninitialized handle may not be shared with other threads.
      */
     bool IsInitialized() const noexcept {
         return Flags.load(std::memory_order_relaxed) != FlagsUninitialized;

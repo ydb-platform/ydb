@@ -1,6 +1,6 @@
 # Получение информации об объекте схемы
 
-Получите информацию об объекте схемы:
+Получите информацию об [объекте схемы](../../../../concepts/glossary.md#scheme-object):
 
 ```bash
 {{ ydb-cli }} scheme describe episodes --stats

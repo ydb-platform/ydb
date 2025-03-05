@@ -12,13 +12,18 @@ ELSE()
     ENDIF()
 ENDIF()
 
+
+IF (OOM_HELPER)
+    PEERDIR(yql/essentials/utils/oom_helper)
+ENDIF()
+
     SRCS(
         dqrun.cpp
     )
 
     PEERDIR(
         contrib/libs/protobuf
-        ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
+        ydb/public/sdk/cpp/src/client/persqueue_public/codecs
         ydb/library/actors/http
         library/cpp/getopt
         library/cpp/lfalloc/alloc_profiler
@@ -34,13 +39,19 @@ ENDIF()
         yql/essentials/core/file_storage/http_download
         yql/essentials/core/services
         yql/essentials/core/services/mounts
+        yql/essentials/sql
+        yql/essentials/sql/v1
+        yql/essentials/sql/v1/lexer/antlr4
+        yql/essentials/sql/v1/lexer/antlr4_ansi
+        yql/essentials/sql/v1/proto_parser/antlr4
+        yql/essentials/sql/v1/proto_parser/antlr4_ansi
         ydb/library/yql/dq/actors/input_transforms
         ydb/library/yql/dq/comp_nodes
-        ydb/library/yql/dq/actors/input_transforms
+        ydb/library/yql/dq/opt
         yql/essentials/core/dq_integration/transform
         ydb/library/yql/dq/transform
-        yql/essentials/minikql/comp_nodes/llvm14
-        yql/essentials/minikql/invoke_builtins/llvm14
+        yql/essentials/minikql/comp_nodes/llvm16
+        yql/essentials/minikql/invoke_builtins/llvm16
         ydb/library/yql/providers/clickhouse/actors
         ydb/library/yql/providers/clickhouse/provider
         yql/essentials/providers/common/comp_nodes
@@ -52,6 +63,7 @@ ENDIF()
         ydb/library/yql/providers/dq/local_gateway
         ydb/library/yql/providers/dq/provider
         ydb/library/yql/providers/dq/provider/exec
+        ydb/library/yql/providers/dq/helper
         ydb/library/yql/providers/pq/async_io
         ydb/library/yql/providers/pq/gateway/dummy
         ydb/library/yql/providers/pq/gateway/native
@@ -66,7 +78,7 @@ ENDIF()
         ydb/library/yql/providers/ydb/provider
         yql/essentials/providers/pg/provider
 
-        yql/essentials/public/udf/service/terminate_policy
+        yql/essentials/public/udf/service/exception_policy
         yql/essentials/utils/backtrace
         ydb/library/yql/utils/bindings
         yql/essentials/utils/log
@@ -75,18 +87,18 @@ ENDIF()
         yql/essentials/core/url_lister
         yql/essentials/core/pg_ext
         ydb/library/yql/providers/yt/actors
-        ydb/library/yql/providers/yt/comp_nodes/dq
+        yt/yql/providers/yt/comp_nodes/dq/llvm16
         ydb/library/yql/providers/yt/dq_task_preprocessor
-        ydb/library/yql/providers/yt/gateway/file
-        ydb/library/yql/providers/yt/gateway/native
-        ydb/library/yql/providers/yt/codec/codegen
-        ydb/library/yql/providers/yt/mkql_dq
-        ydb/library/yql/providers/yt/provider
-        ydb/library/yql/providers/yt/codec/codegen
-        ydb/library/yql/providers/yt/comp_nodes/llvm14
-        ydb/library/yql/providers/yt/lib/yt_download
-        ydb/library/yql/providers/yt/lib/yt_url_lister
-        ydb/library/yql/providers/yt/lib/config_clusters
+        yt/yql/providers/yt/gateway/file
+        yt/yql/providers/yt/gateway/native
+        yt/yql/providers/yt/codec/codegen
+        yt/yql/providers/yt/mkql_dq
+        yt/yql/providers/yt/provider
+        yt/yql/providers/yt/codec/codegen
+        yt/yql/providers/yt/comp_nodes/llvm16
+        yt/yql/providers/yt/lib/yt_download
+        yt/yql/providers/yt/lib/yt_url_lister
+        yt/yql/providers/yt/lib/config_clusters
         yql/essentials/parser/pg_wrapper
         yql/essentials/utils/log/proto
         yql/essentials/core/qplayer/storage/file

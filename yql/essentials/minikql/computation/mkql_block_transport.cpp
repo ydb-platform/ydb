@@ -2,7 +2,7 @@
 #include "mkql_block_builder.h"
 
 #include <yql/essentials/minikql/mkql_type_builder.h>
-#include <yql/essentials/public/udf/arrow/block_reader.h>
+#include <yql/essentials/public/udf/arrow/dispatch_traits.h>
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -13,7 +13,7 @@ namespace {
 using NYql::TChunkedBuffer;
 
 TChunkedBuffer MakeChunkedBufferAndUntrack(const std::shared_ptr<const arrow::Buffer>& owner, const char* data, size_t size) {
-    MKQLArrowUntrack(owner->data());
+    MKQLArrowUntrack(owner->data(), owner->capacity());
     return TChunkedBuffer(TStringBuf{data, size}, owner);
 }
 
@@ -429,6 +429,49 @@ private:
     const std::unique_ptr<TBlockDeserializerBase> Inner_;
 };
 
+class TSingularTypeBlockSerializer final: public IBlockSerializer {
+private:
+    size_t ArrayMetadataCount() const final {
+        return 0;
+    }
+
+    void StoreMetadata(const arrow::ArrayData& data, const IBlockSerializer::TMetadataSink& metaSink) const final {
+        Y_UNUSED(data, metaSink);
+    }
+
+    void StoreArray(const arrow::ArrayData& data, TChunkedBuffer& dst) const final {
+        Y_UNUSED(data, dst);
+    }
+};
+
+class TSingularTypeBlockDeserializer final: public TBlockDeserializerBase {
+private:
+    void DoLoadMetadata(const TMetadataSource& metaSource) final {
+        Y_UNUSED(metaSource);
+    }
+
+    std::shared_ptr<arrow::ArrayData> DoMakeDefaultValue(const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) const final {
+        Y_UNUSED(offset);
+        Y_ENSURE(nullsCount == 0);
+        Y_ENSURE(!nulls || nulls->size() == 0);
+        return arrow::NullArray(blockLen).data();
+    }
+
+    std::shared_ptr<arrow::ArrayData> DoLoadArray(TChunkedBuffer& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) final {
+        Y_UNUSED(offset, src);
+        Y_ENSURE(nullsCount == 0);
+        Y_ENSURE(!nulls || nulls->size() == 0);
+        return arrow::NullArray(blockLen).data();
+    }
+
+    bool IsNullable() const final {
+        return false;
+    }
+
+    void DoResetMetadata() final {
+    }
+};
+
 template<bool Nullable, typename TDerived>
 class TTupleBlockSerializerBase : public IBlockSerializer {
     size_t ArrayMetadataCount() const final {
@@ -632,7 +675,8 @@ struct TSerializerTraits {
     using TExtOptional = TExtOptionalBlockSerializer;
     template<typename TTzDateType, bool Nullable>
     using TTzDate = TTzDateBlockSerializer<TTzDateType, Nullable>;
-
+    using TSingularType = TSingularTypeBlockSerializer;
+    constexpr static bool PassType = false;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -645,6 +689,10 @@ struct TSerializerTraits {
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Serializer not implemented for block resources";
+    }
+
+    static std::unique_ptr<TResult> MakeSingular() {
+        return std::make_unique<TSingularType>();
     }
 
     template<typename TTzDateType>
@@ -669,6 +717,9 @@ struct TDeserializerTraits {
     using TExtOptional = TExtOptionalBlockDeserializer;
     template<typename TTzDateType, bool Nullable>
     using TTzDate = TTzDateBlockDeserializer<TTzDateType, Nullable>;
+    using TSingularType = TSingularTypeBlockDeserializer;
+
+    constexpr static bool PassType = false;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -681,6 +732,10 @@ struct TDeserializerTraits {
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Deserializer not implemented for block resources";
+    }
+
+    static std::unique_ptr<TResult> MakeSingular() {
+        return std::make_unique<TSingularType>();
     }
 
     template<typename TTzDateType>
@@ -698,11 +753,11 @@ struct TDeserializerTraits {
 
 
 std::unique_ptr<IBlockSerializer> MakeBlockSerializer(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper, const NYql::NUdf::TType* type) {
-    return NYql::NUdf::MakeBlockReaderImpl<TSerializerTraits>(typeInfoHelper, type, nullptr);
+    return NYql::NUdf::DispatchByArrowTraits<TSerializerTraits>(typeInfoHelper, type, nullptr);
 }
 
 std::unique_ptr<IBlockDeserializer> MakeBlockDeserializer(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper, const NYql::NUdf::TType* type) {
-    std::unique_ptr<TBlockDeserializerBase> result =  NYql::NUdf::MakeBlockReaderImpl<TDeserializerTraits>(typeInfoHelper, type, nullptr);
+    std::unique_ptr<TBlockDeserializerBase> result =  NYql::NUdf::DispatchByArrowTraits<TDeserializerTraits>(typeInfoHelper, type, nullptr);
     result->SetArrowType(NYql::NUdf::GetArrowType(typeInfoHelper, type));
     return std::move(result);
 }

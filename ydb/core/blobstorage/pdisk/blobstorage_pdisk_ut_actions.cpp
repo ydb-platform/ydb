@@ -267,16 +267,18 @@ void TTestIncorrectRequests::TestFSM(const TActorContext &ctx) {
     case 170:
         TEST_RESPONSE(EvChunkWriteResult, ERROR);
         VERBOSE_COUT(" Sending TEvChunkWrite that actually does the thing");
-        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx0, ChunkWriteData.size(),
+        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx0, 0,
             new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
         break;
-    case 180:
+    case 180: {
         TEST_RESPONSE(EvChunkWriteResult, OK);
         ChunkIdx = LastResponse.ChunkIdx;
+        size_t blockSize = LastResponse.AppendBlockSize;
         VERBOSE_COUT(" Sending TEvChunkWrite");
-        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, ChunkWriteData.size() / 2,
+        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, ChunkWriteData.size() / 2 / blockSize * blockSize,
             new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
         break;
+    }
     case 190:
         TEST_RESPONSE(EvChunkWriteResult, OK);
         VERBOSE_COUT(" Sending TEvInit for invalid id");
@@ -1115,9 +1117,9 @@ void TTestChunkUnlockRestart::TestFSM(const TActorContext &ctx) {
     switch (TestStep) {
     case 0:
         WhiteboardID = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(WhiteboardID, SelfId());
+        ctx.ActorSystem()->RegisterLocalService(WhiteboardID, SelfId());
         NodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(NodeWardenId, SelfId());
+        ctx.ActorSystem()->RegisterLocalService(NodeWardenId, SelfId());
         ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
         VERBOSE_COUT(" Sending TEvInit");
         ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid, TActorId(), SelfId()));
@@ -1136,7 +1138,7 @@ void TTestChunkUnlockRestart::TestFSM(const TActorContext &ctx) {
             SignalDoneEvent();
             break;
         }
-        ctx.Send(NodeWardenId, new TEvBlobStorage::TEvAskWardenRestartPDisk(LastResponse.whiteboardPDiskResult->Record.GetPDiskId()));
+        ctx.Send(NodeWardenId, new TEvBlobStorage::TEvAskWardenRestartPDisk(LastResponse.whiteboardPDiskResult->Record.GetPDiskId(), false));
         break;
     case 30:
         TEST_RESPONSE(EvHarakiri, OK);
@@ -1322,9 +1324,9 @@ void TTestWhiteboard::TestFSM(const TActorContext &ctx) {
     {
         ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
         TActorId whiteboardID = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(whiteboardID, SelfId());
+        ctx.ActorSystem()->RegisterLocalService(whiteboardID, SelfId());
         TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(nodeWardenId, SelfId());
+        ctx.ActorSystem()->RegisterLocalService(nodeWardenId, SelfId());
         for (int owner = 0; owner < ExpectedOwnerCount; ++owner) {
             ctx.Send(Yard, new NPDisk::TEvYardInit(2, TVDiskID(TGroupId::Zero(), 0, 0, 0, owner), *PDiskGuid, TActorId(), SelfId()));
         }
@@ -3411,7 +3413,7 @@ void TTestChunkDeletionWhileWritingIt::TestFSM(const TActorContext &ctx) {
         ChunkWriteData = PrepareData(ChunkSize - 1);
         ChunkWriteParts[0].Data = ChunkWriteData.data();
         ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
-        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 1,
+        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0,
             new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 5));
 
         VERBOSE_COUT(" Sending TEvLog to commit");

@@ -38,6 +38,14 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
             Y_ABORT("Unexpected");
         }
 
+        TActorId RegisterAlias() noexcept {
+            Y_ABORT("Unexpected");
+        }
+
+        void UnregisterAlias(const TActorId&) noexcept {
+            Y_ABORT("Unexpected");
+        }
+
         ~MockActorOps() {
             for (auto [_, ptr] : Events) {
                 std::unique_ptr<IEventBase> p;

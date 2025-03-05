@@ -1,7 +1,0 @@
-<tmp_path>/program.sql:<main>: Info: DQ cannot execute the query
-
-    <tmp_path>/program.sql:<main>: Info: Optimization
-    
-        <tmp_path>/program.sql:<main>:7:32: Info: Cannot execute self join in DQ
-        	discard select * from Input as a join Input as b using(key);
-	                               ^

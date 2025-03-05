@@ -193,15 +193,19 @@ namespace NKikimr::NStorage {
             // we do not have relevant group configuration, but we know that there is one, so reset the configuration
             // for group/proxy and ask BSC for group info
             group.Info.Reset();
+            group.NodeLayoutInfo.Reset();
             RequestGroupConfig(groupId, group);
             if (group.ProxyId) {
-                Send(group.ProxyId, new TEvBlobStorage::TEvConfigureProxy(nullptr));
+                Send(group.ProxyId, new TEvBlobStorage::TEvConfigureProxy(nullptr, nullptr));
             }
         } else if (groupChanged) {
             // group has changed; obtain main encryption key for this group and try to parse group info from the protobuf
             auto& mainKey = GetGroupMainKey(groupId);
             TStringStream err;
             group.Info = TBlobStorageGroupInfo::Parse(*currentGroup, &mainKey, &err);
+            if (group.Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
+                group.NodeLayoutInfo = MakeIntrusive<TNodeLayoutInfo>(NodeLocationMap[LocalNodeId], group.Info, NodeLocationMap);
+            }
             Y_ABORT_UNLESS(group.EncryptionParams.HasEncryptionMode());
             if (const TString& s = err.Str()) {
                 STLOG(PRI_ERROR, BS_NODE, NW19, "error while parsing group", (GroupId, groupId), (Err, s));
@@ -224,7 +228,8 @@ namespace NKikimr::NStorage {
 
                 // forward ConfigureProxy anyway, because when we switch to BlobDepot agent, we still need to update
                 // ds proxy configuration
-                Send(group.ProxyId, new TEvBlobStorage::TEvConfigureProxy(std::move(info), std::move(counters)));
+                Send(group.ProxyId, new TEvBlobStorage::TEvConfigureProxy(std::move(info), group.NodeLayoutInfo,
+                    std::move(counters)));
             }
 
             if (const auto& info = group.Info) {

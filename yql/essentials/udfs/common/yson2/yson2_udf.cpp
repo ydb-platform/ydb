@@ -795,6 +795,7 @@ protected:
     static const TType* CheckType(const ITypeInfoHelper::TPtr typeHelper, const TType* shape) {
         switch (const auto kind = typeHelper->GetTypeKind(shape)) {
             case ETypeKind::Null:
+            case ETypeKind::Void:
             case ETypeKind::EmptyList:
             case ETypeKind::EmptyDict:
                 return MoreTypesAllowed ? nullptr : shape;

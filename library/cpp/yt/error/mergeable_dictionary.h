@@ -1,6 +1,10 @@
 #pragma once
 
-#include "public.h"
+#include "error_attribute.h"
+
+#include <library/cpp/yt/memory/type_erasure.h>
+
+#include <library/cpp/yt/misc/tag_invoke_cpo.h>
 
 #include <ranges>
 
@@ -8,49 +12,34 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Can be specialized to make your dictionary satisfy CMergeableDictionary.
-template <class TDictionary>
-struct TMergeDictionariesTraits
-{
-    static auto MakeIterableView(const TDictionary& dict)
-        requires false;
-};
+namespace NMergeableRangeImpl {
+
+struct TFn
+    : public TTagInvokeCpoBase<TFn>
+{ };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NDetail {
+using TMergeableRange = std::vector<std::pair<TErrorAttribute::TKey, TErrorAttribute::TValue>>;
 
-template <class T>
-struct TMergeableDictionaryImpl
-{
-    using TView = std::invoke_result_t<decltype(&TMergeDictionariesTraits<T>::MakeIterableView), const T&>;
-    using TIterator = std::ranges::iterator_t<TView>;
-    using TValue = typename std::iterator_traits<TIterator>::value_type;
+} // namespace NMergeableRangeImpl
 
-    static constexpr bool ValidSize = requires {
-        { std::tuple_size<TValue>::value } -> std::same_as<const size_t&>;
-    } && (std::tuple_size<TValue>::value == 2);
+////////////////////////////////////////////////////////////////////////////////
 
-    static constexpr bool CorrectTupleElements = requires {
-        typename std::tuple_element<0, TValue>::type;
-        std::same_as<typename std::tuple_element<0, TValue>::type, TString>;
-
-        typename std::tuple_element<1, TValue>::type;
-        std::same_as<typename std::tuple_element<1, TValue>::type, NYson::TYsonString>;
-    };
-};
-
-} // namespace NDetail
+// Can be customized to make your dictionary satisfy CMergeableDictionary.
+inline constexpr NMergeableRangeImpl::TFn AsMergeableRange = {};
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-concept CMergeableDictionary =
-    requires (const T& dict) {
-        TMergeDictionariesTraits<T>::MakeIterableView(dict);
-    } &&
-    NDetail::TMergeableDictionaryImpl<T>::ValidSize &&
-    NDetail::TMergeableDictionaryImpl<T>::CorrectTupleElements;
+concept CMergeableDictionary = CTagInvocableS<
+    TTagInvokeTag<AsMergeableRange>,
+    NMergeableRangeImpl::TMergeableRange(const T&)>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+using TAnyMergeableDictionaryRef = TAnyRef<
+    TOverload<AsMergeableRange, NMergeableRangeImpl::TMergeableRange(const TErasedThis&)>>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

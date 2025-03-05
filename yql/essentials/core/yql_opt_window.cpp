@@ -250,7 +250,7 @@ TExprNode::TPtr ApplyDistinctForUpdateLambda(TExprNode::TPtr updateLambda, const
 
     auto expandedDistinctKeyType = ExpandType(updateLambda->Pos(), distinctKeyType, ctx);
     auto expandedDistinctKeyOrigType = ExpandType(updateLambda->Pos(), distinctKeyOrigType, ctx);
-    
+
     auto setAddValueUdf = ctx.Builder(updateLambda->Pos())
         .Callable("Udf")
             .Atom(0, "Set.AddValue")
@@ -480,7 +480,7 @@ TCalcOverWindowTraits ExtractCalcOverWindowTraits(const TExprNode::TPtr& frames,
                 YQL_ENSURE(rawTraits.OutputType);
 
                 auto lambdaInputType = traits->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-                
+
                 if (item->ChildrenSize() == 3) {
                     auto distinctKey = item->Child(2)->Content();
 
@@ -2293,7 +2293,7 @@ TExprNode::TPtr BuildFold1Lambda(TPositionHandle pos, const TExprNode::TPtr& fra
                         lambda = ReplaceLastLambdaArgWithUnsignedLiteral(*lambda, i, ctx);
                     }
                     YQL_ENSURE(lambda->Child(0)->ChildrenSize() == 2);
-                    
+
                     applied = ctx.Builder(pos)
                         .Apply(lambda)
                             .With(0, arg1)
@@ -2822,7 +2822,7 @@ bool NeedPartitionRows(const TExprNode::TPtr& frames, const TStructExprType& row
             return true;
         }
     }
-    
+
     return false;
 }
 
@@ -2838,14 +2838,14 @@ TString AllocatePartitionRowsColumn(const TStructExprType& rowType) {
     }
 }
 
-TExprNode::TPtr AddPartitionRowsColumn(TPositionHandle pos, const TExprNode::TPtr& input, const TExprNode::TPtr& keyColumns, 
+TExprNode::TPtr AddPartitionRowsColumn(TPositionHandle pos, const TExprNode::TPtr& input, const TExprNode::TPtr& keyColumns,
     const TString& columnName, TExprContext& ctx, TTypeAnnotationContext& types) {
     auto exportsPtr = types.Modules->GetModule("/lib/yql/window.yql");
     YQL_ENSURE(exportsPtr);
     const auto& exports = exportsPtr->Symbols();
     const auto ex = exports.find("count_traits_factory");
     YQL_ENSURE(exports.cend() != ex);
-    TNodeOnNodeOwnedMap deepClones;    
+    TNodeOnNodeOwnedMap deepClones;
     auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, true, false);
     auto listTypeNode = ctx.NewCallable(pos, "TypeOf", {input});
     auto extractor = ctx.Builder(pos)
@@ -2862,7 +2862,7 @@ TExprNode::TPtr AddPartitionRowsColumn(TPositionHandle pos, const TExprNode::TPt
     });
 
     ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-    auto status = ExpandApply(traits, traits, ctx);
+    auto status = ExpandApplyNoRepeat(traits, traits, ctx);
     YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
 
     return ctx.Builder(pos)

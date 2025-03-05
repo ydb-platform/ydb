@@ -4,9 +4,7 @@ FORK_SUBTESTS()
 
 SIZE(LARGE)
 
-TIMEOUT(3600)
-
-TAG(ya:fat)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 SRCS(
     replication.cpp

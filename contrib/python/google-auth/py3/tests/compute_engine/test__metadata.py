@@ -346,12 +346,32 @@ def test_get_return_none_for_not_found_error():
 @mock.patch("time.sleep", return_value=None)
 def test_get_failure_connection_failed(mock_sleep):
     request = make_request("")
-    request.side_effect = exceptions.TransportError()
+    request.side_effect = exceptions.TransportError("failure message")
 
     with pytest.raises(exceptions.TransportError) as excinfo:
         _metadata.get(request, PATH)
 
-    assert excinfo.match(r"Compute Engine Metadata server unavailable")
+    assert excinfo.match(
+        r"Compute Engine Metadata server unavailable due to failure message"
+    )
+
+    request.assert_called_with(
+        method="GET",
+        url=_metadata._METADATA_ROOT + PATH,
+        headers=_metadata._METADATA_HEADERS,
+    )
+    assert request.call_count == 5
+
+
+def test_get_too_many_requests_retryable_error_failure():
+    request = make_request("too many requests", status=http_client.TOO_MANY_REQUESTS)
+
+    with pytest.raises(exceptions.TransportError) as excinfo:
+        _metadata.get(request, PATH)
+
+    assert excinfo.match(
+        r"Compute Engine Metadata server unavailable due to too many requests"
+    )
 
     request.assert_called_with(
         method="GET",
@@ -399,7 +419,7 @@ def test_get_universe_domain_success():
 
     request.assert_called_once_with(
         method="GET",
-        url=_metadata._METADATA_ROOT + "universe/universe_domain",
+        url=_metadata._METADATA_ROOT + "universe/universe-domain",
         headers=_metadata._METADATA_HEADERS,
     )
     assert universe_domain == "fake_universe_domain"
@@ -412,7 +432,7 @@ def test_get_universe_domain_success_empty_response():
 
     request.assert_called_once_with(
         method="GET",
-        url=_metadata._METADATA_ROOT + "universe/universe_domain",
+        url=_metadata._METADATA_ROOT + "universe/universe-domain",
         headers=_metadata._METADATA_HEADERS,
     )
     assert universe_domain == "googleapis.com"
@@ -427,7 +447,7 @@ def test_get_universe_domain_not_found():
 
     request.assert_called_once_with(
         method="GET",
-        url=_metadata._METADATA_ROOT + "universe/universe_domain",
+        url=_metadata._METADATA_ROOT + "universe/universe-domain",
         headers=_metadata._METADATA_HEADERS,
     )
     assert universe_domain == "googleapis.com"
@@ -447,7 +467,7 @@ def test_get_universe_domain_retryable_error_failure():
 
     request.assert_called_with(
         method="GET",
-        url=_metadata._METADATA_ROOT + "universe/universe_domain",
+        url=_metadata._METADATA_ROOT + "universe/universe-domain",
         headers=_metadata._METADATA_HEADERS,
     )
     assert request.call_count == 5
@@ -489,12 +509,12 @@ def test_get_universe_domain_retryable_error_success():
 
     request_error.assert_called_once_with(
         method="GET",
-        url=_metadata._METADATA_ROOT + "universe/universe_domain",
+        url=_metadata._METADATA_ROOT + "universe/universe-domain",
         headers=_metadata._METADATA_HEADERS,
     )
     request_ok.assert_called_once_with(
         method="GET",
-        url=_metadata._METADATA_ROOT + "universe/universe_domain",
+        url=_metadata._METADATA_ROOT + "universe/universe-domain",
         headers=_metadata._METADATA_HEADERS,
     )
 
@@ -513,7 +533,7 @@ def test_get_universe_domain_other_error():
 
     request.assert_called_once_with(
         method="GET",
-        url=_metadata._METADATA_ROOT + "universe/universe_domain",
+        url=_metadata._METADATA_ROOT + "universe/universe-domain",
         headers=_metadata._METADATA_HEADERS,
     )
 

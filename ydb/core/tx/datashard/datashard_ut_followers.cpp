@@ -2,6 +2,7 @@
 #include "datashard_ut_common_kqp.h"
 #include "datashard_ut_read_table.h"
 
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/library/actors/core/mon.h>
 
 namespace NKikimr {
@@ -718,6 +719,71 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             "{ items { uint32_value: 2 } items { uint32_value: 55 } }, "
             "{ items { uint32_value: 3 } items { uint32_value: 66 } }");
         UNIT_ASSERT_EQUAL(readDataPages, 3);
+    }
+
+    Y_UNIT_TEST(FollowerReadDuringSplit) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key Uint32, value Uint32, PRIMARY KEY (key))
+                WITH (READ_REPLICAS_SETTINGS = "PER_AZ:1");
+            )"),
+            "SUCCESS");
+
+        auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1UL);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table` (key, value) VALUES (1, 11), (2, 22), (3, 33);");
+
+        // Wait for leader to promote the follower read edge (and stop writing to the Sys table)
+        Cerr << "... sleeping after upsert" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        auto modifyReads = runtime.AddObserver<TEvDataShard::TEvRead>(
+            [&](TEvDataShard::TEvRead::TPtr& ev) {
+                ev->Get()->Record.SetMaxRowsInResult(1);
+            });
+        TBlockEvents<TEvDataShard::TEvReadContinue> blockedContinue(runtime);
+
+        auto readFuture = KqpSimpleStaleRoSend(runtime, "SELECT key, value FROM `/Root/table` ORDER BY key", "/Root");
+        runtime.WaitFor("the first TEvReadContinue", [&]{ return blockedContinue.size() >= 1; });
+
+        Cerr << "... splitting table at key 3" << Endl;
+        SetSplitMergePartCountLimit(&runtime, -1);
+        ui64 txId = AsyncSplitTable(server, sender, "/Root/table", shards.at(0), 3);
+        WaitTxNotification(server, sender, txId);
+
+        blockedContinue.Unblock().Stop();
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(runtime.WaitFuture(std::move(readFuture))),
+            "ERROR: UNAVAILABLE");
+
+        Cerr << "... reading from the left follower" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime, "SELECT key, value FROM `/Root/table` WHERE key < 3 ORDER BY key"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } }");
+        Cerr << "... reading from the right follower" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleStaleRoExec(runtime, "SELECT key, value FROM `/Root/table` WHERE key >= 3 ORDER BY key"),
+            "{ items { uint32_value: 3 } items { uint32_value: 33 } }");
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardFollowers)

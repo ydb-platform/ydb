@@ -10,7 +10,6 @@
 #include <yt/yt/client/table_client/table_output.h>
 #include <yt/yt/client/table_client/value_consumer.h>
 
-
 namespace NYT::NDriver {
 
 using namespace NConcurrency;
@@ -25,6 +24,18 @@ void TStartShuffleCommand::Register(TRegistrar registrar)
     registrar.Parameter("account", &TThis::Account);
     registrar.Parameter("partition_count", &TThis::PartitionCount);
     registrar.Parameter("parent_transaction_id", &TThis::ParentTransactionId);
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
+        "medium",
+        [] (TThis* command) -> auto& {
+            return command->Options.Medium;
+        })
+        .Default();
+    registrar.ParameterWithUniversalAccessor<std::optional<int>>(
+        "replication_factor",
+        [] (TThis* command) -> auto& {
+            return command->Options.ReplicationFactor;
+        })
+        .Default();
 }
 
 void TStartShuffleCommand::DoExecute(ICommandContextPtr context)
@@ -60,6 +71,7 @@ void TReadShuffleDataCommand::DoExecute(ICommandContextPtr context)
         format,
         reader->GetNameTable(),
         /*tableSchemas*/ {New<TTableSchema>()},
+        /*columns*/ {std::nullopt},
         context->Request().OutputStream,
         /*enableContextSaving*/ false,
         New<TControlAttributesConfig>(),

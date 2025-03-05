@@ -3,7 +3,7 @@
 #include "grpc_request_base.h"
 #include "logger.h"
 
-#include <ydb/library/grpc/common/constants.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/common/constants.h>
 #include <library/cpp/threading/future/future.h>
 
 #include <util/generic/ptr.h>
@@ -17,6 +17,10 @@
 #include <util/thread/factory.h>
 
 #include <grpcpp/grpcpp.h>
+
+namespace NMonitoring {
+    struct TDynamicCounters;
+} // NMonitoring
 
 namespace NYdbGrpc {
 
@@ -349,8 +353,11 @@ protected:
 class TGRpcServer {
 public:
     using IGRpcServicePtr = TIntrusivePtr<IGRpcService>;
-    TGRpcServer(const TServerOptions& opts);
+
+    // TODO: remove default nullptr after migration
+    TGRpcServer(const TServerOptions& opts, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = nullptr);
     ~TGRpcServer();
+
     void AddService(IGRpcServicePtr service);
     void Start();
     // Send stop to registred services and call Shutdown on grpc server
@@ -365,6 +372,7 @@ private:
     using IThreadRef = TAutoPtr<IThreadFactory::IThread>;
 
     const TServerOptions Options_;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
     std::unique_ptr<grpc::Server> Server_;
     std::vector<std::unique_ptr<grpc::ServerCompletionQueue>> CQS_;
     TVector<IThreadRef> Ts;

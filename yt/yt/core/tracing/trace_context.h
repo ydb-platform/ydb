@@ -49,11 +49,6 @@ ITracerPtr GetGlobalTracer();
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void SetTracingTransportConfig(TTracingTransportConfigPtr config);
-TTracingTransportConfigPtr GetTracingTransportConfig();
-
-////////////////////////////////////////////////////////////////////////////////
-
 DEFINE_ENUM(ETraceContextState,
     (Disabled) // Used to propagate TraceId, RequestId and LoggingTag.
     (Recorded) // May be sampled later.
@@ -75,7 +70,7 @@ DEFINE_ENUM(ETraceContextState,
  *
  *  By default, child objects inherit TraceId, RequestId and LoggingTag from the parent.
  *
- *  \note Thread affininty: any unless noted otherwise.
+ *  \note Thread affinity: any unless noted otherwise.
  */
 class TTraceContext
     : public TRefCounted
@@ -113,14 +108,14 @@ public:
     TSpanId GetSpanId() const;
     TSpanId GetParentSpanId() const;
     bool IsDebug() const;
-    const TString& GetSpanName() const;
+    const std::string& GetSpanName() const;
 
     //! Sets target endpoint.
     /*!
      *  Not thread-safe.
      */
-    void SetTargetEndpoint(const std::optional<TString>& targetEndpoint);
-    const std::optional<TString>& GetTargetEndpoint() const;
+    void SetTargetEndpoint(const std::optional<std::string>& targetEndpoint);
+    const std::optional<std::string>& GetTargetEndpoint() const;
 
     //! Sets request id.
     /*!
@@ -145,8 +140,8 @@ public:
     /*!
      *  Not thread-safe.
      */
-    void SetLoggingTag(const TString& loggingTag);
-    const TString& GetLoggingTag() const;
+    void SetLoggingTag(const std::string& loggingTag);
+    const std::string& GetLoggingTag() const;
 
     TInstant GetStartTime() const;
 
@@ -176,11 +171,11 @@ public:
     struct TTraceLogEntry
     {
         NProfiling::TCpuInstant At;
-        TString Message;
+        std::string Message;
     };
     using TLogList = TCompactVector<TTraceLogEntry, 4>;
     TLogList GetLogEntries() const;
-    void AddLogEntry(NProfiling::TCpuInstant at, TString message);
+    void AddLogEntry(NProfiling::TCpuInstant at, std::string message);
 
     using TAsyncChildrenList = TCompactVector<TTraceId, 4>;
     TAsyncChildrenList GetAsyncChildren() const;
@@ -201,7 +196,7 @@ public:
     static TTraceContextPtr NewChildFromSpan(
         TSpanContext parentSpanContext,
         const std::string& spanName,
-        std::optional<TString> endpoint = {},
+        std::optional<std::string> endpoint = {},
         NYson::TYsonString baggage = NYson::TYsonString());
 
     TTraceContextPtr CreateChild(
@@ -213,8 +208,12 @@ public:
 
     using TProfilingTagValue = std::variant<std::string, i64>;
     std::vector<std::pair<std::string, TProfilingTagValue>> GetProfilingTags();
+    void SetProfilingTags(std::vector<std::pair<std::string, TProfilingTagValue>> profilingTags);
 
-    friend void ToProto(NProto::TTracingExt* ext, const TTraceContextPtr& context);
+    friend void ToProto(
+        NProto::TTracingExt* ext,
+        const TTraceContextPtr& context,
+        bool sendBaggage);
 
 private:
     const TTraceId TraceId_;
@@ -227,10 +226,10 @@ private:
     bool Propagated_ = true;
 
     const TTraceContextPtr ParentContext_;
-    const TString SpanName_;
+    const std::string SpanName_;
     TRequestId RequestId_;
-    std::optional<TString> TargetEndpoint_;
-    TString LoggingTag_;
+    std::optional<std::string> TargetEndpoint_;
+    std::string LoggingTag_;
     const NProfiling::TCpuInstant StartTime_;
 
     std::atomic<bool> Finished_ = false;
@@ -278,7 +277,7 @@ TTraceContext* GetCurrentTraceContext();
 //! Flushes the elapsed time of the current trace context (if any).
 void FlushCurrentTraceContextElapsedTime();
 
-//!
+//! Returns a trace context from #storage (null if there is none).
 TTraceContext* TryGetTraceContextFromPropagatingStorage(const NConcurrency::TPropagatingStorage& storage);
 
 //! Creates a new trace context. If the current trace context exists, it becomes the parent of the

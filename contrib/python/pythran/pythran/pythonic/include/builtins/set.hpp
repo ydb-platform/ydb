@@ -17,9 +17,9 @@ namespace builtins
     inline types::set<typename std::iterator_traits<
         typename std::remove_reference<Iterable>::type::iterator>::value_type>
     set(Iterable &&t);
-  }
+  } // namespace anonymous
 
   DEFINE_FUNCTOR(pythonic::builtins::anonymous, set);
-}
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

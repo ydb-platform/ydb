@@ -77,7 +77,7 @@ TString CombinePaths(const std::vector<TString>& paths);
 void CleanTempFiles(const TString& path);
 
 //! Returns all files in a given directory.
-std::vector<TString> EnumerateFiles(const TString& path, int depth = 1);
+std::vector<TString> EnumerateFiles(const TString& path, int depth = 1, bool sortByName = false);
 
 //! Returns all directories in a given directory.
 std::vector<TString> EnumerateDirectories(const TString& path, int depth = 1);

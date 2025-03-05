@@ -1,4 +1,5 @@
 //  Copyright (c) 2006 Xiaogang Zhang, 2015 John Maddock.
+//  Copyright (c) 2024 Matt Borland
 //  Use, modification and distribution are subject to the
 //  Boost Software License, Version 1.0. (See accompanying file
 //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -16,10 +17,10 @@
 #pragma once
 #endif
 
+#include <boost/math/tools/config.hpp>
+#include <boost/math/tools/promotion.hpp>
 #include <boost/math/special_functions/math_fwd.hpp>
 #include <boost/math/special_functions/ellint_rc.hpp>
-#include <boost/math/special_functions/pow.hpp>
-#include <boost/math/tools/config.hpp>
 #include <boost/math/policies/error_handling.hpp>
 
 // Carlson's elliptic integral of the second kind
@@ -29,12 +30,11 @@
 namespace boost { namespace math { namespace detail{
 
 template <typename T, typename Policy>
-T ellint_rd_imp(T x, T y, T z, const Policy& pol)
+BOOST_MATH_GPU_ENABLED T ellint_rd_imp(T x, T y, T z, const Policy& pol)
 {
    BOOST_MATH_STD_USING
-   using std::swap;
 
-   static const char* function = "boost::math::ellint_rd<%1%>(%1%,%1%,%1%)";
+   constexpr auto function = "boost::math::ellint_rd<%1%>(%1%,%1%,%1%)";
 
    if(x < 0)
    {
@@ -55,9 +55,11 @@ T ellint_rd_imp(T x, T y, T z, const Policy& pol)
    //
    // Special cases from http://dlmf.nist.gov/19.20#iv
    //
-   using std::swap;
+
    if(x == z)
-      swap(x, y);
+   {
+      BOOST_MATH_GPU_SAFE_SWAP(x, y);
+   }
    if(y == z)
    {
       if(x == y)
@@ -70,19 +72,21 @@ T ellint_rd_imp(T x, T y, T z, const Policy& pol)
       }
       else
       {
-         if((std::max)(x, y) / (std::min)(x, y) > T(1.3))
+         if(BOOST_MATH_GPU_SAFE_MAX(x, y) / BOOST_MATH_GPU_SAFE_MIN(x, y) > T(1.3))
             return 3 * (ellint_rc_imp(x, y, pol) - sqrt(x) / y) / (2 * (y - x));
          // Otherwise fall through to avoid cancellation in the above (RC(x,y) -> 1/x^0.5 as x -> y)
       }
    }
    if(x == y)
    {
-      if((std::max)(x, z) / (std::min)(x, z) > T(1.3))
+      if(BOOST_MATH_GPU_SAFE_MAX(x, z) / BOOST_MATH_GPU_SAFE_MIN(x, z) > T(1.3))
          return 3 * (ellint_rc_imp(z, x, pol) - 1 / sqrt(z)) / (z - x);
       // Otherwise fall through to avoid cancellation in the above (RC(x,y) -> 1/x^0.5 as x -> y)
    }
    if(y == 0)
-      swap(x, y);
+   {
+      BOOST_MATH_GPU_SAFE_SWAP(x, y);
+   }
    if(x == 0)
    {
       //
@@ -102,7 +106,8 @@ T ellint_rd_imp(T x, T y, T z, const Policy& pol)
          xn = (xn + yn) / 2;
          yn = t;
          sum_pow *= 2;
-         sum += sum_pow * boost::math::pow<2>(xn - yn);
+         const auto temp = (xn - yn);
+         sum += sum_pow * temp * temp;
       }
       T RF = constants::pi<T>() / (xn + yn);
       //
@@ -128,7 +133,7 @@ T ellint_rd_imp(T x, T y, T z, const Policy& pol)
    T An = (x + y + 3 * z) / 5;
    T A0 = An;
    // This has an extra 1.2 fudge factor which is really only needed when x, y and z are close in magnitude:
-   T Q = pow(tools::epsilon<T>() / 4, -T(1) / 8) * (std::max)((std::max)(An - x, An - y), An - z) * 1.2f;
+   T Q = pow(tools::epsilon<T>() / 4, -T(1) / 8) * BOOST_MATH_GPU_SAFE_MAX(BOOST_MATH_GPU_SAFE_MAX(An - x, An - y), An - z) * 1.2f;
    BOOST_MATH_INSTRUMENT_VARIABLE(Q);
    T lambda, rx, ry, rz;
    unsigned k = 0;
@@ -177,7 +182,7 @@ T ellint_rd_imp(T x, T y, T z, const Policy& pol)
 } // namespace detail
 
 template <class T1, class T2, class T3, class Policy>
-inline typename tools::promote_args<T1, T2, T3>::type 
+BOOST_MATH_GPU_ENABLED inline typename tools::promote_args<T1, T2, T3>::type 
    ellint_rd(T1 x, T2 y, T3 z, const Policy& pol)
 {
    typedef typename tools::promote_args<T1, T2, T3>::type result_type;
@@ -190,7 +195,7 @@ inline typename tools::promote_args<T1, T2, T3>::type
 }
 
 template <class T1, class T2, class T3>
-inline typename tools::promote_args<T1, T2, T3>::type 
+BOOST_MATH_GPU_ENABLED inline typename tools::promote_args<T1, T2, T3>::type 
    ellint_rd(T1 x, T2 y, T3 z)
 {
    return ellint_rd(x, y, z, policies::policy<>());

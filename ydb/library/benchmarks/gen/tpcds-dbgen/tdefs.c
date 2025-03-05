@@ -71,7 +71,7 @@ GetRowcountByName(char *szName)
     int nTable = -1;
     
     nTable = GetTableNumber(szName);
-    if (nTable >= 0)
+    if (nTable > 0)
         return(get_rowcount(nTable - 1));
 
     nTable = distsize(szName);
@@ -146,11 +146,22 @@ getTdefsByNumber(int nTable)
         return(&w_tdefs[nTable]);
 }
 */
+
+void checkTdefsSize(int nTable) {
+   // Prevent array overflow. Fixing coverity issue OVERRUN
+   if (nTable < 0 || nTable >= (int)(sizeof(s_tdefs) / sizeof(s_tdefs[0]))) {
+      INTERNAL("Array s_tdefs overflow");
+      exit(EXIT_FAILURE);
+   }
+}
+
 tdef *
 getSimpleTdefsByNumber(int nTable)
 {
-   if (nTable >= S_BRAND)
+   if (nTable >= S_BRAND) {
+      checkTdefsSize(nTable - S_BRAND);
       return(&s_tdefs[nTable - S_BRAND]);
+   }
    return(&w_tdefs[nTable]);
 }
 
@@ -159,6 +170,7 @@ getTdefsByNumber(int nTable)
 {
    if (is_set("UPDATE") && is_set("VALIDATE"))
    {
+      checkTdefsSize(nTable);
       if (s_tdefs[nTable].flags & FL_PASSTHRU)
       {
          switch(nTable + S_BRAND)

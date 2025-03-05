@@ -3,8 +3,8 @@
 
 #include "pythonic/include/numpy/tri.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -24,7 +24,7 @@ namespace numpy
           out[i][j] = 1;
     return out;
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

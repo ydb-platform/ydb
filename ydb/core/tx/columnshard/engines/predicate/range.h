@@ -20,6 +20,12 @@ public:
         return PredicateFrom.IsEmpty() && PredicateTo.IsEmpty();
     }
 
+    bool IsPointRange(const std::shared_ptr<arrow::Schema>& pkSchema) const {
+        return PredicateFrom.GetCompareType() == NArrow::ECompareType::GREATER_OR_EQUAL &&
+               PredicateTo.GetCompareType() == NArrow::ECompareType::LESS_OR_EQUAL && PredicateFrom.IsEqualPointTo(PredicateTo) &&
+               PredicateFrom.IsSchemaEqualTo(pkSchema);
+    }
+
     const TPredicateContainer& GetPredicateFrom() const {
         return PredicateFrom;
     }
@@ -32,16 +38,16 @@ public:
 
     NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const;
 
-    bool IsPortionInUsage(const TPortionInfo& info) const;
+    bool IsUsed(const TPortionInfo& info) const;
     bool CheckPoint(const NArrow::TReplaceKey& point) const;
 
     enum class EUsageClass {
-        DontUsage,
+        NoUsage,
         PartialUsage,
         FullUsage
     };
 
-    EUsageClass IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
+    EUsageClass GetUsageClass(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
 
     std::set<ui32> GetColumnIds(const TIndexInfo& indexInfo) const;
     TString DebugString() const;

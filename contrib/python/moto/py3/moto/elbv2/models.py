@@ -3,14 +3,15 @@ import re
 from jinja2 import Template
 from botocore.exceptions import ParamValidationError
 from collections import OrderedDict
+from typing import Any, List, Dict, Iterable, Optional
 from moto.core.exceptions import RESTError
-from moto.core import get_account_id, BaseBackend, BaseModel, CloudFormationModel
+from moto.core import BaseBackend, BaseModel, CloudFormationModel
 from moto.core.utils import (
     iso_8601_datetime_with_milliseconds,
-    get_random_hex,
     BackendDict,
 )
 from moto.ec2.models import ec2_backends
+from moto.moto_api._internal import mock_random
 from moto.utilities.tagging_service import TaggingService
 from .utils import make_arn_for_target_group
 from .utils import make_arn_for_load_balancer
@@ -172,11 +173,11 @@ class FakeTargetGroup(CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
         properties = cloudformation_json["Properties"]
 
-        elbv2_backend = elbv2_backends[region_name]
+        elbv2_backend = elbv2_backends[account_id][region_name]
 
         vpc_id = properties.get("VpcId")
         protocol = properties.get("Protocol")
@@ -268,11 +269,11 @@ class FakeListener(CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
         properties = cloudformation_json["Properties"]
 
-        elbv2_backend = elbv2_backends[region_name]
+        elbv2_backend = elbv2_backends[account_id][region_name]
         load_balancer_arn = properties.get("LoadBalancerArn")
         protocol = properties.get("Protocol")
         port = properties.get("Port")
@@ -288,11 +289,16 @@ class FakeListener(CloudFormationModel):
 
     @classmethod
     def update_from_cloudformation_json(
-        cls, original_resource, new_resource_name, cloudformation_json, region_name
+        cls,
+        original_resource,
+        new_resource_name,
+        cloudformation_json,
+        account_id,
+        region_name,
     ):
         properties = cloudformation_json["Properties"]
 
-        elbv2_backend = elbv2_backends[region_name]
+        elbv2_backend = elbv2_backends[account_id][region_name]
         protocol = properties.get("Protocol")
         port = properties.get("Port")
         ssl_policy = properties.get("SslPolicy")
@@ -330,10 +336,10 @@ class FakeListenerRule(CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
         properties = cloudformation_json["Properties"]
-        elbv2_backend = elbv2_backends[region_name]
+        elbv2_backend = elbv2_backends[account_id][region_name]
         listener_arn = properties.get("ListenerArn")
         priority = properties.get("Priority")
         conditions = properties.get("Conditions")
@@ -346,12 +352,17 @@ class FakeListenerRule(CloudFormationModel):
 
     @classmethod
     def update_from_cloudformation_json(
-        cls, original_resource, new_resource_name, cloudformation_json, region_name
+        cls,
+        original_resource,
+        new_resource_name,
+        cloudformation_json,
+        account_id,
+        region_name,
     ):
 
         properties = cloudformation_json["Properties"]
 
-        elbv2_backend = elbv2_backends[region_name]
+        elbv2_backend = elbv2_backends[account_id][region_name]
         conditions = properties.get("Conditions")
 
         actions = elbv2_backend.convert_and_validate_action_properties(properties)
@@ -515,8 +526,10 @@ class FakeLoadBalancer(CloudFormationModel):
         "load_balancing.cross_zone.enabled",
         "routing.http.desync_mitigation_mode",
         "routing.http.drop_invalid_header_fields.enabled",
+        "routing.http.preserve_host_header.enabled",
         "routing.http.x_amzn_tls_version_and_cipher_suite.enabled",
         "routing.http.xff_client_port.enabled",
+        "routing.http.xff_header_processing.mode",
         "routing.http2.enabled",
         "waf.fail_open.enabled",
     }
@@ -563,9 +576,9 @@ class FakeLoadBalancer(CloudFormationModel):
         if self.state == "provisioning":
             self.state = "active"
 
-    def delete(self, region):
+    def delete(self, account_id, region):
         """Not exposed as part of the ELB API - used for CloudFormation."""
-        elbv2_backends[region].delete_load_balancer(self.arn)
+        elbv2_backends[account_id][region].delete_load_balancer(self.arn)
 
     @staticmethod
     def cloudformation_name_type():
@@ -578,11 +591,11 @@ class FakeLoadBalancer(CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
         properties = cloudformation_json["Properties"]
 
-        elbv2_backend = elbv2_backends[region_name]
+        elbv2_backend = elbv2_backends[account_id][region_name]
 
         security_groups = properties.get("SecurityGroups")
         subnet_ids = properties.get("Subnets")
@@ -657,7 +670,7 @@ class ELBv2Backend(BaseBackend):
         :return: EC2 Backend
         :rtype: moto.ec2.models.EC2Backend
         """
-        return ec2_backends[self.region_name]
+        return ec2_backends[self.account_id][self.region_name]
 
     def create_load_balancer(
         self,
@@ -689,7 +702,7 @@ class ELBv2Backend(BaseBackend):
 
         vpc_id = subnets[0].vpc_id
         arn = make_arn_for_load_balancer(
-            account_id=get_account_id(), name=name, region_name=self.region_name
+            account_id=self.account_id, name=name, region_name=self.region_name
         )
         dns_name = "%s-1.%s.elb.amazonaws.com" % (name, self.region_name)
 
@@ -747,7 +760,7 @@ class ELBv2Backend(BaseBackend):
 
         self._validate_actions(actions)
         arn = listener_arn.replace(":listener/", ":listener-rule/")
-        arn += "/%s" % (get_random_hex(16))
+        arn += f"/{mock_random.get_random_hex(16)}"
 
         # TODO: check for error 'TooManyRegistrationsForTargetId'
         # TODO: check for error 'TooManyRules'
@@ -1017,7 +1030,7 @@ Member must satisfy regular expression pattern: {}".format(
             )
 
         arn = make_arn_for_target_group(
-            account_id=get_account_id(), name=name, region_name=self.region_name
+            account_id=self.account_id, name=name, region_name=self.region_name
         )
         tags = kwargs.pop("tags", None)
         target_group = FakeTargetGroup(name, arn, **kwargs)
@@ -1163,7 +1176,12 @@ Member must satisfy regular expression pattern: {}".format(
             raise RuleNotFoundError("One or more rules not found")
         return matched_rules
 
-    def describe_target_groups(self, load_balancer_arn, target_group_arns, names):
+    def describe_target_groups(
+        self,
+        load_balancer_arn: Optional[str],
+        target_group_arns: List[str],
+        names: Optional[List[str]],
+    ) -> Iterable[FakeTargetGroup]:
         if load_balancer_arn:
             if load_balancer_arn not in self.load_balancers:
                 raise LoadBalancerNotFoundError()
@@ -1272,13 +1290,15 @@ Member must satisfy regular expression pattern: {}".format(
             rule.actions = actions
         return rule
 
-    def register_targets(self, target_group_arn, instances):
+    def register_targets(self, target_group_arn: str, instances: List[Any]):
         target_group = self.target_groups.get(target_group_arn)
         if target_group is None:
             raise TargetGroupNotFoundError()
         target_group.register(instances)
 
-    def deregister_targets(self, target_group_arn, instances):
+    def deregister_targets(
+        self, target_group_arn: str, instances: List[Dict[str, Any]]
+    ):
         target_group = self.target_groups.get(target_group_arn)
         if target_group is None:
             raise TargetGroupNotFoundError()
@@ -1537,19 +1557,20 @@ Member must satisfy regular expression pattern: {}".format(
         """
         Verify the provided certificate exists in either ACM or IAM
         """
-        from moto.acm import acm_backends
-        from moto.acm.models import AWSResourceNotFoundException
+        from moto.acm.models import acm_backends, CertificateNotFound
 
         try:
-            acm_backend = acm_backends[self.region_name]
+            acm_backend = acm_backends[self.account_id][self.region_name]
             acm_backend.get_certificate(certificate_arn)
             return True
-        except AWSResourceNotFoundException:
+        except CertificateNotFound:
             pass
 
-        from moto.iam import iam_backend
+        from moto.iam import iam_backends
 
-        cert = iam_backend.get_certificate_by_arn(certificate_arn)
+        cert = iam_backends[self.account_id]["global"].get_certificate_by_arn(
+            certificate_arn
+        )
         if cert is not None:
             return True
 

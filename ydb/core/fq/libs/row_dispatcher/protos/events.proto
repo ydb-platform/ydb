@@ -6,28 +6,39 @@ option cc_enable_arenas = true;
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/yql/providers/pq/proto/dq_io.proto";
 import "ydb/library/yql/dq/actors/protos/dq_events.proto";
+import "ydb/library/yql/dq/actors/protos/dq_status_codes.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
 
 message TEvGetAddressRequest {
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
-    repeated uint32 PartitionId = 2;
+    repeated uint32 PartitionId = 2 [deprecated=true];
+    repeated uint32 PartitionIds = 3;
 }
 
 message TEvPartitionAddress {
-    repeated uint32 PartitionId = 1;
+    repeated uint32 PartitionId = 1 [deprecated=true];
     NActorsProto.TActorId ActorId = 2;
+    repeated uint32 PartitionIds = 3;
 }
 
 message TEvGetAddressResponse {
     repeated TEvPartitionAddress Partitions = 1;
 }
 
+message TPartitionOffset {
+    uint32 PartitionId = 1;
+    uint64 Offset = 2;
+}
+
 message TEvStartSession {
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
-    uint32 PartitionId = 2;
+    uint32 PartitionId = 2 [deprecated=true];
     string Token = 3;
-    optional uint64 Offset = 4;
+    optional uint64 Offset = 4 [deprecated=true];
     uint64 StartingMessageTimestampMs = 5;
     string QueryId = 6;
+    repeated uint32 PartitionIds = 7;
+    repeated TPartitionOffset Offsets = 8;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
@@ -48,13 +59,15 @@ message TEvNewDataArrived {
 
 message TEvStopSession {
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
-    uint32 PartitionId = 2;
+    uint32 PartitionId = 2 [deprecated=true];
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
 message TEvMessage {
-    string Json = 1;
-    uint64 Offset = 2;
+    reserved 1;
+    reserved 2;
+    uint32 PayloadId = 3;
+    repeated uint64 Offsets = 4;
 }
 
 message TEvMessageBatch {
@@ -64,19 +77,44 @@ message TEvMessageBatch {
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
-message TEvStatus {
+message TPartitionStatistics {
     uint32 PartitionId = 1;
     uint64 NextMessageOffset = 2;
+}
+
+message TEvStatistics {
+    uint32 PartitionId = 1;             // deprecated
+    uint64 NextMessageOffset = 2;       // deprecated
+    uint64 ReadBytes = 3;
+    repeated TPartitionStatistics Partition = 4;
+    uint64 CpuMicrosec = 5;
+    uint64 FilteredBytes = 6;
+    uint64 FilteredRows = 7;
+    uint64 QueuedBytes = 8;
+    uint64 QueuedRows = 9;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
 message TEvSessionError {
-    string Message = 1;
-    uint32 PartitionId = 2;
+    reserved 1;
+    uint32 PartitionId = 2 [deprecated=true];
+    NYql.NDqProto.StatusIds.StatusCode StatusCode = 3;
+    repeated Ydb.Issue.IssueMessage Issues = 4;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
 message TEvHeartbeat {
     uint32 PartitionId = 1;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
+}
+
+message TEvNoSession {
+    uint32 PartitionId = 1;
+}
+
+message TEvGetInternalStateRequest {
+}
+
+message TEvGetInternalStateResponse {
+    string InternalState = 1;
 }

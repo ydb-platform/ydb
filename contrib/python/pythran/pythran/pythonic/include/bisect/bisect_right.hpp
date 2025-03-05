@@ -14,7 +14,7 @@ namespace bisect
   long bisect_right(X const &x, A const &a, long lo, long hi);
 
   DEFINE_FUNCTOR(pythonic::bisect, bisect_right);
-}
+} // namespace bisect
 PYTHONIC_NS_END
 
 #endif

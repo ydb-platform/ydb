@@ -125,7 +125,7 @@ EObjectType SchemaTypeFromType(EObjectType type);
 EObjectType TypeFromSchemaType(EObjectType type);
 
 //! Formats object type into string (taking schemas into account).
-TString FormatObjectType(EObjectType type);
+std::string FormatObjectType(EObjectType type);
 
 //! Constructs the id from its parts.
 TObjectId MakeId(

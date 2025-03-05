@@ -3,7 +3,6 @@
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
@@ -84,7 +83,9 @@ struct Schema : NIceDb::Schema {
         LastCompletedTxId = 14,
         LastNormalizerSequentialId = 15,
         GCBarrierPreparationGen = 16,
-        GCBarrierPreparationStep = 17
+        GCBarrierPreparationStep = 17,
+        SubDomainLocalPathId = 18,
+        SubDomainOutOfSpace = 19
     };
 
     enum class EInsertTableIds : ui8 {
@@ -781,10 +782,8 @@ struct Schema : NIceDb::Schema {
         db.Table<SchemaPresetInfo>().Key(id).Delete();
     }
 
-    static void SaveTableInfo(NIceDb::TNiceDb& db, const ui64 pathId, const TString tieringUsage) {
-        db.Table<TableInfo>().Key(pathId).Update(
-            NIceDb::TUpdate<TableInfo::TieringUsage>(tieringUsage)
-        );
+    static void SaveTableInfo(NIceDb::TNiceDb& db, const ui64 pathId) {
+        db.Table<TableInfo>().Key(pathId).Update();
     }
 
 
@@ -1072,6 +1071,12 @@ public:
         MetadataProto = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::Metadata>();
     }
 
+    TColumnChunkLoadContextV2(const ui64 pathId, const ui64 portionId, const NKikimrTxColumnShard::TIndexPortionAccessor& proto)
+        : PathId(pathId)
+        , PortionId(portionId)
+        , MetadataProto(proto.SerializeAsString()) {
+    }
+
     std::vector<TColumnChunkLoadContextV1> BuildRecordsV1() const {
         std::vector<TColumnChunkLoadContextV1> records;
         NKikimrTxColumnShard::TIndexPortionAccessor metaProto;
@@ -1116,6 +1121,15 @@ public:
     TIndexChunk BuildIndexChunk() const {
         AFL_VERIFY(BlobData);
         return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, *BlobData);
+    }
+
+    TIndexChunk BuildIndexChunk(const TPortionInfo& portionInfo) const {
+        if (BlobData) {
+            return BuildIndexChunk();
+        } else {
+            AFL_VERIFY(!!BlobRange);
+            return BuildIndexChunk(portionInfo.GetMeta().GetBlobIdxVerified(BlobRange->BlobId));
+        }
     }
 
     template <class TSource>

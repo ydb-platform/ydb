@@ -101,7 +101,14 @@ void TPDisk::ProcessReadLogRecord(TLogRecordHeader &header, TString &data, NPDis
         if (header.Signature.HasCommitRecord()) {
             TCommitRecordFooter *footer = (TCommitRecordFooter*)
                 ((ui8*)data.data() + data.size() - sizeof(TCommitRecordFooter));
-            ui32 *deletes = (ui32*)((ui8*)footer - footer->DeleteCount * sizeof(ui32));
+    #ifdef ENABLE_PDISK_SHRED
+            ui32 *dirties = (ui32*)((ui8*)footer - footer->DirtyCount * sizeof(ui32));
+            ui32 dirtyCount = footer->DirtyCount;
+    #else
+            ui32 *dirties = nullptr;
+            ui32 dirtyCount = 0;
+    #endif
+            ui32 *deletes = (ui32*)((ui8*)footer - (footer->DeleteCount + dirtyCount) * sizeof(ui32));
             ui64 *commitNonces = (ui64*)((ui8*)deletes - footer->CommitCount * sizeof(ui64));
             ui32 *commits = (ui32*)((ui8*)commitNonces - footer->CommitCount * sizeof(ui32));
             {
@@ -109,9 +116,14 @@ void TPDisk::ProcessReadLogRecord(TLogRecordHeader &header, TString &data, NPDis
                 TOwnerData &ownerData = OwnerData[header.OwnerId];
                 if (isInitial) {
                     if (parseCommitMessage) {
+                        for (ui32 i = 0; i < dirtyCount; ++i) {
+                            const ui32 chunkId = ReadUnaligned<ui32>(&dirties[i]);
+                            (*outChunkOwnerMap)[chunkId].IsDirty = true;
+                        }
                         for (ui32 i = 0; i < footer->DeleteCount; ++i) {
                             const ui32 chunkId = ReadUnaligned<ui32>(&deletes[i]);
                             (*outChunkOwnerMap)[chunkId].OwnerId = OwnerUnallocated;
+                            (*outChunkOwnerMap)[chunkId].IsDirty = true;
                         }
                         for (ui32 i = 0; i < footer->CommitCount; ++i) {
                             const ui32 chunkId = ReadUnaligned<ui32>(&commits[i]);
@@ -797,12 +809,30 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
             P_LOG(PRI_NOTICE, LR018, SelfInfo() << " In ProcessSectorSet got !restorator.GoodSectorFlags",
                     (LastGoodToWriteLogPosition, LastGoodToWriteLogPosition));
         } else {
-           Y_VERIFY_S(ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx, SelfInfo()
-                   << " File# " << __FILE__
-                   << " Line# " << __LINE__
-                   << " LogEndChunkIdx# " << LogEndChunkIdx
-                   << " LogEndSectorIdx# " << LogEndSectorIdx);
-            if (!(ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx)) {
+            bool outsideLogEnd = ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx;
+            
+            if (!outsideLogEnd) {
+                // If read invalid data from the log (but not outside this owner's log bounds), check if the owner is on quarantine.
+                TGuard<TMutex> guard(PDisk->StateMutex);
+                TOwnerData &ownerData = PDisk->OwnerData[Owner];
+
+                if (ownerData.OnQuarantine) {
+                    P_LOG(PRI_WARN, LR019, SelfInfo()
+                        << " In ProcessSectorSet got !restorator.GoodSectorFlags with owner on quarantine",
+                            (LogEndChunkIdx, LogEndChunkIdx), (LogEndSectorIdx, LogEndSectorIdx));
+                    ReplyOk();
+                    return true;
+                }
+            }
+
+            Y_VERIFY_S(outsideLogEnd, SelfInfo()
+                    << " File# " << __FILE__
+                    << " Line# " << __LINE__
+                    << " LogEndChunkIdx# " << LogEndChunkIdx
+                    << " LogEndSectorIdx# " << LogEndSectorIdx);
+
+            if (outsideLogEnd) {
+                // It's ok.
                 P_LOG(PRI_WARN, LR004, SelfInfo()
                     << " In ProcessSectorSet got !restorator.GoodSectorFlags outside the LogEndSector",
                         (LogEndChunkIdx, LogEndChunkIdx), (LogEndSectorIdx, LogEndSectorIdx));
@@ -1111,6 +1141,10 @@ void TLogReader::ReplyOk() {
     Result->Status = NKikimrProto::OK;
     Result->NextPosition = IsInitial ? LastGoodToWriteLogPosition : TLogPosition::Invalid();
     Result->IsEndOfLog = true;
+    if (IsInitial) {
+        Result->LastGoodChunkIdx = ChunkIdx; 
+        Result->LastGoodSectorIdx = SectorIdx; 
+    }
     Reply();
 }
 
@@ -1259,6 +1293,9 @@ void TLogReader::UpdateNewChunkInfo(ui32 currChunk, const TMaybe<ui32> prevChunk
     TGuard<TMutex> guard(PDisk->StateMutex);
     if (prevChunkIdx) {
         PDisk->ChunkState[*prevChunkIdx].CommitState = TChunkState::LOG_COMMITTED;
+        if (TPDisk::IS_SHRED_ENABLED) {
+            PDisk->ChunkState[*prevChunkIdx].IsDirty = true;
+        }
     }
 
     TChunkState& state = PDisk->ChunkState[currChunk];
@@ -1267,6 +1304,7 @@ void TLogReader::UpdateNewChunkInfo(ui32 currChunk, const TMaybe<ui32> prevChunk
                 (ChunkState, state.ToString()));
     }
     state.CommitState = TChunkState::LOG_RESERVED;
+    state.IsDirty = true;
     P_LOG(PRI_INFO, BPD01, SelfInfo() << " chunk is the next log chunk",
             (prevOwnerId, ui32(state.OwnerId)),
             (newOwnerId, ui32(OwnerSystem)));

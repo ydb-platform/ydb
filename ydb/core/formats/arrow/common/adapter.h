@@ -2,8 +2,10 @@
 #include "container.h"
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/formats/arrow/arrow_filter.h>
 
-#include <ydb/library/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
@@ -40,11 +42,23 @@ public:
         return arrow::RecordBatch::Make(schema, count, std::move(columns));
     }
     [[nodiscard]] static std::shared_ptr<arrow::RecordBatch> ApplyArrowFilter(
-        const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::BooleanArray>& filter) {
-        auto res = arrow::compute::Filter(batch, filter);
+        const std::shared_ptr<arrow::RecordBatch>& batch, const TColumnFilter& filter) {
+        auto res = arrow::compute::Filter(batch, filter.BuildArrowFilter(batch->num_rows()));
         Y_VERIFY_S(res.ok(), res.status().message());
         Y_ABORT_UNLESS(res->kind() == arrow::Datum::RECORD_BATCH);
         return res->record_batch();
+    }
+    [[nodiscard]] static std::shared_ptr<arrow::RecordBatch> ApplySlicesFilter(
+        const std::shared_ptr<arrow::RecordBatch>& batch, TColumnFilter::TSlicesIterator filter) {
+        AFL_VERIFY(filter.GetRecordsCount() == batch->num_rows());
+        std::vector<std::shared_ptr<arrow::RecordBatch>> slices;
+        for (filter.Start(); filter.IsValid(); filter.Next()) {
+            if (!filter.IsFiltered()) {
+                continue;
+            }
+            slices.emplace_back(batch->Slice(filter.GetStartIndex(), filter.GetSliceSize()));
+        }
+        return NArrow::ToBatch(TStatusValidator::GetValid(arrow::Table::FromRecordBatches(slices)));
     }
     [[nodiscard]] static std::shared_ptr<arrow::RecordBatch> GetEmptySame(const std::shared_ptr<arrow::RecordBatch>& batch) {
         return batch->Slice(0, 0);
@@ -68,11 +82,22 @@ public:
     }
 
     [[nodiscard]] static std::shared_ptr<arrow::Table> ApplyArrowFilter(
-        const std::shared_ptr<arrow::Table>& batch, const std::shared_ptr<arrow::BooleanArray>& filter) {
-        auto res = arrow::compute::Filter(batch, filter);
+        const std::shared_ptr<arrow::Table>& batch, const TColumnFilter& filter) {
+        auto res = arrow::compute::Filter(batch, filter.BuildArrowFilter(batch->num_rows()));
         Y_VERIFY_S(res.ok(), res.status().message());
         Y_ABORT_UNLESS(res->kind() == arrow::Datum::TABLE);
         return res->table();
+    }
+    [[nodiscard]] static std::shared_ptr<arrow::Table> ApplySlicesFilter(
+        const std::shared_ptr<arrow::Table>& batch, TColumnFilter::TSlicesIterator filter) {
+        std::vector<std::shared_ptr<arrow::Table>> slices;
+        for (filter.Start(); filter.IsValid(); filter.Next()) {
+            if (!filter.IsFiltered()) {
+                continue;
+            }
+            slices.emplace_back(batch->Slice(filter.GetStartIndex(), filter.GetSliceSize()));
+        }
+        return TStatusValidator::GetValid(arrow::ConcatenateTables(slices));
     }
     [[nodiscard]] static std::shared_ptr<arrow::Table> GetEmptySame(const std::shared_ptr<arrow::Table>& batch) {
         return batch->Slice(0, 0);
@@ -96,9 +121,13 @@ public:
         return batch;
     }
     [[nodiscard]] static std::shared_ptr<TGeneralContainer> ApplyArrowFilter(
-        const std::shared_ptr<TGeneralContainer>& batch, const std::shared_ptr<arrow::BooleanArray>& filter) {
+        const std::shared_ptr<TGeneralContainer>& batch, const TColumnFilter& filter) {
+        return std::make_shared<TGeneralContainer>(batch->ApplyFilter(filter));
+    }
+    [[nodiscard]] static std::shared_ptr<TGeneralContainer> ApplySlicesFilter(
+        const std::shared_ptr<TGeneralContainer>& batch, TColumnFilter::TSlicesIterator filter) {
         auto table = batch->BuildTableVerified();
-        return std::make_shared<TGeneralContainer>(TDataBuilderPolicy<arrow::Table>::ApplyArrowFilter(table, filter));
+        return std::make_shared<TGeneralContainer>(TDataBuilderPolicy<arrow::Table>::ApplySlicesFilter(table, filter));
     }
     [[nodiscard]] static std::shared_ptr<TGeneralContainer> GetEmptySame(const std::shared_ptr<TGeneralContainer>& batch) {
         return batch->BuildEmptySame();

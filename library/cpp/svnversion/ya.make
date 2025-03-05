@@ -6,7 +6,7 @@ SRCS(
 )
 
 IF (OPENSOURCE_PROJECT == "yt-cpp-sdk")
-    PEERDIR(build/scripts/c_templates/)
+    PEERDIR(build/scripts/c_templates)
 ENDIF()
 
 END()

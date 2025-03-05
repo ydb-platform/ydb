@@ -145,6 +145,12 @@ void TExponentialBackoffOptionsSerializer::Register(TRegistrar registrar)
 
     registrar.ExternalClassParameter("backoff_jitter", &TThat::BackoffJitter)
         .Default(TThat::DefaultBackoffJitter);
+
+    registrar.ExternalPostprocessor([] (TThat* config) {
+        if(config->MinBackoff > config->MaxBackoff) {
+            THROW_ERROR_EXCEPTION("\"min_backoff\" must be less or equal than \"max_backoff\"");
+        }
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

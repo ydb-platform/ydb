@@ -1,7 +1,7 @@
 #ifndef BOOST_MP11_HPP_INCLUDED
 #define BOOST_MP11_HPP_INCLUDED
 
-//  Copyright 2015 Peter Dimov.
+//  Copyright 2015-2024 Peter Dimov.
 //
 //  Distributed under the Boost Software License, Version 1.0.
 //
@@ -16,6 +16,7 @@
 #include <boost/mp11/map.hpp>
 #include <boost/mp11/set.hpp>
 #include <boost/mp11/bind.hpp>
+#include <boost/mp11/lambda.hpp>
 #include <boost/mp11/integer_sequence.hpp>
 #include <boost/mp11/tuple.hpp>
 

@@ -84,6 +84,10 @@ TString FormatBytes(ui64 bytes) {
     return FormatIntegerValue(bytes, 1024, "B");
 }
 
+TString FormatInteger(ui64 bytes) {
+    return FormatIntegerValue(bytes);
+}
+
 TString FormatTimeMs(ui64 time, bool shortFormat) {
     if (shortFormat) {
         time /= 10;
@@ -107,6 +111,36 @@ TString FormatTimeAgg(const TAggregation& agg, bool shortFormat) {
 TString FormatMCpu(ui64 mCpu) {
     mCpu /= 10;
     return Sprintf("%lu.%.2lu", mCpu / 100, mCpu % 100);
+}
+
+TString FormatTooltip(TStringBuilder& builder, const TString& prefix, TSingleMetric* metric, TString (*format)(ui64), ui64 total = 0) {
+    TString result;
+    builder << prefix;
+    if (metric) {
+        result = format(metric->Details.Sum);
+        if (!total) {
+            total = metric->Summary->Value;
+        }
+        if (total) {
+            builder << ' ' << metric->Details.Sum * 100 / total << "%, ";
+        }
+        if (metric->Details.Count > 1) {
+            builder << "\u2211" << result << ", " << format(metric->Details.Min) << " | "
+            << format(metric->Details.Avg) << " | " << format(metric->Details.Max);
+        } else {
+            builder << result;
+        }
+    }
+    return result;
+}
+
+TString FormatTooltip(TString& tooltip, const TString& prefix, TSingleMetric* metric, TString (*format)(ui64), ui64 total = 0) {
+    TStringBuilder builder;
+    auto result = FormatTooltip(builder, prefix, metric, format, total);
+    if (result) {
+        tooltip = builder;
+    }
+    return result;
 }
 
 TString GetEstimation(const NJson::TJsonValue& node) {
@@ -259,6 +293,7 @@ void TMetricHistory::Load(std::vector<ui64>& times, std::vector<ui64>& values, u
         }
         if (missed && t > MinTime) {
             Values.emplace_back(MinTime, values[i - 1]);
+            missed = false;
         }
         if (t > MaxTime) {
             if (i && times[i - 1] < MaxTime) {
@@ -273,40 +308,55 @@ void TMetricHistory::Load(std::vector<ui64>& times, std::vector<ui64>& values, u
     }
 }
 
+void Min0(ui64& m, ui64 v) {
+    if (v) {
+        m = m ? std::min(m, v) : v;
+    }
+}
+
+void Max0(ui64& m, ui64 v) {
+    if (v) {
+        m = m ? std::max(m, v) : v;
+    }
+}
+
 TSingleMetric::TSingleMetric(std::shared_ptr<TSummaryMetric> summary, const NJson::TJsonValue& node,
+        ui64 minTime, ui64 maxTime,
         const NJson::TJsonValue* firstMessageNode, const NJson::TJsonValue* lastMessageNode,
         const NJson::TJsonValue* waitTimeUsNode)
-    : Summary(summary) {
-
-    if (!Details.Load(node)) {
-        return;
-    }
-
-    Summary->Add(Details.Sum);
+    : Summary(summary), MinTime(minTime), MaxTime(maxTime) {
 
     if (firstMessageNode) {
         FirstMessage.Load(*firstMessageNode);
+        Min0(MinTime, FirstMessage.Min);
     }
 
     if (lastMessageNode) {
         LastMessage.Load(*lastMessageNode);
-    }
-
-    if (auto* historyNode = node.GetValueByPath("History")) {
-        History.Load(*historyNode, FirstMessage.Min, LastMessage.Max);
-        MinTime = History.MinTime;
-        MaxTime = History.MaxTime;
+        Max0(MaxTime, LastMessage.Max);
     }
 
     if (waitTimeUsNode) {
-        WaitTime.Load(*waitTimeUsNode, FirstMessage.Min, LastMessage.Max);
-        MinTime = MinTime ? std::min(MinTime, WaitTime.MinTime) : WaitTime.MinTime;
-        MaxTime = MaxTime ? std::max(MaxTime, WaitTime.MaxTime) : WaitTime.MaxTime;
-    } else if (FirstMessage.Min && LastMessage.Max) {
-        MinTime = MinTime ? std::min(MinTime, FirstMessage.Min) : FirstMessage.Min;
-        MaxTime = MaxTime ? std::max(MaxTime, LastMessage.Max) : LastMessage.Max;
+        WaitTime.Load(*waitTimeUsNode, MinTime, MaxTime);
+        MinTime = WaitTime.MinTime;
+        MaxTime = WaitTime.MaxTime;
+    }
+
+    if (Details.Load(node)) {
+        Summary->Add(Details.Sum);
+        if (auto* historyNode = node.GetValueByPath("History")) {
+            History.Load(*historyNode, MinTime, MaxTime);
+            MinTime = History.MinTime;
+            MaxTime = History.MaxTime;
+        }
     }
 }
+
+TSingleMetric::TSingleMetric(std::shared_ptr<TSummaryMetric> summary, ui64 value)
+    : Summary(summary), Details(value) {
+    Summary->Add(Details.Sum);
+}
+
 
 void TPlan::Load(const NJson::TJsonValue& node) {
     if (auto* subplanNameNode = node.GetValueByPath("Subplan Name")) {
@@ -345,7 +395,7 @@ void TPlan::ResolveCteRefs() {
         if (it == CteSubPlans.end()) {
             ythrow yexception() << "Can not find CTE Ref " << memberRef.first;
         }
-        memberRef.second.first->Info.at(memberRef.second.second) = "Reference: " + it->second;
+        memberRef.second.first->Operators.at(memberRef.second.second).Info = it->second;
     }
     for (auto& cteRef : CteRefs) {
         auto it = CteStages.find(cteRef.first);
@@ -362,12 +412,14 @@ void TPlan::ResolveCteRefs() {
                             if (auto* pushNode = subNode.GetValueByPath("Push")) {
                                 if (auto* bytesNode = pushNode->GetValueByPath("Bytes")) {
                                     cteRef.second->InputBytes = std::make_shared<TSingleMetric>(InputBytes,
-                                        *bytesNode,
+                                        *bytesNode, 0, 0,
                                         pushNode->GetValueByPath("FirstMessageMs"),
                                         pushNode->GetValueByPath("LastMessageMs"),
                                         pushNode->GetValueByPath("WaitTimeUs.History")
                                     );
-                                    MaxTime = std::max(MaxTime, cteRef.second->InputBytes->MaxTime);
+                                    Min0(cteRef.second->Stage.MinTime, cteRef.second->InputBytes->MinTime);
+                                    Max0(cteRef.second->Stage.MaxTime, cteRef.second->InputBytes->MaxTime);
+                                    Max0(MaxTime, cteRef.second->InputBytes->MaxTime);
                                 }
                                 if (auto* rowsNode = pushNode->GetValueByPath("Rows")) {
                                     cteRef.second->InputRows = std::make_shared<TSingleMetric>(InputRows, *rowsNode);
@@ -386,12 +438,14 @@ void TPlan::ResolveCteRefs() {
                             if (auto* popNode = subNode.GetValueByPath("Pop")) {
                                 if (auto* bytesNode = popNode->GetValueByPath("Bytes")) {
                                     cteRef.second->CteOutputBytes = std::make_shared<TSingleMetric>(OutputBytes,
-                                        *bytesNode,
+                                        *bytesNode, 0, 0,
                                         popNode->GetValueByPath("FirstMessageMs"),
                                         popNode->GetValueByPath("LastMessageMs"),
                                         popNode->GetValueByPath("WaitTimeUs.History")
                                     );
-                                    MaxTime = std::max(MaxTime, cteRef.second->CteOutputBytes->MaxTime);
+                                    Min0(cteRef.second->FromStage->MinTime, cteRef.second->CteOutputBytes->MinTime);
+                                    Max0(cteRef.second->FromStage->MaxTime, cteRef.second->CteOutputBytes->MaxTime);
+                                    Max0(MaxTime, cteRef.second->CteOutputBytes->MaxTime);
                                 }
                                 if (auto* rowsNode = popNode->GetValueByPath("Rows")) {
                                     cteRef.second->CteOutputRows = std::make_shared<TSingleMetric>(OutputRows, *rowsNode);
@@ -418,7 +472,11 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         }
     }
 
+    stage->StatsNode = node.GetValueByPath("Stats");
     auto operators = node.GetValueByPath("Operators");
+
+    std::vector<TOperatorInfo> externalOperators;
+    TStage* externalStage = nullptr;
 
     if (operators) {
         TString prevFilter;
@@ -426,6 +484,10 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         for (const auto& subNode : operators->GetArray()) {
             if (auto* nameNode = subNode.GetValueByPath("Name")) {
                 auto name = nameNode->GetStringSafe();
+                TString info;
+                TString operatorType = "";
+                TString operatorId = "0";
+                auto externalOperator = false;
 
                 if (name == "Iterator" || name == "Member") {
                     if (auto* referenceNode = subNode.GetValueByPath(name)) {
@@ -452,14 +514,12 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 TStringBuilder builder;
 
                 if (name == "Iterator" || name == "Member" || name == "ToFlow") {
-                    builder << "Reference";
-                } else {
-                    builder << name;
+                    name = "Reference";
                 }
 
                 if (name == "Limit") {
                     if (auto* limitNode = subNode.GetValueByPath("Limit")) {
-                        builder << ": " << limitNode->GetStringSafe();
+                        info = limitNode->GetStringSafe();
                     }
                 } else if (name == "Sort") {
                     if (auto* sortByNode = subNode.GetValueByPath("SortBy")) {
@@ -472,10 +532,11 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                             sortBy.erase(p, 4);
                         }
                         if (sortBy) {
-                            builder << " by " << sortBy;
+                            info = sortBy;
                         }
                     }
                 } else if (name == "Filter") {
+                    operatorType = "Filter";
                     if (auto* predicateNode = subNode.GetValueByPath("Predicate")) {
                         auto filter = predicateNode->GetStringSafe();
                         prevFilter = filter;
@@ -494,9 +555,14 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                             filter.erase(p, 1);
                             filter.insert(p, "&lt;");
                         }
-                        builder << ": " << filter;
+                        info = filter;
+                    }
+                    if (auto* pushdownNode = subNode.GetValueByPath("Pushdown")) {
+                        externalOperator = pushdownNode->GetStringSafe() == "True";
                     }
                 } else if (name == "Aggregate") {
+                    operatorType = "Aggregation";
+                    TStringBuilder builder;
                     if (auto* aggregationNode = subNode.GetValueByPath("Aggregation")) {
                         auto aggr = aggregationNode->GetStringSafe();
                         if (aggr) {
@@ -548,7 +614,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                 }
                                 aggr.erase(p, 5);
                             }
-                            builder << " " << aggr;
+                            builder << aggr;
                         }
                     }
                     if (auto* groupByNode = subNode.GetValueByPath("GroupBy")) {
@@ -561,17 +627,22 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                             groupBy.erase(p, 5);
                         }
                         if (groupBy) {
-                            builder << ", Group By: " << groupBy;
+                            if (TString(builder)) {
+                                builder << ", ";
+                            }
+                            builder << "Group By: " << groupBy;
                         }
                     }
+                    info = builder;
                 } else if (name == "TableFullScan") {
+                    TStringBuilder builder;
                     if (auto* tableNode = subNode.GetValueByPath("Table")) {
                         auto table = tableNode->GetStringSafe();
                         auto n = table.find_last_of('/');
                         if (n != table.npos) {
                             table = table.substr(n + 1);
                         }
-                        builder << " " << table;
+                        builder << table;
                     }
                     builder << "(";
                     if (auto* readColumnsNode = subNode.GetValueByPath("ReadColumns")) {
@@ -586,52 +657,184 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                     }
                     builder << ")";
+                    info = builder;
+                    externalOperator = true;
                 } else if (name == "TopSort" || name == "Top") {
+                    TStringBuilder builder;
                     if (auto* limitNode = subNode.GetValueByPath("Limit")) {
                         auto limit = limitNode->GetStringSafe();
                         if (limit) {
-                            builder << ", Limit: " << limit;
+                            builder << "Limit: " << limit;
                         }
                     }
                     if (auto* topSortByNode = subNode.GetValueByPath("TopSortBy")) {
                         auto topSortBy = topSortByNode->GetStringSafe();
                         if (topSortBy) {
-                            builder << ", TopSortBy: " << topSortBy;
+                            if (TString(builder)) {
+                                builder << ", ";
+                            }
+                            builder << "TopSortBy: " << topSortBy;
                         }
                     }
-                } else if (name == "Iterator" || name == "Member" || name == "ToFlow") {
+                    info = builder;
+                } else if (name == "Reference") {
                     if (auto* referenceNode = subNode.GetValueByPath(name)) {
                         auto referenceName = referenceNode->GetStringSafe();
                         references.insert(referenceName);
-                        builder << ": " << referenceName;
+                        info = referenceName;
                         auto cteRef = "CTE " + referenceName;
                         auto stageCopy = stage;
-                        MemberRefs.emplace_back(cteRef, std::make_pair<std::shared_ptr<TStage>, ui32>(std::move(stageCopy), stage->Info.size()));
+                        MemberRefs.emplace_back(cteRef, std::make_pair<std::shared_ptr<TStage>, ui32>(std::move(stageCopy), stage->Operators.size()));
                     }
                 } else if (name.Contains("Join")) {
+                    operatorType = "Join";
                     if (auto* conditionNode = subNode.GetValueByPath("Condition")) {
-                        builder << " on " << conditionNode->GetStringSafe();
+                        info = conditionNode->GetStringSafe();
                     }
                 }
-                stage->Info.push_back(builder);
 
-                auto est = GetEstimation(subNode);
-                if (est) {
-                    stage->Info.push_back(est);
+                if (externalOperator) {
+                    externalOperators.emplace_back(name, info);
+                    externalOperators.back().Estimations = GetEstimation(subNode);
+                } else {
+                    stage->Operators.emplace_back(name, info);
+                    stage->Operators.back().Estimations = GetEstimation(subNode);
+                }
+
+                if (stage->StatsNode) {
+                    if (!externalOperator) {
+                        const NJson::TJsonValue* operatorStatNode = nullptr;
+                        if (operatorType) {
+                            if (auto* operatorNode = stage->StatsNode->GetValueByPath("Operator")) {
+                                TStringBuilder builder;
+                                for (const auto& subNode : operatorNode->GetArray()) {
+                                    TString id = "";
+                                    if (auto* idNode = subNode.GetValueByPath("Id")) {
+                                        id = idNode->GetStringSafe();
+                                    }
+                                    TString type = "";
+                                    if (auto* typeNode = subNode.GetValueByPath("Type")) {
+                                        type = typeNode->GetStringSafe();
+                                    }
+                                    if (operatorType == type && operatorId == id) {
+                                        if (operatorStatNode) {
+                                            // collision
+                                            operatorStatNode = nullptr;
+                                            break;
+                                        } else {
+                                            operatorStatNode = &subNode;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (operatorStatNode) {
+                            if (auto* rowsStatsNode = operatorStatNode->GetValueByPath("Rows")) {
+                                stage->Operators.back().OutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *rowsStatsNode);
+                            }
+                        }
+
+                        if (auto* inputsArrayNode = subNode.GetValueByPath("Inputs")) {
+                            for (const auto& inputNode : inputsArrayNode->GetArray()) {
+                                if (auto* externalNodeIdNode = inputNode.GetValueByPath("ExternalPlanNodeId")) {
+                                    auto externalNodeId = ToString(externalNodeIdNode->GetIntegerSafe());
+                                    if (externalNodeId) {
+                                        if (!stage->Operators.back().InputPlanNodeId) {
+                                            stage->Operators.back().InputPlanNodeId = externalNodeId;
+                                        } else if (!stage->Operators.back().ExtraInputPlanNodeId) {
+                                            stage->Operators.back().ExtraInputPlanNodeId = externalNodeId;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (name == "TableFullScan") {
+                        Y_ENSURE(externalOperator);
+                        if (stage->IngressName) {
+                            ythrow yexception() << "Plan stage already has Ingress [" << stage->IngressName << "]";
+                        }
+                        stage->IngressName = name;
+                        TString tablePath;
+                        if (auto* pathNode = subNode.GetValueByPath("Path")) {
+                            tablePath = pathNode->GetStringSafe();
+                        } else if (auto* tableNode = subNode.GetValueByPath("Table")) {
+                            tablePath = tableNode->GetStringSafe();
+                        }
+                        if (tablePath) {
+                            if (auto* ingressTopNode = stage->StatsNode->GetValueByPath("Ingress")) {
+                                // only 1 ingress node is possible (???)
+                                auto& ingress0 = (*ingressTopNode)[0];
+                                if (auto* ingressNode = ingress0.GetValueByPath("Ingress")) {
+                                    if (auto* bytesNode = ingressNode->GetValueByPath("Bytes")) {
+                                        stage->IngressBytes = std::make_shared<TSingleMetric>(IngressBytes,
+                                            *bytesNode, 0, 0,
+                                            ingressNode->GetValueByPath("FirstMessageMs"),
+                                            ingressNode->GetValueByPath("LastMessageMs"),
+                                            ingressNode->GetValueByPath("WaitTimeUs.History")
+                                        );
+                                        Min0(stage->MinTime, stage->IngressBytes->MinTime);
+                                        Max0(stage->MaxTime, stage->IngressBytes->MaxTime);
+                                    }
+                                    if (auto* rowsNode = ingressNode->GetValueByPath("Rows")) {
+                                        stage->IngressRows = std::make_shared<TSingleMetric>(IngressRows, *rowsNode);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
-    stage->StatsNode = node.GetValueByPath("Stats");
+    if (!externalOperators.empty()) {
+        auto connection = std::make_shared<TConnection>(*stage, "External", 0);
+        stage->Connections.push_back(connection);
+        Stages.push_back(std::make_shared<TStage>("External"));
+        connection->FromStage = Stages.back();
+        Stages.back()->Operators = externalOperators;
+        externalStage = Stages.back().get();
+        Stages.back()->External = true;
+    }
+
+    if (stage->Operators.empty()) {
+        stage->Operators.emplace_back(stage->NodeType, "");
+        // add inputs + outputs from connections
+    }
 
     const NJson::TJsonValue* inputNode = nullptr;
 
     if (stage->StatsNode) {
+        if (externalStage) {
+            if (auto* ingressTopNode = stage->StatsNode->GetValueByPath("Ingress")) {
+                // only 1 ingress node is possible (???)
+                auto& ingress0 = (*ingressTopNode)[0];
+                if (auto* externalNode = ingress0.GetValueByPath("External")) {
+                    if (auto* externalBytesNode = externalNode->GetValueByPath("ExternalBytes")) {
+                        externalStage->OutputBytes = std::make_shared<TSingleMetric>(ExternalBytes, *externalBytesNode, 0, 0,
+                            externalNode->GetValueByPath("FirstMessageMs"),
+                            externalNode->GetValueByPath("LastMessageMs")
+                        );
+                    }
+                    if (auto* externalRowsNode = externalNode->GetValueByPath("ExternalRows")) {
+                        externalStage->OutputRows = std::make_shared<TSingleMetric>(ExternalRows, *externalRowsNode);
+                        externalStage->Operators.front().OutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *externalRowsNode);
+                    }
+                    if (auto* partitionCountNode = externalNode->GetValueByPath("PartitionCount")) {
+                        externalStage->Tasks = partitionCountNode->GetIntegerSafe();
+                    }
+                }
+            }
+        }
 
         if (auto* tasksNode = stage->StatsNode->GetValueByPath("Tasks")) {
             stage->Tasks = tasksNode->GetIntegerSafe();
             Tasks += stage->Tasks;
+        }
+        if (auto* finishedTasksNode = stage->StatsNode->GetValueByPath("FinishedTasks")) {
+            stage->FinishedTasks = finishedTasksNode->GetIntegerSafe();
         }
 
         if (auto* physicalStageIdNode = stage->StatsNode->GetValueByPath("PhysicalStageId")) {
@@ -647,8 +850,199 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
             }
         }
 
+        if (auto* outputNode = stage->StatsNode->GetValueByPath("Output")) {
+            for (const auto& subNode : outputNode->GetArray()) {
+                if (auto* nameNode = subNode.GetValueByPath("Name")) {
+                    if (ToString(parentPlanNodeId) == nameNode->GetStringSafe()) {
+                        if (auto* popNode = subNode.GetValueByPath("Pop")) {
+                            if (auto* bytesNode = popNode->GetValueByPath("Bytes")) {
+                                stage->OutputBytes = std::make_shared<TSingleMetric>(OutputBytes,
+                                    *bytesNode, 0, 0,
+                                    popNode->GetValueByPath("FirstMessageMs"),
+                                    popNode->GetValueByPath("LastMessageMs"),
+                                    popNode->GetValueByPath("WaitTimeUs.History")
+                                );
+                                Min0(stage->MinTime, stage->OutputBytes->MinTime);
+                                Max0(stage->MaxTime, stage->OutputBytes->MaxTime);
+                            }
+                            if (auto* rowsNode = popNode->GetValueByPath("Rows")) {
+                                stage->OutputRows = std::make_shared<TSingleMetric>(OutputRows, *rowsNode);
+
+                                if (!stage->Operators.front().OutputRows) {
+                                    stage->Operators.front().OutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *rowsNode);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (auto* spillingComputeBytesNode = stage->StatsNode->GetValueByPath("SpillingComputeBytes")) {
+            stage->SpillingComputeBytes = std::make_shared<TSingleMetric>(SpillingComputeBytes, *spillingComputeBytesNode,
+                stage->MinTime, stage->MaxTime);
+        }
+
+        if (auto* spillingComputeTimeNode = stage->StatsNode->GetValueByPath("SpillingComputeTimeUs")) {
+            stage->SpillingComputeTime = std::make_shared<TSingleMetric>(SpillingComputeTime, *spillingComputeTimeNode,
+                stage->MinTime, stage->MaxTime);
+        }
+
+        if (auto* spillingChannelBytesNode = stage->StatsNode->GetValueByPath("SpillingChannelBytes")) {
+            stage->SpillingChannelBytes = std::make_shared<TSingleMetric>(SpillingChannelBytes, *spillingChannelBytesNode,
+                stage->MinTime, stage->MaxTime);
+        }
+
+        if (auto* spillingChannelTimeNode = stage->StatsNode->GetValueByPath("SpillingChannelTimeUs")) {
+            stage->SpillingChannelTime = std::make_shared<TSingleMetric>(SpillingChannelTime, *spillingChannelTimeNode,
+                stage->MinTime, stage->MaxTime);
+        }
+
+        inputNode = stage->StatsNode->GetValueByPath("Input");
+    }
+
+    if (auto* subNode = node.GetValueByPath("Plans")) {
+        for (auto& plan : subNode->GetArray()) {
+            TString subNodeType;
+            if (auto* nodeTypeNode = plan.GetValueByPath("Node Type")) {
+                subNodeType = nodeTypeNode->GetStringSafe();
+            }
+            TString planNodeType;
+            if (auto* planNodeTypeNode = plan.GetValueByPath("PlanNodeType")) {
+                planNodeType = planNodeTypeNode->GetStringSafe();
+            }
+            TString connectionPlanNodeId;
+            if (auto* planNodeIdNode = plan.GetValueByPath("PlanNodeId")) {
+                connectionPlanNodeId = ToString(planNodeIdNode->GetIntegerSafe());
+            }
+
+            if (planNodeType == "Connection") {
+                auto* keyColumnsNode = plan.GetValueByPath("KeyColumns");
+                auto* sortColumnsNode = plan.GetValueByPath("SortColumns");
+                if (auto* subNode = plan.GetValueByPath("Plans")) {
+                    for (auto& plan : subNode->GetArray()) {
+                        TString nodeType;
+                        if (auto* nodeTypeNode = plan.GetValueByPath("Node Type")) {
+                            nodeType = nodeTypeNode->GetStringSafe();
+                        }
+                        if (auto* planNodeTypeNode = plan.GetValueByPath("PlanNodeType")) {
+                            auto planNodeType = planNodeTypeNode->GetStringSafe();
+                            if (planNodeType) {
+                                ythrow yexception() << "Unexpected plan node type [" << planNodeType << "]";
+                            }
+                        }
+                        auto connection = std::make_shared<TConnection>(*stage, subNodeType, stage->PlanNodeId);
+                        stage->Connections.push_back(connection);
+                        if (keyColumnsNode) {
+                            for (auto& keyColumn : keyColumnsNode->GetArray()) {
+                                stage->Connections.back()->KeyColumns.push_back(keyColumn.GetStringSafe());
+                            }
+                        }
+                        if (sortColumnsNode) {
+                            for (auto& sortColumn : sortColumnsNode->GetArray()) {
+                                stage->Connections.back()->SortColumns.push_back(sortColumn.GetStringSafe());
+                            }
+                        }
+
+                        if (auto* planNodeIdNode = plan.GetValueByPath("PlanNodeId")) {
+                            auto planNodeId = planNodeIdNode->GetStringRobust();
+                            if (inputNode) {
+                                for (const auto& subNode : inputNode->GetArray()) {
+                                    if (auto* nameNode = subNode.GetValueByPath("Name")) {
+                                        if (planNodeId == nameNode->GetStringSafe()) {
+                                            if (auto* pushNode = subNode.GetValueByPath("Push")) {
+                                                if (auto* bytesNode = pushNode->GetValueByPath("Bytes")) {
+                                                    connection->InputBytes = std::make_shared<TSingleMetric>(InputBytes,
+                                                        *bytesNode, 0, 0,
+                                                        pushNode->GetValueByPath("FirstMessageMs"),
+                                                        pushNode->GetValueByPath("LastMessageMs"),
+                                                        pushNode->GetValueByPath("WaitTimeUs.History")
+                                                    );
+                                                    Min0(stage->MinTime, connection->InputBytes->MinTime);
+                                                    Max0(stage->MaxTime, connection->InputBytes->MaxTime);
+                                                }
+                                                if (auto* rowsNode = pushNode->GetValueByPath("Rows")) {
+                                                    connection->InputRows = std::make_shared<TSingleMetric>(InputRows, *rowsNode);
+                                                    for (auto& op : stage->Operators) {
+                                                        if (op.InputPlanNodeId == connectionPlanNodeId) {
+                                                            op.InputRows = std::make_shared<TSingleMetric>(OperatorInputRows, *rowsNode);
+                                                        } else if (op.ExtraInputPlanNodeId == connectionPlanNodeId) {
+                                                            op.ExtraInputRows = std::make_shared<TSingleMetric>(OperatorInputRows, *rowsNode);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Stages.push_back(std::make_shared<TStage>(nodeType));
+                        connection->FromStage = Stages.back();
+                        LoadStage(Stages.back(), plan, stage->PlanNodeId);
+                    }
+                } else if (auto* cteNameNode = plan.GetValueByPath("CTE Name")) {
+                    auto cteName = "CTE " + cteNameNode->GetStringSafe();
+                    auto connection = std::make_shared<TConnection>(*stage, subNodeType, stage->PlanNodeId);
+                    connection->CteConnection = true;
+                    stage->Connections.push_back(connection);
+                    if (keyColumnsNode) {
+                        for (auto& keyColumn : keyColumnsNode->GetArray()) {
+                            stage->Connections.back()->KeyColumns.push_back(keyColumn.GetStringSafe());
+                        }
+                    }
+                    CteRefs.emplace_back(cteName, stage->Connections.back());
+                    stage->Connections.back()->StatsNode = stage->StatsNode;
+                }
+            } else if (planNodeType == "") {
+                if (subNodeType == "Source") {
+                    if (stage->IngressName) {
+                        ythrow yexception() << "Plan stage already has Ingress [" << stage->IngressName << "]";
+                    }
+                    stage->IngressName = subNodeType;
+                    stage->BuiltInIngress = true;
+
+                    const NJson::TJsonValue* ingressRowsNode = nullptr;
+                    if (stage->StatsNode) {
+                        if (auto* ingressTopNode = stage->StatsNode->GetValueByPath("Ingress")) {
+                            // only 1 ingress node is possible (???)
+                            auto& ingress0 = (*ingressTopNode)[0];
+                            if (auto* ingressNode = ingress0.GetValueByPath("Ingress")) {
+                                if (auto* bytesNode = ingressNode->GetValueByPath("Bytes")) {
+                                    stage->IngressBytes = std::make_shared<TSingleMetric>(IngressBytes,
+                                        *bytesNode, 0, 0,
+                                        ingressNode->GetValueByPath("FirstMessageMs"),
+                                        ingressNode->GetValueByPath("LastMessageMs"),
+                                        ingressNode->GetValueByPath("WaitTimeUs.History")
+                                    );
+                                    Min0(stage->MinTime, stage->IngressBytes->MinTime);
+                                    Max0(stage->MaxTime, stage->IngressBytes->MaxTime);
+                                }
+                                if (auto* rowsNode = ingressNode->GetValueByPath("Rows")) {
+                                    stage->IngressRows = std::make_shared<TSingleMetric>(IngressRows, *rowsNode);
+                                    ingressRowsNode = rowsNode;
+                                }
+                            }
+                        }
+                    }
+                    LoadSource(plan, stage->Operators, ingressRowsNode);
+                } else {
+                    stage->Connections.push_back(std::make_shared<TConnection>(*stage, "Implicit", stage->PlanNodeId));
+                    Stages.push_back(std::make_shared<TStage>(subNodeType));
+                    stage->Connections.back()->FromStage = Stages.back();
+                    LoadStage(Stages.back(), plan, stage->PlanNodeId);
+                }
+            } else {
+                ythrow yexception() << "Unexpected plan node type [" << planNodeType << "]";
+            }
+        }
+    }
+
+    // CPU and MEM metrics use Min/Max time from Inputs and Outputs and should be processed after them
+    if (stage->StatsNode) {
         if (auto* cpuTimeNode = stage->StatsNode->GetValueByPath("CpuTimeUs")) {
-            stage->CpuTime = std::make_shared<TSingleMetric>(CpuTime, *cpuTimeNode);
+            stage->CpuTime = std::make_shared<TSingleMetric>(CpuTime, *cpuTimeNode, stage->MinTime, stage->MaxTime);
 
             std::vector<ui64> updatedCpuTimes;
             std::vector<ui64> updatedCpuValues;
@@ -693,207 +1087,82 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         }
 
         if (auto* mmuNode = stage->StatsNode->GetValueByPath("MaxMemoryUsage")) {
-            stage->MaxMemoryUsage = std::make_shared<TSingleMetric>(MaxMemoryUsage, *mmuNode);
+            stage->MaxMemoryUsage = std::make_shared<TSingleMetric>(MaxMemoryUsage, *mmuNode, stage->MinTime, stage->MaxTime);
         }
 
-        if (auto* spillingComputeBytesNode = stage->StatsNode->GetValueByPath("SpillingComputeBytes")) {
-            stage->SpillingComputeBytes = std::make_shared<TSingleMetric>(SpillingComputeBytes, *spillingComputeBytesNode);
+        if (auto* witNode = stage->StatsNode->GetValueByPath("WaitInputTimeUs")) {
+            stage->WaitInputTime = std::make_shared<TSingleMetric>(WaitInputTime, *witNode, stage->MinTime, stage->MaxTime);
         }
 
-        if (auto* spillingComputeTimeNode = stage->StatsNode->GetValueByPath("SpillingComputeTimeUs")) {
-            stage->SpillingComputeTime = std::make_shared<TSingleMetric>(SpillingComputeTime, *spillingComputeTimeNode);
+        if (auto* wotNode = stage->StatsNode->GetValueByPath("WaitOutputTimeUs")) {
+            stage->WaitOutputTime = std::make_shared<TSingleMetric>(WaitOutputTime, *wotNode, stage->MinTime, stage->MaxTime);
         }
-
-        if (auto* spillingChannelBytesNode = stage->StatsNode->GetValueByPath("SpillingChannelBytes")) {
-            stage->SpillingChannelBytes = std::make_shared<TSingleMetric>(SpillingChannelBytes, *spillingChannelBytesNode);
-        }
-
-        if (auto* spillingChannelTimeNode = stage->StatsNode->GetValueByPath("SpillingChannelTimeUs")) {
-            stage->SpillingChannelTime = std::make_shared<TSingleMetric>(SpillingChannelTime, *spillingChannelTimeNode);
-        }
-
-        if (auto* outputNode = stage->StatsNode->GetValueByPath("Output")) {
-            for (const auto& subNode : outputNode->GetArray()) {
-                if (auto* nameNode = subNode.GetValueByPath("Name")) {
-                    if (ToString(parentPlanNodeId) == nameNode->GetStringSafe()) {
-                        if (auto* popNode = subNode.GetValueByPath("Pop")) {
-                            if (auto* bytesNode = popNode->GetValueByPath("Bytes")) {
-                                stage->OutputBytes = std::make_shared<TSingleMetric>(OutputBytes,
-                                    *bytesNode,
-                                    popNode->GetValueByPath("FirstMessageMs"),
-                                    popNode->GetValueByPath("LastMessageMs"),
-                                    popNode->GetValueByPath("WaitTimeUs.History")
-                                );
-                                MaxTime = std::max(MaxTime, stage->OutputBytes->MaxTime);
-                            }
-                            if (auto* rowsNode = popNode->GetValueByPath("Rows")) {
-                                stage->OutputRows = std::make_shared<TSingleMetric>(OutputRows, *rowsNode);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        inputNode = stage->StatsNode->GetValueByPath("Input");
     }
 
-    if (auto* subNode = node.GetValueByPath("Plans")) {
-        for (auto& plan : subNode->GetArray()) {
-            TString subNodeType;
-            if (auto* nodeTypeNode = plan.GetValueByPath("Node Type")) {
-                subNodeType = nodeTypeNode->GetStringSafe();
+    auto stageDuration = stage->MaxTime - stage->MinTime;
+
+    for (auto i = 0u; i < stage->Operators.size(); i++) {
+        auto& op = stage->Operators[i];
+        if (!op.InputRows && i + 1 < stage->Operators.size()) {
+            op.InputRows = stage->Operators[i + 1].OutputRows;
+        }
+        if (stageDuration) {
+            if (op.OutputRows) {
+                op.OutputThroughput = std::make_shared<TSingleMetric>(OperatorOutputThroughput, op.OutputRows->Details.Sum * 1000 / stageDuration);
             }
-            TString planNodeType;
-            if (auto* planNodeTypeNode = plan.GetValueByPath("PlanNodeType")) {
-                planNodeType = planNodeTypeNode->GetStringSafe();
-            }
-            if (planNodeType == "Connection") {
-                auto* keyColumnsNode = plan.GetValueByPath("KeyColumns");
-                auto* sortColumnsNode = plan.GetValueByPath("SortColumns");
-                if (auto* subNode = plan.GetValueByPath("Plans")) {
-                    for (auto& plan : subNode->GetArray()) {
-                        TString nodeType;
-                        if (auto* nodeTypeNode = plan.GetValueByPath("Node Type")) {
-                            nodeType = nodeTypeNode->GetStringSafe();
-                        }
-                        if (auto* planNodeTypeNode = plan.GetValueByPath("PlanNodeType")) {
-                            auto planNodeType = planNodeTypeNode->GetStringSafe();
-                            if (planNodeType) {
-                                ythrow yexception() << "Unexpected plan node type [" << planNodeType << "]";
-                            }
-                        }
-                        auto connection = std::make_shared<TConnection>(subNodeType, stage->PlanNodeId);
-                        stage->Connections.push_back(connection);
-                        if (keyColumnsNode) {
-                            for (auto& keyColumn : keyColumnsNode->GetArray()) {
-                                stage->Connections.back()->KeyColumns.push_back(keyColumn.GetStringSafe());
-                            }
-                        }
-                        if (sortColumnsNode) {
-                            for (auto& sortColumn : sortColumnsNode->GetArray()) {
-                                stage->Connections.back()->SortColumns.push_back(sortColumn.GetStringSafe());
-                            }
-                        }
-
-                        if (auto* planNodeIdNode = plan.GetValueByPath("PlanNodeId")) {
-                            auto planNodeId = planNodeIdNode->GetStringRobust();
-                            if (inputNode) {
-                                for (const auto& subNode : inputNode->GetArray()) {
-                                    if (auto* nameNode = subNode.GetValueByPath("Name")) {
-                                        if (planNodeId == nameNode->GetStringSafe()) {
-                                            if (auto* pushNode = subNode.GetValueByPath("Push")) {
-                                                if (auto* bytesNode = pushNode->GetValueByPath("Bytes")) {
-                                                    connection->InputBytes = std::make_shared<TSingleMetric>(InputBytes,
-                                                        *bytesNode,
-                                                        pushNode->GetValueByPath("FirstMessageMs"),
-                                                        pushNode->GetValueByPath("LastMessageMs"),
-                                                        pushNode->GetValueByPath("WaitTimeUs.History")
-                                                    );
-                                                    MaxTime = std::max(MaxTime, connection->InputBytes->MaxTime);
-                                                }
-                                                if (auto* rowsNode = pushNode->GetValueByPath("Rows")) {
-                                                    connection->InputRows = std::make_shared<TSingleMetric>(InputRows, *rowsNode);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        Stages.push_back(std::make_shared<TStage>(nodeType));
-                        connection->FromStage = Stages.back();
-                        LoadStage(Stages.back(), plan, stage->PlanNodeId);
-                    }
-                } else if (auto* cteNameNode = plan.GetValueByPath("CTE Name")) {
-                    auto cteName = "CTE " + cteNameNode->GetStringSafe();
-                    auto connection = std::make_shared<TConnection>(subNodeType, stage->PlanNodeId);
-                    connection->CteConnection = true;
-                    stage->Connections.push_back(connection);
-                    if (keyColumnsNode) {
-                        for (auto& keyColumn : keyColumnsNode->GetArray()) {
-                            stage->Connections.back()->KeyColumns.push_back(keyColumn.GetStringSafe());
-                        }
-                    }
-                    CteRefs.emplace_back(cteName, stage->Connections.back());
-                    stage->Connections.back()->StatsNode = stage->StatsNode;
+            if (op.InputRows) {
+                auto sum = op.InputRows->Details.Sum;
+                if (op.ExtraInputRows) {
+                    sum += op.ExtraInputRows->Details.Sum;
                 }
-            } else if (planNodeType == "") {
-                if (subNodeType == "Source") {
-                    if (stage->Source) {
-                        ythrow yexception() << "Plan stage already has linked Source [" << stage->Source->NodeType << "]";
-                    }
-                    stage->Source = std::make_shared<TSource>(subNodeType);
-                    LoadSource(stage->Source, plan);
-                    if (!stage->Source->Info.empty()) {
-                        stage->Info.insert(stage->Info.end(), stage->Source->Info.begin(), stage->Source->Info.end());
-                    }
-
-                    if (stage->StatsNode) {
-                        if (auto* ingressTopNode = stage->StatsNode->GetValueByPath("Ingress")) {
-                            if (auto* ingressNode = (*ingressTopNode)[0].GetValueByPath("Ingress")) {
-                                if (auto* bytesNode = ingressNode->GetValueByPath("Bytes")) {
-                                    stage->Source->IngressBytes = std::make_shared<TSingleMetric>(IngressBytes,
-                                        *bytesNode,
-                                        ingressNode->GetValueByPath("FirstMessageMs"),
-                                        ingressNode->GetValueByPath("LastMessageMs"),
-                                        ingressNode->GetValueByPath("WaitTimeUs.History")
-                                    );
-                                    MaxTime = std::max(MaxTime, stage->Source->IngressBytes->MaxTime);
-                                }
-                                if (auto* rowsNode = ingressNode->GetValueByPath("Rows")) {
-                                    stage->Source->IngressRows = std::make_shared<TSingleMetric>(IngressRows, *rowsNode);
-                                }
-                            }
-                        }
-                    }
-
-                } else {
-                    stage->Connections.push_back(std::make_shared<TConnection>("Implicit", stage->PlanNodeId));
-                    Stages.push_back(std::make_shared<TStage>(subNodeType));
-                    stage->Connections.back()->FromStage = Stages.back();
-                    LoadStage(Stages.back(), plan, stage->PlanNodeId);
-                }
-            } else {
-                ythrow yexception() << "Unexpected plan node type [" << planNodeType << "]";
+                op.InputThroughput = std::make_shared<TSingleMetric>(OperatorInputThroughput, sum * 1000 / stageDuration);
             }
         }
     }
+
+    Max0(MaxTime, stage->MaxTime);
 }
 
-void TPlan::LoadSource(std::shared_ptr<TSource> source, const NJson::TJsonValue& node) {
+void TPlan::LoadSource(const NJson::TJsonValue& node, std::vector<TOperatorInfo>& stageOperators, const NJson::TJsonValue* ingressRowsNode) {
 
     auto operators = node.GetValueByPath("Operators");
 
     if (operators) {
         for (const auto& subNode : operators->GetArray()) {
-            TStringBuilder builder;
-            builder << "Source";
-            if (auto* sourceTypeNode = subNode.GetValueByPath("SourceType")) {
-                builder << " " << sourceTypeNode->GetStringSafe();
-            }
-            if (auto* nameNode = subNode.GetValueByPath("Name")) {
-                builder << " " << nameNode->GetStringSafe();
-            }
-            builder << "(";
-            if (auto* readColumnsNode = subNode.GetValueByPath("ReadColumns")) {
-                bool firstColumn = true;
-                for (const auto& subNode : readColumnsNode->GetArray()) {
-                    if (firstColumn) {
-                        firstColumn = false;
-                    } else {
-                        builder << ", ";
-                    }
-                    builder << subNode.GetStringSafe();
+            TString name;
+            TString info;
+            {
+                TStringBuilder builder;
+                builder << "Source";
+                if (auto* sourceTypeNode = subNode.GetValueByPath("SourceType")) {
+                    builder << " " << sourceTypeNode->GetStringSafe();
                 }
+                name = builder;
             }
-            builder << ")";
-            source->Info.push_back(builder);
- 
-            auto est = GetEstimation(subNode);
-            if (est) {
-                source->Info.push_back(est);
+            {
+                TStringBuilder builder;
+                if (auto* nameNode = subNode.GetValueByPath("Name")) {
+                    builder << nameNode->GetStringSafe();
+                }
+                builder << "(";
+                if (auto* readColumnsNode = subNode.GetValueByPath("ReadColumns")) {
+                    bool firstColumn = true;
+                    for (const auto& subNode : readColumnsNode->GetArray()) {
+                        if (firstColumn) {
+                            firstColumn = false;
+                        } else {
+                            builder << ", ";
+                        }
+                        builder << subNode.GetStringSafe();
+                    }
+                }
+                builder << ")";
+                info = builder;
+            }
+            stageOperators.emplace_back(name, info);
+            stageOperators.back().Estimations = GetEstimation(subNode);
+            if (ingressRowsNode) {
+                stageOperators.back().OutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *ingressRowsNode);
             }
             break;
         }
@@ -906,7 +1175,10 @@ void TPlan::MarkStageIndent(ui32 indent, ui32& offsetY, std::shared_ptr<TStage> 
     }
 
     stage->OffsetY = offsetY;
-    ui32 height = std::max<ui32>(stage->Connections.size() + (stage->Source ? 1 : 0) + 3, 4) * (INTERNAL_HEIGHT + INTERNAL_GAP_Y) + INTERNAL_GAP_Y;
+    ui32 height = std::max<ui32>(
+        (3 /* Output, MEM, CPU*/ + stage->Connections.size() + stage->BuiltInIngress) * (INTERNAL_HEIGHT + INTERNAL_GAP_Y) + INTERNAL_GAP_Y,
+        stage->Operators.size() * (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y) * 2 - INTERNAL_GAP_Y + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT));
+
     stage->Height = height;
     stage->IndentY = stage->OffsetY + height;
     offsetY += (height + GAP_Y);
@@ -933,21 +1205,20 @@ void TPlan::MarkLayout() {
     MarkStageIndent(0, offsetY, Stages.front());
     // Compress Reference(s)
     for (auto& stage : Stages) {
-        auto& info = stage->Info;
+        auto& operators = stage->Operators;
         ui32 i = 0;
-        while (i < info.size()) {
-            auto& s = info[i];
-            if (s.starts_with("Reference: ")) {
+        while (i < operators.size()) {
+            auto& o = operators[i];
+            if (o.Name == "Reference") {
                 auto next = i + 1;
-                if (next < info.size()) {
-                    auto& sn = info[next];
-                    if (sn.starts_with("Reference: ")) {
-                        s.insert(9, "s");
-                        while (next < info.size()) {
-                            auto& sn = info[next];
-                            if (sn.starts_with("Reference: ")) {
-                                s += ", " + sn.substr(11);
-                                info.erase(info.begin() + next);
+                if (next < operators.size()) {
+                    auto& on = operators[next];
+                    if (on.Name == "Reference") {
+                        while (next < operators.size()) {
+                            auto& on = operators[next];
+                            if (on.Name == "Reference") {
+                                o.Name += ", " + on.Name;
+                                operators.erase(operators.begin() + next);
                             } else {
                                 break;
                             }
@@ -1072,14 +1343,16 @@ void TPlan::PrintValues(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> m
     }
 }
 
-void TPlan::PrintStageSummary(TStringBuilder& background, TStringBuilder&, ui32 y0, std::shared_ptr<TSingleMetric> metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip) {
-    ui32 x0 = Config.HeaderWidth + GAP_X + INTERNAL_GAP_X;
-    ui32 width = Config.SummaryWidth - INTERNAL_GAP_X * 2;
+void TPlan::PrintStageSummary(TStringBuilder& background, TStringBuilder&, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric> metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip, ui32 taskCount) {
+    ui32 x0 = viewLeft + INTERNAL_GAP_X;
+    ui32 width = viewWidth - INTERNAL_GAP_X * 2;
     if (metric->Summary && metric->Summary->Max) {
         width = metric->Details.Sum * width / metric->Summary->Max;
     }
-    background
+    if (tooltip) {
+        background
         << "<g><title>" << tooltip << "</title>" << Endl;
+    }
     if (metric->Details.Max) {
         auto wavg = width / 2;
         if (metric->Details.Max > metric->Details.Min) {
@@ -1087,30 +1360,74 @@ void TPlan::PrintStageSummary(TStringBuilder& background, TStringBuilder&, ui32 
         }
         background
         << "  <rect x='" << x0 << "' y='" << y0
-        << "' width='" << width << "' height='" << INTERNAL_HEIGHT
+        << "' width='" << width << "' height='" << h
         << "' stroke-width='0' fill='" << lightColor << "'/>"
         << "  <polygon points='" << x0 << "," << y0 << " "
-        << x0 + wavg << "," << y0 + INTERNAL_HEIGHT - metric->Details.Avg * INTERNAL_HEIGHT / metric->Details.Max << " "
-        << x0 + width << "," << y0 + INTERNAL_HEIGHT - metric->Details.Min * INTERNAL_HEIGHT / metric->Details.Max << " "
-        << x0 + width << "," << y0 + INTERNAL_HEIGHT << " "
-        << x0 << "," << y0 + INTERNAL_HEIGHT
+        << x0 + wavg << "," << y0 + h - metric->Details.Avg * h / metric->Details.Max << " "
+        << x0 + width << "," << y0 + h - metric->Details.Min * h / metric->Details.Max << " "
+        << x0 + width << "," << y0 + h << " "
+        << x0 << "," << y0 + h
         << "' stroke='none' fill='" << mediumColor << "'/>" << Endl;
     } else {
         background
         << "  <rect x='" << x0 << "' y='" << y0
-        << "' width='" << width << "' height='" << INTERNAL_HEIGHT
+        << "' width='" << width << "' height='" << h
         << "' stroke-width='0' fill='" << mediumColor << "'/>" << Endl;
     }
     if (textSum) {
         background
-        << "<rect x='" << x0 << "' y='" << y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
+        << "<rect x='" << x0 << "' y='" << y0 + (h - INTERNAL_TEXT_HEIGHT) / 2
         << "' width='" << textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10 << "' height='" << INTERNAL_TEXT_HEIGHT + 1
         << "' stroke-width='0' opacity='0.5' fill='" << Config.Palette.StageMain << "'/>" << Endl
         << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextSummary << "' x='" << x0
-        << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << textSum << "</text>" << Endl;
+        << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (h - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << textSum << "</text>" << Endl;
     }
-    background
+    if (tooltip) {
+        background
         << "</g>" << Endl;
+    }
+
+    if (taskCount) {
+        TStringBuilder warn;
+        TString w = "";
+
+        if (metric->Details.Count != taskCount) {
+            warn << "Only " << metric->Details.Count << " task(s) of " << taskCount << " reported this metric";
+            w = ToString(metric->Details.Count);
+        }
+
+        // We define SKEW as following:
+        //   1. Max > 4 * Min, i.e. there is LARGE DIFFERENCE between minimal and maximal metric values
+        // or
+        //   1. Max > 2 * Min, i.e. there is SIGNIFICANT DIFFERENCE between minimal and maximal metric values
+        //   2. (Max - Avg) > 2 * (Avg - Min), i.e. OVERLOADED tasks are in MINORITY
+        // Skewing ration (x2 and x4) may be tuned later
+
+        if ((metric->Details.Max > 4 * metric->Details.Min) || (metric->Details.Max > 2 * metric->Details.Min
+            && metric->Details.Max - metric->Details.Avg > 2 * (metric->Details.Avg - metric->Details.Min))) {
+            if (w) {
+                warn << ", ";
+            } else {
+                w = "S";
+            }
+            warn << "Significant skew in metric";
+        }
+
+        if (w) {
+            background
+            << "<g><title>" << warn << "</title>" << Endl
+            << "  <circle cx='" << (viewLeft + viewWidth) - INTERNAL_WIDTH / 2
+            << "' cy='" << y0 + INTERNAL_WIDTH / 2
+            << "' r='" << INTERNAL_WIDTH / 2 - 1
+            << "' stroke='none' fill='" << Config.Palette.StageTextHighlight << "' />" << Endl
+            << "  <text text-anchor='middle' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
+            << "px' fill='" << Config.Palette.TextLight
+            << "' x='" << (viewLeft + viewWidth) - INTERNAL_WIDTH / 2
+            << "' y='" << y0 + INTERNAL_WIDTH - (INTERNAL_WIDTH - INTERNAL_TEXT_HEIGHT) / 2
+            << "'>" << w << "</text>" << Endl
+            << "</g>" << Endl;
+        }
+    }
 }
 
 void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TStringBuilder& canvas) {
@@ -1118,104 +1435,156 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
     ui32 planHeight = 0;
 
     for (auto& s : Stages) {
+        auto stageBackground = s->External ? Config.Palette.StageClone : Config.Palette.StageMain;
         planHeight = std::max(planHeight, s->IndentY);
         background
-            << "<rect x='" << s->IndentX << "' y='" << s->OffsetY + offsetY
-            << "' width='" << Config.HeaderWidth - s->IndentX - INTERNAL_WIDTH << "' height='" << s->Height
-            << "' stroke-width='0' fill='" << Config.Palette.StageMain << "'/>" << Endl;
-        auto x = Config.HeaderWidth + GAP_X;
+            << "<rect x='" << Config.HeaderLeft + s->IndentX << "' y='" << s->OffsetY + offsetY
+            << "' width='" << Config.HeaderWidth - s->IndentX << "' height='" << s->Height
+            << "' stroke-width='0' fill='" << stageBackground << "'/>" << Endl;
         background
-            << "<rect x='" << x << "' y='" << s->OffsetY + offsetY
+            << "<rect x='" << Config.OperatorLeft << "' y='" << s->OffsetY + offsetY
+            << "' width='" << Config.OperatorWidth << "' height='" << s->Height
+            << "' stroke-width='0' fill='" << stageBackground << "'/>" << Endl;
+        background
+            << "<rect x='" << Config.SummaryLeft << "' y='" << s->OffsetY + offsetY
             << "' width='" << Config.SummaryWidth << "' height='" << s->Height
-            << "' stroke-width='0' fill='" << Config.Palette.StageMain << "'/>" << Endl;
-        x += Config.SummaryWidth + GAP_X;
+            << "' stroke-width='0' fill='" << stageBackground << "'/>" << Endl;
         background
-            << "<rect x='" << x << "' y='" << s->OffsetY + offsetY
-            << "' width='" << Config.Width - x << "' height='" << s->Height
-            << "' stroke-width='0' fill='" << Config.Palette.StageMain << "'/>" << Endl;
+            << "<rect x='" << Config.TaskLeft << "' y='" << s->OffsetY + offsetY
+            << "' width='" << Config.TaskWidth << "' height='" << s->Height
+            << "' stroke-width='0' fill='" << stageBackground << "'/>" << Endl;
+        background
+            << "<rect x='" << Config.TimelineLeft << "' y='" << s->OffsetY + offsetY
+            << "' width='" << Config.TimelineWidth << "' height='" << s->Height
+            << "' stroke-width='0' fill='" << stageBackground << "'/>" << Endl;
         if (s->Connections.size() > 1) {
             ui32 y = s->OffsetY + s->Height;
             background
-                << "<rect x='" << s->IndentX << "' y='" << y + offsetY
+                << "<rect x='" << Config.HeaderLeft + s->IndentX << "' y='" << y + offsetY
                 << "' width='" << INDENT_X << "' height='" << s->IndentY - y
-                << "' stroke-width='0' fill='" << Config.Palette.StageMain << "'/>" << Endl;
-        }
-        background
-            << "<circle cx='" << s->IndentX + INTERNAL_WIDTH / 2
-            << "' cy='" << s->OffsetY + s->Height / 2 + offsetY
-            << "' r='" << INTERNAL_WIDTH / 2 - 1
-            << "' stroke='" << Config.Palette.StageMain << "' stroke-width='1' fill='" << Config.Palette.StageClone << "' />" << Endl
-            << "<text text-anchor='middle' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
-            << "px' fill='" << Config.Palette.StageText << "' x='" << s->IndentX + INTERNAL_WIDTH / 2
-            << "' y='" << s->OffsetY + s->Height / 2 + offsetY + INTERNAL_TEXT_HEIGHT / 2
-            << "'>" << ToString(s->PhysicalStageId) << "</text>" << Endl;
-
-        {
-            ui32 y0 = s->OffsetY + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 + offsetY;
-            if (!s->Info.empty()) {
-                for (auto text : s->Info) {
-                    canvas
-                        << "<g><title>" << text << "</title>"
-                        << "<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText << "' x='" << s->IndentX + INTERNAL_WIDTH + 2
-                        << "' y='" << y0 << "'>" << text << "</text>" << "</g>" << Endl;
-                    y0 += (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y);
-                }
-            } else {
-                canvas
-                    << "<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText << "' x='" << s->IndentX + INTERNAL_WIDTH + 2
-                    << "' y='" << y0 << "'>" << s->NodeType << "</text>" << Endl;
-            }
+                << "' stroke-width='0' fill='" << stageBackground << "'/>" << Endl;
         }
 
-
-        ui32 y0 = s->OffsetY + offsetY + INTERNAL_GAP_Y;
-
-        auto tx0 = Config.HeaderWidth + GAP_X + Config.SummaryWidth + GAP_X + INTERNAL_GAP_X;
-        auto tx1 = Config.Width - INTERNAL_GAP_X;
-        auto tw = tx1 - tx0;
-        auto px = tx0 + TimeOffset * tw / maxTime;
-        auto pw = MaxTime * tw / maxTime;
+        if (!s->External) {
+            background
+                << "<circle cx='" << Config.HeaderLeft + s->IndentX + INTERNAL_WIDTH / 2
+                << "' cy='" << s->OffsetY + s->Height / 2 + offsetY
+                << "' r='" << INTERNAL_WIDTH / 2 - 1
+                << "' stroke='" << Config.Palette.StageMain << "' stroke-width='1' fill='" << Config.Palette.StageClone << "' />" << Endl
+                << "<text text-anchor='middle' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
+                << "px' fill='" << Config.Palette.StageText << "' x='" << Config.HeaderLeft + s->IndentX + INTERNAL_WIDTH / 2
+                << "' y='" << s->OffsetY + s->Height / 2 + offsetY + INTERNAL_TEXT_HEIGHT / 2
+                << "'>" << s->PhysicalStageId << "</text>" << Endl;
+        }
 
         auto taskCount = s->CpuTime ? s->CpuTime->Details.Count : 0;
 
-        if (s->OutputBytes) {
-            auto textSum = FormatBytes(s->OutputBytes->Details.Sum);
-            TStringBuilder tooltip;
-            tooltip
-                << "Output "
-                << s->OutputBytes->Details.Sum * 100 / s->OutputBytes->Summary->Value << "%, \u2211"
-                << textSum << ", " << FormatBytes(s->OutputBytes->Details.Min) << " | "
-                << FormatBytes(s->OutputBytes->Details.Avg) << " | " << FormatBytes(s->OutputBytes->Details.Max);
-            if (s->OutputRows && s->OutputRows->Details.Sum) {
-            tooltip
-                << ", Rows \u2211"
-                << FormatIntegerValue(s->OutputRows->Details.Sum) << ", " << FormatIntegerValue(s->OutputRows->Details.Min) << " | "
-                << FormatIntegerValue(s->OutputRows->Details.Avg) << " | " << FormatIntegerValue(s->OutputRows->Details.Max)
-                << ", Width " << FormatBytes(s->OutputBytes->Details.Sum / s->OutputRows->Details.Sum);
+        {
+            ui32 y0 = s->OffsetY + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 + offsetY;
+            bool first = true;
+            for (auto op : s->Operators) {
+                if (first) {
+                    first = false;
+                } else {
+                canvas
+                    << "<line x1='" << Config.HeaderLeft + s->IndentX + INTERNAL_WIDTH + 2
+                    << "' y1='" << y0
+                    << "' x2='" << Config.HeaderLeft + Config.HeaderWidth
+                    << "' y2='" << y0
+                    << "' stroke-width='1' stroke='" << Config.Palette.StageGrid << "' stroke-dasharray='1,2'/>" << Endl;
+                }
+                canvas
+                    << "<g><title>" << op.Name << ": " << op.Info << "</title>"
+                    << "  <text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
+                    << "px' fill='" << Config.Palette.StageText << "' x='" << Config.HeaderLeft + s->IndentX + INTERNAL_WIDTH + 2
+                    << "' y='" << y0 + INTERNAL_TEXT_HEIGHT << "'>" << op.Name << "</text>"
+                    << "  <text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
+                    << "px' fill='" << Config.Palette.StageText << "' x='" << Config.HeaderLeft + s->IndentX + INTERNAL_WIDTH + 2 + 4
+                    << "' y='" << y0 + INTERNAL_TEXT_HEIGHT * 2 + INTERNAL_GAP_Y << "'>" << op.Info << "</text>"
+                    << "</g>" << Endl;
+
+                if (op.OutputThroughput) {
+                    TStringBuilder tooltip;
+                    tooltip
+                        << "Output Throughput " << FormatInteger(op.OutputThroughput->Details.Sum) << "/s";
+                        PrintStageSummary(background, canvas, Config.OperatorLeft, Config.OperatorWidth, y0, INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y, op.OutputThroughput, Config.Palette.CpuMedium, Config.Palette.CpuLight, "", tooltip, 0);
+                }
+
+                if (op.InputThroughput) {
+                    TStringBuilder tooltip;
+                    tooltip
+                        << "Input Throughput " << FormatInteger(op.InputThroughput->Details.Sum) << "/s";
+                        PrintStageSummary(background, canvas, Config.OperatorLeft, Config.OperatorWidth, y0 + (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y) * 2 - (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y), INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y, op.InputThroughput, Config.Palette.CpuMedium, Config.Palette.CpuLight, "", tooltip, 0);
+                }
+
+                if (op.OutputRows) {
+                    TStringBuilder tooltip;
+                    auto textSum = FormatTooltip(tooltip, "Output Rows", op.OutputRows.get(), FormatInteger);
+                    if (op.Estimations) {
+                        tooltip
+                        << ", " << op.Estimations;
+                    }
+                    PrintStageSummary(background, canvas, Config.OperatorLeft, Config.OperatorWidth, y0 + (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y) - INTERNAL_HEIGHT / 2, INTERNAL_HEIGHT, op.OutputRows, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, taskCount);
+                }
+                y0 += (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y) * 2;
             }
-            PrintStageSummary(background, canvas, y0, s->OutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip);
+        }
+
+        ui32 y0 = s->OffsetY + offsetY + INTERNAL_GAP_Y;
+
+        auto tx0 = Config.TimelineLeft;
+        auto px = tx0 + TimeOffset * Config.TimelineWidth / maxTime;
+        auto pw = MaxTime * Config.TimelineWidth / maxTime;
+
+        if (s->External) {
+        canvas
+            << "<g><title>External Source, partitions: " << s->Tasks << "</title>" << Endl
+            << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText
+            << "' x='" << Config.TaskLeft + Config.TaskWidth - 2
+            << "' y='" << s->OffsetY + s->Height / 2 + offsetY + INTERNAL_TEXT_HEIGHT / 2 << "'>" << s->Tasks << "</text>" << Endl
+            << "</g>" << Endl;
+        } else {
+            canvas
+            << "<g><title>Stage " << s->PhysicalStageId << ", tasks: " << s->Tasks << ", finished: " << s->FinishedTasks << "</title>" << Endl;
+            if (s->FinishedTasks && s->FinishedTasks <= s->Tasks) {
+                auto finishedHeight = s->Height * s->FinishedTasks / s->Tasks;
+                auto xx = Config.TaskLeft + Config.TaskWidth - Config.TaskWidth / 8;
+                canvas
+                << "<line x1='" << xx << "' y1='" << s->OffsetY + offsetY + s->Height - finishedHeight
+                << "' x2='" << xx << "' y2='" << s->OffsetY + offsetY + s->Height
+                << "' stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageClone << "' stroke-dasharray='1,1' />" << Endl;
+            }
+            canvas
+            << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText
+            << "' x='" << Config.TaskLeft + Config.TaskWidth - 2
+            << "' y='" << s->OffsetY + s->Height / 2 + offsetY + INTERNAL_TEXT_HEIGHT / 2 << "'>" << s->Tasks << "</text>" << Endl
+            << "</g>" << Endl;
+        }
+
+        if (s->OutputBytes) {
+            TStringBuilder tooltip;
+            auto textSum = FormatTooltip(tooltip, "Output", s->OutputBytes.get(), FormatBytes);
+            if (s->OutputRows) {
+                FormatTooltip(tooltip, ", Rows", s->OutputRows.get(), FormatInteger);
+            }
+            PrintStageSummary(background, canvas, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->OutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, taskCount);
 
             if (s->SpillingChannelBytes && s->SpillingChannelBytes->Details.Sum) {
-                auto textSum = FormatBytes(s->SpillingChannelBytes->Details.Sum);
-                auto x1 = Config.HeaderWidth + GAP_X + Config.SummaryWidth + - INTERNAL_GAP_X;
-                auto x0 = x1 - textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10;
                 background
-                << "<g><title>" << "Channel Spilling \u2211" << textSum
-                << ", " << FormatBytes(s->SpillingChannelBytes->Details.Min) << " | "
-                << FormatBytes(s->SpillingChannelBytes->Details.Avg) << " | " << FormatBytes(s->SpillingChannelBytes->Details.Max)
+                << "<g><title>";
+
+                auto textSum = FormatTooltip(background, "Channel Spilling", s->SpillingChannelBytes.get(), FormatBytes);
+                auto x1 = Config.SummaryLeft + Config.SummaryWidth - INTERNAL_GAP_X;
+                auto x0 = x1 - textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10;
+
+                background
                 << "</title>" << Endl
-                << "<rect x='" << x0 << "' y='" << y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
+                << "  <rect x='" << x0 << "' y='" << y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
                 << "' width='" << x1 - x0 << "' height='" << INTERNAL_TEXT_HEIGHT + 1
                 << "' stroke-width='0' fill='" << Config.Palette.SpillingBytesLight << "'/>" << Endl
-                << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextSummary << "' x='" << x1 - 1
+                << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextSummary << "' x='" << x1 - 1
                 << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << textSum << "</text>" << Endl
                 << "</g>" << Endl;
-            }
-
-            if (s->OutputBytes->Details.Count != taskCount) {
-                canvas
-                << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageTextHighlight << "' x='" << Config.HeaderWidth
-                << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << s->OutputBytes->Details.Count << "</text>" << Endl;
             }
 
             auto d = s->OutputBytes->MaxTime - s->OutputBytes->MinTime;
@@ -1224,7 +1593,7 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
             if (d) {
                 title << " " << FormatBytes(s->OutputBytes->Details.Sum * 1000 / d) << "/s";
                 if (s->OutputRows) {
-                    title << ", Rows " << FormatIntegerValue(s->OutputRows->Details.Sum * 1000 / d) << "/s";
+                    title << ", Rows " << FormatInteger(s->OutputRows->Details.Sum * 1000 / d) << "/s";
                 }
             }
             PrintTimeline(background, canvas, title, s->OutputBytes->FirstMessage, s->OutputBytes->LastMessage, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.OutputMedium);
@@ -1242,23 +1611,19 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
 
         if (s->MaxMemoryUsage) {
-            auto textSum = FormatBytes(s->MaxMemoryUsage->Details.Sum);
-            TStringBuilder tooltip;
-            tooltip
-                << "Memory "
-                << s->MaxMemoryUsage->Details.Sum * 100 / s->MaxMemoryUsage->Summary->Value << "%, \u2211"
-                << textSum << ", " << FormatBytes(s->MaxMemoryUsage->Details.Min) << " | "
-                << FormatBytes(s->MaxMemoryUsage->Details.Avg) << " | " << FormatBytes(s->MaxMemoryUsage->Details.Max);
-            PrintStageSummary(background, canvas, y0, s->MaxMemoryUsage, Config.Palette.MemMedium, Config.Palette.MemLight, textSum, tooltip);
+            TString tooltip;
+            auto textSum = FormatTooltip(tooltip, "Memory", s->MaxMemoryUsage.get(), FormatBytes);
+            PrintStageSummary(background, canvas, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->MaxMemoryUsage, Config.Palette.MemMedium, Config.Palette.MemLight, textSum, tooltip, taskCount);
 
             if (s->SpillingComputeBytes && s->SpillingComputeBytes->Details.Sum) {
-                auto textSum = FormatBytes(s->SpillingComputeBytes->Details.Sum);
-                auto x1 = Config.HeaderWidth + GAP_X + Config.SummaryWidth + - INTERNAL_GAP_X;
-                auto x0 = x1 - textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10;
                 background
-                << "<g><title>" << "Compute Spilling \u2211" << textSum
-                << ", " << FormatBytes(s->SpillingComputeBytes->Details.Min) << " | "
-                << FormatBytes(s->SpillingComputeBytes->Details.Avg) << " | " << FormatBytes(s->SpillingComputeBytes->Details.Max)
+                << "<g><title>";
+
+                auto textSum = FormatTooltip(background, "Compute Spilling", s->SpillingComputeBytes.get(), FormatBytes);
+                auto x1 = Config.SummaryLeft + Config.SummaryWidth - INTERNAL_GAP_X;
+                auto x0 = x1 - textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10;
+
+                background
                 << "</title>" << Endl
                 << "<rect x='" << x0 << "' y='" << y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
                 << "' width='" << x1 - x0 << "' height='" << INTERNAL_TEXT_HEIGHT + 1
@@ -1266,12 +1631,6 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
                 << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextSummary << "' x='" << x1 - 1
                 << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << textSum << "</text>" << Endl
                 << "</g>" << Endl;
-            }
-
-            if (s->MaxMemoryUsage->Details.Count != taskCount) {
-                canvas
-                << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageTextHighlight << "' x='" << Config.HeaderWidth
-                << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << s->MaxMemoryUsage->Details.Count << "</text>" << Endl;
             }
 
             if (!s->MaxMemoryUsage->History.Values.empty()) {
@@ -1286,22 +1645,91 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
 
         if (s->CpuTime) {
-            auto textSum = FormatUsage(s->CpuTime->Details.Sum);
-            TStringBuilder tooltip;
-            tooltip
-                << "CPU Usage "
-                << s->CpuTime->Details.Sum * 100 / s->CpuTime->Summary->Value << "%, \u2211"
-                << textSum << ", " << FormatUsage(s->CpuTime->Details.Min) << " | "
-                << FormatUsage(s->CpuTime->Details.Avg) << " | " << FormatUsage(s->CpuTime->Details.Max);
-            PrintStageSummary(background, canvas, y0, s->CpuTime, Config.Palette.CpuMedium, Config.Palette.CpuLight, textSum, tooltip);
+            TString tooltip;
+            auto textSum = FormatTooltip(tooltip, "CPU Usage", s->CpuTime.get(), FormatUsage);
+            PrintStageSummary(background, canvas, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->CpuTime, Config.Palette.CpuMedium, Config.Palette.CpuLight, textSum, tooltip, taskCount);
 
-            if (taskCount) {
-                canvas
-                << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText << "' x='" << Config.HeaderWidth
-                << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << taskCount << "</text>" << Endl;
+            auto totalTime = s->CpuTime->Details.Sum;
+            if (s->WaitInputTime) {
+                totalTime += s->WaitInputTime->Details.Sum;
+            }
+            if (s->WaitOutputTime) {
+                totalTime += s->WaitOutputTime->Details.Sum;
             }
 
-            if (!s->CpuTime->History.Deriv.empty()) {
+            if (s->WaitInputTime) {
+                if (totalTime) {
+                    auto height = s->WaitInputTime->Details.Sum * s->Height / totalTime;
+                background
+                    << "<g><title>";
+                    FormatTooltip(background, "Wait Input Time", s->WaitInputTime.get(), FormatUsage, totalTime);
+                background
+                    << "</title>" << Endl
+                    << "  <rect x='" << Config.TaskLeft << "' y='" << s->OffsetY + offsetY + s->Height - height
+                    << "' width='" << Config.TaskWidth << "' height='" << height
+                    << "' stroke-width='0' fill='" << Config.Palette.InputLight << "'/>" << Endl
+                    << "</g>" << Endl;
+                }
+                if(!s->WaitInputTime->History.Deriv.empty()) {
+                    PrintDeriv(canvas, s->WaitInputTime->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.InputMedium, Config.Palette.InputLight);
+                }
+
+                // consider only 10% or more waiting times
+                if (totalTime && s->WaitInputTime->Details.Sum * 10 > totalTime) {
+                    TStringBuilder waitOutputPeers;
+                    for (auto& c : s->Connections) {
+                        if (c->FromStage && c->FromStage->WaitOutputTime) {
+                            auto peerTotalTime = c->FromStage->WaitOutputTime->Details.Sum;
+                            if (c->FromStage->WaitInputTime) {
+                                peerTotalTime += c->FromStage->WaitInputTime->Details.Sum;
+                            }
+                            if (c->FromStage->CpuTime) {
+                                peerTotalTime += c->FromStage->CpuTime->Details.Sum;
+                            }
+                            if (peerTotalTime && c->FromStage->WaitOutputTime->Details.Sum * 10 > peerTotalTime) {
+                                if (waitOutputPeers) {
+                                    waitOutputPeers << ", ";
+                                }
+                                waitOutputPeers << c->FromStage->PhysicalStageId;
+                            }
+                        }
+                    }
+                    if (waitOutputPeers) {
+                    background
+                        << "<g><title>" << "Wait input with peer stage(s) " << waitOutputPeers << " wait output" << "</title>" << Endl
+                        << "  <circle cx='" << Config.TaskLeft + Config.TaskWidth / 2
+                        << "' cy='" << s->OffsetY + offsetY + s->Height - INTERNAL_WIDTH / 2
+                        << "' r='" << INTERNAL_WIDTH / 2 - 1
+                        << "' stroke='none' fill='" << Config.Palette.StageTextHighlight << "' />" << Endl
+                        << "  <text text-anchor='middle' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
+                        << "px' fill='" << Config.Palette.TextLight
+                        << "' x='" << Config.TaskLeft + Config.TaskWidth / 2
+                        << "' y='" << s->OffsetY + offsetY + s->Height - (INTERNAL_WIDTH - INTERNAL_TEXT_HEIGHT) / 2
+                        << "'>" << "W" << "</text>" << Endl
+                        << "</g>" << Endl;
+                    }
+                }
+            }
+
+            if (s->WaitOutputTime) {
+                if (totalTime) {
+                    auto height = s->WaitOutputTime->Details.Sum * s->Height / totalTime;
+                background
+                    << "<g><title>";
+                    FormatTooltip(background, "Wait Output Time", s->WaitOutputTime.get(), FormatUsage, totalTime);
+                background
+                    << "</title>" << Endl
+                    << "  <rect x='" << Config.TaskLeft << "' y='" << s->OffsetY + offsetY
+                    << "' width='" << Config.TaskWidth << "' height='" << height
+                    << "' stroke-width='0' fill='" << Config.Palette.OutputLight << "'/>" << Endl
+                    << "</g>" << Endl;
+                }
+                if (!s->WaitOutputTime->History.Deriv.empty()) {
+                    PrintDeriv(canvas, s->WaitOutputTime->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.OutputMedium, Config.Palette.OutputLight);
+                }
+            }
+
+            if (!s->CpuTime->History.Deriv.empty() && s->CpuTime->History.MaxTime > s->CpuTime->History.MinTime) {
                 auto maxCpu = s->CpuTime->History.MaxDeriv * TIME_SERIES_RANGES / (s->CpuTime->History.MaxTime - s->CpuTime->History.MinTime);
                 PrintDeriv(canvas, s->CpuTime->History, px, y0, pw, INTERNAL_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.CpuMedium, Config.Palette.CpuLight);
             }
@@ -1319,56 +1747,52 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
             auto y = (c->CteConnection ? c->CteOffsetY : c->FromStage->OffsetY) + offsetY;
 
             if (c->CteConnection) {
-                auto xx = x;
                 background
-                    << "<rect x='" << xx << "' y='" << y
-                    << "' width='" << Config.HeaderWidth - xx - INTERNAL_WIDTH<< "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2
+                    << "<rect x='" << Config.TaskLeft << "' y='" << y
+                    << "' width='" << Config.TaskWidth << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2
                     << "' stroke-width='1' stroke='" << Config.Palette.StageMain << "' fill='" << Config.Palette.StageClone << "'/>" << Endl;
-                xx = Config.HeaderWidth + GAP_X;
                 background
-                    << "<rect x='" << xx << "' y='" << y
+                    << "<rect x='" << Config.HeaderLeft + x << "' y='" << y
+                    << "' width='" << Config.HeaderWidth - x << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2
+                    << "' stroke-width='1' stroke='" << Config.Palette.StageMain << "' fill='" << Config.Palette.StageClone << "'/>" << Endl;
+                background
+                    << "<rect x='" << Config.SummaryLeft << "' y='" << y
                     << "' width='" << Config.SummaryWidth << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2
                     << "' stroke-width='1' stroke='" << Config.Palette.StageMain << "' fill='" << Config.Palette.StageClone << "'/>" << Endl;
-                xx += Config.SummaryWidth + GAP_X;
                 background
-                    << "<rect x='" << xx << "' y='" << y
-                    << "' width='" << Config.Width - xx << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2
+                    << "<rect x='" << Config.OperatorLeft << "' y='" << y
+                    << "' width='" << Config.OperatorWidth << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2
                     << "' stroke-width='1' stroke='" << Config.Palette.StageMain << "' fill='" << Config.Palette.StageClone << "'/>" << Endl;
                 background
-                    << "<circle cx='" << c->CteIndentX + INTERNAL_WIDTH * 3 / 2
+                    << "<rect x='" << Config.TimelineLeft << "' y='" << y
+                    << "' width='" << Config.TimelineWidth << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2
+                    << "' stroke-width='1' stroke='" << Config.Palette.StageMain << "' fill='" << Config.Palette.StageClone << "'/>" << Endl;
+                background
+                    << "<circle cx='" << Config.HeaderLeft + x + INTERNAL_WIDTH * 3 / 2
                     << "' cy='" << c->CteOffsetY + offsetY + INTERNAL_HEIGHT / 2 + INTERNAL_GAP_Y
                     << "' r='" << std::min(INTERNAL_HEIGHT, INTERNAL_WIDTH) / 2 - 1
                     << "' stroke='" << Config.Palette.StageMain << "' stroke-width='1' fill='" << Config.Palette.StageClone << "' />" << Endl
                     << "<text text-anchor='middle' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
-                    << "px' fill='" << Config.Palette.StageText << "' x='" << c->CteIndentX + INTERNAL_WIDTH * 3 / 2
+                    << "px' fill='" << Config.Palette.StageText << "' x='" << Config.HeaderLeft + x + INTERNAL_WIDTH * 3 / 2
                     << "' y='" << c->CteOffsetY + offsetY + INTERNAL_HEIGHT / 2 + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT / 2
                     << "'>" << ToString(c->FromStage->PhysicalStageId) << "</text>" << Endl;
 
-                auto s = c->FromStage->Info.empty() ? c->FromStage->NodeType : c->FromStage->Info[0];
+                auto s = c->FromStage->Operators[0].Name + ": " + c->FromStage->Operators[0].Info;
                 canvas
-                    << "<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText << "' x='" << x + INTERNAL_WIDTH * 2 + 2
+                    << "<text clip-path='url(#clipTextPath)' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='"
+                    << Config.Palette.StageText << "' x='" << Config.HeaderLeft + x + INTERNAL_WIDTH * 2 + 2
                     << "' y='" << y + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << s << "</text>" << Endl;
 
                 if (c->CteOutputBytes) {
-                    auto textSum = FormatBytes(c->CteOutputBytes->Details.Sum);
                     TStringBuilder tooltip;
-                    tooltip
-                        << "Output "
-                        << c->CteOutputBytes->Details.Sum * 100 / c->CteOutputBytes->Summary->Value << "%, \u2211"
-                        << textSum << ", " << FormatBytes(c->CteOutputBytes->Details.Min) << " | "
-                        << FormatBytes(c->CteOutputBytes->Details.Avg) << " | " << FormatBytes(c->CteOutputBytes->Details.Max);
-                    if (c->CteOutputRows && c->CteOutputRows->Details.Sum) {
-                    tooltip
-                        << ", Rows \u2211"
-                        << FormatIntegerValue(c->CteOutputRows->Details.Sum) << ", " << FormatIntegerValue(c->CteOutputRows->Details.Min) << " | "
-                        << FormatIntegerValue(c->CteOutputRows->Details.Avg) << " | " << FormatIntegerValue(c->CteOutputRows->Details.Max)
-                        << ", Width " << FormatBytes(c->CteOutputBytes->Details.Sum / c->CteOutputRows->Details.Sum);
+                    auto textSum = FormatTooltip(tooltip, "Output", c->CteOutputBytes.get(), FormatBytes);
+                    if (c->CteOutputRows) {
+                        FormatTooltip(tooltip, ", Rows", c->CteOutputRows.get(), FormatInteger);
+                        if (c->CteOutputRows->Details.Sum) {
+                            tooltip << ", Width " << FormatBytes(c->CteOutputRows->Details.Sum / c->CteOutputRows->Details.Sum);
+                        }
                     }
-                    PrintStageSummary(background, canvas, y + INTERNAL_GAP_Y, c->CteOutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip);
-
-                    canvas
-                        << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText << "' x='" << Config.HeaderWidth
-                        << "' y='" << y + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << c->CteOutputBytes->Details.Count << "</text>" << Endl;
+                    PrintStageSummary(background, canvas, Config.SummaryLeft, Config.SummaryWidth, y + INTERNAL_GAP_Y, INTERNAL_HEIGHT, c->CteOutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, 0);
 
                     auto d = c->CteOutputBytes->MaxTime - c->CteOutputBytes->MinTime;
                     TStringBuilder title;
@@ -1376,7 +1800,7 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
                     if (d) {
                         title << " " << FormatBytes(c->CteOutputBytes->Details.Sum * 1000 / d) << "/s";
                         if (c->CteOutputRows) {
-                            title << ", Rows " << FormatIntegerValue(c->CteOutputRows->Details.Sum * 1000 / d) << "/s";
+                            title << ", Rows " << FormatInteger(c->CteOutputRows->Details.Sum * 1000 / d) << "/s";
                         }
                     }
                     PrintTimeline(background, canvas, title, c->CteOutputBytes->FirstMessage, c->CteOutputBytes->LastMessage, px, y + INTERNAL_GAP_Y, pw, INTERNAL_HEIGHT, Config.Palette.OutputMedium);
@@ -1397,6 +1821,7 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
             else if (c->NodeType == "Map")       mark = "Ma";
             else if (c->NodeType == "UnionAll")  mark = "U";
             else if (c->NodeType == "Broadcast") mark = "B";
+            else if (c->NodeType == "External")  mark = "E";
             else                                 mark = "?";
 
             canvas
@@ -1427,46 +1852,34 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
             }
             canvas
                 << "</title>" << Endl
-                << "  <polygon points='" << x + INTERNAL_WIDTH << "," << y + INTERNAL_HEIGHT << " "
-                << x << "," << y + INTERNAL_HEIGHT << " ";
+                << "  <polygon points='" << Config.HeaderLeft + x + INTERNAL_WIDTH << "," << y + INTERNAL_HEIGHT << " "
+                << Config.HeaderLeft + x << "," << y + INTERNAL_HEIGHT << " ";
             if (s->Connections.size() >= 2) {
             canvas
-                << x - INTERNAL_GAP_X * 2 << "," << y + INTERNAL_HEIGHT / 2 << " ";
+                << Config.HeaderLeft + x - INTERNAL_GAP_X * 2 << "," << y + INTERNAL_HEIGHT / 2 << " ";
             }
             canvas
-                << x << "," << y << " ";
+                << Config.HeaderLeft + x << "," << y << " ";
             if (s->Connections.size() == 1) {
             canvas
-                << x + INTERNAL_WIDTH / 2 << "," << y - INTERNAL_GAP_Y * 2 << " ";
+                << Config.HeaderLeft + x + INTERNAL_WIDTH / 2 << "," << y - INTERNAL_GAP_Y * 2 << " ";
             }
             canvas
-                << x + INTERNAL_WIDTH << "," << y << "' stroke-width='1' stroke='" << Config.Palette.ConnectionLine << "' fill='" << Config.Palette.ConnectionFill << "'/>" << Endl
-                << "  <text text-anchor='middle' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT - 2 << "px' fill='" << Config.Palette.ConnectionText << "' x='" << x + INTERNAL_WIDTH / 2
+                << Config.HeaderLeft + x + INTERNAL_WIDTH << "," << y << "' stroke-width='1' stroke='" << Config.Palette.ConnectionLine << "' fill='" << Config.Palette.ConnectionFill << "'/>" << Endl
+                << "  <text text-anchor='middle' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT - 2 << "px' fill='" << Config.Palette.ConnectionText << "' x='" << Config.HeaderLeft + x + INTERNAL_WIDTH / 2
                 << "' y='" << y + INTERNAL_TEXT_HEIGHT  + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 - 1 << "'>" << mark << "</text>" << Endl
                 << "</g>" << Endl;
 
             if (c->InputBytes) {
-                auto textSum = FormatBytes(c->InputBytes->Details.Sum);
                 TStringBuilder tooltip;
-                tooltip
-                    << "Input "
-                    << c->InputBytes->Details.Sum * 100 / c->InputBytes->Summary->Value << "%, \u2211"
-                    << textSum << ", " << FormatBytes(c->InputBytes->Details.Min) << " | "
-                    << FormatBytes(c->InputBytes->Details.Avg) << " | " << FormatBytes(c->InputBytes->Details.Max);
-                if (c->InputRows && c->InputRows->Details.Sum) {
-                tooltip
-                    << ", Rows \u2211"
-                    << FormatIntegerValue(c->InputRows->Details.Sum) << ", " << FormatIntegerValue(c->InputRows->Details.Min) << " | "
-                    << FormatIntegerValue(c->InputRows->Details.Avg) << " | " << FormatIntegerValue(c->InputRows->Details.Max)
-                    << ", Width " << FormatBytes(c->InputBytes->Details.Sum / c->InputRows->Details.Sum);
+                auto textSum = FormatTooltip(tooltip, "Input", c->InputBytes.get(), FormatBytes);
+                if (c->InputRows) {
+                    FormatTooltip(tooltip, ", Rows", c->InputRows.get(), FormatInteger);
+                    if (c->InputRows->Details.Sum) {
+                        tooltip << ", Width " << FormatBytes(c->InputBytes->Details.Sum / c->InputRows->Details.Sum);
+                    }
                 }
-                PrintStageSummary(background, canvas, y0, c->InputBytes, Config.Palette.InputMedium, Config.Palette.InputLight, textSum, tooltip);
-
-                if (c->InputBytes->Details.Count != taskCount) {
-                    canvas
-                    << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageTextHighlight << "' x='" << Config.HeaderWidth
-                    << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << c->InputBytes->Details.Count << "</text>" << Endl;
-                }
+                PrintStageSummary(background, canvas, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, c->InputBytes, Config.Palette.InputMedium, Config.Palette.InputLight, textSum, tooltip, taskCount);
 
                 auto d = c->InputBytes->MaxTime - c->InputBytes->MinTime;
                 TStringBuilder title;
@@ -1474,7 +1887,7 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
                 if (d) {
                     title << " " << FormatBytes(c->InputBytes->Details.Sum * 1000 / d) << "/s";
                     if (c->InputRows) {
-                        title << ", Rows " << FormatIntegerValue(c->InputRows->Details.Sum * 1000 / d) << "/s";
+                        title << ", Rows " << FormatInteger(c->InputRows->Details.Sum * 1000 / d) << "/s";
                     }
                 }
                 PrintTimeline(background, canvas, title, c->InputBytes->FirstMessage, c->InputBytes->LastMessage, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.InputMedium);
@@ -1491,46 +1904,34 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
             }
         }
 
-        if (s->Source && s->Source->IngressBytes) {
-            auto textSum = FormatBytes(s->Source->IngressBytes->Details.Sum);
+        if (s->IngressBytes) {
             TStringBuilder tooltip;
-            tooltip
-                << "Ingress "
-                << s->Source->IngressBytes->Details.Sum * 100 / s->Source->IngressBytes->Summary->Value << "%, \u2211"
-                << textSum << ", " << FormatBytes(s->Source->IngressBytes->Details.Min) << " | "
-                << FormatBytes(s->Source->IngressBytes->Details.Avg) << " | " << FormatBytes(s->Source->IngressBytes->Details.Max);
-            if (s->Source->IngressRows && s->Source->IngressRows->Details.Sum) {
-            tooltip
-                << ", Rows \u2211"
-                << FormatIntegerValue(s->Source->IngressRows->Details.Sum) << ", " << FormatIntegerValue(s->Source->IngressRows->Details.Min) << " | "
-                << FormatIntegerValue(s->Source->IngressRows->Details.Avg) << " | " << FormatIntegerValue(s->Source->IngressRows->Details.Max)
-                << ", Width " << FormatBytes(s->Source->IngressBytes->Details.Sum / s->Source->IngressRows->Details.Sum);
+            auto textSum = FormatTooltip(tooltip, "Ingress", s->IngressBytes.get(), FormatBytes);
+            if (s->IngressRows) {
+                FormatTooltip(tooltip, ", Rows", s->IngressRows.get(), FormatInteger);
+                if (s->IngressRows->Details.Sum) {
+                    tooltip << ", Width " << FormatBytes(s->IngressBytes->Details.Sum / s->IngressRows->Details.Sum);
+                }
             }
-            PrintStageSummary(background, canvas, y0, s->Source->IngressBytes, Config.Palette.IngressMedium, Config.Palette.IngressLight, textSum, tooltip);
+            PrintStageSummary(background, canvas, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->IngressBytes, Config.Palette.IngressMedium, Config.Palette.IngressLight, textSum, tooltip, taskCount);
 
-            if (s->Source->IngressBytes->Details.Count != taskCount) {
-                canvas
-                << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageTextHighlight << "' x='" << Config.HeaderWidth
-                << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << s->Source->IngressBytes->Details.Count << "</text>" << Endl;
-            }
-
-            auto d = s->Source->IngressBytes->MaxTime - s->Source->IngressBytes->MinTime;
+            auto d = s->IngressBytes->MaxTime - s->IngressBytes->MinTime;
             TStringBuilder title;
             title << "Ingress";
             if (d) {
-                title << " " << FormatBytes(s->Source->IngressBytes->Details.Sum * 1000 / d) << "/s";
-                if (s->Source->IngressRows) {
-                    title << ", Rows " << FormatIntegerValue(s->Source->IngressRows->Details.Sum / d) << "/s";
+                title << " " << FormatBytes(s->IngressBytes->Details.Sum * 1000 / d) << "/s";
+                if (s->IngressRows) {
+                    title << ", Rows " << FormatInteger(s->IngressRows->Details.Sum / d) << "/s";
                 }
             }
-            PrintTimeline(background, canvas, title, s->Source->IngressBytes->FirstMessage, s->Source->IngressBytes->LastMessage, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.IngressMedium);
+            PrintTimeline(background, canvas, title, s->IngressBytes->FirstMessage, s->IngressBytes->LastMessage, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.IngressMedium);
 
-            if (!s->Source->IngressBytes->WaitTime.Deriv.empty()) {
-                PrintWaitTime(background, s->Source->IngressBytes, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.IngressLight);
+            if (!s->IngressBytes->WaitTime.Deriv.empty()) {
+                PrintWaitTime(background, s->IngressBytes, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.IngressLight);
             }
 
-            if (!s->Source->IngressBytes->History.Deriv.empty()) {
-                PrintDeriv(canvas, s->Source->IngressBytes->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.IngressDark);
+            if (!s->IngressBytes->History.Deriv.empty()) {
+                PrintDeriv(canvas, s->IngressBytes->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.IngressDark);
             }
 
             y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
@@ -1575,9 +1976,17 @@ TColorPalette::TColorPalette() {
 }
 
 TPlanViewConfig::TPlanViewConfig() {
-    HeaderWidth = 300;
+    Width = 1280;
+    HeaderLeft = 0;
+    HeaderWidth = 300 - INTERNAL_GAP_X;
+    OperatorLeft = HeaderLeft + HeaderWidth + GAP_X;
+    OperatorWidth = 128;
+    SummaryLeft = OperatorLeft + OperatorWidth + GAP_X;
     SummaryWidth = 128;
-    Width = 1024;
+    TaskLeft = SummaryLeft + SummaryWidth + GAP_X;
+    TaskWidth = 24;
+    TimelineLeft = TaskLeft + TaskWidth + GAP_X;
+    TimelineWidth = Width - TimelineLeft;
 }
 
 
@@ -1645,13 +2054,21 @@ TString TPlanVisualizer::PrintSvg() {
     for (auto& p : Plans) {
         offsetY += GAP_Y;
         canvas
-            << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText 
-            << "' x='" << 0 << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>"
-            << p.NodeType << "</text>" << Endl;
-
-        canvas
-            << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText << "' x='" << Config.HeaderWidth
-            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>" << ToString(p.Tasks) << "</text>" << Endl;
+            << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText
+            << "' x='" << Config.HeaderLeft
+            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>" << p.NodeType << "</text>" << Endl
+            << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText
+            << "' x='" << Config.OperatorLeft + 2
+            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>Operators</text>" << Endl
+            << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText
+            << "' x='" << Config.SummaryLeft + 2
+            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>Stages</text>" << Endl
+            << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText
+            << "' x='" << Config.TaskLeft + Config.TaskWidth - 2
+            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>Tasks</text>" << Endl
+            << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText
+            << "' x='" << Config.TaskLeft + Config.TaskWidth - 2
+            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y << "'>" << p.Tasks << "</text>" << Endl;
 
         canvas
             << "<g><title>Ingress "
@@ -1666,11 +2083,12 @@ TString TPlanVisualizer::PrintSvg() {
         }
         canvas
             << "</title>" << Endl
-            << "  <rect x='" << Config.HeaderWidth + GAP_X << "' y='" << offsetY
+            << "  <rect x='" << Config.SummaryLeft << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT + GAP_Y
             << "' width='" << summary3 << "' height='" << TIME_HEIGHT
             << "' stroke-width='0' fill='" << Config.Palette.IngressMedium << "'/>" << Endl
-            << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight << "' x='" << Config.HeaderWidth + GAP_X + 2
-            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>" << FormatBytes(p.IngressBytes->Value) << "</text>" << Endl
+            << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
+            << "' x='" << Config.SummaryLeft + 2
+            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y << "'>" << FormatBytes(p.IngressBytes->Value) << "</text>" << Endl
             << "</g>" << Endl;
 
         canvas
@@ -1683,24 +2101,25 @@ TString TPlanVisualizer::PrintSvg() {
         }
         canvas
             << "</title>" << Endl
-            << "  <rect x='" << Config.HeaderWidth + GAP_X + INTERNAL_GAP_X + summary3 << "' y='" << offsetY
+            << "  <rect x='" << Config.SummaryLeft + INTERNAL_GAP_X + summary3 << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT + GAP_Y
             << "' width='" << Config.SummaryWidth - (summary3 + INTERNAL_GAP_X) * 2 << "' height='" << TIME_HEIGHT
             << "' stroke-width='0' fill='" << Config.Palette.CpuMedium << "'/>" << Endl
-            << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight << "' x='" << Config.HeaderWidth + GAP_X + INTERNAL_GAP_X + summary3 + 2
-            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>" << FormatUsage(p.CpuTime->Value) << "</text>" << Endl
+            << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
+            << "' x='" << Config.SummaryLeft + INTERNAL_GAP_X + summary3 + 2
+            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y << "'>" << FormatUsage(p.CpuTime->Value) << "</text>" << Endl
             << "</g>" << Endl;
 
         canvas
             << "<g><title>Memory " << FormatBytes(p.MaxMemoryUsage->Value) << "</title>" << Endl
-            << "  <rect x='" << Config.HeaderWidth + GAP_X + Config.SummaryWidth - summary3 << "' y='" << offsetY
+            << "  <rect x='" << Config.SummaryLeft + Config.SummaryWidth - summary3 << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT + GAP_Y
             << "' width='" << summary3 << "' height='" << TIME_HEIGHT
             << "' stroke-width='0' fill='" << Config.Palette.MemMedium << "'/>" << Endl
-            << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight << "' x='" << Config.HeaderWidth + GAP_X + Config.SummaryWidth - summary3 + 2
-            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>" << FormatBytes(p.MaxMemoryUsage->Value) << "</text>" << Endl
+            << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
+            << "' x='" << Config.SummaryLeft + Config.SummaryWidth - summary3 + 2
+            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y<< "'>" << FormatBytes(p.MaxMemoryUsage->Value) << "</text>" << Endl
             << "</g>" << Endl;
 
-        auto w = Config.Width - (Config.HeaderWidth + GAP_X + Config.SummaryWidth + GAP_X);
-        auto x = (Config.HeaderWidth + GAP_X + Config.SummaryWidth + GAP_X) + w * (p.MaxTime + p.TimeOffset) / MaxTime;
+        auto x = Config.TimelineLeft + Config.TimelineWidth * (p.MaxTime + p.TimeOffset) / MaxTime;
         canvas
             << "<g><title>" << "Duration: " << FormatTimeMs(p.MaxTime) << ", Total " << FormatTimeMs(p.MaxTime + p.TimeOffset) << "</title>" << Endl
             << "  <rect x='" << x - summary3 << "' y='" << offsetY
@@ -1711,11 +2130,10 @@ TString TPlanVisualizer::PrintSvg() {
             << "</g>" << Endl;
 
         offsetY += TIME_HEIGHT;
-        if (!p.TotalCpuTime.Deriv.empty()) {
+        if (!p.TotalCpuTime.Deriv.empty() && p.TotalCpuTime.MaxTime > p.TotalCpuTime.MinTime) {
 
-            auto tx0 = Config.HeaderWidth + GAP_X + Config.SummaryWidth + GAP_X + INTERNAL_GAP_X;
-            auto tx1 = Config.Width - INTERNAL_GAP_X;
-            auto tw = tx1 - tx0;
+            auto tx0 = Config.TimelineLeft;
+            auto tw = Config.TimelineWidth;
             auto maxCpu = p.TotalCpuTime.MaxDeriv * TIME_SERIES_RANGES / (p.TotalCpuTime.MaxTime - p.TotalCpuTime.MinTime);
             p.PrintDeriv(canvas, p.TotalCpuTime, tx0, offsetY, tw, INTERNAL_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.CpuMedium, Config.Palette.CpuLight);
         }
@@ -1724,8 +2142,8 @@ TString TPlanVisualizer::PrintSvg() {
     }
 
     svg << "<svg width='" << Config.Width << "' height='" << offsetY << "' xmlns='http://www.w3.org/2000/svg'>" << Endl;
-    svg << "<clipPath id='clipTextPath'><rect x='" << 0
-        << "' y='0' width='" << Config.HeaderWidth - INTERNAL_WIDTH << "' height='" << offsetY << "'/>"
+    svg << "<clipPath id='clipTextPath'><rect x='" << Config.HeaderLeft
+        << "' y='0' width='" << Config.HeaderWidth << "' height='" << offsetY << "'/>"
         << "</clipPath>" << Endl;
     svg << TString(background) << Endl;
 
@@ -1752,8 +2170,8 @@ TString TPlanVisualizer::PrintSvg() {
             deltaSec = stepSec - (stepSec % 60);
         }
 
-        auto x = Config.HeaderWidth + GAP_X + Config.SummaryWidth + GAP_X;
-        auto w = Config.Width - x - INTERNAL_GAP_X * 2;
+        auto x = Config.TimelineLeft + INTERNAL_GAP_X;
+        auto w = Config.TimelineWidth - INTERNAL_GAP_X * 2;
 
         for (ui64 t = 0; t < maxSec; t += deltaSec) {
             ui64 x1 = t * w / maxSec;
@@ -1763,7 +2181,7 @@ TString TPlanVisualizer::PrintSvg() {
             auto timeLabel = Sprintf("%lu:%.2lu", t / 60, t % 60);
             for (auto& p : Plans) {
                 svg
-                    << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText 
+                    << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText
                     << "' x='" << x + x1 + 2 << "' y='" << p.OffsetY - INTERNAL_HEIGHT - (TIME_HEIGHT - INTERNAL_TEXT_HEIGHT) << "'>"
                     << timeLabel << "</text>" << Endl;
             }

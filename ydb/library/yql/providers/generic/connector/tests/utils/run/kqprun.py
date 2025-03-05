@@ -5,7 +5,7 @@ import subprocess
 
 import jinja2
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EProtocol
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 
 import ydb.library.yql.providers.generic.connector.tests.utils.artifacts as artifacts
@@ -63,10 +63,10 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
 
 {% for cluster in generic_settings.clickhouse_clusters %}
 
-{% if cluster.protocol == EProtocol.NATIVE %}
+{% if cluster.protocol == EGenericProtocol.NATIVE %}
 {% set CLICKHOUSE_PORT = settings.clickhouse.native_port_internal %}
 {% set CLICKHOUSE_PROTOCOL = NATIVE %}
-{% elif cluster.protocol == EProtocol.HTTP %}
+{% elif cluster.protocol == EGenericProtocol.HTTP %}
 {% set CLICKHOUSE_PORT = settings.clickhouse.http_port_internal %}
 {% set CLICKHOUSE_PROTOCOL = HTTP %}
 {% endif %}
@@ -165,7 +165,7 @@ CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
         self.template = jinja2.Environment(loader=jinja2.BaseLoader, undefined=jinja2.DebugUndefined).from_string(
             self.template_
         )
-        self.template.globals['EProtocol'] = EProtocol
+        self.template.globals['EGenericProtocol'] = EGenericProtocol
 
     def render(self, file_path: Path, settings: Settings, generic_settings: GenericSettings) -> None:
         content = self.template.render(dict(settings=settings, generic_settings=generic_settings))

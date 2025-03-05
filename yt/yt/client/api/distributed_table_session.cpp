@@ -1,7 +1,10 @@
 #include "distributed_table_session.h"
 
 #include "client.h"
+#include "distributed_table_client.h"
 #include "transaction.h"
+
+#include <yt/yt/client/signature/signature.h>
 
 namespace NYT::NApi {
 
@@ -12,36 +15,9 @@ using namespace NTransactionClient;
 using namespace NYTree;
 using namespace NCypressClient;
 using namespace NChunkClient;
+using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
-
-TTableWriterPatchInfo::TTableWriterPatchInfo(
-    TRichYPath richPath,
-    TObjectId objectId,
-    TCellTag externalCellTag,
-    TMasterTableSchemaId chunkSchemaId,
-    TTableSchemaPtr chunkSchema,
-    std::optional<TLegacyOwningKey> writerLastKey,
-    int maxHeavyColumns,
-    TTimestamp timestamp,
-    const IAttributeDictionary& tableAttributes)
-    : TTableWriterPatchInfo()
-{
-    ObjectId = objectId;
-    RichPath = std::move(richPath);
-
-    ChunkSchemaId = chunkSchemaId;
-    ChunkSchema = std::move(chunkSchema);
-
-    WriterLastKey = writerLastKey;
-    MaxHeavyColumns = maxHeavyColumns;
-
-    TableAttributes = tableAttributes.ToMap();
-
-    ExternalCellTag = externalCellTag;
-
-    Timestamp = timestamp;
-}
 
 void TTableWriterPatchInfo::Register(TRegistrar registrar)
 {
@@ -63,8 +39,10 @@ void TTableWriterPatchInfo::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TFragmentWriteResult::Register(TRegistrar registrar)
+void TWriteFragmentResult::Register(TRegistrar registrar)
 {
+    registrar.Parameter("session_id", &TThis::SessionId);
+    registrar.Parameter("cookie_id", &TThis::CookieId);
     registrar.Parameter("min_boundary_key", &TThis::MinBoundaryKey);
     registrar.Parameter("max_boundary_key", &TThis::MaxBoundaryKey);
     registrar.Parameter("chunk_list_id", &TThis::ChunkListId);
@@ -72,126 +50,89 @@ void TFragmentWriteResult::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TTableWriterPatchInfo& TFragmentWriteCookie::GetPatchInfo() const
+void TWriteFragmentCookie::Register(TRegistrar registrar)
 {
-    return PatchInfo_;
-}
+    registrar.Parameter("session_id", &TThis::SessionId);
+    registrar.Parameter("cookie_id", &TThis::CookieId);
 
-TTransactionId TFragmentWriteCookie::GetMainTransactionId() const
-{
-    return MainTxId_;
-}
+    registrar.Parameter("transaction_id", &TThis::MainTransactionId);
 
-TTransactionId TFragmentWriteCookie::GetUploadTransactionId() const
-{
-    return UploadTxId_;
-}
-
-void TFragmentWriteCookie::Register(TRegistrar registrar)
-{
-    registrar.Parameter("session_id", &TThis::Id_);
-
-    registrar.Parameter("tx_id", &TThis::MainTxId_);
-    registrar.Parameter("upload_tx_id", &TThis::UploadTxId_);
-
-    registrar.Parameter("patch_info", &TThis::PatchInfo_);
-
-    registrar.Parameter("writer_results", &TThis::WriteResults_);
+    registrar.Parameter("patch_info", &TThis::PatchInfo);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TDistributedWriteSession::TDistributedWriteSession(
-    TTransactionId mainTxId,
-    TTransactionId uploadTxId,
+    TTransactionId mainTransactionId,
+    TTransactionId uploadTransactionId,
     TChunkListId rootChunkListId,
-    TTableWriterPatchInfo patchInfo)
+    NYPath::TRichYPath richPath,
+    NObjectClient::TObjectId objectId,
+    NObjectClient::TCellTag externalCellTag,
+    NTableClient::TMasterTableSchemaId chunkSchemaId,
+    NTableClient::TTableSchemaPtr chunkSchema,
+    std::optional<NTableClient::TLegacyOwningKey> writerLastKey,
+    int maxHeavyColumns,
+    NTransactionClient::TTimestamp timestamp,
+    const NYTree::IAttributeDictionary& tableAttributes)
     : TDistributedWriteSession()
 {
-    Id_ = TDistributedWriteSessionId(TGuid::Create());
-    MainTxId_ = mainTxId;
-    UploadTxId_ = uploadTxId;
+    MainTransactionId = mainTransactionId;
+    UploadTransactionId = uploadTransactionId;
 
-    RootChunkListId_ = rootChunkListId;
+    RootChunkListId = rootChunkListId;
 
-    PatchInfo_ = std::move(patchInfo);
+    PatchInfo.ObjectId = objectId;
+    PatchInfo.RichPath = std::move(richPath);
 
-    // Signatures?
+    PatchInfo.ChunkSchemaId = chunkSchemaId;
+    PatchInfo.ChunkSchema = std::move(chunkSchema);
+
+    PatchInfo.WriterLastKey = std::move(writerLastKey);
+    PatchInfo.MaxHeavyColumns = maxHeavyColumns;
+
+    PatchInfo.TableAttributes = tableAttributes.ToMap();
+
+    PatchInfo.ExternalCellTag = externalCellTag;
+
+    PatchInfo.Timestamp = timestamp;
 }
 
-TTransactionId TDistributedWriteSession::GetMainTransactionId() const
+TWriteFragmentCookie TDistributedWriteSession::CookieFromThis() const
 {
-    return MainTxId_;
-}
-
-TTransactionId TDistributedWriteSession::GetUploadTransactionId() const
-{
-    return UploadTxId_;
-}
-
-const TTableWriterPatchInfo& TDistributedWriteSession::GetPatchInfo() const Y_LIFETIME_BOUND
-{
-    return PatchInfo_;
-}
-
-TChunkListId TDistributedWriteSession::GetRootChunkListId() const
-{
-    return RootChunkListId_;
-}
-
-TFragmentWriteCookiePtr TDistributedWriteSession::GiveCookie()
-{
-    auto cookie = New<TFragmentWriteCookie>();
-    cookie->Id_ = Id_;
-    cookie->MainTxId_ = MainTxId_;
-    cookie->UploadTxId_ = UploadTxId_;
-    cookie->PatchInfo_ = PatchInfo_;
+    auto cookie = TWriteFragmentCookie{};
+    cookie.CookieId = TGuid::Create();
+    cookie.SessionId = RootChunkListId;
+    cookie.MainTransactionId = MainTransactionId;
+    cookie.PatchInfo = PatchInfo;
 
     return cookie;
 }
 
-void TDistributedWriteSession::TakeCookie(TFragmentWriteCookiePtr cookie)
-{
-    // Verify cookie signature?
-    WriteResults_.reserve(std::ssize(WriteResults_) + std::ssize(cookie->WriteResults_));
-    for (const auto& writeResult : cookie->WriteResults_) {
-        WriteResults_.push_back(writeResult);
-    }
-}
-
-TFuture<void> TDistributedWriteSession::Ping(IClientPtr client)
-{
-    // NB(arkady-e1ppa): AutoAbort = false by default.
-    auto mainTx = client->AttachTransaction(MainTxId_);
-
-    return mainTx->Ping();
-}
-
 void TDistributedWriteSession::Register(TRegistrar registrar)
 {
-    registrar.Parameter("session_id", &TThis::Id_);
-    registrar.Parameter("tx_id", &TThis::MainTxId_);
-    registrar.Parameter("upload_tx_id", &TThis::UploadTxId_);
+    registrar.Parameter("main_transaction_id", &TThis::MainTransactionId);
+    registrar.Parameter("upload_transaction_id", &TThis::UploadTransactionId);
 
-    registrar.Parameter("root_chunk_list_id", &TThis::RootChunkListId_);
+    registrar.Parameter("root_chunk_list_id", &TThis::RootChunkListId);
 
-    registrar.Parameter("patch_info", &TThis::PatchInfo_);
-
-    registrar.Parameter("write_results", &TThis::WriteResults_);
+    registrar.Parameter("patch_info", &TThis::PatchInfo);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void* IDistributedTableClientBase::GetOpaqueDistributedWriteResults(Y_LIFETIME_BOUND const TDistributedWriteSessionPtr& session)
+TFuture<void> PingDistributedWriteSession(
+    const TSignedDistributedWriteSessionPtr& session,
+    const IClientPtr& client)
 {
-    return static_cast<void*>(&session->WriteResults_);
+    auto concreteSession = ConvertTo<TDistributedWriteSession>(TYsonStringBuf(session.Underlying()->Payload()));
+
+    // NB(arkady-e1ppa): AutoAbort = false by default.
+    auto mainTx = client->AttachTransaction(concreteSession.MainTransactionId);
+
+    return mainTx->Ping();
 }
 
-void IDistributedTableClientBase::RecordOpaqueWriteResult(const TFragmentWriteCookiePtr& cookie, void* opaqueWriteResult)
-{
-    auto* concrete = static_cast<TFragmentWriteResult*>(opaqueWriteResult);
-    YT_ASSERT(concrete);
-    cookie->WriteResults_.push_back(*concrete);
-}
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi

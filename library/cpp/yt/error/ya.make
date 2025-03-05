@@ -9,12 +9,21 @@ PEERDIR(
     library/cpp/yt/misc
     library/cpp/yt/threading
     library/cpp/yt/string
-    library/cpp/yt/yson_string # TODO(arkady-e1ppa): eliminate
+    library/cpp/yt/logging # TODO(arkady-e1ppa): Consider logging error_code crashes to stderr and drop this dep.
+
+    util
 )
 
 SRCS(
+    error.cpp
     error_attributes.cpp
+    error_code.cpp
     origin_attributes.cpp
+    text_yson.cpp
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    unittests
+)

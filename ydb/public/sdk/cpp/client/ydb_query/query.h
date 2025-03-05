@@ -1,5 +1,7 @@
 #pragma once
 
+#include "fwd.h"
+
 #include <ydb/public/sdk/cpp/client/ydb_query/stats.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h>
@@ -9,7 +11,7 @@
 
 #include <library/cpp/threading/future/future.h>
 
-namespace NYdb::NQuery {
+namespace NYdb::inline V2::NQuery {
 
 enum class ESyntax {
     Unspecified = 0,
@@ -68,12 +70,12 @@ private:
 using TAsyncExecuteQueryIterator = NThreading::TFuture<TExecuteQueryIterator>;
 
 struct TExecuteQuerySettings : public TRequestSettings<TExecuteQuerySettings> {
-    FLUENT_SETTING_OPTIONAL(ui32, OutputChunkMaxSize);
-    FLUENT_SETTING_DEFAULT(ESyntax, Syntax, ESyntax::YqlV1);
-    FLUENT_SETTING_DEFAULT(EExecMode, ExecMode, EExecMode::Execute);
-    FLUENT_SETTING_DEFAULT(EStatsMode, StatsMode, EStatsMode::None);
-    FLUENT_SETTING_OPTIONAL(bool, ConcurrentResultSets);
-    FLUENT_SETTING(TString, ResourcePool);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui32, OutputChunkMaxSize);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ESyntax, Syntax, ESyntax::YqlV1);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(EExecMode, ExecMode, EExecMode::Execute);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(EStatsMode, StatsMode, EStatsMode::None);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(bool, ConcurrentResultSets);
+    FLUENT_SETTING_DEPRECATED(TString, ResourcePool);
 };
 
 struct TBeginTxSettings : public TRequestSettings<TBeginTxSettings> {};
@@ -93,11 +95,11 @@ using TAsyncBeginTransactionResult = NThreading::TFuture<TBeginTransactionResult
 using TAsyncCommitTransactionResult = NThreading::TFuture<TCommitTransactionResult>;
 
 struct TExecuteScriptSettings : public TOperationRequestSettings<TExecuteScriptSettings> {
-    FLUENT_SETTING_DEFAULT(ESyntax, Syntax, ESyntax::YqlV1);
-    FLUENT_SETTING_DEFAULT(EExecMode, ExecMode, EExecMode::Execute);
-    FLUENT_SETTING_DEFAULT(EStatsMode, StatsMode, EStatsMode::None);
-    FLUENT_SETTING(TDuration, ResultsTtl);
-    FLUENT_SETTING(TString, ResourcePool);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ESyntax, Syntax, ESyntax::YqlV1);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(EExecMode, ExecMode, EExecMode::Execute);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(EStatsMode, StatsMode, EStatsMode::None);
+    FLUENT_SETTING_DEPRECATED(TDuration, ResultsTtl);
+    FLUENT_SETTING_DEPRECATED(TString, ResourcePool);
 };
 
 class TQueryContent {
@@ -152,8 +154,8 @@ private:
 };
 
 struct TFetchScriptResultsSettings : public TRequestSettings<TFetchScriptResultsSettings> {
-    FLUENT_SETTING(TString, FetchToken);
-    FLUENT_SETTING_DEFAULT(ui64, RowsLimit, 1000);
+    FLUENT_SETTING_DEPRECATED(TString, FetchToken);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(ui64, RowsLimit, 1000);
 };
 
 class TFetchScriptResultsResult : public TStatus {

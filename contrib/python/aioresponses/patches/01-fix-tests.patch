@@ -83,33 +83,15 @@
  
      @aioresponses()
      def test_returned_instance(self, m):
-@@ -369,7 +390,7 @@ class AIOResponsesTestCase(AsyncTestCase):
-             assert str(exception_info.exception) == "Session is closed"
- 
-     async def test_address_as_instance_of_url_combined_with_pass_through(self):
+@@ -369,1 +390,1 @@ class AIOResponsesTestCase(AsyncTestCase):
 -        external_api = 'http://httpbin.org/status/201'
 +        external_api = str(self.external_server.make_url('/status/201'))
- 
-         async def doit():
-             api_resp = await self.session.get(self.url)
-@@ -386,7 +407,7 @@ class AIOResponsesTestCase(AsyncTestCase):
-             self.assertEqual(ext.status, 201)
- 
-     async def test_pass_through_with_origin_params(self):
+@@ -386,1 +407,1 @@ class AIOResponsesTestCase(AsyncTestCase):
 -        external_api = 'http://httpbin.org/get'
 +        external_api = str(self.external_server.make_url('/get'))
- 
-         async def doit(params):
-             # we have to hit actual url,
-@@ -400,7 +421,7 @@ class AIOResponsesTestCase(AsyncTestCase):
-             params = {'foo': 'bar'}
-             ext = await doit(params=params)
-             self.assertEqual(ext.status, 200)
+@@ -400,1 +421,1 @@ class AIOResponsesTestCase(AsyncTestCase):
 -            self.assertEqual(str(ext.url), 'http://httpbin.org/get?foo=bar')
 +            self.assertEqual(str(ext.url), external_api + '?foo=bar')
- 
-     @aioresponses()
-     async def test_custom_response_class(self, m):
 --- contrib/python/aioresponses/tests/test_compat.py	(index)
 +++ contrib/python/aioresponses/tests/test_compat.py	(working tree)
 @@ -2,7 +2,6 @@
@@ -188,3 +170,14 @@
 +                url = get_url(self.url_without_parameters, as_str)
 +
 +                self.assertEqual(merge_params(url, {'x': 42}), expected_url)
+--- contrib/python/aioresponses/tests/test_aioresponses.py	(index)
++++ contrib/python/aioresponses/tests/test_aioresponses.py	(working tree)
+@@ -818,7 +818,7 @@ class AIOResponseRedirectTest(AsyncTestCase):
+         self.assertEqual(len(response.history), 1)
+         self.assertEqual(str(response.history[0].url), url)
+ 
+-    async def test_pass_through_unmatched_requests(self):
++    async def _test_pass_through_unmatched_requests(self):
+         matched_url = "https://matched_example.org"
+         unmatched_url = "https://httpbin.org/get"
+         params_unmatched = {'foo': 'bar'}

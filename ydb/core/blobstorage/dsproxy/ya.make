@@ -17,6 +17,7 @@ SRCS(
     dsproxy_discover_m3dc.cpp
     dsproxy_discover_m3of4.cpp
     dsproxy_get.cpp
+    dsproxy_get_block.cpp
     dsproxy_get_impl.cpp
     dsproxy_get_impl.h
     dsproxy_indexrestoreget.cpp
@@ -67,7 +68,7 @@ PEERDIR(
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/storagepoolmon
     ydb/core/blobstorage/vdisk/ingress
-    ydb/core/control
+    ydb/core/control/lib
     ydb/core/util
 )
 

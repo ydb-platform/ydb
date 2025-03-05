@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 11,
+                "PlanNodeId": 9,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +14,18 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 9
+                                        "ExternalPlanNodeId": 7
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 10,
+                        "PlanNodeId": 8,
                         "Plans": [
                             {
                                 "Node Type": "Merge",
-                                "PlanNodeId": 9,
+                                "PlanNodeId": 7,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -39,14 +39,11 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[Arg.ss1.x,Arg.ss2.q1,Arg.ss2.q2,Arg.ss2.y]"
                                             },
                                             {
                                                 "Condition": "ss1.x = ss2._equijoin_column_0",
                                                 "Inputs": [
-                                                    {
-                                                        "ExternalPlanNodeId": 7
-                                                    },
                                                     {
                                                         "ExternalPlanNodeId": 5
                                                     }
@@ -54,7 +51,7 @@
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
-                                        "PlanNodeId": 8,
+                                        "PlanNodeId": 6,
                                         "Plans": [
                                             {
                                                 "Node Type": "Broadcast",
@@ -78,6 +75,9 @@
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "ExternalPlanNodeId": 1
+                                                                                    },
+                                                                                    {
+                                                                                        "Other": "ConstantExpression"
                                                                                     }
                                                                                 ],
                                                                                 "Name": "LeftJoin (MapJoin)"
@@ -91,6 +91,7 @@
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
+                                                                                        "Path": "/Root/postgres_jointest/join3.test_plan/int8_tbl",
                                                                                         "ReadColumns": [
                                                                                             "q1",
                                                                                             "q2"
@@ -114,17 +115,6 @@
                                                                 ]
                                                             }
                                                         ]
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                "Node Type": "Map",
-                                                "PlanNodeId": 7,
-                                                "PlanNodeType": "Connection",
-                                                "Plans": [
-                                                    {
-                                                        "Node Type": "Stage",
-                                                        "PlanNodeId": 6
                                                     }
                                                 ]
                                             }

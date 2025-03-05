@@ -1,14 +1,14 @@
 # Setting the session pool size
 
-{% include [work in progress message](_includes/addition.md) %}
+{{ ydb-short-name }} creates an [actor](../../concepts/glossary.md#actor) for each session. Consequently, the session pool size of a client affects resource consumption (RAM, CPU) on the server side of {{ ydb-short-name }}.
 
-The client's session pool size affects resource consumption (RAM, CPU) on the server side of {{ ydb-short-name }}. Simple math: if `1000` clients of the same DB have `1000` sessions each, `1000000` actors (workers, session performers) are created on the server side. If you don't limit the number of sessions on the client, this may result in a slow cluster that is close to a failure.
+For example, if 1000 clients of the same database have 1000 sessions each, then 1000000 [actors](../../concepts/glossary.md#actor) are created on the server side, consuming a significant amount of memory and CPU. If you do not limit the number of sessions on the client side, this may result in a slow cluster that is at risk of failure.
 
-By default, the {{ ydb-short-name }} SDK has a limit of `50` sessions when using native drivers. There is no limit for third-party libraries, such as Go database/sql.
+By default, the {{ ydb-short-name }} SDK sets a limit of 50 sessions when using native drivers. However, no session limit is enforced for third-party libraries, such as Go `database/sql`.
 
-A good recommendation is to set the limit on the number of client sessions to the minimum required for the normal operation of the client app. Keep in mind that sessions are single-threaded both on the server and client side. So if the application needs to make `1000` simultaneous (`inflight`) requests to {{ ydb-short-name }} for its estimated load, the limit should be set to `1000` sessions.
+It’s recommended to set the client session limit to the minimum required for the normal operation of the client application. Keep in mind that sessions are single-threaded on both the server and client sides. For instance, if the application needs to handle 1000 simultaneous (in-flight) requests to {{ ydb-short-name }} based on its estimated load, the session limit should be set to 1000.
 
-Here it's necessary to distinguish between the estimated `RPS` (requests per second) and `inflight`. In the first case, this is the total number of requests to {{ ydb-short-name }} completed within `1` second. For example, if `RPS`=`10000` and the average `latency` is `100`ms, it's sufficient to set the session limit to `1000`. This means that each session will perform an average of `10` consecutive requests for the estimated second.
+It is important to distinguish between estimated RPS (requests per second) and in-flight requests. RPS refers to the total number of requests completed by {{ ydb-short-name }} within one second. For example, if RPS = 10000 and the average latency is 100 ms, a session limit of 1000 is sufficient. This configuration allows each session to perform an average of 10 consecutive requests within the estimated second.
 
 Below are examples of the code for setting the session pool limit in different {{ ydb-short-name }} SDKs.
 
@@ -70,11 +70,24 @@ Below are examples of the code for setting the session pool limit in different {
 - Java
 
   ```java
-  this.tableClient = TableClient.newClient(transport)
+  this.queryClient = QueryClient.newClient(transport)
           // 10 - minimum number of active sessions to keep in the pool during the cleanup
           // 500 - maximum number of sessions in the pool
-          .sessionPoolSize(10, 500)
+          .sessionPoolMinSize(10)
+          .sessionPoolMaxSize(500)
           .build();
+  ```
+
+- JDBC Driver
+
+  Usually working with JDBC applications use the different connections pools, such as [HikariCP](https://github.com/brettwooldridge/HikariCP) or [C3p0](https://github.com/swaldman/c3p0). By default the {{ ydb-short-name }} JDBC driver detects current count of opened connections and tunes the session pool size itself. So if the application has correct configured `HikariCP` или `C3p0`, it may not configure the session pool.
+
+  Example of HikariCP configuration in `String` application.properties:
+
+  ```properties
+    spring.datasource.url=jdbc:ydb:grpc://localhost:2136/local
+    spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
+    spring.datasource.hikari.maximum-pool-size=100 # maximum size of JDBC connections
   ```
 
 {% endlist %}

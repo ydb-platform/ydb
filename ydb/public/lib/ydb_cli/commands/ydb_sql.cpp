@@ -1,15 +1,18 @@
 #include "ydb_sql.h"
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/json_prettifier.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/common/waiting_bar.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <util/generic/queue.h>
+#include <util/string/escape.h>
 #include <google/protobuf/text_format.h>
 
 namespace NYdb {
@@ -31,12 +34,17 @@ void TCommandSql::Config(TConfig& config) {
     config.Opts->AddLongOption("explain", "Execute explain request for the query. Shows query logical plan. "
             "The query is not actually executed, thus does not affect the database.")
         .StoreTrue(&ExplainMode);
+    config.Opts->AddLongOption("explain-ast", "In addition to the query logical plan, you can get an AST (abstract syntax tree). "
+            "The AST section contains a representation in the internal miniKQL language.")
+        .StoreTrue(&ExplainAst);
     config.Opts->AddLongOption("explain-analyze", "Execute query in explain-analyze mode. Shows query execution plan. "
             "Query results are ignored.\n"
             "Important note: The query is actually executed, so any changes will be applied to the database.")
         .StoreTrue(&ExplainAnalyzeMode);
     config.Opts->AddLongOption("stats", "Execution statistics collection mode [none, basic, full, profile]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
+    config.Opts->AddLongOption("diagnostics-file", "Path to file where the diagnostics will be saved.")
+        .RequiredArgument("[String]").StoreResult(&DiagnosticsFile);
     config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
         .RequiredArgument("[String]").DefaultValue("yql").StoreResult(&Syntax)
         .Hidden();
@@ -73,6 +81,14 @@ void TCommandSql::Parse(TConfig& config) {
     }
     if (ExplainMode && ExplainAnalyzeMode) {
         throw TMisuseException() << "Both mutually exclusive options \"Explain mode\" (\"--explain\") "
+            << "and \"Explain-analyze mode\" (\"--explain-analyze\") were provided.";
+    }
+    if (ExplainMode && ExplainAst) {
+        throw TMisuseException() << "Both mutually exclusive options \"Explain mode\" (\"--explain\") "
+            << "and \"Explain-AST mode\" (\"--explain-ast\") were provided.";
+    }
+    if (ExplainAst && ExplainAnalyzeMode) {
+        throw TMisuseException() << "Both mutually exclusive options \"Explain-AST mode\" (\"--explain-ast\") "
             << "and \"Explain-analyze mode\" (\"--explain-analyze\") were provided.";
     }
     if (ExplainAnalyzeMode && !CollectStatsMode.empty()) {
@@ -118,7 +134,7 @@ int TCommandSql::RunCommand(TConfig& config) {
     // Single stream execution
     NQuery::TExecuteQuerySettings settings;
 
-    if (ExplainMode) {
+    if (ExplainMode || ExplainAst) {
         // Execute explain request for the query
         settings.ExecMode(NQuery::EExecMode::Explain);
     } else {
@@ -147,7 +163,7 @@ int TCommandSql::RunCommand(TConfig& config) {
                 );
 
             auto result = asyncResult.GetValueSync();
-            ThrowOnError(result);
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
             int printResult = PrintResponse(result);
             if (printResult != EXIT_SUCCESS) {
                 return printResult;
@@ -162,15 +178,17 @@ int TCommandSql::RunCommand(TConfig& config) {
         );
 
         auto result = asyncResult.GetValueSync();
-        ThrowOnError(result);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
         return PrintResponse(result);
     }
     return EXIT_SUCCESS;
 }
 
 int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
-    TMaybe<TString> stats;
-    TMaybe<TString> plan;
+    std::optional<std::string> stats;
+    std::optional<std::string> plan;
+    std::optional<std::string> ast;
+    std::optional<std::string> meta;
     {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
@@ -184,16 +202,30 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
                 printer.Print(streamPart.GetResultSet());
             }
 
-            if (!streamPart.GetStats().Empty()) {
+            if (streamPart.GetStats().has_value()) {
                 const auto& queryStats = *streamPart.GetStats();
                 stats = queryStats.ToString();
+                ast = queryStats.GetAst();
 
                 if (queryStats.GetPlan()) {
                     plan = queryStats.GetPlan();
                 }
+                if (queryStats.GetMeta()) {
+                    meta = queryStats.GetMeta();
+                }
             }
         }
     } // TResultSetPrinter destructor should be called before printing stats
+
+    if (ExplainAst) {
+        Cout << "Query AST:" << Endl << ast << Endl;
+
+        if (IsInterrupted()) {
+            Cerr << "<INTERRUPTED>" << Endl;
+            return EXIT_FAILURE;
+        }
+        return EXIT_SUCCESS;
+    }
 
     if (stats && !ExplainMode && !ExplainAnalyzeMode) {
         Cout << Endl << "Statistics:" << Endl << *stats;
@@ -209,7 +241,32 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
             && (ExplainMode || ExplainAnalyzeMode)
             ? EDataFormat::PrettyTable : OutputFormat;
         TQueryPlanPrinter queryPlanPrinter(format, /* show actual costs */ !ExplainMode);
-        queryPlanPrinter.Print(*plan);
+        queryPlanPrinter.Print(TString{*plan});
+    }
+
+    if (!DiagnosticsFile.empty()) {
+        TFileOutput file(DiagnosticsFile);
+
+        NJson::TJsonValue diagnosticsJson(NJson::JSON_MAP);
+
+        if (stats) {
+            diagnosticsJson.InsertValue("stats", *stats);
+        }
+        if (ast) {
+            diagnosticsJson.InsertValue("ast", *ast);
+        }
+        if (plan) {
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*plan, &planJson, true);
+            diagnosticsJson.InsertValue("plan", planJson);
+        }
+        if (meta) {
+            NJson::TJsonValue metaJson;
+            NJson::ReadJsonTree(*meta, &metaJson, true);
+            metaJson.InsertValue("query_text", EscapeC(Query));
+            diagnosticsJson.InsertValue("meta", metaJson);
+        }
+        file << NJson::PrettifyJson(NJson::WriteJson(diagnosticsJson, true), false);
     }
 
     if (IsInterrupted()) {

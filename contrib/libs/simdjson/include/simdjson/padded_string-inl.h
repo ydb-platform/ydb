@@ -53,6 +53,9 @@ inline padded_string::padded_string(const char *data, size_t length) noexcept
   if ((data != nullptr) && (data_ptr != nullptr)) {
     std::memcpy(data_ptr, data, length);
   }
+  if (data_ptr == nullptr) {
+    viable_size = 0;
+  }
 }
 #ifdef __cpp_char8_t
 inline padded_string::padded_string(const char8_t *data, size_t length) noexcept
@@ -60,12 +63,17 @@ inline padded_string::padded_string(const char8_t *data, size_t length) noexcept
   if ((data != nullptr) && (data_ptr != nullptr)) {
     std::memcpy(data_ptr, reinterpret_cast<const char *>(data), length);
   }
+  if (data_ptr == nullptr) {
+    viable_size = 0;
+  }
 }
 #endif
 // note: do not pass std::string arguments by value
 inline padded_string::padded_string(const std::string & str_ ) noexcept
     : viable_size(str_.size()), data_ptr(internal::allocate_padded_buffer(str_.size())) {
-  if (data_ptr != nullptr) {
+  if (data_ptr == nullptr) {
+    viable_size = 0;
+  } else {
     std::memcpy(data_ptr, str_.data(), str_.size());
   }
 }
@@ -179,11 +187,11 @@ inline simdjson_result<padded_string> padded_string::load(std::string_view filen
 
 } // namespace simdjson
 
-inline simdjson::padded_string operator "" _padded(const char *str, size_t len) {
+inline simdjson::padded_string operator ""_padded(const char *str, size_t len) {
   return simdjson::padded_string(str, len);
 }
 #ifdef __cpp_char8_t
-inline simdjson::padded_string operator "" _padded(const char8_t *str, size_t len) {
+inline simdjson::padded_string operator ""_padded(const char8_t *str, size_t len) {
   return simdjson::padded_string(reinterpret_cast<const char8_t *>(str), len);
 }
 #endif

@@ -34,10 +34,11 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         {
             auto it = MaxByPortionId.find(portion.GetPortionId());
             if (it == MaxByPortionId.end()) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "data not ready");
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "skip_add_portion")("reason", "data not ready");
                 return {};
             } else if (!it->second) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no data for ttl usage (need to create index or use first pk column)");
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "skip_add_portion")(
+                    "reason", "no data for ttl usage (need to create index or use first pk column)");
                 return {};
             } else {
                 max = it->second;
@@ -64,6 +65,11 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
             auto storagesWrite = targetSchema->GetIndexInfo().GetUsedStorageIds(targetTierName);
             auto storagesRead = portionSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
             return TFullActualizationInfo(TRWAddress(std::move(storagesRead), std::move(storagesWrite)), targetTierName, *d, targetSchema);
+        } else {
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "skip_add_portion")("reason", "no_eviction")(
+                "portion", portion.GetPortionId())("skip_eviction", skipEviction)("optimized",
+                portion.HasRuntimeFeature(NOlap::TPortionInfo::ERuntimeFeature::Optimized))("has_insert_write_id", portion.HasInsertWriteId());
+            return {};
         }
     } else if (currentTierName != IStoragesManager::DefaultStorageId) {
         //        if (currentTierName == "deploy_logs_s3") {
@@ -75,7 +81,19 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         TRWAddress address(std::move(storagesRead), std::move(storagesWrite));
         return TFullActualizationInfo(std::move(address), IStoragesManager::DefaultStorageId, 0, targetSchema);
     }
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "skip_add_portion")("reason", "no_tiering");
     return {};
+}
+
+void TTieringActualizer::AddPortionImpl(const TPortionInfo& portion, const TInstant now) {
+    auto info = BuildActualizationInfo(portion, now);
+    if (!info) {
+        return;
+    }
+    AFL_VERIFY(PortionIdByWaitDuration[info->GetAddress()].AddPortion(*info, portion.GetPortionId(), now));
+    auto address = info->GetAddress();
+    TFindActualizationInfo findId(std::move(address), info->GetWaitInstant(now));
+    AFL_VERIFY(PortionsInfo.emplace(portion.GetPortionId(), std::move(findId)).second);
 }
 
 void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExternalContext& addContext) {
@@ -88,10 +106,19 @@ void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExt
         AFL_VERIFY(!PortionsInfo.contains(portion.GetPortionId()))("id", portion.GetPortionId())("path_id", portion.GetPathId());
         AFL_VERIFY(!NewPortionIds.contains(portion.GetPortionId()))("id", portion.GetPortionId())("path_id", portion.GetPathId());
     }
-    if (MaxByPortionId.contains(portion.GetPortionId())) {
+    if (!Tiering || MaxByPortionId.contains(portion.GetPortionId())) {
         AddPortionImpl(portion, addContext.GetNow());
     } else {
-        NewPortionIds.emplace(portion.GetPortionId());
+        auto schema = portion.GetSchema(VersionedIndex);
+        if (*TValidator::CheckNotNull(TieringColumnId) == schema->GetIndexInfo().GetPKColumnIds().front()) {
+            NYDBTest::TControllers::GetColumnShardController()->OnMaxValueUsage();
+            const auto lastPk = portion.GetMeta().GetFirstLastPK().GetLast();
+            const auto max = NArrow::TStatusValidator::GetValid(lastPk.Column(0).GetScalar(lastPk.GetPosition()));
+            AFL_VERIFY(MaxByPortionId.emplace(portion.GetPortionId(), max).second);
+            AddPortionImpl(portion, addContext.GetNow());
+        } else {
+            NewPortionIds.emplace(portion.GetPortionId());
+        }
     }
 }
 
@@ -99,18 +126,18 @@ void TTieringActualizer::ActualizePortionInfo(const TPortionDataAccessor& access
     if (!NewPortionIds.erase(accessor.GetPortionInfo().GetPortionId())) {
         return;
     }
+    if (NewPortionIds.empty()) {
+        NYDBTest::TControllers::GetColumnShardController()->OnTieringMetadataActualized();
+    }
     auto& portion = accessor.GetPortionInfo();
     if (Tiering) {
         std::shared_ptr<ISnapshotSchema> portionSchema = portion.GetSchema(VersionedIndex);
-        auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMax(*TieringColumnId);
         std::shared_ptr<arrow::Scalar> max;
-        if (indexMeta) {
+        AFL_VERIFY(*TieringColumnId != portionSchema->GetIndexInfo().GetPKColumnIds().front());
+        if (auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMax(*TieringColumnId)) {
             NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
             const std::vector<TString> data = accessor.GetIndexInplaceDataVerified(indexMeta->GetIndexId());
             max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
-        } else if (*TieringColumnId == portionSchema->GetIndexInfo().GetPKColumnIds().front()) {
-            NYDBTest::TControllers::GetColumnShardController()->OnMaxValueUsage();
-            max = NArrow::TStatusValidator::GetValid(portion.GetMeta().GetFirstLastPK().GetFirst().Column(0).GetScalar(0));
         }
         AFL_VERIFY(MaxByPortionId.emplace(portion.GetPortionId(), max).second);
     }
@@ -158,11 +185,18 @@ void TTieringActualizer::DoExtractTasks(
                     portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
                 features.SetTargetTierName(info->GetTargetTierName());
 
-                if (!tasksContext.AddPortion(portion, std::move(features), info->GetLateness())) {
-                    limitEnriched = true;
+                switch (tasksContext.AddPortion(portion, std::move(features), info->GetLateness())) {
+                    case TTieringProcessContext::EAddPortionResult::TASK_LIMIT_EXCEEDED:
+                        limitEnriched = true;
+                        break;
+                    case TTieringProcessContext::EAddPortionResult::PORTION_LOCKED:
+                        break;
+                    case TTieringProcessContext::EAddPortionResult::SUCCESS:
+                        AFL_VERIFY(portionIds.emplace(portion->GetPortionId()).second);
+                        break;
+                }
+                if (limitEnriched) {
                     break;
-                } else {
-                    portionIds.emplace(portion->GetPortionId());
                 }
             }
             if (limitEnriched) {
@@ -170,6 +204,8 @@ void TTieringActualizer::DoExtractTasks(
             }
         }
     }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "ExtractTtlTasks")("total_portions", PortionsInfo.size())(
+        "tasks", portionIds.size());
     if (portionIds.size()) {
         ui64 waitDurationEvict = 0;
         ui64 waitQueueEvict = 0;
@@ -195,16 +231,21 @@ void TTieringActualizer::DoExtractTasks(
 }
 
 void TTieringActualizer::Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext) {
+    AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "refresh_tiering")("has_tiering", !!info)(
+        "tiers", info ? info->GetOrderedTiers().size() : 0)("had_tiering_before", !!Tiering);
     Tiering = info;
+    std::optional<ui32> newTieringColumnId;
     if (Tiering) {
-        TieringColumnId = VersionedIndex.GetLastSchema()->GetColumnId(Tiering->GetEvictColumnName());
-    } else {
-        TieringColumnId = {};
+        newTieringColumnId = VersionedIndex.GetLastSchema()->GetColumnId(Tiering->GetEvictColumnName());
     }
     TargetCriticalSchema = VersionedIndex.GetLastCriticalSchema();
     PortionsInfo.clear();
     NewPortionIds.clear();
     PortionIdByWaitDuration.clear();
+    if (newTieringColumnId != TieringColumnId) {
+        MaxByPortionId.clear();
+    }
+    TieringColumnId = newTieringColumnId;
 
     for (auto&& i : externalContext.GetPortions()) {
         AddPortion(i.second, externalContext);
@@ -215,14 +256,14 @@ namespace {
 class TActualizationReply: public IMetadataAccessorResultProcessor {
 private:
     std::weak_ptr<TTieringActualizer> TieringActualizer;
-    virtual void DoApplyResult(TDataAccessorsResult&& result, TColumnEngineForLogs& /*engine*/) override {
+    virtual void DoApplyResult(NResourceBroker::NSubscribe::TResourceContainer<TDataAccessorsResult>&& result, TColumnEngineForLogs& /*engine*/) override {
         auto locked = TieringActualizer.lock();
         if (!locked) {
             return;
         }
         TActualizationContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now());
-        for (auto&& i : result.ExtractPortionsVector()) {
-            locked->ActualizePortionInfo(i, context);
+        for (auto&& [_, portion] : result.GetValue().GetPortions()) {
+            locked->ActualizePortionInfo(portion, context);
         }
     }
 
@@ -235,18 +276,32 @@ public:
 
 }   // namespace
 
-std::optional<TCSMetadataRequest> TTieringActualizer::BuildMetadataRequest(
+std::vector<TCSMetadataRequest> TTieringActualizer::BuildMetadataRequests(
     const ui64 /*pathId*/, const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TTieringActualizer>& index) {
     if (NewPortionIds.empty()) {
-        return std::nullopt;
+        NYDBTest::TControllers::GetColumnShardController()->OnTieringMetadataActualized();
+        return {};
     }
-    std::shared_ptr<TDataAccessorsRequest> result = std::make_shared<TDataAccessorsRequest>();
+
+    const ui64 batchMemorySoftLimit = NYDBTest::TControllers::GetColumnShardController()->GetMetadataRequestSoftMemoryLimit();
+    std::vector<TCSMetadataRequest> requests;
+    std::shared_ptr<TDataAccessorsRequest> currentRequest;
     for (auto&& i : NewPortionIds) {
+        if (!currentRequest) {
+            currentRequest = std::make_shared<TDataAccessorsRequest>("TIERING_ACTUALIZER");
+        }
         auto it = portions.find(i);
         AFL_VERIFY(it != portions.end());
-        result->AddPortion(it->second);
+        currentRequest->AddPortion(it->second);
+        if (currentRequest->PredictAccessorsMemory(it->second->GetSchema(VersionedIndex)) >= batchMemorySoftLimit) {
+            requests.emplace_back(currentRequest, std::make_shared<TActualizationReply>(index));
+            currentRequest.reset();
+        }
     }
-    return TCSMetadataRequest(result, std::make_shared<TActualizationReply>(index));
+    if (currentRequest) {
+        requests.emplace_back(std::move(currentRequest), std::make_shared<TActualizationReply>(index));
+    }
+    return requests;
 }
 
 }   // namespace NKikimr::NOlap::NActualizer

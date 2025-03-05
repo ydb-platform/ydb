@@ -166,29 +166,39 @@ NLogging::ELogLevel ToCoreLogLevel(ILogger::ELevel level)
     Y_ABORT();
 }
 
-void CommonInitialize(int argc, const char** argv)
+void CommonInitialize(TGuard<TMutex>& g)
 {
     auto logLevelStr = to_lower(TConfig::Get()->LogLevel);
     ILogger::ELevel logLevel;
 
     if (!TryFromString(logLevelStr, logLevel)) {
         Cerr << "Invalid log level: " << TConfig::Get()->LogLevel << Endl;
+        g.Release();
         exit(1);
     }
 
     auto logPath = TConfig::Get()->LogPath;
-    ILoggerPtr logger;
     if (logPath.empty()) {
-        logger = CreateStdErrLogger(logLevel);
-    } else {
-        logger = CreateFileLogger(logLevel, logPath);
-
-        auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateLogFile(logPath, ToCoreLogLevel(logLevel));
+        auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateStderrLogger(ToCoreLogLevel(logLevel));
+        for (const auto& rule : coreLoggingConfig->Rules) {
+            rule->ExcludeCategories = TConfig::Get()->LogExcludeCategories;
+        }
         NLogging::TLogManager::Get()->Configure(coreLoggingConfig);
-    }
-    SetLogger(logger);
 
-    TProcessState::Get()->SetCommandLine(argc, argv);
+        if (TConfig::Get()->LogUseCore) {
+            SetUseCoreLog();
+        } else {
+            auto logger = CreateStdErrLogger(logLevel);
+            SetLogger(logger);
+        }
+    } else {
+        auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateLogFile(logPath, ToCoreLogLevel(logLevel));
+        for (const auto& rule : coreLoggingConfig->Rules) {
+            rule->ExcludeCategories = TConfig::Get()->LogExcludeCategories;
+        }
+        NLogging::TLogManager::Get()->Configure(coreLoggingConfig);
+        SetUseCoreLog();
+    }
 }
 
 void NonJobInitialize(const TInitializeOptions& options)
@@ -216,11 +226,11 @@ void ExecJob(int argc, const char** argv, const TInitializeOptions& options)
 
         NDetail::OutputTableCount = static_cast<i64>(outputTableCount);
 
-        THolder<IInputStream> jobStateStream;
+        std::unique_ptr<IInputStream> jobStateStream;
         if (hasState) {
-            jobStateStream = MakeHolder<TIFStream>("jobstate");
+            jobStateStream = std::make_unique<TIFStream>("jobstate");
         } else {
-            jobStateStream = MakeHolder<TBufferStream>(0);
+            jobStateStream = std::make_unique<TBufferStream>(0);
         }
 
         int ret = 1;
@@ -283,8 +293,7 @@ void JoblessInitialize(const TInitializeOptions& options)
 {
     auto g = Guard(InitializeLock);
 
-    static const char* fakeArgv[] = {"unknown..."};
-    NDetail::CommonInitialize(1, fakeArgv);
+    NDetail::CommonInitialize(g);
     NDetail::NonJobInitialize(options);
     NDetail::ElevateInitStatus(NDetail::EInitStatus::JoblessInitialization);
 }
@@ -293,7 +302,7 @@ void Initialize(int argc, const char* argv[], const TInitializeOptions& options)
 {
     auto g = Guard(InitializeLock);
 
-    NDetail::CommonInitialize(argc, argv);
+    NDetail::CommonInitialize(g);
 
     NDetail::ElevateInitStatus(NDetail::EInitStatus::FullInitialization);
 

@@ -23,7 +23,7 @@ on
     c.c_custkey = o.o_custkey
 where
     o.o_orderdate >= $border
-    and o.o_orderdate < ($border + Interval("P90D"))
+    and o.o_orderdate < ($border + Interval("P92D"))
 );
 $join2 = (
 select

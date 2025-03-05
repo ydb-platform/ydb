@@ -359,6 +359,12 @@ private:
             return;
         }
 
+        if (json.IsMap() && !json.GetMapSafe().count("vector")) {
+            NJson::TJsonValue newJson;
+            newJson["vector"sv].AppendValue(std::move(json));
+            json = std::move(newJson);
+        }
+
         Batch.push_back(json);
         NotifyComputeActorWithData();
     }

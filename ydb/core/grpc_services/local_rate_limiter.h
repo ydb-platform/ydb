@@ -41,20 +41,23 @@ TActorId RateLimiterAcquireUseSameMailbox(
     const TDuration& duration,
     std::function<void()>&& onSuccess,
     std::function<void()>&& onTimeout,
-    const TActorContext& ctx);
+    const TActorContext& ctx,
+    NWilson::TTraceId traceId = {});
 
 TActorId RateLimiterAcquireUseSameMailbox(
     Ydb::RateLimiter::AcquireResourceRequest&& request,
     const TString& database,
     const TString& token,
-    std::function<void(Ydb::RateLimiter::AcquireResourceResponse resp)>&& cb, const TActorContext &ctx);
+    std::function<void(Ydb::RateLimiter::AcquireResourceResponse resp)>&& cb, const TActorContext& ctx,
+    NWilson::TTraceId traceId = {});
 
 TActorId RateLimiterAcquireUseSameMailbox(const NGRpcService::IRequestCtxBase& reqCtx,
     ui64 required,
     const TDuration& duration,
     std::function<void()>&& onSuccess,
     std::function<void()>&& onFail,
-    const NActors::TActorContext &ctx);
+    const NActors::TActorContext& ctx,
+    NWilson::TTraceId traceId = {});
 
 struct TRlConfig {
     struct TOnReqAction {

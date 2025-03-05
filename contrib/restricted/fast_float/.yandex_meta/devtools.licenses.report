@@ -29,6 +29,18 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
+KEEP     MIT                  0fd56f828db65664f447da50874ce655
+BELONGS ya.make
+    License text:
+        2.0</a> or <a href="LICENSE-MIT">MIT license</a> or <a
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [535:535]
+
 KEEP     BSL-1.0              2c7a3fa82e66676005cd4ee2608fd7d2
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -64,7 +76,69 @@ FILE_INCLUDE AUTHORS found in files: LICENSE-MIT at line 23
     Files with this license:
         LICENSE-MIT [5:27]
 
-SKIP     LicenseRef-scancode-unknown-license-reference 5332daea95b50b06c92625648767000b
+KEEP     Apache-2.0           79f65f9f30b137f9b03d455de6cfdac9
+BELONGS ya.make
+    License text:
+        Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
+        2.0</a> or <a href="LICENSE-MIT">MIT license</a> or <a
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [534:535]
+
+KEEP     Apache-2.0 AND MIT   a76785199b4beee1ba8a8173f3d43241
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 49.30
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [529:544]
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 49.30
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [529:544]
+
+KEEP     BSL-1.0 AND BSL-1.0  a8fd7a0ddc7793219e50dfdeb4742dfc
+BELONGS ya.make
+    License text:
+        href="LICENSE-BOOST">BOOST license</a>.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [536:536]
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [536:536]
+
+KEEP     Apache-2.0           c48d93dbb5419f7a8844879928a2fda7
+BELONGS ya.make
+    License text:
+        was originally published under the Apache 2.0 license.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [529:529]
+
+KEEP     Apache-2.0 OR MIT OR BSL-1.0 dbfbb7aa50e4925e728f16d4a8adf7d9
 BELONGS ya.make
     License text:
         Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
@@ -74,98 +148,14 @@ BELONGS ya.make
         Match type      : INTRO
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
     Files with this license:
-        README.md [462:462]
-
-KEEP     Apache-2.0           5e7d4154fa46facc827f6086a0b6b5d1
-BELONGS ya.make
-    License text:
-        under the Apache 2.0 license.
-    Scancode info:
-        Original SPDX id: Apache-2.0
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
-    Files with this license:
-        README.md [457:457]
-
-KEEP     Apache-2.0           62795c4c9961569de215634277f01a15
-BELONGS ya.make
-    License text:
-        Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
+        README.md [534:534]
     Scancode info:
         Original SPDX id: Apache-2.0
         Score           : 90.00
         Match type      : TAG
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        README.md [462:462]
-
-KEEP     Apache-2.0           922a268d401707c0a55929c692c037a5
-BELONGS ya.make
-    License text:
-        Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
-        2.0</a> or <a href="LICENSE-MIT">MIT license</a> or <a href="LICENSE-BOOST">BOOST license</a> .
-    Scancode info:
-        Original SPDX id: Apache-2.0
-        Score           : 100.00
-        Match type      : REFERENCE
-        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
-    Files with this license:
-        README.md [462:463]
-
-KEEP     BSL-1.0              923e9cb72b59149633868ff72a9e17c6
-BELONGS ya.make
-    License text:
-        2.0</a> or <a href="LICENSE-MIT">MIT license</a> or <a href="LICENSE-BOOST">BOOST license</a> .
-    Scancode info:
-        Original SPDX id: BSL-1.0
-        Score           : 99.00
-        Match type      : REFERENCE
-        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
-    Files with this license:
-        README.md [463:463]
-
-KEEP     BSL-1.0              9485675221ae35c9c070b4d380de8e99
-BELONGS ya.make
-    License text:
-        2.0</a> or <a href="LICENSE-MIT">MIT license</a> or <a href="LICENSE-BOOST">BOOST license</a> .
-    Scancode info:
-        Original SPDX id: BSL-1.0
-        Score           : 95.00
-        Match type      : REFERENCE
-        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
-    Files with this license:
-        README.md [463:463]
-
-KEEP     Apache-2.0 AND MIT   ac8d921d2bfa0e3a507421ec1e7c3852
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: Apache-2.0
-        Score           : 49.30
-        Match type      : NOTICE
-        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
-    Files with this license:
-        README.md [457:471]
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 49.30
-        Match type      : NOTICE
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
-        README.md [457:471]
-
-KEEP     MIT                  cf519141cd6049a5930eb400ab733edc
-BELONGS ya.make
-    License text:
-        2.0</a> or <a href="LICENSE-MIT">MIT license</a> or <a href="LICENSE-BOOST">BOOST license</a> .
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : TAG
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
-        README.md [463:463]
+        README.md [534:534]
 
 KEEP     Apache-2.0           fb21a7d67961597593aefff800484f8d
 BELONGS ya.make

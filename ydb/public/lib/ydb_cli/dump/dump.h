@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/request_settings.h>
+#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
+#include <ydb-cpp-sdk/client/types/request_settings.h>
 
 #include <library/cpp/regex/pcre/regexp.h>
 
@@ -12,14 +12,11 @@ class TLog;
 
 namespace NYdb {
 
-class TDriver;
+inline namespace V3 {
+    class TDriver;
+}
 
 namespace NDump {
-
-extern const char SCHEME_FILE_NAME[10];
-extern const char PERMISSIONS_FILE_NAME[15];
-extern const char INCOMPLETE_FILE_NAME[11];
-extern const char EMPTY_FILE_NAME[10];
 
 TString DataFileName(ui32 id);
 
@@ -67,7 +64,7 @@ public:
 struct TRateLimiterSettings {
     using TSelf = TRateLimiterSettings;
 
-    FLUENT_SETTING_DEFAULT(ui32, Rate, 30);
+    FLUENT_SETTING_DEFAULT(ui32, Rate, Max<ui32>());
     FLUENT_SETTING_DEFAULT(TDuration, Interval, TDuration::Seconds(1));
     FLUENT_SETTING_DEFAULT(TDuration, ReactionTime, TDuration::MilliSeconds(50));
 
@@ -94,12 +91,13 @@ struct TRestoreSettings: public TOperationRequestSettings<TRestoreSettings> {
         ImportData,
     };
 
-    static constexpr ui64 MaxBytesPerRequest = 16_MB;
+    static constexpr ui64 MaxImportDataBytesPerRequest = 16_MB;
 
     FLUENT_SETTING_DEFAULT(EMode, Mode, EMode::Yql);
     FLUENT_SETTING_DEFAULT(bool, DryRun, false);
     FLUENT_SETTING_DEFAULT(bool, RestoreData, true);
     FLUENT_SETTING_DEFAULT(bool, RestoreIndexes, true);
+    FLUENT_SETTING_DEFAULT(bool, RestoreChangefeeds, true);
     FLUENT_SETTING_DEFAULT(bool, RestoreACL, true);
     FLUENT_SETTING_DEFAULT(bool, SkipDocumentTables, false);
     FLUENT_SETTING_DEFAULT(bool, SavePartialResult, false);
@@ -107,12 +105,26 @@ struct TRestoreSettings: public TOperationRequestSettings<TRestoreSettings> {
     FLUENT_SETTING_DEFAULT(ui64, MemLimit, 32_MB);
     FLUENT_SETTING_DEFAULT(ui64, RowsPerRequest, 0);
     FLUENT_SETTING_DEFAULT(ui64, BytesPerRequest, 512_KB);
-    FLUENT_SETTING_DEFAULT(ui64, RequestUnitsPerRequest, 30);
+    FLUENT_SETTING_DEFAULT(ui64, RequestUnitsPerRequest, 0);
     FLUENT_SETTING_DEFAULT(ui64, FileBufferSize, 2_MB);
-    FLUENT_SETTING_DEFAULT(ui32, InFly, 10);
+    FLUENT_SETTING_DEFAULT(ui32, MaxInFlight, 0);
     FLUENT_SETTING_DEFAULT(TRateLimiterSettings, RateLimiterSettings, {});
 
 }; // TRestoreSettings
+
+struct TRestoreClusterSettings {
+    using TSelf = TRestoreClusterSettings;
+
+    FLUENT_SETTING_DEFAULT(TDuration, WaitNodesDuration, TDuration::Minutes(1));
+}; // TRestoreClusterSettings
+
+struct TRestoreDatabaseSettings {
+    using TSelf = TRestoreDatabaseSettings;
+
+    FLUENT_SETTING_DEFAULT(TDuration, WaitNodesDuration, TDuration::Minutes(1));
+    FLUENT_SETTING_OPTIONAL(TString, Database);
+    FLUENT_SETTING_DEFAULT(bool, WithContent, true);
+}; // TRestoreDatabaseSettings
 
 class TRestoreResult: public TStatus {
 public:
@@ -131,6 +143,12 @@ public:
 
     TDumpResult Dump(const TString& dbPath, const TString& fsPath, const TDumpSettings& settings = {});
     TRestoreResult Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings = {});
+
+    TDumpResult DumpCluster(const TString& fsPath);
+    TRestoreResult RestoreCluster(const TString& fsPath, const TRestoreClusterSettings& settings = {});
+
+    TDumpResult DumpDatabase(const TString& database, const TString& fsPath);
+    TRestoreResult RestoreDatabase(const TString& fsPath, const TRestoreDatabaseSettings& settings = {});
 
 private:
     std::shared_ptr<TImpl> Impl_;

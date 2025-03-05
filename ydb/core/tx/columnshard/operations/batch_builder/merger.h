@@ -15,11 +15,11 @@ private:
     virtual TConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& incoming) = 0;
 protected:
     std::shared_ptr<ISnapshotSchema> Schema;
-    std::shared_ptr<arrow::RecordBatch> IncomingData;
+    NArrow::TContainerWithIndexes<arrow::RecordBatch> IncomingData;
     bool IncomingFinished = false;
 public:
-    IMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema)
-        : IncomingPosition(incoming, 0, actualSchema->GetPKColumnNames(), incoming->schema()->field_names(), false)
+    IMerger(const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema)
+        : IncomingPosition(incoming.GetContainer(), 0, actualSchema->GetPKColumnNames(), incoming->schema()->field_names(), false)
         , Schema(actualSchema)
         , IncomingData(incoming) {
         IncomingFinished = !IncomingPosition.InitPosition(0);
@@ -27,7 +27,7 @@ public:
 
     virtual ~IMerger() = default;
 
-    virtual std::shared_ptr<arrow::RecordBatch> BuildResultBatch() = 0;
+    virtual NArrow::TContainerWithIndexes<arrow::RecordBatch> BuildResultBatch() = 0;
 
     TConclusionStatus Finish();
 
@@ -45,7 +45,7 @@ private:
     }
 public:
     using TBase::TBase;
-    virtual std::shared_ptr<arrow::RecordBatch> BuildResultBatch() override {
+    virtual NArrow::TContainerWithIndexes<arrow::RecordBatch> BuildResultBatch() override {
         return IncomingData;
     }
 };
@@ -65,9 +65,9 @@ private:
 public:
     using TBase::TBase;
 
-    virtual std::shared_ptr<arrow::RecordBatch> BuildResultBatch() override {
+    virtual NArrow::TContainerWithIndexes<arrow::RecordBatch> BuildResultBatch() override {
         auto result = IncomingData;
-        AFL_VERIFY(Filter.Apply(result));
+        AFL_VERIFY(Filter.Apply(result.MutableContainer()));
         return result;
     }
 };
@@ -92,11 +92,9 @@ private:
         }
     }
 public:
-    virtual std::shared_ptr<arrow::RecordBatch> BuildResultBatch() override {
-        return Builder.Finalize();
-    }
+    virtual NArrow::TContainerWithIndexes<arrow::RecordBatch> BuildResultBatch() override;
 
-    TUpdateMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema,
+    TUpdateMerger(const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema,
         const TString& insertDenyReason, const std::optional<NArrow::NMerger::TSortableBatchPosition>& defaultExists = {});
 };
 

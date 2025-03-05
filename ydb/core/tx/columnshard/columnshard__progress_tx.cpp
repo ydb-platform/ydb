@@ -28,9 +28,12 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        NActors::TLogContextGuard logGuard =
-            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "execute");
-        Y_ABORT_UNLESS(Self->ProgressTxInFlight);
+        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("tablet_id", Self->TabletID())(
+            "tx_state", "TTxProgressTx::Execute")("tx_current", Self->ProgressTxInFlight);
+        if (!Self->ProgressTxInFlight) {
+            AbortedThroughRemoveExpired = true;
+            return true;
+        }
         Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TX_COMPLETE_LAG, Self->GetTxCompleteLag().MilliSeconds());
 
         const size_t removedCount = Self->ProgressTxController->CleanExpiredTxs(txc);
@@ -45,15 +48,24 @@ public:
         const auto plannedItem = Self->ProgressTxController->GetFirstPlannedTx();
         if (!!plannedItem) {
             PlannedQueueItem.emplace(plannedItem->PlanStep, plannedItem->TxId);
-            ui64 step = plannedItem->PlanStep;
-            ui64 txId = plannedItem->TxId;
+            const ui64 step = plannedItem->PlanStep;
+            const ui64 txId = plannedItem->TxId;
+            NActors::TLogContextGuard logGuardTx = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("tx_id", txId);
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "PlannedItemStart");
             TxOperator = Self->ProgressTxController->GetTxOperatorVerified(txId);
             if (auto txPrepare = TxOperator->BuildTxPrepareForProgress(Self)) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "PlannedItemStart")("details", "BuildTxPrepareForProgress");
                 AbortedThroughRemoveExpired = true;
                 Self->ProgressTxInFlight = txId;
                 Self->Execute(txPrepare.release(), ctx);
                 return true;
+            } else if (TxOperator->IsInProgress()) {
+                AbortedThroughRemoveExpired = true;
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "PlannedItemContinue");
+                AFL_VERIFY(Self->ProgressTxInFlight == txId);
+                return true;
             } else {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "PlannedItemStart")("details", "PopFirstPlannedTx");
                 Self->ProgressTxController->PopFirstPlannedTx();
             }
             StartExecution = TMonotonic::Now();
@@ -80,8 +92,9 @@ public:
         if (AbortedThroughRemoveExpired) {
             return;
         }
-        NActors::TLogContextGuard logGuard =
-            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "complete");
+        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)(
+            "tablet_id", Self->TabletID())(
+            "tx_state", "TTxProgressTx::Complete");
         if (TxOperator) {
             TxOperator->ProgressOnComplete(*Self, ctx);
             Self->RescheduleWaitingReads();
@@ -104,11 +117,13 @@ public:
 };
 
 void TColumnShard::EnqueueProgressTx(const TActorContext& ctx, const std::optional<ui64> continueTxId) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "EnqueueProgressTx")("tablet_id", TabletID());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "EnqueueProgressTx")("tablet_id", TabletID())("tx_id", continueTxId);
     if (continueTxId) {
         AFL_VERIFY(!ProgressTxInFlight || ProgressTxInFlight == continueTxId)("current", ProgressTxInFlight)("expected", continueTxId);
     }
     if (!ProgressTxInFlight || ProgressTxInFlight == continueTxId) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "EnqueueProgressTxStart")("tablet_id", TabletID())("tx_id", continueTxId)(
+            "tx_current", ProgressTxInFlight);
         ProgressTxInFlight = continueTxId.value_or(0);
         Execute(new TTxProgressTx(this), ctx);
     }

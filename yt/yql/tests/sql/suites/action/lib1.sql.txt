@@ -1,0 +1,7 @@
+use plato;
+
+define action $action($table) as
+  select key,count(*) as cnt from $table group by key order by key;
+end define;
+
+export $action;

@@ -102,6 +102,8 @@ void TFileLogWriterConfig::Register(TRegistrar registrar)
     registrar.Parameter("file_name", &TThis::FileName);
     registrar.Parameter("use_timestamp_suffix", &TThis::UseTimestampSuffix)
         .Default(false);
+    registrar.Parameter("use_logrotate_compatible_timestamp_suffix", &TThis::UseLogrotateCompatibleTimestampSuffix)
+        .Default(false);
     registrar.Parameter("enable_compression", &TThis::EnableCompression)
         .Default(false);
     registrar.Parameter("enable_no_reuse", &TThis::EnableNoReuse)
@@ -122,6 +124,10 @@ void TFileLogWriterConfig::Register(TRegistrar registrar)
             THROW_ERROR_EXCEPTION("Invalid \"compression_level\" attribute for \"gzip\" compression method");
         } else if (config->CompressionMethod == ECompressionMethod::Zstd && config->CompressionLevel > 22) {
             THROW_ERROR_EXCEPTION("Invalid \"compression_level\" attribute for \"zstd\" compression method");
+        }
+        if (config->UseTimestampSuffix && config->UseLogrotateCompatibleTimestampSuffix) {
+            THROW_ERROR_EXCEPTION("At most one of \"use_timestamp_suffix\" and "
+                "\"use_logrotate_compatible_timestamp_suffix\" can be specified");
         }
     });
 }

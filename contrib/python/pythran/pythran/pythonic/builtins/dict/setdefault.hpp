@@ -37,8 +37,8 @@ namespace builtins
     {
       return d.get(k);
     }
-  }
-}
+  } // namespace dict
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

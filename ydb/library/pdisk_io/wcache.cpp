@@ -11,7 +11,11 @@
 #ifdef _linux_
 #include <libgen.h>
 #include <limits.h>
+#if !defined(_musl_)
 #include <linux/fs.h>
+#else
+#include <sys/mount.h>
+#endif
 #include <linux/nvme_ioctl.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>

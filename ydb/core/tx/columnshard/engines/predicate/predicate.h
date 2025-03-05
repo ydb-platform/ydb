@@ -1,7 +1,9 @@
 #pragma once
 
-#include <ydb/core/formats/arrow/program.h>
+#include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+
+#include <ydb/library/arrow_kernels/operations.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
@@ -9,13 +11,15 @@ namespace NKikimr::NOlap {
 
 struct TPredicate {
 private:
-    using EOperation = NArrow::EOperation;
+    using EOperation = NKernels::EOperation;
     EOperation Operation{ EOperation::Unspecified };
 
 public:
     static std::shared_ptr<arrow::RecordBatch> CutNulls(const std::shared_ptr<arrow::RecordBatch>& batch);
 
     std::shared_ptr<arrow::RecordBatch> Batch;
+    bool IsEqualSchema(const std::shared_ptr<arrow::Schema>& schema) const;
+    bool IsEqualTo(const TPredicate& item) const;
 
     NArrow::ECompareType GetCompareType() const {
         if (Operation == EOperation::GreaterEqual) {

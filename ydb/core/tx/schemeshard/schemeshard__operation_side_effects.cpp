@@ -13,7 +13,9 @@ void TSideEffects::ProposeToCoordinator(TOperationId opId, TPathId pathId, TStep
 }
 
 void TSideEffects::CoordinatorAck(TActorId coordinator, TStepId stepId, TTxId txId) {
-    CoordinatorAcks.push_back(TCoordinatorAck(coordinator, stepId, txId));
+    if (coordinator) {
+        CoordinatorAcks.push_back(TCoordinatorAck(coordinator, stepId, txId));
+    }
 }
 
 void TSideEffects::MediatorAck(TActorId mediator, TStepId stepId) {
@@ -165,6 +167,7 @@ void TSideEffects::ApplyOnExecute(TSchemeShard* ss, NTabletFlatExecutor::TTransa
     DoDoneParts(ss, ctx);
     DoSetBarriers(ss, ctx);
     DoCheckBarriers(ss, txc, ctx);
+    DoDoneParts(ss, ctx);
 
     DoWaitShardCreated(ss, ctx);
     DoActivateShardCreated(ss, ctx);

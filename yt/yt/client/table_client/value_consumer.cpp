@@ -42,7 +42,7 @@ void TValueConsumerBase::InitializeIdToTypeMapping()
     const auto& nameTable = GetNameTable();
     for (const auto& column : Schema_->Columns()) {
         int id = nameTable->GetIdOrRegisterName(column.Name());
-        if (id >= static_cast<int>(NameTableIdToType_.size())) {
+        if (id >= std::ssize(NameTableIdToType_)) {
             NameTableIdToType_.resize(id + 1, EValueType::Any);
         }
         NameTableIdToType_[id] = column.GetWireType();
@@ -200,7 +200,7 @@ const TTableSchemaPtr& TValueConsumerBase::GetSchema() const
 
 void TValueConsumerBase::ThrowConversionException(const TUnversionedValue& value, EValueType columnType, const TError& ex)
 {
-    THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation, "Error while performing type conversion")
+    THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation, "Error while performing type conversion")
         << ex
         << TErrorAttribute("column", GetNameTable()->GetName(value.Id))
         << TErrorAttribute("value_type", value.Type)

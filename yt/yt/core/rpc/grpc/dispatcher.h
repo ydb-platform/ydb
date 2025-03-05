@@ -3,8 +3,6 @@
 #include "helpers.h"
 #include "private.h"
 
-#include <yt/yt/core/misc/singleton.h>
-
 namespace NYT::NRpc::NGrpc {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -28,11 +26,12 @@ public:
 
     //! Configures the dispatcher.
     /*!
-     *  Can only can called once; subsequent calls will throw.
-    *   The call must be done prior to any GRPC client or server is created.
+     *  The call must be done prior to any GRPC client or server is created.
+     *  Can only be called before initialization, the future calls will throw.
      */
     void Configure(const TDispatcherConfigPtr& config);
-    [[nodiscard]] bool IsConfigured() const noexcept;
+
+    [[nodiscard]] bool IsInitialized() const noexcept;
 
     TGrpcLibraryLockPtr GetLibraryLock();
     TGuardedGrpcCompletionQueue* PickRandomGuardedCompletionQueue();

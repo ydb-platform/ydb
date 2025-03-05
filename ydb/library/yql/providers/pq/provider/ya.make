@@ -48,7 +48,7 @@ PEERDIR(
     ydb/library/yql/providers/pq/proto
     yql/essentials/providers/result/expr_nodes
     yql/essentials/public/udf
-    ydb/public/sdk/cpp/client/ydb_driver
+    ydb/public/sdk/cpp/src/client/driver
 )
 
 YQL_LAST_ABI_VERSION()

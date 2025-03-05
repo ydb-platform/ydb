@@ -2,8 +2,8 @@
 
 //#include <alice/wonderlogs/protos/wonderlogs.pb.h>
 #include <yql/essentials/minikql/protobuf_udf/ut/protobuf_ut.pb.h>
-#include <contrib/ydb/library/yql/providers/yt/lib/schema/schema.h>
-#include <contrib/ydb/library/yql/providers/yt/common/yql_names.h>
+#include <yt/yql/providers/yt/lib/schema/schema.h>
+#include <yt/yql/providers/yt/common/yql_names.h>
 
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 #include <yql/essentials/minikql/mkql_alloc.h>

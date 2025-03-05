@@ -25,13 +25,13 @@ namespace scipy
         return boost::math::cyl_bessel_k_prime(
             x, y, make_policy(promote_double<true>()));
       }
-    }
+    } // namespace details
 
 #define NUMPY_NARY_FUNC_NAME kvp
 #define NUMPY_NARY_FUNC_SYM details::kvp
 #include "pythonic/types/numpy_nary_expr.hpp"
-  }
-}
+  } // namespace special
+} // namespace scipy
 PYTHONIC_NS_END
 
 #endif

@@ -5,9 +5,9 @@
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/interruptible.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/lib/ydb_cli/common/parameters.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 
@@ -60,7 +60,7 @@ public:
 
 private:
     TVector<TString> Columns;
-    TVector<TString> PrimaryKeys;
+    std::vector<std::string> PrimaryKeys;
     TVector<TString> Indexes;
     TString PresetName;
     TString ExecutionPolicy;
@@ -115,7 +115,7 @@ public:
     template <typename TIterator>
     bool PrintQueryResponse(TIterator& result);
 
-    void PrintFlameGraph(const TMaybe<TString>& plan);
+    void PrintFlameGraph(const std::optional<std::string>& plan);
 
 private:
     TString CollectStatsMode;
@@ -123,6 +123,7 @@ private:
     TString TxMode;
     TString QueryType;
     bool BasicStats = false;
+    TString DiagnosticsFile;
 };
 
 class TCommandExplain : public TTableCommand, public TCommandWithOutput, TCommandQueryBase, TInterruptibleCommand {
@@ -135,7 +136,7 @@ public:
     virtual int Run(TConfig& config) override;
 
 private:
-    static void SaveDiagnosticsToFile(const TString& diagnostics);
+    static void SaveDiagnosticsToFile(const std::string& diagnostics);
 
     bool PrintAst = false;
     TString QueryType;
@@ -207,7 +208,7 @@ public:
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 private:
-    TString IndexName;
+    std::string IndexName;
 };
 
 class TCommandIndexRename : public TYdbCommand, public TCommandWithPath {
@@ -229,7 +230,7 @@ public:
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 private:
-    THashMap<TString, TString> Attributes;
+    std::unordered_map<std::string, std::string> Attributes;
 };
 
 class TCommandAttributeDrop : public TYdbCommand, public TCommandWithPath {

@@ -3675,6 +3675,60 @@ bool IsEarlyExpandOfSkipNullAllowed(const TOptimizeContext& optCtx) {
     return optCtx.Types->OptimizerFlags.contains(skipNullFlags);
 }
 
+TExprNode::TPtr ReplaceFuncWithImpl(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    auto exportsPtr = optCtx.Types->Modules->GetModule("/lib/yql/core.yql");
+    YQL_ENSURE(exportsPtr);
+    const auto& exports = exportsPtr->Symbols();
+    const auto ex = exports.find(TString(node->Content()) + "Impl");
+    YQL_ENSURE(exports.cend() != ex);
+    TNodeOnNodeOwnedMap deepClones;
+    auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, true, false);
+
+    YQL_CLOG(DEBUG, Core) << "Replace " << node->Content() << " with implementation";
+    return ctx.Builder(node->Pos())
+        .Apply(lambda)
+            .Do([&node](TExprNodeReplaceBuilder& builder) -> TExprNodeReplaceBuilder& {
+                for (size_t i = 0; i < node->ChildrenSize(); i++) {
+                    builder.With(i, node->ChildPtr(i));
+                }
+                return builder;
+            })
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr MemberNthOverFlatMapWithOptional(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    YQL_ENSURE(node->IsCallable({"Member", "Nth"}));
+    YQL_ENSURE(optCtx.Types);
+    static const char optName[] = "MemberNthOverFlatMap";
+    if (!IsOptimizerEnabled<optName>(*optCtx.Types) || IsOptimizerDisabled<optName>(*optCtx.Types)) {
+        return node;
+    }
+    if (auto maybeFlatMap = TMaybeNode<TCoFlatMapBase>(node->HeadPtr())) {
+        auto flatMap = maybeFlatMap.Cast();
+        if (flatMap.Input().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional &&
+            flatMap.Lambda().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional)
+        {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return ctx.Builder(node->Pos())
+                .Callable(flatMap.CallableName())
+                    .Add(0, flatMap.Input().Ptr())
+                    .Lambda(1)
+                        .Param("item")
+                        .Callable(node->Content())
+                            .Apply(0, flatMap.Lambda().Ptr())
+                                .With(0, "item")
+                            .Seal()
+                            .Add(1, node->Child(1))
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+    }
+    return node;
+}
+
 } // namespace
 
 void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
@@ -3914,6 +3968,39 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                 .Ptr();
         }
 
+        return node;
+    };
+
+    map["FilterNullMembers"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        YQL_ENSURE(optCtx.Types);
+        static const char optName[] = "FilterNullMembersOverJust";
+        if (!IsOptimizerEnabled<optName>(*optCtx.Types) || IsOptimizerDisabled<optName>(*optCtx.Types)) {
+            return node;
+        }
+        const auto self = TCoFilterNullMembers(node);
+        if (self.Members() && self.Members().Cast().Size() == 1) {
+            if (auto maybeJust = self.Input().Maybe<TCoJust>()) {
+                YQL_CLOG(DEBUG, Core) << node->Content() << " with single member over Just";
+                auto name = self.Members().Cast().Item(0);
+                return Build<TCoFlatMap>(ctx, node->Pos())
+                    .Input<TCoMember>()
+                        .Struct(maybeJust.Cast().Input())
+                        .Name(name)
+                    .Build()
+                    .Lambda()
+                        .Args({"unwrapped"})
+                        .Body<TCoJust>()
+                            .Input<TCoReplaceMember>()
+                                .Struct(maybeJust.Cast().Input())
+                                .Name(name)
+                                .Item("unwrapped")
+                            .Build()
+                        .Build()
+                    .Build()
+                    .Done()
+                    .Ptr();
+            }
+        }
         return node;
     };
 
@@ -4597,7 +4684,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return ctx.NewCallable(node->Pos(), "AsStruct", std::move(asStructChildren));
     };
 
-    map["Member"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+    map["Member"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (node->Head().IsCallable("AsStruct")) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             return ExtractMember(*node);
@@ -4621,6 +4708,10 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             return ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
         }
 
+        if (auto opt = MemberNthOverFlatMapWithOptional(node, ctx, optCtx); opt != node) {
+            return opt;
+        }
+
         return node;
     };
 
@@ -4642,7 +4733,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
     map["AsStruct"] = std::bind(&OptimizeAsStruct, _1, _2);
 
-    map["Nth"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+    map["Nth"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (node->Head().Type() == TExprNode::List) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over tuple literal";
             const auto index = FromString<ui32>(node->Tail().Content());
@@ -4677,6 +4768,10 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                 .Build()
                 .Done()
                 .Ptr();
+        }
+
+        if (auto opt = MemberNthOverFlatMapWithOptional(node, ctx, optCtx); opt != node) {
+            return opt;
         }
 
         return node;
@@ -4895,6 +4990,65 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
 
         return node;
+    };
+
+    map["ListSample"] = map["ListSampleN"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (node->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+            YQL_CLOG(DEBUG, Core) << "Handle optional list in " << node->Content();
+            return ctx.Builder(node->Pos())
+                .Callable("Map")
+                    .Add(0, node->Child(0))
+                    .Lambda(1)
+                        .Param("list")
+                        .Callable(node->Content())
+                            .Arg(0, "list")
+                            .Add(1, node->Child(1))
+                            .Add(2, node->Child(2))
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+
+        if (node->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+            YQL_CLOG(DEBUG, Core) << "Handle optional prob arg in " << node->Content();
+            return ctx.Builder(node->Pos())
+                .Callable("IfPresent")
+                    .Add(0, node->Child(1))
+                    .Lambda(1)
+                        .Param("probArg")
+                        .Callable(node->Content())
+                            .Add(0, node->Child(0))
+                            .Arg(1, "probArg")
+                            .Add(2, node->Child(2))
+                        .Seal()
+                    .Seal()
+                    .Add(2, node->Child(0))
+                .Seal()
+                .Build();
+        }
+
+        return ReplaceFuncWithImpl(node, ctx, optCtx);
+    };
+
+    map["ListShuffle"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+            YQL_CLOG(DEBUG, Core) << "Handle optionals args in " << node->Content();
+            return ctx.Builder(node->Pos())
+                .Callable("Map")
+                    .Add(0, node->Child(0))
+                    .Lambda(1)
+                        .Param("list")
+                        .Callable(node->Content())
+                            .Arg(0, "list")
+                            .Add(1, node->Child(1))
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+
+        return ReplaceFuncWithImpl(node, ctx, optCtx);
     };
 
     map["OptionalReduce"] = std::bind(&RemoveOptionalReduceOverData, _1, _2);
@@ -5384,11 +5538,17 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
         if (node->ChildrenSize() % 2 == 1) { // No default value
             bool allJust = true;
+            bool allSingleAsList = true;
             TNodeSet uniqLambdas;
             for (ui32 index = 1; index < node->ChildrenSize(); index += 2) {
-                uniqLambdas.insert(node->Child(index + 1));
-                if (!TCoJust::Match(node->Child(index + 1)->Child(1))) {
+                const TExprNode* visitLambda = node->Child(index + 1);
+                const TExprNode* body = visitLambda->Child(1);
+                uniqLambdas.insert(visitLambda);
+                if (!TCoJust::Match(body)) {
                     allJust = false;
+                }
+                if (!TCoAsList::Match(body) || body->ChildrenSize() != 1) {
+                    allSingleAsList = false;
                 }
             }
 
@@ -5405,10 +5565,10 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                     .Build();
             }
 
-            if (allJust) {
-                YQL_CLOG(DEBUG, Core) << node->Content() << " - extract Just";
+            if (allJust || allSingleAsList) {
+                YQL_CLOG(DEBUG, Core) << node->Content() << " - extract " << (allJust ? "Just" : "AsList");
                 return ctx.Builder(node->Pos())
-                    .Callable("Just")
+                    .Callable(allJust ? "Just" : "AsList")
                         .Callable(0, "Visit")
                             .Add(0, node->HeadPtr())
                             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
@@ -5976,7 +6136,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         Y_UNREACHABLE();
     };
 
-    map["Unordered"] = map["UnorderedSubquery"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+    map["Unordered"] = map["UnorderedSubquery"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (node->Head().IsCallable({"AsList","EquiJoin","Filter","Map","FlatMap","MultiMap","Extend", "Apply","PartitionByKey","PartitionsByKeys"})) {
             YQL_CLOG(DEBUG, Core) << "Drop " << node->Content() << " over " << node->Head().Content();
             return node->HeadPtr();
@@ -5985,6 +6145,18 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         if (node->Head().IsCallable("AssumeSorted")) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             return ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
+        }
+
+        static const char optName[] = "UnorderedOverSortImproved";
+        YQL_ENSURE(optCtx.Types);
+        const bool optEnabled = IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+        if (optEnabled) {
+            if (node->Head().IsCallable(node->Content()) ||
+                node->Head().IsCallable("Sort") && node->IsCallable("Unordered"))
+            {
+                YQL_CLOG(DEBUG, Core) << "Drop " << node->Head().Content() << " under " << node->Content();
+                return ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
+            }
         }
 
         if (node->Head().IsCallable("AssumeConstraints") && node->Head().GetConstraint<TSortedConstraintNode>()) {
@@ -6424,7 +6596,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map["UnionAllPositional"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    map["UnionAllPositional"] = map["UnionMergePositional"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         YQL_CLOG(DEBUG, Core) << "Expand " << node->Content();
         if (node->ChildrenSize() == 1) {
             return node->HeadPtr();
@@ -6703,6 +6875,39 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
 
         return node;
+    };
+
+    map["FailMe"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << "Expand FailMe";
+        auto failureKind = node->Child(0)->Content();
+        if (failureKind == "expr") {
+            return ctx.Builder(node->Pos())
+                .Callable("String")
+                    .Atom(0, "foo")
+                    .Atom(1, "bar")
+                .Seal()
+                .Build();
+        }
+
+        if (failureKind == "type") {
+            return ctx.Builder(node->Pos())
+                .Callable("Int32")
+                    .Atom(0, "1")
+                .Seal()
+                .Build();
+        }
+
+        if (failureKind == "constraint") {
+            return ctx.Builder(node->Pos())
+                .Callable("AsList")
+                    .Callable(0, "String")
+                        .Atom(0, "foo")
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+
+        throw yexception() << "Unknown failure kind: " << failureKind;
     };
 
     // will be applied to any callable after all above

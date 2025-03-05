@@ -1,10 +1,11 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
+#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <cstdlib>
 
@@ -102,9 +103,7 @@ TCollectedStreamResult JoinStatsBasic(
         std::function<Iterator(TKikimrRunner&, ECollectQueryStatsMode, const TString&)> getIter, bool StreamLookupJoin = false) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
-    appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(false);
     appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
 
     auto settings = TKikimrSettings()
         .SetAppConfig(appConfig);
@@ -409,7 +408,6 @@ Y_UNIT_TEST(StatsProfile) {
 Y_UNIT_TEST_TWIN(StreamLookupStats, StreamLookupJoin) {
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
 
     TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(app));
     auto db = kikimr.GetTableClient();
@@ -635,6 +633,221 @@ Y_UNIT_TEST(SysViewCancelled) {
         UNIT_ASSERT(queryCount == 1);
         UNIT_ASSERT(rowsCount == 3);
     }
+}
+
+Y_UNIT_TEST(OneShardLocalExec) {
+    TKikimrRunner kikimr;
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+    {
+        auto result = session.ExecuteDataQuery(R"(
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), 2);
+    }
+    {
+        auto result = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (1, "1");
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), 3);
+    }
+    {
+        auto result = kikimr.GetQueryClient().ExecuteQuery(R"(
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), 4);
+    }
+    {
+        auto result = kikimr.GetQueryClient().ExecuteQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (1, "1");
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), 5);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(counters.NonLocalSingleNodeReqCount->Val(), 0);
+}
+
+Y_UNIT_TEST(OneShardNonLocalExec) {
+    TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(2));
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+    auto monPort = kikimr.GetTestServer().GetRuntime()->GetMonPort();
+
+    auto firstNodeId = kikimr.GetTestServer().GetRuntime()->GetFirstNodeId();
+
+    TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+    auto expectedTotalSingleNodeReqCount = counters.TotalSingleNodeReqCount->Val();
+    auto expectedNonLocalSingleNodeReqCount = counters.NonLocalSingleNodeReqCount->Val();
+
+    auto drainNode = [monPort](size_t nodeId, bool undrain = false) {
+        TNetworkAddress addr("localhost", monPort);
+        TSocket s(addr);
+        TString url;
+        if (undrain) {
+            url = "/tablets/app?TabletID=72057594037968897&node=" + std::to_string(nodeId) + "&page=SetDown&down=0";
+        } else {
+            url = "/tablets/app?TabletID=72057594037968897&node=" + std::to_string(nodeId) + "&page=DrainNode";
+        }
+        SendMinimalHttpRequest(s, "localhost", url);
+        TSocketInput si(s);
+        THttpInput input(&si);
+        TString firstLine = input.FirstLine();
+
+        const auto httpCode = ParseHttpRetCode(firstLine);
+        UNIT_ASSERT_VALUES_EQUAL(httpCode, 200);
+    };
+
+    auto waitTablets = [&session](size_t nodeId) mutable {
+        TDescribeTableSettings describeTableSettings =
+            TDescribeTableSettings()
+                .WithTableStatistics(true)
+                .WithPartitionStatistics(true)
+                .WithShardNodesInfo(true);
+
+        bool done = false;
+        for (int i = 0; i < 10; i++) {
+            std::unordered_set<ui32> nodeIds;
+            auto res = session.DescribeTable("Root/EightShard", describeTableSettings)
+                .ExtractValueSync();
+
+            UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionsCount(), 8);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats().size(), 8);
+            for (const auto& s : res.GetTableDescription().GetPartitionStats()) {
+                nodeIds.emplace(s.LeaderNodeId);
+            }
+            if (nodeIds.size() == 1 && *nodeIds.begin() == nodeId) {
+                done = true;
+                break;
+            }
+            Sleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(done, "unable to wait tablets move on specific node");
+    };
+
+    // Move all tablets on the node2, we have a grpc connection to node 1
+    // so all sessions will be created on the node 1
+    drainNode(firstNodeId);
+    waitTablets(firstNodeId + 1);
+
+    {
+        auto result = session.ExecuteDataQuery(R"(
+            SELECT * FROM `/Root/EightShard` WHERE Key = 1;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+    }
+    {
+        auto result = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/EightShard` (Key, Data) VALUES (1, 1);
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+    }
+    {
+        auto result = kikimr.GetQueryClient().ExecuteQuery(R"(
+            SELECT * FROM `/Root/EightShard` WHERE Key = 1;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+    }
+    {
+        auto result = kikimr.GetQueryClient().ExecuteQuery(R"(
+            UPSERT INTO `/Root/EightShard` (Key, Data) VALUES (1, 1);
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+    }
+    {
+        auto result = session.ExecuteDataQuery(R"(
+            UPDATE `/Root/EightShard` SET Data = 111 WHERE Key = 1;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+    }
+    {
+        auto result = kikimr.GetQueryClient().ExecuteQuery(R"(
+            UPDATE `/Root/EightShard` SET Data = 111 WHERE Key = 1;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+    }
+    expectedNonLocalSingleNodeReqCount += 6;
+    UNIT_ASSERT_VALUES_EQUAL(counters.NonLocalSingleNodeReqCount->Val(), expectedNonLocalSingleNodeReqCount);
+
+    // Now resume node 1 and move all tablets on the node1
+    // so all tablets will be on the same node with session
+    drainNode(firstNodeId, true);
+    drainNode(firstNodeId + 1);
+    waitTablets(firstNodeId);
+
+    {
+        auto result = session.ExecuteDataQuery(R"(
+            SELECT * FROM `/Root/EightShard` WHERE Key = 1;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+    }
+    {
+        auto result = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/EightShard` (Key, Data) VALUES (1, 1);
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+    }
+    {
+        auto result = kikimr.GetQueryClient().ExecuteQuery(R"(
+            SELECT * FROM `/Root/EightShard` WHERE Key = 1;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+    }
+    {
+        auto result = kikimr.GetQueryClient().ExecuteQuery(R"(
+            UPSERT INTO `/Root/EightShard` (Key, Data) VALUES (1, 1);
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+    }
+    {
+        auto result = session.ExecuteDataQuery(R"(
+            UPDATE `/Root/EightShard` SET Data = 111 WHERE Key = 1;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+    }
+    {
+        auto result = kikimr.GetQueryClient().ExecuteQuery(R"(
+            UPDATE `/Root/EightShard` SET Data = 111 WHERE Key = 1;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+    }
+        {
+        auto result = session.ExecuteDataQuery(R"(
+            UPDATE `/Root/EightShard` SET Data = 111 WHERE Key = 1;
+            SELECT * FROM `/Root/EightShard` WHERE Key = 1;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+    }
+    {
+        auto result = kikimr.GetQueryClient().ExecuteQuery(R"(
+            UPDATE `/Root/EightShard` SET Data = 111 WHERE Key = 1;
+            SELECT * FROM `/Root/EightShard` WHERE Key = 1;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+    }
+    // All executions are local - same value of counter
+    UNIT_ASSERT_VALUES_EQUAL(counters.NonLocalSingleNodeReqCount->Val(), expectedNonLocalSingleNodeReqCount);
 }
 
 } // suite

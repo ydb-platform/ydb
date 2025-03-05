@@ -38,13 +38,13 @@ namespace NKikimr {
         TDelayedResponses DelayedResponses;
         bool AllowGarbageCollection = false;
         THugeBlobCtxPtr HugeBlobCtx;
-        ui32 MinREALHugeBlobInBytes;
+        ui32 MinHugeBlobInBytes;
 
         TFields(TIntrusivePtr<THullDs> hullDs,
                 TIntrusivePtr<TLsnMngr> &&lsnMngr,
                 TPDiskCtxPtr &&pdiskCtx,
                 THugeBlobCtxPtr hugeBlobCtx,
-                ui32 minREALHugeBlobInBytes,
+                ui32 minHugeBlobInBytes,
                 const TActorId skeletonId,
                 bool runHandoff,
                 TActorSystem *as,
@@ -60,7 +60,7 @@ namespace NKikimr {
             , ActorSystem(as)
             , BarrierValidation(barrierValidation)
             , HugeBlobCtx(std::move(hugeBlobCtx))
-            , MinREALHugeBlobInBytes(minREALHugeBlobInBytes)
+            , MinHugeBlobInBytes(minHugeBlobInBytes)
         {}
 
         void CutRecoveryLog(const TActorContext &ctx, std::unique_ptr<NPDisk::TEvCutLog> msg) {
@@ -83,7 +83,7 @@ namespace NKikimr {
             TIntrusivePtr<TLsnMngr> lsnMngr,
             TPDiskCtxPtr pdiskCtx,
             THugeBlobCtxPtr hugeBlobCtx,
-            ui32 minREALHugeBlobInBytes,
+            ui32 minHugeBlobInBytes,
             const TActorId skeletonId,
             bool runHandoff,
             THullDbRecovery &&uncond,
@@ -92,7 +92,7 @@ namespace NKikimr {
             TActorId hugeKeeperId)
         : THullDbRecovery(std::move(uncond))
         , Fields(std::make_unique<TFields>(HullDs, std::move(lsnMngr), std::move(pdiskCtx), std::move(hugeBlobCtx),
-            minREALHugeBlobInBytes, skeletonId, runHandoff, as, barrierValidation, hugeKeeperId))
+            minHugeBlobInBytes, skeletonId, runHandoff, as, barrierValidation, hugeKeeperId))
     {}
 
     THull::~THull() = default;
@@ -130,7 +130,7 @@ namespace NKikimr {
         Fields->SetLogNotifierActorId(logNotifierAid);
         // actor for LogoBlobs DB
         HullDs->LogoBlobs->LIActor = ctx.RegisterWithSameMailbox(CreateLogoBlobsActor(config, HullDs, hullLogCtx,
-            Fields->HugeBlobCtx, Fields->MinREALHugeBlobInBytes, loggerId, Fields->LogoBlobsRunTimeCtx, syncLogFirstLsnToKeep));
+            Fields->HugeBlobCtx, Fields->MinHugeBlobInBytes, loggerId, Fields->LogoBlobsRunTimeCtx, syncLogFirstLsnToKeep));
         activeActors.Insert(HullDs->LogoBlobs->LIActor, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         // actor for Blocks DB
         HullDs->Blocks->LIActor = ctx.RegisterWithSameMailbox(CreateBlocksActor(config, HullDs, hullLogCtx, loggerId,
@@ -201,7 +201,9 @@ namespace NKikimr {
             }
         }
 
-        ValidateWriteQuery(ctx, id, writtenBeyondBarrier);
+        if (writtenBeyondBarrier) {
+            ValidateWriteQuery(ctx, id, writtenBeyondBarrier);
+        }
         return {NKikimrProto::OK, "", false};
     }
 
@@ -711,14 +713,14 @@ namespace NKikimr {
         ctx.Send(HullDs->Barriers->LIActor, new TEvPermitGarbageCollection);
     }
 
-    void THull::ApplyHugeBlobSize(ui32 minREALHugeBlobInBytes, const TActorContext& ctx) {
-        Fields->MinREALHugeBlobInBytes = minREALHugeBlobInBytes;
-        ctx.Send(HullDs->LogoBlobs->LIActor, new TEvMinHugeBlobSizeUpdate(minREALHugeBlobInBytes));
+    void THull::ApplyHugeBlobSize(ui32 minHugeBlobInBytes, const TActorContext& ctx) {
+        Fields->MinHugeBlobInBytes = minHugeBlobInBytes;
+        ctx.Send(HullDs->LogoBlobs->LIActor, new TEvMinHugeBlobSizeUpdate(minHugeBlobInBytes));
     }
 
     void THull::CompactFreshLogoBlobsIfRequired(const TActorContext& ctx) {
         CompactFreshSegmentIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(HullDs, Fields->HugeBlobCtx,
-            Fields->MinREALHugeBlobInBytes, Fields->LogoBlobsRunTimeCtx, ctx, false, Fields->AllowGarbageCollection);
+            Fields->MinHugeBlobInBytes, Fields->LogoBlobsRunTimeCtx, ctx, false, Fields->AllowGarbageCollection);
     }
 
 } // NKikimr

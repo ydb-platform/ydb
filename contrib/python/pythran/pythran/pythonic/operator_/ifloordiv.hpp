@@ -23,7 +23,7 @@ namespace operator_
   {
     return (a - mod(a, b)) / b;
   }
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

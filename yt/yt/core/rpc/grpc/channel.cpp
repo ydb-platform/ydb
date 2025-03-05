@@ -3,7 +3,6 @@
 #include "dispatcher.h"
 #include "helpers.h"
 
-#include <yt/yt/core/misc/singleton.h>
 #include <yt/yt/core/misc/finally.h>
 
 #include <yt/yt/core/rpc/channel.h>
@@ -19,6 +18,8 @@
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 #include <array>
 
@@ -126,7 +127,7 @@ DEFINE_ENUM(EClientCallStage,
 );
 
 class TChannel
-    : public IChannel
+    : public NRpc::NGrpc::IGrpcChannel
 {
 public:
     explicit TChannel(TChannelConfigPtr config)
@@ -171,11 +172,13 @@ public:
             responseHandler->HandleError(std::move(error));
             return nullptr;
         }
-        return New<TCallHandler>(
+        auto callHandler = New<TCallHandler>(
             this,
             options,
             std::move(request),
             std::move(responseHandler));
+        callHandler->Initialize();
+        return callHandler;
     }
 
     void Terminate(const TError& error) override
@@ -221,6 +224,11 @@ public:
         return MemoryUsageTracker_;
     }
 
+    grpc_connectivity_state CheckConnectivityState(bool tryToConnect) override
+    {
+        return grpc_channel_check_connectivity_state(Channel_.Unwrap(), tryToConnect);
+    }
+
 private:
     const TChannelConfigPtr Config_;
     const TString EndpointAddress_;
@@ -252,6 +260,9 @@ private:
             , Request_(std::move(request))
             , ResponseHandler_(std::move(responseHandler))
             , GuardedCompletionQueue_(TDispatcher::Get()->PickRandomGuardedCompletionQueue())
+        { }
+
+        void Initialize()
         {
             YT_LOG_DEBUG("Sending request (RequestId: %v, Method: %v.%v, Timeout: %v)",
                 Request_->GetRequestId(),
@@ -337,6 +348,9 @@ private:
             }
 
             try {
+                THROW_ERROR_EXCEPTION_IF(
+                    Request_->IsAttachmentCompressionEnabled(),
+                    "Compression codecs are not supported in RPC over GRPC");
                 RequestBody_ = Request_->Serialize();
             } catch (const std::exception& ex) {
                 auto responseHandler = TryAcquireResponseHandler();
@@ -624,6 +638,8 @@ private:
 
             NRpc::NProto::TResponseHeader responseHeader;
             ToProto(responseHeader.mutable_request_id(), Request_->GetRequestId());
+            NYT::ToProto(responseHeader.mutable_service(), Request_->GetService());
+            NYT::ToProto(responseHeader.mutable_method(), Request_->GetMethod());
             if (Request_->Header().has_response_codec()) {
                 responseHeader.set_codec(Request_->Header().response_codec());
             }
@@ -736,7 +752,7 @@ public:
 
 } // namespace
 
-IChannelPtr CreateGrpcChannel(TChannelConfigPtr config)
+IGrpcChannelPtr CreateGrpcChannel(TChannelConfigPtr config)
 {
     return New<TChannel>(std::move(config));
 }

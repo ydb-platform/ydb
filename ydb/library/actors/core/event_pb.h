@@ -19,6 +19,7 @@ namespace NActorsProto {
 } // NActorsProto
 
 namespace NActors {
+    TString EventPBBaseToString(const TString& header, const TString& dbgStr);
 
     class TRopeStream : public NProtoBuf::io::ZeroCopyInputStream {
         TRope::TConstIterator Iter;
@@ -183,9 +184,7 @@ namespace NActors {
         }
 
         TString ToString() const override {
-            TStringStream ss;
-            ss << ToStringHeader() << " " << Record.ShortDebugString();
-            return ss.Str();
+            return EventPBBaseToString(ToStringHeader(), Record.ShortDebugString());
         }
 
         bool IsSerializable() const override {

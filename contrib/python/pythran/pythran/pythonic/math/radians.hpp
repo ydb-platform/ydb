@@ -3,8 +3,8 @@
 
 #include "pythonic/include/math/radians.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/math/pi.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -15,7 +15,7 @@ namespace math
   {
     return (x * 2. * pi) / 360.;
   }
-}
+} // namespace math
 PYTHONIC_NS_END
 
 #endif

@@ -15,7 +15,7 @@ namespace operator_
   {
     return std::count(a.begin(), a.end(), std::forward<B>(b));
   }
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

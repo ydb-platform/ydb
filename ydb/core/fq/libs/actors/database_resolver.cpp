@@ -29,7 +29,7 @@ using TParser = std::function<TDatabaseDescription(
         NJson::TJsonValue& body,
         const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
         bool useTls,
-        NConnector::NApi::EProtocol protocol
+        NYql::EGenericProtocol protocol
 )>;
 using TParsers = THashMap<NYql::EDatabaseType, TParser>;
 
@@ -292,7 +292,7 @@ public:
             .SetErrorTtl(TDuration::Minutes(1))
             .SetMaxSize(1000000))
     {
-        auto ydbParser = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr&, bool, NConnector::NApi::EProtocol) {
+        auto ydbParser = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr&, bool, NYql::EGenericProtocol) {
             bool secure = false;
             TString endpoint = databaseInfo.GetMap().at("endpoint").GetStringRobust();
             TString prefix("/?database=");
@@ -333,7 +333,7 @@ public:
             NJson::TJsonValue& databaseInfo,
             const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
             bool useTls,
-            NConnector::NApi::EProtocol protocol)
+            NYql::EGenericProtocol protocol)
         {
             auto ret = ydbParser(databaseInfo, mdbEndpointGenerator, useTls, protocol);
             // TODO: Take explicit field from MVP
@@ -349,7 +349,7 @@ public:
             NJson::TJsonValue& databaseInfo,
             const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
             bool useTls,
-            NConnector::NApi::EProtocol protocol
+            NYql::EGenericProtocol protocol
             ) {
             NYql::IMdbEndpointGenerator::TEndpoint endpoint;
             TVector<TString> aliveHosts;
@@ -380,7 +380,7 @@ public:
             NJson::TJsonValue& databaseInfo,
             const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
             bool useTls,
-            NConnector::NApi::EProtocol protocol
+            NYql::EGenericProtocol protocol
             ) {
             NYql::IMdbEndpointGenerator::TEndpoint endpoint;
             TVector<TString> aliveHosts;
@@ -427,7 +427,7 @@ public:
             NJson::TJsonValue& databaseInfo,
             const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
             bool useTls,
-            NConnector::NApi::EProtocol protocol
+            NYql::EGenericProtocol protocol
             ) {
             NYql::IMdbEndpointGenerator::TEndpoint endpoint;
             TString aliveHost;
@@ -465,7 +465,7 @@ public:
             NJson::TJsonValue& databaseInfo,
             const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
             bool useTls,
-            NConnector::NApi::EProtocol protocol
+            NYql::EGenericProtocol protocol
             ) {
             NYql::IMdbEndpointGenerator::TEndpoint endpoint;
             TVector<TString> aliveHosts;
@@ -610,7 +610,7 @@ private:
 
                 auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, databaseAuth.StructuredToken, databaseAuth.AddBearerToToken);
                 auto token = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
-                if (token) {
+                if (!token.empty()) {
                     httpRequest->Set("Authorization", token);
                 }
 

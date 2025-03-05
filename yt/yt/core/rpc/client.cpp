@@ -154,6 +154,17 @@ bool TClientRequest::IsStreamingEnabled() const
     return StreamingEnabled_;
 }
 
+bool TClientRequest::IsAttachmentCompressionEnabled() const
+{
+    auto attachmentCodecId = GetEffectiveAttachmentCompressionCodec();
+    return attachmentCodecId != NCompression::ECodec::None;
+}
+
+NCompression::ECodec TClientRequest::GetEffectiveAttachmentCompressionCodec() const
+{
+    return EnableLegacyRpcCodecs_ ? NCompression::ECodec::None : RequestCodec_;
+}
+
 const TStreamingParameters& TClientRequest::ClientAttachmentsStreamingParameters() const
 {
     return ClientAttachmentsStreamingParameters_;
@@ -315,10 +326,7 @@ TClientContextPtr TClientRequest::CreateClientContext()
     auto traceContext = CreateCallTraceContext(GetService(), GetMethod());
     if (traceContext) {
         auto* tracingExt = Header().MutableExtension(NRpc::NProto::TRequestHeader::tracing_ext);
-        ToProto(tracingExt, traceContext);
-        if (!SendBaggage_) {
-            tracingExt->clear_baggage();
-        }
+        ToProto(tracingExt, traceContext, SendBaggage_ && TDispatcher::Get()->ShouldSendTracingBaggage());
         if (traceContext->IsSampled()) {
             TraceRequest(traceContext);
         }
@@ -589,7 +597,7 @@ const IInvokerPtr& TClientResponse::GetInvoker()
         : TDispatcher::Get()->GetLightInvoker();
 }
 
-void TClientResponse::Deserialize(TSharedRefArray responseMessage)
+TFuture<void> TClientResponse::Deserialize(TSharedRefArray responseMessage) noexcept
 {
     YT_ASSERT(responseMessage);
     YT_ASSERT(!ResponseMessage_);
@@ -597,26 +605,32 @@ void TClientResponse::Deserialize(TSharedRefArray responseMessage)
     ResponseMessage_ = std::move(responseMessage);
 
     if (ResponseMessage_.Size() < 2) {
-        THROW_ERROR_EXCEPTION(NRpc::EErrorCode::ProtocolError, "Too few response message parts: %v < 2",
-            ResponseMessage_.Size());
+        return MakeFuture(TError(
+            NRpc::EErrorCode::ProtocolError,
+            "Too few response message parts: %v < 2",
+            ResponseMessage_.Size()));
     }
 
     if (!TryParseResponseHeader(ResponseMessage_, &Header_)) {
-        THROW_ERROR_EXCEPTION(NRpc::EErrorCode::ProtocolError, "Error deserializing response header");
+        return MakeFuture(TError(
+            NRpc::EErrorCode::ProtocolError,
+            "Error deserializing response header"));
     }
 
     // COMPAT(danilalexeev): legacy RPC codecs
     std::optional<NCompression::ECodec> bodyCodecId;
     NCompression::ECodec attachmentCodecId;
     if (Header_.has_codec()) {
-        bodyCodecId = attachmentCodecId = CheckedEnumCast<NCompression::ECodec>(Header_.codec());
+        bodyCodecId = attachmentCodecId = FromProto<NCompression::ECodec>(Header_.codec());
     } else {
         bodyCodecId = std::nullopt;
         attachmentCodecId = NCompression::ECodec::None;
     }
 
     if (!TryDeserializeBody(ResponseMessage_[1], bodyCodecId)) {
-        THROW_ERROR_EXCEPTION(NRpc::EErrorCode::ProtocolError, "Error deserializing response body");
+        return MakeFuture(TError(
+            NRpc::EErrorCode::ProtocolError,
+            "Error deserializing response body"));
     }
 
     auto compressedAttachments = TRange(ResponseMessage_.Begin() + 2, ResponseMessage_.End());
@@ -624,12 +638,16 @@ void TClientResponse::Deserialize(TSharedRefArray responseMessage)
 
     if (attachmentCodecId == NCompression::ECodec::None) {
         Attachments_ = compressedAttachments.ToVector();
+        return VoidFuture;
     } else {
-        Attachments_ = DecompressAttachments(compressedAttachments, attachmentCodecId);
-    }
-
-    for (auto& attachment : Attachments_) {
-        attachment = TrackMemory(memoryUsageTracker, attachment);
+        return AsyncDecompressAttachments(compressedAttachments, attachmentCodecId)
+            .ApplyUnique(BIND([this, this_ = MakeStrong(this)] (std::vector<TSharedRef>&& decompressedAttachments) {
+                Attachments_ = std::move(decompressedAttachments);
+                auto memoryUsageTracker = ClientContext_->GetMemoryUsageTracker();
+                for (auto& attachment : Attachments_) {
+                    attachment = TrackMemory(memoryUsageTracker, attachment);
+                }
+            }));
     }
 }
 
@@ -657,18 +675,16 @@ void TClientResponse::DoHandleResponse(TSharedRefArray message, const std::strin
 
     Address_ = address;
 
-    try {
-        Deserialize(std::move(message));
-        Finish({});
-    } catch (const std::exception& ex) {
-        Finish(ex);
-    }
+    Deserialize(std::move(message))
+        .Subscribe(BIND([timer, this, this_ = MakeStrong(this)] (const TError& error) {
+            Finish(error);
 
-    if (!ClientContext_->GetResponseHeavy() && timer.GetElapsedTime() > LightInvokerDurationWarningThreshold) {
-        YT_LOG_DEBUG("Handling light response took too long (RequestId: %v, Duration: %v)",
-            ClientContext_->GetRequestId(),
-            timer.GetElapsedTime());
-    }
+            if (!ClientContext_->GetResponseHeavy() && timer.GetElapsedTime() > LightInvokerDurationWarningThreshold) {
+                YT_LOG_DEBUG("Handling light response took too long (RequestId: %v, Duration: %v)",
+                    ClientContext_->GetRequestId(),
+                    timer.GetElapsedTime());
+            }
+        }));
 }
 
 void TClientResponse::HandleStreamingPayload(const TStreamingPayload& payload)

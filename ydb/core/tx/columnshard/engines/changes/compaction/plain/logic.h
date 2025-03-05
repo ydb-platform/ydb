@@ -1,8 +1,8 @@
 #pragma once
 #include "column_cursor.h"
 
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/library/formats/arrow/accessor/common/const.h>
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction/abstract/merger.h>
 
 namespace NKikimr::NOlap::NCompaction {

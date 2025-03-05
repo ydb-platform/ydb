@@ -1,85 +1,86 @@
-diff --git a/include/__config b/include/__config
-index 52bf12f..e431997 100644
---- a/include/__config
-+++ b/include/__config
-@@ -131,7 +131,12 @@
+diff --git a/include/__configuration/abi.h b/include/__configuration/abi.h
+index 513da6e..c31fbba 100644
+--- a/include/__configuration/abi.h
++++ b/include/__configuration/abi.h
+@@ -47,7 +47,12 @@
  // Previously libc++ used "unsigned int" exclusively.
- #    define _LIBCPP_ABI_VARIANT_INDEX_TYPE_OPTIMIZATION
+ #  define _LIBCPP_ABI_VARIANT_INDEX_TYPE_OPTIMIZATION
  // Unstable attempt to provide a more optimized std::function
-+#ifdef __EMSCRIPTEN__
+-#  define _LIBCPP_ABI_OPTIMIZED_FUNCTION
++#  ifdef __EMSCRIPTEN__
 +// XXX EMSCRIPTEN https://github.com/emscripten-core/emscripten/issues/11022
-+//#    define _LIBCPP_ABI_OPTIMIZED_FUNCTION
-+#else
- #    define _LIBCPP_ABI_OPTIMIZED_FUNCTION
-+#endif
++// #  define _LIBCPP_ABI_OPTIMIZED_FUNCTION
++#  else
++#    define _LIBCPP_ABI_OPTIMIZED_FUNCTION
++#  endif
  // All the regex constants must be distinct and nonzero.
- #    define _LIBCPP_ABI_REGEX_CONSTANTS_NONZERO
+ #  define _LIBCPP_ABI_REGEX_CONSTANTS_NONZERO
  // Re-worked external template instantiations for std::string with a focus on
 diff --git a/include/typeinfo b/include/typeinfo
-index 59bc291..eb3dc59 100644
+index d1c0de3..8b75ced 100644
 --- a/include/typeinfo
 +++ b/include/typeinfo
-@@ -104,6 +104,11 @@ public:
+@@ -96,7 +96,13 @@ public:
  
-     size_t hash_code() const _NOEXCEPT;
+   size_t hash_code() const _NOEXCEPT;
  
-+#ifdef __EMSCRIPTEN__
-+    // XXX Emscripten: adding `always_inline` fixes
-+    // https://github.com/emscripten-core/emscripten/issues/13330
-+    __attribute__((always_inline))
-+#endif
-     _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_SINCE_CXX23
-     bool operator==(const type_info& __arg) const _NOEXCEPT {
-       // When evaluated in a constant expression, both type infos simply can't come
+-  _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX23 bool operator==(const type_info& __arg) const _NOEXCEPT {
++#    ifdef __EMSCRIPTEN__
++  // XXX Emscripten: adding `always_inline` fixes
++  // https://github.com/emscripten-core/emscripten/issues/13330
++  __attribute__((always_inline))
++#    endif
++  _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX23 bool
++  operator==(const type_info& __arg) const _NOEXCEPT {
+     // When evaluated in a constant expression, both type infos simply can't come
+     // from different translation units, so it is sufficient to compare their addresses.
+     if (__libcpp_is_constant_evaluated()) {
 diff --git a/src/filesystem/operations.cpp b/src/filesystem/operations.cpp
-index 63a119a..61f2cc5 100644
+index a83c1ae..fd770e1 100644
 --- a/src/filesystem/operations.cpp
 +++ b/src/filesystem/operations.cpp
 @@ -37,7 +37,7 @@
- #include <time.h>
  #include <fcntl.h> /* values for fchmodat */
+ #include <time.h>
  
 -#if __has_include(<sys/sendfile.h>)
 +#if __has_include(<sys/sendfile.h>) && !defined(__EMSCRIPTEN__)
- # include <sys/sendfile.h>
- # define _LIBCPP_FILESYSTEM_USE_SENDFILE
+ #  include <sys/sendfile.h>
+ #  define _LIBCPP_FILESYSTEM_USE_SENDFILE
  #elif defined(__APPLE__) || __has_include(<copyfile.h>)
 diff --git a/src/new.cpp b/src/new.cpp
-index c435c5f..6d5b221 100644
+index b0c7316..7f1cc67 100644
 --- a/src/new.cpp
 +++ b/src/new.cpp
-@@ -37,8 +37,17 @@ operator new(std::size_t size) _THROW_BAD_ALLOC
-         else
- #ifndef _LIBCPP_HAS_NO_EXCEPTIONS
-             throw std::bad_alloc();
+@@ -18,7 +18,13 @@
+ // The code below is copied as-is into libc++abi's libcxxabi/src/stdlib_new_delete.cpp
+ // file. The version in this file is the canonical one.
+ 
+-inline void __throw_bad_alloc_shim() { std::__throw_bad_alloc(); }
++inline void __throw_bad_alloc_shim() {
++# ifdef __EMSCRIPTEN__
++  abort();
 +#else
-+#ifdef __EMSCRIPTEN__
-+            // Abort here so that when exceptions are disabled, we do not just
-+            // return 0 when malloc returns 0.
-+            // We could also do this with set_new_handler, but that adds a
-+            // global constructor and a table entry, overhead that we can avoid
-+            // by doing it this way.
-+            abort();
- #else
-             break;
++  std::__throw_bad_alloc();
 +#endif
- #endif
-     }
-     return p;
++}
+ 
+ #  define _LIBCPP_ASSERT_SHIM(expr, str) _LIBCPP_ASSERT(expr, str)
+ 
 diff --git a/src/support/runtime/exception_fallback.ipp b/src/support/runtime/exception_fallback.ipp
-index 3b2716d..c14c375 100644
+index 18ff4b8..d54a9a5 100644
 --- a/src/support/runtime/exception_fallback.ipp
 +++ b/src/support/runtime/exception_fallback.ipp
-@@ -47,6 +47,7 @@ get_terminate() noexcept
-   return __libcpp_atomic_load(&__terminate_handler);
- }
+@@ -33,6 +33,7 @@ terminate_handler set_terminate(terminate_handler func) noexcept {
+ 
+ terminate_handler get_terminate() noexcept { return __libcpp_atomic_load(&__terminate_handler); }
  
 +#ifndef __EMSCRIPTEN__ // We provide this in JS
- _LIBCPP_NORETURN
- void
- terminate() noexcept
-@@ -69,7 +70,9 @@ terminate() noexcept
-     }
+ _LIBCPP_NORETURN void terminate() noexcept {
+ #ifndef _LIBCPP_HAS_NO_EXCEPTIONS
+   try {
+@@ -49,7 +50,9 @@ _LIBCPP_NORETURN void terminate() noexcept {
+   }
  #endif // _LIBCPP_HAS_NO_EXCEPTIONS
  }
 +#endif // !__EMSCRIPTEN__
@@ -87,12 +88,12 @@ index 3b2716d..c14c375 100644
 +#if !defined(__EMSCRIPTEN__)
  bool uncaught_exception() noexcept { return uncaught_exceptions() > 0; }
  
- int uncaught_exceptions() noexcept
-@@ -78,6 +81,7 @@ int uncaught_exceptions() noexcept
+ int uncaught_exceptions() noexcept {
+@@ -57,6 +60,7 @@ int uncaught_exceptions() noexcept {
    fprintf(stderr, "uncaught_exceptions not yet implemented\n");
    ::abort();
  }
 +#endif // !__EMSCRIPTEN__
  
+ exception::~exception() noexcept {}
  
- exception::~exception() noexcept

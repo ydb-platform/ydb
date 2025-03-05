@@ -29,9 +29,9 @@ namespace numpy
     }
 
     inline auto logseries(double p, long size)
-        -> decltype(logseries(p, types::array<long, 1>{{size}}))
+        -> decltype(logseries(p, types::array_tuple<long, 1>{{size}}))
     {
-      return logseries(p, types::array<long, 1>{{size}});
+      return logseries(p, types::array_tuple<long, 1>{{size}});
     }
 
     inline double logseries(double p, types::none_type d)

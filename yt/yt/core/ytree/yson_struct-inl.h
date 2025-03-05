@@ -15,7 +15,6 @@
 
 #include <yt/yt/core/misc/guid.h>
 #include <yt/yt/core/misc/serialize.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <yt/yt/core/ypath/token.h>
 
@@ -172,26 +171,28 @@ TYsonStructRegistrar<TStruct>::TYsonStructRegistrar(IYsonStructMeta* meta)
 
 template <class TStruct>
 template <class TValue>
-TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::Parameter(const TString& key, TValue(TStruct::*field))
+TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::Parameter(const std::string& key, TValue(TStruct::*field))
 {
     return BaseClassParameter<TStruct, TValue>(key, field);
 }
 
 template <class TStruct>
 template <class TBase, class TValue>
-TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::BaseClassParameter(const TString& key, TValue(TBase::*field))
+TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::BaseClassParameter(const std::string& key, TValue(TBase::*field))
 {
     static_assert(std::derived_from<TStruct, TBase>);
-    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TYsonFieldAccessor<TBase, TValue>>(field));
+    int fieldIndex = ssize(Meta_->GetParameterMap());
+    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TYsonFieldAccessor<TBase, TValue>>(field), fieldIndex);
     Meta_->RegisterParameter(key, parameter);
     return *parameter;
 }
 
 template <class TStruct>
 template <class TValue>
-TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ParameterWithUniversalAccessor(const TString& key, std::function<TValue&(TStruct*)> accessor)
+TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ParameterWithUniversalAccessor(const std::string& key, std::function<TValue&(TStruct*)> accessor)
 {
-    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TUniversalYsonParameterAccessor<TStruct, TValue>>(std::move(accessor)));
+    int fieldIndex = ssize(Meta_->GetParameterMap());
+    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TUniversalYsonParameterAccessor<TStruct, TValue>>(std::move(accessor)), fieldIndex);
     Meta_->RegisterParameter(key, parameter);
     return *parameter;
 }
@@ -215,7 +216,7 @@ void TYsonStructRegistrar<TStruct>::Postprocessor(std::function<void(TStruct*)> 
 template <class TStruct>
 template <class TExternal, class TValue>
     // requires std::derived_from<TStruct, TExternalizedYsonStruct<TExternal, TStruct>>
-TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ExternalClassParameter(const TString& key, TValue(TExternal::*field))
+TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ExternalClassParameter(const std::string& key, TValue(TExternal::*field))
 {
     static_assert(std::derived_from<TStruct, TExternalizedYsonStruct>);
     static_assert(std::same_as<typename TStruct::TExternal, TExternal>);
@@ -249,6 +250,19 @@ void TYsonStructRegistrar<TStruct>::ExternalPostprocessor(TExternalPostprocessor
 }
 
 template <class TStruct>
+template <class TBase, class TValue>
+TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ExternalBaseClassParameter(const std::string& key, TValue(TBase::*field))
+{
+    static_assert(std::derived_from<TStruct, TExternalizedYsonStruct>);
+    static_assert(std::derived_from<typename TStruct::TExternal, TBase>);
+    auto universalAccessor = [field] (TStruct* serializer) -> auto& {
+        return serializer->That_->*field;
+    };
+
+    return ParameterWithUniversalAccessor<TValue>(key, universalAccessor);
+}
+
+template <class TStruct>
 void TYsonStructRegistrar<TStruct>::UnrecognizedStrategy(EUnrecognizedStrategy strategy)
 {
     Meta_->SetUnrecognizedStrategy(strategy);
@@ -273,11 +287,14 @@ void Serialize(const T& value, NYson::IYsonConsumer* consumer)
 }
 
 template <CExternallySerializable T, CYsonStructSource TSource>
-void Deserialize(T& value, TSource source, bool postprocess, bool setDefaults)
+void Deserialize(T& value, TSource source, bool postprocess, bool setDefaults, std::optional<EUnrecognizedStrategy> strategy)
 {
     using TTraits = TGetExternalizedYsonStructTraits<T>;
     using TSerializer = typename TTraits::TExternalSerializer;
     auto serializer = TSerializer::template CreateWritable<T, TSerializer>(value, setDefaults);
+    if (strategy) {
+        serializer.SetUnrecognizedStrategy(*strategy);
+    }
     serializer.Load(std::move(source), postprocess, setDefaults);
 }
 
@@ -314,10 +331,10 @@ std::vector<TIntrusivePtr<T>> CloneYsonStructs(const std::vector<TIntrusivePtr<T
     return clonedObjs;
 }
 
-template <class T>
-THashMap<TString, TIntrusivePtr<T>> CloneYsonStructs(const THashMap<TString, TIntrusivePtr<T>>& objs)
+template <class TKey, class TValue>
+THashMap<TKey, TIntrusivePtr<TValue>> CloneYsonStructs(const THashMap<TKey, TIntrusivePtr<TValue>>& objs)
 {
-    THashMap<TString, TIntrusivePtr<T>> clonedObjs;
+    THashMap<TKey, TIntrusivePtr<TValue>> clonedObjs;
     clonedObjs.reserve(objs.size());
     for (const auto& [key, obj] : objs) {
         clonedObjs.emplace(key, CloneYsonStruct(obj));

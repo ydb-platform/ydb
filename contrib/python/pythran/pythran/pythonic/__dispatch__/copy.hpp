@@ -14,7 +14,7 @@ namespace __dispatch__
   {
     return any.copy();
   }
-}
+} // namespace __dispatch__
 PYTHONIC_NS_END
 
 #endif

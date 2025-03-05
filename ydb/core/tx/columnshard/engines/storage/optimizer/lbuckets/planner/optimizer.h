@@ -215,20 +215,20 @@ public:
     bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
         for (auto&& f : Futures) {
             for (auto&& p : f.second) {
-                if (auto lockInfo = dataLocksManager->IsLocked(*p.second)) {
+                if (auto lockInfo = dataLocksManager->IsLocked(*p.second, NDataLocks::ELockCategory::Compaction)) {
                     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
                     return true;
                 }
             }
         }
         for (auto&& i : PreActuals) {
-            if (auto lockInfo = dataLocksManager->IsLocked(*i.second)) {
+            if (auto lockInfo = dataLocksManager->IsLocked(*i.second, NDataLocks::ELockCategory::Compaction)) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
                 return true;
             }
         }
         for (auto&& i : Actuals) {
-            if (auto lockInfo = dataLocksManager->IsLocked(*i.second)) {
+            if (auto lockInfo = dataLocksManager->IsLocked(*i.second, NDataLocks::ELockCategory::Compaction)) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
                 return true;
             }
@@ -746,7 +746,7 @@ public:
 
     bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
         if (MainPortion) {
-            if (auto lockInfo = dataLocksManager->IsLocked(*MainPortion)) {
+            if (auto lockInfo = dataLocksManager->IsLocked(*MainPortion, NDataLocks::ELockCategory::Compaction)) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "optimization_locked")("reason", *lockInfo);
                 return true;
             }
@@ -885,7 +885,7 @@ public:
         ui64 size = 0;
         for (auto&& i : portions) {
             size += i->GetTotalBlobBytes();
-            if (locksManager->IsLocked(*i)) {
+            if (locksManager->IsLocked(*i, NDataLocks::ELockCategory::Compaction)) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("info", Others.DebugString())("event", "skip_optimization")("reason", "busy");
                 return nullptr;
             }

@@ -5,8 +5,6 @@ SRCS(
     yql_callable_transform.cpp
     yql_callable_transform.h
     yql_cost_function.cpp
-    yql_csv.cpp
-    yql_csv.h
     yql_data_provider.h
     yql_execution.cpp
     yql_execution.h
@@ -71,12 +69,13 @@ PEERDIR(
     yql/essentials/core/url_lister/interface
     yql/essentials/core/url_preprocessing/interface
     yql/essentials/minikql
-    yql/essentials/minikql/jsonpath
+    yql/essentials/minikql/jsonpath/parser
     yql/essentials/core/minsketch
     yql/essentials/protos
     yql/essentials/public/udf
     yql/essentials/public/udf/tz
     yql/essentials/sql/settings
+    yql/essentials/sql
     yql/essentials/utils
     yql/essentials/utils/log
     yql/essentials/core/expr_nodes
@@ -98,7 +97,9 @@ END()
 RECURSE(
     cbo
     credentials
+    dq_expr_nodes
     dq_integration
+    dqs_expr_nodes
     file_storage
     issue
     minsketch

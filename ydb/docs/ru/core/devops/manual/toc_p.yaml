@@ -13,8 +13,6 @@ items:
   href: backup-and-recovery.md
 - name: Обновление
   href: upgrade.md
-- name: Изменение конфигурации актор-системы
-  href: ../../maintenance/manual/change_actorsystem_configs.md
 - name: Управление конфигурацией кластера
   items:
   - name: Обзор конфигурации
@@ -27,9 +25,13 @@ items:
     href: ../../maintenance/manual/dynamic-config-selectors.md
   - name: Временная конфигурация
     href: ../../maintenance/manual/dynamic-config-volatile-config.md
+  - name: Аутентификация и авторизация узлов баз данных
+    href: node-authorization.md
   - name: Изменение конфигураций через CMS
     href: ../../maintenance/manual/cms.md
-- name: Системные таблицы
+  - name: Изменение конфигурации актор-системы
+    href: ../../maintenance/manual/change_actorsystem_configs.md
+- name: Системные представления
   href: system-views.md
 - name: Обслуживание без потери доступности
   href: maintenance-without-downtime.md

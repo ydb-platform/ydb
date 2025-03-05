@@ -4,13 +4,9 @@ FORK_SUBTESTS()
 
 FORK_SUBTESTS()
 
-#    SIZE(MEDIUM)
-#    TIMEOUT(600)
 SIZE(LARGE)
 
-TIMEOUT(3600)
-
-TAG(ya:fat)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 SRCS(
     race.cpp

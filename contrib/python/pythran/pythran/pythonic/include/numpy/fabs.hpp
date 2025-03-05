@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_FABS_HPP
 #define PYTHONIC_INCLUDE_NUMPY_FABS_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/numpy/abs.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 

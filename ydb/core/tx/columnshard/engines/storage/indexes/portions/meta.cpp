@@ -1,26 +1,27 @@
 #include "meta.h"
-#include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
-#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+
 #include <ydb/core/formats/arrow/size_calcer.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 
 namespace NKikimr::NOlap::NIndexes {
 
-std::shared_ptr<NKikimr::NOlap::IPortionDataChunk> TIndexByColumns::DoBuildIndex(
-    const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {
+TConclusion<std::shared_ptr<IPortionDataChunk>> TIndexByColumns::DoBuildIndexOptional(
+    const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo) const {
     AFL_VERIFY(Serializer);
     AFL_VERIFY(data.size());
     std::vector<TChunkedColumnReader> columnReaders;
     for (auto&& i : ColumnIds) {
         auto it = data.find(i);
-        AFL_VERIFY(it != data.end());
+        if (it == data.end()) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "index_data_absent")("column_id", i)("index_name", GetIndexName())(
+                "index_id", GetIndexId());
+            return std::shared_ptr<IPortionDataChunk>();
+        }
         columnReaders.emplace_back(it->second, indexInfo.GetColumnLoaderVerified(i));
     }
-    ui32 recordsCount = 0;
-    for (auto&& i : data.begin()->second) {
-        recordsCount += i->GetRecordsCountVerified();
-    }
     TChunkedBatchReader reader(std::move(columnReaders));
-    const TString indexData = DoBuildIndexImpl(reader);
+    const TString indexData = DoBuildIndexImpl(reader, recordsCount);
     return std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData);
 }
 
@@ -29,17 +30,22 @@ bool TIndexByColumns::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDe
     return true;
 }
 
-TIndexByColumns::TIndexByColumns(const ui32 indexId, const TString& indexName, const std::set<ui32>& columnIds, const TString& storageId)
+TIndexByColumns::TIndexByColumns(
+    const ui32 indexId, const TString& indexName, const ui32 columnId, const TString& storageId, const TReadDataExtractorContainer& extractor)
     : TBase(indexId, indexName, storageId)
-    , ColumnIds(columnIds)
-{
+    , DataExtractor(extractor)
+    , ColumnIds({ columnId }) {
     Serializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
 }
 
 NKikimr::TConclusionStatus TIndexByColumns::CheckSameColumnsForModification(const IIndexMeta& newMeta) const {
     const auto* bMeta = dynamic_cast<const TIndexByColumns*>(&newMeta);
     if (!bMeta) {
-        return TConclusionStatus::Fail("cannot read meta as appropriate class: " + GetClassName() + ". Meta said that class name is " + newMeta.GetClassName());
+        return TConclusionStatus::Fail(
+            "cannot read meta as appropriate class: " + GetClassName() + ". Meta said that class name is " + newMeta.GetClassName());
+    }
+    if (bMeta->ColumnIds.size() != 1) {
+        return TConclusionStatus::Fail("one column per index is necessary");
     }
     if (bMeta->ColumnIds.size() != ColumnIds.size()) {
         return TConclusionStatus::Fail("columns count is different");

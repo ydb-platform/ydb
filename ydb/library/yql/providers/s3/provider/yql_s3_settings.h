@@ -59,7 +59,6 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     ui64 MaxDiscoveryFilesPerQuery = 0;
     ui64 MaxDirectoriesAndFilesPerQuery = 0;
     ui64 MinDesiredDirectoriesOfFilesPerQuery = 0;
-    ui64 MaxReadSizePerQuery = 0;
     ui64 MaxInflightListsPerQuery = 0;
     ui64 ListingCallbackThreadCount = 0;
     ui64 ListingCallbackPerThreadQueueSize = 0;

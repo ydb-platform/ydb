@@ -100,6 +100,9 @@ public:
     //! Gets owned RateHistogram with given metric suffix using buckets as a constructor.
     const TRateHistogram& GetRateHistogram(const std::string& name, std::vector<double> buckets) const;
 
+    //! Gets owned Summary with given metric suffix using summary policy as a constructor.
+    const TSummary& GetSummary(const std::string& name, ESummaryPolicy policy) const;
+
 private:
     struct TState final
     {

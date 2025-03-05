@@ -1,24 +1,24 @@
 diff --git a/include/__exception/exception_ptr.h b/include/__exception/exception_ptr.h
-index 970d819..03d3843 100644
+index beadd92..d23450f 100644
 --- a/include/__exception/exception_ptr.h
 +++ b/include/__exception/exception_ptr.h
-@@ -21,7 +21,6 @@
+@@ -55,8 +55,6 @@ _LIBCPP_OVERRIDABLE_FUNC_VIS __cxa_exception* __cxa_init_primary_exception(
  
  namespace std { // purposefully not using versioning namespace
  
 -#ifndef _LIBCPP_ABI_MICROSOFT
- 
+-
  class _LIBCPP_EXPORTED_FROM_ABI exception_ptr {
    void* __ptr_;
-@@ -44,10 +43,19 @@ public:
+ 
+@@ -86,10 +84,18 @@ public:
      return !(__x == __y);
    }
  
-+  friend _LIBCPP_HIDE_FROM_ABI void swap(exception_ptr& __x, exception_ptr& __y) _NOEXCEPT
-+  {
-+      void* __tmp = __x.__ptr_;
-+      __x.__ptr_ = __y.__ptr_;
-+      __y.__ptr_ = __tmp;
++  friend _LIBCPP_HIDE_FROM_ABI void swap(exception_ptr& __x, exception_ptr& __y) _NOEXCEPT {
++    void* __tmp = __x.__ptr_;
++    __x.__ptr_  = __y.__ptr_;
++    __y.__ptr_  = __tmp;
 +  }
 +
    friend _LIBCPP_EXPORTED_FROM_ABI exception_ptr current_exception() _NOEXCEPT;
@@ -30,7 +30,7 @@ index 970d819..03d3843 100644
  template <class _Ep>
  _LIBCPP_HIDE_FROM_ABI exception_ptr make_exception_ptr(_Ep __e) _NOEXCEPT {
  #  ifndef _LIBCPP_HAS_NO_EXCEPTIONS
-@@ -64,34 +72,7 @@ _LIBCPP_HIDE_FROM_ABI exception_ptr make_exception_ptr(_Ep __e) _NOEXCEPT {
+@@ -132,34 +138,7 @@ _LIBCPP_HIDE_FROM_ABI exception_ptr make_exception_ptr(_Ep __e) _NOEXCEPT {
  
  #else // _LIBCPP_ABI_MICROSOFT
  
@@ -62,11 +62,11 @@ index 970d819..03d3843 100644
 -_LIBCPP_EXPORTED_FROM_ABI exception_ptr __copy_exception_ptr(void* __except, const void* __ptr);
 -_LIBCPP_EXPORTED_FROM_ABI exception_ptr current_exception() _NOEXCEPT;
 -_LIBCPP_NORETURN _LIBCPP_EXPORTED_FROM_ABI void rethrow_exception(exception_ptr);
-+_LIBCPP_HIDE_FROM_ABI exception_ptr __copy_exception_ptr(void *__exception, const void* __ptr);
++_LIBCPP_HIDE_FROM_ABI exception_ptr __copy_exception_ptr(void* __exception, const void* __ptr);
  
  // This is a built-in template function which automagically extracts the required
  // information.
-@@ -99,7 +80,7 @@ template <class _E>
+@@ -167,7 +146,7 @@ template <class _E>
  void* __GetExceptionInfo(_E);
  
  template <class _Ep>

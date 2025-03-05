@@ -1,7 +1,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -36,7 +35,7 @@ Y_UNIT_TEST_SUITE(TUserAttrsTestWithReboots) {
                                               NLs::UserAttrsEqual(userAttrs)});
             }
 
-            t.TestEnv->ReliablePropose(runtime, UserAttrsRequest(++t.TxId,  "/MyRoot/DirA", "USER_0", 
+            t.TestEnv->ReliablePropose(runtime, UserAttrsRequest(++t.TxId,  "/MyRoot/DirA", "USER_0",
                                        AlterUserAttrs({}, userAttrsKeys), {pathVer}),
                                        {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -140,7 +139,7 @@ Y_UNIT_TEST_SUITE(TUserAttrsTestWithReboots) {
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::PathVersionEqual(11)});
+                                   {NLs::PathVersionEqual(12)});
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir@"),
                                    {NLs::Finished, NLs::PathVersionEqual(5)});

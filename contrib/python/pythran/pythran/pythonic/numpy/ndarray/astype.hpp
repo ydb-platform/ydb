@@ -16,8 +16,8 @@ namespace numpy
     {
       return asarray(std::forward<E>(e), d);
     }
-  }
-}
+  } // namespace ndarray
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

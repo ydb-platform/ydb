@@ -26,6 +26,18 @@ TStatus RemoveTable(TTableClient& client, const TString& path, const TDropTableS
     });
 }
 
+TStatus DropSchemeObject(const TString& objectType, NQuery::TQueryClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
+    return client.RetryQuerySync([&](NQuery::TSession session) {
+        const auto executionSettings = NQuery::TExecuteQuerySettings()
+            .TraceId(settings.TraceId_)
+            .RequestType(settings.RequestType_)
+            .Header(settings.Header_)
+            .ClientTimeout(settings.ClientTimeout_);
+        const auto query = TStringBuilder() << "DROP " << objectType << " `" << path << "`";
+        return session.ExecuteQuery(query, NQuery::TTxControl::NoTx(), executionSettings).ExtractValueSync();
+    });
+}
+
 TStatus RemoveThrowQuery(const TString& entry, TTableClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
     // This is temporary solution, safe deleting of columnstore is impossible now
     return client.RetryOperationSync([path, settings, entry](TSession session) {
@@ -48,15 +60,19 @@ TStatus RemoveExternalTable(TTableClient& client, const TString& path, const TRe
     return RemoveThrowQuery("EXTERNAL TABLE", client, path, settings);
 }
 
+TStatus RemoveView(NQuery::TQueryClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
+    return DropSchemeObject("VIEW", client, path, settings);
+}
+
 TStatus RemoveTopic(TTopicClient& client, const TString& path, const TDropTopicSettings& settings) {
     return RetryFunction([&]() -> TStatus {
         return client.DropTopic(path, settings).ExtractValueSync();
     });
 }
 
-NYql::TIssues MakeIssues(const TString& error) {
-    NYql::TIssues issues;
-    issues.AddIssue(NYql::TIssue(error));
+NYdb::NIssue::TIssues MakeIssues(const TString& error) {
+    NYdb::NIssue::TIssues issues;
+    issues.AddIssue(NYdb::NIssue::TIssue(error));
     return issues;
 }
 
@@ -105,7 +121,7 @@ TStatus Remove(TRemoveFunc<TClient, TSettings> func, TSchemeClient& schemeClient
 }
 
 TStatus Remove(
-    TSchemeClient& schemeClient, TTableClient* tableClient, TTopicClient* topicClient, const ESchemeEntryType type,
+    TSchemeClient& schemeClient, TTableClient* tableClient, TTopicClient* topicClient, NQuery::TQueryClient* queryClient, const ESchemeEntryType type,
     const TString& path, ERecursiveRemovePrompt prompt, const TRemoveDirectorySettings& settings)
 {
     switch (type) {
@@ -125,6 +141,8 @@ TStatus Remove(
         return Remove(&RemoveExternalDataSource, schemeClient, tableClient, type, path, prompt, settings);
     case ESchemeEntryType::ExternalTable:
         return Remove(&RemoveExternalTable, schemeClient, tableClient, type, path, prompt, settings);
+    case ESchemeEntryType::View:
+        return Remove(&RemoveView, schemeClient, queryClient, type, path, prompt, settings);
 
     default:
         return TStatus(EStatus::UNSUPPORTED, MakeIssues(TStringBuilder()
@@ -136,6 +154,7 @@ TStatus RemoveDirectoryRecursive(
         TSchemeClient& schemeClient,
         TTableClient* tableClient,
         TTopicClient* topicClient,
+        NQuery::TQueryClient* queryClient,
         const TString& path,
         ERecursiveRemovePrompt prompt,
         const TRemoveDirectorySettings& settings,
@@ -152,7 +171,7 @@ TStatus RemoveDirectoryRecursive(
             return TStatus(EStatus::SUCCESS, {});
         }
     }
-    
+
     std::unique_ptr<TProgressBar> bar;
     if (createProgressBar) {
         bar = std::make_unique<TProgressBar>(recursiveListResult.Entries.size());
@@ -160,7 +179,7 @@ TStatus RemoveDirectoryRecursive(
     // output order is: Root, Recursive(children)...
     // we need to reverse it to delete recursively
     for (auto it = recursiveListResult.Entries.rbegin(); it != recursiveListResult.Entries.rend(); ++it) {
-        if (auto result = Remove(schemeClient, tableClient, topicClient, it->Type, it->Name, prompt, settings); !result.IsSuccess()) {
+        if (auto result = Remove(schemeClient, tableClient, topicClient, queryClient, it->Type, TString{it->Name}, prompt, settings); !result.IsSuccess()) {
             return result;
         }
         if (createProgressBar) {
@@ -179,23 +198,24 @@ TStatus RemoveDirectoryRecursive(
         bool removeSelf,
         bool createProgressBar)
 {
-    return RemoveDirectoryRecursive(schemeClient, &tableClient, nullptr, path, ERecursiveRemovePrompt::Never, settings, removeSelf, createProgressBar);
+    return RemoveDirectoryRecursive(schemeClient, &tableClient, nullptr, nullptr, path, ERecursiveRemovePrompt::Never, settings, removeSelf, createProgressBar);
 }
 
 TStatus RemoveDirectoryRecursive(
         TSchemeClient& schemeClient,
         TTableClient& tableClient,
-        TTopicClient& topicClient,
+        TTopicClient* topicClient,
+        NQuery::TQueryClient* queryClient,
         const TString& path,
         ERecursiveRemovePrompt prompt,
         const TRemoveDirectorySettings& settings,
         bool removeSelf,
         bool createProgressBar)
 {
-    return RemoveDirectoryRecursive(schemeClient, &tableClient, &topicClient, path, prompt, settings, removeSelf, createProgressBar);
+    return RemoveDirectoryRecursive(schemeClient, &tableClient, topicClient, queryClient, path, prompt, settings, removeSelf, createProgressBar);
 }
 
-NYdb::TStatus RemovePathRecursive(NScheme::TSchemeClient& schemeClient, NTable::TTableClient& tableClient, NTopic::TTopicClient& topicClient, const TString& path, ERecursiveRemovePrompt prompt, const TRemovePathRecursiveSettings& settings /*= {}*/, bool createProgressBar /*= true*/) {
+NYdb::TStatus RemovePathRecursive(NScheme::TSchemeClient& schemeClient, NTable::TTableClient& tableClient, NTopic::TTopicClient* topicClient, NQuery::TQueryClient* queryClient, const TString& path, ERecursiveRemovePrompt prompt, const TRemovePathRecursiveSettings& settings /*= {}*/, bool createProgressBar /*= true*/) {
     auto entity = schemeClient.DescribePath(path).ExtractValueSync();
     if (!entity.IsSuccess()) {
         if (settings.NotExistsIsOk_ && entity.GetStatus() == EStatus::SCHEME_ERROR && entity.GetIssues().ToString().find("Path not found") != TString::npos) {
@@ -206,9 +226,9 @@ NYdb::TStatus RemovePathRecursive(NScheme::TSchemeClient& schemeClient, NTable::
     switch (entity.GetEntry().Type) {
     case ESchemeEntryType::Directory:
     case ESchemeEntryType::ColumnStore:
-        return RemoveDirectoryRecursive(schemeClient, tableClient, topicClient, path, prompt, settings, true, createProgressBar);
+        return RemoveDirectoryRecursive(schemeClient, tableClient, topicClient, queryClient, path, prompt, settings, true, createProgressBar);
     default:
-        return Remove(schemeClient, &tableClient, &topicClient, entity.GetEntry().Type, path, prompt, settings);
+        return Remove(schemeClient, &tableClient, topicClient, queryClient, entity.GetEntry().Type, path, prompt, settings);
     }
 }
 }

@@ -9,7 +9,7 @@
 #include <util/thread/pool.h>
 
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 class IAsyncExecutor : public IExecutor {
 private:

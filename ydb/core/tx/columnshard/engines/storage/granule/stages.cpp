@@ -31,14 +31,14 @@ bool TGranuleColumnsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& 
     TDbWrapper db(txc.DB, &*DsGroupSelector);
     TPortionInfo::TSchemaCursor schema(*VersionedIndex);
     Context->ClearRecords();
-    return db.LoadColumns(Self->GetPathId(), [&](TColumnChunkLoadContextV1&& loadContext) {
+    return db.LoadColumns(Self->GetPathId(), [&](TColumnChunkLoadContextV2&& loadContext) {
         Context->Add(std::move(loadContext));
     });
 }
 
 bool TGranuleColumnsReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
-    return db.Table<NColumnShard::Schema::IndexColumnsV1>().Prefix(Self->GetPathId()).Select().IsReady();
+    return db.Table<NColumnShard::Schema::IndexColumnsV2>().Prefix(Self->GetPathId()).Select().IsReady();
 }
 
 bool TGranuleIndexesReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {

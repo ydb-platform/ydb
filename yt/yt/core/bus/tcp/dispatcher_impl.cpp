@@ -64,7 +64,7 @@ const TIntrusivePtr<TTcpDispatcher::TImpl>& TTcpDispatcher::TImpl::Get()
     return TTcpDispatcher::Get()->Impl_;
 }
 
-const TBusNetworkCountersPtr& TTcpDispatcher::TImpl::GetCounters(const TString& networkName, bool encrypted)
+const TBusNetworkCountersPtr& TTcpDispatcher::TImpl::GetCounters(const std::string& networkName, bool encrypted)
 {
     auto [statistics, ok] = NetworkStatistics_.FindOrInsert(networkName, [] {
         return std::array<TNetworkStatistics, 2>{};
@@ -79,7 +79,7 @@ IPollerPtr TTcpDispatcher::TImpl::GetOrCreatePoller(
     const TString& threadNamePrefix)
 {
     {
-        auto guard = ReaderGuard(PollerLock_);
+        auto guard = ReaderGuard(PollersLock_);
         if (*pollerPtr) {
             return *pollerPtr;
         }
@@ -87,13 +87,14 @@ IPollerPtr TTcpDispatcher::TImpl::GetOrCreatePoller(
 
     IPollerPtr poller;
     {
-        auto guard = WriterGuard(PollerLock_);
+        auto guard = WriterGuard(PollersLock_);
+        auto config = Config_.Acquire();
         if (!*pollerPtr) {
             if (isXfer) {
                 *pollerPtr = CreateThreadPoolPoller(
-                    Config_->ThreadPoolSize,
+                    config->ThreadPoolSize,
                     threadNamePrefix,
-                    Config_->ThreadPoolPollingPeriod);
+                    config->ThreadPoolPollingPeriod);
             } else {
                 *pollerPtr = CreateThreadPoolPoller(/*threadCount*/ 1, threadNamePrefix);
             }
@@ -118,7 +119,7 @@ bool TTcpDispatcher::TImpl::IsNetworkingDisabled()
     return NetworkingDisabled_.load();
 }
 
-const TString& TTcpDispatcher::TImpl::GetNetworkNameForAddress(const TNetworkAddress& address)
+const std::string& TTcpDispatcher::TImpl::GetNetworkNameForAddress(const TNetworkAddress& address)
 {
     if (address.IsUnix()) {
         return LocalNetworkName;
@@ -181,13 +182,13 @@ IPollerPtr TTcpDispatcher::TImpl::GetXferPoller()
 void TTcpDispatcher::TImpl::Configure(const TTcpDispatcherConfigPtr& config)
 {
     {
-        auto guard = WriterGuard(PollerLock_);
+        auto guard = WriterGuard(PollersLock_);
 
-        Config_ = config;
+        Config_.Store(config);
 
         if (XferPoller_) {
-            XferPoller_->Reconfigure(Config_->ThreadPoolSize);
-            XferPoller_->Reconfigure(Config_->ThreadPoolPollingPeriod);
+            XferPoller_->SetThreadCount(config->ThreadPoolSize);
+            XferPoller_->SetPollingPeriod(config->ThreadPoolPollingPeriod);
         }
     }
 
@@ -259,12 +260,7 @@ void TTcpDispatcher::TImpl::CollectSensors(ISensorWriter* writer)
         }
     });
 
-    TTcpDispatcherConfigPtr config;
-    {
-        auto guard = ReaderGuard(PollerLock_);
-        config = Config_;
-    }
-
+    auto config = Config_.Acquire();
     if (config->NetworkBandwidth) {
         writer->AddGauge("/network_bandwidth_limit", *config->NetworkBandwidth);
     }
@@ -272,9 +268,11 @@ void TTcpDispatcher::TImpl::CollectSensors(ISensorWriter* writer)
 
 std::vector<TTcpConnectionPtr> TTcpDispatcher::TImpl::GetConnections()
 {
+    auto connectionList = ConnectionList_.Load();
+
     std::vector<TTcpConnectionPtr> result;
-    result.reserve(ConnectionList_.size());
-    for (const auto& weakConnection : ConnectionList_) {
+    result.reserve(connectionList.size());
+    for (const auto& weakConnection : connectionList) {
         if (auto connection = weakConnection.Lock()) {
             result.push_back(connection);
         }
@@ -322,34 +320,74 @@ IYPathServicePtr TTcpDispatcher::TImpl::GetOrchidService()
 
 void TTcpDispatcher::TImpl::OnPeriodicCheck()
 {
-    for (auto&& connection : ConnectionsToRegister_.DequeueAll()) {
-        ConnectionList_.push_back(std::move(connection));
-    }
+    ConnectionList_.Transform([&] (auto& connectionList) {
+        for (auto&& connection : ConnectionsToRegister_.DequeueAll()) {
+            connectionList.push_back(std::move(connection));
+        }
 
-    i64 connectionsToCheck = std::max(
-        std::ssize(ConnectionList_) *
-        static_cast<i64>(PeriodicCheckPeriod.GetValue()) /
-        static_cast<i64>(PerConnectionPeriodicCheckPeriod.GetValue()),
-        static_cast<i64>(1));
-    for (i64 index = 0; index < connectionsToCheck && !ConnectionList_.empty(); ++index) {
-        auto& weakConnection = ConnectionList_[CurrentConnectionListIndex_];
-        if (auto connection = weakConnection.Lock()) {
-            connection->RunPeriodicCheck();
-            ++CurrentConnectionListIndex_;
-        } else {
-            std::swap(weakConnection, ConnectionList_.back());
-            ConnectionList_.pop_back();
+        i64 connectionsToCheck = std::max(
+            std::ssize(connectionList) *
+            static_cast<i64>(PeriodicCheckPeriod.GetValue()) /
+            static_cast<i64>(PerConnectionPeriodicCheckPeriod.GetValue()),
+            static_cast<i64>(1));
+        for (i64 index = 0; index < connectionsToCheck && !connectionList.empty(); ++index) {
+            auto& weakConnection = connectionList[CurrentConnectionListIndex_];
+            if (auto connection = weakConnection.Lock()) {
+                connection->RunPeriodicCheck();
+                ++CurrentConnectionListIndex_;
+            } else {
+                std::swap(weakConnection, connectionList.back());
+                connectionList.pop_back();
+            }
+            if (CurrentConnectionListIndex_ >= std::ssize(connectionList)) {
+                CurrentConnectionListIndex_ = 0;
+            }
         }
-        if (CurrentConnectionListIndex_ >= std::ssize(ConnectionList_)) {
-            CurrentConnectionListIndex_ = 0;
-        }
-    }
+    });
 }
 
 std::optional<TString> TTcpDispatcher::TImpl::GetBusCertsDirectoryPath() const
 {
-    auto guard = ReaderGuard(PollerLock_);
-    return Config_->BusCertsDirectoryPath;
+    return Config_.Acquire()->BusCertsDirectoryPath;
+}
+
+void TTcpDispatcher::TImpl::RegisterLocalMessageHandler(int port, const ILocalMessageHandlerPtr& handler)
+{
+    {
+        auto guard = WriterGuard(LocalMessageHandlersLock_);
+        if (!LocalMessageHandlers_.emplace(port, handler).second) {
+            THROW_ERROR_EXCEPTION("Local message handler is already registered for port %v",
+                port);
+        }
+    }
+
+    YT_LOG_INFO("Local message handler registered (Port: %v)",
+        port);
+}
+
+void TTcpDispatcher::TImpl::UnregisterLocalMessageHandler(int port)
+{
+    {
+        auto guard = WriterGuard(LocalMessageHandlersLock_);
+        LocalMessageHandlers_.erase(port);
+    }
+
+    YT_LOG_INFO("Local message handler unregistered (Port: %v)",
+        port);
+}
+
+ILocalMessageHandlerPtr TTcpDispatcher::TImpl::FindLocalBypassMessageHandler(const TNetworkAddress& address)
+{
+    if (!TAddressResolver::Get()->IsLocalAddress(address)) {
+        return nullptr;
+    }
+
+    if (!Config_.Acquire()->EnableLocalBypass) {
+        return nullptr;
+    }
+
+    auto guard = ReaderGuard(LocalMessageHandlersLock_);
+    return GetOrDefault(LocalMessageHandlers_, address.GetPort());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

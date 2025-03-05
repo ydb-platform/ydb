@@ -5,9 +5,8 @@
 #include "sql_values.h"
 #include "sql_select.h"
 #include "source.h"
+#include "antlr_token.h"
 
-#include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/sql/settings/partitioning.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
 
@@ -64,8 +63,9 @@ bool RecreateContext(
     const TString queryName = "context recreation query";
 
     const auto* ast = NSQLTranslationV1::SqlAST(
+        ctx.Parsers,
         recreationQuery, queryName, ctx.Issues,
-        settings.MaxErrors, settings.AnsiLexer,  settings.Antlr4Parser, settings.TestAntlr4, settings.Arena
+        settings.MaxErrors, settings.AnsiLexer,  settings.Antlr4Parser, settings.Arena
     );
     if (!ast) {
         return false;
@@ -83,7 +83,7 @@ TNodePtr BuildViewSelect(
     const TString& contextRecreationQuery
 ) {
     TIssues issues;
-    TContext context(parentContext.Settings, {}, issues);
+    TContext context(parentContext.Lexers, parentContext.Parsers, parentContext.Settings, {}, issues, parentContext.Query);
     if (!RecreateContext(context, context.Settings, contextRecreationQuery)) {
         parentContext.Issues.AddIssues(issues);
         return nullptr;
@@ -1479,7 +1479,7 @@ TMaybe<TSourcePtr> TSqlTranslation::AsTableImpl(const TRule_table_ref& node) {
                 return TMaybe<TSourcePtr>(nullptr);
             }
 
-            return BuildNodeSource(Ctx.Pos(), arg->Expr, true);
+            return BuildNodeSource(Ctx.Pos(), arg->Expr, true, Ctx.EmitTableSource);
         }
     }
 
@@ -1709,9 +1709,9 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
 
                         auto& token = spec.GetBlock2().GetToken1();
                         auto tokenId = token.GetId();
-                        if (IS_TOKEN(tokenId, ASC)) {
+                        if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, ASC)) {
                             return true;
-                        } else if (IS_TOKEN(tokenId, DESC)) {
+                        } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, DESC)) {
                             desc = true;
                             return true;
                         } else {
@@ -1963,19 +1963,68 @@ namespace {
         return true;
     }
 
-    bool StoreTtlSettings(const TRule_table_setting_value& from, TResetableSetting<TTtlSettings, void>& to,
-            TSqlExpression& expr, TContext& ctx, TTranslation& txc) {
+    bool FillTieringInterval(const TRule_expr& from, TNodePtr& tieringInterval, TSqlExpression& expr, TContext& ctx) {
+        auto exprNode = expr.Build(from);
+        if (!exprNode) {
+            return false;
+        }
+
+        if (exprNode->GetOpName() != "Interval") {
+            ctx.Error() << "Literal of Interval type is expected for TTL";
+            return false;
+        }
+
+        tieringInterval = exprNode;
+        return true;
+    }
+
+    bool FillTierAction(const TRule_ttl_tier_action& from, std::optional<TIdentifier>& storageName, TTranslation& txc) {
+        switch (from.GetAltCase()) {
+            case TRule_ttl_tier_action::kAltTtlTierAction1:
+                storageName = IdEx(from.GetAlt_ttl_tier_action1().GetRule_an_id5(), txc);
+                break;
+            case TRule_ttl_tier_action::kAltTtlTierAction2:
+                storageName.reset();
+                break;
+            case TRule_ttl_tier_action::ALT_NOT_SET:
+                Y_ABORT("You should change implementation according to grammar changes");
+        }
+        return true;
+    }
+
+    bool StoreTtlSettings(const TRule_table_setting_value& from, TResetableSetting<TTtlSettings, void>& to, TSqlExpression& expr, TContext& ctx,
+        TTranslation& txc) {
         switch (from.Alt_case()) {
         case TRule_table_setting_value::kAltTableSettingValue5: {
             auto columnName = IdEx(from.GetAlt_table_setting_value5().GetRule_an_id3(), txc);
-            auto exprNode = expr.Build(from.GetAlt_table_setting_value5().GetRule_expr1());
-            if (!exprNode) {
+            auto tiersLiteral = from.GetAlt_table_setting_value5().GetRule_ttl_tier_list1();
+
+            TNodePtr firstInterval;
+            if (!FillTieringInterval(tiersLiteral.GetRule_expr1(), firstInterval, expr, ctx)) {
                 return false;
             }
 
-            if (exprNode->GetOpName() != "Interval") {
-                ctx.Error() << "Literal of Interval type is expected for TTL";
-                return false;
+            std::vector<TTtlSettings::TTierSettings> tiers;
+            if (!tiersLiteral.HasBlock2()) {
+                tiers.emplace_back(firstInterval);
+            } else {
+                std::optional<TIdentifier> firstStorageName;
+                if (!FillTierAction(tiersLiteral.GetBlock2().GetRule_ttl_tier_action1(), firstStorageName, txc)) {
+                    return false;
+                }
+                tiers.emplace_back(firstInterval, firstStorageName);
+
+                for (const auto& tierLiteral : tiersLiteral.GetBlock2().GetBlock2()) {
+                    TNodePtr intervalExpr;
+                    if (!FillTieringInterval(tierLiteral.GetRule_expr2(), intervalExpr, expr, ctx)) {
+                        return false;
+                    }
+                    std::optional<TIdentifier> storageName;
+                    if (!FillTierAction(tierLiteral.GetRule_ttl_tier_action3(), storageName, txc)) {
+                        return false;
+                    }
+                    tiers.emplace_back(intervalExpr, storageName);
+                }
             }
 
             TMaybe<TTtlSettings::EUnit> columnUnit;
@@ -1988,7 +2037,7 @@ namespace {
                 }
             }
 
-            to.Set(TTtlSettings(columnName, exprNode, columnUnit));
+            to.Set(TTtlSettings(columnName, tiers, columnUnit));
             break;
         }
         default:
@@ -3695,9 +3744,9 @@ bool TSqlTranslation::SortSpecification(const TRule_sort_specification& node, TV
         const auto& token = node.GetBlock2().GetToken1();
         Token(token);
         auto tokenId = token.GetId();
-        if (IS_TOKEN(tokenId, ASC)) {
+        if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, ASC)) {
             Ctx.IncrementMonCounter("sql_features", "OrderByAsc");
-        } else if (IS_TOKEN(tokenId, DESC)) {
+        } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, DESC)) {
             asc = false;
             Ctx.IncrementMonCounter("sql_features", "OrderByDesc");
         } else {
@@ -3727,11 +3776,11 @@ bool TSqlTranslation::SortSpecificationList(const TRule_sort_specification_list&
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node) const {
     TPosition pos;
-    return node.HasBlock1() && IS_TOKEN(node.GetBlock1().GetToken1().GetId(), DISTINCT);
+    return node.HasBlock1() && IS_TOKEN(Ctx.Settings.Antlr4Parser, node.GetBlock1().GetToken1().GetId(), DISTINCT);
 }
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPosition& distinctPos) const {
-    if (node.HasBlock1() && IS_TOKEN(node.GetBlock1().GetToken1().GetId(), DISTINCT)) {
+    if (node.HasBlock1() && IS_TOKEN(Ctx.Settings.Antlr4Parser, node.GetBlock1().GetToken1().GetId(), DISTINCT)) {
         distinctPos = Ctx.TokenPosition(node.GetBlock1().GetToken1());
         return true;
     }
@@ -3769,19 +3818,138 @@ bool TSqlTranslation::RoleNameClause(const TRule_role_name& node, TDeferredAtom&
     return true;
 }
 
-bool TSqlTranslation::RoleParameters(const TRule_create_user_option& node, TRoleParameters& result) {
-    // create_user_option: ENCRYPTED? PASSWORD expr;
-    result = TRoleParameters{};
+bool TSqlTranslation::PasswordParameter(const TRule_password_option& passwordOption, TUserParameters& result) {
+    // password_option: ENCRYPTED? PASSWORD password_value;
+    // password_value: STRING_VALUE | NULL;
 
-    TSqlExpression expr(Ctx, Mode);
-    TNodePtr password = expr.Build(node.GetRule_expr3());
-    if (!password) {
+    const auto& token = passwordOption.GetRule_password_value3().GetToken1();
+    TString stringValue(Ctx.Token(token));
+
+    if (to_lower(stringValue) == "null") {
+        // result.Password = default value
+    } else {
+        auto password = StringContent(Ctx, Ctx.Pos(), stringValue);
+
+        if (!password) {
+            Error() << "Password should be enclosed into quotation marks.";
+            return false;
+        }
+
+        result.Password = TDeferredAtom(Ctx.Pos(), std::move(password->Content));
+    }
+
+    result.IsPasswordEncrypted = passwordOption.HasBlock1();
+
+    return true;
+}
+
+bool TSqlTranslation::HashParameter(const TRule_hash_option& hashOption, TUserParameters& result) {
+    // hash_option: HASH STRING_VALUE;
+
+    const auto& token = hashOption.GetToken2();
+    TString stringValue(Ctx.Token(token));
+
+    auto hash = StringContent(Ctx, Ctx.Pos(), stringValue);
+
+    if (!hash) {
+        Error() << "Hash should be enclosed into quotation marks.";
         return false;
     }
 
-    result.IsPasswordEncrypted = node.HasBlock1();
-    if (!password->IsNull()) {
-        result.Password = MakeAtomFromExpression(Ctx.Pos(), Ctx, password);
+    result.Hash = TDeferredAtom(Ctx.Pos(), std::move(hash->Content));
+
+    return true;
+}
+
+void TSqlTranslation::LoginParameter(const TRule_login_option& loginOption, std::optional<bool>& canLogin) {
+    // login_option: LOGIN | NOLOGIN;
+
+    auto token = loginOption.GetToken1().GetId();
+    if (IS_TOKEN(Ctx.Settings.Antlr4Parser, token, LOGIN)) {
+        canLogin = true;
+    } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, token, NOLOGIN)) {
+        canLogin = false;
+    } else {
+        Y_ABORT("You should change implementation according to grammar changes");
+    }
+}
+
+bool TSqlTranslation::UserParameters(const std::vector<TRule_user_option>& optionsList, TUserParameters& result, bool isCreateUser) {
+    enum class EUserOption {
+        Login,
+        Authentication
+    };
+
+    std::set<EUserOption> used;
+
+    auto ParseUserOption = [&used, this](const TRule_user_option& option, TUserParameters& result) -> bool {
+        // user_option: authentication_option | login_option;
+        //      authentication_option: password_option | hash_option;
+
+        switch (option.Alt_case()) {
+            case TRule_user_option::kAltUserOption1:
+            {
+                if (used.contains(EUserOption::Authentication)) {
+                    Error() << "Conflicting or redundant options";
+                    return false;
+                }
+
+                used.insert(EUserOption::Authentication);
+
+                const auto& authenticationOption = option.GetAlt_user_option1().GetRule_authentication_option1();
+
+                switch (authenticationOption.Alt_case()) {
+                    case TRule_authentication_option::kAltAuthenticationOption1: {
+                        if (!PasswordParameter(authenticationOption.GetAlt_authentication_option1().GetRule_password_option1(), result)){
+                            return false;
+                        }
+
+                        break;
+                    }
+                    case TRule_authentication_option::kAltAuthenticationOption2: {
+                        if (!HashParameter(authenticationOption.GetAlt_authentication_option2().GetRule_hash_option1(), result)){
+                            return false;
+                        }
+
+                        break;
+                    }
+                    case TRule_authentication_option::ALT_NOT_SET: {
+                        Y_ABORT("You should change implementation according to grammar changes");
+                    }
+                }
+
+                break;
+            }
+            case TRule_user_option::kAltUserOption2:
+            {
+                if (used.contains(EUserOption::Login)) {
+                    Error() << "Conflicting or redundant options";
+                    return false;
+                }
+
+                used.insert(EUserOption::Login);
+
+                LoginParameter(option.GetAlt_user_option2().GetRule_login_option1(), result.CanLogin);
+
+                break;
+            }
+            case TRule_user_option::ALT_NOT_SET:
+            {
+                Y_ABORT("You should change implementation according to grammar changes");
+            }
+        }
+
+        return true;
+    };
+
+    if (isCreateUser) {
+        result.CanLogin = true;
+    }
+
+    for (const auto& option : optionsList) {
+        if (!ParseUserOption(option, result)) {
+            return false;
+        }
     }
 
     return true;
@@ -4543,13 +4711,15 @@ bool TSqlTranslation::DefineActionOrSubqueryBody(TSqlQuery& query, TBlocks& bloc
         Y_DEFER {
             Ctx.PopCurrentBlocks();
         };
-        if (!query.Statement(blocks, body.GetBlock2().GetRule_sql_stmt_core1())) {
+
+        size_t statementNumber = 0;
+        if (!query.Statement(blocks, body.GetBlock2().GetRule_sql_stmt_core1(), statementNumber++)) {
             return false;
         }
 
         for (const auto& nestedStmtItem : body.GetBlock2().GetBlock2()) {
             const auto& nestedStmt = nestedStmtItem.GetRule_sql_stmt_core2();
-            if (!query.Statement(blocks, nestedStmt)) {
+            if (!query.Statement(blocks, nestedStmt, statementNumber++)) {
                 return false;
             }
         }
@@ -4986,6 +5156,101 @@ bool TSqlTranslation::ParseViewQuery(
     features["query_ast"] = {viewSelect, Ctx};
 
     return true;
+}
+
+namespace {
+
+static std::string::size_type GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token, bool antlr4) {
+    if (1 == token.GetLine() && 0 == token.GetColumn()) {
+        return 0;
+    }
+
+    TPosition pos = {0, 1};
+    TTextWalker walker(pos, antlr4);
+
+    std::string::size_type position = 0;
+    for (char c : query) {
+        walker.Advance(c);
+        ++position;
+
+        if (pos.Row == token.GetLine() && pos.Column == token.GetColumn()) {
+            return position;
+        }
+    }
+
+    return std::string::npos;
+}
+
+static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambda_or_parameter& lambdaOrParameter) {
+    static const TString statementSeparator = ";\n";
+
+    TVector<TString> statements;
+    NYql::TIssues issues;
+    if (!SplitQueryToStatements(Ctx.Lexers, Ctx.Parsers, Ctx.Query, statements, issues, Ctx.Settings)) {
+        return {};
+    }
+
+    TStringBuilder result;
+    for (const auto id : Ctx.ForAllStatementsParts) {
+        result << statements[id] << "\n";
+    }
+
+    switch (lambdaOrParameter.Alt_case()) {
+        case NSQLv1Generated::TRule_lambda_or_parameter::kAltLambdaOrParameter1: {
+            const auto& lambda = lambdaOrParameter.GetAlt_lambda_or_parameter1().GetRule_lambda1();
+
+            auto& beginToken = lambda.GetRule_smart_parenthesis1().GetToken1();
+            const NSQLv1Generated::TToken* endToken = nullptr;
+            switch (lambda.GetBlock2().GetBlock2().GetAltCase()) {
+                case TRule_lambda_TBlock2_TBlock2::AltCase::kAlt1:
+                    endToken = &lambda.GetBlock2().GetBlock2().GetAlt1().GetToken3();
+                    break;
+                case TRule_lambda_TBlock2_TBlock2::AltCase::kAlt2:
+                    endToken = &lambda.GetBlock2().GetBlock2().GetAlt2().GetToken3();
+                    break;
+                case TRule_lambda_TBlock2_TBlock2::AltCase::ALT_NOT_SET:
+                    Y_ABORT("You should change implementation according to grammar changes");
+            }
+
+            auto begin = GetQueryPosition(Ctx.Query, beginToken, Ctx.Settings.Antlr4Parser);
+            auto end = GetQueryPosition(Ctx.Query, *endToken, Ctx.Settings.Antlr4Parser);
+            if (begin == std::string::npos || end == std::string::npos) {
+                return {};
+            }
+
+            result << "$__ydb_transfer_lambda = " << Ctx.Query.substr(begin, end - begin + endToken->value().size()) << statementSeparator;
+
+            return result;
+        }
+        case NSQLv1Generated::TRule_lambda_or_parameter::kAltLambdaOrParameter2: {
+            const auto& valueBlock = lambdaOrParameter.GetAlt_lambda_or_parameter2().GetRule_bind_parameter1().GetBlock2();
+            const auto id = Id(valueBlock.GetAlt1().GetRule_an_id_or_type1(), ctx);
+            result << "$__ydb_transfer_lambda = $" << id << statementSeparator;
+            return result;
+        }
+        case NSQLv1Generated::TRule_lambda_or_parameter::ALT_NOT_SET:
+            Y_ABORT("You should change implementation according to grammar changes");
+    }
+}
+
+}
+
+bool TSqlTranslation::ParseTransferLambda(
+    TString& lambdaText,
+    const TRule_lambda_or_parameter& lambdaOrParameter) {
+
+    TSqlExpression expr(Ctx, Ctx.Settings.Mode);
+    auto result = expr.Build(lambdaOrParameter);
+    if (!result) {
+        return false;
+    }
+
+    lambdaText = GetLambdaText(*this, Ctx, lambdaOrParameter);
+    if (lambdaText.empty()) {
+        Ctx.Error() << "Cannot parse lambda correctly";
+    }
+
+    return !lambdaText.empty();
 }
 
 class TReturningListColumns : public INode {

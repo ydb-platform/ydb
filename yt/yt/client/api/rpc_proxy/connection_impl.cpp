@@ -102,7 +102,7 @@ bool IsProxyUrlSecure(const std::string& url)
     return url.starts_with(ProxyUrlCanonicalHttpsPrefix);
 }
 
-TString MakeConnectionLoggingTag(const TConnectionConfigPtr& config, TGuid connectionId)
+std::string MakeConnectionLoggingTag(const TConnectionConfigPtr& config, TGuid connectionId)
 {
     TStringBuilder builder;
     TDelimitedStringBuilderWrapper delimitedBuilder(&builder);
@@ -291,9 +291,9 @@ IChannelPtr TConnection::CreateChannel(bool sticky)
     return CreateRoamingChannel(std::move(provider));
 }
 
-IChannelPtr TConnection::CreateChannelByAddress(const TString& address)
+IChannelPtr TConnection::CreateChannelByAddress(const std::string& address)
 {
-    return CachingChannelFactory_->CreateChannel(address.ConstRef());
+    return CachingChannelFactory_->CreateChannel(address);
 }
 
 TClusterTag TConnection::GetClusterTag() const
@@ -303,7 +303,7 @@ TClusterTag TConnection::GetClusterTag() const
     return *Config_->ClusterTag;
 }
 
-const TString& TConnection::GetLoggingTag() const
+const std::string& TConnection::GetLoggingTag() const
 {
     return LoggingTag_;
 }
@@ -383,7 +383,7 @@ std::vector<std::string> TConnection::DiscoverProxiesViaHttp()
         auto poller = TTcpDispatcher::Get()->GetXferPoller();
         auto headers = New<THeaders>();
         SetUserAgent(headers, GetRpcUserAgent());
-        if (auto token = DiscoveryToken_.Load()) {
+        if (auto token = DiscoveryToken_.Load(); !token.empty()) {
             headers->Add("Authorization", "OAuth " + token);
         }
         headers->Add("X-YT-Correlation-Id", ToString(correlationId));

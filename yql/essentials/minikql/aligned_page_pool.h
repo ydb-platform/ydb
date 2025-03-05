@@ -1,20 +1,25 @@
 #pragma once
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <util/generic/yexception.h>
 #include <util/stream/output.h>
 #include <util/string/builder.h>
-#include <util/system/yassert.h>
 #include <util/system/defaults.h>
+#include <util/system/yassert.h>
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
-
-#include <type_traits>
 #include <stack>
-#include <vector>
-#include <unordered_set>
 #include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 namespace NKikimr {
+
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+// By default the default allocator is not used unless PROFILE_MEMORY_ALLOCATIONS is defined.
+// Call this method once at the start of the process - to enable usage of default allocator.
+void UseDefaultAllocator();
+#endif
 
 struct TAlignedPagePoolCounters {
     explicit TAlignedPagePoolCounters(::NMonitoring::TDynamicCounterPtr countersRoot = nullptr, const TString& name = TString());
@@ -233,6 +238,10 @@ public:
         IsMemoryYellowZoneForcefullyChanged = true;
     }
 
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+    static bool IsDefaultAllocatorUsed();
+#endif
+
 protected:
     void* Alloc(size_t size);
     void Free(void* ptr, size_t size) noexcept;
@@ -300,12 +309,19 @@ template<typename TMmap = TSystemMmap>
 void* GetAlignedPage(ui64 size);
 
 template<typename TMmap = TSystemMmap>
+void* GetAlignedPage();
+
+template<typename TMmap = TSystemMmap>
 void ReleaseAlignedPage(void* mem, ui64 size);
+
+template<typename TMmap = TSystemMmap>
+void ReleaseAlignedPage(void* mem);
 
 template<typename TMmap = TSystemMmap>
 i64 GetTotalMmapedBytes();
 template<typename TMmap = TSystemMmap>
 i64 GetTotalFreeListBytes();
 
+size_t GetMemoryMapsCount();
 
 } // NKikimr

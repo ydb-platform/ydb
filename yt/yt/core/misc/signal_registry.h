@@ -45,7 +45,7 @@ public:
     void PushCallback(int signal, TSignalHandler callback);
 
     //! Adds the default signal handler which is called after invoking our custom handlers.
-    //! NB: this handler restores default signal handler as a side-effect. Use it only
+    //! NB: This handler restores default signal handler as a side-effect. Use it only
     //! when default handler terminates the program.
     void PushDefaultSignalHandler(int signal);
 

@@ -5,9 +5,9 @@
 #include <yt/yt/core/ytree/node.h>
 #include <yt/yt/core/ytree/ypath_detail.h>
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <util/generic/algorithm.h>
+
+#include <util/system/platform.h>
 
 namespace NYT::NYTree {
 
@@ -19,6 +19,19 @@ using namespace NYson;
 TYsonStructFinalClassHolder::TYsonStructFinalClassHolder(std::type_index typeIndex)
     : FinalType_(typeIndex)
 { }
+
+#ifdef _win_
+
+// This constructor is not actually called.
+// This dummy implementation is only provided for MSVC
+// as the latter fails to link the binary in debug mode unless it is implemented.
+// If we just delete it, the default constructor of TYsonStructLite
+// will be implicitly deleted as well and compilation will fail.
+TYsonStructFinalClassHolder::TYsonStructFinalClassHolder()
+    : FinalType_{typeid(void)}
+{ }
+
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -42,7 +55,7 @@ void TYsonStructBase::SetUnrecognizedStrategy(EUnrecognizedStrategy strategy)
     InstanceUnrecognizedStrategy_ = strategy;
 }
 
-THashSet<TString> TYsonStructBase::GetRegisteredKeys() const
+THashSet<std::string> TYsonStructBase::GetRegisteredKeys() const
 {
     return Meta_->GetRegisteredKeys();
 }
@@ -115,17 +128,17 @@ void TYsonStructBase::SetDefaults()
     Meta_->SetDefaultsOfInitializedStruct(this);
 }
 
-void TYsonStructBase::SaveParameter(const TString& key, IYsonConsumer* consumer) const
+void TYsonStructBase::SaveParameter(const std::string& key, IYsonConsumer* consumer) const
 {
     Meta_->GetParameter(key)->Save(this, consumer);
 }
 
-void TYsonStructBase::LoadParameter(const TString& key, const NYTree::INodePtr& node)
+void TYsonStructBase::LoadParameter(const std::string& key, const NYTree::INodePtr& node)
 {
     Meta_->LoadParameter(this, key, node);
 }
 
-void TYsonStructBase::ResetParameter(const TString& key)
+void TYsonStructBase::ResetParameter(const std::string& key)
 {
     Meta_->GetParameter(key)->SetDefaultsInitialized(this);
 }
@@ -135,7 +148,7 @@ int TYsonStructBase::GetParameterCount() const
     return Meta_->GetParameterMap().size();
 }
 
-std::vector<TString> TYsonStructBase::GetAllParameterAliases(const TString& key) const
+std::vector<std::string> TYsonStructBase::GetAllParameterAliases(const std::string& key) const
 {
     auto parameter = Meta_->GetParameter(key);
     auto result = parameter->GetAliases();
@@ -153,6 +166,11 @@ bool TYsonStructBase::IsEqual(const TYsonStructBase& rhs) const
     return Meta_->CompareStructs(this, &rhs);
 }
 
+const IYsonStructMeta* TYsonStructBase::GetMeta() const
+{
+    return Meta_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TYsonStruct::InitializeRefCounted()
@@ -161,6 +179,50 @@ void TYsonStruct::InitializeRefCounted()
     if (!TYsonStructRegistry::InitializationInProgress()) {
         SetDefaults();
     }
+}
+
+bool TYsonStruct::IsSet(const std::string& key) const
+{
+    return SetFields_[Meta_->GetParameter(key)->GetFieldIndex()];
+}
+
+TCompactBitmap* TYsonStruct::GetSetFieldsBitmap()
+{
+    return &SetFields_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TCompactBitmap* TYsonStructLite::GetSetFieldsBitmap()
+{
+    return nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool TYsonStructLiteWithFieldTracking::IsSet(const std::string& key) const
+{
+    return SetFields_[Meta_->GetParameter(key)->GetFieldIndex()];
+}
+
+TCompactBitmap* TYsonStructLiteWithFieldTracking::GetSetFieldsBitmap()
+{
+    return &SetFields_;
+}
+
+TYsonStructLiteWithFieldTracking::TYsonStructLiteWithFieldTracking(const TYsonStructLiteWithFieldTracking& other)
+    : TYsonStructFinalClassHolder(other.FinalType_)
+    , TYsonStructLite(other)
+{
+    SetFields_.CopyFrom(other.SetFields_, GetParameterCount());
+}
+
+TYsonStructLiteWithFieldTracking& TYsonStructLiteWithFieldTracking::operator=(const TYsonStructLiteWithFieldTracking& other)
+{
+    TYsonStructLite::operator=(other);
+
+    SetFields_.CopyFrom(other.SetFields_, GetParameterCount());
+    return *this;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -229,7 +291,6 @@ DEFINE_REFCOUNTED_TYPE(TYsonStruct)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYTree
-
 
 namespace NYT {
 

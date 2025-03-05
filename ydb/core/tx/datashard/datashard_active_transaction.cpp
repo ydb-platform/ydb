@@ -283,7 +283,7 @@ bool TValidatedDataTx::CheckCancelled(ui64 tabletId) {
     Cancelled = Cancelled || gCancelTxFailPoint.Check(tabletId, GetTxId());
 
     if (Cancelled) {
-        LOG_NOTICE_S(*TlsActivationContext->ExecutorThread.ActorSystem, NKikimrServices::TX_DATASHARD, "CANCELLED TxId " << GetTxId() << " at " << tabletId);
+        LOG_NOTICE_S(*TActivationContext::ActorSystem(), NKikimrServices::TX_DATASHARD, "CANCELLED TxId " << GetTxId() << " at " << tabletId);
     }
     return Cancelled;
 }
@@ -919,12 +919,12 @@ bool TActiveTransaction::OnStopping(TDataShard& self, const TActorContext& ctx) 
                     << " because datashard "
                     << self.TabletID()
                     << " is restarting";
-            auto result = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
+            auto result = std::make_unique<TEvDataShard::TEvProposeTransactionResult>(
                     kind, self.TabletID(), GetTxId(), rejectStatus);
             result->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, rejectReason);
             LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, rejectReason);
 
-            ctx.Send(GetTarget(), result.Release(), 0, GetCookie());
+            ctx.Send(GetTarget(), result.release(), 0, GetCookie());
 
             self.IncCounter(COUNTER_PREPARE_OVERLOADED);
             self.IncCounter(COUNTER_PREPARE_COMPLETE);
@@ -933,6 +933,35 @@ bool TActiveTransaction::OnStopping(TDataShard& self, const TActorContext& ctx) 
 
         // Immediate ops become ready when stopping flag is set
         return true;
+    } else if (HasVolatilePrepareFlag()) {
+        // Volatile transactions may be aborted at any time unless executed
+        // Note: we need to send the result (and discard the transaction) as
+        // soon as possible, because new transactions are unlikely to execute
+        // and commits will even more likely fail.
+        if (!HasResultSentFlag() && !Result() && !HasCompletedFlag()) {
+            auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(GetKind());
+            auto status = NKikimrTxDataShard::TEvProposeTransactionResult::ABORTED;
+            auto result = std::make_unique<TEvDataShard::TEvProposeTransactionResult>(
+                kind, self.TabletID(), GetTxId(), status);
+            result->AddError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, TStringBuilder()
+                << "DataShard " << self.TabletID() << " is restarting");
+            ctx.Send(GetTarget(), result.release(), 0, GetCookie());
+
+            // Make sure we also send acks and nodata readsets to expecting participants
+            std::vector<std::unique_ptr<IEventHandle>> cleanupReplies;
+            self.GetCleanupReplies(this, cleanupReplies);
+
+            for (auto& ev : cleanupReplies) {
+                TActivationContext::Send(ev.release());
+            }
+
+            SetResultSentFlag();
+            return true;
+        }
+
+        // Executed transactions will have to wait until committed
+        // There is no way to hand-off committing volatile transactions for now
+        return false;
     } else {
         // Distributed operations send notification when proposed
         if (GetTarget() && !HasCompletedFlag()) {

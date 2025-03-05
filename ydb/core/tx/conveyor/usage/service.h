@@ -40,11 +40,11 @@ public:
         auto& context = NActors::TActorContext::AsActorContext();
         context.Register(new TAsyncTaskExecutor(task));
     }
-    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task) {
-        auto& context = NActors::TActorContext::AsActorContext();
-        const NActors::TActorId& selfId = context.SelfID;
-        if (TSelf::IsEnabled()) {
-            context.Send(MakeServiceId(selfId.NodeId()), new NConveyor::TEvExecution::TEvNewTask(task));
+    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ui64 processId = 0) {
+        if (TSelf::IsEnabled() && NActors::TlsActivationContext) {
+            auto& context = NActors::TActorContext::AsActorContext();
+            const NActors::TActorId& selfId = context.SelfID;
+            context.Send(MakeServiceId(selfId.NodeId()), new NConveyor::TEvExecution::TEvNewTask(task, processId));
             return true;
         } else {
             task->Execute(nullptr, task);
@@ -60,6 +60,16 @@ public:
     static NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals) {
         Register(config);
         return new TDistributor(config, GetConveyorName(), conveyorSignals);
+    }
+    static TProcessGuard StartProcess(const ui64 externalProcessId) {
+        if (TSelf::IsEnabled() && NActors::TlsActivationContext) {
+            auto& context = NActors::TActorContext::AsActorContext();
+            const NActors::TActorId& selfId = context.SelfID;
+            context.Send(MakeServiceId(selfId.NodeId()), new NConveyor::TEvExecution::TEvRegisterProcess(externalProcessId));
+            return TProcessGuard(externalProcessId, MakeServiceId(selfId.NodeId()));
+        } else {
+            return TProcessGuard(externalProcessId, {});
+        }
     }
 
 };

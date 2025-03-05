@@ -13,8 +13,11 @@ TTpcdsWorkloadGenerator::TTpcdsWorkloadGenerator(const TTpcdsWorkloadParams& par
     , Params(params)
 {}
 
-TString TTpcdsWorkloadGenerator::DoGetDDLQueries() const {
-    auto schema = NResource::Find("tpcds_schema.sql");
+TString TTpcdsWorkloadGenerator::GetTablesYaml() const {
+    return NResource::Find("tpcds_schema.yaml");
+}
+
+TWorkloadGeneratorBase::TSpecialDataTypes TTpcdsWorkloadGenerator::GetSpecialDataTypes() const {
     TString decimalType_5_2, decimalType_7_2, decimalType_15_2;
     switch (Params.GetFloatMode()) {
     case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
@@ -30,38 +33,10 @@ TString TTpcdsWorkloadGenerator::DoGetDDLQueries() const {
                      + "," + ::ToString(NKikimr::NScheme::DECIMAL_SCALE) + ")";
         break;
     }
-    SubstGlobal(schema, "{decimal_5_2_type}", decimalType_5_2);
-    SubstGlobal(schema, "{decimal_7_2_type}", decimalType_7_2);
-    SubstGlobal(schema, "{decimal_15_2_type}", decimalType_15_2);
-    return schema;
-}
-
-TVector<TString> TTpcdsWorkloadGenerator::GetTablesList() const {
     return {
-        "customer_address",
-        "customer_demographics",
-        "date_dim",
-        "warehouse",
-        "ship_mode",
-        "time_dim",
-        "reason",
-        "income_band",
-        "item",
-        "store",
-        "call_center",
-        "customer",
-        "web_site",
-        "store_returns",
-        "household_demographics",
-        "web_page",
-        "promotion",
-        "catalog_page",
-        "inventory",
-        "catalog_returns",
-        "web_returns",
-        "web_sales",
-        "catalog_sales",
-        "store_sales",
+        {"decimal_5_2_type", decimalType_5_2},
+        {"decimal_7_2_type", decimalType_7_2},
+        {"decimal_15_2_type", decimalType_15_2}
     };
 }
 

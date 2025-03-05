@@ -77,6 +77,7 @@ struct TComputationMutables {
     std::vector<ui32> SerializableValues; // Indices of values that need to be saved in IComputationGraph::SaveGraphState() and restored in IComputationGraph::LoadGraphState().
     ui32 CurWideFieldsIndex = 0U;
     std::vector<TWideFieldsInitInfo> WideFieldInitialize;
+    std::vector<ui32> CachedValues; // Indices of values that holds temporary cached data and unreachable by dependencies
 
     void DeferWideFieldsInit(ui32 count, std::set<ui32> used) {
         Y_DEBUG_ABORT_UNLESS(AllOf(used, [count](ui32 i) { return i < count; }));
@@ -251,7 +252,8 @@ public:
     virtual IComputationExternalNode* GetEntryPoint(size_t index, bool require) = 0;
     virtual const TArrowKernelsTopology* GetKernelsTopology() = 0;
     virtual const TComputationNodePtrDeque& GetNodes() const = 0;
-    virtual void Invalidate() = 0;
+    virtual void Invalidate() = 0;  // Invalidate all mutable values in graph (may lead to udf recreation)
+    virtual void InvalidateCaches() = 0;  // Invalidate only cached values
     virtual TMemoryUsageInfo& GetMemInfo() const = 0;
     virtual const THolderFactory& GetHolderFactory() const = 0;
     virtual ITerminator* GetTerminator() const = 0;

@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/pq_database.h>
 #include <ydb/core/persqueue/writer/metadata_initializers.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 namespace NKikimr::NPQ::NPartitionChooser {
 
@@ -41,13 +42,16 @@ public:
                                    const std::shared_ptr<IPartitionChooser>& chooser,
                                    NPersQueue::TTopicConverterPtr& fullConverter,
                                    const TString& sourceId,
-                                   std::optional<ui32> preferedPartition)
+                                   std::optional<ui32> preferedPartition,
+                                   NWilson::TTraceId traceId)
         : Parent(parentId)
         , SourceId(sourceId)
         , PreferedPartition(preferedPartition)
         , Chooser(chooser)
+        , Span(TWilsonTopic::TopicDetailed, std::move(traceId), "Topic.ChoosePartition")
         , TableHelper(fullConverter->GetClientsideName(), fullConverter->GetTopicForSrcIdHash())
-        , PartitionHelper() {
+        , PartitionHelper(Span.GetTraceId())
+    {
     }
 
     TActorIdentity SelfId() const {
@@ -299,11 +303,14 @@ protected:
         }
         ResultWasSent = true;
         DEBUG("ReplyResult: Partition=" << Partition->PartitionId << ", SeqNo=" << SeqNo);
+        Span.EndOk();
+        Span = {};
         ctx.Send(Parent, new TEvPartitionChooser::TEvChooseResult(Partition->PartitionId, Partition->TabletId, SeqNo));
     }
 
     void ReplyError(ErrorCode code, TString&& errorMessage, const NActors::TActorContext& ctx) {
         INFO("ReplyError: " << errorMessage);
+        Span.EndError(errorMessage);
         ctx.Send(Parent, new TEvPartitionChooser::TEvChooseError(code, std::move(errorMessage)));
 
         TThis::Die(ctx);
@@ -315,6 +322,7 @@ protected:
     const TString SourceId;
     const std::optional<ui32> PreferedPartition;
     const std::shared_ptr<IPartitionChooser> Chooser;
+    NWilson::TSpan Span;
 
     const TPartitionInfo* Partition = nullptr;
 

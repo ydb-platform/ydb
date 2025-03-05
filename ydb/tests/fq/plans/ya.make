@@ -15,11 +15,9 @@ DEPENDS(
 )
 
 IF (SANITIZER_TYPE)
-    TIMEOUT(2400)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 

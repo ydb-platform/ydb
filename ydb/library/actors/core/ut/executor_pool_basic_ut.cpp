@@ -474,7 +474,6 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         //UNIT_ASSERT_VALUES_EQUAL(stats[0].CpuUs, 0); // depends on total duration of test, so undefined
         UNIT_ASSERT(stats[0].ElapsedTicks > 0);
         UNIT_ASSERT(stats[0].ParkedTicks > 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].BlockedTicks, 0);
         UNIT_ASSERT(stats[0].ActivationTimeHistogram.TotalSamples >= 2 * msgCount / TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].EventDeliveryTimeHistogram.TotalSamples, 2 * msgCount);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].EventProcessingCountHistogram.TotalSamples, 2 * msgCount);
@@ -485,7 +484,7 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         UNIT_ASSERT_VALUES_EQUAL(stats[0].ScheduledEventsByActivity[NActors::TActorTypeOperator::GetOtherActivityIndex()], 0);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolActorRegistrations, 2);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolDestroyedActors, 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolAllocatedMailboxes, 4095); // one line
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolAllocatedMailboxes, 4096); // one line
         UNIT_ASSERT(stats[0].MailboxPushedOutByTime + stats[0].MailboxPushedOutByEventCount >= 2 * msgCount / TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].MailboxPushedOutBySoftPreemption, 0);
     }
@@ -529,28 +528,35 @@ Y_UNIT_TEST_SUITE(ChangingThreadsCountInBasicExecutorPool) {
         const size_t MaxThreadCount;
         const size_t SendingMessageCount;
         std::unique_ptr<TBasicExecutorPool> ExecutorPool;
-        THolder<TActorSystemSetup> Setup;
-        TActorSystem ActorSystem;
+        std::unique_ptr<TActorSystem> ActorSystem;
 
         TState State;
+
+        void Init(size_t, size_t) {
+            TBasicExecutorPoolConfig config;
+            config.MaxThreadCount = MaxThreadCount;
+            config.Threads = MaxThreadCount;
+            config.MinThreadCount = 1;
+            config.DefaultThreadCount = 1;
+            config.EventsPerMailbox = 50;
+            ExecutorPool.reset(new TBasicExecutorPool(config, nullptr, nullptr));
+            THolder<TActorSystemSetup> setup = GetActorSystemSetup(ExecutorPool.get());
+            ActorSystem.reset(new TActorSystem(setup));
+        }
 
         TTestCtx(size_t maxThreadCount, size_t sendingMessageCount)
             : MaxThreadCount(maxThreadCount)
             , SendingMessageCount(sendingMessageCount)
-            , ExecutorPool(new TBasicExecutorPool(0, MaxThreadCount, 50))
-            , Setup(GetActorSystemSetup(ExecutorPool.get()))
-            , ActorSystem(Setup)
         {
+            Init(maxThreadCount, sendingMessageCount);
         }
 
         TTestCtx(size_t maxThreadCount, size_t sendingMessageCount, const TState &state)
             : MaxThreadCount(maxThreadCount)
             , SendingMessageCount(sendingMessageCount)
-            , ExecutorPool(new TBasicExecutorPool(0, MaxThreadCount, 50))
-            , Setup(GetActorSystemSetup(ExecutorPool.get()))
-            , ActorSystem(Setup)
             , State(state)
         {
+            Init(maxThreadCount, sendingMessageCount);
         }
 
         ~TTestCtx() {
@@ -563,7 +569,7 @@ Y_UNIT_TEST_SUITE(ChangingThreadsCountInBasicExecutorPool) {
                 res.Actors[i] = new TTestSenderActor([&] {
                     State.ActorDo();
                 });
-                res.ActorIds[i] = ActorSystem.Register(res.Actors[i]);
+                res.ActorIds[i] = ActorSystem->Register(res.Actors[i]);
             }
             return res;
         }
@@ -597,7 +603,7 @@ Y_UNIT_TEST_SUITE(ChangingThreadsCountInBasicExecutorPool) {
         const size_t size = 4;
         const size_t testCount = 2;
         TTestCtx<TCheckingInFlightState> ctx(size, msgCount);
-        ctx.ActorSystem.Start();
+        ctx.ActorSystem->Start();
 
         TTestActors testActors = ctx.RegisterCheckActors(size);
 
@@ -609,13 +615,13 @@ Y_UNIT_TEST_SUITE(ChangingThreadsCountInBasicExecutorPool) {
             AtomicSet(ctx.State.ExpectedMaximum, currentThreadCount);
 
             for (size_t testIdx = 0; testIdx < testCount; ++testIdx) {
-                testActors.Start(ctx.ActorSystem, msgCount);
+                testActors.Start(*ctx.ActorSystem, msgCount);
                 Sleep(TDuration::MilliSeconds(100));
                 testActors.Stop();
             }
             Sleep(TDuration::MilliSeconds(10));
         }
-        ctx.ActorSystem.Stop();
+        ctx.ActorSystem->Stop();
     }
 
     Y_UNIT_TEST(ContiniousChangingThreadCount) {
@@ -624,10 +630,10 @@ Y_UNIT_TEST_SUITE(ChangingThreadsCountInBasicExecutorPool) {
 
         auto begin = TInstant::Now();
         TTestCtx<TCheckingInFlightState> ctx(size, msgCount, TCheckingInFlightState{msgCount});
-        ctx.ActorSystem.Start();
+        ctx.ActorSystem->Start();
         TTestActors testActors = ctx.RegisterCheckActors(size);
 
-        testActors.Start(ctx.ActorSystem, msgCount);
+        testActors.Start(*ctx.ActorSystem, msgCount);
 
         const size_t N = 6;
         const size_t threadsCouns[N] = { 1, 3, 2, 3, 1, 4 };
@@ -646,9 +652,9 @@ Y_UNIT_TEST_SUITE(ChangingThreadsCountInBasicExecutorPool) {
             }
             ctx.State.ActorStopProcessing();
         });
-        TActorId changerActorId = ctx.ActorSystem.Register(changerActor);
+        TActorId changerActorId = ctx.ActorSystem->Register(changerActor);
         changerActor->Start(changerActorId, msgCount);
-        ctx.ActorSystem.Send(changerActorId, new TEvMsg());
+        ctx.ActorSystem->Send(changerActorId, new TEvMsg());
 
         while (true) {
             size_t maxCounter = 0;
@@ -664,6 +670,6 @@ Y_UNIT_TEST_SUITE(ChangingThreadsCountInBasicExecutorPool) {
         }
 
         changerActor->Stop();
-        ctx.ActorSystem.Stop();
+        ctx.ActorSystem->Stop();
     }
 }

@@ -12,14 +12,14 @@ namespace NKikimr::NSchemeShard {
 class TOlapOptionsUpdate {
 private:
     YDB_ACCESSOR(bool, SchemeNeedActualization, false);
-    YDB_ACCESSOR_DEF(std::optional<bool>, ExternalGuaranteeExclusivePK);
+    YDB_ACCESSOR_DEF(std::optional<TString>, ScanReaderPolicyName);
     YDB_ACCESSOR_DEF(NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
     YDB_ACCESSOR_DEF(NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer, MetadataManagerConstructor);
 public:
     bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
         SchemeNeedActualization = alterRequest.GetOptions().GetSchemeNeedActualization();
-        if (alterRequest.GetOptions().HasExternalGuaranteeExclusivePK()) {
-            ExternalGuaranteeExclusivePK = alterRequest.GetOptions().GetExternalGuaranteeExclusivePK();
+        if (alterRequest.GetOptions().HasScanReaderPolicyName()) {
+            ScanReaderPolicyName = alterRequest.GetOptions().GetScanReaderPolicyName();
         }
         if (alterRequest.GetOptions().HasMetadataManagerConstructor()) {
             auto container = NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetMetadataManagerConstructor());
@@ -41,8 +41,8 @@ public:
     }
     void SerializeToProto(NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest) const {
         alterRequest.MutableOptions()->SetSchemeNeedActualization(SchemeNeedActualization);
-        if (ExternalGuaranteeExclusivePK) {
-            alterRequest.MutableOptions()->SetExternalGuaranteeExclusivePK(*ExternalGuaranteeExclusivePK);
+        if (ScanReaderPolicyName) {
+            alterRequest.MutableOptions()->SetScanReaderPolicyName(*ScanReaderPolicyName);
         }
         if (CompactionPlannerConstructor.HasObject()) {
             CompactionPlannerConstructor.SerializeToProto(*alterRequest.MutableOptions()->MutableCompactionPlannerConstructor());

@@ -4,12 +4,12 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 struct TSeries {
-    ui64 SeriesId;
-    TString Title;
+    uint64_t SeriesId;
+    std::string Title;
     TInstant ReleaseDate;
-    TString SeriesInfo;
+    std::string SeriesInfo;
 
-    TSeries(ui64 seriesId, const TString& title, const TInstant& releaseDate, const TString& seriesInfo)
+    TSeries(uint64_t seriesId, const std::string& title, const TInstant& releaseDate, const std::string& seriesInfo)
         : SeriesId(seriesId)
         , Title(title)
         , ReleaseDate(releaseDate)
@@ -17,13 +17,13 @@ struct TSeries {
 };
 
 struct TSeason {
-    ui64 SeriesId;
-    ui64 SeasonId;
-    TString Title;
+    uint64_t SeriesId;
+    uint64_t SeasonId;
+    std::string Title;
     TInstant FirstAired;
     TInstant LastAired;
 
-    TSeason(ui64 seriesId, ui64 seasonId, const TString& title, const TInstant& firstAired, const TInstant& lastAired)
+    TSeason(uint64_t seriesId, uint64_t seasonId, const std::string& title, const TInstant& firstAired, const TInstant& lastAired)
         : SeriesId(seriesId)
         , SeasonId(seasonId)
         , Title(title)
@@ -32,13 +32,13 @@ struct TSeason {
 };
 
 struct TEpisode {
-    ui64 SeriesId;
-    ui64 SeasonId;
-    ui64 EpisodeId;
-    TString Title;
+    uint64_t SeriesId;
+    uint64_t SeasonId;
+    uint64_t EpisodeId;
+    std::string Title;
     TInstant AirDate;
 
-    TEpisode(ui64 seriesId, ui64 seasonId, ui64 episodeId, const TString& title, const TInstant& airDate)
+    TEpisode(uint64_t seriesId, uint64_t seasonId, uint64_t episodeId, const std::string& title, const TInstant& airDate)
         : SeriesId(seriesId)
         , SeasonId(seasonId)
         , EpisodeId(episodeId)
@@ -47,7 +47,7 @@ struct TEpisode {
 };
 
 TParams GetTablesDataParams() {
-    TVector<TSeries> seriesData = {
+    std::vector<TSeries> seriesData = {
         TSeries(1, "IT Crowd",  TInstant::ParseIso8601("2006-02-03"),
             "The IT Crowd is a British sitcom produced by Channel 4, written by Graham Linehan, produced by "
             "Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry."),
@@ -56,7 +56,7 @@ TParams GetTablesDataParams() {
             "Dave Krinsky. The series focuses on five young men who founded a startup company in Silicon Valley.")
     };
 
-    TVector<TSeason> seasonsData = {
+    std::vector<TSeason> seasonsData = {
         TSeason(1, 1, "Season 1", TInstant::ParseIso8601("2006-02-03"), TInstant::ParseIso8601("2006-03-03")),
         TSeason(1, 2, "Season 2", TInstant::ParseIso8601("2007-08-24"), TInstant::ParseIso8601("2007-09-28")),
         TSeason(1, 3, "Season 3", TInstant::ParseIso8601("2008-11-21"), TInstant::ParseIso8601("2008-12-26")),
@@ -68,7 +68,7 @@ TParams GetTablesDataParams() {
         TSeason(2, 5, "Season 5", TInstant::ParseIso8601("2018-03-25"), TInstant::ParseIso8601("2018-05-13"))
     };
 
-    TVector<TEpisode> episodesData = {
+    std::vector<TEpisode> episodesData = {
         TEpisode(1, 1, 1, "Yesterday's Jam", TInstant::ParseIso8601("2006-02-03")),
         TEpisode(1, 1, 2, "Calamity Jen", TInstant::ParseIso8601("2006-02-03")),
         TEpisode(1, 1, 3, "Fifty-Fifty", TInstant::ParseIso8601("2006-02-10")),

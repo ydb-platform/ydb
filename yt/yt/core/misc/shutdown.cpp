@@ -4,7 +4,6 @@
 
 #include <yt/yt/core/misc/collection_helpers.h>
 #include <yt/yt/core/misc/proc.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
@@ -14,6 +13,8 @@
 #include <library/cpp/yt/misc/tls.h>
 
 #include <library/cpp/yt/system/exit.h>
+
+#include <library/cpp/yt/memory/leaky_singleton.h>
 
 #include <util/generic/algorithm.h>
 
@@ -35,7 +36,7 @@ public:
     }
 
     TShutdownCookie RegisterShutdownCallback(
-        TString name,
+        std::string name,
         TClosure callback,
         int priority)
     {
@@ -159,7 +160,7 @@ public:
         ShutdownLogFile_.store(stderr);
     }
 
-    void EnableShutdownLoggingToFile(const TString& fileName)
+    void EnableShutdownLoggingToFile(const std::string& fileName)
     {
         auto* file = fopen(fileName.c_str(), "w");
         if (!file) {
@@ -195,7 +196,7 @@ private:
 
     struct TRegisteredCallback
     {
-        TString Name;
+        std::string Name;
         TClosure Callback;
         int Priority;
     };
@@ -241,7 +242,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TShutdownCookie RegisterShutdownCallback(
-    TString name,
+    std::string name,
     TClosure callback,
     int priority)
 {
@@ -271,7 +272,7 @@ void EnableShutdownLoggingToStderr()
     TShutdownManager::Get()->EnableShutdownLoggingToStderr();
 }
 
-void EnableShutdownLoggingToFile(const TString& fileName)
+void EnableShutdownLoggingToFile(const std::string& fileName)
 {
     TShutdownManager::Get()->EnableShutdownLoggingToFile(fileName);
 }

@@ -123,6 +123,7 @@ struct TCopyNodeOptionsBase
     bool PreserveAcl = false;
     bool PessimisticQuotaCheck = true;
     bool EnableCrossCellCopying = true;
+    bool AllowSecondaryIndexAbandonment = false;
 };
 
 struct TCopyNodeOptions

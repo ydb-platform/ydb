@@ -44,17 +44,17 @@ namespace numpy
                        utils::int_<N - 1>());
       return size;
     }
-  }
+  } // namespace
 
   template <class C, class L>
-  types::ndarray<typename L::dtype, types::array<long, L::value - 1>>
+  types::ndarray<typename L::dtype, types::array_tuple<long, L::value - 1>>
   select(C const &condlist, L const &choicelist, typename L::dtype _default)
   {
     constexpr size_t N = L::value - 1;
     auto &&choicelist0_shape = sutils::getshape(choicelist[0]);
-    types::ndarray<typename L::dtype, types::array<long, N>> out(
+    types::ndarray<typename L::dtype, types::array_tuple<long, N>> out(
         choicelist0_shape, _default);
-    types::ndarray<typename L::dtype, types::array<long, N>> selected(
+    types::ndarray<typename L::dtype, types::array_tuple<long, N>> selected(
         choicelist0_shape, false);
     long size = selected.flat_size();
     for (long i = 0; i < condlist.size() && size != 0; i++)
@@ -117,7 +117,7 @@ namespace numpy
   {
     return select_helper(condlist, choicelist, _default);
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

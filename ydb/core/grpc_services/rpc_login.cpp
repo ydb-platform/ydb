@@ -12,6 +12,9 @@
 #include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/core/security/login_shared_func.h>
 
+#include <ydb/library/aclib/aclib.h>
+#include <ydb/library/login/login.h>
+
 #include <ydb/public/api/protos/ydb_auth.pb.h>
 
 namespace NKikimr {
@@ -88,7 +91,7 @@ public:
             ReplyErrorAndPassAway(Ydb::StatusIds::INTERNAL_ERROR, "Failed to produce a token");
         } else {
             // success = token + no errors
-            ReplyAndPassAway(loginResult.token());
+            ReplyAndPassAway(loginResult);
         }
     }
 
@@ -113,9 +116,12 @@ public:
         }
     }
 
-    void ReplyAndPassAway(const TString& resultToken) {
-        TResponse response;
+    void ReplyAndPassAway(const NKikimrScheme::TEvLoginResult& loginResult) {
+        const auto& resultToken = loginResult.GetToken();
+        const auto& sanitizedToken = loginResult.GetSanitizedToken();
+        const auto& isAdmin = loginResult.GetIsAdmin();
 
+        TResponse response;
         Ydb::Operations::Operation& operation = *response.mutable_operation();
         operation.set_ready(true);
         operation.set_status(Ydb::StatusIds::SUCCESS);
@@ -126,7 +132,7 @@ public:
             operation.mutable_result()->PackFrom(result);
         }
 
-        AuditLogLogin(Request.Get(), PathToDatabase, *GetProtoRequest(), response, /* errorDetails */ TString());
+        AuditLogLogin(Request.Get(), PathToDatabase, *GetProtoRequest(), response, /* errorDetails */ TString(), sanitizedToken, isAdmin);
 
         return CleanupAndReply(response);
     }
@@ -143,7 +149,7 @@ public:
             issue->set_message(error);
         }
 
-        AuditLogLogin(Request.Get(), PathToDatabase, *GetProtoRequest(), response, reason);
+        AuditLogLogin(Request.Get(), PathToDatabase, *GetProtoRequest(), response, reason, {});
 
         return CleanupAndReply(response);
     }

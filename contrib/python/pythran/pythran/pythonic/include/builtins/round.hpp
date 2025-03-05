@@ -14,7 +14,7 @@ namespace builtins
   double round(T const &v);
 
   DEFINE_FUNCTOR(pythonic::builtins, round);
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

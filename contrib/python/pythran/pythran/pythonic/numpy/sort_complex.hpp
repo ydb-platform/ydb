@@ -3,7 +3,7 @@
 
 #include "pythonic/include/numpy/sort_complex.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/numpy/sort.hpp"
+#include "pythonic/utils/functor.hpp"
 
 #endif

@@ -1,0 +1,26 @@
+{#- empty string #}
+sourceSets {
+    main {
+        java.srcDir("$buildDir/generated/source/proto/main/java")
+{%- if target.proto_grpc %}
+        java.srcDir("$buildDir/generated/source/proto/main/grpc")
+{%- endif %}
+    }
+    test {
+        java.srcDir("$buildDir/generated/source/proto/test/java")
+{%- if target.proto_grpc %}
+        java.srcDir("$buildDir/generated/source/proto/test/grpc")
+{%- endif %}
+    }
+}
+
+{%- if target.jar_source_set is defined -%}
+{%-     for source_set in target.jar_source_set -%}
+{%-         set srcdir_glob = split(source_set, ':') %}
+sourceSets.main.java.srcDirs += "{{ srcdir_glob[0] }}"
+{%      endfor -%}
+{%- endif %}
+
+tasks.withType<Jar>() {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}

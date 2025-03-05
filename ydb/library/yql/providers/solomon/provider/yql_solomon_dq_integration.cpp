@@ -79,8 +79,7 @@ public:
     {
     }
 
-    ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
-        Y_UNUSED(maxPartitions);
+    ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings&) override {
         Y_UNUSED(node);
         Y_UNUSED(partitions);
         partitions.push_back("zz_partition");
@@ -91,11 +90,14 @@ public:
         return TSoReadObject::Match(&read);
     }
 
-    TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>&, TExprContext&) override {
-        YQL_ENSURE(false, "Unimplemented");
+    TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>& read, TExprContext&) override {
+        if (AllOf(read, [](const auto val) { return TSoReadObject::Match(val); })) {
+            return 0ul; // TODO: return real size
+        }
+        return Nothing();
     }
 
-    TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
+    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
         if (const auto& maybeSoReadObject = TMaybeNode<TSoReadObject>(read)) {
             const auto& soReadObject = maybeSoReadObject.Cast();
             YQL_ENSURE(soReadObject.Ref().GetTypeAnn(), "No type annotation for node " << soReadObject.Ref().Content());

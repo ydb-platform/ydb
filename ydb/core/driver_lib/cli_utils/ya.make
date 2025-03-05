@@ -25,7 +25,6 @@ SRCS(
     cli_persqueue.cpp
     cli_persqueue_cluster_discovery.cpp
     cli_persqueue_stress.cpp
-    cli_minikql_compile_and_exec.cpp
     cli_scheme_cache_append.cpp
     cli_scheme_initroot.cpp
     melancholic_gopher.cpp
@@ -51,12 +50,12 @@ PEERDIR(
     ydb/core/scheme
     ydb/library/aclib
     ydb/library/folder_service/proto
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     ydb/library/yaml_config
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/lib/deprecated/client
-    ydb/public/sdk/cpp/client/ydb_driver
+    ydb/public/sdk/cpp/src/client/driver
     ydb/public/lib/ydb_cli/commands/ydb_discovery
 )
 

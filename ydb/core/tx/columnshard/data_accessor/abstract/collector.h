@@ -20,12 +20,27 @@ public:
     }
 };
 
+class TDataCategorized {
+private:
+    YDB_READONLY_DEF(std::vector<TPortionInfo::TConstPtr>, PortionsToAsk);
+    YDB_READONLY_DEF(std::vector<TPortionDataAccessor>, CachedAccessors);
+
+public:
+    void AddToAsk(const TPortionInfo::TConstPtr& p) {
+        PortionsToAsk.emplace_back(p);
+    }
+    void AddFromCache(const TPortionDataAccessor& accessor) {
+        CachedAccessors.emplace_back(accessor);
+    }
+};
+
 class IGranuleDataAccessor {
 private:
     const ui64 PathId;
 
-    virtual THashMap<ui64, TPortionDataAccessor> DoAskData(
-        const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& callback) = 0;
+    virtual void DoAskData(
+        const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& callback, const TString& consumer) = 0;
+    virtual TDataCategorized DoAnalyzeData(const std::vector<TPortionInfo::TConstPtr>& portions, const TString& consumer) = 0;
     virtual void DoModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) = 0;
 
 public:
@@ -39,7 +54,9 @@ public:
         : PathId(pathId) {
     }
 
-    THashMap<ui64, TPortionDataAccessor> AskData(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& callback);
+    void AskData(
+        const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& callback, const TString& consumer);
+    TDataCategorized AnalyzeData(const std::vector<TPortionInfo::TConstPtr>& portions, const TString& consumer);
     void ModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) {
         return DoModifyPortions(add, remove);
     }

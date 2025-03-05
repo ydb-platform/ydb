@@ -170,6 +170,10 @@ public:
         return ActualizationIndex->CollectMetadataRequests(Portions);
     }
 
+    const NStorageOptimizer::IOptimizerPlanner& GetOptimizerPlanner() const {
+        return *OptimizerPlanner;
+    }
+
     std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex);
     bool TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex);
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& GetDataAccessorsManager() const {
@@ -218,11 +222,11 @@ public:
         NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId, const TSnapshot& snapshot) const;
     void CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine);
 
-    void AbortPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId) const {
+    void AbortPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId, const TSnapshot ssRemove) const {
         auto it = InsertedPortions.find(insertWriteId);
         AFL_VERIFY(it != InsertedPortions.end());
-        it->second->SetCommitSnapshot(TSnapshot(1, 1));
-        it->second->SetRemoveSnapshot(TSnapshot(1, 2));
+        it->second->SetCommitSnapshot(ssRemove);
+        it->second->SetRemoveSnapshot(ssRemove);
         TDbWrapper wrapper(txc.DB, nullptr);
         it->second->SaveMetaToDatabase(wrapper);
     }
@@ -302,7 +306,7 @@ public:
             OnAfterChangePortion(i.second, &g, true);
         }
         if (MetadataMemoryManager->NeedPrefetch() && Portions.size()) {
-            auto request = std::make_shared<TDataAccessorsRequest>();
+            auto request = std::make_shared<TDataAccessorsRequest>("PREFETCH_GRANULE::" + ::ToString(PathId));
             for (auto&& p : Portions) {
                 request->AddPortion(p.second);
             }
@@ -310,7 +314,9 @@ public:
 
             DataAccessorsManager->AskData(request);
         }
-        
+        if (ActualizationIndex->IsStarted()) {
+            RefreshScheme();
+        }
     }
 
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;
@@ -334,7 +340,8 @@ public:
     void OnCompactionFailed(const TString& reason);
     void OnCompactionFinished();
 
-    void AppendPortion(const TPortionDataAccessor& info, const bool addAsAccessor = true);
+    void AppendPortion(const TPortionDataAccessor& info);
+    void AppendPortion(const std::shared_ptr<TPortionInfo>& info);
 
     TString DebugString() const {
         return TStringBuilder() << "(granule:" << GetPathId() << ";"

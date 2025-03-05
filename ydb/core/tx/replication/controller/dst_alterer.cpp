@@ -3,6 +3,7 @@
 #include "private_events.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -43,9 +44,11 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
-            PathIdFromPathId(DstPathId, tx.MutableAlterTable()->MutablePathId());
+            DstPathId.ToProto(tx.MutableAlterTable()->MutablePathId());
             tx.MutableAlterTable()->MutableReplicationConfig()->SetMode(
                 NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+            break;
+        case TReplication::ETargetKind::Transfer:
             break;
         }
 
@@ -151,7 +154,13 @@ public:
         if (!DstPathId) {
             Success();
         } else {
-            AllocateTxId();
+            switch (Kind) {
+                case TReplication::ETargetKind::Table:
+                case TReplication::ETargetKind::IndexTable:
+                    return AllocateTxId();
+                case TReplication::ETargetKind::Transfer:
+                    return Success();
+            }
         }
     }
 

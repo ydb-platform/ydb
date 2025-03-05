@@ -95,6 +95,10 @@ struct TEvNodeBroker {
         EvSetConfigRequest,
         EvSetConfigResponse,
 
+        // decommission
+        EvGracefulShutdownRequest,
+        EvGracefulShutdownResponse,
+
         // TODO: remove
         // internal
         //EvNodeExpire = EvListNodes + 512,
@@ -123,6 +127,11 @@ struct TEvNodeBroker {
     struct TEvRegistrationRequest : public TEventPB<TEvRegistrationRequest,
                                                     NKikimrNodeBroker::TRegistrationRequest,
                                                     EvRegistrationRequest> {
+    };
+
+    struct TEvGracefulShutdownRequest : public TEventPB<TEvGracefulShutdownRequest,
+                                                    NKikimrNodeBroker::TGracefulShutdownRequest,
+                                                    EvGracefulShutdownRequest> {
     };
 
     struct TEvExtendLeaseRequest : public TEventPB<TEvExtendLeaseRequest,
@@ -154,6 +163,11 @@ struct TEvNodeBroker {
     struct TEvRegistrationResponse : public TEventPB<TEvRegistrationResponse,
                                                      NKikimrNodeBroker::TRegistrationResponse,
                                                      EvRegistrationResponse> {
+    };
+
+    struct TEvGracefulShutdownResponse : public TEventPB<TEvGracefulShutdownResponse,
+                                                     NKikimrNodeBroker::TGracefulShutdownResponse,
+                                                     EvGracefulShutdownResponse> {
     };
 
     struct TEvExtendLeaseResponse : public TEventPB<TEvExtendLeaseResponse,

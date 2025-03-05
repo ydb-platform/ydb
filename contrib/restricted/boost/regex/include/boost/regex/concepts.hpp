@@ -23,7 +23,7 @@
 #include <boost/concept_check.hpp>
 #include <boost/type_traits/is_enum.hpp>
 #include <boost/type_traits/is_base_and_derived.hpp>
-#include <boost/static_assert.hpp>
+#error #include <boost/static_assert.hpp>
 #ifndef BOOST_TEST_TR1_REGEX
 #include <boost/regex.hpp>
 #endif

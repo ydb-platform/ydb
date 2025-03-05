@@ -19,7 +19,7 @@
 #include "readers.h"
 
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NTable {
 
 //How ofter run host scan to perform session balancing

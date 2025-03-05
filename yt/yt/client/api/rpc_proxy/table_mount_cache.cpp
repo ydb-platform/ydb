@@ -100,11 +100,14 @@ private:
 
                 tableInfo->Indices.reserve(rsp->indices_size());
                 for (const auto& protoIndexInfo : rsp->indices()) {
-                    TIndexInfo indexInfo{
+                    auto indexInfo = TIndexInfo{
                         .TableId = FromProto<NObjectClient::TObjectId>(protoIndexInfo.index_table_id()),
                         .Kind = FromProto<ESecondaryIndexKind>(protoIndexInfo.index_kind()),
-                        .Predicate = YT_PROTO_OPTIONAL(protoIndexInfo, predicate),
-                        .UnfoldedColumn = YT_PROTO_OPTIONAL(protoIndexInfo, unfolded_column),
+                        .Predicate = YT_OPTIONAL_FROM_PROTO(protoIndexInfo, predicate),
+                        .UnfoldedColumn = YT_OPTIONAL_FROM_PROTO(protoIndexInfo, unfolded_column),
+                        .Correspondence = protoIndexInfo.has_index_correspondence()
+                            ? FromProto<ETableToIndexCorrespondence>(protoIndexInfo.index_correspondence())
+                            : ETableToIndexCorrespondence::Unknown,
                     };
                     THROW_ERROR_EXCEPTION_UNLESS(TEnumTraits<ESecondaryIndexKind>::FindLiteralByValue(indexInfo.Kind).has_value(),
                         "Unsupported secondary index kind %Qlv (client not up-to-date)",
@@ -120,7 +123,7 @@ private:
 
                     auto tabletCount = tableInfo->IsChaosReplicated()
                         ? rsp->tablet_count()
-                        : static_cast<int>(tableInfo->Tablets.size());
+                        : std::ssize(tableInfo->Tablets);
                     tableInfo->UpperCapBound = MakeUnversionedOwningRow(tabletCount);
                 }
 

@@ -435,7 +435,7 @@ int TCube<T>::ReadSensors(
         };
 
         if constexpr (std::is_same_v<T, i64> || std::is_same_v<T, TDuration>) {
-            if (options.ConvertCountersToRateGauge) {
+            if (options.ConvertCountersToRateGauge || options.ConvertCountersToDeltaGauge) {
                 consumer->OnMetricBegin(NMonitoring::EMetricType::GAUGE);
             } else {
                 consumer->OnMetricBegin(NMonitoring::EMetricType::RATE);
@@ -455,7 +455,17 @@ int TCube<T>::ReadSensors(
                     } else {
                         consumer->OnDouble(time, value.SecondsFloat() / options.RateDenominator);
                     }
+                } else if (options.ConvertCountersToDeltaGauge) {
+                    if constexpr (std::is_same_v<T, i64>) {
+                        consumer->OnDouble(time, value);
+                    } else {
+                        consumer->OnDouble(time, value.SecondsFloat());
+                    }
                 } else {
+                    if (!options.ReportTimestampsForRateMetrics) {
+                        time = TInstant::Zero();
+                    }
+
                     // TODO(prime@): RATE is incompatible with windowed read.
                     if constexpr (std::is_same_v<T, i64>) {
                         consumer->OnInt64(time, Rollup(*window, indices.back()));

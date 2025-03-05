@@ -2,8 +2,6 @@ package NYql;
 option java_package = "ru.yandex.yql.proto";
 
 import "yql/essentials/protos/clickhouse.proto";
-import "ydb/library/yql/providers/generic/connector/api/common/data_source.proto";
-import "ydb/library/yql/providers/generic/connector/api/common/endpoint.proto";
 
 
 /////////////////////////////// common ///////////////////////////////
@@ -105,6 +103,11 @@ message TYtClusterConfig {
     repeated TAttr Settings = 100;
 }
 
+message TFileWithMd5 {
+    optional string File = 1;
+    optional string Md5 = 2;
+}
+
 message TYtGatewayConfig {
     optional uint32 GatewayThreads = 1 [default = 0]; // Number of gateway MtpQueue threads. The adaptive MtpQueue will be used for 0 value
     optional EYtLogLevel YtLogLevel = 2 [default = YL_ERROR]; // The verbosity level of YT log
@@ -119,6 +122,7 @@ message TYtGatewayConfig {
     optional uint64 YtDebugLogSize = 11 [default = 0]; // Max YT debug log size
     optional bool YtDebugLogAlwaysWrite = 12 [default = false]; // Write YT debug log always or on error only
     optional string LocalChainFile = 14; // File to dump table contet in test mode
+    repeated TFileWithMd5 MrJobSystemLibsWithMd5 = 15; // Paths to linux dynamic libraries required for running mrjob.
 
     repeated TRemoteFilePattern RemoteFilePatterns = 100;
     repeated TYtClusterConfig ClusterMapping = 101; // Accepted cluster shortcuts. All names not from this list will be rejected
@@ -328,6 +332,7 @@ message TPqClusterConfig {
     repeated TAttr Settings = 100;
     optional bool SharedReading = 101;
     optional string ReconnectPeriod = 102; // disabled by default, example of a parameter: 5m
+    optional string ReadGroup = 103;
 }
 
 message TPqGatewayConfig {
@@ -389,7 +394,7 @@ message TS3GatewayConfig {
     repeated TS3FormatSizeLimit FormatSizeLimit = 6; // Format limits (override FileSizeLimit)
     optional uint64 BlockFileSizeLimit = 10;         // Global limit for block readers (overrides FormatSizeLimit)
     optional uint64 MaxFilesPerQuery = 3;
-    optional uint64 MaxReadSizePerQuery = 4;
+    reserved 4;
     optional uint64 MaxDiscoveryFilesPerQuery = 5;
     optional uint64 MaxInflightListsPerQuery = 7;
     optional uint64 MaxDirectoriesAndFilesPerQuery = 8;
@@ -551,29 +556,169 @@ message TDbToolConfig {
 
 /////////// Generic gateway for the external data sources ////////////
 
+// TGenericEndpoint represents the network address of a generic data source instance
+message TGenericEndpoint {
+    optional string host = 1;
+    optional uint32 port = 2;
+}
+
+
+// TGenericCredentials represents various ways of user authentication in the data source instance
+message TGenericCredentials {
+    message TBasic {
+        optional string username = 1;
+        optional string password = 2;
+    }
+
+    message TToken {
+        optional string type = 1;
+        optional string value = 2;
+    }
+
+    oneof payload {
+        TBasic basic = 1;
+        TToken token = 2;
+    }
+}
+
+// EGenericDataSourceKind enumerates the external data sources
+// supported by the federated query system
+enum EGenericDataSourceKind {
+    DATA_SOURCE_KIND_UNSPECIFIED = 0;
+    CLICKHOUSE = 1;
+    POSTGRESQL = 2;
+    S3 = 3;
+    YDB = 4;
+    MYSQL = 5;
+    MS_SQL_SERVER = 6;
+    GREENPLUM = 7;
+    ORACLE = 8;
+    LOGGING = 9;
+    MONGO_DB = 10;
+}
+
+// EGenericProtocol generalizes various kinds of network protocols supported by different databases.
+enum EGenericProtocol {
+    PROTOCOL_UNSPECIFIED = 0;
+    NATIVE = 1; // CLICKHOUSE, POSTGRESQL
+    HTTP = 2;   // CLICKHOUSE, S3
+}
+
+// TPostgreSQLDataSourceOptions represents settings specific to PostgreSQL
+message TPostgreSQLDataSourceOptions {
+    // PostgreSQL schema
+    optional string schema = 1;
+}
+
+// TClickhouseDataSourceOptions represents settings specific to Clickhouse
+message TClickhouseDataSourceOptions {
+}
+
+// TS3DataSourceOptions represents settings specific to S3 (Simple Storage Service)
+message TS3DataSourceOptions {
+    // the region where data is stored
+    optional string region = 1;
+    // the bucket the object belongs to
+    optional string bucket = 2;
+}
+
+// TGreenplumDataSourceOptions represents settings specific to Greenplum
+message TGreenplumDataSourceOptions {
+    // Greenplum schema
+    optional string schema = 1;
+}
+
+// TOracleDataSourceOptions represents settings specific to Oracle
+message TOracleDataSourceOptions {
+    // Oracle service_name - alias to SID of oracle INSTANCE, or SID, or PDB.
+    //  More about connection options in Oracle docs:
+    //  https://docs.oracle.com/en/database/other-databases/essbase/21/essoa/connection-string-formats.html
+    optional string service_name = 1;
+}
+
+// TLoggingDataSourceOptions represents settings specific to Logging
+message TLoggingDataSourceOptions {
+    optional string folder_id = 1;
+}
+
+// TMongoDbDataSourceOptions represents settings specific to MongoDB
+message TMongoDbDataSourceOptions {
+    enum EReadingMode {
+        READING_MODE_UNSPECIFIED = 0;
+        // Returns each top level field of the document deserialized into the corresponding YQL type; if the type of some field is ambiguous / inconsistent across several documents it is returned serialized as an YQL Utf8 value
+        TABLE = 1;
+    };
+      
+    // Ways of dealing with values read in ReadSplit whose types are inconsistent with types that were deduced in DescribeTable
+    enum EUnexpectedTypeDisplayMode {
+        UNEXPECTED_UNSPECIFIED = 0;
+        UNEXPECTED_AS_NULL = 1;
+        UNEXPECTED_AS_STRING = 2;
+    };
+
+    // Ways of dealing with unsupported data types
+    enum EUnsupportedTypeDisplayMode {
+        UNSUPPORTED_UNSPECIFIED = 0;
+        UNSUPPORTED_OMIT = 1;
+        UNSUPPORTED_AS_STRING = 2;
+    };
+    
+    optional EReadingMode reading_mode = 1;
+    optional EUnexpectedTypeDisplayMode unexpected_type_display_mode = 2;
+    optional EUnsupportedTypeDisplayMode unsupported_type_display_mode = 3;
+}
+
+// TGenericDataSourceInstance helps to identify the instance of a data source to redirect request to.
+message TGenericDataSourceInstance {
+    // Data source kind
+    optional EGenericDataSourceKind kind = 1;
+    // Network address
+    optional TGenericEndpoint endpoint = 2;
+    // Database name
+    optional string database = 3;
+    // Credentials to access database
+    optional TGenericCredentials credentials = 4;
+    // If true, Connector server will use secure connections to access remote data sources.
+    // Certificates will be obtained from the standard system paths.
+    optional bool use_tls = 5;
+    // Allows to specify network protocol that should be used between
+    // during the connection between Connector and the remote data source
+    optional EGenericProtocol protocol = 6;
+    // Options specific to various data sources
+    oneof options {
+        TPostgreSQLDataSourceOptions pg_options = 7;
+        TClickhouseDataSourceOptions ch_options = 8;
+        TS3DataSourceOptions s3_options = 9;
+        TGreenplumDataSourceOptions gp_options = 10;
+        TOracleDataSourceOptions oracle_options = 11;
+        TLoggingDataSourceOptions logging_options = 12;
+        TMongoDbDataSourceOptions mongodb_options = 13;
+    }
+}
+
 message TGenericClusterConfig {
     // Cluster name
     optional string Name = 1;
 
     // Data source kind
-    optional NYql.NConnector.NApi.EDataSourceKind Kind = 8;
+    optional EGenericDataSourceKind Kind = 8;
 
     // Location represents the network address of a data source instance we want to connect
     oneof Location {
         // Endpoint must be used for on-premise deployments.
-        NYql.NConnector.NApi.TEndpoint Endpoint = 9;
+        TGenericEndpoint Endpoint = 9;
         // DatabaseId must be used when the data source is deployed in cloud.
         // Data source FQDN and port will be resolved by MDB service.
         string DatabaseId = 4;
     }
 
     // Credentials used to access data source instance
-    optional NYql.NConnector.NApi.TCredentials Credentials = 10;
+    optional TGenericCredentials Credentials = 10;
 
     // Credentials used to access managed databases APIs.
     // When working with external data source instances deployed in clouds,
-    // one should either set (ServiceAccountId, ServiceAccountIdSignature) pair 
-    // that will be resolved into IAM Token via Token Accessor, 
+    // one should either set (ServiceAccountId, ServiceAccountIdSignature) pair
+    // that will be resolved into IAM Token via Token Accessor,
     // or provide IAM Token directly.
     optional string ServiceAccountId = 6;
     optional string ServiceAccountIdSignature = 7;
@@ -587,7 +732,7 @@ message TGenericClusterConfig {
     optional string DatabaseName = 13;
 
     // Transport protocol used to establish a network connection with database
-    optional NYql.NConnector.NApi.EProtocol Protocol = 14;
+    optional EGenericProtocol Protocol = 14;
 
     // Data source options specific to various data sources
     map<string, string> DataSourceOptions = 15;
@@ -600,7 +745,7 @@ message TGenericConnectorConfig {
     // 1. Set address statically via `Endpoint.Host` and `Endpoint.Port`;
     // 2. Ask YDB to set `Endpoint.Port` to the value of expression `./ydbd --ic-port + OffsetFromIcPort`,
     // while Connector's hostname will still be taken from `Endpoint.Host` (with 'localhost' as a default value).
-    optional NYql.NConnector.NApi.TEndpoint Endpoint = 3;
+    optional TGenericEndpoint Endpoint = 3;
     optional uint32 OffsetFromIcPort = 6;
 
     // If true, Connector GRPC Client will use TLS encryption.
@@ -637,7 +782,7 @@ message TGenericGatewayConfig {
 
 message TDbResolverConfig {
     // Ydb / Yds MVP endpoint.
-    // Expected format: 
+    // Expected format:
     // [http|https]://host:port/ydbc/cloud-prod/
     optional string YdbMvpEndpoint = 2;
 }
@@ -653,6 +798,13 @@ message TRevisionException {
 message TRevisionFilterConfig {
     repeated TRevisionException RevisionException = 1;
 }
+
+///////////////////////////// Ytflow /////////////////////////////
+
+message TYtflowGatewayConfig {
+    optional uint32 GatewayThreads = 1 [default = 1]; // Number of gateway MtpQueue threads. The adaptive MtpQueue will be used for 0 value
+}
+
 
 /////////////////////////////// Root ///////////////////////////////
 
@@ -680,4 +832,5 @@ message TGatewaysConfig {
     optional TGenericGatewayConfig Generic = 21;
     optional TRevisionFilterConfig RevisionFilter = 22;
     optional TDbResolverConfig DbResolver = 23;
+    optional TYtflowGatewayConfig Ytflow = 24;
 }

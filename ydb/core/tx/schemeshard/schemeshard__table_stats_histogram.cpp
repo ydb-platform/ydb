@@ -1,6 +1,7 @@
 #include "schemeshard_impl.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/protos/table_stats.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -44,7 +45,7 @@ TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram
         for (const auto& point : histogram.GetBuckets()) {
             ui64 leftSize = Min(point.GetValue(), total);
             ui64 rightSize = total - leftSize;
-            
+
             // search for a median point at which abs(leftSize - rightSize) is minimum
             ui64 sizesDiff = Max(leftSize, rightSize) - Min(leftSize, rightSize);
             if (idxMedDiff > sizesDiff) {
@@ -94,6 +95,7 @@ TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram
                 // For integer types we can add 1 to med
                 ui64 val = 0;
                 size_t sz =  keyMed.GetCells()[i].Size();
+                Y_ABORT_UNLESS(sz <= sizeof(ui64));
                 memcpy(&val, keyMed.GetCells()[i].Data(), sz);
                 val++;
                 splitKey[i] = TCell((const char*)&val, sz);

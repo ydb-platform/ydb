@@ -5,8 +5,8 @@
 #include "pretty_table.h"
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
+#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb-cpp-sdk/client/types/status/status.h>
 #include <ydb/library/accessor/accessor.h>
 
 #include <util/generic/set.h>
@@ -109,6 +109,7 @@ public:
         YDB_ACCESSOR(EDataFormat, Format, EDataFormat::Pretty);
         YDB_ACCESSOR(std::function<bool()>, IsInterrupted, []() { return false; });
         YDB_ACCESSOR(size_t, MaxWidth, 0);
+        YDB_ACCESSOR(size_t, MaxRowsCount, 0);
         YDB_FLAG_ACCESSOR(CsvWithHeader, false);
         YDB_READONLY(IOutputStream*, Output, &Cout);
     public:

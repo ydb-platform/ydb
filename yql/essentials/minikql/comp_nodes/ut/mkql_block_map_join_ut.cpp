@@ -1,1985 +1,1466 @@
+#include "mkql_block_map_join_ut_utils.h"
 #include "mkql_computation_node_ut.h"
 
-#include <arrow/array/builder_binary.h>
-#include <arrow/array/builder_primitive.h>
-#include <arrow/compute/kernel.h>
-#include <yql/essentials/minikql/computation/mkql_block_builder.h>
-#include <yql/essentials/minikql/computation/mkql_block_impl.h>
-#include <yql/essentials/minikql/computation/mkql_block_reader.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
-#include <yql/essentials/public/udf/arrow/udf_arrow_helpers.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
 
-const TRuntimeNode MakeSet(TProgramBuilder& pgmBuilder,
-    const TVector<const TRuntimeNode>& keys
-) {
-    const auto keysList = keys.size() > 1 ? pgmBuilder.Zip(keys) : keys.front();
-
-    return pgmBuilder.ToHashedDict(keysList, false,
-        [&](TRuntimeNode item) {
-            return item;
-        }, [&](TRuntimeNode) {
-            return pgmBuilder.NewVoid();
-        });
-}
-
-const TRuntimeNode MakeDict(TProgramBuilder& pgmBuilder,
-    const TVector<const TRuntimeNode>& keys,
-    const TVector<const TRuntimeNode>& payloads
-) {
-    const auto keysList = keys.size() > 1 ? pgmBuilder.Zip(keys) : keys.front();
-    // TODO: Process containers properly. Now just use Zip to pack
-    // the data type in a tuple.
-    TVector<const TRuntimeNode> wrappedPayloads;
-    std::transform(payloads.cbegin(), payloads.cend(), std::back_inserter(wrappedPayloads),
-        [&](const auto payload) {
-            return pgmBuilder.Zip({payload});
-        });
-    TVector<const TRuntimeNode> pairsChunks;
-    std::transform(wrappedPayloads.cbegin(), wrappedPayloads.cend(), std::back_inserter(pairsChunks),
-        [&](const auto payload) {
-            return pgmBuilder.Zip({keysList, payload});
-        });
-    const auto pairsList = pgmBuilder.Extend(pairsChunks);
-
-    return pgmBuilder.ToHashedDict(pairsList, payloads.size() > 1,
-        [&](TRuntimeNode item) {
-            return pgmBuilder.Nth(item, 0);
-        }, [&](TRuntimeNode item) {
-            return pgmBuilder.Nth(item, 1);
-        });
-}
-
-// XXX: Copy-pasted from program builder sources. Adjusted on demand.
-const std::vector<TType*> ValidateBlockStreamType(const TType* streamType) {
-    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, streamType));
-    Y_ENSURE(wideComponents.size() > 0, "Expected at least one column");
-    std::vector<TType*> items;
-    items.reserve(wideComponents.size());
-    // XXX: Declare these variables outside the loop body to use for the last
-    // item (i.e. block length column) in the assertions below.
-    bool isScalar;
-    TType* itemType;
-    for (const auto& wideComponent : wideComponents) {
-        auto blockType = AS_TYPE(TBlockType, wideComponent);
-        isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
-        itemType = blockType->GetItemType();
-        items.push_back(blockType);
-    }
-
-    Y_ENSURE(isScalar, "Last column should be scalar");
-    Y_ENSURE(AS_TYPE(TDataType, itemType)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
-    return items;
-}
-
-bool IsOptionalOrNull(const TType* type) {
-    return type->IsOptional() || type->IsNull() || type->IsPg();
-}
-
-const TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
-    const TVector<ui32>& leftKeyColumns, const TVector<ui32>& leftKeyDrops,
-    TRuntimeNode& leftArg, TType* leftTuple, const TRuntimeNode& dictNode
-) {
-    // 1. Make left argument node.
-    const auto tupleType = AS_TYPE(TTupleType, leftTuple);
-    const auto listTupleType = pgmBuilder.NewListType(leftTuple);
-    leftArg = pgmBuilder.Arg(listTupleType);
-
-    // 2. Make left wide stream node.
-    const auto leftWideStream = pgmBuilder.FromFlow(pgmBuilder.ExpandMap(pgmBuilder.ToFlow(leftArg),
+// List<Tuple<...>> -> Stream<Multi<...>>
+TRuntimeNode ToWideStream(TProgramBuilder& pgmBuilder, TRuntimeNode list) {
+    auto wideFlow = pgmBuilder.ExpandMap(pgmBuilder.ToFlow(list),
         [&](TRuntimeNode tupleNode) -> TRuntimeNode::TList {
+            TTupleType* tupleType = AS_TYPE(TTupleType, tupleNode.GetStaticType());
             TRuntimeNode::TList wide;
             wide.reserve(tupleType->GetElementsCount());
             for (size_t i = 0; i < tupleType->GetElementsCount(); i++) {
                 wide.emplace_back(pgmBuilder.Nth(tupleNode, i));
             }
             return wide;
-        }));
-
-    // 3. Calculate the resulting join type.
-    const auto leftStreamItems = ValidateBlockStreamType(leftWideStream.GetStaticType());
-    const THashSet<ui32> leftKeyDropsSet(leftKeyDrops.cbegin(), leftKeyDrops.cend());
-    TVector<TType*> returnJoinItems;
-    for (size_t i = 0; i < leftStreamItems.size(); i++) {
-        if (leftKeyDropsSet.contains(i)) {
-            continue;
         }
-        returnJoinItems.push_back(leftStreamItems[i]);
-    }
+    );
 
-    const auto payloadType = AS_TYPE(TDictType, dictNode.GetStaticType())->GetPayloadType();
-    const auto payloadItemType = payloadType->IsList()
-                               ? AS_TYPE(TListType, payloadType)->GetItemType()
-                               : payloadType;
-    if (joinKind == EJoinKind::Inner || joinKind == EJoinKind::Left) {
-        // XXX: This is the contract ensured by the expression compiler and
-        // optimizers to ease the processing of the dict payload in wide context.
-        Y_ENSURE(payloadItemType->IsTuple(), "Dict payload has to be a Tuple");
-        const auto payloadItems = AS_TYPE(TTupleType, payloadItemType)->GetElements();
-        TVector<TType*> dictBlockItems;
-        dictBlockItems.reserve(payloadItems.size());
-        for (const auto& payloadItem : payloadItems) {
-            MKQL_ENSURE(!payloadItem->IsBlock(), "Dict payload item has to be non-block");
-            const auto itemType = joinKind == EJoinKind::Inner ? payloadItem
-                                : IsOptionalOrNull(payloadItem) ? payloadItem
-                                : pgmBuilder.NewOptionalType(payloadItem);
-            dictBlockItems.emplace_back(pgmBuilder.NewBlockType(itemType, TBlockType::EShape::Many));
-        }
-        // Block length column has to be the last column in wide block stream item,
-        // so all contents of the dict payload should be appended to the resulting
-        // wide type before the block size column.
-        const auto blockLenPos = std::prev(returnJoinItems.end());
-        returnJoinItems.insert(blockLenPos, dictBlockItems.cbegin(), dictBlockItems.cend());
-    } else {
-        // XXX: This is the contract ensured by the expression compiler and
-        // optimizers for join types that don't require the right (i.e. dict) part.
-        Y_ENSURE(payloadItemType->IsVoid(), "Dict payload has to be Void");
-    }
-    TType* returnJoinType = pgmBuilder.NewStreamType(pgmBuilder.NewMultiType(returnJoinItems));
+    return pgmBuilder.FromFlow(wideFlow);
+}
 
-    // 4. Build BlockMapJoinCore node.
-    const auto joinNode = pgmBuilder.BlockMapJoinCore(leftWideStream, dictNode, joinKind,
-                                                      leftKeyColumns, leftKeyDrops,
-                                                      returnJoinType);
-
-    // 5. Build the root node with list of tuples.
-    const auto joinItems = GetWideComponents(AS_TYPE(TStreamType, joinNode.GetStaticType()));
-    const auto resultType = AS_TYPE(TTupleType, pgmBuilder.NewTupleType(joinItems));
-
-    const auto rootNode = pgmBuilder.Collect(pgmBuilder.FromFlow(pgmBuilder.NarrowMap(pgmBuilder.ToFlow(joinNode),
+// Stream<Multi<...>> -> List<Tuple<...>>
+TRuntimeNode FromWideStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream) {
+    return pgmBuilder.Collect(pgmBuilder.NarrowMap(pgmBuilder.ToFlow(stream),
         [&](TRuntimeNode::TList items) -> TRuntimeNode {
             TVector<TRuntimeNode> tupleElements;
-            tupleElements.reserve(resultType->GetElementsCount());
-            for (size_t i = 0; i < resultType->GetElementsCount(); i++) {
+            tupleElements.reserve(items.size());
+            for (size_t i = 0; i < items.size(); i++) {
                 tupleElements.emplace_back(items[i]);
             }
             return pgmBuilder.NewTuple(tupleElements);
-        })));
-
-    return rootNode;
+        })
+    );
 }
 
-NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize,
-    const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values
+TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
+    TRuntimeNode leftList, const TVector<ui32>& leftKeyColumns, const TVector<ui32>& leftKeyDrops,
+    TRuntimeNode rightList, const TVector<ui32>& rightKeyColumns, const TVector<ui32>& rightKeyDrops, bool rightAny
 ) {
-    const auto maxLength = CalcBlockLen(std::accumulate(types.cbegin(), types.cend(), 0ULL,
-        [](size_t max, const TType* type) {
-            return std::max(max, CalcMaxBlockItemSize(type));
-        }));
-    TVector<std::unique_ptr<IArrayBuilder>> builders;
-    std::transform(types.cbegin(), types.cend(), std::back_inserter(builders),
-        [&](const auto& type) {
-            return MakeArrayBuilder(TTypeInfoHelper(), type, ctx.ArrowMemoryPool,
-                                    maxLength, &ctx.Builder->GetPgBuilder());
-        });
+    const auto leftStream = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, leftList));
+    const auto rightStream = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, rightList));
 
-    const auto& holderFactory = ctx.HolderFactory;
-    const size_t width = types.size();
-    const size_t total = values.GetListLength();
-    NUdf::TUnboxedValue iterator = values.GetListIterator();
-    NUdf::TUnboxedValue current;
-    size_t converted = 0;
-    TDefaultListRepresentation listValues;
-    while (converted < total) {
-        for (size_t i = 0; i < blockSize && iterator.Next(current); i++, converted++) {
-            for (size_t j = 0; j < builders.size(); j++) {
-                const NUdf::TUnboxedValuePod& item = current.GetElement(j);
-                builders[j]->Add(item);
-            }
-        }
-        NUdf::TUnboxedValue* items = nullptr;
-        const auto tuple = holderFactory.CreateDirectArrayHolder(width + 1, items);
-        for (size_t i = 0; i < width; i++) {
-            items[i] = holderFactory.CreateArrowBlock(builders[i]->Build(converted >= total));
-        }
-        items[width] = MakeBlockCount(holderFactory, blockSize);
-        listValues = listValues.Append(std::move(tuple));
+    const auto joinReturnType = MakeJoinType(pgmBuilder,
+        joinKind,
+        leftStream.GetStaticType(),
+        leftKeyDrops,
+        rightStream.GetStaticType(),
+        rightKeyDrops
+    );
+
+    auto rightBlockStorageNode = pgmBuilder.BlockStorage(rightStream, pgmBuilder.NewResourceType(BlockStorageResourcePrefix));
+    if (joinKind != EJoinKind::Cross) {
+        rightBlockStorageNode = pgmBuilder.BlockMapJoinIndex(
+            rightBlockStorageNode,
+            AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
+            rightKeyColumns,
+            rightAny,
+            pgmBuilder.NewResourceType(BlockMapJoinIndexResourcePrefix)
+        );
     }
-    return holderFactory.CreateDirectListHolder(std::move(listValues));
+
+    auto joinNode = pgmBuilder.BlockMapJoinCore(
+        leftStream,
+        rightBlockStorageNode,
+        AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
+        joinKind,
+        leftKeyColumns,
+        leftKeyDrops,
+        rightKeyColumns,
+        rightKeyDrops,
+        joinReturnType
+    );
+
+    return FromWideStream(pgmBuilder, DethrottleStream(pgmBuilder, joinNode));
 }
 
-NUdf::TUnboxedValuePod FromBlocks(TComputationContext& ctx,
-    const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values
+TRuntimeNode BuildBlockJoinsWithNodeMultipleUsage(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
+    TRuntimeNode leftList, const TVector<ui32>& leftKeyColumns, const TVector<ui32>& leftKeyDrops,
+    TRuntimeNode rightList, const TVector<ui32>& rightKeyColumns, const TVector<ui32>& rightKeyDrops, bool rightAny
 ) {
-    TVector<std::unique_ptr<IBlockReader>> readers;
-    TVector<std::unique_ptr<IBlockItemConverter>> converters;
-    for (const auto& type : types) {
-        const auto blockItemType = AS_TYPE(TBlockType, type)->GetItemType();
-        readers.push_back(MakeBlockReader(TTypeInfoHelper(), blockItemType));
-        converters.push_back(MakeBlockItemConverter(TTypeInfoHelper(), blockItemType,
-                                                    ctx.Builder->GetPgBuilder()));
-    }
+    Y_ENSURE(joinKind == EJoinKind::Inner);
+    Y_ENSURE(!rightAny);
+    Y_ENSURE(leftKeyDrops.empty() && rightKeyDrops.empty());
 
-    const auto& holderFactory = ctx.HolderFactory;
-    const size_t width = types.size() - 1;
-    TDefaultListRepresentation listValues;
-    NUdf::TUnboxedValue iterator = values.GetListIterator();
-    NUdf::TUnboxedValue current;
-    while (iterator.Next(current)) {
-        const auto blockLengthValue = current.GetElement(width);
-        const auto blockLengthDatum = TArrowBlock::From(blockLengthValue).GetDatum();
-        Y_ENSURE(blockLengthDatum.is_scalar());
-        const auto blockLength = blockLengthDatum.scalar_as<arrow::UInt64Scalar>().value;
-        for (size_t i = 0; i < blockLength; i++) {
-            NUdf::TUnboxedValue* items = nullptr;
-            const auto tuple = holderFactory.CreateDirectArrayHolder(width, items);
-            for (size_t j = 0; j < width; j++) {
-                const auto arrayValue = current.GetElement(j);
-                const auto arrayDatum = TArrowBlock::From(arrayValue).GetDatum();
-                UNIT_ASSERT(arrayDatum.is_array());
-                const auto blockItem = readers[j]->GetItem(*arrayDatum.array(), i);
-                items[j] = converters[j]->MakeValue(blockItem, holderFactory);
-            }
-            listValues = listValues.Append(std::move(tuple));
-        }
-    }
-    return holderFactory.CreateDirectListHolder(std::move(listValues));
+    const auto leftStream = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, leftList));
+    const auto leftStream2 = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, leftList));
+    const auto leftStream3 = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, leftList));
+
+    const auto rightStream = ThrottleStream(pgmBuilder, ToWideStream(pgmBuilder, rightList));
+
+    const auto joinReturnType = MakeJoinType(pgmBuilder,
+        joinKind,
+        leftStream.GetStaticType(),
+        leftKeyDrops,
+        rightStream.GetStaticType(),
+        rightKeyDrops
+    );
+
+    auto rightBlockStorageNode = pgmBuilder.BlockStorage(rightStream, pgmBuilder.NewResourceType(BlockStorageResourcePrefix));
+    auto rightBlockIndexNode = pgmBuilder.BlockMapJoinIndex(
+        rightBlockStorageNode,
+        AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
+        rightKeyColumns,
+        rightAny,
+        pgmBuilder.NewResourceType(BlockMapJoinIndexResourcePrefix)
+    );
+
+    auto joinNode = pgmBuilder.BlockMapJoinCore(
+        leftStream,
+        rightBlockIndexNode,
+        AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
+        EJoinKind::Inner,
+        leftKeyColumns,
+        leftKeyDrops,
+        rightKeyColumns,
+        rightKeyDrops,
+        joinReturnType
+    );
+
+    auto joinNode2 = pgmBuilder.BlockMapJoinCore(
+        leftStream2,
+        rightBlockIndexNode,
+        AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
+        EJoinKind::Inner,
+        leftKeyColumns,
+        leftKeyDrops,
+        rightKeyColumns,
+        rightKeyDrops,
+        joinReturnType
+    );
+
+    auto joinNode3 = pgmBuilder.BlockMapJoinCore(
+        leftStream3,
+        rightBlockStorageNode,
+        AS_TYPE(TStreamType, rightStream.GetStaticType())->GetItemType(),
+        EJoinKind::Cross,
+        {},
+        {},
+        {},
+        {},
+        joinReturnType
+    );
+
+    return pgmBuilder.OrderedExtend({
+        FromWideStream(pgmBuilder, DethrottleStream(pgmBuilder, joinNode)),
+        FromWideStream(pgmBuilder, DethrottleStream(pgmBuilder, joinNode2)),
+        FromWideStream(pgmBuilder, DethrottleStream(pgmBuilder, joinNode3))
+    });
 }
 
+template<auto BuildBlockJoinFunc>
 NUdf::TUnboxedValue DoTestBlockJoin(TSetup<false>& setup,
-    const TType* leftType, const NUdf::TUnboxedValue& leftListValue,
-    const TVector<ui32>& leftKeyColumns, const TVector<ui32>& leftKeyDrops,
-    const TRuntimeNode& rightNode, EJoinKind joinKind, size_t blockSize
+    TType* leftType, NUdf::TUnboxedValue&& leftListValue, const TVector<ui32>& leftKeyColumns, const TVector<ui32>& leftKeyDrops,
+    TType* rightType, NUdf::TUnboxedValue&& rightListValue, const TVector<ui32>& rightKeyColumns, const TVector<ui32>& rightKeyDrops, bool rightAny,
+    EJoinKind joinKind, size_t blockSize, bool scalar
 ) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    // 1. Prepare block type for the input produced by the left node.
     Y_ENSURE(leftType->IsList(), "Left node has to be list");
-    const auto leftListType = AS_TYPE(TListType, leftType)->GetItemType();
-    Y_ENSURE(leftListType->IsTuple(), "List item has to be tuple");
-    const auto leftItems = AS_TYPE(TTupleType, leftListType)->GetElements();
-    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
-    const auto blockLenType = pb.NewBlockType(ui64Type, TBlockType::EShape::Scalar);
-    TVector<TType*> leftBlockItems;
-    std::transform(leftItems.cbegin(), leftItems.cend(), std::back_inserter(leftBlockItems),
-        [&](const auto& itemType) {
-            return pb.NewBlockType(itemType, TBlockType::EShape::Many);
-        });
-    // XXX: Mind the last block length column.
-    leftBlockItems.push_back(blockLenType);
-    const auto leftBlockType = pb.NewTupleType(leftBlockItems);
+    const auto leftItemType = AS_TYPE(TListType, leftType)->GetItemType();
+    Y_ENSURE(leftItemType->IsTuple(), "List item has to be tuple");
+    TType* leftBlockType = MakeBlockTupleType(pb, leftItemType, scalar);
 
-    // 2. Build AST with BlockMapJoinCore.
-    TRuntimeNode leftArg;
-    const auto joinNode = BuildBlockJoin(pb, joinKind, leftKeyColumns, leftKeyDrops,
-                                         leftArg, leftBlockType, rightNode);
+    Y_ENSURE(rightType->IsList(), "Right node has to be list");
+    const auto rightItemType = AS_TYPE(TListType, rightType)->GetItemType();
+    Y_ENSURE(rightItemType->IsTuple(), "Right item has to be tuple");
+    TType* rightBlockType = MakeBlockTupleType(pb, rightItemType, scalar);
 
-    // 3. Prepare non-block type for the result of the join node.
-    const auto joinBlockType = joinNode.GetStaticType();
-    Y_ENSURE(joinBlockType->IsList(), "Join result has to be list");
-    const auto joinListType = AS_TYPE(TListType, joinBlockType)->GetItemType();
-    Y_ENSURE(joinListType->IsTuple(), "List item has to be tuple");
-    const auto joinBlockItems = AS_TYPE(TTupleType, joinListType)->GetElements();
-    TVector<TType*> joinItems;
-    // XXX: Mind the last block length column.
-    std::transform(joinBlockItems.cbegin(), std::prev(joinBlockItems.cend()), std::back_inserter(joinItems),
-        [](const auto& blockItemType) {
-            const auto& blockType = AS_TYPE(TBlockType, blockItemType);
-            Y_ENSURE(blockType->GetShape() == TBlockType::EShape::Many);
-            return blockType->GetItemType();
-        });
+    TRuntimeNode leftList = pb.Arg(pb.NewListType(leftBlockType));
+    TRuntimeNode rightList = pb.Arg(pb.NewListType(rightBlockType));
+    const auto joinNode = BuildBlockJoinFunc(pb, joinKind, leftList, leftKeyColumns, leftKeyDrops, rightList, rightKeyColumns, rightKeyDrops, rightAny);
 
-    // 4. Build computation graph with BlockMapJoinCore node as a root.
-    //    Pass the values from the "left node" as the input for the
-    //    BlockMapJoinCore graph.
-    const auto graph = setup.BuildGraph(joinNode, {leftArg.GetNode()});
-    const auto& leftBlocks = graph->GetEntryPoint(0, true);
+    const auto joinType = joinNode.GetStaticType();
+    Y_ENSURE(joinType->IsList(), "Join result has to be list");
+    const auto joinItemType = AS_TYPE(TListType, joinType)->GetItemType();
+    Y_ENSURE(joinItemType->IsTuple(), "List item has to be tuple");
+
+    const auto graph = setup.BuildGraph(joinNode, {leftList.GetNode(), rightList.GetNode()});
+
     auto& ctx = graph->GetContext();
-    leftBlocks->SetValue(ctx, ToBlocks(ctx, blockSize, leftItems, leftListValue));
-    const auto joinValues = FromBlocks(ctx, joinBlockItems, graph->GetValue());
-    return joinValues;
-}
 
-TVector<NUdf::TUnboxedValue> ConvertListToVector(const NUdf::TUnboxedValue& list) {
-    NUdf::TUnboxedValue current;
-    NUdf::TUnboxedValue iterator = list.GetListIterator();
-    TVector<NUdf::TUnboxedValue> items;
-    while (iterator.Next(current)) {
-        items.push_back(current);
+    NUdf::TUnboxedValuePod leftBlockListValue, rightBlockListValue;
+    if (scalar) {
+        leftBlockListValue = MakeUint64ScalarBlock(ctx, blockSize, AS_TYPE(TTupleType, leftItemType)->GetElements(), std::move(leftListValue));
+        rightBlockListValue = MakeUint64ScalarBlock(ctx, blockSize, AS_TYPE(TTupleType, rightItemType)->GetElements(), std::move(rightListValue));
+    } else {
+        leftBlockListValue = ToBlocks(ctx, blockSize, AS_TYPE(TTupleType, leftItemType)->GetElements(), std::move(leftListValue));
+        rightBlockListValue = ToBlocks(ctx, blockSize, AS_TYPE(TTupleType, rightItemType)->GetElements(), std::move(rightListValue));
     }
-    return items;
+
+    graph->GetEntryPoint(0, true)->SetValue(ctx, leftBlockListValue);
+    graph->GetEntryPoint(1, true)->SetValue(ctx, rightBlockListValue);
+    return FromBlocks(ctx, AS_TYPE(TTupleType, joinItemType)->GetElements(), graph->GetValue());
 }
 
-void CompareResults(const TType* type, const NUdf::TUnboxedValue& expected,
-                    const NUdf::TUnboxedValue& got
-) {
-    const auto itemType = AS_TYPE(TListType, type)->GetItemType();
-    const NUdf::ICompare::TPtr compare = MakeCompareImpl(itemType);
-    const NUdf::IEquate::TPtr equate = MakeEquateImpl(itemType);
-    // XXX: Stub both keyTypes and isTuple arguments, since
-    // ICompare/IEquate are used.
-    TKeyTypes keyTypesStub;
-    bool isTupleStub = false;
-    const TValueLess valueLess(keyTypesStub, isTupleStub, compare.Get());
-    const TValueEqual valueEqual(keyTypesStub, isTupleStub, equate.Get());
-
-    auto expectedItems = ConvertListToVector(expected);
-    auto gotItems = ConvertListToVector(got);
-    UNIT_ASSERT_VALUES_EQUAL(expectedItems.size(), gotItems.size());
-    Sort(expectedItems, valueLess);
-    Sort(gotItems, valueLess);
-    for (size_t i = 0; i < expectedItems.size(); i++) {
-        UNIT_ASSERT(valueEqual(gotItems[i], expectedItems[i]));
-    }
-}
-
+template<auto BuildBlockJoinFunc = BuildBlockJoin>
 void RunTestBlockJoin(TSetup<false>& setup, EJoinKind joinKind,
-    const TType* expectedType, const NUdf::TUnboxedValue& expected,
-    const TRuntimeNode& rightNode, const TType* leftType,
-    const NUdf::TUnboxedValue& leftListValue, const TVector<ui32>& leftKeyColumns,
-    const TVector<ui32>& leftKeyDrops = {}
+    TType* expectedType, const NUdf::TUnboxedValue& expected,
+    TType* leftType, NUdf::TUnboxedValue&& leftListValue, const TVector<ui32>& leftKeyColumns,
+    TType* rightType, NUdf::TUnboxedValue&& rightListValue, const TVector<ui32>& rightKeyColumns,
+    const TVector<ui32>& leftKeyDrops = {}, const TVector<ui32>& rightKeyDrops = {},
+    bool rightAny = false, bool scalar = false
 ) {
     const size_t testSize = leftListValue.GetListLength();
-    for (size_t blockSize = 8; blockSize <= testSize; blockSize <<= 1) {
-        const auto got = DoTestBlockJoin(setup, leftType, leftListValue,
-                                         leftKeyColumns, leftKeyDrops,
-                                         rightNode, joinKind, blockSize);
+    for (size_t blockSize = 1; blockSize <= testSize; blockSize <<= 1) {
+        const auto got = DoTestBlockJoin<BuildBlockJoinFunc>(setup,
+            leftType, std::move(leftListValue), leftKeyColumns, leftKeyDrops,
+            rightType, std::move(rightListValue), rightKeyColumns, rightKeyDrops, rightAny,
+            joinKind, blockSize, scalar
+        );
         CompareResults(expectedType, expected, got);
     }
 }
 
-//
-// Auxiliary routines to build list nodes from the given vectors.
-//
-
-struct TTypeMapperBase {
-    TProgramBuilder& Pb;
-    TType* ItemType;
-    auto GetType() { return ItemType; }
-};
-
-template <typename Type>
-struct TTypeMapper: TTypeMapperBase {
-    TTypeMapper(TProgramBuilder& pb): TTypeMapperBase {pb, pb.NewDataType(NUdf::TDataType<Type>::Id) } {}
-    auto GetValue(const Type& value) {
-        return Pb.NewDataLiteral<Type>(value);
-    }
-};
-
-template <>
-struct TTypeMapper<TString>: TTypeMapperBase {
-    TTypeMapper(TProgramBuilder& pb): TTypeMapperBase {pb, pb.NewDataType(NUdf::EDataSlot::String)} {}
-    auto GetValue(const TString& value) {
-        return Pb.NewDataLiteral<NUdf::EDataSlot::String>(value);
-    }
-};
-
-template <typename TNested>
-class TTypeMapper<std::optional<TNested>>: TTypeMapper<TNested> {
-    using TBase = TTypeMapper<TNested>;
-public:
-    TTypeMapper(TProgramBuilder& pb): TBase(pb) {}
-    auto GetType() { return TBase::Pb.NewOptionalType(TBase::GetType()); }
-    auto GetValue(const std::optional<TNested>& value) {
-        if (value == std::nullopt) {
-            return TBase::Pb.NewEmptyOptional(GetType());
-        } else {
-            return TBase::Pb.NewOptional(TBase::GetValue(*value));
-        }
-    }
-};
-
-template<typename Type>
-const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb,
-    const TVector<Type>& vector
-) {
-    TTypeMapper<Type> mapper(pb);
-
-    TRuntimeNode::TList listItems;
-    std::transform(vector.cbegin(), vector.cend(), std::back_inserter(listItems),
-        [&](const auto value) {
-            return mapper.GetValue(value);
-        });
-
-    return {pb.NewList(mapper.GetType(), listItems)};
-}
-
-template<typename Type, typename... Tail>
-const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb,
-    const TVector<Type>& vector, Tail... vectors
-) {
-    const auto frontList = BuildListNodes(pb, vector);
-    const auto tailLists = BuildListNodes(pb, std::forward<Tail>(vectors)...);
-    TVector<const TRuntimeNode> lists;
-    lists.reserve(tailLists.size() + 1);
-    lists.push_back(frontList.front());;
-    for (const auto& list : tailLists) {
-        lists.push_back(list);
-    }
-    return lists;
-}
-
-template<typename... TVectors>
-const std::pair<TType*, NUdf::TUnboxedValue> ConvertVectorsToTuples(
-    TSetup<false>& setup, TVectors... vectors
-) {
-    TProgramBuilder& pb = *setup.PgmBuilder;
-    const auto lists = BuildListNodes(pb, std::forward<TVectors>(vectors)...);
-    const auto tuplesNode = pb.Zip(lists);
-    const auto tuplesNodeType = tuplesNode.GetStaticType();
-    const auto tuples = setup.BuildGraph(tuplesNode)->GetValue();
-    return std::make_pair(tuplesNodeType, tuples);
-}
-
-TVector<TString> GenerateValues(size_t level) {
-    constexpr size_t alphaSize = 'Z' - 'A' + 1;
-    if (level == 1) {
-        TVector<TString> alphabet(alphaSize);
-        std::iota(alphabet.begin(), alphabet.end(), 'A');
-        return alphabet;
-    }
-    const auto subValues = GenerateValues(level - 1);
-    TVector<TString> values;
-    values.reserve(alphaSize * subValues.size());
-    for (char ch = 'A'; ch <= 'Z'; ch++) {
-        for (const auto& tail : subValues) {
-            values.emplace_back(ch + tail);
-        }
-    }
-    return values;
-}
-
-TSet<ui64> GenerateFibonacci(size_t count) {
-    TSet<ui64> fibSet;
-    ui64 a = 0, b = 1;
-    fibSet.insert(a);
-    while (count--) {
-        a = std::exchange(b, a + b);
-        fibSet.insert(b);
-    }
-    return fibSet;
-}
-
 } // namespace
 
-Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinBasicTest) {
-
+Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestBasic) {
     constexpr size_t testSize = 1 << 14;
     constexpr size_t valueSize = 3;
     static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
-    static const TSet<ui64> fibonacci = GenerateFibonacci(21);
-
-    Y_UNIT_TEST(TestInnerOnUint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
-            [](const auto key) { return key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
-            [](const auto key) { return threeLetterValues[key]; });
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
-        TVector<TString> rightPayloadInit;
-        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayloadInit),
-            [](const auto key) { return std::to_string(key); });
-        // 3. Make "expected" data.
-        TMap<ui64, TString> rightMap;
-        for (size_t i = 0; i < rightKeyInit.size(); i++) {
-            rightMap[rightKeyInit[i]] = rightPayloadInit[i];
-        }
-        TVector<ui64> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<TString> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            const auto& found = rightMap.find(keyInit[i]);
-            if (found != rightMap.cend()) {
-                keyExpected.push_back(keyInit[i]);
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
-                rightExpected.push_back(found->second);
-            }
-        }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayloadInit);
-        const auto rightMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
-                         rightMapNode, leftType, leftList, {0});
-    }
-
-    Y_UNIT_TEST(TestInnerMultiOnUint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
-            [](const auto key) { return key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
-            [](const auto key) { return threeLetterValues[key]; });
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
-        TVector<TString> rightPayload1Init;
-        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayload1Init),
-            [](const auto key) { return std::to_string(key); });
-        TVector<TString> rightPayload2Init;
-        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayload2Init),
-            [](const auto key) { return std::to_string(key * 1001); });
-        // 3. Make "expected" data.
-        TMap<ui64, TVector<TString>> rightMultiMap;
-        for (size_t i = 0; i < rightKeyInit.size(); i++) {
-            rightMultiMap[rightKeyInit[i]] = {rightPayload1Init[i], rightPayload2Init[i]};
-        }
-        TVector<ui64> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<TString> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            const auto& found = rightMultiMap.find(keyInit[i]);
-            if (found != rightMultiMap.cend()) {
-                for (const auto& right : found->second) {
-                    keyExpected.push_back(keyInit[i]);
-                    subkeyExpected.push_back(subkeyInit[i]);
-                    valueExpected.push_back(valueInit[i]);
-                    rightExpected.push_back(right);
-                }
-            }
-        }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayload1Init, rightPayload2Init);
-        const auto rightMultiMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
-                         rightMultiMapNode, leftType, leftList, {0});
-    }
-
-    Y_UNIT_TEST(TestLeftOnUint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
-            [](const auto key) { return key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
-            [](const auto key) { return threeLetterValues[key]; });
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
-        TVector<TString> rightPayloadInit;
-        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayloadInit),
-            [](const auto key) { return std::to_string(key); });
-        // 3. Make "expected" data.
-        TMap<ui64, TString> rightMap;
-        for (size_t i = 0; i < rightKeyInit.size(); i++) {
-            rightMap[rightKeyInit[i]] = rightPayloadInit[i];
-        }
-        TVector<ui64> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<std::optional<TString>> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            keyExpected.push_back(keyInit[i]);
-            subkeyExpected.push_back(subkeyInit[i]);
-            valueExpected.push_back(valueInit[i]);
-            const auto& found = rightMap.find(keyInit[i]);
-            if (found != rightMap.cend()) {
-                rightExpected.push_back(found->second);
-            } else {
-                rightExpected.push_back(std::nullopt);
-            }
-        }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayloadInit);
-        const auto rightMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::Left, expectedType, expected,
-                         rightMapNode, leftType, leftList, {0});
-    }
-
-    Y_UNIT_TEST(TestLeftMultiOnUint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
-            [](const auto key) { return key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
-            [](const auto key) { return threeLetterValues[key]; });
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
-        TVector<TString> rightPayload1Init;
-        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayload1Init),
-            [](const auto key) { return std::to_string(key); });
-        TVector<TString> rightPayload2Init;
-        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayload2Init),
-            [](const auto key) { return std::to_string(key * 1001); });
-        // 3. Make "expected" data.
-        TMap<ui64, TVector<TString>> rightMultiMap;
-        for (size_t i = 0; i < rightKeyInit.size(); i++) {
-            rightMultiMap[rightKeyInit[i]] = {rightPayload1Init[i], rightPayload2Init[i]};
-        }
-        TVector<ui64> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<std::optional<TString>> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            const auto& found = rightMultiMap.find(keyInit[i]);
-            if (found != rightMultiMap.cend()) {
-                for (const auto& right : found->second) {
-                    keyExpected.push_back(keyInit[i]);
-                    subkeyExpected.push_back(subkeyInit[i]);
-                    valueExpected.push_back(valueInit[i]);
-                    rightExpected.push_back(right);
-                }
-            } else {
-                keyExpected.push_back(keyInit[i]);
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
-                rightExpected.push_back(std::nullopt);
-            }
-        }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayload1Init, rightPayload2Init);
-        const auto rightMultiMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::Left, expectedType, expected,
-                         rightMultiMapNode, leftType, leftList, {0});
-    }
-
-    Y_UNIT_TEST(TestLeftSemiOnUint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
-            [](const auto key) { return key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
-            [](const auto key) { return threeLetterValues[key]; });
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
-        // 3. Make "expected" data.
-        TSet<ui64> rightSet(rightKeyInit.cbegin(), rightKeyInit.cend());
-        TVector<ui64> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            if (rightSet.contains(keyInit[i])) {
-                keyExpected.push_back(keyInit[i]);
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
-            }
-        }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightSetNode = MakeSet(pgmBuilder, rightKeys);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::LeftSemi, expectedType, expected,
-                         rightSetNode, leftType, leftList, {0});
-    }
-
-    Y_UNIT_TEST(TestLeftOnlyOnUint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
-            [](const auto key) { return key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
-            [](const auto key) { return threeLetterValues[key]; });
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
-        // 3. Make "expected" data.
-        TSet<ui64> rightSet(rightKeyInit.cbegin(), rightKeyInit.cend());
-        TVector<ui64> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            if (!rightSet.contains(keyInit[i])) {
-                keyExpected.push_back(keyInit[i]);
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
-            }
-        }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightSetNode = MakeSet(pgmBuilder, rightKeys);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::LeftOnly, expectedType, expected,
-                         rightSetNode, leftType, leftList, {0});
-    }
-
-} // Y_UNIT_TEST_SUITE
-
-Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinNullKeysTest) {
-
-    constexpr size_t testSize = 1 << 14;
-    constexpr size_t valueSize = 3;
-    static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
-    static const TSet<ui64> fibonacci = GenerateFibonacci(21);
-
-    Y_UNIT_TEST(TestInnerOnOptionalUint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<std::optional<ui64>> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
-            [](const auto key) { return *key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
-            [](const auto key) { return threeLetterValues[*key]; });
-        // 1a. Make some keys NULL
-        keyInit[0] = std::nullopt;
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
-        TVector<TString> rightPayloadInit;
-        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayloadInit),
-            [](const auto key) { return std::to_string(key); });
-        // 3. Make "expected" data.
-        TMap<ui64, TString> rightMap;
-        for (size_t i = 0; i < rightKeyInit.size(); i++) {
-            rightMap[rightKeyInit[i]] = rightPayloadInit[i];
-        }
-        TVector<std::optional<ui64>> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<TString> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            if (!keyInit[i]) {
-                continue;
-            }
-            const auto& found = rightMap.find(*keyInit[i]);
-            if (found != rightMap.cend()) {
-                keyExpected.push_back(keyInit[i]);
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
-                rightExpected.push_back(found->second);
-            }
-        }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayloadInit);
-        const auto rightMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
-                         rightMapNode, leftType, leftList, {0});
-    }
-
-    Y_UNIT_TEST(TestInnerMultiOnOptionalUint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<std::optional<ui64>> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
-            [](const auto key) { return *key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
-            [](const auto key) { return threeLetterValues[*key]; });
-        // 1a. Make some keys NULL
-        keyInit[0] = std::nullopt;
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
-        TVector<TString> rightPayload1Init;
-        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayload1Init),
-            [](const auto key) { return std::to_string(key); });
-        TVector<TString> rightPayload2Init;
-        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayload2Init),
-            [](const auto key) { return std::to_string(key * 1001); });
-        // 3. Make "expected" data.
-        TMap<ui64, TVector<TString>> rightMultiMap;
-        for (size_t i = 0; i < rightKeyInit.size(); i++) {
-            rightMultiMap[rightKeyInit[i]] = {rightPayload1Init[i], rightPayload2Init[i]};
-        }
-        TVector<std::optional<ui64>> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<TString> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            if (!keyInit[i]) {
-                continue;
-            }
-            const auto& found = rightMultiMap.find(*keyInit[i]);
-            if (found != rightMultiMap.cend()) {
-                for (const auto& right : found->second) {
-                    keyExpected.push_back(keyInit[i]);
-                    subkeyExpected.push_back(subkeyInit[i]);
-                    valueExpected.push_back(valueInit[i]);
-                    rightExpected.push_back(right);
-                }
-            }
-        }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayload1Init, rightPayload2Init);
-        const auto rightMultiMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
-                         rightMultiMapNode, leftType, leftList, {0});
-    }
-
-    Y_UNIT_TEST(TestLeftOnOptionalUint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<std::optional<ui64>> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
-            [](const auto key) { return *key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
-            [](const auto key) { return threeLetterValues[*key]; });
-        // 1a. Make some keys NULL
-        keyInit[0] = std::nullopt;
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
-        TVector<TString> rightPayloadInit;
-        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayloadInit),
-            [](const auto key) { return std::to_string(key); });
-        // 3. Make "expected" data.
-        TMap<ui64, TString> rightMap;
-        for (size_t i = 0; i < rightKeyInit.size(); i++) {
-            rightMap[rightKeyInit[i]] = rightPayloadInit[i];
-        }
-        TVector<std::optional<ui64>> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<std::optional<TString>> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            keyExpected.push_back(keyInit[i]);
-            subkeyExpected.push_back(subkeyInit[i]);
-            valueExpected.push_back(valueInit[i]);
-            const auto& found = keyInit[i] ? rightMap.find(*keyInit[i]) : rightMap.cend();
-            if (found != rightMap.cend()) {
-                rightExpected.push_back(found->second);
-            } else {
-                rightExpected.push_back(std::nullopt);
-            }
-        }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayloadInit);
-        const auto rightMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::Left, expectedType, expected,
-                         rightMapNode, leftType, leftList, {0});
-    }
-
-    Y_UNIT_TEST(TestLeftMultiOnOptionalUint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<std::optional<ui64>> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
-            [](const auto key) { return *key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
-            [](const auto key) { return threeLetterValues[*key]; });
-        // 1a. Make some keys NULL
-        keyInit[0] = std::nullopt;
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
-        TVector<TString> rightPayload1Init;
-        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayload1Init),
-            [](const auto key) { return std::to_string(key); });
-        TVector<TString> rightPayload2Init;
-        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayload2Init),
-            [](const auto key) { return std::to_string(key * 1001); });
-        // 3. Make "expected" data.
-        TMap<ui64, TVector<TString>> rightMultiMap;
-        for (size_t i = 0; i < rightKeyInit.size(); i++) {
-            rightMultiMap[rightKeyInit[i]] = {rightPayload1Init[i], rightPayload2Init[i]};
-        }
-        TVector<std::optional<ui64>> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<std::optional<TString>> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            const auto& found = keyInit[i] ? rightMultiMap.find(*keyInit[i]) : rightMultiMap.cend();
-            if (found != rightMultiMap.cend()) {
-                for (const auto& right : found->second) {
-                    keyExpected.push_back(keyInit[i]);
-                    subkeyExpected.push_back(subkeyInit[i]);
-                    valueExpected.push_back(valueInit[i]);
-                    rightExpected.push_back(right);
-                }
-            } else {
-                keyExpected.push_back(keyInit[i]);
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
-                rightExpected.push_back(std::nullopt);
-            }
-        }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayload1Init, rightPayload2Init);
-        const auto rightMultiMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::Left, expectedType, expected,
-                         rightMultiMapNode, leftType, leftList, {0});
-    }
-
-    Y_UNIT_TEST(TestLeftSemiOnOptionalUint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<std::optional<ui64>> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
-            [](const auto key) { return *key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
-            [](const auto key) { return threeLetterValues[*key]; });
-        // 1a. Make some keys NULL
-        keyInit[0] = std::nullopt;
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
-        // 3. Make "expected" data.
-        TSet<ui64> rightSet(rightKeyInit.cbegin(), rightKeyInit.cend());
-        TVector<std::optional<ui64>> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            if (keyInit[i] && rightSet.contains(*keyInit[i])) {
-                keyExpected.push_back(keyInit[i]);
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
-            }
-        }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightSetNode = MakeSet(pgmBuilder, rightKeys);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::LeftSemi, expectedType, expected,
-                         rightSetNode, leftType, leftList, {0});
-    }
-
-    Y_UNIT_TEST(TestLeftOnlyOnOptionalUint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<std::optional<ui64>> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
-            [](const auto key) { return *key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
-            [](const auto key) { return threeLetterValues[*key]; });
-        // 1a. Make some keys NULL
-        keyInit[0] = std::nullopt;
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
-        // 3. Make "expected" data.
-        TSet<ui64> rightSet(rightKeyInit.cbegin(), rightKeyInit.cend());
-        TVector<std::optional<ui64>> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            if (!(keyInit[i] && rightSet.contains(*keyInit[i]))) {
-                keyExpected.push_back(keyInit[i]);
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
-            }
-        }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightSetNode = MakeSet(pgmBuilder, rightKeys);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::LeftOnly, expectedType, expected,
-                         rightSetNode, leftType, leftList, {0});
-    }
-
-} // Y_UNIT_TEST_SUITE
-
-Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMoreTest) {
-
-    constexpr size_t testSize = 1 << 14;
-    constexpr size_t valueSize = 3;
-    static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
+    static const TSet<ui64> fibonacci = GenerateFibonacci(testSize);
     static const TString hugeString(128, '1');
 
-    Y_UNIT_TEST(TestInnerOn1) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+    Y_UNIT_TEST(TestInnerJoin) {
+        TSetup<false> setup(GetNodeFactory());
+
         // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::fill(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        TVector<TString> valueInit;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            subkeyInit.push_back(i * 1001);
-            valueInit.push_back(threeLetterValues[i]);
-        }
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit({1});
-        TVector<TString> rightPayloadInit({hugeString});
-        // 3. Make "expected" data.
-        TMap<ui64, TString> rightMap;
-        for (size_t i = 0; i < rightKeyInit.size(); i++) {
-            rightMap[rightKeyInit[i]] = rightPayloadInit[i];
-        }
-        TVector<ui64> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<TString> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            const auto& found = rightMap.find(keyInit[i]);
-            if (found != rightMap.cend()) {
-                keyExpected.push_back(keyInit[i]);
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
-                rightExpected.push_back(found->second);
-            }
-        }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayloadInit);
-        const auto rightMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
-                         rightMapNode, leftType, leftList, {0});
-    }
-
-    Y_UNIT_TEST(TestInnerMultiOn1) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::fill(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        TVector<TString> valueInit;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            subkeyInit.push_back(i * 1001);
-            valueInit.push_back(threeLetterValues[i]);
-        }
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit({1});
-        TVector<TString> rightPayload1Init({"1"});
-        TVector<TString> rightPayload2Init({hugeString});
-        // 3. Make "expected" data.
-        TMap<ui64, TVector<TString>> rightMultiMap;
-        for (size_t i = 0; i < rightKeyInit.size(); i++) {
-            rightMultiMap[rightKeyInit[i]] = {rightPayload1Init[i], rightPayload2Init[i]};
-        }
-        TVector<ui64> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<TString> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            const auto& found = rightMultiMap.find(keyInit[i]);
-            if (found != rightMultiMap.cend()) {
-                for (const auto& right : found->second) {
-                    keyExpected.push_back(keyInit[i]);
-                    subkeyExpected.push_back(subkeyInit[i]);
-                    valueExpected.push_back(valueInit[i]);
-                    rightExpected.push_back(right);
-                }
-            }
-        }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayload1Init, rightPayload2Init);
-        const auto rightMultiMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
-                         rightMultiMapNode, leftType, leftList, {0});
-    }
-
-    Y_UNIT_TEST(TestLeftOn1) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::fill(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        TVector<TString> valueInit;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            subkeyInit.push_back(i * 1001);
-            valueInit.push_back(threeLetterValues[i]);
-        }
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit({1});
-        TVector<TString> rightPayloadInit({hugeString});
-        // 3. Make "expected" data.
-        TMap<ui64, TString> rightMap;
-        for (size_t i = 0; i < rightKeyInit.size(); i++) {
-            rightMap[rightKeyInit[i]] = rightPayloadInit[i];
-        }
-        TVector<ui64> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<std::optional<TString>> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            keyExpected.push_back(keyInit[i]);
-            subkeyExpected.push_back(subkeyInit[i]);
-            valueExpected.push_back(valueInit[i]);
-            const auto& found = rightMap.find(keyInit[i]);
-            if (found != rightMap.cend()) {
-                rightExpected.push_back(found->second);
-            } else {
-                rightExpected.push_back(std::nullopt);
-            }
-        }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayloadInit);
-        const auto rightMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::Left, expectedType, expected,
-                         rightMapNode, leftType, leftList, {0});
-    }
-
-    Y_UNIT_TEST(TestLeftMultiOn1) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::fill(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        TVector<TString> valueInit;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            subkeyInit.push_back(i * 1001);
-            valueInit.push_back(threeLetterValues[i]);
-        }
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit({1});
-        TVector<TString> rightPayload1Init({"1"});
-        TVector<TString> rightPayload2Init({hugeString});
-        // 3. Make "expected" data.
-        TMap<ui64, TVector<TString>> rightMultiMap;
-        for (size_t i = 0; i < rightKeyInit.size(); i++) {
-            rightMultiMap[rightKeyInit[i]] = {rightPayload1Init[i], rightPayload2Init[i]};
-        }
-        TVector<ui64> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<std::optional<TString>> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            const auto& found = rightMultiMap.find(keyInit[i]);
-            if (found != rightMultiMap.cend()) {
-                for (const auto& right : found->second) {
-                    keyExpected.push_back(keyInit[i]);
-                    subkeyExpected.push_back(subkeyInit[i]);
-                    valueExpected.push_back(valueInit[i]);
-                    rightExpected.push_back(right);
-                }
-            } else {
-                keyExpected.push_back(keyInit[i]);
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
-                rightExpected.push_back(std::nullopt);
-            }
-        }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayload1Init, rightPayload2Init);
-        const auto rightMultiMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::Left, expectedType, expected,
-                         rightMultiMapNode, leftType, leftList, {0});
-    }
-
-    Y_UNIT_TEST(TestLeftSemiOn1) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::fill(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        TVector<TString> valueInit;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            subkeyInit.push_back(i * 1001);
-            valueInit.push_back(threeLetterValues[i]);
-        }
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit({1});
-        // 3. Make "expected" data.
-        TSet<ui64> rightSet(rightKeyInit.cbegin(), rightKeyInit.cend());
-        TVector<ui64> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            if (rightSet.contains(keyInit[i])) {
-                keyExpected.push_back(keyInit[i]);
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
-            }
-        }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightSetNode = MakeSet(pgmBuilder, rightKeys);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::LeftSemi, expectedType, expected,
-                         rightSetNode, leftType, leftList, {0});
-    }
-
-    Y_UNIT_TEST(TestLeftOnlyOn1) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::fill(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        TVector<TString> valueInit;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            subkeyInit.push_back(i * 1001);
-            valueInit.push_back(threeLetterValues[i]);
-        }
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit({1});
-        // 3. Make "expected" data.
-        TSet<ui64> rightSet(rightKeyInit.cbegin(), rightKeyInit.cend());
-        TVector<ui64> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            if (!rightSet.contains(keyInit[i])) {
-                keyExpected.push_back(keyInit[i]);
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
-            }
-        }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightSetNode = MakeSet(pgmBuilder, rightKeys);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::LeftOnly, expectedType, expected,
-                         rightSetNode, leftType, leftList, {0});
-    }
-
-} // Y_UNIT_TEST_SUITE
-
-Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinDropKeyColumns) {
-
-    constexpr size_t testSize = 1 << 14;
-    constexpr size_t valueSize = 3;
-    static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
-    static const TSet<ui64> fibonacci = GenerateFibonacci(21);
-
-    Y_UNIT_TEST(TestInnerOnUint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
+        TVector<ui64> leftKeyInit(testSize);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
             [](const auto key) { return key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
+        TVector<TString> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
             [](const auto key) { return threeLetterValues[key]; });
-        // 2. Make input for the "right" dict.
+
+        // 2. Make input for the "right" stream.
         const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
-        TVector<TString> rightPayloadInit;
-        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayloadInit),
+        TVector<TString> rightValueInit;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
             [](const auto key) { return std::to_string(key); });
+
         // 3. Make "expected" data.
         TMap<ui64, TString> rightMap;
         for (size_t i = 0; i < rightKeyInit.size(); i++) {
-            rightMap[rightKeyInit[i]] = rightPayloadInit[i];
+            rightMap[rightKeyInit[i]] = rightValueInit[i];
         }
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<TString> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            const auto& found = rightMap.find(keyInit[i]);
+        TVector<ui64> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<TString> expectedValue;
+        TVector<TString> expectedRightValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            const auto& found = rightMap.find(leftKeyInit[i]);
             if (found != rightMap.cend()) {
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
-                rightExpected.push_back(found->second);
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+                expectedRightValue.push_back(found->second);
             }
         }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayloadInit);
-        const auto rightMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKeyInit, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue, expectedRightValue);
+
         RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
-                         rightMapNode, leftType, leftList, {0}, {0});
+                         leftType, std::move(leftList), {0},
+                         rightType, std::move(rightList), {0},
+                         {}, {0}
+        );
     }
 
-    Y_UNIT_TEST(TestInnerMultiOnUint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+    Y_UNIT_TEST(TestInnerJoinMulti) {
+        TSetup<false> setup(GetNodeFactory());
+
         // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
+        TVector<ui64> leftKeyInit(testSize);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
             [](const auto key) { return key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
+        TVector<TString> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
             [](const auto key) { return threeLetterValues[key]; });
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
-        TVector<TString> rightPayload1Init;
-        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayload1Init),
+
+        // 2. Make input for the "right" stream.
+        TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+        TVector<TString> rightValueInit;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
             [](const auto key) { return std::to_string(key); });
-        TVector<TString> rightPayload2Init;
-        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayload2Init),
+
+        // Add rows with the same keys
+        rightKeyInit.reserve(fibonacci.size() * 2);
+        std::copy_n(rightKeyInit.begin(), fibonacci.size(), std::back_inserter(rightKeyInit));
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
             [](const auto key) { return std::to_string(key * 1001); });
+
         // 3. Make "expected" data.
-        TMap<ui64, TVector<TString>> rightMultiMap;
+        TMultiMap<ui64, TString> rightMap;
         for (size_t i = 0; i < rightKeyInit.size(); i++) {
-            rightMultiMap[rightKeyInit[i]] = {rightPayload1Init[i], rightPayload2Init[i]};
+            rightMap.insert({rightKeyInit[i], rightValueInit[i]});
         }
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<TString> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            const auto& found = rightMultiMap.find(keyInit[i]);
-            if (found != rightMultiMap.cend()) {
-                for (const auto& right : found->second) {
-                    subkeyExpected.push_back(subkeyInit[i]);
-                    valueExpected.push_back(valueInit[i]);
-                    rightExpected.push_back(right);
-                }
+        TVector<ui64> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<TString> expectedValue;
+        TVector<TString> expectedRightValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            const auto& [begin, end] = rightMap.equal_range(leftKeyInit[i]);
+            for (auto it = begin; it != end; it++) {
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+                expectedRightValue.push_back(it->second);
             }
         }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayload1Init, rightPayload2Init);
-        const auto rightMultiMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKeyInit, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue, expectedRightValue);
+
         RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
-                         rightMultiMapNode, leftType, leftList, {0}, {0});
+                         leftType, std::move(leftList), {0},
+                         rightType, std::move(rightList), {0},
+                         {}, {0}
+        );
     }
 
-    Y_UNIT_TEST(TestLeftOnUint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+    Y_UNIT_TEST(TestInnerJoinRightAny) {
+        TSetup<false> setup(GetNodeFactory());
+
         // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
+        TVector<ui64> leftKeyInit(testSize);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
             [](const auto key) { return key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
+        TVector<TString> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
             [](const auto key) { return threeLetterValues[key]; });
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
-        TVector<TString> rightPayloadInit;
-        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayloadInit),
+
+        // 2. Make input for the "right" stream.
+        TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+        TVector<TString> rightValueInit;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
             [](const auto key) { return std::to_string(key); });
+
+        // Add rows with the same keys
+        rightKeyInit.reserve(fibonacci.size() * 2);
+        std::copy_n(rightKeyInit.begin(), fibonacci.size(), std::back_inserter(rightKeyInit));
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
+            [](const auto key) { return std::to_string(key); });
+
         // 3. Make "expected" data.
         TMap<ui64, TString> rightMap;
         for (size_t i = 0; i < rightKeyInit.size(); i++) {
-            rightMap[rightKeyInit[i]] = rightPayloadInit[i];
+            rightMap[rightKeyInit[i]] = rightValueInit[i];
         }
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<std::optional<TString>> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            subkeyExpected.push_back(subkeyInit[i]);
-            valueExpected.push_back(valueInit[i]);
-            const auto& found = rightMap.find(keyInit[i]);
+        TVector<ui64> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<TString> expectedValue;
+        TVector<TString> expectedRightValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            auto found = rightMap.find(leftKeyInit[i]);
             if (found != rightMap.cend()) {
-                rightExpected.push_back(found->second);
-            } else {
-                rightExpected.push_back(std::nullopt);
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+                expectedRightValue.push_back(found->second);
             }
         }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayloadInit);
-        const auto rightMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::Left, expectedType, expected,
-                         rightMapNode, leftType, leftList, {0}, {0});
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKeyInit, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue, expectedRightValue);
+
+        RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
+                         leftType, std::move(leftList), {0},
+                         rightType, std::move(rightList), {0},
+                         {}, {0}, true
+        );
     }
 
-    Y_UNIT_TEST(TestLeftMultiOnUint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+    Y_UNIT_TEST(TestLeftJoin) {
+        TSetup<false> setup(GetNodeFactory());
+
         // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
+        TVector<ui64> leftKeyInit(testSize);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
             [](const auto key) { return key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
+        TVector<TString> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
             [](const auto key) { return threeLetterValues[key]; });
-        // 2. Make input for the "right" dict.
+
+        // 2. Make input for the "right" stream.
         const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
-        TVector<TString> rightPayload1Init;
-        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayload1Init),
+        TVector<TString> rightValueInit;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
             [](const auto key) { return std::to_string(key); });
-        TVector<TString> rightPayload2Init;
-        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightPayload2Init),
-            [](const auto key) { return std::to_string(key * 1001); });
+
         // 3. Make "expected" data.
-        TMap<ui64, TVector<TString>> rightMultiMap;
+        TMap<ui64, TString> rightMap;
         for (size_t i = 0; i < rightKeyInit.size(); i++) {
-            rightMultiMap[rightKeyInit[i]] = {rightPayload1Init[i], rightPayload2Init[i]};
+            rightMap[rightKeyInit[i]] = rightValueInit[i];
         }
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<std::optional<TString>> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            const auto& found = rightMultiMap.find(keyInit[i]);
-            if (found != rightMultiMap.cend()) {
-                for (const auto& right : found->second) {
-                    subkeyExpected.push_back(subkeyInit[i]);
-                    valueExpected.push_back(valueInit[i]);
-                    rightExpected.push_back(right);
+        TVector<ui64> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<TString> expectedValue;
+        TVector<std::optional<TString>> expectedRightValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            expectedKey.push_back(leftKeyInit[i]);
+            expectedSubkey.push_back(leftSubkeyInit[i]);
+            expectedValue.push_back(leftValueInit[i]);
+            const auto& found = rightMap.find(leftKeyInit[i]);
+            if (found != rightMap.cend()) {
+                expectedRightValue.push_back(found->second);
+            } else {
+                expectedRightValue.push_back(std::nullopt);
+            }
+        }
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKeyInit, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue, expectedRightValue);
+
+        RunTestBlockJoin(setup, EJoinKind::Left, expectedType, expected,
+                         leftType, std::move(leftList), {0},
+                         rightType, std::move(rightList), {0},
+                         {}, {0}
+        );
+    }
+
+    Y_UNIT_TEST(TestLeftJoinMulti) {
+        TSetup<false> setup(GetNodeFactory());
+
+        // 1. Make input for the "left" stream.
+        TVector<ui64> leftKeyInit(testSize);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
+            [](const auto key) { return key * 1001; });
+        TVector<TString> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
+            [](const auto key) { return threeLetterValues[key]; });
+
+        // 2. Make input for the "right" stream.
+        TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+        TVector<TString> rightValueInit;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
+            [](const auto key) { return std::to_string(key); });
+
+        // Add rows with the same keys
+        rightKeyInit.reserve(fibonacci.size() * 2);
+        std::copy_n(rightKeyInit.begin(), fibonacci.size(), std::back_inserter(rightKeyInit));
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
+            [](const auto key) { return std::to_string(key * 1001); });
+
+        // 3. Make "expected" data.
+        TMultiMap<ui64, TString> rightMap;
+        for (size_t i = 0; i < rightKeyInit.size(); i++) {
+            rightMap.insert({rightKeyInit[i], rightValueInit[i]});
+        }
+        TVector<ui64> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<TString> expectedValue;
+        TVector<std::optional<TString>> expectedRightValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            const auto& [begin, end] = rightMap.equal_range(leftKeyInit[i]);
+            if (begin != end) {
+                for (auto it = begin; it != end; it++) {
+                    expectedKey.push_back(leftKeyInit[i]);
+                    expectedSubkey.push_back(leftSubkeyInit[i]);
+                    expectedValue.push_back(leftValueInit[i]);
+                    expectedRightValue.push_back(it->second);
                 }
             } else {
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
-                rightExpected.push_back(std::nullopt);
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+                expectedRightValue.push_back(std::nullopt);
             }
         }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayload1Init, rightPayload2Init);
-        const auto rightMultiMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKeyInit, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue, expectedRightValue);
+
         RunTestBlockJoin(setup, EJoinKind::Left, expectedType, expected,
-                         rightMultiMapNode, leftType, leftList, {0}, {0});
+                         leftType, std::move(leftList), {0},
+                         rightType, std::move(rightList), {0},
+                         {}, {0}
+        );
     }
 
-    Y_UNIT_TEST(TestLeftSemiOnUint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+    Y_UNIT_TEST(TestLeftSemiJoin) {
+        TSetup<false> setup(GetNodeFactory());
+
         // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
+        TVector<ui64> leftKeyInit(testSize);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
             [](const auto key) { return key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
+        TVector<TString> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
             [](const auto key) { return threeLetterValues[key]; });
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+
+        // 2. Make input for the "right" stream.
+        TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+        // Add rows with the same keys
+        rightKeyInit.reserve(fibonacci.size() * 2);
+        std::copy_n(rightKeyInit.begin(), fibonacci.size(), std::back_inserter(rightKeyInit));
+
         // 3. Make "expected" data.
         TSet<ui64> rightSet(rightKeyInit.cbegin(), rightKeyInit.cend());
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            if (rightSet.contains(keyInit[i])) {
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
+        TVector<ui64> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<TString> expectedValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            if (rightSet.contains(leftKeyInit[i])) {
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
             }
         }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            subkeyExpected, valueExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightSetNode = MakeSet(pgmBuilder, rightKeys);
-        // 6. Run tests.
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup, rightKeyInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue);
+
         RunTestBlockJoin(setup, EJoinKind::LeftSemi, expectedType, expected,
-                         rightSetNode, leftType, leftList, {0}, {0});
+            leftType, std::move(leftList), {0},
+            rightType, std::move(rightList), {0}
+        );
     }
 
-    Y_UNIT_TEST(TestLeftOnlyOnUint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+    Y_UNIT_TEST(TestLeftOnlyJoin) {
+        TSetup<false> setup(GetNodeFactory());
+
         // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
+        TVector<ui64> leftKeyInit(testSize);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
             [](const auto key) { return key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
+        TVector<TString> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
             [](const auto key) { return threeLetterValues[key]; });
-        // 2. Make input for the "right" dict.
-        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+
+        // 2. Make input for the "right" stream.
+        TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+        // Add rows with the same keys
+        rightKeyInit.reserve(fibonacci.size() * 2);
+        std::copy_n(rightKeyInit.begin(), fibonacci.size(), std::back_inserter(rightKeyInit));
+
         // 3. Make "expected" data.
         TSet<ui64> rightSet(rightKeyInit.cbegin(), rightKeyInit.cend());
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            if (!rightSet.contains(keyInit[i])) {
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
+        TVector<ui64> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<TString> expectedValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            if (!rightSet.contains(leftKeyInit[i])) {
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
             }
         }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            subkeyExpected, valueExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKeyInit);
-        const auto rightSetNode = MakeSet(pgmBuilder, rightKeys);
-        // 6. Run tests.
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup, rightKeyInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue);
+
         RunTestBlockJoin(setup, EJoinKind::LeftOnly, expectedType, expected,
-                         rightSetNode, leftType, leftList, {0}, {0});
+            leftType, std::move(leftList), {0},
+            rightType, std::move(rightList), {0}
+        );
     }
 
-} // Y_UNIT_TEST_SUITE
+    Y_UNIT_TEST(TestKeyTuple) {
+        TSetup<false> setup(GetNodeFactory());
 
-Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinMultiKeyBasicTest) {
-
-    constexpr size_t testSize = 1 << 14;
-    constexpr size_t valueSize = 3;
-    static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
-    static const TSet<ui64> fibonacci = GenerateFibonacci(21);
-
-    Y_UNIT_TEST(TestInnerOnUint64Uint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
         // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
+        TVector<ui64> leftKeyInit(testSize);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
             [](const auto key) { return key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
+        TVector<TString> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
             [](const auto key) { return threeLetterValues[key]; });
-        // 2. Make input for the "right" dict.
+
+        // 2. Make input for the "right" stream.
         TVector<ui64> rightKey1Init(fibonacci.cbegin(), fibonacci.cend());
         TVector<ui64> rightKey2Init;
         std::transform(rightKey1Init.cbegin(), rightKey1Init.cend(), std::back_inserter(rightKey2Init),
             [](const auto& key) { return key * 1001; });
-        TVector<TString> rightPayloadInit;
-        std::transform(rightKey1Init.cbegin(), rightKey1Init.cend(), std::back_inserter(rightPayloadInit),
+        TVector<TString> rightValueInit;
+        std::transform(rightKey1Init.cbegin(), rightKey1Init.cend(), std::back_inserter(rightValueInit),
             [](const auto& key) { return std::to_string(key); });
+
         // 3. Make "expected" data.
         TMap<std::tuple<ui64, ui64>, TString> rightMap;
         for (size_t i = 0; i < rightKey1Init.size(); i++) {
             const auto key = std::make_tuple(rightKey1Init[i], rightKey2Init[i]);
-            rightMap[key] = rightPayloadInit[i];
+            rightMap[key] = rightValueInit[i];
         }
-        TVector<ui64> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<TString> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            const auto key = std::make_tuple(keyInit[i], subkeyInit[i]);
+        TVector<ui64> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<TString> expectedValue;
+        TVector<TString> expectedRightValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            const auto key = std::make_tuple(leftKeyInit[i], leftSubkeyInit[i]);
             const auto found = rightMap.find(key);
             if (found != rightMap.cend()) {
-                keyExpected.push_back(keyInit[i]);
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
-                rightExpected.push_back(found->second);
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+                expectedRightValue.push_back(found->second);
             }
         }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKey1Init, rightKey2Init);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayloadInit);
-        const auto rightMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKey1Init, rightValueInit, rightKey2Init);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue, expectedRightValue);
+
         RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
-                         rightMapNode, leftType, leftList, {0, 1});
+                         leftType, std::move(leftList), {0, 1},
+                         rightType, std::move(rightList), {0, 2},
+                         {}, {0, 2}
+        );
     }
 
-    Y_UNIT_TEST(TestInnerMultiOnUint64Uint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+    Y_UNIT_TEST(TestInnerJoinOutputSlicing) {
+        TSetup<false> setup(GetNodeFactory());
+
         // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
+        TVector<ui64> leftKeyInit(testSize);
+        std::fill(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
             [](const auto key) { return key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
+        TVector<TString> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
             [](const auto key) { return threeLetterValues[key]; });
-        // 2. Make input for the "right" dict.
-        TVector<ui64> rightKey1Init(fibonacci.cbegin(), fibonacci.cend());
-        TVector<ui64> rightKey2Init;
-        std::transform(rightKey1Init.cbegin(), rightKey1Init.cend(), std::back_inserter(rightKey2Init),
-            [](const auto& key) { return key * 1001; });
-        TVector<TString> rightPayload1Init;
-        std::transform(rightKey1Init.cbegin(), rightKey1Init.cend(), std::back_inserter(rightPayload1Init),
-            [](const auto& key) { return std::to_string(key); });
-        TVector<TString> rightPayload2Init;
-        std::transform(rightKey2Init.cbegin(), rightKey2Init.cend(), std::back_inserter(rightPayload2Init),
-            [](const auto& key) { return std::to_string(key); });
+
+        // 2. Make input for the "right" stream.
+        // Huge string is used to make less rows fit into one block
+        const TVector<ui64> rightKeyInit({1});
+        TVector<TString> rightValueInit({hugeString});
+
         // 3. Make "expected" data.
-        TMap<std::tuple<ui64, ui64>, TVector<TString>> rightMultiMap;
-        for (size_t i = 0; i < rightKey1Init.size(); i++) {
-            const auto key = std::make_tuple(rightKey1Init[i], rightKey2Init[i]);
-            rightMultiMap[key] = {rightPayload1Init[i], rightPayload2Init[i]};
+        TMap<ui64, TString> rightMap;
+        for (size_t i = 0; i < rightKeyInit.size(); i++) {
+            rightMap[rightKeyInit[i]] = rightValueInit[i];
         }
-        TVector<ui64> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<TString> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            const auto key = std::make_tuple(keyInit[i], subkeyInit[i]);
-            const auto found = rightMultiMap.find(key);
-            if (found != rightMultiMap.cend()) {
-                for (const auto& right : found->second) {
-                    keyExpected.push_back(keyInit[i]);
-                    subkeyExpected.push_back(subkeyInit[i]);
-                    valueExpected.push_back(valueInit[i]);
-                    rightExpected.push_back(right);
+        TVector<ui64> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<TString> expectedValue;
+        TVector<TString> expectedRightValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            const auto& found = rightMap.find(leftKeyInit[i]);
+            if (found != rightMap.cend()) {
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+                expectedRightValue.push_back(found->second);
+            }
+        }
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKeyInit, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue, expectedRightValue);
+
+        RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
+                         leftType, std::move(leftList), {0},
+                         rightType, std::move(rightList), {0},
+                         {}, {0}
+        );
+    }
+
+    Y_UNIT_TEST(TestInnerJoinHugeIterator) {
+        TSetup<false> setup(GetNodeFactory());
+
+        // 1. Make input for the "left" stream.
+        TVector<ui64> leftKeyInit({1});
+        TVector<ui64> leftSubkeyInit({1001});
+        TVector<TString> leftValueInit({threeLetterValues[1]});
+
+        // 2. Make input for the "right" stream.
+        // Huge string is used to make less rows fit into one block
+        TVector<ui64> rightKeyInit(1 << 16);
+        std::fill(rightKeyInit.begin(), rightKeyInit.end(), 1);
+        TVector<TString> rightValueInit;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
+            [](const auto& key) { return std::to_string(key); });
+
+        // 3. Make "expected" data.
+        TMultiMap<ui64, TString> rightMap;
+        for (size_t i = 0; i < rightKeyInit.size(); i++) {
+            rightMap.insert({rightKeyInit[i], rightValueInit[i]});
+        }
+        TVector<ui64> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<TString> expectedValue;
+        TVector<TString> expectedRightValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            const auto& [begin, end] = rightMap.equal_range(leftKeyInit[i]);
+            for (auto it = begin; it != end; it++) {
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+                expectedRightValue.push_back(it->second);
+            }
+        }
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKeyInit, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue, expectedRightValue);
+
+        RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
+                         leftType, std::move(leftList), {0},
+                         rightType, std::move(rightList), {0},
+                         {}, {0}
+        );
+    }
+
+    Y_UNIT_TEST(TestScalar) {
+        TSetup<false> setup(GetNodeFactory());
+        const size_t testSize = 1 << 7;
+
+        // 1. Make input for the "left" stream.
+        TVector<ui64> leftKeyInit(testSize, 1);
+        TVector<ui64> leftSubkeyInit(testSize, 2);
+        TVector<ui64> leftValueInit(testSize, 3);
+
+        // 2. Make input for the "right" stream.
+        TVector<ui64> rightKeyInit(testSize, 1);
+        TVector<ui64> rightValueInit(testSize, 2);
+
+        // 3. Make "expected" data.
+        TMultiMap<ui64, ui64> rightMap;
+        for (size_t i = 0; i < testSize; i++) {
+            rightMap.insert({rightKeyInit[i], rightValueInit[i]});
+        }
+        TVector<ui64> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<ui64> expectedValue;
+        TVector<ui64> expectedRightValue;
+        for (size_t i = 0; i < testSize; i++) {
+            const auto& [begin, end] = rightMap.equal_range(leftKeyInit[i]);
+            for (auto it = begin; it != end; it++) {
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+                expectedRightValue.push_back(it->second);
+            }
+        }
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKeyInit, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue, expectedRightValue);
+
+        RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
+                         leftType, std::move(leftList), {0},
+                         rightType, std::move(rightList), {0},
+                         {}, {0}, false, true
+        );
+    }
+
+} // Y_UNIT_TEST_SUITE
+
+Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestOptional) {
+    constexpr size_t testSize = 1 << 14;
+    constexpr size_t valueSize = 3;
+    static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
+    static const TSet<ui64> fibonacci = GenerateFibonacci(testSize);
+
+    Y_UNIT_TEST(TestInnerJoin) {
+        TSetup<false> setup(GetNodeFactory());
+
+        // 1. Make input for the "left" stream.
+        TVector<std::optional<ui64>> leftKeyInit(testSize);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
+            [](const auto key) { return *key * 1001; });
+        TVector<std::optional<TString>> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
+            [](const auto key) { return threeLetterValues[*key]; });
+
+        // 2. Make input for the "right" stream.
+        TVector<std::optional<ui64>> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+        TVector<std::optional<TString>> rightValueInit;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
+            [](const auto key) { return std::to_string(*key); });
+
+        // 3. Add some NULLs
+        leftKeyInit[0] = leftKeyInit[2] = std::nullopt;
+        rightKeyInit[2] = rightKeyInit[3] = std::nullopt;
+
+        leftValueInit[1] = leftValueInit[11] = leftValueInit[41] = std::nullopt;
+        rightValueInit[2] = rightValueInit[12] = rightValueInit[42] = std::nullopt;
+
+        // 4. Make "expected" data.
+        TMap<ui64, std::optional<TString>> rightMap;
+        for (size_t i = 0; i < rightKeyInit.size(); i++) {
+            if (rightKeyInit[i].has_value()) {
+                rightMap[*rightKeyInit[i]] = rightValueInit[i];
+            }
+        }
+        TVector<std::optional<ui64>> expectedLeftKey;
+        TVector<ui64> expectedSubkey;
+        TVector<std::optional<TString>> expectedValue;
+        TVector<std::optional<ui64>> expectedRightKey;
+        TVector<std::optional<TString>> expectedRightValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            if (!leftKeyInit[i]) {
+                continue;
+            }
+            const auto& found = rightMap.find(*leftKeyInit[i]);
+            if (found != rightMap.cend()) {
+                expectedLeftKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+                expectedRightKey.push_back(found->first);
+                expectedRightValue.push_back(found->second);
+            }
+        }
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKeyInit, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedLeftKey, expectedSubkey, expectedValue, expectedRightKey, expectedRightValue);
+
+        RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
+                         leftType, std::move(leftList), {0},
+                         rightType, std::move(rightList), {0}
+        );
+    }
+
+    Y_UNIT_TEST(TestLeftJoin) {
+        TSetup<false> setup(GetNodeFactory());
+
+        // 1. Make input for the "left" stream.
+        TVector<std::optional<ui64>> leftKeyInit(testSize);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
+            [](const auto key) { return *key * 1001; });
+        TVector<std::optional<TString>> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
+            [](const auto key) { return threeLetterValues[*key]; });
+
+        // 2. Make input for the "right" stream.
+        TVector<std::optional<ui64>> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+        TVector<std::optional<TString>> rightValueInit;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
+            [](const auto key) { return std::to_string(*key); });
+
+        // 3. Add some NULLs
+        leftKeyInit[0] = leftKeyInit[2] = std::nullopt;
+        rightKeyInit[2] = rightKeyInit[3] = std::nullopt;
+
+        leftValueInit[1] = leftValueInit[11] = leftValueInit[41] = std::nullopt;
+        rightValueInit[2] = rightValueInit[12] = rightValueInit[42] = std::nullopt;
+
+        // 4. Make "expected" data.
+        TMap<ui64, std::optional<TString>> rightMap;
+        for (size_t i = 0; i < rightKeyInit.size(); i++) {
+            if (rightKeyInit[i].has_value()) {
+                rightMap[*rightKeyInit[i]] = rightValueInit[i];
+            }
+        }
+        TVector<std::optional<ui64>> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<std::optional<TString>> expectedValue;
+        TVector<std::optional<ui64>> expectedRightKey;
+        TVector<std::optional<TString>> expectedRightValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            expectedKey.push_back(leftKeyInit[i]);
+            expectedSubkey.push_back(leftSubkeyInit[i]);
+            expectedValue.push_back(leftValueInit[i]);
+
+            if (leftKeyInit[i].has_value()) {
+                const auto& found = rightMap.find(*leftKeyInit[i]);
+                if (found != rightMap.cend()) {
+                    expectedRightKey.push_back(found->first);
+                    expectedRightValue.push_back(found->second);
+                    continue;
                 }
             }
+
+            expectedRightKey.push_back(std::nullopt);
+            expectedRightValue.push_back(std::nullopt);
         }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKey1Init, rightKey2Init);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayload1Init, rightPayload2Init);
-        const auto rightMultiMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
-                         rightMultiMapNode, leftType, leftList, {0, 1});
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKeyInit, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue, expectedRightKey, expectedRightValue);
+
+        RunTestBlockJoin(setup, EJoinKind::Left, expectedType, expected,
+                         leftType, std::move(leftList), {0},
+                         rightType, std::move(rightList), {0}
+        );
     }
 
-    Y_UNIT_TEST(TestLeftOnUint64Uint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+    Y_UNIT_TEST(TestLeftSemiJoin) {
+        TSetup<false> setup(GetNodeFactory());
+
         // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
-            [](const auto key) { return key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
-            [](const auto key) { return threeLetterValues[key]; });
-        // 2. Make input for the "right" dict.
-        TVector<ui64> rightKey1Init(fibonacci.cbegin(), fibonacci.cend());
-        TVector<ui64> rightKey2Init;
-        std::transform(rightKey1Init.cbegin(), rightKey1Init.cend(), std::back_inserter(rightKey2Init),
-            [](const auto& key) { return key * 1001; });
-        TVector<TString> rightPayloadInit;
-        std::transform(rightKey1Init.cbegin(), rightKey1Init.cend(), std::back_inserter(rightPayloadInit),
-            [](const auto& key) { return std::to_string(key); });
-        // 3. Make "expected" data.
+        TVector<std::optional<ui64>> leftKeyInit(testSize);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
+            [](const auto key) { return *key * 1001; });
+        TVector<std::optional<TString>> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
+            [](const auto key) { return threeLetterValues[*key]; });
+
+        // 2. Make input for the "right" stream.
+        TVector<std::optional<ui64>> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+
+        // 3. Add some NULLs
+        leftKeyInit[0] = leftKeyInit[2] = std::nullopt;
+        rightKeyInit[2] = rightKeyInit[3] = std::nullopt;
+        leftValueInit[1] = leftValueInit[11] = leftValueInit[41] = std::nullopt;
+
+        // 4. Make "expected" data.
+        TSet<ui64> rightSet;
+        for (size_t i = 0; i < rightKeyInit.size(); i++) {
+            if (rightKeyInit[i].has_value()) {
+                rightSet.insert(*rightKeyInit[i]);
+            }
+        }
+        TVector<std::optional<ui64>> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<std::optional<TString>> expectedValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            if (!leftKeyInit[i]) {
+                continue;
+            }
+            if (rightSet.contains(*leftKeyInit[i])) {
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+            }
+        }
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup, rightKeyInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue);
+
+        RunTestBlockJoin(setup, EJoinKind::LeftSemi, expectedType, expected,
+            leftType, std::move(leftList), {0},
+            rightType, std::move(rightList), {0}
+        );
+    }
+
+    Y_UNIT_TEST(TestLeftOnlyJoin) {
+        TSetup<false> setup(GetNodeFactory());
+
+        // 1. Make input for the "left" stream.
+        TVector<std::optional<ui64>> leftKeyInit(testSize);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
+            [](const auto key) { return *key * 1001; });
+        TVector<std::optional<TString>> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
+            [](const auto key) { return threeLetterValues[*key]; });
+
+        // 2. Make input for the "right" stream.
+        TVector<std::optional<ui64>> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+
+        // 3. Add some NULLs
+        leftKeyInit[0] = leftKeyInit[2] = std::nullopt;
+        rightKeyInit[2] = rightKeyInit[3] = std::nullopt;
+        leftValueInit[1] = leftValueInit[11] = leftValueInit[41] = std::nullopt;
+
+        // 4. Make "expected" data.
+        TSet<ui64> rightSet;
+        for (size_t i = 0; i < rightKeyInit.size(); i++) {
+            if (rightKeyInit[i].has_value()) {
+                rightSet.insert(*rightKeyInit[i]);
+            }
+        }
+        TVector<std::optional<ui64>> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<std::optional<TString>> expectedValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            if (!leftKeyInit[i] || !rightSet.contains(*leftKeyInit[i])) {
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+            }
+        }
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup, rightKeyInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue);
+
+        RunTestBlockJoin(setup, EJoinKind::LeftOnly, expectedType, expected,
+            leftType, std::move(leftList), {0},
+            rightType, std::move(rightList), {0}
+        );
+    }
+
+    Y_UNIT_TEST(TestKeyTuple) {
+        TSetup<false> setup(GetNodeFactory());
+
+        // 1. Make input for the "left" stream.
+        TVector<std::optional<ui64>> leftKey1Init(testSize);
+        std::iota(leftKey1Init.begin(), leftKey1Init.end(), 1);
+        TVector<std::optional<ui64>> leftKey2Init(testSize);
+        std::iota(leftKey2Init.begin(), leftKey2Init.end(), 1);
+        TVector<TString> leftValueInit;
+        std::transform(leftKey1Init.cbegin(), leftKey1Init.cend(), std::back_inserter(leftValueInit),
+            [](const auto key) { return threeLetterValues[*key]; });
+
+        // 2. Make input for the "right" stream.
+        TVector<std::optional<ui64>> rightKey1Init(fibonacci.cbegin(), fibonacci.cend());
+        TVector<std::optional<ui64>> rightKey2Init(fibonacci.cbegin(), fibonacci.cend());
+        TVector<TString> rightValueInit;
+        std::transform(rightKey1Init.cbegin(), rightKey1Init.cend(), std::back_inserter(rightValueInit),
+            [](const auto key) { return std::to_string(*key); });
+
+        // 3. Add some NULLs
+        leftKey1Init[0] = leftKey1Init[1] = std::nullopt;
+        leftKey2Init[1] = std::nullopt;
+        rightKey1Init[1] = rightKey1Init[2] = std::nullopt;
+        rightKey2Init[2] = std::nullopt;
+
+        // 4. Make "expected" data.
         TMap<std::tuple<ui64, ui64>, TString> rightMap;
         for (size_t i = 0; i < rightKey1Init.size(); i++) {
-            const auto key = std::make_tuple(rightKey1Init[i], rightKey2Init[i]);
-            rightMap[key] = rightPayloadInit[i];
+            if (rightKey1Init[i].has_value() && rightKey2Init[i].has_value()) {
+                const auto key = std::make_tuple(*rightKey1Init[i], *rightKey2Init[i]);
+                rightMap[key] = rightValueInit[i];
+            }
         }
-        TVector<ui64> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<std::optional<TString>> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            keyExpected.push_back(keyInit[i]);
-            subkeyExpected.push_back(subkeyInit[i]);
-            valueExpected.push_back(valueInit[i]);
-            const auto key = std::make_tuple(keyInit[i], subkeyInit[i]);
-            const auto found = rightMap.find(key);
+        TVector<std::optional<ui64>> expectedLeftKey1;
+        TVector<std::optional<ui64>> expectedLeftKey2;
+        TVector<TString> expectedValue;
+        TVector<std::optional<ui64>> expectedRightKey1;
+        TVector<std::optional<ui64>> expectedRightKey2;
+        TVector<TString> expectedRightValue;
+        for (size_t i = 0; i < leftKey1Init.size(); i++) {
+            if (!leftKey1Init[i] || !leftKey2Init[i]) {
+                continue;
+            }
+            const auto key = std::make_tuple(*leftKey1Init[i], *leftKey2Init[i]);
+            const auto& found = rightMap.find(key);
             if (found != rightMap.cend()) {
-                rightExpected.push_back(found->second);
-            } else {
-                rightExpected.push_back(std::nullopt);
+                expectedLeftKey1.push_back(leftKey1Init[i]);
+                expectedLeftKey2.push_back(leftKey2Init[i]);
+                expectedValue.push_back(leftValueInit[i]);
+                expectedRightKey1.push_back(std::get<0>(found->first));
+                expectedRightKey2.push_back(std::get<1>(found->first));
+                expectedRightValue.push_back(found->second);
             }
         }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKey1Init, rightKey2Init);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayloadInit);
-        const auto rightMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::Left, expectedType, expected,
-                         rightMapNode, leftType, leftList, {0, 1});
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKey1Init, leftKey2Init, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKey1Init, rightKey2Init, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedLeftKey1, expectedLeftKey2, expectedValue, expectedRightKey1, expectedRightKey2, expectedRightValue);
+
+        RunTestBlockJoin(setup, EJoinKind::Inner, expectedType, expected,
+                         leftType, std::move(leftList), {0, 1},
+                         rightType, std::move(rightList), {0, 1}
+        );
     }
 
-    Y_UNIT_TEST(TestLeftMultiOnUint64Uint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+} // Y_UNIT_TEST_SUITE
+
+Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestCross) {
+    constexpr size_t testSize = 1 << 14;
+    constexpr size_t valueSize = 3;
+    static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
+    static const TSet<ui64> fibonacci = GenerateFibonacci(testSize);
+    static const TString hugeString(128, '1');
+
+    Y_UNIT_TEST(TestBasic) {
+        TSetup<false> setup(GetNodeFactory());
+        const size_t testSize = 1 << 7;
+
         // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
+        TVector<ui64> leftKeyInit(testSize);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
             [](const auto key) { return key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
+        TVector<TString> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
             [](const auto key) { return threeLetterValues[key]; });
-        // 2. Make input for the "right" dict.
-        TVector<ui64> rightKey1Init(fibonacci.cbegin(), fibonacci.cend());
-        TVector<ui64> rightKey2Init;
-        std::transform(rightKey1Init.cbegin(), rightKey1Init.cend(), std::back_inserter(rightKey2Init),
-            [](const auto& key) { return key * 1001; });
-        TVector<TString> rightPayload1Init;
-        std::transform(rightKey1Init.cbegin(), rightKey1Init.cend(), std::back_inserter(rightPayload1Init),
-            [](const auto& key) { return std::to_string(key); });
-        TVector<TString> rightPayload2Init;
-        std::transform(rightKey2Init.cbegin(), rightKey2Init.cend(), std::back_inserter(rightPayload2Init),
-            [](const auto& key) { return std::to_string(key); });
-        // 3. Make "expected" data.
-        TMap<std::tuple<ui64, ui64>, TVector<TString>> rightMultiMap;
-        for (size_t i = 0; i < rightKey1Init.size(); i++) {
-            const auto key = std::make_tuple(rightKey1Init[i], rightKey2Init[i]);
-            rightMultiMap[key] = {rightPayload1Init[i], rightPayload2Init[i]};
+
+        // 2. Make input for the "right" stream.
+        TVector<ui64> rightKeyInit;
+        auto it = fibonacci.cbegin();
+        for (size_t i = 0; i < testSize; i++) {
+            rightKeyInit.push_back(*it++);
         }
-        TVector<ui64> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        TVector<std::optional<TString>> rightExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            const auto key = std::make_tuple(keyInit[i], subkeyInit[i]);
-            const auto found = rightMultiMap.find(key);
-            if (found != rightMultiMap.cend()) {
-                for (const auto& right : found->second) {
-                    keyExpected.push_back(keyInit[i]);
-                    subkeyExpected.push_back(subkeyInit[i]);
-                    valueExpected.push_back(valueInit[i]);
-                    rightExpected.push_back(right);
+        TVector<TString> rightValueInit;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
+            [](const auto key) { return std::to_string(key); });
+
+        // 3. Make "expected" data.
+        TVector<ui64> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<TString> expectedValue;
+        TVector<ui64> expectedRightKey;
+        TVector<TString> expectedRightValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            for (size_t j = 0; j < rightKeyInit.size(); j++) {
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+                expectedRightKey.push_back(rightKeyInit[j]);
+                expectedRightValue.push_back(rightValueInit[j]);
+            }
+        }
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKeyInit, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue, expectedRightKey, expectedRightValue);
+
+        RunTestBlockJoin(setup, EJoinKind::Cross, expectedType, expected,
+                         leftType, std::move(leftList), {},
+                         rightType, std::move(rightList), {},
+                         {}, {}
+        );
+    }
+
+    Y_UNIT_TEST(TestOptional) {
+        TSetup<false> setup(GetNodeFactory());
+        const size_t testSize = 1 << 7;
+
+        // 1. Make input for the "left" stream.
+        TVector<std::optional<ui64>> leftKeyInit(testSize);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
+            [](const auto key) { return *key * 1001; });
+        TVector<std::optional<TString>> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
+            [](const auto key) { return threeLetterValues[*key]; });
+
+        // 2. Make input for the "right" stream.
+        TVector<std::optional<ui64>> rightKeyInit;
+        auto it = fibonacci.cbegin();
+        for (size_t i = 0; i < testSize; i++) {
+            rightKeyInit.push_back(*it++);
+        }
+        TVector<std::optional<TString>> rightValueInit;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
+            [](const auto key) { return std::to_string(*key); });
+
+        // 3. Add some NULLs
+        leftKeyInit[0] = leftKeyInit[2] = std::nullopt;
+        rightKeyInit[2] = rightKeyInit[3] = std::nullopt;
+
+        leftValueInit[1] = leftValueInit[11] = leftValueInit[41] = std::nullopt;
+        rightValueInit[2] = rightValueInit[12] = rightValueInit[42] = std::nullopt;
+
+        // 4. Make "expected" data.
+        TVector<std::optional<ui64>> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<std::optional<TString>> expectedValue;
+        TVector<std::optional<ui64>> expectedRightKey;
+        TVector<std::optional<TString>> expectedRightValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            for (size_t j = 0; j < rightKeyInit.size(); j++) {
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+                expectedRightKey.push_back(rightKeyInit[j]);
+                expectedRightValue.push_back(rightValueInit[j]);
+            }
+        }
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKeyInit, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue, expectedRightKey, expectedRightValue);
+
+        RunTestBlockJoin(setup, EJoinKind::Cross, expectedType, expected,
+                         leftType, std::move(leftList), {},
+                         rightType, std::move(rightList), {},
+                         {}, {}
+        );
+    }
+
+    Y_UNIT_TEST(TestScalar) {
+        TSetup<false> setup(GetNodeFactory());
+        const size_t testSize = 1 << 7;
+
+        // 1. Make input for the "left" stream.
+        TVector<ui64> leftKeyInit(testSize, 1);
+        TVector<ui64> leftSubkeyInit(testSize, 2);
+        TVector<ui64> leftValueInit(testSize, 3);
+
+        // 2. Make input for the "right" stream.
+        TVector<ui64> rightKeyInit(testSize, 1);
+        TVector<ui64> rightValueInit(testSize, 2);
+
+        // 3. Make "expected" data.
+        TVector<ui64> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<ui64> expectedValue;
+        TVector<ui64> expectedRightKey;
+        TVector<ui64> expectedRightValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            for (size_t j = 0; j < rightKeyInit.size(); j++) {
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+                expectedRightKey.push_back(rightKeyInit[j]);
+                expectedRightValue.push_back(rightValueInit[j]);
+            }
+        }
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKeyInit, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue, expectedRightKey, expectedRightValue);
+
+        RunTestBlockJoin(setup, EJoinKind::Cross, expectedType, expected,
+                         leftType, std::move(leftList), {},
+                         rightType, std::move(rightList), {},
+                         {}, {}, false, true
+        );
+    }
+
+    Y_UNIT_TEST(TestHugeRightTable) {
+        TSetup<false> setup(GetNodeFactory());
+
+        // 1. Make input for the "left" stream.
+        TVector<ui64> leftKeyInit(2);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
+            [](const auto key) { return key * 1001; });
+        TVector<TString> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
+            [](const auto key) { return threeLetterValues[key]; });
+
+        // 2. Make input for the "right" stream.
+        TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+        TVector<TString> rightValueInit;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
+            [](const auto key) { return std::to_string(key); });
+
+        // 3. Make "expected" data.
+        TVector<ui64> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<TString> expectedValue;
+        TVector<ui64> expectedRightKey;
+        TVector<TString> expectedRightValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            for (size_t j = 0; j < rightKeyInit.size(); j++) {
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+                expectedRightKey.push_back(rightKeyInit[j]);
+                expectedRightValue.push_back(rightValueInit[j]);
+            }
+        }
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKeyInit, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue, expectedRightKey, expectedRightValue);
+
+        RunTestBlockJoin(setup, EJoinKind::Cross, expectedType, expected,
+                         leftType, std::move(leftList), {},
+                         rightType, std::move(rightList), {},
+                         {}, {}
+        );
+    }
+
+    Y_UNIT_TEST(TestOutputSlicing) {
+        TSetup<false> setup(GetNodeFactory());
+
+        // 1. Make input for the "left" stream.
+        TVector<ui64> leftKeyInit(testSize);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
+            [](const auto key) { return key * 1001; });
+        TVector<TString> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
+            [](const auto key) { return threeLetterValues[key]; });
+
+        // 2. Make input for the "right" stream.
+        // Huge string is used to make less rows fit into one block
+        const TVector<ui64> rightKeyInit({1});
+        TVector<TString> rightValueInit({hugeString});
+
+        // 3. Make "expected" data.
+        TVector<ui64> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<TString> expectedValue;
+        TVector<ui64> expectedRightKey;
+        TVector<TString> expectedRightValue;
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            for (size_t j = 0; j < rightKeyInit.size(); j++) {
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+                expectedRightKey.push_back(rightKeyInit[j]);
+                expectedRightValue.push_back(rightValueInit[j]);
+            }
+        }
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKeyInit, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue, expectedRightKey, expectedRightValue);
+
+        RunTestBlockJoin(setup, EJoinKind::Cross, expectedType, expected,
+                         leftType, std::move(leftList), {},
+                         rightType, std::move(rightList), {},
+                         {}, {}
+        );
+    }
+
+} // Y_UNIT_TEST_SUITE
+
+Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestNodeMultipleUsage) {
+    constexpr size_t testSize = 1 << 7;
+    constexpr size_t valueSize = 3;
+    static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
+    static const TSet<ui64> fibonacci = GenerateFibonacci(testSize);
+    static const TString hugeString(128, '1');
+
+    Y_UNIT_TEST(TestBasic) {
+        TSetup<false> setup(GetNodeFactory());
+
+        // 1. Make input for the "left" stream.
+        TVector<ui64> leftKeyInit(testSize);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
+            [](const auto key) { return key * 1001; });
+        TVector<TString> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
+            [](const auto key) { return threeLetterValues[key]; });
+
+        // 2. Make input for the "right" stream.
+        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+        TVector<TString> rightValueInit;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
+            [](const auto key) { return std::to_string(key); });
+
+        // 3. Make "expected" data.
+        TVector<ui64> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<TString> expectedValue;
+        TVector<ui64> expectedRightKey;
+        TVector<TString> expectedRightValue;
+
+        TMap<ui64, TString> rightMap;
+        for (size_t i = 0; i < rightKeyInit.size(); i++) {
+            rightMap[rightKeyInit[i]] = rightValueInit[i];
+        }
+
+        // Two inner joins
+        for (size_t join = 0; join < 2; join++) {
+            for (size_t i = 0; i < leftKeyInit.size(); i++) {
+                const auto& found = rightMap.find(leftKeyInit[i]);
+                if (found != rightMap.cend()) {
+                    expectedKey.push_back(leftKeyInit[i]);
+                    expectedSubkey.push_back(leftSubkeyInit[i]);
+                    expectedValue.push_back(leftValueInit[i]);
+                    expectedRightKey.push_back(found->first);
+                    expectedRightValue.push_back(found->second);
                 }
-            } else {
-                keyExpected.push_back(keyInit[i]);
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
-                rightExpected.push_back(std::nullopt);
             }
         }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected, rightExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKey1Init, rightKey2Init);
-        const auto rightPayloads = BuildListNodes(pgmBuilder, rightPayload1Init, rightPayload2Init);
-        const auto rightMultiMapNode = MakeDict(pgmBuilder, rightKeys, rightPayloads);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::Left, expectedType, expected,
-                         rightMultiMapNode, leftType, leftList, {0, 1});
-    }
 
-    Y_UNIT_TEST(TestLeftSemiOnUint64Uint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
-            [](const auto key) { return key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
-            [](const auto key) { return threeLetterValues[key]; });
-        // 2. Make input for the "right" dict.
-        TVector<ui64> rightKey1Init(fibonacci.cbegin(), fibonacci.cend());
-        TVector<ui64> rightKey2Init;
-        std::transform(rightKey1Init.cbegin(), rightKey1Init.cend(), std::back_inserter(rightKey2Init),
-            [](const auto& key) { return key * 1001; });
-        // 3. Make "expected" data.
-        TSet<std::tuple<ui64, ui64>> rightSet;
-        for (size_t i = 0; i < rightKey1Init.size(); i++) {
-            rightSet.emplace(std::make_tuple(rightKey1Init[i], rightKey2Init[i]));
-        }
-        TVector<ui64> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            const auto key = std::make_tuple(keyInit[i], subkeyInit[i]);
-            if (rightSet.contains(key)) {
-                keyExpected.push_back(keyInit[i]);
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
+        // Cross join
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            for (size_t j = 0; j < rightKeyInit.size(); j++) {
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+                expectedRightKey.push_back(rightKeyInit[j]);
+                expectedRightValue.push_back(rightValueInit[j]);
             }
         }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKey1Init, rightKey2Init);
-        const auto rightSetNode = MakeSet(pgmBuilder, rightKeys);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::LeftSemi, expectedType, expected,
-                         rightSetNode, leftType, leftList, {0, 1});
-    }
 
-    Y_UNIT_TEST(TestLeftOnlyOnUint64Uint64) {
-        TSetup<false> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-        // 1. Make input for the "left" stream.
-        TVector<ui64> keyInit(testSize);
-        std::iota(keyInit.begin(), keyInit.end(), 1);
-        TVector<ui64> subkeyInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(subkeyInit),
-            [](const auto key) { return key * 1001; });
-        TVector<TString> valueInit;
-        std::transform(keyInit.cbegin(), keyInit.cend(), std::back_inserter(valueInit),
-            [](const auto key) { return threeLetterValues[key]; });
-        // 2. Make input for the "right" dict.
-        TVector<ui64> rightKey1Init(fibonacci.cbegin(), fibonacci.cend());
-        TVector<ui64> rightKey2Init;
-        std::transform(rightKey1Init.cbegin(), rightKey1Init.cend(), std::back_inserter(rightKey2Init),
-            [](const auto& key) { return key * 1001; });
-        // 3. Make "expected" data.
-        TSet<std::tuple<ui64, ui64>> rightSet;
-        for (size_t i = 0; i < rightKey1Init.size(); i++) {
-            rightSet.emplace(std::make_tuple(rightKey1Init[i], rightKey2Init[i]));
-        }
-        TVector<ui64> keyExpected;
-        TVector<ui64> subkeyExpected;
-        TVector<TString> valueExpected;
-        for (size_t i = 0; i < keyInit.size(); i++) {
-            const auto key = std::make_tuple(keyInit[i], subkeyInit[i]);
-            if (!rightSet.contains(key)) {
-                keyExpected.push_back(keyInit[i]);
-                subkeyExpected.push_back(subkeyInit[i]);
-                valueExpected.push_back(valueInit[i]);
-            }
-        }
-        // 4. Convert input and expected TVectors to List<UV>.
-        const auto [leftType, leftList] = ConvertVectorsToTuples(setup,
-            keyInit, subkeyInit, valueInit);
-        const auto [expectedType, expected] = ConvertVectorsToTuples(setup,
-            keyExpected, subkeyExpected, valueExpected);
-        // 5. Build "right" computation node.
-        const auto rightKeys = BuildListNodes(pgmBuilder, rightKey1Init, rightKey2Init);
-        const auto rightSetNode = MakeSet(pgmBuilder, rightKeys);
-        // 6. Run tests.
-        RunTestBlockJoin(setup, EJoinKind::LeftOnly, expectedType, expected,
-                         rightSetNode, leftType, leftList, {0, 1});
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKeyInit, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue, expectedRightKey, expectedRightValue);
+
+        RunTestBlockJoin<BuildBlockJoinsWithNodeMultipleUsage>(setup, EJoinKind::Inner, expectedType, expected,
+                                                               leftType, std::move(leftList), {0},
+                                                               rightType, std::move(rightList), {0},
+                                                               {}, {}
+        );
     }
 
 } // Y_UNIT_TEST_SUITE

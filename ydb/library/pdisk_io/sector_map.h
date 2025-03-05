@@ -200,6 +200,7 @@ private:
     THashMap<ui64, TString> Map;
     NSectorMap::EDiskMode DiskMode = NSectorMap::DM_NONE;
     THolder<NSectorMap::TSectorOperationThrottler> SectorOperationThrottler;
+    std::function<void()> ReadCallback = nullptr;
 
 public:
     TSectorMap(ui64 deviceSize = 0, NSectorMap::EDiskMode diskMode = NSectorMap::DM_NONE)
@@ -222,12 +223,13 @@ public:
     }
 
     void ForceSize(ui64 size) {
-        DeviceSize = size;
-        if (DeviceSize < size) {
+        if (size < DeviceSize) {
             for (const auto& [offset, data] : Map) {
                 Y_VERIFY_S(offset + 4096 <= DeviceSize, "It is not possible to shrink TSectorMap with data");
             }
         }
+        
+        DeviceSize = size;
 
         InitSectorOperationThrottler();
     }
@@ -271,6 +273,10 @@ public:
 
         if (SectorOperationThrottler.Get() != nullptr) {
             SectorOperationThrottler->ThrottleRead(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000);
+        }
+
+        if (ReadCallback) {
+            ReadCallback();
         }
     }
 
@@ -322,6 +328,11 @@ public:
 
     ui64 DataBytes() const {
         return Map.size() * NSectorMap::SECTOR_SIZE;
+    }
+
+    void SetReadCallback(std::function<void()> callback) {
+        TGuard<TTicketLock> guard(MapLock);
+        ReadCallback = callback;
     }
 
     TString ToString() const {

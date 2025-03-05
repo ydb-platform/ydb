@@ -5,6 +5,8 @@
 #include "tx_processor.h"
 
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -26,8 +28,8 @@ using NTabletFlatExecutor::TTransactionBase;
 using NTabletFlatExecutor::TTabletExecutedFlat;
 using ::NMonitoring::TDynamicCounterPtr;
 
-class TConfigsManager;
 class TTenantsManager;
+class TConfigsManager;
 
 class TConsole : public TActor<TConsole>
                , public TTabletExecutedFlat
@@ -50,6 +52,8 @@ private:
     class TTxLoadState;
     class TTxSetConfig;
 
+    friend class TConfigsManager;
+
     ITransaction *CreateTxInitScheme();
     ITransaction *CreateTxLoadState();
     ITransaction *CreateTxSetConfig(TEvConsole::TEvSetConfigRequest::TPtr &ev);
@@ -71,8 +75,12 @@ private:
 
     void ForwardToConfigsManager(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx);
     void ForwardToTenantsManager(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx);
+    void ForwardFromPipe(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvGetConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvSetConfigRequest::TPtr &ev, const TActorContext &ctx);
+
+    void Handle(TEvBlobStorage::TEvControllerProposeConfigRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvBlobStorage::TEvControllerConsoleCommitRequest::TPtr &ev, const TActorContext &ctx);
 
     STFUNC(StateInit)
     {
@@ -106,6 +114,7 @@ private:
             FFunc(TEvConsole::EvDropConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvResolveConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvResolveAllConfigRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvFetchStartupConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetConfigSubscriptionRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetNodeConfigItemsRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetNodeConfigRequest, ForwardToConfigsManager);
@@ -121,6 +130,9 @@ private:
             FFunc(TEvConsole::EvReplaceConfigSubscriptionsRequest, ForwardToConfigsManager);
             HFuncTraced(TEvConsole::TEvSetConfigRequest, Handle);
             FFunc(TEvConsole::EvToggleConfigValidatorRequest, ForwardToConfigsManager);
+            FFunc(TEvBlobStorage::EvControllerProposeConfigRequest, ForwardFromPipe);
+            FFunc(TEvBlobStorage::EvControllerConsoleCommitRequest, ForwardFromPipe);
+            FFunc(TEvBlobStorage::EvControllerValidateConfigRequest, ForwardFromPipe);
             FFunc(TEvConsole::EvUpdateTenantPoolConfig, ForwardToTenantsManager);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
@@ -168,6 +180,10 @@ public:
         return Config;
     }
 
+    bool HasTenant(const TString& path) const;
+
+    TString GetDomainName() const;
+
 private:
     TDeque<TAutoPtr<IEventHandle>> InitQueue;
     NKikimrConsole::TConfig Config;
@@ -178,6 +194,10 @@ private:
     TTenantsManager* TenantsManager;
 
     TActorId NetClassifierUpdaterId;
+
+    // For handshake with BSController/distconf
+    TActorId CurrentSenderId;
+    TActorId CurrentPipeServerId;
 };
 
 } // namespace NKikimr::NConsole

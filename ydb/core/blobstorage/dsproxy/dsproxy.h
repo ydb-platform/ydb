@@ -30,7 +30,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 constexpr ui32 TypicalPartsInBlob = 6;
 constexpr ui32 TypicalDisksInSubring = 8;
 
-constexpr ui32 MaxBatchedPutSize = 64 * 1024 - 512 - 5; // (MinREALHugeBlobInBytes - 1 - TDiskBlob::HugeBlobOverhead) for ssd and nvme
+constexpr ui32 MaxBatchedPutSize = 64 * 1024 - 512 - 5; // (MinHugeBlobInBytes - 1 - TDiskBlob::HugeBlobOverhead) for ssd and nvme
 
 const TDuration ProxyConfigurationTimeout = TDuration::Seconds(20);
 const ui32 ProxyRetryConfigurationInitialTimeout = 200;
@@ -91,24 +91,6 @@ struct TEvLatencyReport : public TEventLocal<TEvLatencyReport, TEvBlobStorage::E
     {}
 };
 
-struct TNodeLayoutInfo : TThrRefBase {
-    // indexed by NodeId
-    TNodeLocation SelfLocation;
-    TVector<TNodeLocation> LocationPerOrderNumber;
-
-    TNodeLayoutInfo(const TNodeLocation& selfLocation, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
-            std::unordered_map<ui32, TNodeLocation>& map)
-        : SelfLocation(selfLocation)
-        , LocationPerOrderNumber(info->GetTotalVDisksNum())
-    {
-        for (ui32 i = 0; i < LocationPerOrderNumber.size(); ++i) {
-            LocationPerOrderNumber[i] = map[info->GetActorId(i).NodeId()];
-        }
-    }
-};
-
-using TNodeLayoutInfoPtr = TIntrusivePtr<TNodeLayoutInfo>;
-
 inline TStoragePoolCounters::EHandleClass HandleClassToHandleClass(NKikimrBlobStorage::EGetHandleClass handleClass) {
     switch (handleClass) {
         case NKikimrBlobStorage::FastRead:
@@ -143,6 +125,7 @@ NActors::NLog::EPriority PriorityForStatusInbound(NKikimrProto::EReplyStatus sta
     XX(TEvBlobStorage::TEvPut) \
     XX(TEvBlobStorage::TEvGet) \
     XX(TEvBlobStorage::TEvBlock) \
+    XX(TEvBlobStorage::TEvGetBlock) \
     XX(TEvBlobStorage::TEvDiscover) \
     XX(TEvBlobStorage::TEvRange) \
     XX(TEvBlobStorage::TEvCollectGarbage) \
@@ -486,6 +469,16 @@ struct TBlobStorageGroupBlockParameters {
 };
 IActor* CreateBlobStorageGroupBlockRequest(TBlobStorageGroupBlockParameters params);
 
+struct TBlobStorageGroupGetBlockParameters {
+    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvGetBlock> Common;
+    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+        .LogComponent = NKikimrServices::BS_PROXY_GETBLOCK,
+        .Name = "DSProxy.GetBlock",
+        .Activity = NKikimrServices::TActivity::BS_GROUP_GETBLOCK,
+    };
+};
+IActor* CreateBlobStorageGroupGetBlockRequest(TBlobStorageGroupGetBlockParameters params);
+
 struct TBlobStorageGroupStatusParameters {
     TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvStatus> Common;
     TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
@@ -534,7 +527,7 @@ struct TBlobStorageProxyParameters {
     TBlobStorageProxyControlWrappers Controls;
 };
 
-IActor* CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>&& info,
+IActor* CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>&& info, TNodeLayoutInfoPtr nodeLayoutInfo,
     bool forceWaitAllDrives, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
     TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters, const TBlobStorageProxyParameters& params);
 

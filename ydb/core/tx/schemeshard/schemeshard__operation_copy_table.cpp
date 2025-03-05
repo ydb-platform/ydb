@@ -4,6 +4,9 @@
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_cdc_stream_common.h"
 
+#include "schemeshard_utils.h"  // for TransactionTemplate
+
+#include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/base/subdomain.h>
 
 namespace {
@@ -140,7 +143,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCopyTable TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -401,9 +404,12 @@ public:
                         .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of copying base table
                 } else {
                     checks
-                        .NotUnderOperation()
                         .IsCommonSensePath()
                         .IsLikeDirectory();
+
+                    if (!Transaction.GetCreateTable().GetAllowUnderSameOperation()) {
+                        checks.NotUnderOperation();
+                    }
                 }
             }
 
@@ -706,10 +712,22 @@ public:
         const ui32 shardsToCreate = tableInfo->GetPartitions().size();
         Y_VERIFY_S(shardsToCreate <= maxShardsToCreate, "shardsToCreate: " << shardsToCreate << " maxShardsToCreate: " << maxShardsToCreate);
 
-        dstPath.DomainInfo()->IncPathsInside(1, isBackup);
-        dstPath.DomainInfo()->AddInternalShards(txState, isBackup);
+        dstPath.DomainInfo()->IncPathsInside(context.SS, 1, isBackup);
+        dstPath.DomainInfo()->AddInternalShards(txState, context.SS, isBackup);
         dstPath.Base()->IncShardsInside(shardsToCreate);
-        parent.Base()->IncAliveChildren(1, isBackup);
+        IncAliveChildrenSafeWithUndo(OperationId, parent, context, isBackup);
+
+        LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TCopyTable Propose creating new table"
+                << " opId# " << OperationId
+                << " srcPath# " << srcPath.PathString()
+                << " srcPathId# " << srcPath.Base()->PathId
+                << " path# " << dstPath.PathString()
+                << " pathId# " << newTable->PathId
+                << " withNewCdc# " << (Transaction.HasCreateCdcStream() ? "true" : "false")
+                << " schemeshard# " << ssId
+                << " tx# " << Transaction.DebugString()
+                );
 
         SetState(NextState());
         return result;
@@ -775,8 +793,11 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             .NotDeleted()
             .NotUnderDeleting()
             .IsTable()
-            .NotUnderOperation()
             .IsCommonSensePath(); //forbid copy impl index tables directly
+
+        if (!copying.GetAllowUnderSameOperation()) {
+            checks.NotUnderOperation();
+        }
 
         if (!checks) {
             return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
@@ -845,7 +866,6 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         }
 
         Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
-        Y_VERIFY_S(childPath.Base()->GetChildren().size() == 1, childPath.PathString() << " has children " << childPath.Base()->GetChildren().size());
 
         TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
         {
@@ -861,15 +881,21 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             for (const auto& dataColumn: indexInfo->IndexDataColumns) {
                 *operation->MutableDataColumnNames()->Add() = dataColumn;
             }
+            if (indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+                *operation->MutableVectorIndexKmeansTreeDescription() =
+                    std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
+            } else if (!std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription)) {
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
+                                     TStringBuilder{} << "Copy table doesn't support table with index type " << indexInfo->Type)};
+            }
 
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
         }
 
-        TString implTableName = childPath.Base()->GetChildren().begin()->first;
-        TPath implTable = childPath.Child(implTableName);
-        Y_ABORT_UNLESS(implTable.Base()->PathId == childPath.Base()->GetChildren().begin()->second);
+        for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
+            TPath implTable = childPath.Child(implTableName);
+            Y_ABORT_UNLESS(implTable.Base()->PathId == implTablePathId);
 
-        {
             NKikimrSchemeOp::TModifyScheme schema;
             schema.SetFailOnExist(tx.GetFailOnExist());
             schema.SetWorkingDir(JoinPath({dstPath.PathString(), name}));

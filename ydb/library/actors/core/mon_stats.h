@@ -41,14 +41,14 @@ namespace NActors {
     };
 
     struct TExecutorPoolState {
-        float UsedCpu = 0;
+        float ElapsedCpu = 0;
         float CurrentLimit = 0;
         float PossibleMaxLimit = 0;
         float MaxLimit = 0;
         float MinLimit = 0;
 
         void Aggregate(const TExecutorPoolState& other) {
-            UsedCpu += other.UsedCpu;
+            ElapsedCpu += other.ElapsedCpu;
             CurrentLimit += other.CurrentLimit;
             PossibleMaxLimit += other.PossibleMaxLimit;
             MaxLimit += other.MaxLimit;
@@ -63,10 +63,6 @@ namespace NActors {
         ui64 DecreasingThreadsByStarvedState = 0;
         ui64 DecreasingThreadsByHoggishState = 0;
         ui64 DecreasingThreadsByExchange = 0;
-        i64 MaxConsumedCpuUs = 0;
-        i64 MinConsumedCpuUs = 0;
-        i64 MaxBookedCpuUs = 0;
-        i64 MinBookedCpuUs = 0;
         double SpinningTimeUs = 0;
         double SpinThresholdUs = 0;
         i16 WrongWakenedThreadCount = 0;
@@ -95,13 +91,13 @@ namespace NActors {
         ui64 EmptyMailboxActivation = 0;
         ui64 CpuUs = 0; // microseconds thread was executing on CPU (accounts for preemtion)
         ui64 SafeElapsedTicks = 0;
+        ui64 SafeParkedTicks = 0;
         ui64 WorstActivationTimeUs = 0;
 
         TActivationTime CurrentActivationTime;
 
         NHPTimer::STime ElapsedTicks = 0;
         NHPTimer::STime ParkedTicks = 0;
-        NHPTimer::STime BlockedTicks = 0;
         TLogHistogram ActivationTimeHistogram;
         TLogHistogram EventDeliveryTimeHistogram;
         TLogHistogram EventProcessingCountHistogram;

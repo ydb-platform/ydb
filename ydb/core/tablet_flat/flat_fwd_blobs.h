@@ -54,7 +54,7 @@ namespace NFwd {
             Preload(head, upper);
         }
 
-        void Fill(NPageCollection::TLoadedPage& page, EPage) noexcept override
+        void Fill(NPageCollection::TLoadedPage& page, NSharedCache::TSharedPageRef sharedPageRef, EPage) noexcept override
         {
             if (!Pages || page.PageId < Pages.front().PageId) {
                 Y_ABORT("Blobs fwd cache got page below queue");
@@ -66,7 +66,7 @@ namespace NFwd {
 
             Stat.Saved += page.Data.size();
             OnFetch -= page.Data.size();
-            OnHold += Lookup(page.PageId).Settle(page);
+            OnHold += Lookup(page.PageId).Settle(page, std::move(sharedPageRef));
 
             Shrink(false /* do not drop loading pages */);
         }

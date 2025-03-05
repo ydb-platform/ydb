@@ -49,6 +49,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/postgres_jointest/join2.test_plan/x",
                                                         "ReadColumns": [
                                                             "x1",
                                                             "x2"

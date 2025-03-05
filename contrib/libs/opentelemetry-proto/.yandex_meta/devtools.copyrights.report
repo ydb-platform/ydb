@@ -42,7 +42,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        opentelemetry/proto/profiles/v1experimental/pprofextended.proto [17:17]
+        opentelemetry/proto/profiles/v1development/profiles.proto [17:17]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 4def72dc7d92cbd99458fedd7ced0efb
 BELONGS ya.make
@@ -81,6 +81,5 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        opentelemetry/proto/collector/profiles/v1experimental/profiles_service.proto [1:1]
-        opentelemetry/proto/profiles/v1experimental/pprofextended.proto [1:1]
-        opentelemetry/proto/profiles/v1experimental/profiles.proto [1:1]
+        opentelemetry/proto/collector/profiles/v1development/profiles_service.proto [1:1]
+        opentelemetry/proto/profiles/v1development/profiles.proto [1:1]

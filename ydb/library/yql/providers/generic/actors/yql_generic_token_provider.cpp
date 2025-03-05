@@ -10,14 +10,15 @@ namespace NYql::NDq {
     }
 
     TGenericTokenProvider::TGenericTokenProvider(
-        const TString& serviceAccountId, const TString& ServiceAccountIdSignature,
+        const TString& serviceAccountId, 
+        const TString& serviceAccountIdSignature,
         const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
         Y_ENSURE(!serviceAccountId.empty(), "No service account provided");
-        Y_ENSURE(!ServiceAccountIdSignature.empty(), "No service account signature provided");
+        Y_ENSURE(!serviceAccountIdSignature.empty(), "No service account signature provided");
         Y_ENSURE(credentialsFactory, "CredentialsFactory is not initialized");
 
         auto structuredTokenJSON =
-            TStructuredTokenBuilder().SetServiceAccountIdAuth(serviceAccountId, ServiceAccountIdSignature).ToJson();
+            TStructuredTokenBuilder().SetServiceAccountIdAuth(serviceAccountId, serviceAccountIdSignature).ToJson();
 
         Y_ENSURE(structuredTokenJSON, "empty structured token");
 
@@ -26,7 +27,7 @@ namespace NYql::NDq {
         CredentialsProvider_ = credentialsProviderFactory->CreateProvider();
     }
 
-    TString TGenericTokenProvider::MaybeFillToken(NConnector::NApi::TDataSourceInstance& dsi) const {
+    TString TGenericTokenProvider::MaybeFillToken(NYql::TGenericDataSourceInstance& dsi) const {
         // 1. Don't need tokens if basic auth is set
         if (dsi.credentials().has_basic()) {
             return {};
@@ -43,7 +44,7 @@ namespace NYql::NDq {
         // 3. Otherwise use credentials provider to get token
         Y_ENSURE(CredentialsProvider_, "CredentialsProvider is not initialized");
 
-        TString iamToken;
+        std::string iamToken;
         try {
             iamToken = CredentialsProvider_->GetAuthInfo();
         } catch (const std::exception& e) {
@@ -51,14 +52,15 @@ namespace NYql::NDq {
             return TString(e.what());
         }
 
-        Y_ENSURE(iamToken, "CredentialsProvider returned empty IAM token");
+        Y_ENSURE(!iamToken.empty(), "CredentialsProvider returned empty IAM token");
 
         *dsi.mutable_credentials()->mutable_token()->mutable_value() = std::move(iamToken);
         return {};
     }
 
     TGenericTokenProvider::TPtr
-    CreateGenericTokenProvider(const TString& staticIamToken, const TString& serviceAccountId,
+    CreateGenericTokenProvider(const TString& staticIamToken,
+                               const TString& serviceAccountId,
                                const TString& serviceAccountIdSignature,
                                const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
         if (!staticIamToken.empty()) {

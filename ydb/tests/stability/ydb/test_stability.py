@@ -36,6 +36,10 @@ def get_slice_name():
     return yatest.common.get_param("kikimr.ci.cluster_name", None)
 
 
+def get_configure_binary_path():
+    return yatest.common.binary_path("ydb/tools/cfg/bin/ydb_configure")
+
+
 def next_version_kikimr_driver_path():
     return yatest.common.get_param("kikimr.ci.kikimr_driver_next", None)
 
@@ -45,16 +49,16 @@ def kikimr_driver_path():
 
 
 def is_deploy_cluster():
-    return yatest.common.get_param("kikimr.ci.deploy_cluster", "false") == "true"
+    return yatest.common.get_param("kikimr.ci.deploy_cluster", "false").lower() == "true"
 
 
 class TestSetupForStability(object):
     stress_binaries_deploy_path = '/Berkanavt/nemesis/bin/'
     artifacts = (
         yatest.common.binary_path('ydb/tests/tools/nemesis/driver/nemesis'),
-        yatest.common.binary_path('ydb/tools/simple_queue/simple_queue'),
-        yatest.common.binary_path('ydb/tools/olap_workload/olap_workload'),
-        yatest.common.binary_path('ydb/tools/statistics_workload/statistics_workload'),
+        yatest.common.binary_path('ydb/tests/stress/simple_queue/simple_queue'),
+        yatest.common.binary_path('ydb/tests/stress/olap_workload/olap_workload'),
+        yatest.common.binary_path('ydb/tests/stress/statistics_workload'),
     )
 
     @classmethod
@@ -64,6 +68,7 @@ class TestSetupForStability(object):
 
         logger.info('setup_class started for slice = {}'.format(cls.slice_name))
         cls.kikimr_cluster = ExternalKiKiMRCluster(
+            kikimr_configure_binary_path=get_configure_binary_path(),
             config_path=get_slice_directory(),
             kikimr_path=kikimr_driver_path(),
             kikimr_next_path=next_version_kikimr_driver_path(),
@@ -187,6 +192,7 @@ class TestCheckLivenessAndSafety(object):
         logger.info('slice = {}'.format(slice_name))
         assert slice_name is not None
         kikimr_cluster = ExternalKiKiMRCluster(
+            kikimr_configure_binary_path=get_configure_binary_path(),
             config_path=get_slice_directory(),
             kikimr_path=kikimr_driver_path(),
             kikimr_next_path=next_version_kikimr_driver_path(),

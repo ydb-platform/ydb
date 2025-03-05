@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.8.5)
+VERSION(0.8.10)
 
 LICENSE(Apache-2.0)
 
@@ -21,6 +21,10 @@ ADDINCL(
 NO_COMPILER_WARNINGS()
 
 NO_LINT()
+
+NO_CHECK_IMPORTS(
+    clickhouse_connect.cc_sqlalchemy.*
+)
 
 PY_SRCS(
     TOP_LEVEL
@@ -44,6 +48,7 @@ PY_SRCS(
     clickhouse_connect/datatypes/container.py
     clickhouse_connect/datatypes/dynamic.py
     clickhouse_connect/datatypes/format.py
+    clickhouse_connect/datatypes/geometric.py
     clickhouse_connect/datatypes/network.py
     clickhouse_connect/datatypes/numeric.py
     clickhouse_connect/datatypes/postinit.py

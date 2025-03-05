@@ -1,0 +1,8 @@
+{%- set mainClass = target.app_main_class -%}
+{%- set publish = target.publish -%}
+{%- set with_kotlin = target.with_kotlin -%}
+{%- set kotlin_version = target.kotlin_version -%}
+{%- set has_junit5_test = extra_targets|selectattr('junit5_test') -%}
+{%- set has_errorprone = target.use_errorprone and not disable_errorprone and target.consumer|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length -%}
+
+{%- include "[generator]/jdk.jinja" -%}

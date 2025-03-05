@@ -30,8 +30,8 @@ class TIncrementalRestoreScan
             LogPrefix = TStringBuilder()
                 << "[TIncrementalRestoreScan]"
                 << "[" << TxId << "]"
-                << "[" << SourcePathId << "]"
-                << "[" << TargetPathId << "]"
+                << SourcePathId
+                << TargetPathId
                 << SelfId() /* contains brackets */ << " ";
         }
 

@@ -105,7 +105,7 @@ std::shared_ptr<arrow::Table> TMergePartialStream::SingleSourceDrain(const TSort
             *lastResultPosition = TCursor(keys, 0, SortSchema->field_names());
         }
         if (SortHeap.Current().GetFilter()) {
-            SortHeap.Current().GetFilter()->Apply(result, pos.GetPosition() + (include ? 0 : 1), resultSize);
+            AFL_VERIFY(SortHeap.Current().GetFilter()->Apply(result, TColumnFilter::TApplyContext(pos.GetPosition() + (include ? 0 : 1), resultSize)));
         }
     } else {
         result = SortHeap.Current().GetKeyColumns().SliceData(startPos, resultSize);
@@ -114,7 +114,7 @@ std::shared_ptr<arrow::Table> TMergePartialStream::SingleSourceDrain(const TSort
             *lastResultPosition = TCursor(keys, keys->num_rows() - 1, SortSchema->field_names());
         }
         if (SortHeap.Current().GetFilter()) {
-            SortHeap.Current().GetFilter()->Apply(result, startPos, resultSize);
+            AFL_VERIFY(SortHeap.Current().GetFilter()->Apply(result, TColumnFilter::TApplyContext(startPos, resultSize)));
         }
     }
     if (!result || !result->num_rows()) {

@@ -2,6 +2,7 @@
 
 #include <util/string/builder.h>
 #include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 namespace NYql::NS3Util {
 
@@ -11,5 +12,25 @@ TIssues AddParentIssue(const TStringBuilder& prefix, TIssues&& issues);
 // from ydb/library/cpp/string_utils/quote/quote.h, but also escapes:
 // '#', '?'
 TString UrlEscapeRet(const TStringBuf from);
+
+bool ValidateS3ReadWriteSchema(const TStructExprType* schemaStructRowType, TExprContext& ctx);
+
+class TUrlBuilder {
+    struct TParam {
+        TString Name;
+        TString Value;
+    };
+
+public:
+    explicit TUrlBuilder(const TString& uri);
+
+    TUrlBuilder& AddUrlParam(const TString& name, const TString& value = "");
+
+    TString Build() const;
+
+private:
+    std::vector<TParam> Params;
+    TString MainUri;
+};
 
 }

@@ -52,6 +52,7 @@ struct TWaitForPredicateOptions
     TDuration Period = TDuration::MilliSeconds(100);
     bool IgnoreExceptions = false;
     TString Message = "<no-message>";
+    TSourceLocation SourceLocation = YT_CURRENT_SOURCE_LOCATION;
 };
 
 void WaitForPredicate(
@@ -60,12 +61,14 @@ void WaitForPredicate(
 
 void WaitForPredicate(
     std::function<bool()> predicate,
-    const TString& message);
+    const TString& message,
+    TSourceLocation = YT_CURRENT_SOURCE_LOCATION);
 
 void WaitForPredicate(
     std::function<bool()> predicate,
     int iterationCount = 300,
-    TDuration period = TDuration::MilliSeconds(100));
+    TDuration period = TDuration::MilliSeconds(100),
+    TSourceLocation = YT_CURRENT_SOURCE_LOCATION);
 
 ////////////////////////////////////////////////////////////////////////////////
 

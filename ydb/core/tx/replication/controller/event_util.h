@@ -6,8 +6,20 @@
 
 namespace NKikimr::NReplication::NController {
 
-THolder<TEvService::TEvRunWorker> MakeTEvRunWorker(const TReplication::TPtr replication, const TReplication::ITarget& target, ui64 partitionId);
-THolder<TEvService::TEvRunWorker> MakeTEvRunWorker(ui64 replicationId, ui64 targetId, ui64 partitionId, const NKikimrReplication::TConnectionParams& connectionParams,
-            const TString& srcStreamPath, const TPathId& dstPathId);
+THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
+    const TReplication::TPtr replication,
+    const TReplication::ITarget& target,
+    ui64 workerId);
+
+THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
+    ui64 replicationId,
+    ui64 targetId,
+    const TReplication::ITarget::IConfig::TPtr& config,
+    ui64 workerId,
+    const NKikimrReplication::TConnectionParams& connectionParams,
+    const NKikimrReplication::TConsistencySettings& consistencySettings,
+    const TString& srcStreamPath,
+    const TString& srcStreamConsumerName,
+    const TPathId& dstPathId);
 
 }

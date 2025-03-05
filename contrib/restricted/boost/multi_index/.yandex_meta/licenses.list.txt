@@ -4,6 +4,16 @@
  * http://www.boost.org/LICENSE_1_0.txt)
 
 
+====================BSL-1.0====================
+[![BSL 1.0](https://img.shields.io/badge/license-BSL_1.0-blue.svg)](https://www.boost.org/users/license.html) <img alt="Header-only library" src="https://img.shields.io/badge/build-header--only-blue.svg">
+
+
+====================BSL-1.0====================
+http://www.boost.org/LICENSE_1_0.txt).
+
+====================BSL-1.0====================
+under the [Boost Software License, Version 1.0](
+
 ====================COPYRIGHT====================
  * Copyright (c) 1994
  * Hewlett-Packard Company

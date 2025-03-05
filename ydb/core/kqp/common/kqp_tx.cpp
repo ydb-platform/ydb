@@ -158,7 +158,8 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     Y_UNUSED(config);
 
     if (*txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE &&
-        *txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RO)
+        *txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RO &&
+        *txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW)
         return false;
 
     if (txCtx.GetSnapshot().IsValid())
@@ -211,26 +212,42 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 
     YQL_ENSURE(!hasSinkWrite || hasEffects);
 
-    // We don't want snapshot when there are effects at the moment,
-    // because it hurts performance when there are multiple single-shard
-    // reads and a single distributed commit. Taking snapshot costs
-    // similar to an additional distributed transaction, and it's very
-    // hard to predict when that happens, causing performance
-    // degradation.
-    if (hasEffects) {
-        return false;
-    }
-
     // We need snapshot for stream lookup, besause it's used for dependent reads
     if (hasStreamLookup) {
         return true;
     }
+
+    if (*txCtx.EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
+        if (hasEffects && !txCtx.HasTableRead) {
+            YQL_ENSURE(txCtx.HasTableWrite);
+            // Don't need snapshot for WriteOnly transaction.
+            return false;
+        } else if (hasEffects) {
+            YQL_ENSURE(txCtx.HasTableWrite);
+            // ReadWrite transaction => need snapshot
+            return true;
+        }
+        // ReadOnly transaction here
+    } else {
+        // We don't want snapshot when there are effects at the moment,
+        // because it hurts performance when there are multiple single-shard
+        // reads and a single distributed commit. Taking snapshot costs
+        // similar to an additional distributed transaction, and it's very
+        // hard to predict when that happens, causing performance
+        // degradation.
+        if (hasEffects) {
+            return false;
+        }
+    }
+
+    YQL_ENSURE(!hasEffects && !hasStreamLookup);
 
     // We need snapshot when there are multiple table read phases, most
     // likely it involves multiple tables and we would have to use a
     // distributed commit otherwise. Taking snapshot helps as avoid TLI
     // for read-only transactions, and costs less than a final distributed
     // commit.
+    // NOTE: In case of read from single shard, we won't take snapshot.
     return readPhases > 1;
 }
 
@@ -318,7 +335,7 @@ bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
     return false;
 }
 
-bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery) {
+bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery, const bool commit) {
     auto getTable = [](const NKqpProto::TKqpPhyTableId& table) {
         return NKikimr::TTableId(table.GetOwnerId(), table.GetTableId());
     };
@@ -385,6 +402,10 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
                     modifiedTables.insert(getTable(settings.GetTable()));
+                    if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && !commit) {
+                        // INSERT with sink should be executed immediately, because it returns an error in case of duplicate rows.
+                        return true;
+                    }
                 } else {
                     return true;
                 }

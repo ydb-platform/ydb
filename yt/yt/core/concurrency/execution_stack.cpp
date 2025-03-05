@@ -1,5 +1,7 @@
 #include "execution_stack.h"
+
 #include "private.h"
+#include "fiber_manager.h"
 
 #if defined(_unix_)
 #   include <sys/mman.h>
@@ -188,36 +190,7 @@ std::shared_ptr<TExecutionStack> CreateExecutionStack(EExecutionStackKind kind)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static std::atomic<int> SmallFiberStackPoolSize = {1024};
-static std::atomic<int> LargeFiberStackPoolSize = {1024};
-
-int GetFiberStackPoolSize(EExecutionStackKind stackKind)
-{
-    switch (stackKind) {
-        case EExecutionStackKind::Small: return SmallFiberStackPoolSize.load(std::memory_order::relaxed);
-        case EExecutionStackKind::Large: return LargeFiberStackPoolSize.load(std::memory_order::relaxed);
-        default:                         YT_ABORT();
-    }
-}
-
-void SetFiberStackPoolSize(EExecutionStackKind stackKind, int poolSize)
-{
-    if (poolSize < 0) {
-        YT_LOG_FATAL("Invalid fiber stack pool size (Size: %v, Kind: %v)",
-            poolSize,
-            stackKind);
-    }
-    switch (stackKind) {
-        case EExecutionStackKind::Small: SmallFiberStackPoolSize = poolSize; break;
-        case EExecutionStackKind::Large: LargeFiberStackPoolSize = poolSize; break;
-        default:                         YT_ABORT();
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 } // namespace NYT::NConcurrency
-
 
 namespace NYT {
 
@@ -242,7 +215,7 @@ struct TPooledObjectTraits<NConcurrency::TPooledExecutionStack<Kind, Size>, void
 
     static int GetMaxPoolSize()
     {
-        return NConcurrency::GetFiberStackPoolSize(Kind);
+        return NConcurrency::TFiberManager::GetFiberStackPoolSize(Kind);
     }
 };
 

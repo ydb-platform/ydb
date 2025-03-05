@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(20240722.0)
+VERSION(20250127.0)
 
-ORIGINAL_SOURCE(https://github.com/abseil/abseil-cpp/archive/20240722.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/abseil/abseil-cpp/archive/20250127.0.tar.gz)
 
 NO_RUNTIME()
 

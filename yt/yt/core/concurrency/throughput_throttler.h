@@ -67,7 +67,7 @@ struct IThroughputThrottler
      */
     virtual bool IsOverdraft() = 0;
 
-    //! Returns total byte amount of all waiting requests.
+    //! Returns total amount of units of all waiting requests.
     /*!
      *  \note Thread affinity: any
      */
@@ -104,6 +104,8 @@ struct IReconfigurableThroughputThrottler
     //! See TThroughputThrottlerConfig::Limit.
     virtual void SetLimit(std::optional<double> limit) = 0;
 
+    virtual std::optional<double> GetLimit() const = 0;
+
     //! Returns a future that is set when throttler has become available.
     virtual TFuture<void> GetAvailableFuture() = 0;
 
@@ -132,14 +134,14 @@ DEFINE_REFCOUNTED_TYPE(ITestableReconfigurableThroughputThrottler)
 //! Constructs a throttler from #config.
 IReconfigurableThroughputThrottlerPtr CreateReconfigurableThroughputThrottler(
     TThroughputThrottlerConfigPtr config,
-    const NLogging::TLogger& logger = NLogging::TLogger(),
+    const NLogging::TLogger& logger = {},
     const NProfiling::TProfiler& profiler = {});
 
 //! Constructs a throttler from #config and initializes logger and profiler.
 IReconfigurableThroughputThrottlerPtr CreateNamedReconfigurableThroughputThrottler(
     TThroughputThrottlerConfigPtr config,
     const TString& name,
-    NLogging::TLogger logger = NLogging::TLogger(),
+    NLogging::TLogger logger = {},
     NProfiling::TProfiler profiler = {});
 
 //! Returns a throttler that imposes no throughput limit.

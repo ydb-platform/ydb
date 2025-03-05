@@ -3,11 +3,9 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 

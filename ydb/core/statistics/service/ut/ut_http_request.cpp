@@ -38,6 +38,18 @@ void ProbeTest(bool isServerless) {
     TString columnName = "Value";
     const auto sender = runtime.AllocateEdgeActor();
 
+    bool firstStatsToSA = false;
+    auto statsObserver1 = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& /* ev */){
+        firstStatsToSA = true;
+    });
+    runtime.WaitFor("TEvSchemeShardStats 1", [&]{ return firstStatsToSA; });
+
+    bool secondStatsToSA = false;
+    auto statsObserver2 = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& /* ev */){
+        secondStatsToSA = true;
+    });
+    runtime.WaitFor("TEvSchemeShardStats 2", [&]{ return secondStatsToSA; });
+
     const auto operationId = TULIDGenerator().Next(TInstant::Now()).ToBinary();
     auto analyzeRequest = MakeAnalyzeRequest({{tableInfo.PathId, {1, 2}}}, operationId);
     runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest.release());

@@ -29,17 +29,26 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort",
+                                        "Node Type": "TopSort-Aggregate",
                                         "Operators": [
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "row.string4"
+                                            },
                                             {
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 3
                                                     }
                                                 ],
-                                                "Limit": "1001",
-                                                "Name": "TopSort",
-                                                "TopSortBy": "row.string4"
+                                                "Name": "Aggregate",
+                                                "Phase": "Final"
                                             }
                                         ],
                                         "PlanNodeId": 4,
@@ -63,7 +72,8 @@
                                                                         "ExternalPlanNodeId": 1
                                                                     }
                                                                 ],
-                                                                "Name": "Aggregate"
+                                                                "Name": "Aggregate",
+                                                                "Phase": "Intermediate"
                                                             }
                                                         ],
                                                         "PlanNodeId": 2,
@@ -74,6 +84,7 @@
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
+                                                                        "Path": "/Root/postgres_select_distinct.test_plan/onek",
                                                                         "ReadColumns": [
                                                                             "string4"
                                                                         ],

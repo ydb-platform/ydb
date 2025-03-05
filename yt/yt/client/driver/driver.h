@@ -8,6 +8,8 @@
 
 #include <yt/yt/client/security_client/public.h>
 
+#include <yt/yt/client/signature/public.h>
+
 #include <yt/yt/core/concurrency/async_stream.h>
 
 #include <yt/yt/core/misc/error.h>
@@ -66,7 +68,7 @@ struct TDriverRequest
     std::optional<TString> ServiceTicket;
 
     //! Additional logging tags.
-    std::optional<TString> LoggingTags;
+    std::optional<std::string> LoggingTags;
 
     //! Provides means to return arbitrary structured data from any command.
     //! Must be filled before writing data to output stream.
@@ -150,6 +152,10 @@ struct IDriver
     //! Returns the underlying connection.
     virtual NApi::IConnectionPtr GetConnection() = 0;
 
+    virtual NSignature::ISignatureGeneratorPtr GetSignatureGenerator() = 0;
+
+    virtual NSignature::ISignatureValidatorPtr GetSignatureValidator() = 0;
+
     //! Terminates the underlying connection.
     virtual void Terminate() = 0;
 };
@@ -160,7 +166,9 @@ DEFINE_REFCOUNTED_TYPE(IDriver)
 
 IDriverPtr CreateDriver(
     NApi::IConnectionPtr connection,
-    TDriverConfigPtr config);
+    TDriverConfigPtr config,
+    NSignature::ISignatureGeneratorPtr signatureGenerator,
+    NSignature::ISignatureValidatorPtr signatureValidator);
 
 ////////////////////////////////////////////////////////////////////////////////
 

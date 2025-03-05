@@ -38,6 +38,7 @@ from collections import UserList
 from collections import UserString
 from collections import abc
 
+from zope.interface._compat import PY313_OR_OLDER
 from zope.interface.common import ABCInterface
 from zope.interface.common import optional
 
@@ -190,13 +191,14 @@ class IMutableSequence(ISequence):
     extra_classes = (UserList,)
 
 
-class IByteString(ISequence):
-    """
-    This unifies `bytes` and `bytearray`.
-    """
-    abc = _new_in_ver(
-        'ByteString', True, (ISequence.getABC(),), (bytes, bytearray),
-    )
+if PY313_OR_OLDER:
+    class IByteString(ISequence):
+        """
+        This unifies `bytes` and `bytearray`.
+        """
+        abc = _new_in_ver(
+            'ByteString', True, (ISequence.getABC(),), (bytes, bytearray),
+        )
 
 
 class ISet(ICollection):

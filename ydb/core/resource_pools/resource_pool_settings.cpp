@@ -1,5 +1,7 @@
 #include "resource_pool_settings.h"
 
+#include <util/string/builder.h>
+
 
 namespace NKikimr::NResourcePool {
 
@@ -59,6 +61,7 @@ std::unordered_map<TString, TPoolSettings::TProperty> TPoolSettings::GetProperti
         {"database_load_cpu_threshold", &DatabaseLoadCpuThreshold},
         {"total_cpu_limit_percent_per_node", &TotalCpuLimitPercentPerNode},
         {"query_cpu_limit_percent_per_node", &QueryCpuLimitPercentPerNode},
+        {"resource_weight", &ResourceWeight}
     };
     if (!restricted) {
         properties.insert({"query_cancel_after_seconds", &QueryCancelAfter});
@@ -66,13 +69,14 @@ std::unordered_map<TString, TPoolSettings::TProperty> TPoolSettings::GetProperti
     return properties;
 }
 
-void TPoolSettings::Validate() const {
+std::optional<TString> TPoolSettings::Validate() const {
     if (ConcurrentQueryLimit > POOL_MAX_CONCURRENT_QUERY_LIMIT) {
-        throw yexception() << "Invalid resource pool configuration, concurrent_query_limit is " << ConcurrentQueryLimit << ", that exceeds limit in " << POOL_MAX_CONCURRENT_QUERY_LIMIT;
+        return TStringBuilder() << "Invalid resource pool configuration, concurrent_query_limit is " << ConcurrentQueryLimit << ", that exceeds limit in " << POOL_MAX_CONCURRENT_QUERY_LIMIT;
     }
     if (QueueSize != -1 && ConcurrentQueryLimit == -1 && DatabaseLoadCpuThreshold < 0.0) {
-        throw yexception() << "Invalid resource pool configuration, queue_size unsupported without concurrent_query_limit or database_load_cpu_threshold";
+        return "Invalid resource pool configuration, queue_size unsupported without concurrent_query_limit or database_load_cpu_threshold";
     }
+    return std::nullopt;
 }
 
 }  // namespace NKikimr::NResourcePool

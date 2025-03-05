@@ -17,6 +17,9 @@ class TBuiltinFunctionRegistry;
 
 constexpr std::string_view RandomMTResource = "MTRand";
 constexpr std::string_view ResourceQueuePrefix = "TResourceQueue:";
+constexpr std::string_view BlockStorageResourcePrefix = "TBlockStorage:";
+constexpr std::string_view BlockMapJoinIndexResourcePrefix = "TBlockMapJoinIndex:";
+constexpr std::string_view BlockMapJoinIndexResourceSeparator = ":$YqlKeyColumns:";
 
 enum class EJoinKind {
     Min = 1,
@@ -132,6 +135,10 @@ struct TAggInfo {
     TString Name;
     std::vector<ui32> ArgsColumns;
 };
+
+std::vector<TType*> ValidateBlockType(const TType* type, bool unwrap = true);
+std::vector<TType*> ValidateBlockStreamType(const TType* streamType, bool unwrap = true);
+std::vector<TType*> ValidateBlockFlowType(const TType* flowType, bool unwrap = true);
 
 class TProgramBuilder : public TTypeBuilder {
 public:
@@ -255,9 +262,12 @@ public:
     TRuntimeNode BlockFromPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode BlockPgResolvedCall(const std::string_view& name, ui32 id,
         const TArrayRef<const TRuntimeNode>& args, TType* returnType);
-    TRuntimeNode BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode dict,
-        EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns,
-        const TArrayRef<const ui32>& leftKeyDrops, TType* returnType);
+    TRuntimeNode BlockStorage(TRuntimeNode stream, TType* returnType);
+    TRuntimeNode BlockMapJoinIndex(TRuntimeNode blockStorage, TType* streamItemType, const TArrayRef<const ui32>& keyColumns, bool any, TType* returnType);
+    TRuntimeNode BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightBlockStorage, TType* rightStreamItemType, EJoinKind joinKind,
+        const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& leftKeyDrops,
+        const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& rightKeyDrops, TType* returnType
+    );
 
     //-- logical functions
     TRuntimeNode BlockNot(TRuntimeNode data);
@@ -269,7 +279,6 @@ public:
     TRuntimeNode BlockJust(TRuntimeNode data);
 
     TRuntimeNode BlockFunc(const std::string_view& funcName, TType* returnType, const TArrayRef<const TRuntimeNode>& args);
-    TRuntimeNode BlockBitCast(TRuntimeNode value, TType* targetType);
     TRuntimeNode BlockCombineAll(TRuntimeNode flow, std::optional<ui32> filterColumn,
         const TArrayRef<const TAggInfo>& aggs, TType* returnType);
     TRuntimeNode BlockCombineHashed(TRuntimeNode flow, std::optional<ui32> filterColumn, const TArrayRef<ui32>& keys,
@@ -630,6 +639,7 @@ public:
     TRuntimeNode VisitAll(TRuntimeNode variant, std::function<TRuntimeNode(ui32, TRuntimeNode)> handler);
     TRuntimeNode Way(TRuntimeNode variant);
     TRuntimeNode VariantItem(TRuntimeNode variant);
+    TRuntimeNode DynamicVariant(TRuntimeNode item, TRuntimeNode index, TType* variantType);
 
     //-- random functions
     // expects ui64 seed, returns resource
@@ -709,12 +719,15 @@ public:
     TRuntimeNode MatchRecognizeCore(
         TRuntimeNode inputStream,
         const TUnaryLambda& getPartitionKeySelectorNode,
-        const TArrayRef<TStringBuf>& partitionColumns,
-        const TArrayRef<std::pair<TStringBuf, TBinaryLambda>>& getMeasures,
+        const TArrayRef<TStringBuf>& partitionColumnNames,
+        const TVector<TStringBuf>& measureColumnNames,
+        const TVector<TBinaryLambda>& getMeasures,
         const NYql::NMatchRecognize::TRowPattern& pattern,
-        const TArrayRef<std::pair<TStringBuf, TTernaryLambda>>& getDefines,
+        const TVector<TStringBuf>& defineVarNames,
+        const TVector<TTernaryLambda>& getDefines,
         bool streamingMode,
-        const NYql::NMatchRecognize::TAfterMatchSkipTo& skipTo
+        const NYql::NMatchRecognize::TAfterMatchSkipTo& skipTo,
+        NYql::NMatchRecognize::ERowsPerMatch rowsPerMatch
     );
 
     TRuntimeNode TimeOrderRecover(
@@ -754,7 +767,7 @@ protected:
     TRuntimeNode BuildWideSkipTakeBlocks(const std::string_view& callableName, TRuntimeNode flow, TRuntimeNode count);
     TRuntimeNode BuildBlockLogical(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second);
     TRuntimeNode BuildExtend(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists);
-    
+
     TRuntimeNode BuildBlockDecimalBinary(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second);
 
 private:
@@ -847,6 +860,7 @@ private:
 
     TType* ChooseCommonType(TType* type1, TType* type2);
     TType* BuildArithmeticCommonType(TType* type1, TType* type2);
+    TType* BuildWideBlockType(const TArrayRef<TType* const>& wideComponents);
 
     bool IsNull(TRuntimeNode arg);
 protected:

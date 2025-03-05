@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
+#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -202,8 +202,10 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR));
     }
 
-    Y_UNIT_TEST(InsertCV) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(InsertCV, useSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
         TScriptingClient client(kikimr.GetDriver());
 
         auto result = client.ExecuteYqlScript(R"(
@@ -217,8 +219,10 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION));
     }
 
-    Y_UNIT_TEST(InsertCVList) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(InsertCVList, useSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
         TScriptingClient client(kikimr.GetDriver());
 
         auto result = client.ExecuteYqlScript(R"(
@@ -610,7 +614,6 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
     Y_UNIT_TEST(UuidPrimaryKeyDisabled) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableUuidAsPrimaryKey(false)
@@ -681,7 +684,6 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
     Y_UNIT_TEST(UuidPrimaryKey) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -738,7 +740,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
             TResultSetParser parser(result.GetResultSetParser(0));
             for (size_t i = 0; parser.TryNextRow(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("key").GetUuid().ToString(), testUuids[i]);
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().GetRef(), i);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().value(), i);
             }
         }
         {
@@ -752,7 +754,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
                 TResultSetParser parser(result.GetResultSetParser(0));
                 UNIT_ASSERT(parser.TryNextRow());
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().GetRef(), val++);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().value(), val++);
                 UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
             }
         }
@@ -822,14 +824,13 @@ Y_UNIT_TEST_SUITE(KqpYql) {
             TResultSetParser parser(result.GetResultSetParser(0));
             for (size_t i = 0; parser.TryNextRow(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Key").GetUuid().ToString(), testUuids[i]);
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Value").GetOptionalInt32().GetRef(), i);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Value").GetOptionalInt32().value(), i);
             }
         }
     }
 
     Y_UNIT_TEST(TestUuidPrimaryKeyPrefixSearch) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -877,7 +878,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
                 TResultSetParser parser(result.GetResultSetParser(0));
                 UNIT_ASSERT(parser.TryNextRow());
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().GetRef(), val++);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().value(), val++);
                 UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
             }
         }
@@ -885,7 +886,6 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
     Y_UNIT_TEST(TestUuidDefaultColumn) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -963,15 +963,13 @@ Y_UNIT_TEST_SUITE(KqpYql) {
             TResultSetParser parser(result.GetResultSetParser(0));
             for (size_t i = 0; parser.TryNextRow(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("key").GetUuid().ToString(), testUuids[i]);
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().GetRef(), i);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().value(), i);
             }
         }
     }
 
-    Y_UNIT_TEST_TWIN(PgIntPrimaryKey, EnableKqpDataQueryStreamLookup) {
+    Y_UNIT_TEST(PgIntPrimaryKey) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(EnableKqpDataQueryStreamLookup);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -1029,7 +1027,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
                 TResultSetParser parser(result.GetResultSetParser(0));
                 UNIT_ASSERT(parser.TryNextRow());
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().GetRef(), val++);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().value(), val++);
                 UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
             }
         }

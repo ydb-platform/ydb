@@ -15,7 +15,7 @@ constexpr ui32 IssuesBufferSize = 16;
 
 struct TComputeActorAsyncInputHelper {
     TString Type;
-    const TString LogPrefix;
+    TString LogPrefix;
     ui64 Index;
     IDqComputeActorAsyncInput* AsyncInput = nullptr;
     NActors::IActor* Actor = nullptr;
@@ -35,7 +35,7 @@ public:
         , IssuesBuffer(IssuesBufferSize)
         , WatermarksMode(watermarksMode) {}
 
-    bool IsPausedByWatermark() {
+    bool IsPausedByWatermark() const {
         return PendingWatermark.Defined();
     }
 
@@ -101,6 +101,10 @@ public:
             return EResumeSource::CAPollAsyncNoSpace; // If there is no free space in buffer, => we have something to process
         }
         return {};
+    }
+
+    void SetLogPrefix(const TString& logPrefix) {
+        LogPrefix = logPrefix;
     }
 };
 

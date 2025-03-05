@@ -96,11 +96,11 @@ public:
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto value = GetNodeValue(Limit, ctx, block);
-        const auto limit = SelectInst::Create(IsExists(value, block), GetterFor<ui64>(value, context, block), ConstantInt::get(Type::getInt64Ty(context), std::numeric_limits<ui64>::max()), "limit", block);
+        const auto limit = SelectInst::Create(IsExists(value, block, context), GetterFor<ui64>(value, context, block), ConstantInt::get(Type::getInt64Ty(context), std::numeric_limits<ui64>::max()), "limit", block);
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
@@ -125,7 +125,7 @@ public:
 
         result->addIncoming(GetFinish(context), block);
 
-        BranchInst::Create(over, more, IsFinish(state, block), block);
+        BranchInst::Create(over, more, IsFinish(state, block, context), block);
 
         block = more;
 
@@ -140,7 +140,7 @@ public:
 
         const auto push = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Put));
 
-        const auto arg = WrapArgumentForWindows(item, ctx, block);
+        const auto arg = item;
 
         const auto pushType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType(), arg->getType()}, false);
         const auto pushPtr = CastInst::Create(Instruction::IntToPtr, push, PointerType::getUnqual(pushType), "push", block);
@@ -152,21 +152,11 @@ public:
 
         const auto pull = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Pull));
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto pullType = FunctionType::get(valueType, {stateArg->getType(), ctx.Ctx->getType()}, false);
-            const auto pullPtr = CastInst::Create(Instruction::IntToPtr, pull, PointerType::getUnqual(pullType), "pull", block);
-            const auto list = CallInst::Create(pullType, pullPtr, {stateArg, ctx.Ctx}, "list", block);
-            UnRefBoxed(state, ctx, block);
-            result->addIncoming(list, block);
-        } else {
-            const auto ptr = new AllocaInst(valueType, 0U, "ptr", block);
-            const auto pullType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), ptr->getType(), ctx.Ctx->getType()}, false);
-            const auto pullPtr = CastInst::Create(Instruction::IntToPtr, pull, PointerType::getUnqual(pullType), "pull", block);
-            CallInst::Create(pullType, pullPtr, {stateArg, ptr, ctx.Ctx}, "", block);
-            const auto list = new LoadInst(valueType, ptr, "list", block);
-            UnRefBoxed(state, ctx, block);
-            result->addIncoming(list, block);
-        }
+        const auto pullType = FunctionType::get(valueType, {stateArg->getType(), ctx.Ctx->getType()}, false);
+        const auto pullPtr = CastInst::Create(Instruction::IntToPtr, pull, PointerType::getUnqual(pullType), "pull", block);
+        const auto list = CallInst::Create(pullType, pullPtr, {stateArg, ctx.Ctx}, "list", block);
+        UnRefBoxed(state, ctx, block);
+        result->addIncoming(list, block);
 
         new StoreInst(GetFinish(context), statePtr, block);
         BranchInst::Create(over, block);

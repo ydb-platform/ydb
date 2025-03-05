@@ -11,7 +11,6 @@
 
 #include <yt/yt/core/ypath/token.h>
 
-#include <yt/yt/core/misc/crash_handler.h>
 #include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/shutdown.h>
 
@@ -114,10 +113,15 @@ class TSerializedInvoker
     , public TInvokerProfileWrapper
 {
 public:
-    TSerializedInvoker(IInvokerPtr underlyingInvoker, const NProfiling::TTagSet& tagSet, NProfiling::IRegistryImplPtr registry)
+    TSerializedInvoker(
+        IInvokerPtr underlyingInvoker,
+        const NProfiling::TTagSet& tagSet,
+        NProfiling::IRegistryPtr registry)
         : TInvokerWrapper(std::move(underlyingInvoker))
         , TInvokerProfileWrapper(std::move(registry), "/serialized", tagSet)
     { }
+
+    using TInvokerWrapper::Invoke;
 
     void Invoke(TClosure callback) override
     {
@@ -174,7 +178,6 @@ private:
     private:
         TIntrusivePtr<TSerializedInvoker> Owner_;
         bool Activated_ = false;
-
     };
 
     void TrySchedule(TGuard<NThreading::TSpinLock>&& guard)
@@ -241,7 +244,7 @@ private:
     }
 };
 
-IInvokerPtr CreateSerializedInvoker(IInvokerPtr underlyingInvoker, const NProfiling::TTagSet& tagSet, NProfiling::IRegistryImplPtr registry)
+IInvokerPtr CreateSerializedInvoker(IInvokerPtr underlyingInvoker, const NProfiling::TTagSet& tagSet, NProfiling::IRegistryPtr registry)
 {
     if (underlyingInvoker->IsSerialized()) {
         return underlyingInvoker;
@@ -250,7 +253,7 @@ IInvokerPtr CreateSerializedInvoker(IInvokerPtr underlyingInvoker, const NProfil
     return New<TSerializedInvoker>(std::move(underlyingInvoker), tagSet, registry);
 }
 
-IInvokerPtr CreateSerializedInvoker(IInvokerPtr underlyingInvoker, const TString& invokerName, NProfiling::IRegistryImplPtr registry)
+IInvokerPtr CreateSerializedInvoker(IInvokerPtr underlyingInvoker, const TString& invokerName, NProfiling::IRegistryPtr registry)
 {
     NProfiling::TTagSet tagSet;
     tagSet.AddTag(NProfiling::TTag("invoker", invokerName));
@@ -265,7 +268,7 @@ class TPrioritizedInvoker
     , public virtual IPrioritizedInvoker
 {
 public:
-    TPrioritizedInvoker(IInvokerPtr underlyingInvoker, const NProfiling::TTagSet& tagSet, NProfiling::IRegistryImplPtr registry)
+    TPrioritizedInvoker(IInvokerPtr underlyingInvoker, const NProfiling::TTagSet& tagSet, NProfiling::IRegistryPtr registry)
         : TInvokerWrapper(std::move(underlyingInvoker))
         , TInvokerProfileWrapper(std::move(registry), "/prioritized", tagSet)
     { }
@@ -318,12 +321,12 @@ private:
 
 };
 
-IPrioritizedInvokerPtr CreatePrioritizedInvoker(IInvokerPtr underlyingInvoker, const NProfiling::TTagSet& tagSet, NProfiling::IRegistryImplPtr registry)
+IPrioritizedInvokerPtr CreatePrioritizedInvoker(IInvokerPtr underlyingInvoker, const NProfiling::TTagSet& tagSet, NProfiling::IRegistryPtr registry)
 {
     return New<TPrioritizedInvoker>(std::move(underlyingInvoker), std::move(tagSet), std::move(registry));
 }
 
-IPrioritizedInvokerPtr CreatePrioritizedInvoker(IInvokerPtr underlyingInvoker, const TString& invokerName, NProfiling::IRegistryImplPtr registry)
+IPrioritizedInvokerPtr CreatePrioritizedInvoker(IInvokerPtr underlyingInvoker, const TString& invokerName, NProfiling::IRegistryPtr registry)
 {
     NProfiling::TTagSet tagSet;
     tagSet.AddTag(NProfiling::TTag("invoker", invokerName));
@@ -345,7 +348,12 @@ public:
 
     void Invoke(TClosure callback, i64 /*priority*/) override
     {
-        return UnderlyingInvoker_->Invoke(std::move(callback));
+        Invoke(std::move(callback));
+    }
+
+    void Invoke(TClosure callback) override
+    {
+        UnderlyingInvoker_->Invoke(std::move(callback));
     }
 };
 
@@ -378,7 +386,6 @@ public:
 private:
     const IPrioritizedInvokerPtr UnderlyingInvoker_;
     const i64 Priority_;
-
 };
 
 IInvokerPtr CreateFixedPriorityInvoker(
@@ -407,6 +414,8 @@ public:
         : TInvokerWrapper(std::move(underlyingInvoker))
         , MaxConcurrentInvocations_(maxConcurrentInvocations)
     { }
+
+    using TInvokerWrapper::Invoke;
 
     void Invoke(TClosure callback) override
     {
@@ -499,7 +508,7 @@ private:
 
     void IncrementSemaphore(int delta)
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         Semaphore_ += delta;
         YT_ASSERT(Semaphore_ >= 0 && Semaphore_ <= MaxConcurrentInvocations_ && (!PendingMaxConcurrentInvocations_.has_value() || delta <= 0));
@@ -706,41 +715,6 @@ ISuspendableInvokerPtr CreateSuspendableInvoker(IInvokerPtr underlyingInvoker)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TCodicilGuardedInvoker
-    : public TInvokerWrapper<false>
-{
-public:
-    TCodicilGuardedInvoker(IInvokerPtr invoker, TString codicil)
-        : TInvokerWrapper(std::move(invoker))
-        , Codicil_(std::move(codicil))
-    { }
-
-    void Invoke(TClosure callback) override
-    {
-        UnderlyingInvoker_->Invoke(BIND_NO_PROPAGATE(
-            &TCodicilGuardedInvoker::RunCallback,
-            MakeStrong(this),
-            Passed(std::move(callback))));
-    }
-
-private:
-    const TString Codicil_;
-
-    void RunCallback(TClosure callback)
-    {
-        TCurrentInvokerGuard currentInvokerGuard(this);
-        TCodicilGuard codicilGuard(Codicil_);
-        callback();
-    }
-};
-
-IInvokerPtr CreateCodicilGuardedInvoker(IInvokerPtr underlyingInvoker, TString codicil)
-{
-    return New<TCodicilGuardedInvoker>(std::move(underlyingInvoker), std::move(codicil));
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TWatchdogInvoker
     : public TInvokerWrapper<false>
 {
@@ -754,6 +728,8 @@ public:
         , Threshold_(DurationToCpuDuration(threshold))
     { }
 
+    using TInvokerWrapper::Invoke;
+
     void Invoke(TClosure callback) override
     {
         UnderlyingInvoker_->Invoke(BIND_NO_PROPAGATE(
@@ -763,8 +739,8 @@ public:
     }
 
 private:
-    NLogging::TLogger Logger;
-    TCpuDuration Threshold_;
+    const NLogging::TLogger Logger;
+    const TCpuDuration Threshold_;
 
     void RunCallback(TClosure callback)
     {

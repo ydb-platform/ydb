@@ -8,9 +8,9 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/public/lib/deprecated/client/grpc_client.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
@@ -18,10 +18,9 @@
 #include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/core/kqp/provider/yql_kikimr_results.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/mvp/core/core_ydb_impl.h>
@@ -57,7 +56,7 @@ public:
     void Bootstrap(const NActors::TActorContext& ctx) {
         Client = std::make_shared<NYdb::NTable::TTableClient>(std::move(Location.GetTableClient(TMVP::GetMetaDatabaseClientSettings(Request, Location))));
 
-        NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+        NActors::TActorSystem* actorSystem = ctx.ActorSystem();
         NActors::TActorId actorId = ctx.SelfID;
 
         CreateLoadVersionsActor(actorId, Client, Location.RootDomain, ctx);
@@ -77,7 +76,7 @@ public:
 
             auto session = result.GetSession();
             TString query = TStringBuilder() << "SELECT * FROM `" + Location.RootDomain + "/ydb/MasterClusterExt.db`";
-            NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+            NActors::TActorSystem* actorSystem = ctx.ActorSystem();
             NActors::TActorId actorId = ctx.SelfID;
             session.ExecuteDataQuery(query,
                                      NYdb::NTable::TTxControl::BeginTx(

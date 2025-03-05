@@ -1,9 +1,9 @@
-<tmp_path>/program.sql:<main>: Fatal: Execution
+<tmp_path>/program.sql:<main>: Error: Execution
 
-    <tmp_path>/program.sql:<main>:12:1: Fatal: Execution of node: Result
+    <tmp_path>/program.sql:<main>:12:1: Error: Execution of node: Result
     	SELECT
 	^
-        <tmp_path>/program.sql:<main>:14:12: Fatal: yql/essentials/udfs/common/json2/sql_query.h:xxx: Error executing jsonpath:
+        <tmp_path>/program.sql:<main>:14:12: Error: yql/essentials/udfs/common/json2/sql_query.h:xxx: Error executing jsonpath:
 jsonpath:1:8: Error: Member not found, code: 4702
 
         	    Json2::SqlQuery($jsonpath_error, $path, AsDict(), false, NULL, true, NULL);

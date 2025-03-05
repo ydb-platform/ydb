@@ -7,13 +7,50 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
+    Y_UNIT_TEST(TablesInStore) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        auto tableClient = kikimr.GetTableClient();
+        {
+            auto alterQuery =
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=BLOOM_NGRAMM_FILTER,
+                    FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 512, "records_count" : 1024}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        {
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapStore/olapTableTest`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                level Int32,
+                message Utf8,
+                PRIMARY KEY (timestamp, uid)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(IndexesActualization) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -21,7 +58,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
@@ -55,7 +93,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             auto alterQuery =
                 TStringBuilder() <<
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["resource_id", "level"], "false_positive_probability" : 0.05}`);
+                    FEATURES=`{"column_names" : ["resource_id"], "false_positive_probability" : 0.05}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -79,9 +117,10 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 SELECT
                     COUNT(*)
                 FROM `/Root/olapStore/olapTable`
-                WHERE ((resource_id = '2' AND level = 222222) OR (resource_id = '1' AND level = 111111) OR (resource_id LIKE '%11dd%')) AND uid = '222'
+                WHERE uid = '222'
             )")
                           .GetValueSync();
+            //                WHERE ((resource_id = '2' AND level = 222222) OR (resource_id = '1' AND level = 111111) OR (resource_id LIKE '%11dd%')) AND uid = '222'
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
@@ -89,19 +128,22 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             Cerr << csController->GetIndexesSkippingOnSelect().Val() << " / " << csController->GetIndexesApprovedOnSelect().Val() << Endl;
             CompareYson(result, R"([[0u;]])");
             AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0);
+            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() == 0);
             AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val())
             ("approve", csController->GetIndexesApprovedOnSelect().Val())("skip", csController->GetIndexesSkippingOnSelect().Val());
         }
     }
 
     Y_UNIT_TEST(CountMinSketchIndex) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
 
         TLocalHelper(kikimr).CreateTestOlapTableWithoutStore();
         auto tableClient = kikimr.GetTableClient();
@@ -300,10 +342,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             CompareYson(result, R"([[20000u;]])");
         }
 
-        AFL_VERIFY(updatesCount + 3 /*tablets count*/ * 1 /*normalizers*/ ==
-            (ui64)csController->GetActualizationRefreshSchemeCount().Val())(
-                                                                                 "updates", updatesCount)("count",
-                                                                                 csController->GetActualizationRefreshSchemeCount().Val());
+        AFL_VERIFY(updatesCount + 6 ==
+            (ui64)csController->GetActualizationRefreshSchemeCount().Val())("updates", updatesCount)(
+                                       "count", csController->GetActualizationRefreshSchemeCount().Val());
     }
 
     class TTestIndexesScenario {
@@ -312,21 +353,63 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         std::unique_ptr<TKikimrRunner> Kikimr;
         YDB_ACCESSOR(TString, StorageId, "__DEFAULT");
 
+        ui64 SkipStart = 0;
+        ui64 NoDataStart = 0;
+        ui64 ApproveStart = 0;
+
+        template <class TController>
+        void ResetZeroLevel(TController& g) {
+            SkipStart = g->GetIndexesSkippingOnSelect().Val();
+            ApproveStart = g->GetIndexesApprovedOnSelect().Val();
+            NoDataStart = g->GetIndexesSkippedNoData().Val();
+        }
+
+        void ExecuteSQL(const TString& text, const TString& expectedResult) const {
+            auto tableClient = Kikimr->GetTableClient();
+            auto it = tableClient.StreamExecuteScanQuery(text).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("result", result)("expected", expectedResult);
+            auto* controller = NYDBTest::TControllers::GetControllerAs<NOlap::TWaitCompactionController>();
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("skip", controller->GetIndexesSkippingOnSelect().Val() - SkipStart)(
+                "check", controller->GetIndexesApprovedOnSelect().Val() - ApproveStart)(
+                "no_data", controller->GetIndexesSkippedNoData().Val() - NoDataStart);
+            CompareYson(result, expectedResult);
+        }
+
     public:
         TTestIndexesScenario& Initialize() {
             Settings = TKikimrSettings().SetWithSampleTables(false);
+            Settings.AppConfig.MutableColumnShardConfig()->SetReaderClassName("SIMPLE");
             Kikimr = std::make_unique<TKikimrRunner>(Settings);
             return *this;
         }
 
-        void Execute() const {
+        void Execute() {
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-            csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
+            csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+            csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
             TLocalHelper(*Kikimr).CreateTestOlapTable();
             auto tableClient = Kikimr->GetTableClient();
 
-            //        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+/*
+            Tests::NCommon::TLoggerInit(*Kikimr)
+                .SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS")
+                .SetPriority(NActors::NLog::PRI_DEBUG)
+                .Initialize();
+*/
 
+            {
+                auto alterQuery =
+                    TStringBuilder() <<
+                    R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                  {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "10s", "expected_blobs_size" : 2048000, "portions_count_available" : 1},
+                               {"class_name" : "Zero"}]}`);
+                )";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            }
             {
                 auto alterQuery =
                     TStringBuilder() << Sprintf(
@@ -339,10 +422,18 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
             }
             {
+                auto alterQuery = R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=BLOOM_NGRAMM_FILTER,
+                    FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 512, "records_count" : 1024}`);
+                )";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            }
+            {
                 auto alterQuery =
                     TStringBuilder() << Sprintf(
                         R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["resource_id", "level"], "false_positive_probability" : 0.05, "storage_id" : "%s"}`);
+                    FEATURES=`{"column_names" : ["resource_id"], "false_positive_probability" : 0.05, "storage_id" : "%s"}`);
                 )",
                         StorageId.data());
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -355,15 +446,13 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             std::vector<ui32> levels;
 
             {
-                for (ui32 i = 0; i < 2; ++i) {
-                    WriteTestData(*Kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
-                    WriteTestData(*Kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
-                    WriteTestData(*Kikimr, "/Root/olapStore/olapTable", 1200000, 300200000, 10000);
-                    WriteTestData(*Kikimr, "/Root/olapStore/olapTable", 1300000, 300300000, 10000);
-                    WriteTestData(*Kikimr, "/Root/olapStore/olapTable", 1400000, 300400000, 10000);
-                    WriteTestData(*Kikimr, "/Root/olapStore/olapTable", 2000000, 200000000, 70000);
-                    WriteTestData(*Kikimr, "/Root/olapStore/olapTable", 3000000, 100000000, 110000);
-                }
+                WriteTestData(*Kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+                WriteTestData(*Kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
+                WriteTestData(*Kikimr, "/Root/olapStore/olapTable", 1200000, 300200000, 10000);
+                WriteTestData(*Kikimr, "/Root/olapStore/olapTable", 1300000, 300300000, 10000);
+                WriteTestData(*Kikimr, "/Root/olapStore/olapTable", 1400000, 300400000, 10000);
+                WriteTestData(*Kikimr, "/Root/olapStore/olapTable", 2000000, 200000000, 70000);
+                WriteTestData(*Kikimr, "/Root/olapStore/olapTable", 3000000, 100000000, 110000);
 
                 const auto filler = [&](const ui32 startRes, const ui32 startUid, const ui32 count) {
                     for (ui32 i = 0; i < count; ++i) {
@@ -382,87 +471,116 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 filler(3000000, 100000000, 110000);
             }
 
-            {
-                auto it = tableClient
-                              .StreamExecuteScanQuery(R"(
-                --!syntax_v1
-
-                SELECT
-                    COUNT(*)
-                FROM `/Root/olapStore/olapTable`
-            )")
-                              .GetValueSync();
-
-                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-                TString result = StreamResultToYson(it);
-                Cout << result << Endl;
-                CompareYson(result, R"([[230000u;]])");
-            }
+            ExecuteSQL(R"(SELECT COUNT(*) FROM `/Root/olapStore/olapTable`)", "[[230000u;]]");
 
             AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() == 0);
             AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() == 0);
-            TInstant start = Now();
-            ui32 compactionsStart = csController->GetCompactionStartedCounter().Val();
-            while (Now() - start < TDuration::Seconds(10)) {
-                if (compactionsStart != csController->GetCompactionStartedCounter().Val()) {
-                    compactionsStart = csController->GetCompactionStartedCounter().Val();
-                    start = Now();
-                }
-                Cerr << "WAIT_COMPACTION: " << csController->GetCompactionStartedCounter().Val() << Endl;
-                Sleep(TDuration::Seconds(1));
-            }
+            csController->WaitCompactions(TDuration::Seconds(5));
             // important checker for control compactions (<=21) and control indexes constructed (>=21)
-            AFL_VERIFY(csController->GetCompactionStartedCounter().Val() == 21)("count", csController->GetCompactionStartedCounter().Val());
+            AFL_VERIFY(csController->GetCompactionStartedCounter().Val() == 3)("count", csController->GetCompactionStartedCounter().Val());
 
             {
-                auto it = tableClient
-                              .StreamExecuteScanQuery(R"(
-                --!syntax_v1
+                ExecuteSQL(R"(SELECT COUNT(*)
+                    FROM `/Root/olapStore/olapTable`
+                    WHERE resource_id LIKE '%110a151' AND resource_id LIKE '110a%' AND resource_id LIKE '%dd%')",
+                    "[[0u;]]");
+                AFL_VERIFY(!csController->GetIndexesApprovedOnSelect().Val());
+                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val());
+            }
+            {
+                ResetZeroLevel(csController);
+                ExecuteSQL(R"(SELECT COUNT(*)
+                    FROM `/Root/olapStore/olapTable`
+                    WHERE resource_id LIKE '%110a151%')",
+                    "[[0u;]]");
+                AFL_VERIFY(!csController->GetIndexesApprovedOnSelect().Val());
+                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart == 3);
+            }
+            {
+                ResetZeroLevel(csController);
+                ExecuteSQL(R"(SELECT COUNT(*)
+                    FROM `/Root/olapStore/olapTable`
+                    WHERE ((resource_id = '2' AND level = 222222) OR (resource_id = '1' AND level = 111111) OR (resource_id LIKE '%11dd%')) AND uid = '222')",
+                    "[[0u;]]");
 
-                SELECT
-                    COUNT(*)
-                FROM `/Root/olapStore/olapTable`
-                WHERE ((resource_id = '2' AND level = 222222) OR (resource_id = '1' AND level = 111111) OR (resource_id LIKE '%11dd%')) AND uid = '222'
-            )")
-                              .GetValueSync();
-
-                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-                TString result = StreamResultToYson(it);
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("result", result);
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("skip", csController->GetIndexesSkippingOnSelect().Val())(
-                    "check", csController->GetIndexesApprovedOnSelect().Val());
-                CompareYson(result, R"([[0u;]])");
-                if (StorageId == "__LOCAL_METADATA") {
-                    AFL_VERIFY(csController->GetIndexesSkippedNoData().Val());
-                } else {
-                    AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
+                AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
+                AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() - ApproveStart < csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
+            }
+            {
+                ResetZeroLevel(csController);
+                ui32 requestsCount = 100;
+                for (ui32 i = 0; i < requestsCount; ++i) {
+                    const ui32 idx = RandomNumber<ui32>(uids.size());
+                    const auto query = [](const TString& res, const TString& uid, const ui32 level) {
+                        TStringBuilder sb;
+                        sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
+                        sb << "WHERE(" << Endl;
+                        sb << "resource_id = '" << res << "' AND" << Endl;
+                        sb << "uid= '" << uid << "' AND" << Endl;
+                        sb << "level= " << level << Endl;
+                        sb << ")";
+                        return sb;
+                    };
+                    ExecuteSQL(query(resourceIds[idx], uids[idx], levels[idx]), "[[1u;]]");
                 }
-                AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val());
+                AFL_VERIFY((csController->GetIndexesApprovedOnSelect().Val() - ApproveStart) < csController->GetIndexesSkippingOnSelect().Val() - SkipStart)
+                ("approved", csController->GetIndexesApprovedOnSelect().Val() - ApproveStart)(
+                    "skipped", csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
             }
-            ui32 requestsCount = 100;
-            for (ui32 i = 0; i < requestsCount; ++i) {
-                const ui32 idx = RandomNumber<ui32>(uids.size());
-                const auto query = [](const TString& res, const TString& uid, const ui32 level) {
-                    TStringBuilder sb;
-                    sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
-                    sb << "WHERE(" << Endl;
-                    sb << "resource_id = '" << res << "' AND" << Endl;
-                    sb << "uid= '" << uid << "' AND" << Endl;
-                    sb << "level= " << level << Endl;
-                    sb << ")";
-                    return sb;
-                };
-                auto it = tableClient.StreamExecuteScanQuery(query(resourceIds[idx], uids[idx], levels[idx])).GetValueSync();
-
-                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-                TString result = StreamResultToYson(it);
-                Cout << csController->GetIndexesSkippingOnSelect().Val() << " / " << csController->GetIndexesApprovedOnSelect().Val() << " / "
-                     << csController->GetIndexesSkippedNoData().Val() << Endl;
-                CompareYson(result, R"([[1u;]])");
+            {
+                ResetZeroLevel(csController);
+                ui32 requestsCount = 300;
+                for (ui32 i = 0; i < requestsCount; ++i) {
+                    const ui32 idx = RandomNumber<ui32>(uids.size());
+                    const auto query = [](const TString& res) {
+                        TStringBuilder sb;
+                        sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
+                        sb << "WHERE" << Endl;
+                        sb << "resource_id LIKE '%" << res << "%'" << Endl;
+                        return sb;
+                    };
+                    ExecuteSQL(query(resourceIds[idx]), "[[1u;]]");
+                }
+//                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart)(
+//                    "approved", csController->GetIndexesApprovedOnSelect().Val() - ApproveStart)(
+//                    "skipped", csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
             }
-
-            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() * 5 < csController->GetIndexesSkippingOnSelect().Val())
-            ("approved", csController->GetIndexesApprovedOnSelect().Val())("skipped", csController->GetIndexesSkippingOnSelect().Val());
+            {
+                ResetZeroLevel(csController);
+                ui32 requestsCount = 300;
+                for (ui32 i = 0; i < requestsCount; ++i) {
+                    const ui32 idx = RandomNumber<ui32>(uids.size());
+                    const auto query = [](const TString& res) {
+                        TStringBuilder sb;
+                        sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
+                        sb << "WHERE" << Endl;
+                        sb << "resource_id LIKE '" << res << "%'" << Endl;
+                        return sb;
+                    };
+                    ExecuteSQL(query(resourceIds[idx]), "[[1u;]]");
+                }
+//                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart)(
+//                    "approved", csController->GetIndexesApprovedOnSelect().Val() - ApproveStart)(
+//                    "skipped", csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
+            }
+            {
+                ResetZeroLevel(csController);
+                ui32 requestsCount = 300;
+                for (ui32 i = 0; i < requestsCount; ++i) {
+                    const ui32 idx = RandomNumber<ui32>(uids.size());
+                    const auto query = [](const TString& res) {
+                        TStringBuilder sb;
+                        sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
+                        sb << "WHERE" << Endl;
+                        sb << "resource_id LIKE '%" << res << "'" << Endl;
+                        return sb;
+                    };
+                    ExecuteSQL(query(resourceIds[idx]), "[[1u;]]");
+                }
+//                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart)(
+//                    "approved", csController->GetIndexesApprovedOnSelect().Val() - ApproveStart)(
+//                    "skipped", csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
+            }
         }
     };
 

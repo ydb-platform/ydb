@@ -1,7 +1,7 @@
 import sys
 
 TEMPLATE = """
-#include <@YQL_BASE_DIR@/udfs/common/python/python_udf/python_udf.h>
+#include <yql/essentials/udfs/common/python/python_udf/python_udf.h>
 
 #include <yql/essentials/public/udf/udf_registrator.h>
 
@@ -17,18 +17,18 @@ using namespace NKikimr::NUdf;
 LIBRA_MODULE(TLibraModule, "Libra@MODULE_NAME@");
 #endif
 
-extern "C" UDF_API void Register(IRegistrator& registrator, ui32 flags) {
+extern "C" YQL_UDF_API void Register(IRegistrator& registrator, ui32 flags) {
     RegisterYqlPythonUdf(registrator, flags, TStringBuf("@MODULE_NAME@"), TStringBuf("@PACKAGE_NAME@"), EPythonFlavor::@FLAVOR@);
 #if @WITH_LIBRA@
     RegisterHelper<TLibraModule>(registrator);
 #endif
 }
 
-extern "C" UDF_API ui32 AbiVersion() {
+extern "C" YQL_UDF_API ui32 AbiVersion() {
     return CurrentAbiVersion();
 }
 
-extern "C" UDF_API void SetBackTraceCallback(TBackTraceCallback callback) {
+extern "C" YQL_UDF_API void SetBackTraceCallback(TBackTraceCallback callback) {
     SetBackTraceCallbackImpl(callback);
 }
 
@@ -37,8 +37,8 @@ extern "C" UDF_API void SetBackTraceCallback(TBackTraceCallback callback) {
 
 
 def main():
-    assert len(sys.argv) == 7
-    flavor, module_name, package_name, path, libra_flag, yql_base_dir = sys.argv[1:]
+    assert len(sys.argv) == 6
+    flavor, module_name, package_name, path, libra_flag = sys.argv[1:]
     with open(path, 'w') as f:
         f.write(
             TEMPLATE.strip()
@@ -46,7 +46,6 @@ def main():
             .replace('@PACKAGE_NAME@', package_name)
             .replace('@FLAVOR@', flavor)
             .replace('@WITH_LIBRA@', libra_flag)
-            .replace('@YQL_BASE_DIR@', yql_base_dir)
         )
         f.write('\n')
 

@@ -1,22 +1,26 @@
 #include "tenant_runtime.h"
 
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/cms/console/console.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/base/feature_flags_service.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/feature_flags_configurator.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/labels_maintainer.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mind/tenant_slot_broker.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/persqueue/pq.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/statistics/aggregator/aggregator.h>
+#include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/tablet/bootstrapper.h>
 #include <ydb/core/tablet/tablet_monitoring_proxy.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/coordinator/coordinator.h>
-#include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/long_tx_service.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/replication/controller/controller.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -24,9 +28,6 @@
 #include <ydb/core/tx/sequenceshard/sequenceshard.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/sys_view/processor/processor.h>
-#include <ydb/core/persqueue/pq.h>
-#include <ydb/core/statistics/aggregator/aggregator.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
@@ -394,7 +395,7 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
     {
         TIntrusivePtr<TBootstrapperInfo> bi(new TBootstrapperInfo(new TTabletSetupInfo(op, TMailboxType::Simple, 0,
                                                                                        TMailboxType::Simple, 0)));
-        return ctx.ExecutorThread.RegisterActor(CreateBootstrapper(CreateTestTabletInfo(State.NextTabletId, tabletType, erasure), bi.Get()));
+        return ctx.Register(CreateBootstrapper(CreateTestTabletInfo(State.NextTabletId, tabletType, erasure), bi.Get()));
     }
 
     void SendDeletionNotification(ui64 tabletId, TActorId waiter, const TActorContext& ctx)
@@ -1161,6 +1162,7 @@ TTenantTestRuntime::TTenantTestRuntime(const TTenantTestConfig &config,
 {
     Extension.MutableFeatureFlags()->SetEnableExternalHive(false);
     Extension.MutableFeatureFlags()->SetEnableColumnStatistics(false);
+    Extension.MutableFeatureFlags()->SetEnableScaleRecommender(true);
     Setup(createTenantPools);
 }
 

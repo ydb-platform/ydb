@@ -38,11 +38,11 @@ namespace NTabletFlatExecutor {
             return { !ReadMissingReferences, page };
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageId page, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            return Lookup(partStore->PageCollections.at(groupId.Index).Get(), page);
+            return Lookup(partStore->PageCollections.at(groupId.Index).Get(), pageId);
         }
 
         void EnableReadMissingReferences() noexcept {

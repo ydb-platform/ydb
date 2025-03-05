@@ -2,6 +2,7 @@
 #include "scanner.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/result.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -10,7 +11,7 @@ namespace NKikimr::NOlap::NReader::NPlain {
 void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard,
     const std::optional<NArrow::TShardedRecordBatch>& newBatch, const std::shared_ptr<arrow::RecordBatch>& lastPK,
     std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, const ui32 intervalIdx, TPlainReadData& reader) {
-    if (Context->GetReadMetadata()->Limit && (!newBatch || newBatch->GetRecordsCount() == 0) && InFlightLimit < MaxInFlight) {
+    if (Context->GetReadMetadata()->HasLimit() && (!newBatch || newBatch->GetRecordsCount() == 0) && InFlightLimit < MaxInFlight) {
         InFlightLimit = std::min<ui32>(MaxInFlight, InFlightLimit * 4);
     }
     auto itInterval = FetchingIntervals.find(intervalIdx);
@@ -27,7 +28,9 @@ void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocat
         } else {
             gGuard = itInterval->second->GetGroupGuard();
         }
-        AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_shared<TPartialReadResult>(std::move(allocationGuard), std::move(gGuard), *newBatch, lastPK, callbackIdxSubscriver)).second);
+        std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> guards = { std::move(allocationGuard) };
+        AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_shared<TPartialReadResult>(guards, std::move(gGuard), *newBatch,
+            std::make_shared<TPlainScanCursor>(lastPK), Context->GetCommonContext(), callbackIdxSubscriver)).second);
     } else {
         AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, nullptr).second);
     }
@@ -67,7 +70,6 @@ void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocat
 }
 
 TConclusionStatus TScanHead::Start() {
-    const bool guaranteeExclusivePK = Context->GetCommonContext()->GetReadMetadata()->HasGuaranteeExclusivePK();
     TScanContext context;
     for (auto itPoint = BorderPoints.begin(); itPoint != BorderPoints.end(); ++itPoint) {
         auto& point = itPoint->second;
@@ -79,8 +81,7 @@ TConclusionStatus TScanHead::Start() {
         }
         const bool isExclusive = context.GetCurrentSources().size() == 1;
         for (auto&& i : context.GetCurrentSources()) {
-            i.second->SetExclusiveIntervalOnly(
-                (isExclusive && i.second->GetExclusiveIntervalOnly() && !context.GetIsSpecialPoint()) || guaranteeExclusivePK);
+            i.second->SetExclusiveIntervalOnly((isExclusive && i.second->GetExclusiveIntervalOnly() && !context.GetIsSpecialPoint()));
         }
 
         for (auto&& i : point.GetFinishSources()) {
@@ -110,7 +111,7 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
         }
     }
 
-    if (Context->GetReadMetadata()->Limit) {
+    if (Context->GetReadMetadata()->HasLimit()) {
         InFlightLimit = 1;
     } else {
         InFlightLimit = MaxInFlight;
@@ -124,10 +125,7 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
 }
 
 TConclusion<bool> TScanHead::BuildNextInterval() {
-    if (Context->IsAborted()) {
-        return false;
-    }
-    while (BorderPoints.size()) {
+    while (BorderPoints.size() && !Context->IsAborted()) {
         if (BorderPoints.begin()->second.GetStartSources().size()) {
             if (FetchingIntervals.size() >= InFlightLimit) {
                 AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_next_interval")("reason", "too many intervals in flight")(

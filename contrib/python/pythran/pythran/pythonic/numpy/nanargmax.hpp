@@ -3,10 +3,10 @@
 
 #include "pythonic/include/numpy/nanargmax.hpp"
 
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/types/ndarray.hpp"
 #include "pythonic/builtins/ValueError.hpp"
 #include "pythonic/numpy/isnan.hpp"
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -35,7 +35,7 @@ namespace numpy
         _nanargmax((*begin).begin(), (*begin).end(), max, index, where,
                    utils::int_<N - 1>());
     }
-  }
+  } // namespace
 
   template <class E>
   long nanargmax(E const &expr)
@@ -50,7 +50,7 @@ namespace numpy
     else
       throw types::ValueError("empty sequence");
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

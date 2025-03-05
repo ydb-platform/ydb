@@ -12,7 +12,7 @@ TExprNodePtr WrapWithPgCast(TExprNodePtr&& node, ui32 targetTypeId, TExprContext
 TString MakeAliasedColumn(TStringBuf alias, TStringBuf column);
 const TItemExprType* AddAlias(const TString& alias, const TItemExprType* item, TExprContext& ctx);
 TStringBuf RemoveAlias(TStringBuf column);
-TStringBuf RemoveAlias(TStringBuf column, TStringBuf& alias);
+TStringBuf RemoveAlias(TStringBuf column, TString& alias);
 const TItemExprType* RemoveAlias(const TItemExprType* item, TExprContext& ctx);
 TMap<TString, ui32> ExtractExternalColumns(const TExprNode& select);
 bool IsPlainMemberOverArg(const TExprNode& expr, TStringBuf& memberName);

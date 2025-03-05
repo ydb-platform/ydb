@@ -22,11 +22,11 @@ TCompactionTaskData TZeroLevelPortions::DoGetOptimizationTask() const {
 }
 
 ui64 TZeroLevelPortions::DoGetWeight() const {
-    if (!NextLevel || Portions.size() < 10) {
+    if (!NextLevel || Portions.size() < PortionsCountAvailable) {
         return 0;
     }
     if (PredOptimization && TInstant::Now() - *PredOptimization < DurationToDrop) {
-        if (PortionsInfo.PredictPackedBlobBytes(GetPackKff()) < (1 << 20)) {
+        if (PortionsInfo.PredictPackedBlobBytes(GetPackKff()) < ExpectedBlobsSize) {
             return 0;
         }
     }
@@ -59,6 +59,13 @@ ui64 TZeroLevelPortions::DoGetWeight() const {
 
     const ui64 mb = (affectedRawBytes + PortionsInfo.GetRawBytes()) / 1000000 + 1;
     return 1000.0 * PortionsInfo.GetCount() * PortionsInfo.GetCount() / mb;
+}
+
+TInstant TZeroLevelPortions::DoGetWeightExpirationInstant() const {
+    if (!PredOptimization) {
+        return TInstant::Max();
+    }
+    return *PredOptimization + DurationToDrop;
 }
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

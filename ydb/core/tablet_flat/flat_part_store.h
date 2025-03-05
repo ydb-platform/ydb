@@ -154,9 +154,6 @@ public:
 
         for (auto &one: components) {
             caches.emplace_back(new TCache(std::move(one.Packet)));
-
-            for (auto &page: one.Sticky)
-                caches.back()->Fill(page, true);
         }
 
         return caches;

@@ -5,6 +5,8 @@ SRCS(
     manager.cpp
 )
 
+STYLE_CPP()
+
 PEERDIR(
     ydb/library/actors/core
     ydb/library/services
@@ -13,7 +15,3 @@ PEERDIR(
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    style
-)

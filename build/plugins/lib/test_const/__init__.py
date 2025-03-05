@@ -173,10 +173,6 @@ SANDBOX_RUN_TEST_YT_TOKEN_VALUE_NAME = 'YA_MAKE_SANDBOX_RUN_TEST_YT_TOKEN'
 # global resources
 ANDROID_AVD_ROOT = 'ANDROID_AVD_RESOURCE_GLOBAL'
 ANDROID_SDK_ROOT = 'ANDROID_SDK_RESOURCE_GLOBAL'
-COVERAGE_PUSH_TOOL_LOCAL = 'USE_SYSTEM_COVERAGE_PUSH_TOOL'
-COVERAGE_PUSH_TOOL_RESOURCE = 'COVERAGE_PUSH_TOOL_RESOURCE_GLOBAL'
-COVERAGE_PUSH_TOOL_LB_LOCAL = 'USE_SYSTEM_COVERAGE_PUSH_TOOL_LB'
-COVERAGE_PUSH_TOOL_LB_RESOURCE = 'COVERAGE_PUSH_TOOL_LB_RESOURCE_GLOBAL'
 FLAKE8_PY2_RESOURCE = 'FLAKE8_PY2_RESOURCE_GLOBAL'
 FLAKE8_PY3_RESOURCE = 'FLAKE8_PY3_RESOURCE_GLOBAL'
 GO_TOOLS_RESOURCE = 'GO_TOOLS_RESOURCE_GLOBAL'
@@ -184,6 +180,8 @@ JSTYLE_RUNNER_LIB = 'JSTYLE_LIB_RESOURCE_GLOBAL'
 NODEJS_RESOURCE = 'NODEJS_RESOURCE_GLOBAL'
 NYC_RESOURCE = 'NYC_RESOURCE_GLOBAL'
 RUFF_RESOURCE = 'RUFF_RESOURCE_GLOBAL'
+CLANG_FORMAT_RESOURCE = 'CLANG_FORMAT_RESOURCE_GLOBAL'
+CLANG_FORMAT_15_RESOURCE = 'CLANG_FORMAT_15_RESOURCE_GLOBAL'
 
 # test_tool resource for host platform.
 # source - build/platform/test_tool/host.ya.make.inc.
@@ -233,6 +231,7 @@ class TestRequirements(Enum):
     Dns = 'dns'
     Kvm = 'kvm'
     Network = 'network'
+    PortoLayers = 'porto_layers'
     Ram = 'ram'
     RamDisk = 'ram_disk'
     SbVault = 'sb_vault'
@@ -372,16 +371,20 @@ class TestSize(Enum):
 
 
 class ModuleLang(Enum):
-    ABSENT = "absent"
-    NUMEROUS = "numerous"
-    UNKNOWN = "unknown"
     CPP = "cpp"
     DOCS = "docs"
     GO = "go"
     JAVA = "java"
     KOTLIN = "kotlin"
+    LANG_AGNOSTIC = "agnostic"  # This module (or node) is not language specific
     PY = "py"
     TS = "ts"
+    UNKNOWN = "unknown"
+
+
+class AggregateLang(Enum):
+    ABSENT = "absent"
+    NUMEROUS = "numerous"
 
 
 class NodeType(Enum):
@@ -436,20 +439,43 @@ class ServiceTags(Enum):
     AnyTag = "ya:anytag"
 
 
+# Linter names must match `NAME` set in `_ADD_*_LINTER_CHECK`
 class PythonLinterName(Enum):
-    Flake8 = "flake8"
-    Py2Flake8 = "py2_flake8"
     Black = "black"
     DummyLinter = "dummy_linter"
+    Flake8 = "flake8"
+    Py2Flake8 = "py2_flake8"
+    Ruff = "ruff"
 
 
 class CppLinterName(Enum):
     ClangFormat = "clang_format"
+    ClangFormatYT = "clang_format_yt"
+    ClangFormat15 = "clang_format_15"
 
 
 class DefaultLinterConfig(Enum):
-    Python = "build/config/tests/py_style/default_configs.json"
     Cpp = "build/config/tests/cpp_style/default_configs.json"
+    Python = "build/config/tests/py_style/default_configs.json"
+
+
+class LinterConfigsValidationRules(Enum):
+    Cpp = "build/config/tests/cpp_style/configs_validation_rules.json"
+    Python = "build/config/tests/py_style/configs_validation_rules.json"
+
+
+LINTER_CONFIG_TYPES = {
+    CppLinterName.ClangFormat: (".clang-format",),
+    CppLinterName.ClangFormat15: (".clang-format",),
+    CppLinterName.ClangFormatYT: (".clang-format",),
+    PythonLinterName.Black: ("pyproject.toml",),
+    PythonLinterName.Ruff: ("pyproject.toml", "ruff.toml"),
+}
+
+AUTOINCLUDE_PATHS = (
+    'build/conf/autoincludes.json',
+    'build/internal/conf/autoincludes.json',
+)
 
 
 class Status(object):

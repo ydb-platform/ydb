@@ -10,7 +10,7 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/library/actors/core
     ydb/library/actors/interconnect
     library/cpp/getopt
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     ydb/library/grpc/server
     library/cpp/regex/pcre
     ydb/core/actorlib_impl
@@ -46,14 +46,14 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/core/tx/time_cast
     ydb/core/tx/tx_proxy
     yql/essentials/core/services/mounts
-    yql/essentials/minikql/comp_nodes/llvm14
-    ydb/library/yql/providers/yt/codec/codegen
-    ydb/library/yql/providers/yt/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
+    yt/yql/providers/yt/codec/codegen
+    yt/yql/providers/yt/comp_nodes/llvm16
     yql/essentials/public/udf/service/exception_policy
     ydb/public/api/protos
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/table
     ydb/services/cms
     ydb/services/datastreams
     ydb/services/discovery

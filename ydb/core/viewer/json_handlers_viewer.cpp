@@ -32,6 +32,8 @@
 #include "viewer_tenants.h"
 #include "viewer_topicinfo.h"
 #include "viewer_whoami.h"
+#include "viewer_simple_counter.h"
+#include "viewer_multipart_counter.h"
 
 namespace NKikimr::NViewer {
 
@@ -228,7 +230,7 @@ void InitViewerWhoAmIJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerQueryJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/query", new TJsonHandler<TJsonQuery>(TJsonQuery::GetSwagger()), 4);
+    handlers.AddHandler("/viewer/query", new THttpHandler<TJsonQuery>(TJsonQuery::GetSwagger()), 7);
 }
 
 void InitViewerNetInfoJsonHandler(TJsonHandlers& handlers) {
@@ -244,7 +246,7 @@ void InitViewerHealthCheckJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerNodesJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/nodes", new TJsonHandler<TJsonNodes>(TJsonNodes::GetSwagger()), 13);
+    handlers.AddHandler("/viewer/nodes", new TJsonHandler<TJsonNodes>(TJsonNodes::GetSwagger()), 15);
 }
 
 void InitViewerACLJsonHandler(TJsonHandlers &jsonHandlers) {
@@ -273,6 +275,14 @@ void InitViewerFeatureFlagsJsonHandler(TJsonHandlers& handlers) {
 
 void InitViewerPlan2SvgJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/plan2svg", new TJsonHandler<TJsonPlanToSvg>(TJsonPlanToSvg::GetSwagger()));
+}
+
+void InitViewerSimpleCounterHandler(TJsonHandlers& handlers) {
+    handlers.AddHandler("/viewer/simple_counter", new THttpHandler<TViewerSimpleCounter>());
+}
+
+void InitViewerMultipartCounterHandler(TJsonHandlers& handlers) {
+    handlers.AddHandler("/viewer/multipart_counter", new THttpHandler<TViewerMultipartCounter>());
 }
 
 void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
@@ -315,6 +325,8 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerCheckAccessJsonHandler(jsonHandlers);
     InitViewerFeatureFlagsJsonHandler(jsonHandlers);
     InitViewerPlan2SvgJsonHandler(jsonHandlers);
+    InitViewerSimpleCounterHandler(jsonHandlers);
+    InitViewerMultipartCounterHandler(jsonHandlers);
 }
 
 }

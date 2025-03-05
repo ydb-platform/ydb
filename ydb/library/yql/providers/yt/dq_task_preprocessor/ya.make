@@ -14,10 +14,10 @@ PEERDIR(
     yql/essentials/minikql/computation
     yql/essentials/providers/common/codec
     ydb/library/yql/providers/dq/interface
-    ydb/library/yql/providers/yt/codec
-    ydb/library/yql/providers/yt/provider
-    ydb/library/yql/providers/yt/gateway/lib
-    ydb/library/yql/providers/yt/lib/yson_helpers
+    yt/yql/providers/yt/codec
+    yt/yql/providers/yt/provider
+    yt/yql/providers/yt/gateway/lib
+    yt/yql/providers/yt/lib/yson_helpers
 )
 
 YQL_LAST_ABI_VERSION()

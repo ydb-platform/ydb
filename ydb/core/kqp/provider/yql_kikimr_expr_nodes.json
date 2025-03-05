@@ -99,7 +99,8 @@
                 {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Filter", "Type": "TCoLambda"},
                 {"Index": 4, "Name": "Update", "Type": "TCoLambda"},
-                {"Index": 5, "Name": "ReturningColumns", "Type": "TCoAtomList"}
+                {"Index": 5, "Name": "ReturningColumns", "Type": "TCoAtomList"},
+                {"Index": 6, "Name": "IsBatch", "Type": "TCoAtom"}
             ]
         },
         {
@@ -111,7 +112,8 @@
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Filter", "Type": "TCoLambda"},
-                {"Index": 4, "Name": "ReturningColumns", "Type": "TCoAtomList"}
+                {"Index": 4, "Name": "ReturningColumns", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "IsBatch", "Type": "TCoAtom"}
             ]
         },
         {
@@ -501,6 +503,45 @@
             ]
         },
         {
+            "Name": "TKiCreateTransfer",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiCreateTransfer!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "Transfer", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Source", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "Target", "Type": "TCoAtom"},
+                {"Index": 5, "Name": "TransformLambda", "Type": "TCoAtom"},
+                {"Index": 6, "Name": "TransferSettings", "Type": "TCoNameValueTupleList"},
+                {"Index": 7, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TKiAlterTransfer",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiAlterTransfer!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "Transfer", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "TransformLambda", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "TransferSettings", "Type": "TCoNameValueTupleList"},
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TKiDropTransfer",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiDropTransfer!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "Transfer", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Cascade", "Type":  "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKiAnalyzeTable",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KiAnalyze!"},
@@ -561,6 +602,39 @@
                 {"Index": 2, "Name": "BackupCollection", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Prefix", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "Cascade", "Type":  "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKiBackup",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiBackup!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "BackupCollection", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Prefix", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKiBackupIncremental",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiBackupIncremental!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "BackupCollection", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Prefix", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKiRestore",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiRestore!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "BackupCollection", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Prefix", "Type": "TCoAtom"}
             ]
         }
     ]

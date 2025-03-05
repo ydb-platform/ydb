@@ -1,17 +1,17 @@
 #include "query_executor.h"
 #include "get_value.h"
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 namespace NKikimr::NKqp {
 
-TVector<THashMap<TString, NYdb::TValue>> CollectRows(NYdb::NTable::TScanQueryPartIterator& it, NJson::TJsonValue* statInfo /*= nullptr*/, NJson::TJsonValue* diagnostics /*= nullptr*/) {
+TVector<THashMap<TString, NYdb::TValue>> CollectRows(NYdb::NTable::TScanQueryPartIterator& it, NJson::TJsonValue* statInfo /*= nullptr*/, NJson::TJsonValue* meta /*= nullptr*/) {
     TVector<THashMap<TString, NYdb::TValue>> rows;
     if (statInfo) {
         *statInfo = NJson::JSON_NULL;
     }
-    if (diagnostics) {
-        *diagnostics = NJson::JSON_NULL;
+    if (meta) {
+        *meta = NJson::JSON_NULL;
     }
     for (;;) {
         auto streamPart = it.ReadNext().GetValueSync();
@@ -28,12 +28,10 @@ TVector<THashMap<TString, NYdb::TValue>> CollectRows(NYdb::NTable::TScanQueryPar
             if (plan && statInfo) {
                 UNIT_ASSERT(NJson::ReadJsonFastTree(*plan, statInfo));
             }
-        }
 
-        if (streamPart.HasDiagnostics()) {
-            TString diagnosticsString = streamPart.GetDiagnostics();
-            if (!diagnosticsString.empty() && diagnostics) {
-                UNIT_ASSERT(NJson::ReadJsonFastTree(diagnosticsString, diagnostics));
+            auto metaString = streamPart.GetQueryStats().GetMeta();
+            if (metaString && !metaString->empty() && meta) {
+                UNIT_ASSERT(NJson::ReadJsonFastTree(*metaString, meta));
             }
         }
 

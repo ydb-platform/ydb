@@ -2,8 +2,6 @@
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-{% include [work in progress message](_includes/addition.md) %}
-
 Ниже приведены примеры кода аутентификации при помощи переменных окружения в разных {{ ydb-short-name }} SDK.
 
 {% list tabs %}
@@ -83,12 +81,29 @@
               .withAuthProvider(authProvider)
               .build());
 
-      TableClient tableClient = TableClient.newClient(transport).build();
+      QueryClient queryClient = QueryClient.newClient(transport).build();
 
-      doWork(tableClient);
+      doWork(queryClient);
 
-      tableClient.close();
+      queryClient.close();
       transport.close();
+  }
+  ```
+
+- JDBC
+
+  ```java
+  public void work() {
+      Properties props = new Properties();
+      props.setProperty("useMetadata", "true");
+      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
+        doWork(connection);
+      }
+
+      // Опцию useMetadata также можно указать прямо в JDBC URL
+      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local?useMetadata=true")) {
+        doWork(connection);
+      }
   }
   ```
 

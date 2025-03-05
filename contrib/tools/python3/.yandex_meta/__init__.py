@@ -241,6 +241,7 @@ python3 = NixSourceProject(
     ],
     disable_includes=[
         "pydtrace_probes.h",
+        "crtassem.h",
         "blake2-kat.h",
         "bluetooth/",
         "bluetooth.h",
@@ -255,6 +256,7 @@ python3 = NixSourceProject(
         "sys/byteorder.h",
         "sys/lwp.h",
         "sys/memfd.h",
+        "sys/pidfd.h",
         # ifdef __VXWORKS__
         "rtpLib.h",
         "taskLib.h",

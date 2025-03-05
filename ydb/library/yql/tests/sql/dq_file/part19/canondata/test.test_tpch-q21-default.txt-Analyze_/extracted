@@ -1,7 +1,0 @@
-<tmp_path>/program.sql:<main>: Info: DQ cannot execute the query
-
-    <tmp_path>/program.sql:<main>: Info: Optimization
-    
-        <tmp_path>/program.sql:<main>:20:56: Info: Cannot execute self join in DQ
-        	$j1_1 = select l1.l_orderkey as l_orderkey from $j1 as l1
-	                                                       ^

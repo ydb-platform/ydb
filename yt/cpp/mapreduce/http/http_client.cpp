@@ -7,6 +7,7 @@
 
 #include <yt/cpp/mapreduce/interface/config.h>
 
+#include <yt/cpp/mapreduce/interface/error_codes.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
@@ -40,24 +41,24 @@ TMaybe<TErrorResponse> GetErrorResponse(const TString& hostName, const TString& 
         return {};
     }
 
-    TErrorResponse errorResponse(static_cast<int>(httpCode), requestId);
-
-    auto logAndSetError = [&] (const TString& rawError) {
+    auto logAndSetError = [&] (int code, const TString& rawError) {
         YT_LOG_ERROR("RSP %v - HTTP %v - %v",
             requestId,
             httpCode,
             rawError.data());
-        errorResponse.SetRawError(rawError);
+        return TErrorResponse(TYtError(code, rawError), requestId);
     };
+
 
     switch (httpCode) {
         case NHttp::EStatusCode::TooManyRequests:
-            logAndSetError("request rate limit exceeded");
-            break;
+            return logAndSetError(NClusterErrorCodes::NSecurityClient::RequestQueueSizeLimitExceeded, "request rate limit exceeded");
 
         case NHttp::EStatusCode::InternalServerError:
-            logAndSetError("internal error in proxy " + hostName);
-            break;
+            return logAndSetError(NClusterErrorCodes::NRpc::Unavailable, "internal error in proxy " + hostName);
+
+        case NHttp::EStatusCode::ServiceUnavailable:
+            return logAndSetError(NClusterErrorCodes::NBus::TransportError, "service unavailable");
 
         default: {
             TStringStream httpHeaders;
@@ -76,20 +77,19 @@ TMaybe<TErrorResponse> GetErrorResponse(const TString& hostName, const TString& 
                 errorString.data());
 
             if (auto errorHeader = response->GetHeaders()->Find("X-YT-Error")) {
-                errorResponse.ParseFromJsonError(*errorHeader);
+                TYtError error;
+                error.ParseFrom(*errorHeader);
+
+                TErrorResponse errorResponse(std::move(error), requestId);
                 if (errorResponse.IsOk()) {
                     return Nothing();
                 }
                 return errorResponse;
             }
 
-            errorResponse.SetRawError(
-                    errorString + " - X-YT-Error is missing in headers");
-            break;
+            return TErrorResponse(TYtError(errorString + " - X-YT-Error is missing in headers"), requestId);
         }
     }
-
-    return errorResponse;
 }
 
 void CheckErrorResponse(const TString& hostName, const TString& requestId, const NHttp::IResponsePtr& response)
@@ -167,23 +167,23 @@ class TDefaultHttpClient
 public:
     IHttpResponsePtr Request(const TString& url, const TString& requestId, const THttpConfig& config, const THttpHeader& header, TMaybe<TStringBuf> body) override
     {
-        auto request = std::make_unique<THttpRequest>(requestId);
-
         auto urlRef = NHttp::ParseUrl(url);
+        auto host = CreateHost(urlRef.Host, urlRef.PortStr);
 
-        request->Connect(CreateHost(urlRef.Host, urlRef.PortStr), config.SocketTimeout);
-        request->SmallRequest(header, body);
+        auto request = std::make_unique<THttpRequest>(requestId, host, header, config.SocketTimeout);
+
+        request->SmallRequest(body);
         return std::make_unique<TDefaultHttpResponse>(std::move(request));
     }
 
     IHttpRequestPtr StartRequest(const TString& url, const TString& requestId, const THttpConfig& config, const THttpHeader& header) override
     {
-        auto request = std::make_unique<THttpRequest>(requestId);
-
         auto urlRef = NHttp::ParseUrl(url);
+        auto host = CreateHost(urlRef.Host, urlRef.PortStr);
 
-        request->Connect(CreateHost(urlRef.Host, urlRef.PortStr), config.SocketTimeout);
-        auto stream = request->StartRequest(header);
+        auto request = std::make_unique<THttpRequest>(requestId, host, header, config.SocketTimeout);
+
+        auto stream = request->StartRequest();
         return std::make_unique<TDefaultHttpRequest>(std::move(request), stream);
     }
 };
@@ -312,8 +312,9 @@ private:
         TMaybe<TErrorResponse> ParseError(const NHttp::THeadersPtr& headers)
         {
             if (auto errorHeader = headers->Find("X-YT-Error")) {
-                TErrorResponse errorResponse(static_cast<int>(Response_->GetStatusCode()), RequestId_);
-                errorResponse.ParseFromJsonError(*errorHeader);
+                TYtError error;
+                error.ParseFrom(*errorHeader);
+                TErrorResponse errorResponse(std::move(error), RequestId_);
                 if (errorResponse.IsOk()) {
                     return Nothing();
                 }

@@ -42,7 +42,7 @@ namespace NKikimr {
         TIntrusivePtr<TVDiskConfig> VDiskCfg;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
 
-        ui32 MinREALHugeBlobInBytes;
+        ui32 MinHugeBlobInBytes;
 
         TBalancingCtx(
             const TBalancingCfg& cfg,
@@ -53,7 +53,7 @@ namespace NKikimr {
             NKikimr::THullDsSnap snap,
             TIntrusivePtr<TVDiskConfig> vDiskCfg,
             TIntrusivePtr<TBlobStorageGroupInfo> gInfo,
-            ui32 minREALHugeBlobInBytes
+            ui32 minHugeBlobInBytes
         )
             : Cfg(cfg)
             , VCtx(std::move(vCtx))
@@ -64,7 +64,7 @@ namespace NKikimr {
             , Snap(std::move(snap))
             , VDiskCfg(std::move(vDiskCfg))
             , GInfo(std::move(gInfo))
-            , MinREALHugeBlobInBytes(minREALHugeBlobInBytes)
+            , MinHugeBlobInBytes(minHugeBlobInBytes)
         {
         }
     };

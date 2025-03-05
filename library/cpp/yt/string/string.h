@@ -181,6 +181,13 @@ TStringBuf FormatBool(bool value);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+inline constexpr TStringBuf DefaultTruncatedMessage = "...<truncated>";
+
+void TruncateStringInplace(std::string* string, int lengthLimit, TStringBuf truncatedSuffix = DefaultTruncatedMessage);
+std::string TruncateString(std::string string, int lengthLimit, TStringBuf truncatedSuffix = DefaultTruncatedMessage);
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT
 
 #define STRING_INL_H_

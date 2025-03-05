@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
     static int GRPC_PORT = 0;
 
-    void S3WriteRow(TFlatMsgBusClient& annoyingClient, ui64 hash, TString name, TString path, ui64 version, ui64 ts, TString data, TString table, bool someBool = true) {
+    void S3WriteRow(TTestActorRuntime* runtime, TFlatMsgBusClient& annoyingClient, ui64 hash, TString name, TString path, ui64 version, ui64 ts, TString data, TString table, bool someBool = true) {
         TString insertRowQuery =  R"(
                     (
                     (let key '(
@@ -40,10 +40,10 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
                     )
                 )";
 
-        annoyingClient.FlatQuery(Sprintf(insertRowQuery.data(), hash, name.data(), path.data(), version, ts, data.data(), someBool ? "true" : "false", table.data()));
+        annoyingClient.FlatQuery(runtime, Sprintf(insertRowQuery.data(), hash, name.data(), path.data(), version, ts, data.data(), someBool ? "true" : "false", table.data()));
     }
 
-    void S3DeleteRow(TFlatMsgBusClient& annoyingClient, ui64 hash, TString name, TString path, ui64 version, TString table) {
+    void S3DeleteRow(TTestActorRuntime* runtime, TFlatMsgBusClient& annoyingClient, ui64 hash, TString name, TString path, ui64 version, TString table) {
         TString eraseRowQuery =  R"(
                     (
                     (let key '(
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
                     )
                 )";
 
-        annoyingClient.FlatQuery(Sprintf(eraseRowQuery.data(), hash, name.data(), path.data(), version, table.data()));
+        annoyingClient.FlatQuery(runtime, Sprintf(eraseRowQuery.data(), hash, name.data(), path.data(), version, table.data()));
     }
 
     void CreateS3Table(TFlatMsgBusClient& annoyingClient) {
@@ -138,58 +138,58 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
             )");
     }
 
-    void PrepareS3Data(TFlatMsgBusClient& annoyingClient) {
+    void PrepareS3Data(TTestActorRuntime* runtime, TFlatMsgBusClient& annoyingClient) {
         CreateS3Table(annoyingClient);
 
-        S3WriteRow(annoyingClient, 50, "Bucket50", "Music/AC DC/Shoot to Thrill.mp3", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 50, "Bucket50", "Music/AC DC/Thunderstruck.mp3", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 50, "Bucket50", "Music/rock.m3u", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 50, "Bucket50", "Music/Nirvana", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 50, "Bucket50", "Music/Nirvana/Smeels Like Teen Spirit.mp3", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 50, "Bucket50", "Music/Nirvana/In Bloom.mp3", 1, 20, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 50, "Bucket50", "Music/AC DC/Shoot to Thrill.mp3", 1, 10, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 50, "Bucket50", "Music/AC DC/Thunderstruck.mp3", 1, 10, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 50, "Bucket50", "Music/rock.m3u", 1, 10, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 50, "Bucket50", "Music/Nirvana", 1, 10, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 50, "Bucket50", "Music/Nirvana/Smeels Like Teen Spirit.mp3", 1, 10, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 50, "Bucket50", "Music/Nirvana/In Bloom.mp3", 1, 20, "", "Table");
 
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/face.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/facepalm.jpg", 1, 20, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/palm.jpg", 1, 30, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 1.avi", 1, 100, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 10.avi", 1, 300, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Photos/face.jpg", 1, 10, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Photos/facepalm.jpg", 1, 20, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Photos/palm.jpg", 1, 30, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 1.avi", 1, 100, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 10.avi", 1, 300, "", "Table");
 
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 2.avi", 1, 200, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 3.avi", 1, 300, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 4.avi", 1, 300, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 5.avi", 1, 300, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 6.avi", 1, 300, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 7.avi", 1, 300, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 2.avi", 1, 200, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 3.avi", 1, 300, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 4.avi", 1, 300, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 5.avi", 1, 300, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 6.avi", 1, 300, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 7.avi", 1, 300, "", "Table");
 
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 8.avi", 1, 300, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 9.avi", 1, 300, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 2/Episode 1.avi", 1, 1100, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Videos/Godfather 2.avi", 1, 500, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 8.avi", 1, 300, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 9.avi", 1, 300, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 2/Episode 1.avi", 1, 1100, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/Godfather 2.avi", 1, 500, "", "Table");
 
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Videos/Godfather.avi", 1, 500, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Videos/Godmother.avi", 1, 500, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Videos/House of Cards/Season 1/Chapter 1.avi", 1, 1100, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Videos/House of Cards/Season 1/Chapter 2.avi", 1, 1200, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Videos/Terminator 2.avi", 1, 1100, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/XXX/1.avi", 1, 1100, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/XXX/2.avi", 1, 1100, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/XXX/3.avi", 1, 1100, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/XXX/3d.avi", 1, 1100, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/Godfather.avi", 1, 500, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/Godmother.avi", 1, 500, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/House of Cards/Season 1/Chapter 1.avi", 1, 1100, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/House of Cards/Season 1/Chapter 2.avi", 1, 1200, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/Terminator 2.avi", 1, 1100, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/XXX/1.avi", 1, 1100, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/XXX/2.avi", 1, 1100, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/XXX/3.avi", 1, 1100, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 100, "Bucket100", "/XXX/3d.avi", 1, 1100, "", "Table");
 
-        S3WriteRow(annoyingClient, 333, "Bucket333", "asdf", 1, 1100, "", "Table");
-        S3WriteRow(annoyingClient, 333, "Bucket333", "boo/bar", 1, 1100, "", "Table");
-        S3WriteRow(annoyingClient, 333, "Bucket333", "boo/baz/xyzzy", 1, 1100, "", "Table");
-        S3WriteRow(annoyingClient, 333, "Bucket333", "cquux/thud", 1, 1100, "", "Table");
-        S3WriteRow(annoyingClient, 333, "Bucket333", "cquux/bla", 1, 1100, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 333, "Bucket333", "asdf", 1, 1100, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 333, "Bucket333", "boo/bar", 1, 1100, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 333, "Bucket333", "boo/baz/xyzzy", 1, 1100, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 333, "Bucket333", "cquux/thud", 1, 1100, "", "Table");
+        S3WriteRow(runtime, annoyingClient, 333, "Bucket333", "cquux/bla", 1, 1100, "", "Table");
 
-        S3DeleteRow(annoyingClient, 50, "Bucket50", "Music/Nirvana/Smells Like Teen Spirit.mp3", 1, "Table");
-        S3DeleteRow(annoyingClient, 100, "Bucket100", "/Photos/palm.jpg", 1, "Table");
-        S3DeleteRow(annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 2.avi", 1, "Table");
-        S3DeleteRow(annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 5.avi", 1, "Table");
-        S3DeleteRow(annoyingClient, 100, "Bucket100", "/Videos/House of Cards/Season 1/Chapter 2.avi", 1, "Table");
+        S3DeleteRow(runtime, annoyingClient, 50, "Bucket50", "Music/Nirvana/Smells Like Teen Spirit.mp3", 1, "Table");
+        S3DeleteRow(runtime, annoyingClient, 100, "Bucket100", "/Photos/palm.jpg", 1, "Table");
+        S3DeleteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 2.avi", 1, "Table");
+        S3DeleteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/Game of Thrones/Season 1/Episode 5.avi", 1, "Table");
+        S3DeleteRow(runtime, annoyingClient, 100, "Bucket100", "/Videos/House of Cards/Season 1/Chapter 2.avi", 1, "Table");
     }
 
-    void DoListingBySelectRange(TFlatMsgBusClient& annoyingClient,
+    void DoListingBySelectRange(TTestActorRuntime* runtime, TFlatMsgBusClient& annoyingClient,
                                 ui64 bucket, const TString& pathPrefix, const TString& pathDelimiter, const TString& startAfter, ui32 maxKeys,
                                 TSet<TString>& commonPrefixes, TSet<TString>& contents)
     {
@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
         TClient::TFlatQueryOptions opts;
         NKikimrMiniKQL::TResult res;
-        annoyingClient.FlatQuery(Sprintf(selectBucketQuery.data(), hash, hash, name.data(), name.data(), table.data()), opts, res);
+        annoyingClient.FlatQuery(runtime, Sprintf(selectBucketQuery.data(), hash, hash, name.data(), name.data(), table.data()), opts, res);
 
         TValue value = TValue::Create(res.GetValue(), res.GetType());
         TValue objects = value["Objects"];
@@ -285,7 +285,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         endpoint << "localhost:" << grpcPort;
         std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials());
         auto stub = Ydb::ObjectStorage::V1::ObjectStorageService::NewStub(channel);
-        
+
         TAutoPtr<Ydb::ObjectStorage::ListingRequest> request = new Ydb::ObjectStorage::ListingRequest();
         request->Setpath_column_prefix(pathPrefix);
         request->Settable_name(table);
@@ -427,7 +427,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         grpc::Status status = stub->List(&rcontext, *request, &response);
 
         UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
-        
+
         commonPrefixes.clear();
         contents.clear();
 
@@ -437,7 +437,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
                 commonPrefixes.emplace_back(row);
             }
         }
-        
+
         if (response.has_contents()) {
             auto &files = response.contents();
             for (auto row : files.rows()) {
@@ -459,16 +459,16 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         return "";
     }
 
-    void CompareS3Listing(TFlatMsgBusClient& annoyingClient, ui64 bucket, const TString& pathPrefix, const TString& pathDelimiter,
+    void CompareS3Listing(TTestActorRuntime* runtime, TFlatMsgBusClient& annoyingClient, ui64 bucket, const TString& pathPrefix, const TString& pathDelimiter,
                        const TString& startAfter, ui32 maxKeys, const TVector<TString>& columnsToReturn)
     {
         TSet<TString> expectedCommonPrefixes;
         TSet<TString> expectedContents;
-        DoListingBySelectRange(annoyingClient, bucket, pathPrefix, pathDelimiter, startAfter, maxKeys, expectedCommonPrefixes, expectedContents);
+        DoListingBySelectRange(runtime, annoyingClient, bucket, pathPrefix, pathDelimiter, startAfter, maxKeys, expectedCommonPrefixes, expectedContents);
 
         TVector<TString> commonPrefixes;
         TVector<TString> contents;
-        DoS3Listing(GRPC_PORT, bucket, pathPrefix, pathDelimiter, startAfter, nullptr, columnsToReturn, maxKeys, commonPrefixes, contents);
+        DoS3Listing(GRPC_PORT, bucket, pathPrefix, pathDelimiter, startAfter, "", columnsToReturn, maxKeys, commonPrefixes, contents);
 
         UNIT_ASSERT_VALUES_EQUAL(expectedCommonPrefixes.size(), commonPrefixes.size());
         ui32 i = 0;
@@ -485,24 +485,24 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         }
     }
 
-    void TestS3Listing(TFlatMsgBusClient& annoyingClient, ui64 bucket, const TString& pathPrefix, const TString& pathDelimiter,
+    void TestS3Listing(TTestActorRuntime* runtime, TFlatMsgBusClient& annoyingClient, ui64 bucket, const TString& pathPrefix, const TString& pathDelimiter,
                        ui32 maxKeys, const TVector<TString>& columnsToReturn) {
         Cout << Endl << "---------------------------------------" << Endl
              << "Bucket" << bucket << " : " << pathPrefix << Endl;
 
-        CompareS3Listing(annoyingClient, bucket, pathPrefix, pathDelimiter, "", maxKeys, columnsToReturn);
-        CompareS3Listing(annoyingClient, bucket, pathPrefix, pathDelimiter, pathPrefix, maxKeys, columnsToReturn);
+        CompareS3Listing(runtime, annoyingClient, bucket, pathPrefix, pathDelimiter, "", maxKeys, columnsToReturn);
+        CompareS3Listing(runtime, annoyingClient, bucket, pathPrefix, pathDelimiter, pathPrefix, maxKeys, columnsToReturn);
 
         TSet<TString> expectedCommonPrefixes;
         TSet<TString> expectedContents;
-        DoListingBySelectRange(annoyingClient, bucket, pathPrefix, pathDelimiter, "",  100500, expectedCommonPrefixes, expectedContents);
+        DoListingBySelectRange(runtime, annoyingClient, bucket, pathPrefix, pathDelimiter, "",  100500, expectedCommonPrefixes, expectedContents);
 
         for (const TString& after : expectedCommonPrefixes) {
-            CompareS3Listing(annoyingClient, bucket, pathPrefix, pathDelimiter, after, maxKeys, columnsToReturn);
+            CompareS3Listing(runtime, annoyingClient, bucket, pathPrefix, pathDelimiter, after, maxKeys, columnsToReturn);
         }
 
         for (const TString& after : expectedContents) {
-            CompareS3Listing(annoyingClient, bucket, pathPrefix, pathDelimiter, after, maxKeys, columnsToReturn);
+            CompareS3Listing(runtime, annoyingClient, bucket, pathPrefix, pathDelimiter, after, maxKeys, columnsToReturn);
         }
     }
 
@@ -515,42 +515,42 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
         TFlatMsgBusClient annoyingClient(port);
 
-        PrepareS3Data(annoyingClient);
+        PrepareS3Data(cleverServer.GetRuntime(), annoyingClient);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::MSGBUS_REQUEST, NActors::NLog::PRI_DEBUG);
 
-        TestS3Listing(annoyingClient, 50, "", "", 10, {});
-        TestS3Listing(annoyingClient, 50, "", "/", 7, {});
-        TestS3Listing(annoyingClient, 50, "Music/", "/", 9, {});
-        TestS3Listing(annoyingClient, 50, "Music/Nirvana", "/", 11, {});
-        TestS3Listing(annoyingClient, 50, "Music/Nirvana/", "/", 2, {});
-        TestS3Listing(annoyingClient, 50, "Photos/", "/", 3, {});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 50, "", "", 10, {});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 50, "", "/", 7, {});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 50, "Music/", "/", 9, {});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 50, "Music/Nirvana", "/", 11, {});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 50, "Music/Nirvana/", "/", 2, {});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 50, "Photos/", "/", 3, {});
 
-        TestS3Listing(annoyingClient, 100, "", "", 4, {});
-        TestS3Listing(annoyingClient, 100, "", "/", 7, {});
-        TestS3Listing(annoyingClient, 100, "/", "", 3, {});
-        TestS3Listing(annoyingClient, 100, "/", "/", 1, {});
-        TestS3Listing(annoyingClient, 100, "/Photos/", "/", 11, {});
-        TestS3Listing(annoyingClient, 100, "/Videos/", "/", 18, {});
-        TestS3Listing(annoyingClient, 100, "/Videos", "/", 3, {"Path", "Timestamp"});
-        TestS3Listing(annoyingClient, 100, "/Videos/Game ", "/", 5, {"Path", "Timestamp"});
-        TestS3Listing(annoyingClient, 100, "/Videos/Game of Thrones/Season 1/", "/", 6, {"Path", "Timestamp"});
-        TestS3Listing(annoyingClient, 100, "/Videos/Game of Thr", " ", 4, {"Path", "Timestamp"});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "", "", 4, {});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "", "/", 7, {});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/", "", 3, {});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/", "/", 1, {});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/Photos/", "/", 11, {});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/Videos/", "/", 18, {});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/Videos", "/", 3, {"Path", "Timestamp"});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/Videos/Game ", "/", 5, {"Path", "Timestamp"});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/Videos/Game of Thrones/Season 1/", "/", 6, {"Path", "Timestamp"});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/Videos/Game of Thr", " ", 4, {"Path", "Timestamp"});
 
-        TestS3Listing(annoyingClient, 20, "", "/", 8, {"Path", "Timestamp"});
-        TestS3Listing(annoyingClient, 200, "/", "/", 3, {"Path", "Timestamp"});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 20, "", "/", 8, {"Path", "Timestamp"});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 200, "/", "/", 3, {"Path", "Timestamp"});
 
         // Request NULL columns
-        TestS3Listing(annoyingClient, 50, "Photos/", "/", 7, {"ExtraData"});
-        TestS3Listing(annoyingClient, 50, "Photos/", "", 2, {"Unused1"});
-        TestS3Listing(annoyingClient, 50, "Music/", "/", 11, {"ExtraData"});
-        TestS3Listing(annoyingClient, 50, "/", "", 8, {"Unused1"});
-        TestS3Listing(annoyingClient, 50, "Music/Nirvana", "/", 11, {"Int32Data"});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 50, "Photos/", "/", 7, {"ExtraData"});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 50, "Photos/", "", 2, {"Unused1"});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 50, "Music/", "/", 11, {"ExtraData"});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 50, "/", "", 8, {"Unused1"});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 50, "Music/Nirvana", "/", 11, {"Int32Data"});
 
-        TestS3Listing(annoyingClient, 333, "", "", 2, {});
-        TestS3Listing(annoyingClient, 333, "", "/", 2, {});
-        TestS3Listing(annoyingClient, 333, "", "", 3, {});
-        TestS3Listing(annoyingClient, 333, "", "/", 3, {});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 333, "", "", 2, {});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 333, "", "/", 2, {});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 333, "", "", 3, {});
+        TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 333, "", "/", 3, {});
     }
 
     Y_UNIT_TEST(MaxKeysAndSharding) {
@@ -562,7 +562,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
         TFlatMsgBusClient annoyingClient(port);
 
-        PrepareS3Data(annoyingClient);
+        PrepareS3Data(cleverServer.GetRuntime(), annoyingClient);
 
         for (auto commonPrefix: {"/", "/Videos", "/Videos/", "/W", "/X",
                 "/Videos/Game of", "/Videos/Game of Thrones/",
@@ -570,7 +570,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
                 "/Videos/Game of Thrones/Season 1/"})
         {
             for (ui32 maxKeys = 1; maxKeys < 20; ++maxKeys) {
-                TestS3Listing(annoyingClient, 100, commonPrefix, "/", maxKeys, {});
+                TestS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, commonPrefix, "/", maxKeys, {});
             }
         }
     }
@@ -600,7 +600,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         return response;
     }
 
-    Ydb::ObjectStorage::ListingResponse TestS3ListingRequest(const TVector<TString>& prefixColumns, 
+    Ydb::ObjectStorage::ListingResponse TestS3ListingRequest(const TVector<TString>& prefixColumns,
                     const TString& pathPrefix, const TString& pathDelimiter,
                     const TString& startAfter, const TVector<TString>& columnsToReturn, ui32 maxKeys,
                     Ydb::StatusIds_StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
@@ -625,7 +625,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
         TFlatMsgBusClient annoyingClient(port);
 
-        PrepareS3Data(annoyingClient);
+        PrepareS3Data(cleverServer.GetRuntime(), annoyingClient);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::MSGBUS_REQUEST, NActors::NLog::PRI_DEBUG);
 
@@ -696,7 +696,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
         TFlatMsgBusClient annoyingClient(port);
 
-        PrepareS3Data(annoyingClient);
+        PrepareS3Data(cleverServer.GetRuntime(), annoyingClient);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::MSGBUS_REQUEST, NActors::NLog::PRI_DEBUG);
 
@@ -721,7 +721,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
             Ydb::StatusIds::SUCCESS,
             "");
 
-        CompareS3Listing(annoyingClient, 100, "/", "/", "", 100500, {"Path"});
+        CompareS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/", "/", "", 100500, {"Path"});
     }
 
     Y_UNIT_TEST(SuffixColumns) {
@@ -730,23 +730,22 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         TServer cleverServer = TServer(TServerSettings(port));
         GRPC_PORT = pm.GetPort(2135);
         cleverServer.EnableGRpc(GRPC_PORT);
-
         TFlatMsgBusClient annoyingClient(port);
 
-        PrepareS3Data(annoyingClient);
+        PrepareS3Data(cleverServer.GetRuntime(), annoyingClient);
 
-        S3WriteRow(annoyingClient, 50, "Bucket50", "Music/AC DC/Shoot to Thrill.mp3", 55, 10, "", "Table");
-        S3WriteRow(annoyingClient, 50, "Bucket50", "Music/AC DC/Shoot to Thrill.mp3", 66, 10, "", "Table");
-        S3WriteRow(annoyingClient, 50, "Bucket50", "Music/AC DC/Shoot to Thrill.mp3", 77, 10, "", "Table");
-        S3WriteRow(annoyingClient, 50, "Bucket50", "Music/AC DC/Shoot to Thrill.mp3", 88, 10, "", "Table");
-        S3WriteRow(annoyingClient, 50, "Bucket50", "Music/AC DC/Shoot to Thrill.mp3", 666, 10, "", "Table");
-        S3WriteRow(annoyingClient, 50, "Bucket50", "Music/AC DC/Thunderstruck.mp3", 66, 10, "", "Table");
-        S3WriteRow(annoyingClient, 50, "Bucket50", "Music/rock.m3u", 111, 10, "", "Table");
-        S3WriteRow(annoyingClient, 50, "Bucket50", "Music/rock.m3u", 222, 10, "", "Table");
-        S3WriteRow(annoyingClient, 50, "Bucket50", "Music/rock.m3u", 333, 10, "", "Table");
-        S3WriteRow(annoyingClient, 50, "Bucket50", "Music/Nirvana", 112, 10, "", "Table");
-        S3WriteRow(annoyingClient, 50, "Bucket50", "Music/Nirvana/Smeels Like Teen Spirit.mp3", 100, 10, "", "Table");
-        S3WriteRow(annoyingClient, 50, "Bucket50", "Music/Nirvana/In Bloom.mp3", 120, 20, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 50, "Bucket50", "Music/AC DC/Shoot to Thrill.mp3", 55, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 50, "Bucket50", "Music/AC DC/Shoot to Thrill.mp3", 66, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 50, "Bucket50", "Music/AC DC/Shoot to Thrill.mp3", 77, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 50, "Bucket50", "Music/AC DC/Shoot to Thrill.mp3", 88, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 50, "Bucket50", "Music/AC DC/Shoot to Thrill.mp3", 666, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 50, "Bucket50", "Music/AC DC/Thunderstruck.mp3", 66, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 50, "Bucket50", "Music/rock.m3u", 111, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 50, "Bucket50", "Music/rock.m3u", 222, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 50, "Bucket50", "Music/rock.m3u", 333, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 50, "Bucket50", "Music/Nirvana", 112, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 50, "Bucket50", "Music/Nirvana/Smeels Like Teen Spirit.mp3", 100, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 50, "Bucket50", "Music/Nirvana/In Bloom.mp3", 120, 20, "", "Table");
 
         //
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
@@ -774,25 +773,25 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         cleverServer.EnableGRpc(GRPC_PORT);
 
         // Disable shared cache to trigger restarts
-        cleverServer.GetRuntime()->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
+        cleverServer.GetRuntime()->Send(NSharedCache::MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
 
         TFlatMsgBusClient annoyingClient(port);
 
-        PrepareS3Data(annoyingClient);
+        PrepareS3Data(cleverServer.GetRuntime(), annoyingClient);
 
 #ifdef NDEBUG
-        const int N_ROWS = 10000;
+        const int N_ROWS = NSan::PlainOrUnderSanitizer(1000, 200);
 #else
-        const int N_ROWS = 5000;
+        const int N_ROWS = NSan::PlainOrUnderSanitizer(1000, 200);
 #endif
 
         TString bigData(300, 'a');
 
         for (int i = 0; i < N_ROWS; ++i) {
-            S3WriteRow(annoyingClient, 100, "Bucket100", "/A/Santa Barbara " + ToString(i), 1, 1100, bigData, "Table");
-            S3WriteRow(annoyingClient, 100, "Bucket100", "/B/Santa Barbara " + ToString(i%4000), 1, 1100, bigData, "Table");
-            S3WriteRow(annoyingClient, 100, "Bucket100", "/C/Santa Barbara " + ToString(i), 1, 1100, bigData, "Table");
-            S3WriteRow(annoyingClient, 100, "Bucket100", "/D/Santa Barbara " + ToString(i), 1, 1100, bigData, "Table");
+            S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/A/Santa Barbara " + ToString(i), 1, 1100, bigData, "Table");
+            S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/B/Santa Barbara " + ToString(i%4000), 1, 1100, bigData, "Table");
+            S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/C/Santa Barbara " + ToString(i), 1, 1100, bigData, "Table");
+            S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/D/Santa Barbara " + ToString(i), 1, 1100, bigData, "Table");
             if (i % 100 == 0)
                 Cerr << ".";
         }
@@ -800,20 +799,20 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
 
-        CompareS3Listing(annoyingClient, 100, "/", "/", "", 1000, {});
-        CompareS3Listing(annoyingClient, 100, "/A/", "/", "", 1000, {});
-        CompareS3Listing(annoyingClient, 100, "/B/", "/", "", 1000, {});
-        CompareS3Listing(annoyingClient, 100, "/P/", "/", "", 1000, {});
-        CompareS3Listing(annoyingClient, 100, "/Photos/", "/", "", 1000, {});
-        CompareS3Listing(annoyingClient, 100, "/Videos/", "/", "", 1000, {});
+        CompareS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/", "/", "", 1000, {});
+        CompareS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/A/", "/", "", 1000, {});
+        CompareS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/B/", "/", "", 1000, {});
+        CompareS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/P/", "/", "", 1000, {});
+        CompareS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/Photos/", "/", "", 1000, {});
+        CompareS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/Videos/", "/", "", 1000, {});
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_ERROR);
 
         for (int i = 0; i < N_ROWS/2; ++i) {
-            S3DeleteRow(annoyingClient, 100, "Bucket100", "/A/Santa Barbara " + ToString(i), 1, "Table");
-            S3DeleteRow(annoyingClient, 100, "Bucket100", "/B/Santa Barbara " + ToString(i), 1, "Table");
-            S3DeleteRow(annoyingClient, 100, "Bucket100", "/C/Santa Barbara " + ToString(i), 1, "Table");
-            S3DeleteRow(annoyingClient, 100, "Bucket100", "/D/Santa Barbara " + ToString(i), 1, "Table");
+            S3DeleteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/A/Santa Barbara " + ToString(i), 1, "Table");
+            S3DeleteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/B/Santa Barbara " + ToString(i), 1, "Table");
+            S3DeleteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/C/Santa Barbara " + ToString(i), 1, "Table");
+            S3DeleteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/D/Santa Barbara " + ToString(i), 1, "Table");
             if (i % 100 == 0)
                 Cerr << ".";
         }
@@ -821,12 +820,12 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
 
-        CompareS3Listing(annoyingClient, 100, "/", "/", "", 1000, {});
-        CompareS3Listing(annoyingClient, 100, "/A/", "/", "", 1000, {});
-        CompareS3Listing(annoyingClient, 100, "/B/", "/", "", 1000, {});
-        CompareS3Listing(annoyingClient, 100, "/P/", "/", "", 1000, {});
-        CompareS3Listing(annoyingClient, 100, "/Photos/", "/", "", 1000, {});
-        CompareS3Listing(annoyingClient, 100, "/Videos/", "/", "", 1000, {});
+        CompareS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/", "/", "", 1000, {});
+        CompareS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/A/", "/", "", 1000, {});
+        CompareS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/B/", "/", "", 1000, {});
+        CompareS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/P/", "/", "", 1000, {});
+        CompareS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/Photos/", "/", "", 1000, {});
+        CompareS3Listing(cleverServer.GetRuntime(), annoyingClient, 100, "/Videos/", "/", "", 1000, {});
     }
 
     Y_UNIT_TEST(CornerCases) {
@@ -838,23 +837,23 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
         TFlatMsgBusClient annoyingClient(port);
 
-        PrepareS3Data(annoyingClient);
+        PrepareS3Data(cleverServer.GetRuntime(), annoyingClient);
 
-        S3WriteRow(annoyingClient, 750, "Bucket750", "foo/1.mp4", 55, 10, "", "Table");
-        S3WriteRow(annoyingClient, 750, "Bucket750", "foo/bar/1.mp3", 55, 10, "", "Table");
-        S3WriteRow(annoyingClient, 750, "Bucket750", "foo/bar0", 55, 10, "", "Table");
-        S3WriteRow(annoyingClient, 750, "Bucket750", "foo/cat.jpg", 55, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 750, "Bucket750", "foo/1.mp4", 55, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 750, "Bucket750", "foo/bar/1.mp3", 55, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 750, "Bucket750", "foo/bar0", 55, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 750, "Bucket750", "foo/cat.jpg", 55, 10, "", "Table");
 
-        CompareS3Listing(annoyingClient, 750, "foo/", "/", "", 10, {});
-        CompareS3Listing(annoyingClient, 750, "foo/", "/", "foo/1.mp4", 1, {});
-        CompareS3Listing(annoyingClient, 750, "foo/", "/", "foo/bar/", 1, {});
-        CompareS3Listing(annoyingClient, 750, "foo/", "/", "foo/bar0", 1, {});
+        CompareS3Listing(cleverServer.GetRuntime(), annoyingClient, 750, "foo/", "/", "", 10, {});
+        CompareS3Listing(cleverServer.GetRuntime(), annoyingClient, 750, "foo/", "/", "foo/1.mp4", 1, {});
+        CompareS3Listing(cleverServer.GetRuntime(), annoyingClient, 750, "foo/", "/", "foo/bar/", 1, {});
+        CompareS3Listing(cleverServer.GetRuntime(), annoyingClient, 750, "foo/", "/", "foo/bar0", 1, {});
 
         TVector<TString> commonPrefixes;
         TVector<TString> contents;
 
         auto continuationToken = DoS3Listing(GRPC_PORT, 750, "foo/", "/", "", "", {}, 1, commonPrefixes, contents);
-        
+
         UNIT_ASSERT(continuationToken);
         UNIT_ASSERT_EQUAL(1, contents.size());
         UNIT_ASSERT_EQUAL(0, commonPrefixes.size());
@@ -899,55 +898,55 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
         CreateS3Table(annoyingClient);
 
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/a.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/b.jpg", 1, 10, "", "Table", false);
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/c.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/b.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/c.jpg", 1, 10, "", "Table");
 
         // This folder should not be shown, as boolean flag is false
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/folder/a.jpg", 1, 10, "", "Table", false);
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/folder/b.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/folder/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/folder/b.jpg", 1, 10, "", "Table", false);
 
         // This folder should be shown
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/games/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/games/a.jpg", 1, 10, "", "Table");
 
         // This folder should be shown, as one file is hidden, and one is not
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/inner/a.jpg", 1, 10, "", "Table", false);
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/inner/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/inner/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/inner/b.jpg", 1, 10, "", "Table");
 
         // This folder should be shown, as one file in nested folder is hidden, and one is not
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test/inner/a.jpg", 1, 10, "", "Table", false);
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test/inner/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test/inner/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test/inner/b.jpg", 1, 10, "", "Table");
 
         // This folder should not be shown
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test2/inner/a.jpg", 1, 10, "", "Table", false);
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test2/inner/b.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test2/inner/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test2/inner/b.jpg", 1, 10, "", "Table", false);
 
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test3/inner/inner2/a.jpg", 1, 10, "", "Table", false);
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test3/inner/inner2/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test3/inner/inner2/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test3/inner/inner2/b.jpg", 1, 10, "", "Table");
 
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test4/inner/inner2/a.jpg", 1, 10, "", "Table", false);
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test4/inner/inner2/b.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test4/inner/inner2/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test4/inner/inner2/b.jpg", 1, 10, "", "Table", false);
 
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/a.jpg", 1, 10, "", "Table", false);
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/b.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/c.jpg", 1, 10, "", "Table", false);
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/d.jpg", 1, 10, "", "Table", false);
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/e.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/c.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/d.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/e.jpg", 1, 10, "", "Table", false);
 
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/a.jpg", 1, 10, "", "Table", false);
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/b.jpg", 1, 10, "", "Table", false);
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/a.jpg", 1, 10, "", "Table", false);
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/b.jpg", 1, 10, "", "Table", false);
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/a.jpg", 1, 10, "", "Table", false);
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/b.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/c.jpg", 1, 10, "", "Table", false);
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/xyz.io", 1, 10, "", "Table", false);
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/yyyyy.txt", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test6/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test6/b.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test6/inner/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test6/inner/b.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/a.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/c.jpg", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test6/xyz.io", 1, 10, "", "Table", false);
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test6/yyyyy.txt", 1, 10, "", "Table", false);
 
         {
             TVector<TString> folders;
             TVector<TString> files;
-            DoS3Listing(GRPC_PORT, 100, "/Photos/", "/", nullptr, nullptr, {}, 1000, folders, files, Ydb::ObjectStorage::ListingRequest_EMatchType_EQUAL);
+            DoS3Listing(GRPC_PORT, 100, "/Photos/", "/", "", "", {}, 1000, folders, files, Ydb::ObjectStorage::ListingRequest_EMatchType_EQUAL);
 
             TVector<TString> expectedFolders = {"/Photos/games/", "/Photos/inner/", "/Photos/test/", "/Photos/test3/", "/Photos/test5/", "/Photos/test6/"};
             TVector<TString> expectedFiles = {"/Photos/a.jpg", "/Photos/c.jpg"};
@@ -959,11 +958,11 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         {
             TVector<TString> folders;
             TVector<TString> files;
-            DoS3Listing(GRPC_PORT, 100, "/Photos/", "/", nullptr, nullptr, {}, 1000, folders, files, Ydb::ObjectStorage::ListingRequest_EMatchType_NOT_EQUAL);
+            DoS3Listing(GRPC_PORT, 100, "/Photos/", "/", "", "", {}, 1000, folders, files, Ydb::ObjectStorage::ListingRequest_EMatchType_NOT_EQUAL);
 
             TVector<TString> expectedFolders = {"/Photos/folder/", "/Photos/inner/", "/Photos/test/", "/Photos/test2/", "/Photos/test3/", "/Photos/test4/", "/Photos/test5/", "/Photos/test6/"};
             TVector<TString> expectedFiles = {"/Photos/b.jpg"};
-            
+
             UNIT_ASSERT_VALUES_EQUAL(expectedFolders, folders);
             UNIT_ASSERT_VALUES_EQUAL(expectedFiles, files);
         }
@@ -1016,36 +1015,36 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
                 }}
             )");
 
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/a.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/b.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/c.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/folder/a.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/folder/b.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/games/a.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/inner/a.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/inner/b.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test/inner/a.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test/inner/b.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test2/inner/a.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test2/inner/b.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test3/inner/inner2/a.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test3/inner/inner2/b.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test4/inner/inner2/a.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test4/inner/inner2/b.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/a.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/b.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/c.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/d.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/e.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/a.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/b.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/a.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/b.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/a.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/b.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/c.jpg", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/xyz.io", 1, 10, "", "Table");
-        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/yyyyy.txt", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/c.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/folder/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/folder/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/games/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/inner/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/inner/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test/inner/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test/inner/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test2/inner/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test2/inner/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test3/inner/inner2/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test3/inner/inner2/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test4/inner/inner2/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test4/inner/inner2/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/c.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/d.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/e.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test6/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test6/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test6/inner/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test6/inner/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/c.jpg", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test6/xyz.io", 1, 10, "", "Table");
+        S3WriteRow(cleverServer.GetRuntime(), annoyingClient, 100, "Bucket100", "/Photos/test6/yyyyy.txt", 1, 10, "", "Table");
 
         const auto& runtime = cleverServer.GetRuntime();
 
@@ -1053,7 +1052,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
         TVector<TString> folders;
         TVector<TString> files;
-        DoS3Listing(GRPC_PORT, 100, "/", "/", nullptr, nullptr, {}, 1000, folders, files, Ydb::ObjectStorage::ListingRequest_EMatchType_EQUAL);
+        DoS3Listing(GRPC_PORT, 100, "/", "/", "", "", {}, 1000, folders, files, Ydb::ObjectStorage::ListingRequest_EMatchType_EQUAL);
 
         TVector<TString> expectedFolders = {"/Photos/"};
         TVector<TString> expectedFiles = {};
@@ -1071,7 +1070,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(expectedFolders, folders);
         UNIT_ASSERT_VALUES_EQUAL(expectedFiles, files);
-        // Three partitions, second should be skipped, because it's next prefix of /Photos/ (/Photos0) exceeds 
+        // Three partitions, second should be skipped, because it's next prefix of /Photos/ (/Photos0) exceeds
         // the range of second partition. Third (last) partition will always be checked.
         UNIT_ASSERT_EQUAL(2, count);
     }
@@ -1125,7 +1124,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
                     )
                 )";
 
-        annoyingClient.FlatQuery(Sprintf(insertRowQuery.data(), 100, "Bucket100", "/Path1", 1, "123.321", "355555555555555.123456789", "Table" ));
+        annoyingClient.FlatQuery(cleverServer.GetRuntime(), Sprintf(insertRowQuery.data(), 100, "Bucket100", "/Path1", 1, "123.321", "355555555555555.123456789", "Table" ));
 
         Ydb::ObjectStorage::ListingResponse response = TestS3ListingRequest({"100", "Bucket100"}, "/", "/", "", {"DecimalData", "Decimal35Data"}, 10,
             Ydb::StatusIds::SUCCESS,
@@ -1142,7 +1141,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         UNIT_ASSERT_VALUES_EQUAL(resultSet.rows(0).items(2).low_128(), 975580256289238738);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.rows(0).items(2).high_128(), 192747);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.rows(0).items(3).low_128(), 123321000000);
-    }    
+    }
 }
 
 }}

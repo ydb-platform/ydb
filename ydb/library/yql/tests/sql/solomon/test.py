@@ -16,7 +16,7 @@ from yql_utils import (
     normalize_source_code_path,
     yql_binary_path)
 
-from utils import (
+from test_utils import (
     get_config,
     pytest_generate_tests_for_run)
 

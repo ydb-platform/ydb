@@ -7,12 +7,10 @@ IF (WITH_VALGRIND)
 ENDIF()
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    TIMEOUT(2400)
     SPLIT_FACTOR(20)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -22,6 +20,12 @@ PEERDIR(
     ydb/core/blobstorage/lwtrace_probes
     ydb/core/testlib/actors
 )
+
+IF (YDB_ENABLE_PDISK_SHRED) 
+    CFLAGS(
+        -DENABLE_PDISK_SHRED
+    )
+ENDIF()
 
 SRCS(
     blobstorage_pdisk_blockdevice_ut.cpp

@@ -23,13 +23,12 @@ def onregister_yql_python_udf(unit, *args):
             ymake.report_configure_error('Libra modules are not supported in opensource python UDFs')
             add_libra_modules = False
 
-    yql_base_dir = unit.get('YQL_BASE_DIR')
     yql_python_dir = unit.get('YQL_PYTHON_DIR')
     if not yql_python_dir:
-        yql_python_dir = '/'.join([yql_base_dir, 'udfs/common/python'])
+        yql_python_dir = 'yql/essentials/udfs/common/python'
 
     unit.onyql_abi_version(['2', '27', '0'])
-    unit.onpeerdir(['/'.join([yql_base_dir, '/udfs/common/python/python_udf'])])
+    unit.onpeerdir(['yql/essentials/udfs/common/python/python_udf'])
     unit.onpeerdir(['yql/essentials/public/udf'])
 
     if add_libra_modules:
@@ -41,13 +40,13 @@ def onregister_yql_python_udf(unit, *args):
         unit.onpeerdir(
             ['library/python/runtime', '/'.join([yql_python_dir, '/main'])]
             if not py3
-            else ['library/python/runtime_py3', '/'.join([yql_base_dir, '/udfs/common/python/main_py3'])]
+            else ['library/python/runtime_py3', 'yql/essentials/udfs/common/python/main_py3']
         )
     else:
         flavor = 'System'
 
     output_includes = [
-        '/'.join([yql_base_dir, '/udfs/common/python/python_udf/python_udf.h']),
+        'yql/essentials/udfs/common/python/python_udf/python_udf.h',
         'yql/essentials/public/udf/udf_registrator.h',
     ]
     if add_libra_modules:
@@ -63,7 +62,6 @@ def onregister_yql_python_udf(unit, *args):
             resource_name,
             path,
             libra_flag,
-            yql_base_dir,
             'OUT',
             path,
             'OUTPUT_INCLUDES',

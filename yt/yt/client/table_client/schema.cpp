@@ -16,6 +16,8 @@
 #include <yt/yt/core/ytree/fluent.h>
 #include <yt/yt/core/ytree/yson_struct.h>
 
+#include <yt/yt/core/actions/new_with_offloaded_dtor.h>
+
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/chunk_meta.pb.h>
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/wire_protocol.pb.h>
 
@@ -280,6 +282,26 @@ i64 TColumnSchema::GetMemoryUsage() const
         (Group_ ? Group_->size() : 0);
 }
 
+i64 TColumnSchema::GetMemoryUsage(i64 threshold) const
+{
+    YT_ASSERT(threshold > 0);
+
+    auto usage = static_cast<i64>(
+        sizeof(TColumnSchema) +
+        StableName_.Underlying().size() +
+        Name_.size() +
+        (Lock_ ? Lock_->size() : 0) +
+        (Expression_ ? Expression_->size() : 0) +
+        (Aggregate_ ? Aggregate_->size() : 0) +
+        (Group_ ? Group_->size() : 0));
+
+    if (usage >= threshold) {
+        return usage;
+    }
+
+    return usage + LogicalType_->GetMemoryUsage(threshold - usage);
+}
+
 bool TColumnSchema::IsOfV1Type() const
 {
     return IsOfV1Type_;
@@ -407,41 +429,13 @@ void ToProto(NProto::TColumnSchema* protoSchema, const TColumnSchema& schema)
         protoSchema->clear_required();
     }
     ToProto(protoSchema->mutable_logical_type(), schema.LogicalType());
-    if (schema.Lock()) {
-        protoSchema->set_lock(ToProto(*schema.Lock()));
-    } else {
-        protoSchema->clear_lock();
-    }
-    if (schema.Expression()) {
-        protoSchema->set_expression(*schema.Expression());
-    } else {
-        protoSchema->clear_expression();
-    }
-    if (schema.Materialized()) {
-        protoSchema->set_materialized(*schema.Materialized());
-    } else {
-        protoSchema->clear_materialized();
-    }
-    if (schema.Aggregate()) {
-        protoSchema->set_aggregate(ToProto(*schema.Aggregate()));
-    } else {
-        protoSchema->clear_aggregate();
-    }
-    if (schema.SortOrder()) {
-        protoSchema->set_sort_order(ToProto(*schema.SortOrder()));
-    } else {
-        protoSchema->clear_sort_order();
-    }
-    if (schema.Group()) {
-        protoSchema->set_group(ToProto(*schema.Group()));
-    } else {
-        protoSchema->clear_group();
-    }
-    if (schema.MaxInlineHunkSize()) {
-        protoSchema->set_max_inline_hunk_size(*schema.MaxInlineHunkSize());
-    } else {
-        protoSchema->clear_max_inline_hunk_size();
-    }
+    YT_OPTIONAL_SET_PROTO(protoSchema, lock, schema.Lock());
+    YT_OPTIONAL_TO_PROTO(protoSchema, expression, schema.Expression());
+    YT_OPTIONAL_SET_PROTO(protoSchema, materialized, schema.Materialized());
+    YT_OPTIONAL_SET_PROTO(protoSchema, aggregate, schema.Aggregate());
+    YT_OPTIONAL_SET_PROTO(protoSchema, sort_order, schema.SortOrder());
+    YT_OPTIONAL_SET_PROTO(protoSchema, group, schema.Group());
+    YT_OPTIONAL_SET_PROTO(protoSchema, max_inline_hunk_size, schema.MaxInlineHunkSize());
 }
 
 void ToProto(NProto::TDeletedColumn* protoSchema, const TDeletedColumn& schema)
@@ -463,20 +457,20 @@ void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema)
     } else if (protoSchema.has_simple_logical_type()) {
         schema->SetLogicalType(
             MakeLogicalType(
-                CheckedEnumCast<ESimpleLogicalValueType>(protoSchema.simple_logical_type()),
+                FromProto<ESimpleLogicalValueType>(protoSchema.simple_logical_type()),
                 protoSchema.required()));
     } else {
-        auto physicalType = CheckedEnumCast<EValueType>(protoSchema.type());
+        auto physicalType = FromProto<EValueType>(protoSchema.type());
         schema->SetLogicalType(MakeLogicalType(GetLogicalType(physicalType), protoSchema.required()));
     }
 
-    schema->SetLock(YT_PROTO_OPTIONAL(protoSchema, lock));
-    schema->SetExpression(YT_PROTO_OPTIONAL(protoSchema, expression));
-    schema->SetMaterialized(YT_PROTO_OPTIONAL(protoSchema, materialized));
-    schema->SetAggregate(YT_PROTO_OPTIONAL(protoSchema, aggregate));
-    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, CheckedEnumCast<ESortOrder>));
-    schema->SetGroup(YT_PROTO_OPTIONAL(protoSchema, group));
-    schema->SetMaxInlineHunkSize(YT_PROTO_OPTIONAL(protoSchema, max_inline_hunk_size));
+    schema->SetLock(YT_OPTIONAL_FROM_PROTO(protoSchema, lock));
+    schema->SetExpression(YT_OPTIONAL_FROM_PROTO(protoSchema, expression));
+    schema->SetMaterialized(YT_OPTIONAL_FROM_PROTO(protoSchema, materialized));
+    schema->SetAggregate(YT_OPTIONAL_FROM_PROTO(protoSchema, aggregate));
+    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, FromProto<ESortOrder>));
+    schema->SetGroup(YT_OPTIONAL_FROM_PROTO(protoSchema, group));
+    schema->SetMaxInlineHunkSize(YT_OPTIONAL_FROM_PROTO(protoSchema, max_inline_hunk_size));
 }
 
 void FromProto(TDeletedColumn* schema, const NProto::TDeletedColumn& protoSchema)
@@ -790,7 +784,7 @@ bool TTableSchema::IsCGComparatorApplicable() const
 
     auto keyTypes = GetKeyColumnTypes();
     return std::none_of(keyTypes.begin(), keyTypes.end(), [] (auto type) {
-        return type == EValueType::Any;
+        return type == EValueType::Any || type == EValueType::Null;
     });
 }
 
@@ -997,6 +991,43 @@ TTableSchemaPtr TTableSchema::ToQuery() const
         return New<TTableSchema>(std::move(columns), true, false,
             ETableSchemaModification::None, DeletedColumns());
     }
+}
+
+TTableSchemaPtr TTableSchema::WithSystemColumns(const TSystemColumnOptions& options) const
+{
+    std::vector<TColumnSchema> columns;
+    auto safeAdd = [&] (const std::string& name, const ESimpleLogicalValueType type) {
+        const auto existing = FindColumn(name);
+        if (!existing) {
+            columns.push_back(TColumnSchema(name, type));
+        } else if (!existing->IsOfV1Type(type)) {
+            THROW_ERROR_EXCEPTION("Cannot add column %Qv because of type mismatch", name);
+        }
+    };
+
+    if (options.EnableTableIndex) {
+        safeAdd(TableIndexColumnName, ESimpleLogicalValueType::Int64);
+    }
+
+    if (options.EnableRowIndex) {
+        safeAdd(RowIndexColumnName, ESimpleLogicalValueType::Int64);
+    }
+
+    if (options.EnableRangeIndex) {
+        safeAdd(RangeIndexColumnName, ESimpleLogicalValueType::Int64);
+    }
+
+    if (ColumnInfo_) {
+        const auto& info = *ColumnInfo_;
+        columns.insert(columns.end(), info.Columns.begin(), info.Columns.end());
+    }
+
+    return New<TTableSchema>(
+        std::move(columns),
+        Strict_,
+        UniqueKeys_,
+        SchemaModification_,
+        DeletedColumns());
 }
 
 TTableSchemaPtr TTableSchema::ToWriteViaQueueProducer() const
@@ -1430,9 +1461,24 @@ void TTableSchema::Load(TStreamLoadContext& context)
 
 i64 TTableSchema::GetMemoryUsage() const
 {
-    i64 usage = sizeof(TTableSchema);
+    auto usage = static_cast<i64>(sizeof(TTableSchema));
     for (const auto& column : Columns()) {
         usage += column.GetMemoryUsage();
+    }
+    return usage;
+}
+
+i64 TTableSchema::GetMemoryUsage(i64 threshold) const
+{
+    YT_ASSERT(threshold > 0);
+
+    auto usage = static_cast<i64>(sizeof(TTableSchema));
+    for (const auto& column : Columns()) {
+        if (usage >= threshold) {
+            return usage;
+        }
+
+        usage += column.GetMemoryUsage(threshold - usage);
     }
     return usage;
 }
@@ -1514,7 +1560,7 @@ void FromProto(TTableSchema* schema, const NProto::TTableSchemaExt& protoSchema)
         FromProto<std::vector<TColumnSchema>>(protoSchema.columns()),
         protoSchema.strict(),
         protoSchema.unique_keys(),
-        CheckedEnumCast<ETableSchemaModification>(protoSchema.schema_modification()),
+        FromProto<ETableSchemaModification>(protoSchema.schema_modification()),
         FromProto<std::vector<TDeletedColumn>>(protoSchema.deleted_columns()));
 }
 
@@ -1570,6 +1616,35 @@ void FromProto(
 void PrintTo(const TTableSchema& tableSchema, std::ostream* os)
 {
     *os << Format("%v", tableSchema);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TTableSchemaTruncatedFormatter::TTableSchemaTruncatedFormatter(
+    const TTableSchemaPtr& schema,
+    i64 memoryThreshold)
+    : Schema_(schema.Get())
+    , Threshold_(memoryThreshold)
+{
+    YT_ASSERT(Threshold_ >= 0);
+}
+
+void TTableSchemaTruncatedFormatter::operator()(TStringBuilderBase* builder) const
+{
+    if (!Schema_) {
+        builder->AppendString(ToString(nullptr));
+    } else if (Threshold_ > 0 && Schema_->GetMemoryUsage(Threshold_) < Threshold_) {
+        FormatValue(builder, *Schema_, "v");
+    } else {
+        builder->AppendString("<schema memory usage is over the logging threshold>");
+    }
+}
+
+TFormatterWrapper<TTableSchemaTruncatedFormatter> MakeTableSchemaTruncatedFormatter(
+    const TTableSchemaPtr& schema,
+    i64 memoryLimit)
+{
+    return {TTableSchemaTruncatedFormatter(schema, memoryLimit)};
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1773,9 +1848,17 @@ void ValidateDynamicTableKeyColumnCount(int count)
 void ValidateSystemColumnSchema(
     const TColumnSchema& columnSchema,
     bool isTableSorted,
-    bool allowUnversionedUpdateColumns,
-    bool allowTimestampColumns)
+    const TSchemaValidationOptions& options)
 {
+    static const auto allowedOperationSystemColumns = THashMap<std::string, ESimpleLogicalValueType>{
+        // Operation system columns are appended in context of job input query.
+        // Table index column is intentionally disabled in the result of input query, since it can be arbitrarily
+        // changed by the query itself, and final values would violate assumptions about the possible values of
+        // $table_index inside format writers.
+        {RowIndexColumnName, ESimpleLogicalValueType::Int64},
+        {RangeIndexColumnName, ESimpleLogicalValueType::Int64},
+    };
+
     static const auto allowedSortedTablesSystemColumns = THashMap<std::string, ESimpleLogicalValueType>{
         {EmptyValueColumnName, ESimpleLogicalValueType::Int64},
         {TtlColumnName, ESimpleLogicalValueType::Uint64},
@@ -1814,7 +1897,15 @@ void ValidateSystemColumnSchema(
         return;
     }
 
-    if (allowUnversionedUpdateColumns) {
+    if (options.AllowOperationColumns) {
+        auto it = allowedOperationSystemColumns.find(name);
+        if (it != allowedOperationSystemColumns.end()) {
+            validateType(it->second);
+            return;
+        }
+    }
+
+    if (options.AllowUnversionedUpdateColumns) {
         // Unversioned update schema system column.
         if (name == TUnversionedUpdateSchema::ChangeTypeColumnName) {
             validateType(ESimpleLogicalValueType::Uint64);
@@ -1828,7 +1919,7 @@ void ValidateSystemColumnSchema(
         }
     }
 
-    if (allowTimestampColumns) {
+    if (options.AllowTimestampColumns) {
         if (name.starts_with(TimestampColumnPrefix)) {
             validateType(ESimpleLogicalValueType::Uint64);
             return;
@@ -1858,8 +1949,7 @@ void ValidateColumnSchema(
     const TColumnSchema& columnSchema,
     bool isTableSorted,
     bool isTableDynamic,
-    bool allowUnversionedUpdateColumns,
-    bool allowTimestampColumns)
+    const TSchemaValidationOptions& options)
 {
     static const auto allowedAggregates = THashSet<std::string, THash<TStringBuf>, TEqualTo<>>{
         "sum",
@@ -1888,8 +1978,7 @@ void ValidateColumnSchema(
             ValidateSystemColumnSchema(
                 columnSchema,
                 isTableSorted,
-                allowUnversionedUpdateColumns,
-                allowTimestampColumns);
+                options);
         }
 
         {
@@ -2227,8 +2316,7 @@ void ValidateSchemaAttributes(const TTableSchema& schema)
 void ValidateTableSchema(
     const TTableSchema& schema,
     bool isTableDynamic,
-    bool allowUnversionedUpdateColumns,
-    bool allowTimestampColumns)
+    const TSchemaValidationOptions& options)
 {
     int totalTypeComplexity = 0;
     for (const auto& column : schema.Columns()) {
@@ -2236,8 +2324,7 @@ void ValidateTableSchema(
             column,
             schema.IsSorted(),
             isTableDynamic,
-            allowUnversionedUpdateColumns,
-            allowTimestampColumns);
+            options);
         if (!schema.GetStrict() && column.IsRenamed()) {
             THROW_ERROR_EXCEPTION("Renamed column %v in non-strict schema",
                 column.GetDiagnosticNameString());

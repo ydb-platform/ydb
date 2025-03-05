@@ -787,7 +787,7 @@ Y_UNIT_TEST_SUITE(DBase) {
                 stream << cache->DumpRanges();
                 return stream.Str();
             } else {
-                return nullptr;
+                return "";
             }
         };
 
@@ -860,7 +860,7 @@ Y_UNIT_TEST_SUITE(DBase) {
                 stream << cache->DumpRanges();
                 return stream.Str();
             } else {
-                return nullptr;
+                return "";
             }
         };
 
@@ -929,7 +929,7 @@ Y_UNIT_TEST_SUITE(DBase) {
             .Next().Is(*me.SchemedCookRow(table).Col(18_u64, 18_u64))
             .Next().Is(EReady::Gone);
 
-        UNIT_ASSERT_VALUES_EQUAL(dumpCache(), "TKeyRangeCache{ [{1}, {16}] }");
+        UNIT_ASSERT_VALUES_EQUAL(dumpCache(), "TKeyRangeCache{ [{1}, {9}), [{10}, {16}] }");
     }
 
     Y_UNIT_TEST(EraseCacheWithUncommittedChanges) {

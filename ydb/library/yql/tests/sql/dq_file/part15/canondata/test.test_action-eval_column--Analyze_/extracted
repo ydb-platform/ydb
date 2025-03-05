@@ -1,7 +1,0 @@
-<tmp_path>/program.sql:<main>: Info: DQ cannot execute the query
-
-    <tmp_path>/program.sql:<main>: Info: Optimization
-    
-        <tmp_path>/program.sql:<main>:25:42: Info: Cannot execute self join in DQ
-        	select a.$x as x,b.$y as y from Input as a join Input as b on (a.$x = b.$x)
-	                                         ^

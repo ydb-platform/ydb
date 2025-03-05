@@ -37,6 +37,7 @@ class TestResult:
     elapsed: float
     count_of_passed: int
     owners: str
+    status_description: str
 
     @property
     def status_display(self):
@@ -67,15 +68,23 @@ class TestResult:
     @classmethod
     def from_junit(cls, testcase):
         classname, name = testcase.get("classname"), testcase.get("name")
-
+        status_description = None
         if testcase.find("failure") is not None:
             status = TestStatus.FAIL
+            if testcase.find("failure").text is not None:
+                status_description = testcase.find("failure").text
         elif testcase.find("error") is not None:
             status = TestStatus.ERROR
+            if testcase.find("error").text is not None:
+                status_description = testcase.find("error").text
         elif get_property_value(testcase, "mute") is not None:
             status = TestStatus.MUTE
+            if testcase.find("skipped").text is not None:
+                status_description = testcase.find("skipped").text
         elif testcase.find("skipped") is not None:
             status = TestStatus.SKIP
+            if testcase.find("skipped").text is not None:
+                status_description = testcase.find("skipped").text
         else:
             status = TestStatus.PASS
 
@@ -96,7 +105,7 @@ class TestResult:
             elapsed = 0
             print(f"Unable to cast elapsed time for {classname}::{name}  value={elapsed!r}")
 
-        return cls(classname, name, status, log_urls, elapsed, 0,'')
+        return cls(classname, name, status, log_urls, elapsed, 0, '', status_description)
 
 
 class TestSummaryLine:
@@ -284,11 +293,22 @@ def render_testlist_html(rows, fn, build_preset):
     for current_status in status_for_history:
         status_test.get(current_status,[]).sort(key=lambda val: (-val.count_of_passed, val.full_name))
 
+    buid_preset_params = '--build unknown_build_type'
+    if build_preset == 'release-asan' :
+        buid_preset_params = '--build "release" --sanitize="address" -DDEBUGINFO_LINES_ONLY'
+    elif build_preset == 'release-msan':
+        buid_preset_params = '--build "release" --sanitize="memory" -DDEBUGINFO_LINES_ONLY'
+    elif build_preset == 'release-tsan':   
+        buid_preset_params = '--build "release" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'
+    elif build_preset == 'relwithdebinfo':
+        buid_preset_params = '--build "relwithdebinfo"'
+        
     content = env.get_template("summary.html").render(
         status_order=status_order,
         tests=status_test,
         has_any_log=has_any_log,
         history=history,
+        build_preset=buid_preset_params
     )
 
     with open(fn, "w") as fp:

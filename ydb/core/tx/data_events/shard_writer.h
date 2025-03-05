@@ -39,6 +39,7 @@ private:
     NMonitoring::THistogramPtr FailedFullReplyDuration;
     NMonitoring::THistogramPtr BytesDistribution;
     NMonitoring::THistogramPtr RowsDistribution;
+    NMonitoring::THistogramPtr ShardsCountDistribution;
     NMonitoring::TDynamicCounters::TCounterPtr RowsCount;
     NMonitoring::TDynamicCounters::TCounterPtr BytesCount;
     NMonitoring::TDynamicCounters::TCounterPtr FailsCount;
@@ -54,6 +55,7 @@ public:
         , FailedFullReplyDuration(TBase::GetHistogram("Replies/Failed/Full/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10)))
         , BytesDistribution(TBase::GetHistogram("Requests/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024)))
         , RowsDistribution(TBase::GetHistogram("Requests/Rows", NMonitoring::ExponentialHistogram(15, 2, 16)))
+        , ShardsCountDistribution(TBase::GetHistogram("Requests/ShardSplits", NMonitoring::LinearHistogram(50, 1, 1)))
         , RowsCount(TBase::GetDeriviative("Rows"))
         , BytesCount(TBase::GetDeriviative("Bytes"))
         , FailsCount(TBase::GetDeriviative("Fails"))
@@ -79,6 +81,10 @@ public:
 
     void OnCSFailed(const Ydb::StatusIds::StatusCode /*code*/) {
         FailsCount->Add(1);
+    }
+
+    void OnSplitByShards(const ui64 shardsCount) const {
+        ShardsCountDistribution->Collect(shardsCount);
     }
 
     void OnCSReply(const TDuration d) const {

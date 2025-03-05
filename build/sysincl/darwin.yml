@@ -18,7 +18,6 @@
   # - pcap/pcap.h
   # - sasl/sasl.h
   # - sasl/saslutil.h
-  # - uuid/uuid.h
   # - zconf.h
 
   - Availability.h
@@ -38,6 +37,7 @@
   - MacTypes.h
   - TargetConditionals.h
   - architecture/byte_order.h
+  - arm/cpu_capabilities_public.h
   - asl.h
   - copyfile.h
   - crt_externs.h
@@ -174,7 +174,9 @@
   - timeconv.h
   - tzfile.h
   - util.h
+  - uuid/uuid.h
   - vis.h
+  - xpc/connection.h
   - xpc/xpc.h
 
   # OSX frameworks

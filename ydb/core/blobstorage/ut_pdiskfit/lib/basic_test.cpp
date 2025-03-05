@@ -787,7 +787,7 @@ public:
         void *cookie = reinterpret_cast<void *>(NextWriteCookie++);
 
         SendPDiskRequest(ctx, new NPDisk::TEvChunkWrite(PDiskParams->Owner, PDiskParams->OwnerRound, it->first,
-                offsetInBlocks * PDiskParams->AppendBlockSize, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(data),
+                offsetInBlocks * PDiskParams->AppendBlockSize, new NPDisk::TEvChunkWrite::TAlignedParts(TString(data)),
                 cookie, true, NPriWrite::HullHugeAsyncBlob), [&] {
             State.WritesInFlight.push_back(TWriteRecord{it->first, offsetInBlocks, numBlocks, std::move(checksums),
                     cookie});

@@ -1,11 +1,9 @@
 UNITTEST_FOR(ydb/core/tablet_flat)
 
 IF (WITH_VALGRIND)
-    TIMEOUT(2400)
     TAG(ya:fat)
     SIZE(LARGE)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 

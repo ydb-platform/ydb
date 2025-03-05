@@ -17,7 +17,7 @@
 
 #include <library/cpp/yt/misc/variant.h>
 
-#include <library/cpp/yt/small_containers/compact_set.h>
+#include <library/cpp/yt/compact_containers/compact_set.h>
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
@@ -706,7 +706,7 @@ private:
 
     void DoAddPeers(const std::vector<std::string>& addresses)
     {
-        VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
         PeerDiscoveryError_ = {};
 
@@ -729,7 +729,7 @@ private:
 
     void AddPeer(const std::string& address)
     {
-        VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
         YT_VERIFY(ActiveAddresses_.insert(address).second);
 
@@ -744,7 +744,7 @@ private:
 
     void RemovePeer(const std::string& address)
     {
-        VERIFY_WRITER_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
         if (ActiveAddresses_.erase(address) == 0 && BannedAddresses_.erase(address) == 0) {
             return;

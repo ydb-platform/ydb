@@ -12,7 +12,7 @@
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/http/http.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/http/server/http.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
@@ -57,7 +57,9 @@ struct THttpResponseData {
     NJson::TJsonValue Body;
     TString ErrorText{"OK"};
     TString YmqStatusCode;
-    ui32 YmqHttpCode;
+    ui32 YmqHttpCode = 500;
+    bool YmqIsFifo = false;
+    THashMap<TString, TString> QueueTags;
 
     TString DumpBody(MimeTypes contentType);
 };
@@ -83,6 +85,7 @@ struct THttpRequestContext {
     TString FolderId;   // not in context
     TString CloudId;    // not in context
     TString StreamName; // not in context
+    TString ResourceId;
     TString SourceAddress;
     TString MethodName; // used once
     TString ApiVersion; // used once

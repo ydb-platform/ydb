@@ -91,6 +91,14 @@ void INode::MarkImplicitLabel(bool isImplicitLabel) {
     ImplicitLabel = isImplicitLabel;
 }
 
+void INode::SetRefPos(TPosition pos) {
+    RefPos = pos;
+}
+
+TMaybe<TPosition> INode::GetRefPos() const {
+    return RefPos;
+}
+
 void INode::SetCountHint(bool isCount) {
     State.Set(ENodeState::CountHint, isCount);
 }
@@ -170,6 +178,14 @@ const TString* INode::GetLiteral(const TString& type) const {
 
 const TString* INode::GetColumnName() const {
     return nullptr;
+}
+
+bool INode::IsPlainColumn() const {
+    return GetColumnName() != nullptr;
+}
+
+bool INode::IsTableRow() const {
+    return false;
 }
 
 void INode::AssumeColumn() {
@@ -316,6 +332,10 @@ const TString* INode::FuncName() const {
 
 const TString* INode::ModuleName() const {
     return nullptr;
+}
+
+bool INode::IsScript() const {
+    return false;
 }
 
 bool INode::HasSkip() const {
@@ -466,6 +486,14 @@ const TString* IProxyNode::GetColumnName() const {
     return Inner->GetColumnName();
 }
 
+bool IProxyNode::IsPlainColumn() const {
+    return Inner->IsPlainColumn();
+}
+
+bool IProxyNode::IsTableRow() const {
+    return Inner->IsTableRow();
+}
+
 void IProxyNode::AssumeColumn() {
     Inner->AssumeColumn();
 }
@@ -540,6 +568,10 @@ const TString* IProxyNode::FuncName() const {
 
 const TString* IProxyNode::ModuleName() const {
     return Inner->ModuleName();
+}
+
+bool IProxyNode::IsScript() const {
+    return Inner->IsScript();
 }
 
 bool IProxyNode::HasSkip() const {
@@ -680,6 +712,14 @@ TAstDirectNode::TAstDirectNode(TAstNode* node)
 TAstNode* TAstDirectNode::Translate(TContext& ctx) const {
     Y_UNUSED(ctx);
     return Node;
+}
+
+TNodePtr BuildList(TPosition pos, TVector<TNodePtr> nodes) {
+    return new TAstListNodeImpl(pos, std::move(nodes));
+}
+
+TNodePtr BuildQuote(TPosition pos, TNodePtr expr) {
+    return BuildList(pos, {BuildAtom(pos, "quote", TNodeFlags::Default), expr});
 }
 
 TNodePtr BuildAtom(TPosition pos, const TString& content, ui32 flags, bool isOptionalArg) {
@@ -1894,9 +1934,14 @@ TMaybe<TStringContent> StringContentOrIdContent(TContext& ctx, TPosition pos, co
         (ctx.AnsiQuotedIdentifiers && input.StartsWith('"'))? EStringContentMode::AnsiIdent : EStringContentMode::Default);
 }
 
-TTtlSettings::TTtlSettings(const TIdentifier& columnName, const TNodePtr& expr, const TMaybe<EUnit>& columnUnit)
+TTtlSettings::TTierSettings::TTierSettings(const TNodePtr& evictionDelay, const std::optional<TIdentifier>& storageName)
+    : EvictionDelay(evictionDelay)
+    , StorageName(storageName) {
+}
+
+TTtlSettings::TTtlSettings(const TIdentifier& columnName, const std::vector<TTierSettings>& tiers, const TMaybe<EUnit>& columnUnit)
     : ColumnName(columnName)
-    , Expr(expr)
+    , Tiers(tiers)
     , ColumnUnit(columnUnit)
 {
 }
@@ -2475,6 +2520,18 @@ public:
         return ColumnOnly ? Ids[0].Expr->GetColumnName() : nullptr;
     }
 
+    bool IsPlainColumn() const override {
+        if (GetColumnName()) {
+            return true;
+        }
+
+        if (Ids[0].Expr->IsTableRow()) {
+            return true;
+        }
+
+        return false;
+    }
+
     const TString* GetSourceName() const override {
         return Ids[0].Expr->GetSourceName();
     }
@@ -2626,10 +2683,6 @@ private:
 
 TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isLookup) {
     return new TAccessNode(pos, ids, isLookup);
-}
-
-TNodePtr BuildMatchRecognizeVarAccess(TPosition pos, const TString& var, const TString& column, bool theSameVar) {
-    return new TMatchRecognizeVarAccessNode(pos, var, column, theSameVar);
 }
 
 void WarnIfAliasFromSelectIsUsedInGroupBy(TContext& ctx, const TVector<TNodePtr>& selectTerms, const TVector<TNodePtr>& groupByTerms,
@@ -2982,6 +3035,18 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
 
     FunctionName = function->FuncName();
     ModuleName = function->ModuleName();
+    ScriptUdf = function->IsScript();
+    if (ScriptUdf && as_tuple->GetTupleSize() > 1) {
+        ctx.Error(Pos) << "Udf: user type is not supported for script udfs";
+        return false;
+    }
+
+    if (ScriptUdf) {
+        for (size_t i = 0; i < function->GetTupleSize(); ++i) {
+            ScriptArgs.push_back(function->GetTupleElement(i));
+        }
+    }
+
     TVector<TNodePtr> external;
     external.reserve(as_tuple->GetTupleSize() - 1);
 
@@ -3004,9 +3069,26 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
     if (TStructNode* named_args = Args[1]->GetStructNode(); named_args) {
         for (const auto &arg: named_args->GetExprs()) {
             if (arg->GetLabel() == "TypeConfig") {
+                if (function->IsScript()) {
+                    ctx.Error() << "Udf: TypeConfig is not supported for script udfs";
+                    return false;
+                }
+
                 TypeConfig = MakeAtomFromExpression(Pos, ctx, arg);
             } else if (arg->GetLabel() == "RunConfig") {
+                if (function->IsScript()) {
+                    ctx.Error() << "Udf: RunConfig is not supported for script udfs";
+                    return false;
+                }
+
                 RunConfig = arg;
+            } else if (arg->GetLabel() == "Cpu") {
+                Cpu = MakeAtomFromExpression(Pos, ctx, arg);
+            } else if (arg->GetLabel() == "ExtraMem") {
+                ExtraMem = MakeAtomFromExpression(Pos, ctx, arg);
+            } else {
+                ctx.Error() << "Udf: unexpected named argument: " << arg->GetLabel();
+                return false;
             }
         }
     }
@@ -3032,6 +3114,31 @@ TNodePtr TUdfNode::GetRunConfig() const {
 
 const TDeferredAtom& TUdfNode::GetTypeConfig() const {
     return TypeConfig;
+}
+
+TNodePtr TUdfNode::BuildOptions() const {
+    if (Cpu.Empty() && ExtraMem.Empty()) {
+        return nullptr;
+    }
+
+    auto options = Y();
+    if (!Cpu.Empty()) {
+        options = L(options, Q(Y(Q("cpu"), Cpu.Build())));
+    }
+
+    if (!ExtraMem.Empty()) {
+        options = L(options, Q(Y(Q("extraMem"), ExtraMem.Build())));
+    }
+
+    return Q(options);
+}
+
+bool TUdfNode::IsScript() const {
+    return ScriptUdf;
+}
+
+const TVector<TNodePtr>& TUdfNode::GetScriptArgs() const {
+    return ScriptArgs;
 }
 
 TUdfNode* TUdfNode::GetUdfNode() {
@@ -3131,10 +3238,10 @@ public:
         Y_DEBUG_ABORT_UNLESS(FuncNode);
         FuncNode->VisitTree(func, visited);
     }
-    
+
     void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override {
         if (ctx.DistinctOverWindow) {
-            FuncNode->CollectPreaggregateExprs(ctx, src, exprs);   
+            FuncNode->CollectPreaggregateExprs(ctx, src, exprs);
         } else {
             INode::CollectPreaggregateExprs(ctx, src, exprs);
         }
@@ -3274,7 +3381,7 @@ TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TStri
         return nullptr;
     }
 
-    auto wrappedNode = new TAstListNodeImpl(pos, { 
+    auto wrappedNode = new TAstListNodeImpl(pos, {
         new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
         node
     });
@@ -3303,7 +3410,7 @@ void MakeTableFromExpression(TPosition pos, TContext& ctx, TNodePtr node, TDefer
         node = node->Y("Concat", node->Y("String", node->Q(prefix)), node);
     }
 
-    auto wrappedNode = new TAstListNodeImpl(pos, { 
+    auto wrappedNode = new TAstListNodeImpl(pos, {
         new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
         node
     });
@@ -3320,7 +3427,7 @@ TDeferredAtom MakeAtomFromExpression(TPosition pos, TContext& ctx, TNodePtr node
         node = node->Y("Concat", node->Y("String", node->Q(prefix)), node);
     }
 
-    auto wrappedNode = new TAstListNodeImpl(pos, { 
+    auto wrappedNode = new TAstListNodeImpl(pos, {
         new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
         node
     });
@@ -3462,7 +3569,7 @@ bool TVectorIndexSettings::Validate(TContext& ctx) const {
     if (!Distance && !Similarity) {
         ctx.Error() << "either distance or similarity should be set";
         return false;
-    } 
+    }
     if (!VectorType) {
         ctx.Error() << "vector_type should be set";
         return false;

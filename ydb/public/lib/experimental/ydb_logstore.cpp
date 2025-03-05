@@ -1,13 +1,13 @@
 #include "ydb_logstore.h"
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/scheme_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/scheme_helpers/helpers.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/draft/ydb_logstore_v1.grpc.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-#include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -16,23 +16,10 @@ namespace NYdb {
 namespace NLogStore {
 
 TMaybe<TTtlSettings> TtlSettingsFromProto(const Ydb::Table::TtlSettings& proto) {
-    switch (proto.mode_case()) {
-    case Ydb::Table::TtlSettings::kDateTypeColumn:
-        return TTtlSettings(
-            proto.date_type_column(),
-            proto.run_interval_seconds()
-        );
-
-    case Ydb::Table::TtlSettings::kValueSinceUnixEpoch:
-        return TTtlSettings(
-            proto.value_since_unix_epoch(),
-            proto.run_interval_seconds()
-        );
-
-    default:
-        break;
+    if (auto settings = TTtlSettings::FromProto(proto)) {
+        return *settings;
     }
-    return {};
+    return Nothing();
 }
 
 static TCompression CompressionFromProto(const Ydb::LogStore::Compression& compression) {
@@ -98,7 +85,7 @@ TSchema::TSchema(const Ydb::LogStore::Schema& schema)
 void TSchema::SerializeTo(Ydb::LogStore::Schema& schema) const {
     for (const auto& c : Columns) {
         auto& col = *schema.add_columns();
-        col.set_name(c.Name);
+        col.set_name(TString(c.Name));
         col.mutable_type()->CopyFrom(TProtoAccessor::GetProto(c.Type));
     }
     for (const auto& pkc : PrimaryKeyColumns) {
@@ -199,8 +186,6 @@ void TLogTableDescription::SerializeTo(Ydb::LogStore::CreateLogTableRequest& req
 
     if (TtlSettings) {
         TtlSettings->SerializeTo(*request.mutable_ttl_settings());
-    } else if (TieringSettings) {
-        TieringSettings->SerializeTo(*request.mutable_tiering_settings());
     }
 }
 

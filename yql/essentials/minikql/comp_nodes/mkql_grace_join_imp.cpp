@@ -320,6 +320,69 @@ void ResizeHashTable(KeysHashTable &t, ui64 newSlots){
 
 }
 
+bool IsTablesSwapRequired(ui64 tuplesNum1, ui64 tuplesNum2, bool table1Batch, bool table2Batch) {
+     return tuplesNum2 > tuplesNum1 && !table1Batch || table2Batch;
+}
+
+ui64 ComputeJoinSlotsSizeForBucket(const TTableBucket& bucket, const TTableBucketStats& bucketStats, ui64 headerSize, bool tableHasKeyStringColumns, bool tableHasKeyIColumns) {
+    ui64 tuplesNum = bucketStats.TuplesNum;
+
+    ui64 avgStringsSize = (3 * (bucket.KeyIntVals.size() - tuplesNum * headerSize) ) / ( 2 * tuplesNum + 1)  + 1;
+    ui64 slotSize = headerSize + 1; // Header [Short Strings] SlotIdx
+    if (tableHasKeyStringColumns || tableHasKeyIColumns) {
+        slotSize = slotSize + avgStringsSize;
+    }
+
+    return slotSize;
+}
+
+ui64 ComputeNumberOfSlots(ui64 tuplesNum) {
+    return (3 * tuplesNum + 1) | 1;
+}
+
+bool TTable::TryToPreallocateMemoryForJoin(TTable & t1, TTable & t2, EJoinKind /* joinKind */, bool hasMoreLeftTuples, bool hasMoreRightTuples) {
+    // If the batch is final or the only one, then the buckets are processed sequentially, the memory for the hash tables is freed immediately after processing.
+    // So, no preallocation is required.
+    if (!hasMoreLeftTuples && !hasMoreRightTuples) return true;
+
+    for (ui64 bucket = 0; bucket < GraceJoin::NumberOfBuckets; bucket++) {
+        ui64 tuplesNum1 = t1.TableBucketsStats[bucket].TuplesNum;
+        ui64 tuplesNum2 = t2.TableBucketsStats[bucket].TuplesNum;
+
+        TTable& tableForPreallocation = IsTablesSwapRequired(tuplesNum1, tuplesNum2, hasMoreLeftTuples || LeftTableBatch_, hasMoreRightTuples || RightTableBatch_) ? t1 : t2;
+        if (!tableForPreallocation.TableBucketsStats[bucket].TuplesNum || tableForPreallocation.TableBuckets[bucket].NSlots) continue;
+
+        TTableBucket& bucketForPreallocation = tableForPreallocation.TableBuckets[bucket];
+        TTableBucketStats& bucketForPreallocationStats = tableForPreallocation.TableBucketsStats[bucket];
+
+        const auto nSlots = ComputeJoinSlotsSizeForBucket(bucketForPreallocation, bucketForPreallocationStats, tableForPreallocation.HeaderSize,
+                tableForPreallocation.NumberOfKeyStringColumns != 0, tableForPreallocation.NumberOfKeyIColumns != 0);
+        const auto slotSize = ComputeNumberOfSlots(tableForPreallocation.TableBucketsStats[bucket].TuplesNum);
+
+        try {
+            bucketForPreallocation.JoinSlots.reserve(nSlots*slotSize);
+            bucketForPreallocationStats.BloomFilter.Reserve(bucketForPreallocationStats.TuplesNum);
+        } catch (TMemoryLimitExceededException) {
+            for (ui64 i = 0; i < bucket; ++i) {
+                auto& b1 = t1.TableBuckets[i];
+                b1.JoinSlots.resize(0);
+                b1.JoinSlots.shrink_to_fit();
+                auto& s1 = t1.TableBucketsStats[i];
+                s1.BloomFilter.Shrink();
+
+                auto& b2 = t2.TableBuckets[i];
+                b2.JoinSlots.resize(0);
+                b2.JoinSlots.shrink_to_fit();
+                auto& s2 = t2.TableBucketsStats[i];
+                s2.BloomFilter.Shrink();
+            }
+            return false;
+        }
+    }
+
+    return true;
+}
+
 
 // Joins two tables and returns join result in joined table. Tuples of joined table could be received by
 // joined table iterator
@@ -368,7 +431,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         bool table2HasKeyStringColumns = (JoinTable2->NumberOfKeyStringColumns != 0);
         bool table1HasKeyIColumns = (JoinTable1->NumberOfKeyIColumns != 0);
         bool table2HasKeyIColumns = (JoinTable2->NumberOfKeyIColumns != 0);
-        bool swapTables = tuplesNum2 > tuplesNum1 && !table1Batch || table2Batch;
+        bool swapTables = IsTablesSwapRequired(tuplesNum1, tuplesNum2, table1Batch, table2Batch);
 
 
         if (swapTables) {
@@ -402,13 +465,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         if (tuplesNum1 == 0 && (hasMoreRightTuples || hasMoreLeftTuples || !bucketStats2->HashtableMatches))
             continue;
 
-        ui64 slotSize = headerSize2 + 1; // Header [Short Strings] SlotIdx
-
-        ui64 avgStringsSize = ( 3 * (bucket2->KeyIntVals.size() - tuplesNum2 * headerSize2) ) / ( 2 * tuplesNum2 + 1)  + 1;
-
-        if (table2HasKeyStringColumns || table2HasKeyIColumns ) {
-            slotSize = slotSize + avgStringsSize;
-        }
+        ui64 slotSize = ComputeJoinSlotsSizeForBucket(*bucket2, *bucketStats2, headerSize2, table2HasKeyStringColumns, table2HasKeyIColumns);
 
         ui64 &nSlots = bucket2->NSlots;
         auto &joinSlots = bucket2->JoinSlots;
@@ -417,7 +474,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
 
         Y_DEBUG_ABORT_UNLESS(bucketStats2->SlotSize == 0 || bucketStats2->SlotSize == slotSize);
         if (!nSlots) {
-            nSlots = (3 * tuplesNum2 + 1) | 1;
+            nSlots = ComputeNumberOfSlots(tuplesNum2);
             joinSlots.resize(nSlots*slotSize, 0);
             bloomFilter.Resize(tuplesNum2);
             initHashTable = true;
@@ -489,7 +546,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         // slotSize, slotIdx and strPos is only for hashtable (table2)
         ui64 bloomHits = 0;
         ui64 bloomLookups = 0;
-        
+
         for (ui64 keysValSize = headerSize1; it1 != bucket1->KeyIntVals.end(); it1 += keysValSize, ++tuple1Idx ) {
 
             if ( table1HasKeyStringColumns || table1HasKeyIColumns ) {
@@ -630,7 +687,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
     HasMoreRightTuples_ = hasMoreRightTuples;
 
     TuplesFound_ += tuplesFound;
-    
+
 }
 
 inline void TTable::GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData & td) {
@@ -772,7 +829,7 @@ inline bool TTable::AddKeysToHashTable(KeysHashTable& t, ui64* keys, NYql::NUdf:
             continue;
 
         if (NumberOfKeyIColumns > 0) {
-            if (!CompareIColumns( 
+            if (!CompareIColumns(
                         (char *) (slotStringsStart),
                         (char *) (keys + HeaderSize ),
                         iColumns,
@@ -903,22 +960,10 @@ ui64 TTable::GetSizeOfBucket(ui64 bucket) const {
     + TableBuckets[bucket].InterfaceOffsets.size() * sizeof(ui32);
 }
 
-bool TTable::TryToReduceMemoryAndWait() {
-    i32 largestBucketIndex = 0;
-    ui64 largestBucketSize = 0;
-    for (ui32 bucket = 0; bucket < NumberOfBuckets; ++bucket) {
-        if (TableBucketsSpillers[bucket].IsProcessingSpilling()) return true;
-
-        ui64 bucketSize = GetSizeOfBucket(bucket);
-        if (bucketSize > largestBucketSize) {
-            largestBucketSize = bucketSize;
-            largestBucketIndex = bucket;
-        }
-    }
-
-    if (largestBucketSize < SpillingSizeLimit/NumberOfBuckets) return false;
-    if (const auto &tbs = TableBucketsStats[largestBucketIndex]; tbs.HashtableMatches) {
-        auto &tb = TableBuckets[largestBucketIndex];
+bool TTable::TryToReduceMemoryAndWait(ui64 bucket) {
+    if (GetSizeOfBucket(bucket) < SpillingSizeLimit/NumberOfBuckets) return false;
+    if (const auto &tbs = TableBucketsStats[bucket]; tbs.HashtableMatches) {
+        auto &tb = TableBuckets[bucket];
 
         if (tb.JoinSlots.size()) {
             const auto slotSize = tbs.SlotSize;
@@ -946,10 +991,10 @@ bool TTable::TryToReduceMemoryAndWait() {
             tb.JoinSlots.shrink_to_fit();
         }
     }
-    TableBucketsSpillers[largestBucketIndex].SpillBucket(std::move(TableBuckets[largestBucketIndex]));
-    TableBuckets[largestBucketIndex] = TTableBucket{};
+    TableBucketsSpillers[bucket].SpillBucket(std::move(TableBuckets[bucket]));
+    TableBuckets[bucket] = TTableBucket{};
 
-    return TableBucketsSpillers[largestBucketIndex].IsProcessingSpilling();
+    return TableBucketsSpillers[bucket].IsProcessingSpilling();
 }
 
 void TTable::UpdateSpilling() {
@@ -987,7 +1032,7 @@ void TTable::FinalizeSpilling() {
             TableBucketsSpillers[bucket].Finalize();
             TableBucketsSpillers[bucket].SpillBucket(std::move(TableBuckets[bucket]));
             TableBuckets[bucket] = TTableBucket{};
-            
+
         }
     }
 }
@@ -1288,7 +1333,7 @@ void TTableBucketSpiller::ProcessBucketRestoration() {
             case ENextVectorToProcess::InterfaceOffsets:
                 if (StateUi32Adapter.IsDataReady()) {
                     AppendVector(CurrentBucket.InterfaceOffsets, StateUi32Adapter.ExtractVector());
-                    
+
                     SpilledBucketsCount--;
                     if (SpilledBucketsCount == 0) {
                         NextVectorToProcess = ENextVectorToProcess::None;
@@ -1296,7 +1341,7 @@ void TTableBucketSpiller::ProcessBucketRestoration() {
                     } else {
                         NextVectorToProcess = ENextVectorToProcess::KeyAndVals;
                     }
-                    
+
                     break;
                 }
 

@@ -1,11 +1,9 @@
-#include <contrib/ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
-#include <contrib/ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/result/provider/yql_result_provider.h>
 #include <yql/essentials/ast/yql_ast_annotation.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
-#include <yql/essentials/core/ut_common/yql_ut_common.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
@@ -26,17 +24,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
 
         auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
-        TTestTablesMapping testTables;
-        auto yqlNativeServices = NFile::TYtFileServices::Make(functionRegistry.Get(), testTables);
-        auto ytGateway = CreateYtFileGateway(yqlNativeServices);
         auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
         typeAnnotationContext->RandomProvider = CreateDeterministicRandomProvider(1);
-        auto ytState = MakeIntrusive<TYtState>(typeAnnotationContext.Get());
-        ytState->Gateway = ytGateway;
 
-        InitializeYtGateway(ytGateway, ytState);
-        typeAnnotationContext->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
-        typeAnnotationContext->AddDataSource(YtProviderName, CreateYtDataSource(ytState));
+        auto writerFactory = [](){ return CreateYsonResultWriter(NYson::EYsonFormat::Binary); };
+        auto resultProviderConfig = MakeIntrusive<TResultProviderConfig>(*typeAnnotationContext,
+            *functionRegistry, IDataProvider::EResultFormat::Yson, ToString((ui32)NYson::EYsonFormat::Binary), writerFactory);
+        resultProviderConfig->SupportsResultPosition = true;
+        auto resultProvider = CreateResultProvider(resultProviderConfig);
+        typeAnnotationContext->AddDataSink(ResultProviderName, resultProvider);
 
         auto transformer = TTransformationPipeline(typeAnnotationContext)
             .AddServiceTransformers()
@@ -77,15 +73,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(Sort) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
                 (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
             ))
             (let sorted (Sort list (Bool 'True) (lambda '(item) (Member item 'key))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) sorted '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -96,15 +92,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SortByStablePickle) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
                 (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
             ))
             (let sorted (Sort list '((Bool 'False) (Bool 'True)) (lambda '(item) '((Member item 'key) (StablePickle (Member item 'subkey))))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) sorted '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -115,7 +111,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SortByTranspentIfPresent) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (Just (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v))))
                 (Just (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v))))
@@ -123,8 +119,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             ))
             (let sorted (Sort list (Bool 'True) (lambda '(row) (FlatMap row (lambda '(item) (Just (Member item 'key)))))))
             (let map (OrderedFlatMap sorted (lambda '(item) item)))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) map '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) map '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -135,15 +131,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SortByDuplicateColumn) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
                 (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
             ))
             (let sorted (Sort list '((Bool 'True) (Bool 'False) (Bool 'True)) (lambda '(item) '((Member item 'key) (Member item 'key) (Member item 'subkey)))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) sorted '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -154,12 +150,12 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SortByFullRow) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList (Utf8 's) (Utf8 'o) (Utf8 'r) (Utf8 't)))
             (let sorted (Sort list (Bool 'True) (lambda '(item) item)))
             (let map (OrderedMap sorted (lambda '(item) (AsStruct '('key item)))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) map '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) map '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -171,15 +167,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SortByTuple) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
                 (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
             ))
             (let sorted (Sort list (Bool 'False) (lambda '(item) '((Member item 'key) (Member item 'subkey)))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) sorted '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -190,7 +186,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SortByTupleElements) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value '((String 'x) (String 'a) (String 'u))))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value '((String 'y) (String 'b) (String 'v))))
@@ -198,8 +194,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             ))
             (let sorted (Sort list '((Not (Bool 'False)) (Bool 'False) (Not (Bool 'True))) (lambda '(item) '((Nth (Member item 'value) '2) (Member item 'key) (Nth (Member item 'value) '0)))))
             (let map (OrderedMap sorted (lambda '(item) (AsStruct '('tuple '((Nth (Member item 'value) '1) (Nth (Member item 'value) '2) (Nth (Member item 'value) '0) (Member item 'subkey) (Member item 'key)))))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) map '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) map '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -211,7 +207,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SortByAllTupleElementsInRightOrder) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value '((String 'x) (String 'a) (String 'u))))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value '((String 'y) (String 'b) (String 'v))))
@@ -219,8 +215,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             ))
             (let sorted (Sort list (Bool 'False) (lambda '(item) '((Nth (Member item 'value) '0) (Nth (Member item 'value) '1) (Nth (Member item 'value) '2)))))
             (let map (OrderedMap sorted (lambda '(item) (AsStruct '('tuple (Member item 'value))))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) map '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) map '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -232,7 +228,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SortByAllTupleElementsInWrongOrder) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value '((String 'x) (String 'a) (String 'u))))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value '((String 'y) (String 'b) (String 'v))))
@@ -240,8 +236,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             ))
             (let sorted (Sort list (Bool 'True) (lambda '(item) '((Nth (Member item 'value) '1) (Nth (Member item 'value) '0) (Nth (Member item 'value) '2)))))
             (let map (OrderedMap sorted (lambda '(item) (AsStruct '('tuple (Member item 'value))))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) map '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) map '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -253,7 +249,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SortByTupleWithSingleElementAndCopyOfElement) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value '((String 'x))))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value '((String 'y))))
@@ -261,8 +257,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             ))
             (let sorted (Sort list (Bool 'False) (lambda '(item) '((Nth (Member item 'value) '0)))))
             (let map (OrderedMap sorted (lambda '(item) (AsStruct '('tuple (Member item 'value)) '('element (Nth (Member item 'value) '0))))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) map '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) map '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -273,7 +269,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SortByFullTupleOnTop) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 '((String 'x) (String 'a) (String 'u))
                 '((String 'y) (String 'b) (String 'v))
@@ -281,8 +277,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             ))
             (let sorted (Sort list (Bool 'False) (lambda '(item) item)))
             (let map (OrderedMap sorted (lambda '(item) (AsStruct '('one (Nth item '0)) '('two (Nth item '1)) '('three (Nth item '2))))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) map '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) map '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -294,15 +290,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SortByColumnAndExpr) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
                 (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
             ))
             (let sorted (Sort list '((Bool 'True) (Bool 'False) (Bool 'True)) (lambda '(item) '((Member item 'key) (SafeCast (Member item 'value) (DataType 'Utf8)) (Member item 'subkey)))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) sorted '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -313,15 +309,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SortDesc) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
                 (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
             ))
             (let sorted (Sort list '((Bool 'True) (Bool 'False)) (lambda '(item) '((Member item 'key) (Member item 'subkey)))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) sorted '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -332,7 +328,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SortedOverWideMap) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
@@ -342,8 +338,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (let expand (ExpandMap sorted (lambda '(item) (Member item 'key) (Member item 'subkey) (Member item 'value))))
             (let wide (WideMap expand (lambda '(a b c) c b a)))
             (let narrow (NarrowMap wide (lambda '(x y z) (AsStruct '('x x) '('y y) '('z z)))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) (Collect narrow) '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) (Collect narrow) '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -354,7 +350,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SortedOverWideTopSort) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
@@ -364,8 +360,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (let expand (ExpandMap flow (lambda '(item) (Member item 'key) (Member item 'subkey) (Member item 'value))))
             (let wide (WideTopSort expand (Uint64 '2) '('('2 (Bool 'False)) '('0 (Bool 'True)))))
             (let narrow (NarrowMap wide (lambda '(x y z) (AsStruct '('x x) '('y y) '('z z)))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) (Collect narrow) '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) (Collect narrow) '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -376,7 +372,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SortedOverOrderedMultiMap) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'u)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
@@ -387,8 +383,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
                 (AsStruct '('x (Member row 'key)) '('y (Member row 'subkey)) '('z (Member row 'value)))
                 (AsStruct '('x (Member row 'key)) '('y (String 'subkey_stub)) '('z (Member row 'value)))
             )))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) map '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) map '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -399,7 +395,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SortedOverNestedFlatMap) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'u)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
@@ -409,8 +405,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (let map (OrderedFlatMap sorted (lambda '(row) (FlatMap (ListFromRange (Uint8 '0) (Uint8 '5) (Uint8 '1)) (lambda '(index)
                 (OptionalIf (AggrNotEquals index (Uint8 '3)) (AsStruct '('x (Member row 'key)) '('y (Concat (ToString index) (Member row 'subkey))) '('z (Member row 'value))))
             )))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) (LazyList map) '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) (LazyList map) '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -421,7 +417,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SortedOverNestedOrderedFlatMapWithSort) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'u)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
@@ -431,8 +427,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (let map (OrderedFlatMap sorted (lambda '(row) (OrderedFlatMap (Sort (ListFromRange (Uint8 '0) (Uint8 '5) (Uint8 '1)) (Bool 'True) (lambda '(item) item)) (lambda '(index)
                 (OptionalIf (AggrNotEquals index (Uint8 '3)) (AsStruct '('x (Member row 'key)) '('y (Concat (ToString index) (Member row 'subkey))) '('z (Member row 'value))))
             )))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) (LazyList map) '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) (LazyList map) '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -443,7 +439,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(ExtractSortedTuple) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('a (String '4)) '('b (String 'c)) '('c (String 'x)))
                 (AsStruct '('a (String '1)) '('b (String 'd)) '('c (String 'y)))
@@ -452,8 +448,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (let sorted (Sort list '((Bool 'True) (Bool 'True)) (lambda '(item) '((Member item 'a) (Member item 'b)))))
             (let map (OrderedFlatMap sorted (lambda '(item) (OptionalIf (== (Member item 'a) (String '1)) (AddMember item 'x '((Member item 'a) (Member item 'b)))))))
             (let extract (ExtractMembers map '('x)))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) extract '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) extract '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -465,15 +461,15 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(TopSort) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
                 (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
             ))
             (let sorted (TopSort list (Uint64 '2) '((Bool 'True) (Bool 'True)) (lambda '(item) '((Member item 'key) (Member item 'subkey)))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) sorted '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -484,7 +480,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(MergeWithFirstEmpty) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
@@ -493,8 +489,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (let sorted (Sort list (Bool 'True) (lambda '(item) (Member item 'key))))
             (let empty (List (ListType (StructType '('key (DataType 'String)) '('subkey (DataType 'String)) '('value (DataType 'String))))))
             (let merged (Merge empty sorted))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) merged '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) merged '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -505,7 +501,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(MergeWithCloneColumns) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
@@ -514,8 +510,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (let sorted (Sort list (Bool 'False) (lambda '(item) (Member item 'key))))
             (let clone (OrderedMap sorted (lambda '(row) (AsStruct '('key (Member row 'key)) '('subkey (Member row 'key)) '('value (Member row 'key))))))
             (let merged (Merge clone sorted))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) merged '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) merged '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -526,7 +522,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(UnionMergeWithDiffTypes) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list1 (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
@@ -540,8 +536,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (let sorted1 (Sort list1 (Bool 'False) (lambda '(item) '((Member item 'key) (Member item 'subkey) (Member item 'value)))))
             (let sorted2 (Sort list2 (Bool 'False) (lambda '(item) '((Member item 'key) (Member item 'subkey) (Member item 'value)))))
             (let merged (UnionMerge sorted1 sorted2))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) merged '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) merged '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -552,7 +548,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(ExtractMembersKey) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'w)))
@@ -560,8 +556,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             ))
             (let sorted (Sort list '((Bool 'True) (Bool 'True)) (lambda '(item) '((Member item 'key) (Member item 'subkey)))))
             (let sorted (ExtractMembers sorted '('key)))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) sorted '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -572,7 +568,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(ExtractMembersNonKey) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'w)))
@@ -580,8 +576,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             ))
             (let sorted (Sort list '((Bool 'True) (Bool 'True)) (lambda '(item) '((Member item 'key) (Member item 'subkey)))))
             (let sorted (ExtractMembers sorted '('value)))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) sorted '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -592,7 +588,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(OrderedLMap) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'w)))
@@ -600,8 +596,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             ))
             (let sorted (Sort list '((Bool 'False) (Bool 'False)) (lambda '(item) '((Member item 'key) (Member item 'subkey)))))
             (let sorted (OrderedLMap sorted (lambda '(stream) (OrderedFlatMap stream (lambda '(item) (Just item))))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) sorted '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -613,7 +609,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(OrderedFlatMap) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'w)))
@@ -623,8 +619,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (let list (AssumeDistinct list '('key 'subkey) '('value)))
             (let sorted (Sort list '((Bool 'True) (Bool 'True)) (lambda '(item) '((Member item 'key) (Member item 'subkey)))))
             (let sorted (OrderedFlatMap sorted (lambda '(item) (OptionalIf (== (Member item 'key) (String '1)) (AsStruct '('k (Member item 'key)) '('v (Member item 'value)))))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) sorted '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -637,7 +633,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(OrderedFlatMapWithEmptyFilter) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'w)))
@@ -647,8 +643,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (let list (AssumeDistinct list '('key 'subkey) '('value)))
             (let sorted (Sort list '((Bool 'True) (Bool 'True)) (lambda '(item) '((Member item 'key) (Member item 'subkey)))))
             (let sorted (OrderedFlatMap sorted (lambda '(item) (OptionalIf (Bool 'false) (AsStruct '('k (Member item 'key)) '('v (Member item 'value)))))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) sorted '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -661,7 +657,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(OrderedFlatMapNonKey) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'w)))
@@ -669,8 +665,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             ))
             (let sorted (Sort list '((Bool 'True) (Bool 'True)) (lambda '(item) '((Member item 'key) (Member item 'subkey)))))
             (let sorted (OrderedFlatMap sorted (lambda '(item) (OptionalIf (== (Member item 'key) (String '1)) (AsStruct '('key (Member item 'value)))))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) sorted '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -681,7 +677,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(OrderedFilter) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'w)))
@@ -691,8 +687,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (let list (AssumeDistinct list '('key 'subkey) '('value)))
             (let sorted (Sort list '((Bool 'True) (Bool 'True)) (lambda '(item) '((Member item 'key) (Member item 'subkey)))))
             (let sorted (OrderedFilter sorted (lambda '(item) (> (Member item 'key) (String '0)))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) sorted '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -705,7 +701,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(OrderedMapNullifyOneColumn) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'w)))
@@ -715,8 +711,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (let list (AssumeDistinct list '('key 'subkey) '('value)))
             (let sorted (Sort list (Bool 'False) (lambda '(row) '((Member row 'key) (Member row 'subkey) (Member row 'value)))))
             (let map (OrderedMap sorted (lambda '(row) (AsStruct '('k (Member row 'key)) '('s (OptionalIf (AggrNotEquals (Member row 'key) (Member row 'value)) (Member row 'subkey))) '('v (Member row 'value))))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) map '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) map '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -729,7 +725,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(NestedFlatMapByOptional) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'w)))
@@ -741,8 +737,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (let mapped (OrderedFlatMap sorted (lambda '(item) (FlatMap (StrictCast (Member item 'key) (OptionalType (DataType 'Uint8)))
                 (lambda '(key) (Just (AsStruct '('k key) '('s (Member item 'subkey)) '('v (Member item 'value)))))
             ))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) mapped '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) mapped '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -755,7 +751,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(FlattenMembers) {
         const auto s = R"((
-            (let mr_sink (DataSink 'yt (quote plato)))
+            (let res (DataSink 'result))
             (let list (AsList
                 (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
                 (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'w)))
@@ -766,8 +762,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (let sorted (Sort list '((Bool 'True) (Bool 'True)) (lambda '(item) '((Member item 'key) (Member item 'subkey)))))
             (let mapped (OrderedMap sorted (lambda '(item) '((AsStruct '('key (Member item 'key)) '('subkey (Member item 'subkey))) (AsStruct '('subkey (Member item 'subkey)) '('value (Member item 'value)))))))
             (let flatten (OrderedMap mapped (lambda '(pair) (FlattenMembers '('one (Nth pair '0)) '('two (Nth pair '1))))))
-            (let world (Write! world mr_sink (Key '('table (String 'Output))) (LazyList flatten) '('('mode 'renew))))
-            (let world (Commit! world mr_sink))
+            (let world (Write! world res (Key) (LazyList flatten) '()))
+            (let world (Commit! world res))
             (return world)
         ))";
 
@@ -780,7 +776,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(Visit) {
         const auto s = R"((
-(let mr_sink (DataSink 'yt (quote plato)))
+(let res (DataSink 'result))
 
 (let list (AsList
     (AsStruct '('key (String 'aaa)))
@@ -802,10 +798,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (Nothing (OptionalType vt))
 ))))
 
-(let res (Map vlist (lambda '(item) (VariantItem item))))
+(let result (Map vlist (lambda '(item) (VariantItem item))))
 
-(let world (Write! world mr_sink (Key '('table (String 'Output))) res '('('mode 'renew))))
-(let world (Commit! world mr_sink))
+(let world (Write! world res (Key) result '()))
+(let world (Commit! world res))
 (return world)
 ))";
 
@@ -821,7 +817,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SwitchAsFilter) {
         const auto s = R"((
-(let mr_sink (DataSink 'yt (quote plato)))
+(let res (DataSink 'result))
 
 (let list (AsList
     (AsStruct '('key (String 'aaa)))
@@ -838,10 +834,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (Map list (lambda '(x) (Variant (AsStruct '('key (Member x 'key)) '('value (String '2))) '2 vt)))
 ))
 
-(let res (Switch (Iterator vlist) '0 '('0) (lambda '(item) item)))
+(let result (Switch (Iterator vlist) '0 '('0) (lambda '(item) item)))
 
-(let world (Write! world mr_sink (Key '('table (String 'Output))) res '('('mode 'renew))))
-(let world (Commit! world mr_sink))
+(let world (Write! world res (Key) (Collect result) '()))
+(let world (Commit! world res))
 (return world)
 ))";
 
@@ -853,7 +849,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(EmptyForMissingMultiOut) {
         const auto s = R"((
-(let mr_sink (DataSink 'yt (quote plato)))
+(let res (DataSink 'result))
 
 (let list (AsList
     (AsStruct '('key (String 'aaa)))
@@ -877,10 +873,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     '2 (lambda '(v) (Just (Variant v '1 vt2)))
 ))))
 
-(let res (Map vlist (lambda '(item) (VariantItem item))))
+(let result (Map vlist (lambda '(item) (VariantItem item))))
 
-(let world (Write! world mr_sink (Key '('table (String 'Output))) res '('('mode 'renew))))
-(let world (Commit! world mr_sink))
+(let world (Write! world res (Key) result '()))
+(let world (Commit! world res))
 (return world)
 ))";
 
@@ -892,7 +888,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SwitchWithReplicate) {
         const auto s = R"((
-(let mr_sink (DataSink 'yt (quote plato)))
+(let res (DataSink 'result))
 
 (let list (AsList
     (AsStruct '('key (String 'aaa)))
@@ -902,10 +898,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
 (let vlist (Switch (Iterator list) '0 '('0) (lambda '(item) item) '('0) (lambda '(item) item)))
 
-(let res (Map vlist (lambda '(item) (VariantItem item))))
+(let result (Map vlist (lambda '(item) (VariantItem item))))
 
-(let world (Write! world mr_sink (Key '('table (String 'Output))) res '('('mode 'renew))))
-(let world (Commit! world mr_sink))
+(let world (Write! world res (Key) (Collect result) '()))
+(let world (Commit! world res))
 (return world)
 ))";
 
@@ -917,7 +913,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(SwitchWithMultiOut) {
         const auto s = R"((
-(let mr_sink (DataSink 'yt (quote plato)))
+(let res (DataSink 'result))
 
 (let list (AsList
     (AsStruct '('key (String 'aaa)))
@@ -936,10 +932,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
 (let vlist (Switch (Iterator vlist) '0 '('0) (lambda '(s) (Map s (lambda '(item) (Variant item '1 vt)))) '('1) (lambda '(s) s)))
 
-(let res (Map vlist (lambda '(item) (VariantItem item))))
+(let result (Map vlist (lambda '(item) (VariantItem item))))
 
-(let world (Write! world mr_sink (Key '('table (String 'Output))) res '('('mode 'renew))))
-(let world (Commit! world mr_sink))
+(let world (Write! world res (Key) (Collect result) '()))
+(let world (Commit! world res))
 (return world)
 ))";
 
@@ -951,7 +947,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(MultiOutLMapWithEmptyInput) {
         auto s = R"((
-(let mr_sink (DataSink 'yt (quote plato)))
+(let res (DataSink 'result))
 
 (let structType (StructType '('key (DataType 'String)) '('value (DataType 'String))))
 (let tupleType (TupleType structType structType structType))
@@ -965,10 +961,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
 (let vlist (Switch (Iterator vlist) '0 '('0) (lambda '(s) s) '('1) (lambda '(s) s)))
 
-(let res (Map vlist (lambda '(item) (VariantItem item))))
+(let result (Map vlist (lambda '(item) (VariantItem item))))
 
-(let world (Write! world mr_sink (Key '('table (String 'Output))) res '('('mode 'renew))))
-(let world (Commit! world mr_sink))
+(let world (Write! world res (Key) (Collect result) '()))
+(let world (Commit! world res))
 (return world)
 ))";
 
@@ -982,7 +978,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(Unique) {
         const auto s = R"((
-    (let mr_sink (DataSink 'yt (quote plato)))
+    (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'x)))
         (AsStruct '('key (String '1)) '('subkey (String 'b)) '('value (String 'y)))
@@ -1008,8 +1004,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         )))
         (return res)
     )))))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) (Take list (Uint64 '2)) '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
+    (let world (Write! world res (Key) (Take list (Uint64 '2)) '()))
+    (let world (Commit! world res))
     (return world)
 ))";
 
@@ -1020,7 +1016,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(UniqueOverTuple) {
         const auto s = R"((
-    (let mr_sink (DataSink 'yt (quote plato)))
+    (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'm)))
         (AsStruct '('key (String '1)) '('subkey (String 'b)) '('value (String 'm)))
@@ -1046,8 +1042,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         )))
         (return (Just (DivePrefixMembers (Unwrap res) '('p.))))
     )))))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
+    (let world (Write! world res (Key) list '()))
+    (let world (Commit! world res))
     (return world)
 ))";
 
@@ -1060,7 +1056,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(UniqueOverWideFlow) {
         const auto s = R"((
-    (let mr_sink (DataSink 'yt (quote plato)))
+    (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'x)))
         (AsStruct '('key (String '1)) '('subkey (String 'b)) '('value (String 'y)))
@@ -1085,8 +1081,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         )))
         (return (Map res (lambda '(row) (DivePrefixMembers row '('p.)))))
     )))))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
+    (let world (Write! world res (Key) (Collect list) '()))
+    (let world (Commit! world res))
     (return world)
 ))";
 
@@ -1099,7 +1095,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(UniqueExOverWideFlow) {
         const auto s = R"((
-    (let mr_sink (DataSink 'yt (quote plato)))
+    (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
         (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
@@ -1118,8 +1114,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         (let res (NarrowMap res (lambda '(t0 s1) (AddMember (AddMember s1 'one (Nth t0 '1)) 'two (Nth t0 '0)))))
         (return (Collect res))
     )))))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) (LazyList list) '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
+    (let world (Write! world res (Key) (LazyList list) '()))
+    (let world (Commit! world res))
     (return world)
 ))";
 
@@ -1130,7 +1126,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(Distinct) {
         const auto s = R"((
-    (let mr_sink (DataSink 'yt (quote plato)))
+    (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'x)))
         (AsStruct '('key (String '1)) '('subkey (String 'b)) '('value (String 'y)))
@@ -1156,8 +1152,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         )))
         (return res)
     )))))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) (Take list (Uint64 '2)) '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
+    (let world (Write! world res (Key) (Take list (Uint64 '2)) '()))
+    (let world (Commit! world res))
     (return world)
 ))";
 
@@ -1168,7 +1164,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(DistinctOverTuple) {
         const auto s = R"((
-    (let mr_sink (DataSink 'yt (quote plato)))
+    (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'm)))
         (AsStruct '('key (String '1)) '('subkey (String 'b)) '('value (String 'm)))
@@ -1194,8 +1190,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         )))
         (return (Just (DivePrefixMembers (Unwrap res) '('p.))))
     )))))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
+    (let world (Write! world res (Key) list '()))
+    (let world (Commit! world res))
     (return world)
 ))";
 
@@ -1208,7 +1204,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(DistinctOverWideFlow) {
         const auto s = R"((
-    (let mr_sink (DataSink 'yt (quote plato)))
+    (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'x)))
         (AsStruct '('key (String '1)) '('subkey (String 'b)) '('value (String 'y)))
@@ -1233,8 +1229,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         )))
         (return (Map res (lambda '(row) (DivePrefixMembers row '('p.)))))
     )))))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
+    (let world (Write! world res (Key) (Collect list) '()))
+    (let world (Commit! world res))
     (return world)
 ))";
 
@@ -1247,7 +1243,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     Y_UNIT_TEST(DistinctExOverWideFlow) {
         const auto s = R"((
-    (let mr_sink (DataSink 'yt (quote plato)))
+    (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
         (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
@@ -1266,8 +1262,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         (let res (NarrowMap res (lambda '(t0 s1) (AddMember (AddMember s1 'one (Nth t0 '1)) 'two (Nth t0 '0)))))
         (return (Collect res))
     )))))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) (LazyList list) '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
+    (let world (Write! world res (Key) (LazyList list) '()))
+    (let world (Commit! world res))
     (return world)
 ))";
 
@@ -1279,7 +1275,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     Y_UNIT_TEST(PartitionsByKeysWithCondense1) {
         const auto s = R"(
 (
-    (let mr_sink (DataSink 'yt (quote plato)))
+    (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (Just (String '4))) '('subkey (Just (String 'c))) '('value (Just (String 'x))))
         (AsStruct '('key (Just (String '1))) '('subkey (Just (String 'b))) '('value (Just (String 'y))))
@@ -1292,8 +1288,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (lambda '(row state) (AsStruct '('key (Member row 'key)) '('subkey (Member row 'subkey)) '('value (Coalesce (Member row 'value) (Member state 'value)))))
         ))
     ))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) (Skip aggr (Uint64 '1)) '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
+    (let world (Write! world res (Key) (Skip aggr (Uint64 '1)) '()))
+    (let world (Commit! world res))
     (return world)
 )
     )";
@@ -1307,7 +1303,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     Y_UNIT_TEST(PartitionsByKeysWithCondense1AndStablePickle) {
         const auto s = R"(
 (
-    (let mr_sink (DataSink 'yt (quote plato)))
+    (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (Just (String '4))) '('subkey (Just (String 'c))) '('value (Just (String 'x))))
         (AsStruct '('key (Just (String '1))) '('subkey (Just (String 'b))) '('value (Just (String 'y))))
@@ -1320,8 +1316,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (lambda '(row state) (AsStruct '('key (Member row 'key)) '('subkey (Member row 'subkey)) '('value (Coalesce (Member row 'value) (Member state 'value)))))
         ))
     ))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) (Skip aggr (Uint64 '1)) '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
+    (let world (Write! world res (Key) (Skip aggr (Uint64 '1)) '()))
+    (let world (Commit! world res))
     (return world)
 )
     )";
@@ -1335,7 +1331,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     Y_UNIT_TEST(PartitionsByKeysWithCondense1WithSingleItemTupleKey) {
         const auto s = R"(
 (
-    (let mr_sink (DataSink 'yt (quote plato)))
+    (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key '((Just (String '4)))) '('subkey (Just (String 'c))) '('value (Just (String 'x))))
         (AsStruct '('key '((Just (String '1)))) '('subkey (Just (String 'b))) '('value (Just (String 'y))))
@@ -1350,8 +1346,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (lambda '(item) (AsStruct '('key '(item))))
         ))
     ))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) (Skip aggr (Uint64 '1)) '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
+    (let world (Write! world res (Key) (Skip aggr (Uint64 '1)) '()))
+    (let world (Commit! world res))
     (return world)
 )
     )";
@@ -1365,7 +1361,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     Y_UNIT_TEST(PartitionsByKeysWithCondense1WithPairItemsTupleKeyAndDuplicateOut) {
         const auto s = R"(
 (
-    (let mr_sink (DataSink 'yt (quote plato)))
+    (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key '((Just (String '4)) (Just (String '%)))) '('subkey (Just (String 'c))) '('value (Just (String 'x))))
         (AsStruct '('key '((Just (String '1)) (Just (String '€)))) '('subkey (Just (String 'b))) '('value (Just (String 'y))))
@@ -1380,8 +1376,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
             (lambda '(item) (AsStruct '('one '(item)) '('two '(item))))
         ))
     ))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) (Skip aggr (Uint64 '1)) '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
+    (let world (Write! world res (Key) (Skip aggr (Uint64 '1)) '()))
+    (let world (Commit! world res))
     (return world)
 )
     )";
@@ -1395,7 +1391,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     Y_UNIT_TEST(ShuffleByKeysInputUnique) {
         const auto s = R"(
 (
-    (let mr_sink (DataSink 'yt (quote plato)))
+    (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (Just (String '4))) '('subkey (Just (String 'c))) '('value (Just (String 'x))))
         (AsStruct '('key (Just (String '1))) '('subkey (Just (String 'b))) '('value (Just (String 'y))))
@@ -1407,8 +1403,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         (lambda '(item) '((Member item 'key) (Member item 'subkey)))
         (lambda '(stream) (Take stream (Uint64 '100)))
     ))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) (Skip aggr (Uint64 '1)) '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
+    (let world (Write! world res (Key) (Skip aggr (Uint64 '1)) '()))
+    (let world (Commit! world res))
     (return world)
 )
     )";
@@ -1422,7 +1418,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     Y_UNIT_TEST(ShuffleByKeysHandlerUnique) {
         const auto s = R"(
 (
-    (let mr_sink (DataSink 'yt (quote plato)))
+    (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (Just (String '4))) '('subkey (Just (String 'c))) '('value (Just (String 'x))))
         (AsStruct '('key (Just (String '1))) '('subkey (Just (String 'b))) '('value (Just (String 'y))))
@@ -1434,8 +1430,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         (lambda '(item) '((Member item 'key) (Member item 'subkey)))
         (lambda '(stream) (AssumeDistinct (AssumeUnique stream '('key) '('subkey)) '('key 'subkey)))
     ))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) (Skip aggr (Uint64 '1)) '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
+    (let world (Write! world res (Key) (Skip aggr (Uint64 '1)) '()))
+    (let world (Commit! world res))
     (return world)
 )
     )";
@@ -1449,7 +1445,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     Y_UNIT_TEST(Reverse) {
         const auto s = R"(
 (
-    (let mr_sink (DataSink 'yt (quote plato)))
+    (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (Just (String '4))) '('subkey (Just (String 'c))) '('value (Just (String 'x))))
         (AsStruct '('key (Just (String '1))) '('subkey (Just (String 'b))) '('value (Just (String 'y))))
@@ -1459,8 +1455,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let list (AssumeDistinct list '('key 'subkey)))
     (let sorted (Sort list '((Bool 'False) (Bool 'True)) (lambda '(item) '((Member item 'key) (Member item 'subkey)))))
     (let reverse (Reverse sorted))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) reverse '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
+    (let world (Write! world res (Key) reverse '()))
+    (let world (Commit! world res))
     (return world)
 )
     )";
@@ -1475,7 +1471,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     Y_UNIT_TEST(DictItems) {
         const auto s = R"(
 (
-    (let mr_sink (DataSink 'yt (quote plato)))
+    (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (Just (String '4))) '('subkey (Just (String 'c))) '('value (Just (String 'x))))
         (AsStruct '('key (Just (String '1))) '('subkey (Just (String 'b))) '('value (Just (String 'y))))
@@ -1485,8 +1481,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let list (AssumeDistinct list '('key 'subkey)))
     (let dict (ToDict list (lambda '(item) (Member item 'value)) (lambda '(item) (AsStruct '('k (Member item 'key)) '('s (Member item 'subkey)))) '('One 'Hashed)))
     (let items (Map (DictItems dict) (lambda '(item) (AsStruct '('v (Nth item '0)) '('k (Member (Nth item '1) 'k)) '('s (Member (Nth item '1) 's))))))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) items '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
+    (let world (Write! world res (Key) items '()))
+    (let world (Commit! world res))
     (return world)
 )
     )";
@@ -1500,7 +1496,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     Y_UNIT_TEST(DictKeys) {
         const auto s = R"(
 (
-    (let mr_sink (DataSink 'yt (quote plato)))
+    (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (Just (String '4))) '('subkey (Just (String 'c))) '('value (Just (String 'x))))
         (AsStruct '('key (Just (String '1))) '('subkey (Just (String 'b))) '('value (Just (String 'y))))
@@ -1508,8 +1504,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     ))
     (let dict (ToDict list (lambda '(item) (Member item 'value)) (lambda '(item) (AsStruct '('k (Member item 'key)) '('s (Member item 'subkey)))) '('One 'Hashed)))
     (let items (Map (DictKeys dict) (lambda '(row) (AsStruct '('v row)))))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) items '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
+    (let world (Write! world res (Key) items '()))
+    (let world (Commit! world res))
     (return world)
 )
     )";
@@ -1523,7 +1519,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     Y_UNIT_TEST(DictPayloads) {
         const auto s = R"(
 (
-    (let mr_sink (DataSink 'yt (quote plato)))
+    (let res (DataSink 'result))
     (let list (AsList
         (AsStruct '('key (Just (String '4))) '('subkey (Just (String 'c))) '('value (Just (String 'x))))
         (AsStruct '('key (Just (String '1))) '('subkey (Just (String 'b))) '('value (Just (String 'y))))
@@ -1533,8 +1529,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let list (AssumeDistinct list '('key 'subkey)))
     (let dict (ToDict list (lambda '(item) (Member item 'value)) (lambda '(item) (AsStruct '('k (Member item 'key)) '('s (Member item 'subkey)))) '('One 'Hashed)))
     (let items (DictPayloads dict))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) items '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
+    (let world (Write! world res (Key) items '()))
+    (let world (Commit! world res))
     (return world)
 )
     )";
@@ -1575,10 +1571,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (GraceJoinCore flow1 flow2 'Inner '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lk lv rk rs rv) (AsStruct '('lk lk) '('lv lv) '('rk rk) '('rs rs) '('rv rv))))))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) list '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -1618,10 +1614,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (GraceJoinCore flow1 flow2 'Left '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lk lv rk rs rv) (AsStruct '('lk lk) '('lv lv) '('rk rk) '('rs rs) '('rv rv))))))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) list '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -1661,10 +1657,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (GraceJoinCore flow1 flow2 'Full '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lk lv rk rs rv) (AsStruct '('lk lk) '('lv lv) '('rk rk) '('rs rs) '('rv rv))))))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) list '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -1704,10 +1700,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (GraceJoinCore flow1 flow2 'Right '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lk lv rk rs rv) (AsStruct '('lk lk) '('lv lv) '('rk rk) '('rs rs) '('rv rv))))))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) list '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -1747,10 +1743,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (GraceJoinCore flow1 flow2 'Exclusion '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lk lv rk rs rv) (AsStruct '('lk lk) '('lv lv) '('rk rk) '('rs rs) '('rv rv))))))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) list '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -1790,10 +1786,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (GraceJoinCore flow1 flow2 'LeftSemi '('0 '1) '('0 '1) '('0 '2 '1 '1 '2 '0) '() '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lv ls lk) (AsStruct '('lk lk) '('lv lv) '('ls ls))))))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) list '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -1833,10 +1829,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (GraceJoinCore flow1 flow2 'LeftOnly '('0 '1) '('0 '1) '('0 '1 '2 '0) '() '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lv lk) (AsStruct '('lk lk) '('lv lv))))))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) list '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -1877,10 +1873,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (GraceJoinCore flow1 flow2 'RightOnly '('0 '1) '('0 '1) '() '('0 '2 '1 '1 '2 '0) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(rv rs rk) (AsStruct '('rk rk) '('rv rv) '('rs rs))))))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) list '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -1920,10 +1916,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (GraceJoinCore flow1 flow2 'RightSemi '('0 '1) '('0 '1) '() '('0 '1 '2 '0) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(rv rk) (AsStruct '('rk rk) '('rv rv))))))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) list '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -1963,10 +1959,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (GraceJoinCore flow1 flow2 'Inner '('0 '1) '('0 '1) '('0 '0 '1 '1 '2 '2) '('0 '3 '1 '4 '2 '5) '() '() '('LeftAny 'RightAny)))
     (let list (Collect (NarrowMap join (lambda '(lk ls lv rk rs rv) (AsStruct '('lk lk) '('ls ls) '('lv lv) '('rk rk) '('rs rs) '('rv rv))))))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) list '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2006,10 +2002,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (MapJoinCore (ToFlow list1) dict 'Inner '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v) '() '()))
     (let list (Collect join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) list '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2048,10 +2044,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (MapJoinCore (ToFlow list1) dict 'Inner '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v) '() '()))
     (let list (Collect join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) list '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2090,10 +2086,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (MapJoinCore (ToFlow list1) dict 'Left '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v) '() '()))
     (let list (Collect join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) list '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2132,10 +2128,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (MapJoinCore (ToFlow list1) dict 'Left '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v) '() '()))
     (let list (Collect join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) list '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2174,10 +2170,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (MapJoinCore (ToFlow list1) dict 'LeftSemi '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '() '() '()))
     (let list (Collect join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) list '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2216,10 +2212,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (MapJoinCore (ToFlow list1) dict 'LeftOnly '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'value1 'value) '() '() '()))
     (let list (Collect join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) list '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2265,10 +2261,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     )))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2311,10 +2307,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     )))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2362,10 +2358,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('Inner 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2413,10 +2409,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('Left 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2464,10 +2460,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('Right 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2515,10 +2511,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('Full 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2566,10 +2562,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('Exclusion 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2617,10 +2613,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('LeftOnly 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('a 'key1 'a 'subkey1) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2668,10 +2664,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('LeftSemi 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('a 'key1 'a 'subkey1) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2719,10 +2715,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('RightOnly 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2770,10 +2766,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('RightSemi 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2821,10 +2817,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Left '('Inner 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2871,10 +2867,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Left '('Left 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2922,10 +2918,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Left '('Right 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -2973,10 +2969,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Left '('Full 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -3024,10 +3020,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Left '('Exclusion 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -3075,10 +3071,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Left '('LeftOnly 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('a 'key1 'a 'subkey1) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -3126,10 +3122,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Left '('LeftSemi 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('a 'key1 'a 'subkey1) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -3177,10 +3173,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Left '('RightOnly 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -3228,10 +3224,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Left '('RightSemi 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '()))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -3279,10 +3275,10 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let join (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('Inner 'a 'b '('a 'key1 'a 'subkey1) '('b 'key2 'b 'subkey2) '()) 'c '('b 'key2 'b 'subkey2) '('c 'key3 'c 'subkey3) '()) '('('flatten))))
     (let lazy (LazyList join))
 
-    (let res_sink (DataSink 'yt (quote plato)))
-    (let world (Write! world res_sink (Key '('table (String 'Output))) lazy '('('mode 'renew))))
+    (let res (DataSink 'result))
+    (let world (Write! world res (Key) lazy '()))
 
-    (let world (Commit! world res_sink))
+    (let world (Commit! world res))
     (return world)
 )
         )";
@@ -3302,7 +3298,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 (let input (FlatMap list (lambda '(row) (Just (AsStruct '('"data" (Member row '"data")) '('group0 (AsList (Member row '"user"))) '('"time" (Member row '"time")) '('"user" (Member row '"user")))))))
 (let keySelector (lambda '(row) '((StablePickle (Member row '"data")) (StablePickle (Member row 'group0)))))
 (let sortKeySelector (lambda '(row) (SafeCast (Member row '"time") (OptionalType (DataType 'Timestamp)))))
-(let res (PartitionsByKeys input keySelector (Bool 'true) sortKeySelector (lambda '(row) (block '(
+(let result (PartitionsByKeys input keySelector (Bool 'true) sortKeySelector (lambda '(row) (block '(
   (let interval (Interval '1000000))
   (let map (lambda '(item) (AsStruct)))
   (let reduce (lambda '(lhs rhs) (AsStruct)))
@@ -3310,15 +3306,61 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
   (return (ForwardList (FlatMap hopping (lambda '(row) (Just (AsStruct '('_yql_time (Member row '_yql_time)) '('"data" (Unpickle (NullType) (Member row '"data"))) '('group0 (Unpickle (ListType (DataType 'Int32)) (Member row 'group0)))))))))
 )))))
 
-(let res_sink (DataSink 'yt (quote plato)))
-(let world (Write! world res_sink (Key '('table (String 'Output))) res '('('mode 'renew))))
-(return (Commit! world res_sink))
+(let res (DataSink 'result))
+(let world (Write! world res (Key) result '()))
+(return (Commit! world res))
         ))";
 
         TExprContext exprCtx;
         const auto exprRoot = ParseAndAnnotate(s, exprCtx);
         CheckConstraint<TDistinctConstraintNode>(exprRoot, "PartitionsByKeys", "Distinct((data,group0))");
         CheckConstraint<TUniqueConstraintNode>(exprRoot, "PartitionsByKeys", "Unique((data,group0))");
+    }
+
+    Y_UNIT_TEST(StablePickleOfComplexUnique) {
+        const TStringBuf s = R"(
+(
+    (let config (DataSource 'config))
+    (let res_sink (DataSink 'result))
+
+    (let list (AsList
+        (AsStruct '('key (Uint32 '1)) '('value (Uint32 '2)))
+        (AsStruct '('key (Uint32 '2)) '('value (Uint32 '3)))
+    ))
+
+    (let res (Aggregate list '('key 'value) '() '()))
+    (let res (Map res (lambda '(item)
+        (AsStruct
+            '('composite (AsStruct
+                '('k (Member item 'key))
+                '('v (Member item 'value))
+            ))
+            '('key (Member item 'key))
+            '('value (Member item 'value))
+        )
+    )))
+    (let res (FlatMap res (lambda '(item)
+        (Just (AsStruct
+            '('packed (StablePickle (Member item 'composite)))
+            '('composite (Member item 'composite))
+            '('key (Member item 'key))
+            '('value (Member item 'value))
+        ))
+    )))
+    (let world (Write! world res_sink (Key) res '('('type))))
+    (let world (Commit! world res_sink))
+    (return world)
+)
+        )";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TDistinctConstraintNode>(exprRoot, "StablePickle", "");
+        CheckConstraint<TUniqueConstraintNode>(exprRoot, "StablePickle", "");
+        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Map", "Distinct(({composite/k,key},{composite/v,value}))");
+        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Map", "Unique(({composite/k,key},{composite/v,value}))");
+        CheckConstraint<TDistinctConstraintNode>(exprRoot, "FlatMap", "Distinct(({composite/k,key},{composite/v,value}))");
+        CheckConstraint<TUniqueConstraintNode>(exprRoot, "FlatMap", "Unique(({composite/k,key},{composite/v,value}))");
     }
 }
 

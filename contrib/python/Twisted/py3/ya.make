@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(24.10.0)
+VERSION(24.11.0)
 
 LICENSE(MIT)
 
@@ -120,6 +120,7 @@ PY_SRCS(
     twisted/internet/_dumbwin32proc.py
     twisted/internet/_glibbase.py
     twisted/internet/_idna.py
+    twisted/internet/_multicast.py
     twisted/internet/_newtls.py
     twisted/internet/_pollingfile.py
     twisted/internet/_posixserialport.py
@@ -308,7 +309,6 @@ PY_SRCS(
     twisted/python/_url.py
     twisted/python/compat.py
     twisted/python/components.py
-    twisted/python/constants.py
     twisted/python/context.py
     twisted/python/deprecate.py
     twisted/python/failure.py

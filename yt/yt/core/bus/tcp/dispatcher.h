@@ -2,8 +2,6 @@
 
 #include "public.h"
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/core/concurrency/public.h>
 
 #include <yt/yt/core/net/public.h>
@@ -13,6 +11,8 @@
 #include <yt/yt/core/ytree/public.h>
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
+
+#include <library/cpp/yt/memory/leaky_singleton.h>
 
 namespace NYT::NBus {
 
@@ -56,7 +56,7 @@ public:
     bool IsNetworkingDisabled();
 
     //! Returns the network name for a given #address.
-    const TString& GetNetworkNameForAddress(const NNet::TNetworkAddress& address);
+    const std::string& GetNetworkNameForAddress(const NNet::TNetworkAddress& address);
 
     //! Returns the TOS level configured for a band.
     TTosLevel GetTosLevelForBand(EMultiplexingBand band);
@@ -76,6 +76,7 @@ private:
     friend class TTcpBusServerBase;
     template <class TServer>
     friend class TTcpBusServerProxy;
+    friend class TCompositeBusServer;
 
     class TImpl;
     const TIntrusivePtr<TImpl> Impl_;

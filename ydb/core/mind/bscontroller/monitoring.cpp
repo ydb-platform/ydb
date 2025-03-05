@@ -888,8 +888,7 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
         } else if (page == "OperationLogEntry") {
             tx.Reset(new TTxMonEvent_OperationLogEntry(ev->Sender, cgi, this));
         } else if (page == "HealthEvents") {
-            Execute(new TTxMonEvent_HealthEvents(ev->Sender, cgi, this));
-            return true;
+            tx.Reset(new TTxMonEvent_HealthEvents(ev->Sender, cgi, this));
         } else if (page == "SelfHeal") {
             bool hiddenAction = cgi.Has("action") && cgi.Get("action") == "disableSelfHeal";
             if (cgi.Has("disable") && cgi.Get("disable") == "1" && hiddenAction) {
@@ -909,6 +908,56 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
             RenderGroupDetail(str, TGroupId::FromValue(groupId));
         } else if (page == "Scrub") {
             ScrubState.Render(str);
+        } else if (page == "Shred") {
+            if (cgi.Has("startshred")) {
+                class TStartShredActor : public TActorBootstrapped<TStartShredActor> {
+                    TBlobStorageController* const Self;
+                    std::weak_ptr<TLifetimeToken> LifetimeToken;
+                    const ui64 Generation;
+                    const TActorId Sender;
+                    const TCgiParameters Cgi;
+                    TStringStream Str;
+
+                public:
+                    TStartShredActor(TBlobStorageController *self, ui64 generation, TActorId sender, TCgiParameters cgi)
+                        : Self(self)
+                        , LifetimeToken(self->LifetimeToken)
+                        , Generation(generation)
+                        , Sender(sender)
+                        , Cgi(std::move(cgi))
+                    {}
+
+                    void Bootstrap() {
+                        if (LifetimeToken.expired()) {
+                            Str << "BS_CONTROLLER has been terminated";
+                            return PassAway();
+                        }
+                        Send(Self->SelfId(), new TEvBlobStorage::TEvControllerShredRequest(Generation));
+                        Become(&TThis::StateFunc);
+                    }
+
+                    void Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr /*ev*/) {
+                        if (!LifetimeToken.expired()) {
+                            Self->ShredState.Render(Str, Cgi);
+                        }
+                        PassAway();
+                    }
+
+                    void PassAway() override {
+                        Send(Sender, new NMon::TEvRemoteHttpInfoRes(Str.Str()));
+                        TActorBootstrapped::PassAway();
+                    }
+
+                    STRICT_STFUNC(StateFunc,
+                        hFunc(TEvBlobStorage::TEvControllerShredResponse, Handle);
+                    )
+                };
+                RegisterWithSameMailbox(new TStartShredActor(this, FromStringWithDefault<ui64>(cgi.Get("generation")),
+                    ev->Sender, cgi));
+                return true;
+            } else {
+                ShredState.Render(str, cgi);
+            }
         } else if (page == "InternalTables") {
             const TString table = cgi.Has("table") ? cgi.Get("table") : "pdisks";
             RenderInternalTables(str, table);
@@ -965,6 +1014,7 @@ void TBlobStorageController::RenderMonPage(IOutputStream& out) {
         (SelfHealEnable ? "enabled" : "disabled") << ")<br>";
     out << "<a href='app?TabletID=" << TabletID() << "&page=HealthEvents'>Health events</a><br>";
     out << "<a href='app?TabletID=" << TabletID() << "&page=Scrub'>Scrub state</a><br>";
+    out << "<a href='app?TabletID=" << TabletID() << "&page=Shred'>Shred state</a><br>";
     out << "<a href='app?TabletID=" << TabletID() << "&page=VirtualGroups'>Virtual groups</a><br>";
     out << "<a href='app?TabletID=" << TabletID() << "&page=InternalTables'>Internal tables</a><br>";
 
@@ -1338,6 +1388,7 @@ void TBlobStorageController::RenderGroupTable(IOutputStream& out, std::function<
                     TAG_ATTRS(TTableH, {{"title", "PutUserData Latency"}}) { out << "PutUserData<br/>Latency"; }
                     TAG_ATTRS(TTableH, {{"title", "GetFast Latency"}}) { out << "GetFast<br/>Latency"; }
                     TABLEH() { out << "Seen operational"; }
+                    TABLEH() { out << "Layout correct"; }
                     TABLEH() { out << "Operating<br/>status"; }
                     TABLEH() { out << "Expected<br/>status"; }
                     TABLEH() { out << "Donors"; }
@@ -1398,6 +1449,7 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             renderLatency(group.LatencyStats.PutUserData);
             renderLatency(group.LatencyStats.GetFast);
             TABLED() { out << (group.SeenOperational ? "YES" : ""); }
+            TABLED() { out << (group.LayoutCorrect ? "" : "NO"); }
 
             const auto& status = group.Status;
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus); }

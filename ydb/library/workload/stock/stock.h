@@ -10,6 +10,11 @@ namespace NYdbWorkload {
 
 class TStockWorkloadParams final: public TWorkloadParams {
 public:
+    enum class EStoreType {
+        Row     /* "row"    */,
+        Column  /* "column" */,
+    };
+
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
     TString GetWorkloadName() const override;
@@ -20,6 +25,7 @@ public:
     unsigned int Limit = 0;
     bool PartitionsByLoad = true;
     bool EnableCdc = false;
+    YDB_READONLY(EStoreType, StoreType, EStoreType::Row);
 };
 
 class TStockWorkloadGenerator final: public TWorkloadQueryGeneratorBase<TStockWorkloadParams> {

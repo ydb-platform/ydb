@@ -3,6 +3,7 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/kesus/tablet/events.h>
 
 namespace {
 
@@ -16,7 +17,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropKesus TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -49,8 +50,8 @@ public:
         path->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
-        domainInfo->DecPathsInside();
-        parentDir->DecAliveChildren();
+        domainInfo->DecPathsInside(context.SS);
+        DecAliveChildrenDirect(OperationId, parentDir, context); // for correct discard of ChildrenExist prop
 
         // KIKIMR-13173
         // Repeat it here for a while, delete it from TDeleteParts after

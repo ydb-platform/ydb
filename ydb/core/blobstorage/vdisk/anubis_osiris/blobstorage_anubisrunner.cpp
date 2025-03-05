@@ -54,7 +54,7 @@ namespace NKikimr {
             str << "\n";
 
             ctx.Send(ReplyId, new NMon::TEvHttpInfoRes(str.Str(), TDbMon::SyncerInfoId));
-            ctx.Send(NotifyId, new TEvents::TEvActorDied());
+            ctx.Send(NotifyId, new TEvents::TEvGone());
             Die(ctx);
         }
 
@@ -202,7 +202,7 @@ namespace NKikimr {
         }
 
         // This handler is called when TAnubisRunnerHttpInfoActor is finished
-        void Handle(TEvents::TEvActorDied::TPtr &ev, const TActorContext &ctx) {
+        void Handle(TEvents::TEvGone::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ctx);
             ActiveActors.Erase(ev->Sender);
         }
@@ -245,7 +245,7 @@ namespace NKikimr {
                       HFunc(TEvFullSyncedWith, Handle)
                       HFunc(TEvAnubisDone, Handle)
                       HFunc(NMon::TEvHttpInfo, Handle)
-                      HFunc(TEvents::TEvActorDied, Handle)
+                      HFunc(TEvents::TEvGone, Handle)
                       HFunc(TEvents::TEvPoisonPill, HandlePoison)
                       HFunc(TEvVGenerationChange, Handle)
                       CFunc(TEvents::TSystem::Wakeup, HandleWakeup)

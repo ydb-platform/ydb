@@ -126,7 +126,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
         auto &vDiskInstance = HmCtx->Conf->VDisks->Get(0);
         HmCtx->Config = vDiskInstance.Cfg;
         HmCtx->VCtx.Reset(new TVDiskContext(ctx.SelfID, HmCtx->Conf->GroupInfo->PickTopology(), HmCtx->Counters,
-                vDiskInstance.VDiskID, ctx.ExecutorThread.ActorSystem, NPDisk::DEVICE_TYPE_UNKNOWN));
+                vDiskInstance.VDiskID, ctx.ActorSystem(), NPDisk::DEVICE_TYPE_UNKNOWN));
 
         TVDiskID selfVDiskID = HmCtx->Conf->GroupInfo->GetVDiskId(HmCtx->VCtx->ShortSelfVDisk);
         ctx.Send(HmCtx->Config->BaseInfo.PDiskActorID,
@@ -137,7 +137,6 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
 
     bool InitHugeBlobKeeper(const TActorContext &ctx, const TStartingPoints &startingPoints) {
         Y_UNUSED(ctx);
-        const ui32 oldMinHugeBlobInBytes = 64 << 10;
         const ui32 milestoneHugeBlobInBytes = 64 << 10;
         const ui32 maxBlobInBytes = 128 << 10;
         auto logFunc = [] (const TString) { /* empty */ };
@@ -150,7 +149,6 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
                         HmCtx->PDiskCtx->Dsk->ChunkSize,
                         HmCtx->PDiskCtx->Dsk->AppendBlockSize,
                         HmCtx->PDiskCtx->Dsk->AppendBlockSize,
-                        oldMinHugeBlobInBytes,
                         milestoneHugeBlobInBytes,
                         maxBlobInBytes,
                         HmCtx->Config->HugeBlobOverhead,
@@ -169,7 +167,6 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
                         HmCtx->PDiskCtx->Dsk->ChunkSize,
                         HmCtx->PDiskCtx->Dsk->AppendBlockSize,
                         HmCtx->PDiskCtx->Dsk->AppendBlockSize,
-                        oldMinHugeBlobInBytes,
                         milestoneHugeBlobInBytes,
                         maxBlobInBytes,
                         HmCtx->Config->HugeBlobOverhead,
@@ -219,7 +216,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
 
     void Finish(const TActorContext &ctx) {
         HmCtx->LsnMngr = MakeIntrusive<TLsnMngr>(Lsn, Lsn, false);
-        HmCtx->LoggerID = ctx.ExecutorThread.RegisterActor(CreateRecoveryLogWriter(
+        HmCtx->LoggerID = ctx.Register(CreateRecoveryLogWriter(
                         HmCtx->PDiskCtx->PDiskId,
                         ctx.SelfID,
                         HmCtx->PDiskCtx->Dsk->Owner,
@@ -227,12 +224,12 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
                         HmCtx->LsnMngr->GetLsn(),
                         HmCtx->Counters));
         TLogCutterCtx logCutterCtx = {HmCtx->VCtx, HmCtx->PDiskCtx, HmCtx->LsnMngr, HmCtx->Config, HmCtx->LoggerID};
-        HmCtx->LogCutterID = ctx.ExecutorThread.RegisterActor(CreateRecoveryLogCutter(std::move(logCutterCtx)));
+        HmCtx->LogCutterID = ctx.Register(CreateRecoveryLogCutter(std::move(logCutterCtx)));
         RepairedHuge->FinishRecovery(ctx);
         auto hugeKeeperCtx = std::make_shared<THugeKeeperCtx>(HmCtx->VCtx, HmCtx->PDiskCtx, HmCtx->LsnMngr,
                 HmCtx->MainID, HmCtx->LoggerID, HmCtx->LogCutterID, "{}", false);
         TAutoPtr<IActor> hugeKeeperActor(CreateHullHugeBlobKeeper(hugeKeeperCtx, RepairedHuge));
-        HmCtx->HugeKeeperID = ctx.ExecutorThread.RegisterActor(hugeKeeperActor.Release());
+        HmCtx->HugeKeeperID = ctx.Register(hugeKeeperActor.Release());
 
         // report and die
         ctx.Send(HmCtx->MainID, new TEvents::TEvCompleted());
@@ -296,6 +293,7 @@ class THugeModuleTestActor : public TActorBootstrapped<THugeModuleTestActor> {
 
     STRICT_STFUNC(StateWorking,
         HFunc(TEvHullLogHugeBlob, Handle);
+        cFunc(TEvBlobStorage::EvNotifyChunksDeleted, []{});
     )
 
 public:

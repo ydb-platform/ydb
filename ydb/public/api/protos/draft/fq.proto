@@ -515,6 +515,11 @@ message MySQLCluster {
     IamAuth auth = 5;
 }
 
+message Logging {
+    string folder_id = 1;
+    IamAuth auth = 2;
+}
+
 message ConnectionSetting {
     enum ConnectionType {
         CONNECTION_TYPE_UNSPECIFIED = 0;
@@ -526,6 +531,7 @@ message ConnectionSetting {
         POSTGRESQL_CLUSTER = 6;
         GREENPLUM_CLUSTER = 7;
         MYSQL_CLUSTER = 8;
+        LOGGING = 9;
     }
 
     oneof connection {
@@ -537,6 +543,7 @@ message ConnectionSetting {
         PostgreSQLCluster postgresql_cluster = 6;
         GreenplumCluster greenplum_cluster = 7;
         MySQLCluster mysql_cluster = 8;
+        Logging logging = 9;
     }
 }
 

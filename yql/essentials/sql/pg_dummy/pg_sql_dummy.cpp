@@ -2,6 +2,7 @@
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack_impl.h>
 #include <yql/essentials/minikql/mkql_buffer.h>
+#include <yql/essentials/sql/settings/translator.h>
 
 namespace NSQLTranslationPG {
 
@@ -31,6 +32,10 @@ std::unique_ptr<NYql::NPg::ISystemFunctionsParser> CreateSystemFunctionsParser()
 
 std::unique_ptr<NYql::NPg::ISqlLanguageParser> CreateSqlLanguageParser() {
     throw yexception() << "CreateSqlLanguageParser: PG types are not supported";
+}
+
+NSQLTranslation::TTranslatorPtr MakeTranslator() {
+    return NSQLTranslation::MakeDummyTranslator("pg");
 }
 
 } // NSQLTranslationPG
@@ -549,6 +554,16 @@ ui64 HexEncode(const char *src, size_t len, char *dst) {
     Y_UNUSED(dst);
 
     throw yexception() << "HexEncode in pg_dummy does nothing";
+}
+
+
+std::unique_ptr<IYtColumnConverter> BuildPgTopLevelColumnReader(std::unique_ptr<NKikimr::NUdf::IArrayBuilder>&& /* builder */, const NKikimr::NMiniKQL::TPgType* /* targetType */) {
+    throw yexception() << "PG types are not supported";
+}
+
+
+std::unique_ptr<IYsonComplexTypeReader> BuildPgYsonColumnReader(const NUdf::TPgTypeDescription& /* desc */) {
+    throw yexception() << "PG types are not supported";
 }
 
 } // NYql

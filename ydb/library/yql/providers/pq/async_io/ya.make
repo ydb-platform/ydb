@@ -22,9 +22,10 @@ PEERDIR(
     ydb/library/yql/providers/pq/proto
     yql/essentials/public/types
     yql/essentials/utils/log
-    ydb/public/sdk/cpp/client/ydb_driver
-    ydb/public/sdk/cpp/client/ydb_topic
-    ydb/public/sdk/cpp/client/ydb_types/credentials
+    ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/types/credentials
 )
 
 YQL_LAST_ABI_VERSION()

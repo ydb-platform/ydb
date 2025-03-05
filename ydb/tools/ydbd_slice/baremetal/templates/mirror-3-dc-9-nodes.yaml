@@ -1,0 +1,198 @@
+# static erasure is the parameter that
+# describes the fault tolerance mode of the
+# cluster. See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
+static_erasure: mirror-3-dc
+host_configs: # the list of available host configurations in the cluster.
+- drive:
+  - path: /dev/disk/by-partlabel/kikimr_nvme_01 # path of the first disk in the host configration.
+    type: SSD                                   # kind of the disk: available kinds are SSD, NVME or HDD
+  - path: /dev/disk/by-partlabel/kikimr_nvme_02
+    type: SSD
+    # Add more disks if required.
+    # NOTE(shmel1k@): If you host has nodeclaim-label like '_4ssd', that means, that
+    # they will be located at `kikimr_ssd_01-04`
+    # If your host has nodeclaim-label like '_2hdd', that means, that
+    # they will be located at `/dev/disk/by-partlabel/kikimr_hdd_03-04` (enumeration starts with 03)
+  host_config_id: 1 # the unique id of the host config
+hosts:
+- host: ydb-node-zone-a-1.local # storage node DNS name, change if required.
+  host_config_id: 1             # numeric host configuration template identifier.
+  walle_location:               # this parameter describes where host is located.
+    body: 1                     # string representing a host serial number.
+    data_center: 'zone-a'       # string representing the datacenter / availability zone where the host is located.
+                                # if cluster is deployed using mirror-3-dc fault tolerance mode, all hosts must be distributed
+                                # across 3 datacenters.
+    rack: '1'                   # string representing a rack identifier where the host is located.
+                                # if cluster is deployed using block-4-2 erasure, all hosts should be distrubited
+                                # across at least 8 racks.
+    # For testing purpose it does not really matter, where all hosts are located.
+    # All hosts can be located in one datacenter and even in one rack.
+    # Just do not change `data_center` and `rack` options.
+- host: ydb-node-zone-a-2.local
+  host_config_id: 1
+  walle_location:
+    body: 2
+    data_center: 'zone-a'
+    rack: '2'
+- host: ydb-node-zone-a-3.local
+  host_config_id: 1
+  walle_location:
+    body: 3
+    data_center: 'zone-a'
+    rack: '3'
+
+- host: ydb-node-zone-b-1.local
+  host_config_id: 1
+  walle_location:
+    body: 4
+    data_center: 'zone-b'
+    rack: '4'
+- host: ydb-node-zone-b-2.local
+  host_config_id: 1
+  walle_location:
+    body: 5
+    data_center: 'zone-b'
+    rack: '5'
+- host: ydb-node-zone-b-3.local
+  host_config_id: 1
+  walle_location:
+    body: 6
+    data_center: 'zone-b'
+    rack: '6'
+
+- host: ydb-node-zone-c-1.local
+  host_config_id: 1
+  walle_location:
+    body: 7
+    data_center: 'zone-c'
+    rack: '7'
+- host: ydb-node-zone-c-2.local
+  host_config_id: 1
+  walle_location:
+    body: 8
+    data_center: 'zone-c'
+    rack: '8'
+- host: ydb-node-zone-c-3.local
+  host_config_id: 1
+  walle_location:
+    body: 9
+    data_center: 'zone-c'
+    rack: '9'
+
+# NOTE(shmel1k@): this template domains_config differs from production configuration.
+# It will be fixed soon, stay tuned.
+domains:
+  # There can be only one root domain in a cluster. Domain name prefixes all scheme objects names, e.g. full name of a table table1 in database db1
+  # in a cluster with domains_config.domain.name parameter set to Root would be equal to /Root/db1/table1
+  - domain_name: Root
+    dynamic_slots: 8
+    databases:
+      - name: "testdb"
+        storage_units:
+          - count: 1  # How many groups will be allocated for database
+            kind: ssd # What storage will group use
+        compute_units:
+          - count: 1 # How many dynamic nodes will database have
+            kind: slot
+            zone: any
+    storage_pool_kinds:
+    - kind: ssd
+      # fault tolerance mode name - none, block-4-2, or mirror-3-dc.
+      # See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
+      erasure: mirror-3-dc
+      filter_properties:
+        type: SSD # device type to match host_configs.drive.type
+        state_storage:
+        - ring:
+            node: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+            nto_select: 9
+          ssid: 1
+table_service_config:
+  sql_version: 1
+
+sys:                      # the configuration of the actor system which descibes how cores of the instance are distributed
+  executors:              # accross different types of workloads in the instance.
+    system:               # system executor of the actor system. in this executor YDB launches system type of workloads, like system tablets
+      threads: 9          # the number of threads allocated to system executor.
+      spin_threshold: 1
+    user:                 # user executor of the actor system. In this executor YDB launches user workloads, like datashard activities,
+      spin_threshold: 1   # the number of threads allocated to user executor.
+      threads: 16         # queries and rpc calls.
+    batch:                # user executor of the actor system. In this executor YDB launches batch operations, like scan queries, table
+      threads: 7          # compactions, background compactions.
+      spin_threshold: 1
+    io:                   # the io executor. In this executor launches sync operations and writes logs.
+      threads: 1
+    ic:                   # the interconnect executor which YDB uses for network communications accross different nodes of the cluster.
+      threads: 3          # the number of threads allocated to the interconnect executor.
+      max_threads: 5
+      max_avg_ping_deviation: 500
+      spin_threshold: 10
+      time_per_mailbox_micro_secs: 100
+      priority: 40
+  scheduler:
+    resolution: 64
+    spin_threshold: 0
+    progress_threshold: 10000
+
+blob_storage_config: # configuration of static blobstorage group.
+                     # YDB uses this group to store system tablets' data, like SchemeShard
+  service_set:
+    groups:
+    - erasure_species: mirror-3-dc # fault tolerance mode name for the static group
+      rings:                       # in mirror-3-dc must have exactly 3 rings: one in every availability zone.
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: "ydb-node-zone-a-1.local"
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+        - vdisk_locations:
+          - node_id: "ydb-node-zone-a-2.local"
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+        - vdisk_locations:
+          - node_id: "ydb-node-zone-a-3.local"
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: "ydb-node-zone-b-1.local"
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+        - vdisk_locations:
+          - node_id: "ydb-node-zone-b-2.local"
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+        - vdisk_locations:
+          - node_id: "ydb-node-zone-b-3.local"
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: "ydb-node-zone-c-1.local"
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+        - vdisk_locations:
+          - node_id: "ydb-node-zone-c-2.local"
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+        - vdisk_locations:
+          - node_id: "ydb-node-zone-c-3.local"
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+channel_profile_config:
+  profile:
+  - channel:
+    - erasure_species: mirror-3-dc
+      pdisk_category: 1
+      storage_pool_kind: ssd
+    - erasure_species: mirror-3-dc
+      pdisk_category: 1
+      storage_pool_kind: ssd
+    - erasure_species: mirror-3-dc
+      pdisk_category: 1
+      storage_pool_kind: ssd
+    profile_id: 0
+interconnect_config:
+    start_tcp: true
+grpc_config:

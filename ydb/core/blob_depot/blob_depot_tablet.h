@@ -34,6 +34,10 @@ namespace NKikimr::NBlobDepot {
                 EvDeliver,
                 EvJsonTimer,
                 EvJsonUpdate,
+                EvUploadResult,
+                EvDeleteResult,
+                EvScanFound,
+                EvScanContinue,
             };
         };
 
@@ -77,6 +81,8 @@ namespace NKikimr::NBlobDepot {
 
             NKikimrBlobStorage::TPDiskSpaceColor::E LastPushedSpaceColor = {};
             float LastPushedApproximateFreeSpaceShare = 0.0f;
+
+            THashSet<TS3Locator> S3WritesInFlight;
         };
 
         struct TPipeServerContext {
@@ -179,6 +185,7 @@ namespace NKikimr::NBlobDepot {
             KickSpaceMonitor();
             StartDataLoad();
             UpdateThroughputs();
+            InitS3Manager();
         }
 
         void StartDataLoad();
@@ -269,6 +276,15 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev);
         void Handle(TEvBlobDepot::TEvDiscardSpoiledBlobSeq::TPtr ev);
+        void Handle(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // S3 operations
+
+        class TS3Manager;
+        std::unique_ptr<TS3Manager> S3Manager;
+
+        void InitS3Manager();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Space monitoring

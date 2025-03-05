@@ -17,7 +17,7 @@ using namespace NYTree;
 TFairShareInvokerQueue::TFairShareInvokerQueue(
     TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
     const std::vector<TBucketDescription>& bucketDescriptions,
-    NProfiling::IRegistryImplPtr registry)
+    NProfiling::IRegistryPtr registry)
     : Weights_(bucketDescriptions.size(), 1.0)
 {
     Buckets_.reserve(bucketDescriptions.size());
@@ -47,10 +47,10 @@ void TFairShareInvokerQueue::SetThreadId(NThreading::TThreadId threadId)
 
 const IInvokerPtr& TFairShareInvokerQueue::GetInvoker(int bucketIndex, int queueIndex) const
 {
-    YT_ASSERT(0 <= bucketIndex && bucketIndex < static_cast<int>(Buckets_.size()));
+    YT_ASSERT(0 <= bucketIndex && bucketIndex < std::ssize(Buckets_));
     const auto& bucket = Buckets_[bucketIndex];
 
-    YT_ASSERT(0 <= queueIndex && queueIndex < static_cast<int>(bucket.Invokers.size()));
+    YT_ASSERT(0 <= queueIndex && queueIndex < std::ssize(bucket.Invokers));
     return bucket.Invokers[queueIndex];
 }
 

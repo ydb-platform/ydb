@@ -59,6 +59,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _KqpSlowLogNoticeThresholdMs);
     REGISTER_SETTING(*this, _KqpSlowLogTraceThresholdMs);
     REGISTER_SETTING(*this, _KqpYqlSyntaxVersion);
+    REGISTER_SETTING(*this, _KqpYqlAntlr4Parser);
     REGISTER_SETTING(*this, _KqpAllowUnsafeCommit);
     REGISTER_SETTING(*this, _KqpMaxComputeActors);
     REGISTER_SETTING(*this, _KqpEnableSpilling);
@@ -84,17 +85,23 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
     REGISTER_SETTING(*this, OptOverrideStatistics);
     REGISTER_SETTING(*this, OptimizerHints).Parser([](const TString& v) { return NYql::TOptimizerHints::Parse(v); });
+    REGISTER_SETTING(*this, OptShuffleElimination);
+    REGISTER_SETTING(*this, OptShuffleEliminationWithMap);
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
+    REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
     REGISTER_SETTING(*this, EnableSpillingNodes)
         .Parser([](const TString& v) { return ParseEnableSpillingNodes(v); });
 
-    REGISTER_SETTING(*this, MaxDPccpDPTableSize);
+    REGISTER_SETTING(*this, MaxDPHypDPTableSize);
 
     REGISTER_SETTING(*this, MaxTasksPerStage);
+    REGISTER_SETTING(*this, MaxSequentialReadsInFlight);
+
+    REGISTER_SETTING(*this, KMeansTreeSearchTopSize);
 
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
@@ -117,6 +124,10 @@ bool TKikimrSettings::SystemColumnsEnabled() const {
 
 bool TKikimrSettings::SpillingEnabled() const {
     return GetFlagValue(_KqpEnableSpilling.Get());
+}
+
+bool TKikimrSettings::OrderPreservingLookupJoinEnabled() const {
+    return GetFlagValue(EnableOrderPreservingLookupJoin.Get());
 }
 
 bool TKikimrSettings::DisableLlvmForUdfStages() const {
@@ -145,6 +156,10 @@ bool TKikimrSettings::HasOptEnableOlapProvideComputeSharding() const {
 
 bool TKikimrSettings::HasOptUseFinalizeByKey() const {
     return GetFlagValue(OptUseFinalizeByKey.Get().GetOrElse(true)) != EOptionalFlag::Disabled;
+}
+
+bool TKikimrSettings::HasMaxSequentialReadsInFlight() const {
+    return !MaxSequentialReadsInFlight.Get().Empty();
 }
 
 EOptionalFlag TKikimrSettings::GetOptPredicateExtract() const {

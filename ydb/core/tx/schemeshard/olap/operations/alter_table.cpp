@@ -16,7 +16,7 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder() << "TAlterColumnTable TConfigureParts operationId#" << OperationId;
+        return TStringBuilder() << "TAlterColumnTable TConfigureParts operationId# " << OperationId;
     }
 
 public:
@@ -63,7 +63,9 @@ public:
                 context.Ctx.SelfID,
                 ui64(OperationId.GetTxId()),
                 txShardString, seqNo,
-                context.SS->SelectProcessingParams(txState->TargetPathId));
+                context.SS->SelectProcessingParams(txState->TargetPathId),
+                0,
+                0);
 
             context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
 
@@ -85,7 +87,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterColumnTable TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -166,7 +168,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TAlterColumnTable TProposedWaitParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -268,13 +270,6 @@ public:
         const bool isAlterSharding = Transaction.HasAlterColumnTable() && Transaction.GetAlterColumnTable().HasReshardColumnTable();
         if (isAlterSharding && !AppData()->FeatureFlags.GetEnableAlterShardingInColumnShard()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, "Alter sharding is disabled for OLAP tables");
-            return result;
-        }
-
-        const bool hasTiering = Transaction.HasAlterColumnTable() && Transaction.GetAlterColumnTable().HasAlterTtlSettings() &&
-                                Transaction.GetAlterColumnTable().GetAlterTtlSettings().HasUseTiering();
-        if (hasTiering && HasAppData() && !AppDataVerified().FeatureFlags.GetEnableTieringInColumnShard()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Tiering functionality is disabled for OLAP tables");
             return result;
         }
 

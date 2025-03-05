@@ -116,7 +116,7 @@ namespace NYql::NDqs {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
                 if (!CtxSubscribed) {
                     auto selfId = ctx.SelfID;
-                    auto* actorSystem = ctx.ExecutorThread.ActorSystem;
+                    auto* actorSystem = ctx.ActorSystem();
                     Ctx->GetFinishFuture().Subscribe([selfId, actorSystem](const NYdbGrpc::IRequestContextBase::TAsyncFinishResult& future) {
                         Y_ABORT_UNLESS(future.HasValue());
                         if (future.GetValue() == NYdbGrpc::IRequestContextBase::EFinishStatus::CANCEL) {
@@ -178,6 +178,7 @@ namespace NYql::NDqs {
                 operation.Mutableresult()->PackFrom(queryResult);
                 *operation.Mutableissues() = result.GetIssues();
                 ResponseBuffer.SetTruncated(result.GetTruncated());
+                ResponseBuffer.SetTimeout(result.GetTimeout());
 
                 Reply(Ydb::StatusIds::SUCCESS, statusCode > 1 || result.GetIssues().size() > 0);
             }

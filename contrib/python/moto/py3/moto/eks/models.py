@@ -1,10 +1,9 @@
 from datetime import datetime
-from uuid import uuid4
 
-from moto.core import get_account_id, BaseBackend
+from moto.core import BaseBackend
 from moto.core.utils import iso_8601_datetime_without_milliseconds, BackendDict
+from moto.moto_api._internal import mock_random as random
 
-from ..utilities.utils import random_string
 from .exceptions import (
     InvalidParameterException,
     InvalidRequestException,
@@ -14,25 +13,17 @@ from .exceptions import (
 from .utils import get_partition, validate_role_arn
 
 # String Templates
-CLUSTER_ARN_TEMPLATE = (
-    "arn:{partition}:eks:{region}:" + str(get_account_id()) + ":cluster/{name}"
+CLUSTER_ARN_TEMPLATE = "arn:{partition}:eks:{region}:{account_id}:cluster/{name}"
+FARGATE_PROFILE_ARN_TEMPLATE = "arn:{partition}:eks:{region}:{account_id}:fargateprofile/{cluster_name}/{fargate_profile_name}/{uuid}"
+NODEGROUP_ARN_TEMPLATE = "arn:{partition}:eks:{region}:{account_id}:nodegroup/{cluster_name}/{nodegroup_name}/{uuid}"
+ISSUER_TEMPLATE = (
+    "https://oidc.eks.{region}.amazonaws.com/id/" + random.get_random_string(length=10)
 )
-FARGATE_PROFILE_ARN_TEMPLATE = (
-    "arn:{partition}:eks:{region}:"
-    + str(get_account_id())
-    + ":fargateprofile/{cluster_name}/{fargate_profile_name}/{uuid}"
-)
-NODEGROUP_ARN_TEMPLATE = (
-    "arn:{partition}:eks:{region}:"
-    + str(get_account_id())
-    + ":nodegroup/{cluster_name}/{nodegroup_name}/{uuid}"
-)
-ISSUER_TEMPLATE = "https://oidc.eks.{region}.amazonaws.com/id/" + random_string(10)
 ENDPOINT_TEMPLATE = (
     "https://"
-    + random_string()
+    + random.get_random_string()
     + "."
-    + random_string(3)
+    + random.get_random_string(3)
     + ".{region}.eks.amazonaws.com/"
 )
 
@@ -103,6 +94,7 @@ class Cluster:
         name,
         role_arn,
         resources_vpc_config,
+        account_id,
         region_name,
         aws_partition,
         version=None,
@@ -124,9 +116,12 @@ class Cluster:
         self.fargate_profile_count = 0
 
         self.arn = CLUSTER_ARN_TEMPLATE.format(
-            partition=aws_partition, region=region_name, name=name
+            partition=aws_partition,
+            account_id=account_id,
+            region=region_name,
+            name=name,
         )
-        self.certificateAuthority = {"data": random_string(1400)}
+        self.certificateAuthority = {"data": random.get_random_string(1400)}
         self.creation_date = iso_8601_datetime_without_milliseconds(datetime.now())
         self.identity = {"oidc": {"issuer": ISSUER_TEMPLATE.format(region=region_name)}}
         self.endpoint = ENDPOINT_TEMPLATE.format(region=region_name)
@@ -175,6 +170,7 @@ class FargateProfile:
         fargate_profile_name,
         pod_execution_role_arn,
         selectors,
+        account_id,
         region_name,
         aws_partition,
         client_request_token=None,
@@ -187,9 +183,10 @@ class FargateProfile:
             tags = dict()
 
         self.created_at = iso_8601_datetime_without_milliseconds(datetime.now())
-        self.uuid = str(uuid4())
+        self.uuid = str(random.uuid4())
         self.fargate_profile_arn = FARGATE_PROFILE_ARN_TEMPLATE.format(
             partition=aws_partition,
+            account_id=account_id,
             region=region_name,
             cluster_name=cluster_name,
             fargate_profile_name=fargate_profile_name,
@@ -224,6 +221,7 @@ class ManagedNodegroup:
         node_role,
         nodegroup_name,
         subnets,
+        account_id,
         region_name,
         aws_partition,
         scaling_config=None,
@@ -247,9 +245,10 @@ class ManagedNodegroup:
         if taints is None:
             taints = dict()
 
-        self.uuid = str(uuid4())
+        self.uuid = str(random.uuid4())
         self.arn = NODEGROUP_ARN_TEMPLATE.format(
             partition=aws_partition,
+            account_id=account_id,
             region=region_name,
             cluster_name=cluster_name,
             nodegroup_name=nodegroup_name,
@@ -260,7 +259,7 @@ class ManagedNodegroup:
         self.health = DEFAULT_NODEGROUP_HEALTH
         self.resources = {
             "autoScalingGroups": [{"name": "eks-" + self.uuid}],
-            "remoteAccessSecurityGroup": "sg-" + random_string(17).lower(),
+            "remoteAccessSecurityGroup": "sg-" + random.get_random_string(17).lower(),
         }
 
         self.ami_type = ami_type or DEFAULT_AMI_TYPE
@@ -349,6 +348,7 @@ class EKSBackend(BaseBackend):
             client_request_token=client_request_token,
             tags=tags,
             encryption_config=encryption_config,
+            account_id=self.account_id,
             region_name=self.region_name,
             aws_partition=self.partition,
         )
@@ -401,6 +401,7 @@ class EKSBackend(BaseBackend):
             selectors=selectors,
             subnets=subnets,
             tags=tags,
+            account_id=self.account_id,
             region_name=self.region_name,
             aws_partition=self.partition,
         )
@@ -477,6 +478,7 @@ class EKSBackend(BaseBackend):
             capacity_type=capacity_type,
             version=version,
             release_version=release_version,
+            account_id=self.account_id,
             region_name=self.region_name,
             aws_partition=self.partition,
         )
@@ -630,6 +632,78 @@ class EKSBackend(BaseBackend):
 
         cluster.nodegroup_count -= 1
         return result
+
+    def tag_resource(self, resource_arn, tags):
+        """
+        This function currently will tag an EKS cluster only.  It does not tag a managed node group
+        """
+
+        try:
+            cluster = next(
+                self.clusters[x]
+                for x in self.clusters
+                if self.clusters[x].arn == resource_arn
+            )
+        except StopIteration:
+            # Cluster does not exist.
+            raise ResourceNotFoundException(
+                clusterName=None,
+                nodegroupName=None,
+                fargateProfileName=None,
+                addonName=None,
+                message="An error occurred (NotFoundException) when calling the TagResource operation: Resource was not found",
+            )
+        cluster.tags.update(tags)
+        return ""
+
+    def untag_resource(self, resource_arn, tag_keys):
+        """
+        This function currently will remove tags on an EKS cluster only.  It does not remove tags from a managed node group
+        """
+        if not isinstance(tag_keys, list):
+            tag_keys = [tag_keys]
+
+        try:
+            cluster = next(
+                self.clusters[x]
+                for x in self.clusters
+                if self.clusters[x].arn == resource_arn
+            )
+        except StopIteration:
+            # Cluster does not exist.
+            raise ResourceNotFoundException(
+                clusterName=None,
+                nodegroupName=None,
+                fargateProfileName=None,
+                addonName=None,
+                message="An error occurred (NotFoundException) when calling the UntagResource operation: Resource was not found",
+            )
+        for name in tag_keys:
+            if name in cluster.tags:
+                del cluster.tags[name]
+        return ""
+
+    def list_tags_for_resource(self, resource_arn):
+        """
+        This function currently will list tags on an EKS cluster only.  It does not list tags from a managed node group
+        """
+
+        try:
+            cluster = next(
+                self.clusters[x]
+                for x in self.clusters
+                if self.clusters[x].arn == resource_arn
+            )
+        except StopIteration:
+            # Cluster does not exist.
+            raise ResourceNotFoundException(
+                clusterName=None,
+                nodegroupName=None,
+                fargateProfileName=None,
+                addonName=None,
+                message="An error occurred (NotFoundException) when calling the ListTagsForResource operation: Resource was not found",
+            )
+        return cluster.tags
 
     def list_clusters(self, max_results, next_token):
         return paginated_list(self.clusters.keys(), max_results, next_token)

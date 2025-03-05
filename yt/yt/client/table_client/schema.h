@@ -4,11 +4,12 @@
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/property.h>
-#include <yt/yt/core/misc/range.h>
 
 #include <yt/yt/core/yson/public.h>
 
 #include <yt/yt/core/ytree/public.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 #include <util/digest/multi.h>
 
@@ -166,6 +167,7 @@ public:
     EValueType GetWireType() const;
 
     i64 GetMemoryUsage() const;
+    i64 GetMemoryUsage(i64 threshold) const;
 
     // Check if column has plain old v1 type.
     bool IsOfV1Type() const;
@@ -226,6 +228,13 @@ public:
 
     private:
         const TTableSchema& Schema_;
+    };
+
+    struct TSystemColumnOptions
+    {
+        bool EnableTableIndex;
+        bool EnableRowIndex;
+        bool EnableRangeIndex;
     };
 
 public:
@@ -326,6 +335,9 @@ public:
     //! For ordered tables, prepends the current schema with |(tablet_index, row_index)| key columns.
     TTableSchemaPtr ToQuery() const;
 
+    //! Appends |$table_index|, |$row_index| and/or |$range_index|, based on the options.
+    TTableSchemaPtr WithSystemColumns(const TSystemColumnOptions& options) const;
+
     //! For sorted tables, return the current schema without computed columns.
     //! For ordered tables, prepends the current schema with |(tablet_index)| key column
     //! but without |$timestamp| column, if any.
@@ -397,6 +409,7 @@ public:
     void Load(TStreamLoadContext& context);
 
     i64 GetMemoryUsage() const;
+    i64 GetMemoryUsage(i64 threshold) const;
 
 private:
     struct TColumnInfo
@@ -462,6 +475,25 @@ void PrintTo(const TTableSchema& tableSchema, std::ostream* os);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TTableSchemaTruncatedFormatter
+{
+public:
+    // NB: #schema is allowed to be |nullptr|.
+    TTableSchemaTruncatedFormatter(const TTableSchemaPtr& schema, i64 memoryThreshold);
+
+    void operator()(TStringBuilderBase* builder) const;
+
+private:
+    const TTableSchema* const Schema_ = nullptr;
+    const i64 Threshold_ = 0;
+};
+
+TFormatterWrapper<TTableSchemaTruncatedFormatter> MakeTableSchemaTruncatedFormatter(
+    const TTableSchemaPtr& schema,
+    i64 memoryThreshold);
+
+////////////////////////////////////////////////////////////////////////////////
+
 bool operator == (const TColumnSchema& lhs, const TColumnSchema& rhs);
 
 bool operator == (const TDeletedColumn& lhs, const TDeletedColumn& rhs);
@@ -499,18 +531,27 @@ void ValidateDynamicTableKeyColumnCount(int count);
 
 void ValidateColumnName(const std::string& name);
 
+////////////////////////////////////////////////////////////////////////////////
+
+struct TSchemaValidationOptions
+{
+    bool AllowUnversionedUpdateColumns = false;
+    bool AllowTimestampColumns = false;
+    bool AllowOperationColumns = false;
+};
+
 void ValidateColumnSchema(
     const TColumnSchema& columnSchema,
     bool isTableSorted = false,
     bool isTableDynamic = false,
-    bool allowUnversionedUpdateColumns = false,
-    bool allowTimestampColumns = false);
+    const TSchemaValidationOptions& options = {});
 
 void ValidateTableSchema(
     const TTableSchema& schema,
     bool isTableDynamic = false,
-    bool allowUnversionedUpdateColumns = false,
-    bool allowTimestampColumns = false);
+    const TSchemaValidationOptions& options = {});
+
+////////////////////////////////////////////////////////////////////////////////
 
 void ValidateNoDescendingSortOrder(const TTableSchema& schema);
 

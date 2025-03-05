@@ -1,6 +1,5 @@
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
-ENV(SQS_CLIENT_BINARY="ydb/core/ymq/client/bin/sqs")
 
 TEST_SRCS(
     test_generic_messaging.py
@@ -9,18 +8,15 @@ TEST_SRCS(
 )
 
 IF (SANITIZER_TYPE == "thread")
-    TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)
     REQUIREMENTS(ram:32 cpu:1)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
 DEPENDS(
     ydb/apps/ydbd
-    ydb/core/ymq/client/bin
 )
 
 PEERDIR(

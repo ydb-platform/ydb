@@ -23,11 +23,6 @@ namespace NKikimr {
         using THandoffMap = NKikimr::THandoffMap<TKey, TMemRec>;
         using THandoffMapPtr = TIntrusivePtr<THandoffMap>;
 
-        // garbage collector map
-        using TGcMap = NKikimr::TGcMap<TKey, TMemRec>;
-        using TGcMapPtr = TIntrusivePtr<TGcMap>;
-        using TGcMapIterator = typename TGcMap::TIterator;
-
         // compaction record merger
         using TCompactRecordMerger = NKikimr::TCompactRecordMerger<TKey, TMemRec>;
 
@@ -37,6 +32,7 @@ namespace NKikimr {
 
         // level index
         using TLevelIndex = NKikimr::TLevelIndex<TKey, TMemRec>;
+        using TLevelIndexSnapshot = NKikimr::TLevelIndexSnapshot<TKey, TMemRec>;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // DEFERRED ITEM QUEUE PROCESSOR
@@ -116,7 +112,7 @@ namespace NKikimr {
         THullCtxPtr HullCtx;
         TPDiskCtxPtr PDiskCtx;
         THugeBlobCtxPtr HugeBlobCtx;
-        ui32 MinREALHugeBlobInBytes;
+        ui32 MinHugeBlobInBytes;
 
         // Group Type
         const TBlobStorageGroupType GType;
@@ -128,7 +124,7 @@ namespace NKikimr {
         THandoffMapPtr Hmp;
 
         // garbage collector iterator
-        TGcMapIterator GcmpIt;
+        TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> Barriers;
 
         // LSN range
         const ui64 FirstLsn = 0;
@@ -218,6 +214,9 @@ namespace NKikimr {
         TKey Key; // current key
         std::optional<TKey> PreviousKey; // previous key (nullopt for the first iteration)
 
+        TLevelIndexSnapshot *LevelSnap = nullptr;
+        std::optional<typename TLevelIndexSnapshot::TForwardIterator> LevelSnapIt;
+
     public:
         struct TStatistics {
             THullCtxPtr HullCtx;
@@ -284,24 +283,27 @@ namespace NKikimr {
         // is used for compaction policy implementation to limit number of intermediate chunks durint compaction.
         std::optional<TKey> PartitionKey;
 
+        const bool AllowGarbageCollection;
+
         std::deque<std::unique_ptr<NPDisk::TEvChunkWrite>> PendingWrites;
 
     public:
         THullCompactionWorker(THullCtxPtr hullCtx,
                               TPDiskCtxPtr pdiskCtx,
                               THugeBlobCtxPtr hugeBlobCtx,
-                              ui32 minREALHugeBlobInBytes,
+                              ui32 minHugeBlobInBytes,
                               TIntrusivePtr<TLevelIndex> levelIndex,
                               const TIterator& it,
                               bool isFresh,
                               ui64 firstLsn,
                               ui64 lastLsn,
                               TDuration restoreDeadline,
-                              std::optional<TKey> partitionKey)
+                              std::optional<TKey> partitionKey,
+                              bool allowGarbageCollection)
             : HullCtx(std::move(hullCtx))
             , PDiskCtx(std::move(pdiskCtx))
             , HugeBlobCtx(std::move(hugeBlobCtx))
-            , MinREALHugeBlobInBytes(minREALHugeBlobInBytes)
+            , MinHugeBlobInBytes(minHugeBlobInBytes)
             , GType(HullCtx->VCtx->Top->GType)
             , LevelIndex(std::move(levelIndex))
             , FirstLsn(firstLsn)
@@ -317,6 +319,7 @@ namespace NKikimr {
             , Statistics(HullCtx)
             , RestoreDeadline(restoreDeadline)
             , PartitionKey(partitionKey)
+            , AllowGarbageCollection(allowGarbageCollection)
         {
             if (IsFresh) {
                 ChunksToUse = HullCtx->HullSstSizeInChunksFresh;
@@ -333,9 +336,11 @@ namespace NKikimr {
             }
         }
 
-        void Prepare(THandoffMapPtr hmp, TGcMapIterator gcmpIt) {
+        void Prepare(THandoffMapPtr hmp, TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> barriers,
+                TLevelIndexSnapshot *levelSnap) {
             Hmp = std::move(hmp);
-            GcmpIt = gcmpIt;
+            Barriers = std::move(barriers);
+            LevelSnap = levelSnap;
             State = EState::GetNextItem;
         }
 
@@ -355,7 +360,6 @@ namespace NKikimr {
 
                             // iterator is valid and we have one more item to process; instruct merger whether we want
                             // data or not and proceed to TryProcessItem state
-                            Y_ABORT_UNLESS(GcmpIt.Valid());
                             It.PutToMerger(&IndexMerger);
 
                             const bool haveToProcessItem = PreprocessItem();
@@ -568,35 +572,60 @@ namespace NKikimr {
         // start item processing; this function transforms item using handoff map and adds collected huge blobs, if any
         // it returns true if we should keep this item; otherwise it returns false
         bool PreprocessItem() {
-            // finish merging data for this item
+            NGc::TKeepStatus keep(true);
+
             if constexpr (LogoBlobs) {
-                IndexMerger.Finish(HugeBlobCtx->IsHugeBlob(GType, Key.LogoBlobID(), MinREALHugeBlobInBytes));
+                if (!LevelSnapIt) {
+                    LevelSnapIt.emplace(HullCtx, LevelSnap);
+                    LevelSnapIt->Seek(Key);
+                } else {
+                    for (ui32 i = 0; i < 6 && LevelSnapIt->Valid() && LevelSnapIt->GetCurKey() < Key; ++i) {
+                        LevelSnapIt->Next();
+                    }
+                    if (LevelSnapIt->Valid() && LevelSnapIt->GetCurKey() < Key) {
+                        LevelSnapIt->Seek(Key);
+                    }
+                }
+                Y_ABORT_UNLESS(LevelSnapIt->Valid());
+                Y_ABORT_UNLESS(LevelSnapIt->GetCurKey() == Key);
+
+                const ui32 subsKeep = IndexMerger.GetNumKeepFlags();
+                const ui32 subsDoNotKeep = IndexMerger.GetNumDoNotKeepFlags();
+
+                IndexMerger.SetExternalDataStage();
+                LevelSnapIt->PutToMerger(&IndexMerger);
+
+                const ui32 wholeKeep = IndexMerger.GetNumKeepFlags() - subsKeep; // they are counted too
+                const ui32 wholeDoNotKeep = IndexMerger.GetNumDoNotKeepFlags() - subsDoNotKeep; // so are they
+
+                keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), {subsKeep, subsDoNotKeep, wholeKeep,
+                    wholeDoNotKeep}, HullCtx->AllowKeepFlags, AllowGarbageCollection);
+
+                IndexMerger.Finish(HugeBlobCtx->IsHugeBlob(GType, Key.LogoBlobID(), MinHugeBlobInBytes), keep.KeepData);
             } else {
-                IndexMerger.Finish(false);
+                keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), {}, HullCtx->AllowKeepFlags,
+                    AllowGarbageCollection);
+
+                IndexMerger.Finish(false, false);
             }
 
-            // reset transformed item and try to create new one if we want to keep this item
-            const bool keepData = GcmpIt.KeepData();
-            const bool keepItem = GcmpIt.KeepItem();
-            if (keepItem) {
-                ++(keepData ? Statistics.KeepItemsWithData : Statistics.KeepItemsWOData);
+            Y_ABORT_UNLESS(keep.KeepIndex || !keep.KeepData); // either we keep the item, or we drop it along with data
+
+            if (keep.KeepIndex) {
+                ++(keep.KeepData ? Statistics.KeepItemsWithData : Statistics.KeepItemsWOData);
             } else {
                 ++Statistics.DontKeepItems;
             }
 
-            TDataMerger& dataMerger = IndexMerger.GetDataMerger();
-            if (keepItem) {
-                Hmp->Transform(Key, MemRec.emplace(IndexMerger.GetMemRec()), dataMerger, keepData);
+            if (keep.KeepIndex) {
+                Hmp->Transform(Key, MemRec.emplace(IndexMerger.GetMemRec()), IndexMerger.GetDataMerger());
             }
 
             if constexpr (LogoBlobs) {
-                if (!keepItem) { // we are deleting this item too, so we drop saved huge blobs here
-                    CollectRemovedHugeBlobs(dataMerger.GetSavedHugeBlobs());
-                }
-                CollectRemovedHugeBlobs(dataMerger.GetDeletedHugeBlobs());
+                CollectRemovedHugeBlobs(IndexMerger.GetDataMerger().GetDeletedHugeBlobs());
             }
 
-            return keepItem;
+            return keep.KeepIndex;
         }
 
         ETryProcessItemStatus TryProcessItem() {
@@ -614,10 +643,9 @@ namespace NKikimr {
 
                 // create new instance of writer
                 WriterPtr = std::make_unique<TWriter>(HullCtx->VCtx, IsFresh ? EWriterDataType::Fresh : EWriterDataType::Comp,
-                        ChunksToUse, PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
-                        (ui32)PDiskCtx->Dsk->ChunkSize, PDiskCtx->Dsk->AppendBlockSize,
-                        (ui32)PDiskCtx->Dsk->BulkWriteBlockSize, LevelIndex->AllocSstId(), false, ReservedChunks, Arena,
-                        HullCtx->AddHeader);
+                    ChunksToUse, PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, (ui32)PDiskCtx->Dsk->ChunkSize,
+                    PDiskCtx->Dsk->AppendBlockSize, (ui32)PDiskCtx->Dsk->BulkWriteBlockSize, LevelIndex->AllocSstId(),
+                    false, ReservedChunks, Arena, HullCtx->AddHeader);
 
                 WriterHasPendingOperations = false;
             }
@@ -677,7 +705,6 @@ namespace NKikimr {
             // clear merger and on-disk record list and advance both iterators synchronously
             IndexMerger.Clear();
             It.Next();
-            GcmpIt.Next();
             MemRec.reset();
         }
 

@@ -18,10 +18,6 @@
 #include <util/generic/deque.h>
 #include <util/generic/vector.h>
 
-#define ANTLR3_TOKEN(NAME) SQLv1LexerTokens::TOKEN_##NAME << 16
-#define ANTLR4_TOKEN(NAME) (SQLv1Antlr4Lexer::TOKEN_##NAME << 16) + 1
-#define IS_TOKEN(ID, NAME) (UnifiedToken(ID) == ANTLR3_TOKEN(NAME) || UnifiedToken(ID) == ANTLR4_TOKEN(NAME))
-
 namespace NSQLTranslationV1 {
     inline bool IsAnonymousName(const TString& name) {
         return name == "$_";
@@ -85,14 +81,19 @@ namespace NSQLTranslationV1 {
         Allow,
         AsStringLiteral,
         AsPgType,
-        MatchRecognize,
+        MatchRecognizeMeasures,
+        MatchRecognizeDefine,
+        MatchRecognizeDefineAggregate,
     };
 
     class TContext {
     public:
-        TContext(const NSQLTranslation::TTranslationSettings& settings,
-                 const NSQLTranslation::TSQLHints& hints,
-                 NYql::TIssues& issues);
+        TContext(const TLexers& lexers,
+                const TParsers& parsers,
+                const NSQLTranslation::TTranslationSettings& settings,
+                const NSQLTranslation::TSQLHints& hints,
+                NYql::TIssues& issues,
+                const TString& query = {});
 
         virtual ~TContext();
 
@@ -203,10 +204,42 @@ namespace NSQLTranslationV1 {
             return TopLevelColumnReferenceState;
         }
 
-        TStringBuf GetMatchRecognizeDefineVar() const {
-            YQL_ENSURE(EColumnRefState::MatchRecognize == ColumnReferenceState,
-                       "DefineVar can only be accessed within processing of MATCH_RECOGNIZE lambdas");
+        [[nodiscard]] TString GetMatchRecognizeDefineVar() const {
+            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState,
+                       "MATCH_RECOGNIZE Var can only be accessed within processing of MATCH_RECOGNIZE lambdas");
             return MatchRecognizeDefineVar;
+        }
+
+        TString ExtractMatchRecognizeAggrVar() {
+            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState,
+                       "MATCH_RECOGNIZE Var can only be accessed within processing of MATCH_RECOGNIZE lambdas");
+            return std::exchange(MatchRecognizeAggrVar, "");
+        }
+
+        [[nodiscard]] bool SetMatchRecognizeAggrVar(TString var) {
+            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState,
+                       "MATCH_RECOGNIZE Var can only be accessed within processing of MATCH_RECOGNIZE lambdas");
+            if (MatchRecognizeAggrVar.empty()) {
+                MatchRecognizeAggrVar = std::move(var);
+            } else if (MatchRecognizeAggrVar != var) {
+                Error() << "Illegal use of aggregates or navigation operators in MATCH_RECOGNIZE";
+                return false;
+            }
+            return true;
+        }
+
+        [[nodiscard]] auto& GetMatchRecognizeAggregations() {
+            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState
+                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState,
+                       "MATCH_RECOGNIZE Var can only be accessed within processing of MATCH_RECOGNIZE lambdas");
+            return MatchRecognizeAggregations;
         }
 
         TVector<NSQLTranslation::TSQLHint> PullHintForToken(NYql::TPosition tokenPos);
@@ -214,6 +247,10 @@ namespace NSQLTranslationV1 {
 
     private:
         IOutputStream& MakeIssue(NYql::ESeverity severity, NYql::TIssueCode code, NYql::TPosition pos);
+
+    public:
+        const TLexers Lexers;
+        const TParsers Parsers;
 
     private:
         NYql::TPosition Position;
@@ -230,6 +267,12 @@ namespace NSQLTranslationV1 {
         EColumnRefState ColumnReferenceState = EColumnRefState::Deny;
         EColumnRefState TopLevelColumnReferenceState = EColumnRefState::Deny;
         TString MatchRecognizeDefineVar;
+        TString MatchRecognizeAggrVar;
+        struct TMatchRecognizeAggregation {
+            TString Var;
+            TAggregationPtr Aggr;
+        };
+        TVector<TMatchRecognizeAggregation> MatchRecognizeAggregations;
         TString NoColumnErrorContext = "in current scope";
         TVector<TBlocks*> CurrentBlocks;
 
@@ -237,6 +280,7 @@ namespace NSQLTranslationV1 {
         THashMap<TString, std::pair<TPosition, TNodePtr>> Variables;
         THashSet<TString> WeakVariables;
         NSQLTranslation::TTranslationSettings Settings;
+        const TString Query;
         std::unique_ptr<TMemoryPool> Pool;
         NYql::TIssues& Issues;
         TMap<TString, TNodePtr> UniversalAliases;
@@ -291,7 +335,7 @@ namespace NSQLTranslationV1 {
         ui32 PragmaGroupByLimit = 1 << 6;
         ui32 PragmaGroupByCubeLimit = 5;
         // if FlexibleTypes=true, emit TypeOrMember callable and resolve Type/Column uncertainty on type annotation stage, otherwise always emit Type
-        bool FlexibleTypes = false;
+        bool FlexibleTypes = true;
         // see YQL-10265
         bool AnsiCurrentRow = false;
         TMaybe<bool> YsonCastToString;
@@ -314,6 +358,7 @@ namespace NSQLTranslationV1 {
         bool EmitStartsWith = true;
         TMaybe<bool> EmitAggApply;
         bool UseBlocks = false;
+        bool EmitTableSource = false;
         bool AnsiLike = false;
         bool FeatureR010 = false; //Row pattern recognition: FROM clause
         TMaybe<bool> CompactGroupBy;
@@ -321,11 +366,15 @@ namespace NSQLTranslationV1 {
         bool BlockEngineForce = false;
         bool UnorderedResult = false;
         ui64 ParallelModeCount = 0;
-        bool CompactNamedExprs = false;
+        bool CompactNamedExprs = true;
         bool ValidateUnusedExprs = false;
         bool AnsiImplicitCrossJoin = false; // select * from A,B
         bool DistinctOverWindow = false;
         bool SeqMode = false;
+        bool EmitUnionMerge = false;
+        TVector<size_t> ForAllStatementsParts;
+
+        TMaybe<TString> Engine;
     };
 
     class TColumnRefScope {
@@ -342,7 +391,13 @@ namespace NSQLTranslationV1 {
             } else {
                 Ctx.ColumnReferenceState = state;
             }
-            YQL_ENSURE(defineVar.empty() || EColumnRefState::MatchRecognize == state, "Internal logic error");
+            YQL_ENSURE(
+                defineVar.empty()
+                || EColumnRefState::MatchRecognizeMeasures == state
+                || EColumnRefState::MatchRecognizeDefine == state
+                || EColumnRefState::MatchRecognizeDefineAggregate == state,
+                "Internal logic error"
+            );
             ctx.MatchRecognizeDefineVar = defineVar;
         }
 
@@ -379,10 +434,6 @@ namespace NSQLTranslationV1 {
 
         const TString& Token(const NSQLv1Generated::TToken& token) {
             return Ctx.Token(token);
-        }
-
-        ui32 UnifiedToken(ui32 id) const {
-            return Ctx.Settings.Antlr4Parser + (id << 16);
         }
 
         TString Identifier(const NSQLv1Generated::TToken& token) {

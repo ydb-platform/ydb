@@ -8,7 +8,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/base/feature_flags.h>
 
 namespace NKikimr {
@@ -120,7 +120,6 @@ namespace NKikimr {
         ui32 HullSstSizeInChunksLevel;
         ui32 HugeBlobsFreeChunkReservation;
         ui32 MinHugeBlobInBytes;
-        ui32 OldMinHugeBlobInBytes;
         ui32 MilestoneHugeBlobInBytes;
         ui32 HugeBlobOverhead;
         ui32 HullCompLevel0MaxSstsAtOnce;
@@ -220,18 +219,16 @@ namespace NKikimr {
         TDuration WhiteboardUpdateInterval;
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
-        TControlWrapper DefaultHugeGarbagePerMille;
-        TControlWrapper HugeDefragFreeSpaceBorderPerMille;
         bool UseActorSystemTimeInBSQueue = false;
 
         ///////////// BALANCING SETTINGS ////////////////////
-        bool BalancingEnableSend;
-        bool BalancingEnableDelete;
+        bool BalancingEnableSend = false;
+        bool BalancingEnableDelete = false;
         TDuration BalancingJobGranularity;
-        bool BalancingBalanceOnlyHugeBlobs;
-        ui64 BalancingBatchSize;
-        ui64 BalancingMaxToSendPerEpoch;
-        ui64 BalancingMaxToDeletePerEpoch;
+        bool BalancingBalanceOnlyHugeBlobs = false;
+        ui64 BalancingBatchSize = 0;
+        ui64 BalancingMaxToSendPerEpoch = 0;
+        ui64 BalancingMaxToDeletePerEpoch = 0;
         TDuration BalancingReadBatchTimeout;
         TDuration BalancingSendBatchTimeout;
         TDuration BalancingRequestBlobsOnMainTimeout;
@@ -239,9 +236,27 @@ namespace NKikimr {
         TDuration BalancingEpochTimeout;
         TDuration BalancingTimeToSleepIfNothingToDo;
 
+        ///////////////// DEFRAG SETTINGS /////////////////
+        TControlWrapper DefaultHugeGarbagePerMille = 300;
+        TControlWrapper HugeDefragFreeSpaceBorderPerMille = 260;
+        TControlWrapper MaxChunksToDefragInflight = 10;
+
         ///////////// COST METRICS SETTINGS ////////////////
         bool UseCostTracker = true;
         TCostMetricsParametersByMedia CostMetricsParametersByMedia;
+
+        ///////////// THROTTLING SETTINGS //////////////////
+        TControlWrapper ThrottlingDryRun;
+        TControlWrapper ThrottlingMinLevel0SstCount;
+        TControlWrapper ThrottlingMaxLevel0SstCount;
+        TControlWrapper ThrottlingMinInplacedSizeHDD;
+        TControlWrapper ThrottlingMaxInplacedSizeHDD;
+        TControlWrapper ThrottlingMinInplacedSizeSSD;
+        TControlWrapper ThrottlingMaxInplacedSizeSSD;
+        TControlWrapper ThrottlingMinOccupancyPerMille;
+        TControlWrapper ThrottlingMaxOccupancyPerMille;
+        TControlWrapper ThrottlingMinLogChunkCount;
+        TControlWrapper ThrottlingMaxLogChunkCount;
 
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;

@@ -1,9 +1,9 @@
 #include "yql_yt_dq_task_preprocessor.h"
 
-#include <ydb/library/yql/providers/yt/gateway/lib/yt_helpers.h>
-#include <ydb/library/yql/providers/yt/codec/yt_codec.h>
-#include <ydb/library/yql/providers/yt/codec/yt_codec_io.h>
-#include <ydb/library/yql/providers/yt/lib/yson_helpers/yson_helpers.h>
+#include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
+#include <yt/yql/providers/yt/codec/yt_codec.h>
+#include <yt/yql/providers/yt/codec/yt_codec_io.h>
+#include <yt/yql/providers/yt/lib/yson_helpers/yson_helpers.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/failure_injector/failure_injector.h>

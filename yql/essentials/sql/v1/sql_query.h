@@ -20,7 +20,7 @@ public:
     TNodePtr Build(const TSQLv1ParserAST& ast);
     TNodePtr Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_core>& ast);
 
-    bool Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core);
+    bool Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core, size_t statementNumber);
 private:
     bool DeclareStatement(const TRule_declare_stmt& stmt);
     bool ExportStatement(const TRule_export_stmt& stmt);
@@ -42,6 +42,7 @@ private:
     void AlterTableDropChangefeed(const TRule_alter_table_drop_changefeed& node, TAlterTableParameters& params);
     void AlterTableRenameIndexTo(const TRule_alter_table_rename_index_to& node, TAlterTableParameters& params);
     bool AlterTableAlterIndex(const TRule_alter_table_alter_index& node, TAlterTableParameters& params);
+    bool AlterSequenceAction(const TRule_alter_sequence_action& node, TSequenceParameters& params);
     TNodePtr PragmaStatement(const TRule_pragma_stmt& stmt, bool& success);
     void AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node);
     bool ParseTableStoreFeatures(std::map<TString, TDeferredAtom> & result, const TRule_alter_table_store_action & actions);
@@ -64,7 +65,7 @@ private:
         if (!Ctx.Settings.Antlr4Parser) {
             const auto pos = descr.find(": ");
             Y_DEBUG_ABORT_UNLESS(pos != TString::npos);
-            Split(TString(descr.begin() + pos + 2, descr.end()), "_", parts);   
+            Split(TString(descr.begin() + pos + 2, descr.end()), "_", parts);
         } else {
             Split(descr, "_", parts);
         }

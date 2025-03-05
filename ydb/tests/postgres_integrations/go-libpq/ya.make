@@ -1,7 +1,6 @@
 PY3TEST()
 
 FORK_TEST_FILES()
-TIMEOUT(600)
 
 
 # copy from https://docs.yandex-team.ru/devtools/test/environment#docker-compose
@@ -10,10 +9,13 @@ REQUIREMENTS(
     cpu:all dns:dns64
 )
 
+SET(ARCADIA_SANDBOX_SINGLESLOT TRUE)
+
 IF(OPENSOURCE)
     IF (SANITIZER_TYPE)
         # Too huge for precommit check with sanitizers
         SIZE(LARGE)
+        INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     ELSE()
         SIZE(MEDIUM) # for run per PR
     ENDIF()
@@ -30,9 +32,9 @@ IF(OPENSOURCE)
     TAG(ya:not_autocheck)
 ELSE()
     SIZE(LARGE) # run in sandbox with timeout more than a minute
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     TAG(
         ya:external
-        ya:fat
         ya:force_sandbox
     )
 ENDIF()

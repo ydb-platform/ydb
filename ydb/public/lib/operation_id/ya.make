@@ -1,18 +1,11 @@
 LIBRARY()
 
 SRCS(
-    operation_id.cpp
+    operation_id.h
 )
 
 PEERDIR(
-    contrib/libs/protobuf
-    library/cpp/cgiparam
-    library/cpp/uri
-    ydb/public/lib/operation_id/protos
+    ydb/public/sdk/cpp/src/library/operation_id
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)

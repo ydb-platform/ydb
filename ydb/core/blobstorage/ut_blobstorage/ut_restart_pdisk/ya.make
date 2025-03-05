@@ -4,8 +4,6 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
     SIZE(MEDIUM)
 
-    TIMEOUT(600)
-
     SRCS(
         restart_pdisk.cpp
     )

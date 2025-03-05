@@ -11,7 +11,7 @@ namespace math
   long floor(T x);
 
   DEFINE_FUNCTOR(pythonic::math, floor);
-}
+} // namespace math
 PYTHONIC_NS_END
 
 #endif

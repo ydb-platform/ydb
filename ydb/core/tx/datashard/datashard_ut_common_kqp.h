@@ -2,7 +2,7 @@
 
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -180,6 +180,10 @@ namespace NKqpHelpers {
     inline TString KqpSimpleExec(TTestActorRuntime& runtime, const TString& query, bool staleRo = false, const TString& database = {}) {
         auto response = AwaitResponse(runtime, KqpSimpleSend(runtime, query, staleRo, database));
         return FormatResult(response);
+    }
+
+    inline auto KqpSimpleStaleRoSend(TTestActorRuntime& runtime, const TString& query, const TString& database = {}) {
+        return KqpSimpleSend(runtime, query, true, database);
     }
 
     inline TString KqpSimpleStaleRoExec(TTestActorRuntime& runtime, const TString& query, const TString& database = {}) {

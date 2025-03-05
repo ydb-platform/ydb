@@ -8,6 +8,10 @@
             "name": "/local/base_write_insert_sql_plan/Input",
             "reads": [
                 {
+                    "lookup_by": [
+                        "key",
+                        "subkey"
+                    ],
                     "type": "Lookup"
                 }
             ],
@@ -39,6 +43,10 @@
                     "type": "Scan"
                 },
                 {
+                    "lookup_by": [
+                        "Group",
+                        "Name"
+                    ],
                     "type": "Lookup"
                 }
             ],

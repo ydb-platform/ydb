@@ -2,7 +2,8 @@
 
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
+
+#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -239,7 +240,7 @@ protected:
         auto table = context.SS->Tables.at(pathId);
 
         auto& notice = *tx.MutableAlterCdcStreamNotice();
-        PathIdFromPathId(pathId, notice.MutablePathId());
+        pathId.ToProto(notice.MutablePathId());
         notice.SetTableSchemaVersion(table->AlterVersion + 1);
 
         bool found = false;
@@ -255,7 +256,7 @@ protected:
             auto stream = context.SS->CdcStreams.at(childPathId);
 
             Y_VERIFY_S(!found, "Too many cdc streams are planned to alter"
-                << ": found# " << PathIdFromPathId(notice.GetStreamDescription().GetPathId())
+                << ": found# " << TPathId::FromProto(notice.GetStreamDescription().GetPathId())
                 << ", another# " << childPathId);
             found = true;
 
@@ -362,7 +363,7 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
-        const auto tablePath = TPath::Resolve(workingDir, context.SS).Dive(tableName);
+        const auto tablePath = TPath::Resolve(workingDir, context.SS).Child(tableName, TPath::TSplitChildTag{});
         {
             const auto checks = tablePath.Check();
             checks
@@ -487,7 +488,7 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoAlterStreamPathChecks(
         const TString& tableName,
         const TString& streamName)
 {
-    const auto tablePath = workingDirPath.Child(tableName);
+    const auto tablePath = workingDirPath.Child(tableName, TPath::TSplitChildTag{});
     {
         const auto checks = tablePath.Check();
         checks

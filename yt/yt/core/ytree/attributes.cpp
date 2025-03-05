@@ -9,7 +9,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TYsonString IAttributeDictionary::GetYson(TStringBuf key) const
+TYsonString IAttributeDictionary::GetYson(TKeyView key) const
 {
     auto result = FindYson(key);
     if (!result) {
@@ -18,7 +18,7 @@ TYsonString IAttributeDictionary::GetYson(TStringBuf key) const
     return result;
 }
 
-TYsonString IAttributeDictionary::GetYsonAndRemove(const TString& key)
+TYsonString IAttributeDictionary::GetYsonAndRemove(TKeyView key)
 {
     auto result = GetYson(key);
     Remove(key);
@@ -28,8 +28,7 @@ TYsonString IAttributeDictionary::GetYsonAndRemove(const TString& key)
 void IAttributeDictionary::MergeFrom(const IMapNodePtr& other)
 {
     for (const auto& [key, value] : other->GetChildren()) {
-        // TODO(babenko): migrate to std::string
-        SetYson(TString(key), ConvertToYsonString(value));
+        SetYson(key, ConvertToYsonString(value));
     }
 }
 
@@ -64,8 +63,7 @@ IAttributeDictionaryPtr IAttributeDictionary::FromMap(const IMapNodePtr& node)
     auto attributes = CreateEphemeralAttributes();
     auto children = node->GetChildren();
     for (int index = 0; index < std::ssize(children); ++index) {
-        // TODO(babenko): migrate to std::string
-        attributes->SetYson(TString(children[index].first), ConvertToYsonString(children[index].second));
+        attributes->SetYson(children[index].first, ConvertToYsonString(children[index].second));
     }
     return attributes;
 }

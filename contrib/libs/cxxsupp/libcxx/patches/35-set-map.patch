@@ -1,44 +1,40 @@
 diff --git a/include/map b/include/map
-index 17bb715..77f2068 100644
+index 02bd17c..3fabcef 100644
 --- a/include/map
 +++ b/include/map
-@@ -1456,7 +1456,7 @@ public:
-     _LIBCPP_INLINE_VISIBILITY
-     iterator  erase(const_iterator __f, const_iterator __l)
-         {return __tree_.erase(__f.__i_, __l.__i_);}
--    _LIBCPP_INLINE_VISIBILITY
-+    _LIBCPP_REINITIALIZES_OBJECT _LIBCPP_INLINE_VISIBILITY
-     void clear() _NOEXCEPT {__tree_.clear();}
+@@ -1310,6 +1310,7 @@ public:
+   _LIBCPP_HIDE_FROM_ABI iterator erase(const_iterator __f, const_iterator __l) {
+     return __tree_.erase(__f.__i_, __l.__i_);
+   }
++  _LIBCPP_REINITIALIZES_OBJECT
+   _LIBCPP_HIDE_FROM_ABI void clear() _NOEXCEPT { __tree_.clear(); }
  
  #if _LIBCPP_STD_VER >= 17
-@@ -2253,7 +2253,7 @@ public:
-     }
+@@ -1936,6 +1937,7 @@ public:
+   }
  #endif
  
--    _LIBCPP_INLINE_VISIBILITY
-+    _LIBCPP_REINITIALIZES_OBJECT _LIBCPP_INLINE_VISIBILITY
-     void clear() _NOEXCEPT {__tree_.clear();}
++  _LIBCPP_REINITIALIZES_OBJECT
+   _LIBCPP_HIDE_FROM_ABI void clear() _NOEXCEPT { __tree_.clear(); }
  
-     _LIBCPP_INLINE_VISIBILITY
+   _LIBCPP_HIDE_FROM_ABI void swap(multimap& __m) _NOEXCEPT_(__is_nothrow_swappable_v<__base>) {
 diff --git a/include/set b/include/set
-index 75be1e1..3422d43 100644
+index 9453358..f2d2b05 100644
 --- a/include/set
 +++ b/include/set
-@@ -839,7 +839,7 @@ public:
-     _LIBCPP_INLINE_VISIBILITY
-     iterator  erase(const_iterator __f, const_iterator __l)
-         {return __tree_.erase(__f, __l);}
--    _LIBCPP_INLINE_VISIBILITY
-+    _LIBCPP_REINITIALIZES_OBJECT _LIBCPP_INLINE_VISIBILITY
-     void clear() _NOEXCEPT {__tree_.clear();}
+@@ -765,6 +765,7 @@ public:
+   _LIBCPP_HIDE_FROM_ABI iterator erase(const_iterator __p) { return __tree_.erase(__p); }
+   _LIBCPP_HIDE_FROM_ABI size_type erase(const key_type& __k) { return __tree_.__erase_unique(__k); }
+   _LIBCPP_HIDE_FROM_ABI iterator erase(const_iterator __f, const_iterator __l) { return __tree_.erase(__f, __l); }
++  _LIBCPP_REINITIALIZES_OBJECT
+   _LIBCPP_HIDE_FROM_ABI void clear() _NOEXCEPT { __tree_.clear(); }
  
  #if _LIBCPP_STD_VER >= 17
-@@ -1429,7 +1429,7 @@ public:
-     _LIBCPP_INLINE_VISIBILITY
-     iterator  erase(const_iterator __f, const_iterator __l)
-         {return __tree_.erase(__f, __l);}
--    _LIBCPP_INLINE_VISIBILITY
-+    _LIBCPP_REINITIALIZES_OBJECT _LIBCPP_INLINE_VISIBILITY
-     void clear() _NOEXCEPT {__tree_.clear();}
+@@ -1220,6 +1221,7 @@ public:
+   _LIBCPP_HIDE_FROM_ABI iterator erase(const_iterator __p) { return __tree_.erase(__p); }
+   _LIBCPP_HIDE_FROM_ABI size_type erase(const key_type& __k) { return __tree_.__erase_multi(__k); }
+   _LIBCPP_HIDE_FROM_ABI iterator erase(const_iterator __f, const_iterator __l) { return __tree_.erase(__f, __l); }
++  _LIBCPP_REINITIALIZES_OBJECT
+   _LIBCPP_HIDE_FROM_ABI void clear() _NOEXCEPT { __tree_.clear(); }
  
  #if _LIBCPP_STD_VER >= 17

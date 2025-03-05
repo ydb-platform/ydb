@@ -116,7 +116,7 @@ public:
 
     TFuture<IPersistentQueueRowsetPtr> Poll()
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         auto promise = NewPromise<IPersistentQueueRowsetPtr>();
         auto state = GetState();

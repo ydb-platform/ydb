@@ -326,31 +326,31 @@ struct TUserTable : public TThrRefBase {
 
     struct TReplicationConfig {
         NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode Mode;
-        NKikimrSchemeOp::TTableReplicationConfig::EConsistency Consistency;
+        NKikimrSchemeOp::TTableReplicationConfig::EConsistencyLevel ConsistencyLevel;
 
         TReplicationConfig()
             : Mode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE)
-            , Consistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_UNKNOWN)
+            , ConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_UNKNOWN)
         {
         }
 
         TReplicationConfig(const NKikimrSchemeOp::TTableReplicationConfig& config)
             : Mode(config.GetMode())
-            , Consistency(config.GetConsistency())
+            , ConsistencyLevel(config.GetConsistencyLevel())
         {
         }
 
-        bool HasWeakConsistency() const {
-            return Consistency == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK;
+        bool HasRowConsistency() const {
+            return ConsistencyLevel == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW;
         }
 
-        bool HasStrongConsistency() const {
-            return Consistency == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_STRONG;
+        bool HasGlobalConsistency() const {
+            return ConsistencyLevel == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL;
         }
 
         void Serialize(NKikimrSchemeOp::TTableReplicationConfig& proto) const {
             proto.SetMode(Mode);
-            proto.SetConsistency(Consistency);
+            proto.SetConsistencyLevel(ConsistencyLevel);
         }
     };
 

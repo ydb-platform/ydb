@@ -83,7 +83,7 @@ using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
+static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
 
 static constexpr auto DiskProfilingPeriod = TDuration::Minutes(5);
 static constexpr auto AnchorProfilingPeriod = TDuration::Seconds(15);
@@ -684,14 +684,14 @@ private:
 
         TClosure BeginExecute() override
         {
-            VERIFY_THREAD_AFFINITY(Owner_->LoggingThread);
+            YT_ASSERT_THREAD_AFFINITY(Owner_->LoggingThread);
 
             return BeginExecuteImpl(Owner_->EventQueue_->BeginExecute(&CurrentAction_), &CurrentAction_);
         }
 
         void EndExecute() override
         {
-            VERIFY_THREAD_AFFINITY(Owner_->LoggingThread);
+            YT_ASSERT_THREAD_AFFINITY(Owner_->LoggingThread);
 
             Owner_->EventQueue_->EndExecute(&CurrentAction_);
         }
@@ -699,7 +699,7 @@ private:
 
     void EnsureStarted()
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         std::call_once(Started_, [&] {
             if (LoggingThread_->IsStopping()) {
@@ -722,7 +722,7 @@ private:
         const TLogManagerConfigPtr& config,
         const TLogEvent& event)
     {
-        VERIFY_THREAD_AFFINITY(LoggingThread);
+        YT_ASSERT_THREAD_AFFINITY(LoggingThread);
 
         if (event.Category == SystemCategory_) {
             return SystemWriters_;
@@ -772,7 +772,7 @@ private:
 
     void UpdateConfig(const TConfigEvent& event)
     {
-        VERIFY_THREAD_AFFINITY(LoggingThread);
+        YT_ASSERT_THREAD_AFFINITY(LoggingThread);
 
         if (ShutdownRequested_) {
             return;
@@ -795,7 +795,7 @@ private:
 
     static std::unique_ptr<ILogFormatter> CreateFormatter(const TLogWriterConfigPtr& writerConfig)
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         switch (writerConfig->Format) {
             case ELogFormat::PlainText:
@@ -842,6 +842,9 @@ private:
                 writerFactory->ValidateConfig(writerConfig);
                 EmplaceOrCrash(typeNameToWriterFactory, typedWriterConfig->Type, writerFactory);
             }
+            for (const auto& [_, category] : NameToCategory_) {
+                category->StructuredValidationSamplingRate.store(config->StructuredValidationSamplingRate, std::memory_order::relaxed);
+            }
         }
 
         NameToWriter_.clear();
@@ -873,9 +876,6 @@ private:
                 }
             }
         }
-        for (const auto& [_, category] : NameToCategory_) {
-            category->StructuredValidationSamplingRate.store(config->StructuredValidationSamplingRate, std::memory_order::relaxed);
-        }
 
         ConfiguredFromEnv_.store(fromEnv);
         HighBacklogWatermark_.store(config->HighBacklogWatermark);
@@ -883,7 +883,7 @@ private:
         RequestSuppressionEnabled_.store(config->RequestSuppressionTimeout != TDuration::Zero());
         AbortOnAlert_.store(config->AbortOnAlert);
 
-        CompressionThreadPool_->Configure(config->CompressionThreadCount);
+        CompressionThreadPool_->SetThreadCount(config->CompressionThreadCount);
 
         if (RequestSuppressionEnabled_) {
             SuppressedRequestIdSet_.SetTtl((config->RequestSuppressionTimeout + DequeuePeriod) * 2);
@@ -905,7 +905,7 @@ private:
         const TLogManagerConfigPtr& config,
         const TLogEvent& event)
     {
-        VERIFY_THREAD_AFFINITY(LoggingThread);
+        YT_ASSERT_THREAD_AFFINITY(LoggingThread);
 
         if (ReopenRequested_.exchange(false)) {
             ReloadWriters();
@@ -925,7 +925,7 @@ private:
 
     void FlushWriters()
     {
-        VERIFY_THREAD_AFFINITY(LoggingThread);
+        YT_ASSERT_THREAD_AFFINITY(LoggingThread);
 
         for (const auto& [name, writer] : NameToWriter_) {
             writer->Flush();
@@ -936,7 +936,7 @@ private:
 
     void RotateFiles()
     {
-        VERIFY_THREAD_AFFINITY(LoggingThread);
+        YT_ASSERT_THREAD_AFFINITY(LoggingThread);
 
         for (const auto& [name, writer] : NameToWriter_) {
             if (auto fileWriter = DynamicPointerCast<IFileLogWriter>(writer)) {
@@ -947,7 +947,7 @@ private:
 
     void ReloadWriters()
     {
-        VERIFY_THREAD_AFFINITY(LoggingThread);
+        YT_ASSERT_THREAD_AFFINITY(LoggingThread);
 
         Version_++;
         for (const auto& [name, writer] : NameToWriter_) {
@@ -957,7 +957,7 @@ private:
 
     void CheckSpace()
     {
-        VERIFY_THREAD_AFFINITY(LoggingThread);
+        YT_ASSERT_THREAD_AFFINITY(LoggingThread);
 
         auto config = Config_.Acquire();
         for (const auto& [name, writer] : NameToWriter_) {
@@ -969,7 +969,7 @@ private:
 
     void RegisterNotificatonWatch(TNotificationWatch* watch)
     {
-        VERIFY_THREAD_AFFINITY(LoggingThread);
+        YT_ASSERT_THREAD_AFFINITY(LoggingThread);
 
         if (watch->IsValid()) {
             // Watch can fail to initialize if the writer is disabled
@@ -982,7 +982,7 @@ private:
 
     void WatchWriters()
     {
-        VERIFY_THREAD_AFFINITY(LoggingThread);
+        YT_ASSERT_THREAD_AFFINITY(LoggingThread);
 
         if (!NotificationHandle_) {
             return;
@@ -1022,7 +1022,7 @@ private:
 
     void PushEvent(TLoggerQueueItem&& event)
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         auto& perThreadQueue = PerThreadQueue();
         if (!perThreadQueue) {
@@ -1040,7 +1040,7 @@ private:
 
     const TCounter& GetWrittenEventsCounter(const TLogEvent& event)
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         auto key = std::pair(event.Category->Name, event.Level);
         auto it = WrittenEventsCounters_.find(key);
@@ -1059,7 +1059,7 @@ private:
 
     void CollectSensors(ISensorWriter* writer) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         auto writtenEvents = WrittenEvents_.load();
         auto enqueuedEvents = EnqueuedEvents_.load();
@@ -1076,7 +1076,7 @@ private:
 
     void OnDiskProfiling()
     {
-        VERIFY_THREAD_AFFINITY(LoggingThread);
+        YT_ASSERT_THREAD_AFFINITY(LoggingThread);
 
         try {
             auto minLogStorageAvailableSpace = std::numeric_limits<i64>::max();
@@ -1110,7 +1110,7 @@ private:
 
     std::vector<TLoggingAnchorStat> CaptureAnchorStats()
     {
-        VERIFY_THREAD_AFFINITY(LoggingThread);
+        YT_ASSERT_THREAD_AFFINITY(LoggingThread);
 
         auto now = TInstant::Now();
         auto deltaSeconds = (now - LastAnchorStatsCaptureTime_).SecondsFloat();
@@ -1139,7 +1139,7 @@ private:
 
     void OnAnchorProfiling()
     {
-        VERIFY_THREAD_AFFINITY(LoggingThread);
+        YT_ASSERT_THREAD_AFFINITY(LoggingThread);
 
         auto config = Config_.Acquire();
         if (config->EnableAnchorProfiling && !AnchorBufferedProducer_) {
@@ -1174,7 +1174,7 @@ private:
 
     void OnDequeue()
     {
-        VERIFY_THREAD_AFFINITY(LoggingThread);
+        YT_ASSERT_THREAD_AFFINITY(LoggingThread);
 
         ScheduledOutOfBand_.store(false);
 
@@ -1306,7 +1306,7 @@ private:
 
     int ProcessTimeOrderedBuffer()
     {
-        VERIFY_THREAD_AFFINITY(LoggingThread);
+        YT_ASSERT_THREAD_AFFINITY(LoggingThread);
 
         int eventsWritten = 0;
         int eventsSuppressed = 0;
@@ -1349,7 +1349,7 @@ private:
 
     void DoUpdateCategory(const TLogManagerConfigPtr& config, TLoggingCategory* category)
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         auto minPlainTextLevel = ELogLevel::Maximum;
         for (const auto& rule : config->Rules) {
@@ -1365,7 +1365,7 @@ private:
 
     void DoRegisterAnchor(TLoggingAnchor* anchor)
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
         // NB: Duplicates are not desirable but possible.
         AnchorMap_.emplace(anchor->AnchorMessage, anchor);
@@ -1375,20 +1375,20 @@ private:
 
     void DoUpdateAnchor(const TLogManagerConfigPtr& config, TLoggingAnchor* anchor)
     {
-        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
-        auto isPrefixOf = [] (const TString& message, const std::vector<TString>& prefixes) {
+        auto isPrefixOf = [] (const std::string& message, const std::vector<std::string>& prefixes) {
             for (const auto& prefix : prefixes) {
-                if (message.StartsWith(prefix)) {
+                if (message.starts_with(prefix)) {
                     return true;
                 }
             }
             return false;
         };
 
-        auto findByPrefix = [] (const TString& message, const THashMap<TString, ELogLevel>& levelOverrides) -> std::optional<ELogLevel> {
+        auto findByPrefix = [] (const std::string& message, const THashMap<std::string, ELogLevel>& levelOverrides) -> std::optional<ELogLevel> {
             for (const auto& [prefix, level] : levelOverrides) {
-                if (message.StartsWith(prefix)) {
+                if (message.starts_with(prefix)) {
                     return level;
                 }
             }

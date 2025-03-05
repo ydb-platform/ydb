@@ -123,7 +123,7 @@ public:
     { }
 
 protected:
-    virtual size_t DoRead(void* buf, size_t len) override
+    size_t DoRead(void* buf, size_t len) override
     {
         return InputStream_->Read(buf, std::min(len, MaxBlockSize_));
     }

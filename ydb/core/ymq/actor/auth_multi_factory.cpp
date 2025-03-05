@@ -5,7 +5,7 @@
 #include <ydb/core/ymq/actor/error.h>
 #include <ydb/core/ymq/actor/proxy_actor.h>
 #include <ydb/core/ymq/actor/serviceid.h>
-#include <ydb/public/sdk/cpp/client/iam/common/iam.h>
+#include <ydb-cpp-sdk/client/iam/iam.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/folder_service/events.h>
 #include <ydb/library/ycloud/api/access_service.h>
@@ -41,6 +41,9 @@ static const std::pair<EAction, TStringBuf> Action2Permission[] = {
     {EAction::SendMessageBatch, "ymq.messages.send"},
     {EAction::SetQueueAttributes, "ymq.queues.setAttributes"},
     {EAction::ListDeadLetterSourceQueues, "ymq.queues.listDeadLetterSourceQueues"},
+    {EAction::ListQueueTags, "ymq.queues.getAttributes"},
+    {EAction::TagQueue, "ymq.queues.setAttributes"},
+    {EAction::UntagQueue, "ymq.queues.setAttributes"},
 };
 
 TString const ActionToPermissionName(const EAction action) {
@@ -494,10 +497,10 @@ void TCloudAuthRequestProxy::ChangeCounters(std::function<void()> func) {
 }
 
 void THttpProxyAuthRequestProxy::DoReply() {
-    auto response = Error_.Empty() 
+    auto response = Error_.Empty()
         ? MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(CloudId_, FolderId_, UserSID_)
         : MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(Error_.GetRef());
-    
+
     Send(Requester_, response.Release());
 }
 
@@ -585,7 +588,7 @@ void TMultiAuthFactory::RegisterAuthActor(NActors::TActorSystem& system, TAuthAc
     const ui32 poolID = data.ExecutorPoolID;
 
     // token needed only for ResourceManager
-    const auto token = UseResourceManagerFolderService_ ? CredentialsProvider_->GetAuthInfo() : "";
+    const TString token = UseResourceManagerFolderService_ ? CredentialsProvider_->GetAuthInfo() : "";
 
     if (data.RequestFormat == NSQS::TAuthActorData::Json) {
         system.Register(

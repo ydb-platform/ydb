@@ -11,7 +11,7 @@ namespace builtins
   long ord(types::str const &v);
 
   DEFINE_FUNCTOR(pythonic::builtins, ord);
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

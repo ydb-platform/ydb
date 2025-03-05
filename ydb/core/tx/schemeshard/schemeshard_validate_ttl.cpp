@@ -1,7 +1,6 @@
 #include "schemeshard_info_types.h"
 
 #include "common/validation.h"
-#include "olap/columns/schema.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -58,8 +57,18 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
             return false;
         }
 
+        if (!NValidation::TTTLValidator::ValidateTiers(enabled.GetTiers(), errStr)) {
+            return false;
+        }
+
+        const auto expireAfter = GetExpireAfter(enabled, false);
+        if (expireAfter.IsFail()) {
+            errStr = expireAfter.GetErrorMessage();
+            return false;
+        }
+
         const TInstant now = TInstant::Now();
-        if (enabled.GetExpireAfterSeconds() > now.Seconds()) {
+        if (expireAfter->Seconds() > now.Seconds()) {
             errStr = Sprintf("TTL should be less than %" PRIu64 " seconds (%" PRIu64 " days, %" PRIu64 " years). The ttl behaviour is undefined before 1970.", now.Seconds(), now.Days(), now.Days() / 365);
             return false;            
         }
@@ -83,6 +92,22 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     }
 
     return true;
+}
+
+TConclusion<TDuration> GetExpireAfter(const NKikimrSchemeOp::TTTLSettings::TEnabled& settings, const bool allowNonDeleteTiers) {
+    if (settings.TiersSize()) {
+        for (const auto& tier : settings.GetTiers()) {
+            if (tier.HasDelete()) {
+                return TDuration::Seconds(tier.GetApplyAfterSeconds());
+            } else if (!allowNonDeleteTiers) {
+                return TConclusionStatus::Fail("Only DELETE via TTL is allowed for row-oriented tables");
+            }
+        }
+        return TConclusionStatus::Fail("TTL settings does not contain DELETE action");
+    } else {
+        // legacy format
+        return TDuration::Seconds(settings.GetExpireAfterSeconds());
+    }
 }
 
 }}

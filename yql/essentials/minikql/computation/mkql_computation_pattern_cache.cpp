@@ -77,7 +77,11 @@ public:
 
         const auto& entry = it->second.Entry;
 
-        Y_ENSURE(entry->Pattern->IsCompiled());
+        // TODO(ilezhankin): wait until migration of yql to arcadia is complete and merge the proper fix from here:
+        //                   https://github.com/ydb-platform/ydb/pull/11129
+        if (!entry->Pattern->IsCompiled()) {
+            return;
+        }
 
         if (it->second.LinkedInCompiledPatternLRUList()) {
             return;

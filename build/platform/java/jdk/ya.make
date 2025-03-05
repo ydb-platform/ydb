@@ -37,6 +37,7 @@ RECURSE(
     jdk20
     jdk21
     jdk22
+    jdk23
     testing
 )
 

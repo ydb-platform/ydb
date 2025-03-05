@@ -272,7 +272,7 @@ void TProtobufTableConfig::Register(TRegistrar registrar)
 
     registrar.Postprocessor([] (TThis* config) {
         bool hasOtherColumns = false;
-        for (const auto& column: config->Columns) {
+        for (const auto& column : config->Columns) {
             if (column->ProtoType == EProtobufType::OtherColumns) {
                 if (hasOtherColumns) {
                     THROW_ERROR_EXCEPTION("Multiple \"other_columns\" in protobuf config are not allowed");
@@ -348,6 +348,14 @@ void TSkiffFormatConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("override_intermediate_table_schema", &TThis::OverrideIntermediateTableSchema)
         .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TYamlFormatConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("write_uint_tag", &TThis::WriteUintTag)
+        .Default(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

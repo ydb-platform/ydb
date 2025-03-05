@@ -1,3 +1,4 @@
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -45,7 +46,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                 rec.SetTabletId(tid);
             }
             if (!rec.HasPathId()) {
-                PathIdFromPathId(tableId.PathId, rec.MutablePathId());
+                tableId.PathId.ToProto(rec.MutablePathId());
             }
 
             rec.SetSnapshotTxId(snapshot.TxId);
@@ -84,7 +85,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         }
     }
 
-    static TString DoReshuffleKMeans(Tests::TServer::TPtr server, TActorId sender, ui32 parent,
+    static TString DoReshuffleKMeans(Tests::TServer::TPtr server, TActorId sender, NTableIndex::TClusterId parent,
                                      const std::vector<TString>& level,
                                      NKikimrTxDataShard::TEvLocalKMeansRequest::EState upload,
                                      VectorIndexSettings::VectorType type, VectorIndexSettings::Metric metric)
@@ -108,7 +109,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                 rec.SetSeqNoRound(1);
 
                 rec.SetTabletId(tid);
-                PathIdFromPathId(tableId.PathId, rec.MutablePathId());
+                tableId.PathId.ToProto(rec.MutablePathId());
 
                 rec.SetSnapshotTxId(snapshot.TxId);
                 rec.SetSnapshotStep(snapshot.Step);
@@ -171,7 +172,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {PostingTable_ParentColumn, "Uint32", true, true},
+            {ParentColumn, NTableIndex::ClusterIdTypeName, true, true},
             {"key", "Uint32", true, true},
             {"data", "String", false, false},
         });
@@ -183,7 +184,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {PostingTable_ParentColumn, "Uint32", true, true},
+            {ParentColumn, NTableIndex::ClusterIdTypeName, true, true},
             {"key", "Uint32", true, true},
             {"embedding", "String", false, false},
             {"data", "String", false, false},
@@ -231,7 +232,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
             auto ev = std::make_unique<TEvDataShard::TEvReshuffleKMeansRequest>();
             auto& rec = ev->Record;
 
-            PathIdFromPathId({0, 0}, rec.MutablePathId());
+            TPathId(0, 0).ToProto(rec.MutablePathId());
             DoBadRequest(server, sender, ev);
         }
         {
@@ -292,8 +293,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         // Upsert some initial values
         ExecSQL(server, sender,
                 R"(
-        UPSERT INTO `/Root/table-main` 
-            (key, embedding, data) 
+        UPSERT INTO `/Root/table-main`
+            (key, embedding, data)
         VALUES )"
                 "(1, \"\x30\x30\3\", \"one\"),"
                 "(2, \"\x31\x31\3\", \"two\"),"
@@ -377,8 +378,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         // Upsert some initial values
         ExecSQL(server, sender,
                 R"(
-        UPSERT INTO `/Root/table-main` 
-            (key, embedding, data) 
+        UPSERT INTO `/Root/table-main`
+            (key, embedding, data)
         VALUES )"
                 "(1, \"\x30\x30\3\", \"one\"),"
                 "(2, \"\x31\x31\3\", \"two\"),"
@@ -462,8 +463,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         // Upsert some initial values
         ExecSQL(server, sender,
                 R"(
-        UPSERT INTO `/Root/table-main` 
-            (__ydb_parent, key, embedding, data) 
+        UPSERT INTO `/Root/table-main`
+            (__ydb_parent, key, embedding, data)
         VALUES )"
                 "(39, 1, \"\x30\x30\3\", \"one\"),"
                 "(40, 1, \"\x30\x30\3\", \"one\"),"
@@ -549,8 +550,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         // Upsert some initial values
         ExecSQL(server, sender,
                 R"(
-        UPSERT INTO `/Root/table-main` 
-            (__ydb_parent, key, embedding, data) 
+        UPSERT INTO `/Root/table-main`
+            (__ydb_parent, key, embedding, data)
         VALUES )"
                 "(39, 1, \"\x30\x30\3\", \"one\"),"
                 "(40, 1, \"\x30\x30\3\", \"one\"),"

@@ -13,7 +13,7 @@ PEERDIR(
     ydb/core/grpc_streaming
     ydb/core/jaeger_tracing
     ydb/public/api/protos
-    ydb/public/sdk/cpp/client/resources
+    ydb/public/sdk/cpp/src/client/resources
     yql/essentials/public/issue
 )
 

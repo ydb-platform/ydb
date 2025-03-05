@@ -1,12 +1,12 @@
 #ifndef PYTHONIC_NUMPY_FFT_IRFFT_HPP
 #define PYTHONIC_NUMPY_FFT_IRFFT_HPP
 
-#include "pythonic/include/numpy/fft/irfft.hpp"
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/include/utils/array_helper.hpp"
-#include "pythonic/types/ndarray.hpp"
 #include "pythonic/builtins/None.hpp"
+#include "pythonic/include/numpy/fft/irfft.hpp"
+#include "pythonic/include/utils/array_helper.hpp"
 #include "pythonic/numpy/fft/c2c.hpp"
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -16,7 +16,7 @@ namespace numpy
   {
 
     template <class T, class pS>
-    types::ndarray<T, types::array<long, std::tuple_size<pS>::value>>
+    types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>
     irfft(types::ndarray<std::complex<T>, pS> const &in_array,
           types::none_type n, long axis, types::str const &norm)
     {
@@ -24,7 +24,7 @@ namespace numpy
     }
 
     template <class T, class pS>
-    types::ndarray<T, types::array<long, std::tuple_size<pS>::value>>
+    types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>
     irfft(types::ndarray<std::complex<T>, pS> const &in_array,
           types::none_type n, long axis, types::none_type norm)
     {
@@ -32,7 +32,7 @@ namespace numpy
     }
 
     template <class T, class pS>
-    types::ndarray<T, types::array<long, std::tuple_size<pS>::value>>
+    types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>
     irfft(types::ndarray<std::complex<T>, pS> const &in_array, long n,
           long axis, types::none_type norm)
     {
@@ -40,7 +40,7 @@ namespace numpy
     }
 
     template <class T, class pS>
-    types::ndarray<T, types::array<long, std::tuple_size<pS>::value>>
+    types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>
     irfft(types::ndarray<std::complex<T>, pS> const &in_array, long n,
           long axis, types::str const &norm)
     {
@@ -52,7 +52,7 @@ namespace numpy
                        !types::is_complex<T>::value,
                        typename std::conditional<std::is_integral<T>::value,
                                                  double, T>::type>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     irfft(types::ndarray<T, pS> const &in_array, types::none_type n, long axis,
           types::str const &norm)
     {
@@ -65,7 +65,7 @@ namespace numpy
                        !types::is_complex<T>::value,
                        typename std::conditional<std::is_integral<T>::value,
                                                  double, T>::type>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     irfft(types::ndarray<T, pS> const &in_array, types::none_type n, long axis,
           types::none_type norm)
     {
@@ -78,7 +78,7 @@ namespace numpy
                        !types::is_complex<T>::value,
                        typename std::conditional<std::is_integral<T>::value,
                                                  double, T>::type>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     irfft(types::ndarray<T, pS> const &in_array, long n, long axis,
           types::none_type norm)
     {
@@ -91,7 +91,7 @@ namespace numpy
                        !types::is_complex<T>::value,
                        typename std::conditional<std::is_integral<T>::value,
                                                  double, T>::type>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     irfft(types::ndarray<T, pS> const &in_array, long n, long axis,
           types::str const &norm)
     {
@@ -100,8 +100,8 @@ namespace numpy
     }
 
     NUMPY_EXPR_TO_NDARRAY0_IMPL(irfft);
-  }
-}
+  } // namespace fft
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

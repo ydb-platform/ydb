@@ -1,6 +1,13 @@
 #include "yql_mounts.h"
 
 #include <yql/essentials/core/yql_library_compiler.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/utils/log/profile.h>
 
 #include <library/cpp/resource/resource.h>
 
@@ -100,12 +107,12 @@ namespace NYql {
     }
 
     void LoadYqlDefaultMounts(TUserDataTable& userData) {
-        AddLibraryFromResource(userData, "/lib/yql/aggregate.yql");
-        AddLibraryFromResource(userData, "/lib/yql/window.yql");
-        AddLibraryFromResource(userData, "/lib/yql/id.yql");
-        AddLibraryFromResource(userData, "/lib/yql/sqr.yql");
-        AddLibraryFromResource(userData, "/lib/yql/core.yql");
-        AddLibraryFromResource(userData, "/lib/yql/walk_folders.yql");
+        AddLibraryFromResource(userData, "/lib/yql/aggregate.yqls");
+        AddLibraryFromResource(userData, "/lib/yql/window.yqls");
+        AddLibraryFromResource(userData, "/lib/yql/id.yqls");
+        AddLibraryFromResource(userData, "/lib/yql/sqr.yqls");
+        AddLibraryFromResource(userData, "/lib/yql/core.yqls");
+        AddLibraryFromResource(userData, "/lib/yql/walk_folders.yqls");
     }
 
     TUserDataTable GetYqlModuleResolverImpl(
@@ -117,13 +124,26 @@ namespace NYql {
         bool optimizeLibraries,
         THolder<TExprContext> ownedCtx)
     {
+        YQL_PROFILE_FUNC(DEBUG);
         auto ctx = rawCtx ? rawCtx : ownedCtx.Get();
         Y_ENSURE(ctx);
         TUserDataTable mounts;
         LoadYqlDefaultMounts(mounts);
 
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+        lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+        NSQLTranslationV1::TParsers parsers;
+        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+        parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+        NSQLTranslation::TTranslators translators(
+            nullptr,
+            NSQLTranslationV1::MakeTranslator(lexers, parsers),
+            nullptr
+        );
+
         TModulesTable modulesTable;
-        if (!CompileLibraries(mounts, *ctx, modulesTable, optimizeLibraries)) {
+        if (!CompileLibraries(translators, mounts, *ctx, modulesTable, optimizeLibraries)) {
             return {};
         }
 
@@ -131,7 +151,7 @@ namespace NYql {
             AddUserDataToTable(mounts, item);
         }
 
-        moduleResolver = std::make_shared<TModuleResolver>(std::move(modulesTable), ctx->NextUniqueId,
+        moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modulesTable), ctx->NextUniqueId,
             clusterMapping, sqlFlags, optimizeLibraries, std::move(ownedCtx));
         return mounts;
     }

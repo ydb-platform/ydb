@@ -29,6 +29,31 @@ public:
     }
 };
 
+class TProcessGuard: TNonCopyable {
+private:
+    const ui64 ProcessId;
+    bool Finished = false;
+    const std::optional<NActors::TActorId> ServiceActorId;
+public:
+    ui64 GetProcessId() const {
+        return ProcessId;
+    }
+
+    explicit TProcessGuard(const ui64 processId, const std::optional<NActors::TActorId>& actorId)
+        : ProcessId(processId)
+        , ServiceActorId(actorId) {
+
+    }
+
+    void Finish();
+
+    ~TProcessGuard() {
+        if (!Finished) {
+            Finish();
+        }
+    }
+};
+
 class ITask {
 public:
     enum EPriority: ui32 {

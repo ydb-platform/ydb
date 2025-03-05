@@ -160,7 +160,7 @@ private:
 };
 using TShardIdToTableInfoPtr = std::shared_ptr<TShardIdToTableInfo>;
 
-bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery);
+bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery, const bool commit);
 
 class TKqpTransactionContext : public NYql::TKikimrTransactionContextBase  {
 public:
@@ -235,6 +235,7 @@ public:
         HasOlapTable = false;
         HasOltpTable = false;
         HasTableWrite = false;
+        HasTableRead = false;
         NeedUncommittedChangesFlush = false;
     }
 
@@ -264,14 +265,22 @@ public:
                 Readonly = true;
                 break;
 
+            case Ydb::Table::TransactionSettings::kSnapshotReadWrite:
+                EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW;
+                Readonly = false;
+                break;
+
             case Ydb::Table::TransactionSettings::TX_MODE_NOT_SET:
                 YQL_ENSURE(false, "tx_mode not set, settings: " << settings);
                 break;
         };
     }
 
-    bool ShouldExecuteDeferredEffects() const {
+    bool ShouldExecuteDeferredEffects(const TKqpPhyTxHolder::TConstPtr& tx) const {
         if (NeedUncommittedChangesFlush || HasOlapTable) {
+            return !DeferredEffects.Empty();
+        }
+        if (EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW && !tx && HasTableRead) {
             return !DeferredEffects.Empty();
         }
 
@@ -307,8 +316,8 @@ public:
         return true;
     }
 
-    void ApplyPhysicalQuery(const NKqpProto::TKqpPhyQuery& phyQuery) {
-        NeedUncommittedChangesFlush = HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery);
+    void ApplyPhysicalQuery(const NKqpProto::TKqpPhyQuery& phyQuery, const bool commit) {
+        NeedUncommittedChangesFlush = HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery, commit);
         if (NeedUncommittedChangesFlush) {
             ModifiedTablesSinceLastFlush.clear();   
         }
@@ -343,6 +352,7 @@ public:
     bool HasOlapTable = false;
     bool HasOltpTable = false;
     bool HasTableWrite = false;
+    bool HasTableRead = false;
 
     bool NeedUncommittedChangesFlush = false;
     THashSet<NKikimr::TTableId> ModifiedTablesSinceLastFlush;

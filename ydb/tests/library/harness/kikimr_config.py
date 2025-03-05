@@ -69,7 +69,6 @@ def _load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure,
     data = data.format(
         ydb_result_rows_limit=os.getenv("YDB_KQP_RESULT_ROWS_LIMIT", 1000),
         ydb_yql_syntax_version=os.getenv("YDB_YQL_SYNTAX_VERSION", "1"),
-        ydb_force_new_engine=os.getenv("YDB_KQP_FORCE_NEW_ENGINE", "true"),
         ydb_defaut_tablet_node_ids=str(default_tablet_node_ids),
         ydb_default_log_level=int(LogLevels.from_string(os.getenv("YDB_DEFAULT_LOG_LEVEL", "NOTICE"))),
         ydb_domain_name=ydb_domain_name,
@@ -86,6 +85,9 @@ def _load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure,
         yaml_dict["log_config"]["entry"].append({"component": log, "level": int(level)})
     if os.getenv("YDB_ENABLE_COLUMN_TABLES", "") == "true":
         yaml_dict |= {"column_shard_config": {"disabled_on_scheme_shard": False}}
+        yaml_dict["table_service_config"]["enable_htap_tx"] = True
+        yaml_dict["table_service_config"]["enable_olap_sink"] = True
+        yaml_dict["table_service_config"]["enable_create_table_as"] = True
     return yaml_dict
 
 
@@ -144,18 +146,24 @@ class KikimrConfigGenerator(object):
             use_legacy_pq=False,
             dc_mapping={},
             enable_alter_database_create_hive_first=False,
-            disable_iterator_reads=False,
-            disable_iterator_lookups=False,
             overrided_actor_system_config=None,
             default_users=None,  # dict[user]=password
             extra_feature_flags=None,  # list[str]
             extra_grpc_services=None,  # list[str]
             hive_config=None,
             datashard_config=None,
+            columnshard_config=None,
             enforce_user_token_requirement=False,
             default_user_sid=None,
             pg_compatible_expirement=False,
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
+            kafka_api_port=None,
+            metadata_section=None,
+            column_shard_config=None,
+            use_config_store=False,
+            separate_node_configs=False,
+            default_clusteradmin=None,
+            enable_resource_pools=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -247,21 +255,16 @@ class KikimrConfigGenerator(object):
         if os.getenv('YDB_KQP_ENABLE_IMMEDIATE_EFFECTS', 'false').lower() == 'true':
             self.yaml_config["table_service_config"]["enable_kqp_immediate_effects"] = True
 
-        if os.getenv('YDB_TABLE_ENABLE_PREPARED_DDL', 'false').lower() == 'true':
-            self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
-
         if os.getenv('PGWIRE_LISTENING_PORT', ''):
             self.yaml_config["local_pg_wire_config"] = {}
             self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')
 
-        if disable_iterator_reads:
-            self.yaml_config["table_service_config"]["enable_kqp_scan_query_source_read"] = False
-
-        if disable_iterator_lookups:
-            self.yaml_config["table_service_config"]["enable_kqp_scan_query_stream_lookup"] = False
-            self.yaml_config["table_service_config"]["enable_kqp_data_query_stream_lookup"] = False
-
         self.yaml_config["feature_flags"]["enable_public_api_external_blobs"] = enable_public_api_external_blobs
+
+        # for faster shutdown: there is no reason to wait while tablets are drained before whole cluster is stopping
+        self.yaml_config["feature_flags"]["enable_drain_on_shutdown"] = False
+        if enable_resource_pools is not None:
+            self.yaml_config["feature_flags"]["enable_resource_pools"] = enable_resource_pools
         for extra_feature_flag in extra_feature_flags:
             self.yaml_config["feature_flags"][extra_feature_flag] = True
         if enable_alter_database_create_hive_first:
@@ -278,11 +281,12 @@ class KikimrConfigGenerator(object):
             self.yaml_config['pqconfig']['require_credentials_in_new_protocol'] = False
             self.yaml_config['pqconfig']['root'] = '/Root/PQ'
             self.yaml_config['pqconfig']['quoting_config']['enable_quoting'] = False
-
         if pq_client_service_types:
             self.yaml_config['pqconfig']['client_service_type'] = []
             for service_type in pq_client_service_types:
                 self.yaml_config['pqconfig']['client_service_type'].append({'name': service_type})
+        if column_shard_config:
+            self.yaml_config["column_shard_config"] = column_shard_config
 
         self.yaml_config['grpc_config']['services'].extend(extra_grpc_services)
 
@@ -349,6 +353,11 @@ class KikimrConfigGenerator(object):
 
         if datashard_config:
             self.yaml_config["data_shard_config"] = datashard_config
+        if columnshard_config:
+            self.yaml_config["column_shard_config"] = columnshard_config
+
+        if column_shard_config:
+            self.yaml_config["column_shard_config"] = column_shard_config
 
         self.__build()
 
@@ -387,7 +396,6 @@ class KikimrConfigGenerator(object):
             self.yaml_config["table_service_config"]["resource_manager"]["channel_buffer_size"] = int(os.getenv("YDB_CHANNEL_BUFFER_SIZE"))
 
         if pg_compatible_expirement:
-            self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
             self.yaml_config["table_service_config"]["enable_ast_cache"] = True
             self.yaml_config["table_service_config"]["index_auto_choose_mode"] = 'max_used_prefix'
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
@@ -429,6 +437,33 @@ class KikimrConfigGenerator(object):
 
             self.yaml_config["feature_flags"]["enable_external_data_sources"] = True
             self.yaml_config["feature_flags"]["enable_script_execution_operations"] = True
+
+        if kafka_api_port is not None:
+            kafka_proxy_config = dict()
+            kafka_proxy_config["enable_kafka_proxy"] = True
+            kafka_proxy_config["listening_port"] = kafka_api_port
+
+            self.yaml_config["kafka_proxy_config"] = kafka_proxy_config
+
+        self.full_config = dict()
+        if metadata_section:
+            self.full_config["metadata"] = metadata_section
+            self.full_config["config"] = self.yaml_config
+        else:
+            self.full_config = self.yaml_config
+
+        self.use_config_store = use_config_store
+        self.separate_node_configs = separate_node_configs
+
+        self.__default_clusteradmin = default_clusteradmin
+        if self.__default_clusteradmin is not None:
+            security_config = self.yaml_config["domains_config"]["security_config"]
+            security_config.setdefault("administration_allowed_sids", []).append(self.__default_clusteradmin)
+            security_config.setdefault("default_access", []).append('+F:{}'.format(self.__default_clusteradmin))
+
+    @property
+    def default_clusteradmin(self):
+        return self.__default_clusteradmin
 
     @property
     def pdisks_info(self):
@@ -526,7 +561,7 @@ class KikimrConfigGenerator(object):
     def write_proto_configs(self, configs_path):
         self.write_tls_data()
         with open(os.path.join(configs_path, "config.yaml"), "w") as writer:
-            writer.write(yaml.safe_dump(self.yaml_config))
+            writer.write(yaml.safe_dump(self.full_config))
 
     def clone_grpc_as_ext_endpoint(self, port, endpoint_id=None):
         cur_grpc_config = copy.deepcopy(self.yaml_config['grpc_config'])

@@ -42,11 +42,9 @@ namespace NYT::NFS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "FS");
-
-////////////////////////////////////////////////////////////////////////////////
-
 namespace {
+
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "FS");
 
 [[maybe_unused]] void ThrowNotSupported()
 {
@@ -261,12 +259,12 @@ void CleanTempFiles(const TString& path)
     }
 }
 
-std::vector<TString> EnumerateFiles(const TString& path, int depth)
+std::vector<TString> EnumerateFiles(const TString& path, int depth, bool sortByName)
 {
     std::vector<TString> result;
     if (NFS::Exists(path)) {
         TFileList list;
-        list.Fill(path, TStringBuf(), TStringBuf(), depth);
+        list.Fill(path, TStringBuf(), TStringBuf(), depth, sortByName);
         int size = list.Size();
         for (int i = 0; i < size; ++i) {
             result.push_back(list.Next());

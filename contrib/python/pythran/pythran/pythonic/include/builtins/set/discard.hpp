@@ -21,7 +21,7 @@ namespace builtins
     void discard(types::empty_set const &set, U const &elem);
 
     DEFINE_FUNCTOR(pythonic::builtins::set, discard);
-  }
-}
+  } // namespace set
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

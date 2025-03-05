@@ -1,5 +1,17 @@
 #include "schemeshard__operation_common.h"
 
+#include <ydb/core/blob_depot/events.h>
+#include <ydb/core/blockstore/core/blockstore.h>
+#include <ydb/core/filestore/core/filestore.h>
+#include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/replication/controller/public_events.h>
+#include <ydb/core/tx/sequenceshard/public/events.h>
+
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -298,7 +310,7 @@ bool TCreateParts::ProgressState(TOperationContext& context) {
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 DebugHint() << " ProgressState"
                             << ", operation type: " << TTxState::TypeName(txState->TxType)
-                            << ", at tablet" << ssId);
+                            << ", at tablet# " << ssId);
 
     if (txState->TxType == TTxState::TxDropTable
         || txState->TxType == TTxState::TxAlterTable
@@ -416,10 +428,7 @@ TDone::TDone(const TOperationId& id)
     IgnoreMessages(DebugHint(), AllIncomingEvents());
 }
 
-bool TDone::ProgressState(TOperationContext& context) {
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " ProgressState");
-
+bool TDone::Process(TOperationContext& context) {
     const auto* txState = context.SS->FindTx(OperationId);
 
     const auto& pathId = txState->TargetPathId;
@@ -466,6 +475,13 @@ bool TDone::ProgressState(TOperationContext& context) {
 
     context.OnComplete.DoneOperation(OperationId);
     return true;
+}
+
+bool TDone::ProgressState(TOperationContext& context) {
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " ProgressState");
+
+    return Process(context);
 }
 
 namespace {
@@ -867,7 +883,7 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
             dstTableInfo->PerShardPartitionConfig.erase(shard.Idx);
             context.SS->PersistShardDeleted(db, shard.Idx, context.SS->ShardInfos[shard.Idx].BindedChannels);
             context.SS->ShardInfos.erase(shard.Idx);
-            domainInfo->RemoveInternalShard(shard.Idx);
+            domainInfo->RemoveInternalShard(shard.Idx, context.SS);
             context.SS->DecrementPathDbRefCount(pathId, "remove shard from txState");
             context.SS->OnShardRemoved(shard.Idx);
         }
@@ -918,7 +934,7 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
     ui32 newShardCout = dstTableInfo->GetPartitions().size();
 
     dstPath->SetShardsInside(newShardCout);
-    domainInfo->AddInternalShards(txState);
+    domainInfo->AddInternalShards(txState, context.SS);
 
     context.SS->PersistTable(db, txState.TargetPathId);
     context.SS->PersistTxState(db, operationId);
@@ -972,6 +988,7 @@ TProposedWaitParts::TProposedWaitParts(TOperationId id, TTxState::ETxState nextS
     : OperationId(id)
     , NextState(nextState)
 {
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint() << " Constructed");
     IgnoreMessages(DebugHint(),
         { TEvHive::TEvCreateTabletReply::EventType
         , TEvDataShard::TEvProposeTransactionResult::EventType
@@ -1073,8 +1090,8 @@ bool CollectProposeTransactionResults(const TOperationId& operationId,
 TSet<ui32> AllIncomingEvents() {
     TSet<ui32> result;
 
-#define AddToList(TEvType, TxType)          \
-    result.insert(TEvType::EventType);
+#define AddToList(NS, TEvType, ...) \
+    result.insert(::NKikimr::NS::TEvType::EventType);
 
     SCHEMESHARD_INCOMING_EVENTS(AddToList)
 #undef AddToList
@@ -1150,6 +1167,54 @@ void IncParentDirAlterVersionWithRepublish(const TOperationId& opId, const TPath
     if (parent.Base()->IsDirectory() || parent.Base()->IsDomainRoot()) {
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistPathDirAlterVersion(db, parent.Base());
+    }
+}
+
+void IncAliveChildrenSafeWithUndo(const TOperationId& opId, const TPath& parentPath, TOperationContext& context, bool isBackup) {
+    parentPath.Base()->IncAliveChildrenPrivate(isBackup);
+    if (parentPath.Base()->GetAliveChildren() == 1 && !parentPath.Base()->IsDomainRoot()) {
+        auto grandParent = parentPath.Parent();
+        if (grandParent.Base()->IsLikeDirectory()) {
+            ++grandParent.Base()->DirAlterVersion;
+            context.MemChanges.GrabPath(context.SS, grandParent.Base()->PathId);
+            context.DbChanges.PersistPath(grandParent.Base()->PathId);
+        }
+
+        if (grandParent.IsActive()) {
+            context.SS->ClearDescribePathCaches(grandParent.Base());
+            context.OnComplete.PublishToSchemeBoard(opId, grandParent->PathId);
+        }
+    }
+}
+
+void IncAliveChildrenDirect(const TOperationId& opId, const TPath& parentPath, TOperationContext& context, bool isBackup) {
+    parentPath.Base()->IncAliveChildrenPrivate(isBackup);
+    if (parentPath.Base()->GetAliveChildren() == 1 && !parentPath.Base()->IsDomainRoot()) {
+        auto grandParent = parentPath.Parent();
+        if (grandParent.Base()->IsLikeDirectory()) {
+            ++grandParent.Base()->DirAlterVersion;
+            NIceDb::TNiceDb db(context.GetDB());
+            context.SS->PersistPathDirAlterVersion(db, grandParent.Base());
+        }
+
+        if (grandParent.IsActive()) {
+            context.SS->ClearDescribePathCaches(grandParent.Base());
+            context.OnComplete.PublishToSchemeBoard(opId, grandParent->PathId);
+        }
+    }
+}
+
+void DecAliveChildrenDirect(const TOperationId& opId, TPathElement::TPtr parentPath, TOperationContext& context, bool isBackup) {
+    parentPath->DecAliveChildrenPrivate(isBackup);
+    if (parentPath->GetAliveChildren() == 0 && !parentPath->IsDomainRoot()) {
+        auto grandParentDir = context.SS->PathsById.at(parentPath->ParentPathId);
+        if (grandParentDir->IsLikeDirectory()) {
+            ++grandParentDir->DirAlterVersion;
+            NIceDb::TNiceDb db(context.GetDB());
+            context.SS->PersistPathDirAlterVersion(db, grandParentDir);
+            context.SS->ClearDescribePathCaches(grandParentDir);
+            context.OnComplete.PublishToSchemeBoard(opId, grandParentDir->PathId);
+        }
     }
 }
 

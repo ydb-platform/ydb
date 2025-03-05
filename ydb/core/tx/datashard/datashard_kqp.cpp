@@ -523,7 +523,7 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
                     NDq::TDqSerializedBatch outputData;
                     auto fetchStatus = FetchOutput(taskRunner.GetOutputChannel(channel.GetId()).Get(), outputData);
                     MKQL_ENSURE_S(fetchStatus == NUdf::EFetchStatus::Finish);
-                    MKQL_ENSURE_S(outputData.Proto.GetRows() == 0);
+                    MKQL_ENSURE_S(outputData.Proto.GetChunks() == 0);
                 }
             }
         }
@@ -1001,8 +1001,11 @@ namespace {
 
 class TKqpTaskRunnerExecutionContext: public NDq::IDqTaskRunnerExecutionContext {
 public:
-    NDq::IDqOutputConsumer::TPtr CreateOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx, const NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory, TVector<NDq::IDqOutput::TPtr>&& outputs) const override {
-        return NKqp::KqpBuildOutputConsumer(outputDesc, type, applyCtx, typeEnv, holderFactory, std::move(outputs));
+    NDq::IDqOutputConsumer::TPtr CreateOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NMiniKQL::TType* type,
+        NUdf::IApplyContext* applyCtx, const NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+        TVector<NDq::IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* /* pgBuilder */) const override
+    {
+        return NKqp::KqpBuildOutputConsumer(outputDesc, type, applyCtx, typeEnv, holderFactory, std::move(outputs), {});
     }
 
     NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, bool /* withSpilling */) const override {

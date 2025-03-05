@@ -9,7 +9,7 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 
 #include <ydb/library/actors/core/actor.h>
 
@@ -23,6 +23,7 @@ class TDqAsyncIoFactory;
 const i64 PQRdReadDefaultFreeSpace = 256_MB;
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
     NPq::NProto::TDqPqTopicSource&& settings,
     ui64 inputIndex,
     TCollectStatsLevel statsLevel,

@@ -9,7 +9,7 @@
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/minikql/dom/json.h>
 #include <yql/essentials/minikql/dom/yson.h>
-#include <yql/essentials/minikql/jsonpath/jsonpath.h>
+#include <yql/essentials/minikql/jsonpath/parser/parser.h>
 #include <yql/essentials/core/sql_types/simple_types.h>
 #include "yql/essentials/parser/pg_catalog/catalog.h"
 #include <yql/essentials/parser/pg_wrapper/interface/utils.h>
@@ -335,21 +335,26 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         } else if (from == EDataSlot::Date && (
                     to == EDataSlot::Date32 ||
                     to == EDataSlot::TzDate ||
+                    to == EDataSlot::TzDate32 ||
                     to == EDataSlot::Datetime ||
                     to == EDataSlot::Timestamp ||
                     to == EDataSlot::TzDatetime ||
                     to == EDataSlot::TzTimestamp ||
                     to == EDataSlot::Datetime64 ||
-                    to == EDataSlot::Timestamp64))
+                    to == EDataSlot::Timestamp64 ||
+                    to == EDataSlot::TzDatetime64 ||
+                    to == EDataSlot::TzTimestamp64))
         {
             allow = true;
             useCast = true;
         } else if (from == EDataSlot::Datetime && (
                     to == EDataSlot::Datetime64 ||
                     to == EDataSlot::TzDatetime ||
+                    to == EDataSlot::TzDatetime64 ||
                     to == EDataSlot::Timestamp ||
                     to == EDataSlot::TzTimestamp ||
-                    to == EDataSlot::Timestamp64))
+                    to == EDataSlot::Timestamp64 ||
+                    to == EDataSlot::TzTimestamp64))
         {
             allow = true;
             useCast = true;
@@ -365,7 +370,13 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         } else if (from == EDataSlot::Date32 && (to == EDataSlot::Datetime64 || to == EDataSlot::Timestamp64)) {
             allow = true;
             useCast = true;
+        } else if (from == EDataSlot::TzDate32 && (to == EDataSlot::TzDatetime64 || to == EDataSlot::TzTimestamp64)) {
+            allow = true;
+            useCast = true;
         } else if (from == EDataSlot::Datetime64 && (to == EDataSlot::Timestamp64)) {
+            allow = true;
+            useCast = true;
+        } else if (from == EDataSlot::TzDatetime64 && to == EDataSlot::TzTimestamp64) {
             allow = true;
             useCast = true;
         } else if (from == EDataSlot::Interval && (to == EDataSlot::Interval64)) {
@@ -393,6 +404,25 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                 .Build();
 
             return IGraphTransformer::TStatus::Repeat;
+        } else if (IsDataTypeDecimal(from) && IsDataTypeDecimal(to)) {
+            auto* sourceDecimal = sourceType.Cast<TDataExprParamsType>();
+            auto* expectedDecimal = expectedType.Cast<TDataExprParamsType>();
+            ui8 p1 = FromString(sourceDecimal->GetParamOne()), s1 = FromString(sourceDecimal->GetParamTwo());
+            ui8 p2 = FromString(expectedDecimal->GetParamOne()), s2 = FromString(expectedDecimal->GetParamTwo());
+            if (s1 > s2) {
+                TString message = TStringBuilder() << "Implicit decimal cast would lose precision";
+                auto issue = TIssue(node->Pos(ctx), message);
+                ctx.AddError(issue);
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (p1 - s1 > p2 - s2) {
+                TString message = TStringBuilder() << "Implicit decimal cast would narrow the range";
+                auto issue = TIssue(node->Pos(ctx), message);
+                ctx.AddError(issue);
+                return IGraphTransformer::TStatus::Error;
+            }
+            allow = true;
+            useCast = true;
         }
 
         if (!allow || !isSafe) {
@@ -4396,7 +4426,7 @@ TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2, bool wa
     }
 
     if (IsDataTypeInterval(dataSlot1) && IsDataTypeInterval(dataSlot2)) {
-        return (dataSlot1 == EDataSlot::Interval64 || dataSlot2 == EDataSlot::Interval64) 
+        return (dataSlot1 == EDataSlot::Interval64 || dataSlot2 == EDataSlot::Interval64)
             ? EDataSlot::Interval64
             : EDataSlot::Interval;
     }
@@ -4944,7 +4974,7 @@ bool IsSqlInCollectionItemsNullable(const NNodes::TCoSqlIn& node) {
                     break;
                 }
             }
-            
+
             break;
         }
         case ETypeAnnotationKind::Dict: {
@@ -6016,6 +6046,13 @@ std::optional<ui32> GetFieldPosition(const TStructExprType& structType, const TS
     return std::nullopt;
 }
 
+std::optional<ui32> GetWideBlockFieldPosition(const TMultiExprType& multiType, const TStringBuf& field) {
+    YQL_ENSURE(multiType.GetSize() >= 1);
+    if (ui32 pos; TryFromString(field, pos) && pos < multiType.GetSize() - 1)
+        return {pos};
+    return std::nullopt;
+}
+
 bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertToPg, TPositionHandle pos, TExprContext& ctx) {
     pgType = 0;
     convertToPg = false;
@@ -6449,7 +6486,7 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .Atom(1, ToString(aggDesc.FinalFuncId))
                 .List(2)
                     .Do([aggResultType, originalAggResultType](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
-                        if (aggResultType != originalAggResultType) { 
+                        if (aggResultType != originalAggResultType) {
                             builder.List(0)
                                 .Atom(0, "type")
                                 .Atom(1, NPg::LookupType(aggResultType).Name)

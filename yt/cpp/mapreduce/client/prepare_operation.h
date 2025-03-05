@@ -15,14 +15,14 @@ public:
     TOperationPreparationContext(
         const TStructuredJobTableList& structuredInputs,
         const TStructuredJobTableList& structuredOutputs,
-        const TClientContext& context,
+        const IRawClientPtr& rawClient,
         const IClientRetryPolicyPtr& retryPolicy,
         TTransactionId transactionId);
 
     TOperationPreparationContext(
         TVector<TRichYPath> inputs,
         TVector<TRichYPath> outputs,
-        const TClientContext& context,
+        const IRawClientPtr& rawClient,
         const IClientRetryPolicyPtr& retryPolicy,
         TTransactionId transactionId);
 
@@ -38,8 +38,10 @@ public:
 private:
     TVector<TMaybe<TRichYPath>> Inputs_;
     TVector<TMaybe<TRichYPath>> Outputs_;
-    const TClientContext& Context_;
+
+    const IRawClientPtr RawClient_;
     const IClientRetryPolicyPtr RetryPolicy_;
+
     TTransactionId TransactionId_;
 
     mutable TVector<TTableSchema> InputSchemas_;

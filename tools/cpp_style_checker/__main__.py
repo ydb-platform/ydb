@@ -1,9 +1,11 @@
 import difflib
 import json
+import os
 import subprocess
 import time
 import yaml
 
+from build.plugins.lib.test_const import CLANG_FORMAT_RESOURCE, CLANG_FORMAT_15_RESOURCE
 from library.python.testing.custom_linter_util import linter_params, reporter
 from library.python.testing.style import rules
 
@@ -11,7 +13,14 @@ from library.python.testing.style import rules
 def main():
     params = linter_params.get_params()
 
-    clang_format_binary = params.depends["contrib/libs/clang16/tools/clang-format/clang-format"]
+    if 'clang_format_bin' in params.extra_params:
+        # custom clang-format
+        clang_format_binary = params.depends[params.extra_params['clang_format_bin']]
+    elif 'use_clang_format_15' in params.extra_params:
+        clang_format_binary = os.path.join(params.global_resources[CLANG_FORMAT_15_RESOURCE], 'clang-format-15')
+    else:
+        clang_format_binary = os.path.join(params.global_resources[CLANG_FORMAT_RESOURCE], 'clang-format')
+
     style_config_path = params.configs[0]
 
     with open(style_config_path) as f:

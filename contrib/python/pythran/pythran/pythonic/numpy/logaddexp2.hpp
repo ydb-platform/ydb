@@ -3,9 +3,9 @@
 
 #include "pythonic/include/numpy/logaddexp2.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/ndarray.hpp"
 #include "pythonic/types/numpy_broadcast.hpp"
+#include "pythonic/utils/functor.hpp"
 #include "pythonic/utils/numpy_traits.hpp"
 
 #include "pythonic/numpy/log2.hpp"
@@ -25,12 +25,12 @@ namespace numpy
       return functor::log2{}(functor::power{}(T0(2), t0) +
                              functor::power{}(T1(2), t1));
     }
-  }
+  } // namespace wrapper
 
 #define NUMPY_NARY_FUNC_NAME logaddexp2
 #define NUMPY_NARY_FUNC_SYM wrapper::logaddexp2
 #include "pythonic/types/numpy_nary_expr.hpp"
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

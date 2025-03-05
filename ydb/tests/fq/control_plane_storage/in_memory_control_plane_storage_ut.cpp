@@ -1,3 +1,5 @@
+#include <ydb/core/base/backtrace.h>
+
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
@@ -12,74 +14,111 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/actors/logging/log.h>
 
+#include <ydb/tests/tools/fqrun/src/fq_setup.h>
+
 namespace NFq {
 
 using namespace NActors;
 using namespace NKikimr;
+using namespace NFqRun;
+using namespace NKikimrRun;
 
 namespace {
 
-////////////////////////////////////////////////////////////////////////////////
+class TTestFuxture : public NUnitTest::TBaseFixture {
+protected:
+    using TBase = NUnitTest::TBaseFixture;
 
-using TRuntimePtr = std::unique_ptr<TTestActorRuntime>;
+    static constexpr TDuration WAIT_TIMEOUT = TDuration::Seconds(15);
 
-struct TTestBootstrap {
-    NConfig::TControlPlaneStorageConfig Config;
-    TRuntimePtr Runtime;
+public:
+    void SetUp(NUnitTest::TTestContext& ctx) override {
+        TBase::SetUp(ctx);
 
-    const TDuration RequestTimeout = TDuration::Seconds(10);
+        SetupSignalActions();
+        EnableYDBBacktraceFormat();
 
-    TTestBootstrap()
-    {
-        Runtime = PrepareTestActorRuntime();
+        TFqSetupSettings settings;
+        settings.VerboseLevel = TFqSetupSettings::EVerbose::Max;
+
+        settings.LogConfig.SetDefaultLevel(NLog::EPriority::PRI_WARN);
+        ModifyLogPriorities({{NKikimrServices::EServiceKikimr::YQ_CONTROL_PLANE_STORAGE, NLog::EPriority::PRI_DEBUG}}, settings.LogConfig);
+
+        auto& cpStorageConfig = *settings.FqConfig.MutableControlPlaneStorage();
+        cpStorageConfig.SetEnabled(true);
+        cpStorageConfig.SetUseInMemory(true);
+
+        auto& privateApiConfig = *settings.FqConfig.MutablePrivateApi();
+        privateApiConfig.SetEnabled(true);
+        privateApiConfig.SetLoopback(true);
+
+        settings.FqConfig.SetEnableDynamicNameservice(true);
+        settings.FqConfig.MutableControlPlaneProxy()->SetEnabled(true);
+        settings.FqConfig.MutableDbPool()->SetEnabled(true);
+        settings.FqConfig.MutableNodesManager()->SetEnabled(true);
+        settings.FqConfig.MutablePendingFetcher()->SetEnabled(true);
+        settings.FqConfig.MutablePrivateProxy()->SetEnabled(true);
+        settings.FqConfig.MutableGateways()->SetEnabled(true);
+        settings.FqConfig.MutableResourceManager()->SetEnabled(true);
+        settings.FqConfig.MutableCommon()->SetIdsPrefix("ut");
+
+        FqSetup = std::make_unique<TFqSetup>(settings);
     }
 
-    std::pair<FederatedQuery::CreateQueryResult, NYql::TIssues> CreateQuery()
-    {
-        TActorId sender = Runtime->AllocateEdgeActor();
-        FederatedQuery::CreateQueryRequest proto;
-
-        FederatedQuery::QueryContent& content = *proto.mutable_content();
-        content.set_name("my_query_1");
-        content.set_text("SELECT 1;");
-        content.set_type(FederatedQuery::QueryContent::ANALYTICS);
-        content.mutable_acl()->set_visibility(FederatedQuery::Acl::SCOPE);
-
-        auto request = std::make_unique<TEvControlPlaneStorage::TEvCreateQueryRequest>("yandexcloud://my_cloud_1/my_folder_1", proto, "user@staff", "", "mock_cloud", TPermissions{}, TQuotaMap{}, std::make_shared<TTenantInfo>(), FederatedQuery::Internal::ComputeDatabaseInternal{});
-        Runtime->Send(new IEventHandle(ControlPlaneStorageServiceActorId(), sender, request.release()));
-
-        TAutoPtr<IEventHandle> handle;
-        TEvControlPlaneStorage::TEvCreateQueryResponse* event = Runtime->GrabEdgeEvent<TEvControlPlaneStorage::TEvCreateQueryResponse>(handle);
-        return {event->Result, event->Issues};
+protected:
+    static void CheckSuccess(const TRequestResult& result) {
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Status, Ydb::StatusIds::SUCCESS, result.Issues.ToOneLineString());
     }
 
-private:
-    TRuntimePtr PrepareTestActorRuntime() {
-        TRuntimePtr runtime(new TTestBasicRuntime(1));
-        runtime->SetLogPriority(NKikimrServices::YQ_CONTROL_PLANE_STORAGE, NLog::PRI_DEBUG);
+    TExecutionMeta WaitQueryExecution(const TString& queryId, TDuration timeout = WAIT_TIMEOUT) const {
+        using EStatus = FederatedQuery::QueryMeta;
 
-        auto controlPlaneProxy = CreateInMemoryControlPlaneStorageServiceActor(Config);
+        const TInstant start = TInstant::Now();
+        while (TInstant::Now() - start <= timeout) {
+            TExecutionMeta meta;
+            CheckSuccess(FqSetup->DescribeQuery(queryId, meta));
 
-        runtime->AddLocalService(
-            ControlPlaneStorageServiceActorId(),
-            TActorSetupCmd(controlPlaneProxy, TMailboxType::Simple, 0));
+            if (!IsIn({EStatus::FAILED, EStatus::COMPLETED, EStatus::ABORTED_BY_USER, EStatus::ABORTED_BY_SYSTEM}, meta.Status)) {
+                Cerr << "Wait query execution " << TInstant::Now() - start << ": " << EStatus::ComputeStatus_Name(meta.Status) << "\n";
+                Sleep(TDuration::Seconds(1));
+                continue;
+            }
 
-        SetupTabletServices(*runtime);
+            UNIT_ASSERT_C(meta.Status == EStatus::COMPLETED, "issues: " << meta.Issues.ToOneLineString() << ", transient issues: " << meta.TransientIssues.ToOneLineString());
+            return meta;
+        }
 
-        return runtime;
+        UNIT_ASSERT_C(false, "Waiting query execution timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout);
+        return {};
     }
+
+protected:
+    std::unique_ptr<TFqSetup> FqSetup;
 };
 
-}
+} // anonymous namespace
 
-Y_UNIT_TEST_SUITE(CreateQueryRequest) {
-    Y_UNIT_TEST(ShouldCreateSimpleQuery)
-    {
-        TTestBootstrap bootstrap;
-        const auto [result, issues] = bootstrap.CreateQuery();
-        UNIT_ASSERT(!issues);
+Y_UNIT_TEST_SUITE(InMemoryControlPlaneStorage) {
+    Y_UNIT_TEST_F(ExecuteSimpleQuery, TTestFuxture) {
+        TString queryId;
+        CheckSuccess(FqSetup->StreamRequest({
+            .Query = "SELECT 42 AS result_value"
+        }, queryId));
+        UNIT_ASSERT(queryId);
+
+        const auto meta = WaitQueryExecution(queryId);
+        UNIT_ASSERT_VALUES_EQUAL(meta.ResultSetSizes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(meta.ResultSetSizes[0], 1);
+
+        Ydb::ResultSet resultSet;
+        CheckSuccess(FqSetup->FetchQueryResults(queryId, 0, resultSet));
+
+        NYdb::TResultSetParser parser(resultSet);
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("result_value").GetInt32(), 42);
     }
 }
-
 
 } // NFq

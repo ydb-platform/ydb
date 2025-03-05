@@ -3,7 +3,7 @@
 #include "ydb_command.h"
 #include "ydb_common.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
+#include <ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/interruptible.h>
 #include <ydb/public/lib/ydb_cli/common/parameters.h>
@@ -28,11 +28,13 @@ private:
     int PrintResponse(NQuery::TExecuteQueryIterator& result);
 
     TString CollectStatsMode;
+    TString DiagnosticsFile;
     TString Query;
     TString QueryFile;
     TString Syntax;
     bool ExplainMode = false;
     bool ExplainAnalyzeMode = false;
+    bool ExplainAst = false;
 };
 
 }

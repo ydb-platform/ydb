@@ -20,8 +20,8 @@ namespace builtins
     fromkeys(Iterable &&iter, V const &v = builtins::None);
 
     DEFINE_FUNCTOR(pythonic::builtins::dict, fromkeys);
-  }
-}
+  } // namespace dict
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

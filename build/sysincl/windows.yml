@@ -329,10 +329,22 @@
 # These headers are Microsoft Visual C specific.
 - case_sensitive: false
   includes:
+    - comdef.h
+    - comutil.h
+    - concrt.h
+    - crtdefs.h
+    - crtversion.h
+    - eh.h
+    - excpt.h
+    - ppl.h
+    - ppltasks.h
+    - rtcapi.h
+    - vadefs.h
+    - varargs.h
     - vcruntime_exception.h
     - vcruntime_new.h
-    - vcruntime_typeinfo.h
     - vcruntime_new_debug.h
+    - vcruntime_typeinfo.h
     - yvals.h
 
 # These headers belong to UWP application development.

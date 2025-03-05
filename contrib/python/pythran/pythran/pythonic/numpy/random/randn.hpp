@@ -15,9 +15,11 @@ namespace numpy
   {
 
     template <class... T>
-    types::ndarray<double, types::array<long, sizeof...(T)>> randn(T... shape)
+    types::ndarray<double, types::array_tuple<long, sizeof...(T)>>
+    randn(T... shape)
     {
-      return standard_normal(types::array<long, sizeof...(T)>{{shape...}});
+      return standard_normal(
+          types::array_tuple<long, sizeof...(T)>{{shape...}});
     }
 
     inline double randn()

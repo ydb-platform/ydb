@@ -3,8 +3,8 @@
 
 #include "pythonic/include/cmath/log.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/complex.hpp"
+#include "pythonic/utils/functor.hpp"
 
 #include <cmath>
 
@@ -17,7 +17,7 @@ namespace cmath
   {
     return log(x) / log(base);
   }
-}
+} // namespace cmath
 PYTHONIC_NS_END
 
 #endif

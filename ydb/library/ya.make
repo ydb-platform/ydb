@@ -7,6 +7,7 @@ RECURSE(
     arrow_parquet
     backup
     benchmarks
+    breakpad
     chunks_limiter
     folder_service
     formats
@@ -34,7 +35,7 @@ RECURSE(
     workload
     workload
     yaml_config
-    yaml_config
+    yaml_json
     ycloud
     yql
 )

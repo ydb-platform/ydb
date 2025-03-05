@@ -39,16 +39,18 @@ SRCS(
 )
 
 RESOURCE(
-    tpcds_schema.sql tpcds_schema.sql
+    tpcds_schema.yaml tpcds_schema.yaml
 )
 
 ALL_RESOURCE_FILES_FROM_DIRS(
     PREFIX tpcds/
     s1_canonical
+    s10_canonical
+    s100_canonical
 )
 
 PEERDIR(
-    library/cpp/charset
+    library/cpp/charset/lite
     library/cpp/resource
     ydb/library/accessor
     ydb/library/workload/tpc_base

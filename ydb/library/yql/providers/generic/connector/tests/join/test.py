@@ -1,6 +1,6 @@
 import pytest
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.run.runners import runner_types, configure_runner
 
@@ -13,7 +13,7 @@ from test_case import TestCase
 tc_collection = Collection(
     Settings.from_env(
         docker_compose_dir=conftest.docker_compose_dir,
-        data_source_kinds=[EDataSourceKind.CLICKHOUSE, EDataSourceKind.POSTGRESQL],
+        data_source_kinds=[EGenericDataSourceKind.CLICKHOUSE, EGenericDataSourceKind.POSTGRESQL],
     )
 )
 

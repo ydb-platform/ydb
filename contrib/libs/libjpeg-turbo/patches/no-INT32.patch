@@ -1,5 +1,0 @@
---- a/jmorecfg.h
-+++ b/jmorecfg.h
-@@ -140 +140 @@ typedef short INT16;
--typedef long INT32;
-+//typedef long INT32;

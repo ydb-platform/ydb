@@ -18,7 +18,7 @@ namespace types
   struct finfo<std::complex<T>> {
     T eps() const;
   };
-}
+} // namespace types
 PYTHONIC_NS_END
 
 /* pythran attribute system { */
@@ -26,8 +26,8 @@ PYTHONIC_NS_BEGIN
 namespace builtins
 {
   template <class T>
-  auto getattr(types::attr::EPS, pythonic::types::finfo<T> const &f)
-      -> decltype(f.eps());
+  auto getattr(types::attr::EPS,
+               pythonic::types::finfo<T> const &f) -> decltype(f.eps());
 }
 PYTHONIC_NS_END
 /* } */

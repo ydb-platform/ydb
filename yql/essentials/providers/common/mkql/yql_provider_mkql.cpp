@@ -170,7 +170,7 @@ TMkqlBuildContext* GetContextForMemoize(const TExprNode& node, TMkqlBuildContext
 const TRuntimeNode& CheckTypeAndMemoize(const TExprNode& node, TMkqlBuildContext& ctx, const TRuntimeNode& runtime) {
     if (node.GetTypeAnn()) {
         TNullOutput null;
-        if (const auto type = BuildType(*node.GetTypeAnn(), ctx.ProgramBuilder, null)) {
+        if (const auto type = BuildType(*node.GetTypeAnn(), ctx.ProgramBuilder, *ctx.TypeMemoization, null)) {
             if (!type->IsSameType(*runtime.GetStaticType())) {
                 ythrow TNodeException(node) << "Expected: " << *type << " type, but got: "  << *runtime.GetStaticType() << ".";
             }
@@ -661,7 +661,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable({"RoundUp", "RoundDown"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto arg = MkqlBuildExpr(node.Head(), ctx);
-        const auto dstType = BuildType(node.Tail(), *node.Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder);
+        const auto dstType = ctx.BuildType(node.Tail(), *node.Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType());
         return ctx.ProgramBuilder.Round(node.Content(), arg, dstType);
     });
 
@@ -878,17 +878,17 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto& settings = node.Child(4);
 
         //explore params
-        const auto& measures = params->ChildRef(0);
-        const auto& skipTo = params->ChildRef(2);
-        const auto& pattern = params->ChildRef(3);
-        const auto& defines = params->ChildRef(4);
+        const auto measures = params->Child(0);
+        const auto skipTo = params->Child(2);
+        const auto pattern = params->Child(3);
+        const auto defines = params->Child(4);
 
         //explore measures
-        const auto measureNames = measures->ChildRef(2);
+        const auto measureNames = measures->Child(2);
         constexpr size_t FirstMeasureLambdaIndex = 3;
 
         //explore defines
-        const auto defineNames = defines->ChildRef(2);
+        const auto defineNames = defines->Child(2);
         const size_t FirstDefineLambdaIndex = 3;
 
         TVector<TStringBuf> partitionColumnNames;
@@ -900,25 +900,21 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             return MkqlBuildLambda(*partitionKeySelector, ctx, {inputRowArg});
         };
 
-        TVector<std::pair<TStringBuf, TProgramBuilder::TTernaryLambda>> getDefines(defineNames->ChildrenSize());
+        TVector<TStringBuf> defineVarNames(defineNames->ChildrenSize());
+        TVector<TProgramBuilder::TTernaryLambda> getDefines(defineNames->ChildrenSize());
         for (size_t i = 0; i != defineNames->ChildrenSize(); ++i) {
-            getDefines[i] = std::pair{
-                    defineNames->ChildRef(i)->Content(),
-                    [i, defines, &ctx](TRuntimeNode data, TRuntimeNode matchedVars, TRuntimeNode rowIndex) {
-                        return MkqlBuildLambda(*defines->ChildRef(FirstDefineLambdaIndex + i), ctx,
-                                               {data, matchedVars, rowIndex});
-                    }
+            defineVarNames[i] = defineNames->Child(i)->Content();
+            getDefines[i] = [i, defines, &ctx](TRuntimeNode data, TRuntimeNode matchedVars, TRuntimeNode rowIndex) {
+                return MkqlBuildLambda(*defines->Child(FirstDefineLambdaIndex + i), ctx, {data, matchedVars, rowIndex});
             };
         }
 
-        TVector<std::pair<TStringBuf, TProgramBuilder::TBinaryLambda>> getMeasures(measureNames->ChildrenSize());
+        TVector<TStringBuf> measureColumnNames(measureNames->ChildrenSize());
+        TVector<TProgramBuilder::TBinaryLambda> getMeasures(measureNames->ChildrenSize());
         for (size_t i = 0; i != measureNames->ChildrenSize(); ++i) {
-            getMeasures[i] = std::pair{
-                    measureNames->ChildRef(i)->Content(),
-                    [i, measures, &ctx](TRuntimeNode data, TRuntimeNode matchedVars) {
-                        return MkqlBuildLambda(*measures->ChildRef(FirstMeasureLambdaIndex + i), ctx,
-                                               {data, matchedVars});
-                    }
+            measureColumnNames[i] = measureNames->Child(i)->Content();
+            getMeasures[i] = [i, measures, &ctx](TRuntimeNode data, TRuntimeNode matchedVars) {
+                return MkqlBuildLambda(*measures->Child(FirstMeasureLambdaIndex + i), ctx, {data, matchedVars});
             };
         }
 
@@ -928,18 +924,26 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         NYql::NMatchRecognize::EAfterMatchSkipTo to;
         MKQL_ENSURE(TryFromString<NYql::NMatchRecognize::EAfterMatchSkipTo>(stringTo, to), "MATCH_RECOGNIZE: <row pattern skip to> cannot parse AfterMatchSkipTo mode");
 
+        auto rowsPerMatchString = params->Child(1)->Content();
+        MKQL_ENSURE(rowsPerMatchString.SkipPrefix("RowsPerMatch_"), R"(MATCH_RECOGNIZE: <row pattern rows per match> should start with "RowsPerMatch_")");
+        NYql::NMatchRecognize::ERowsPerMatch rowsPerMatch;
+        MKQL_ENSURE(TryFromString<NYql::NMatchRecognize::ERowsPerMatch>(rowsPerMatchString, rowsPerMatch), "MATCH_RECOGNIZE: cannot parse RowsPerMatch mode");
+
         const auto streamingMode = FromString<bool>(settings->Child(0)->Child(1)->Content());
 
         return ctx.ProgramBuilder.MatchRecognizeCore(
                 MkqlBuildExpr(*inputStream, ctx),
                 getPartitionKeySelector,
                 partitionColumnNames,
+                measureColumnNames,
                 getMeasures,
                 NYql::NMatchRecognize::ConvertPattern(pattern, ctx.ExprCtx),
+                defineVarNames,
                 getDefines,
                 streamingMode,
-                NYql::NMatchRecognize::TAfterMatchSkipTo{to, TString{var}}
-                );
+                NYql::NMatchRecognize::TAfterMatchSkipTo{to, TString{var}},
+                rowsPerMatch
+        );
     });
 
     AddCallable("TimeOrderRecover", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -1020,7 +1024,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable("CurrentActorId", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto retType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto retType = ctx.BuildType(node, *node.GetTypeAnn());
         TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), node.Content(), retType);
         return TRuntimeNode(call.Build(), false);
     });
@@ -1337,7 +1341,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable("Struct", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto structType = BuildType(node.Head(), *node.Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder);
+        const auto structType = ctx.BuildType(node.Head(), *node.Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType());
         const auto verifiedStructType = AS_TYPE(TStructType, structType);
         std::vector<std::pair<std::string_view, TRuntimeNode>> members;
         members.reserve(verifiedStructType->GetMembersCount());
@@ -1356,7 +1360,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable("List", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto listType = BuildType(node.Head(), *node.Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder);
+        const auto listType = ctx.BuildType(node.Head(), *node.Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType());
         const auto itemType = AS_TYPE(TListType, listType)->GetItemType();
         const auto& items = GetArgumentsFrom<1U>(node, ctx);
         return ctx.ProgramBuilder.NewList(itemType, items);
@@ -1364,48 +1368,48 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable("FromString", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto arg = MkqlBuildExpr(node.Head(), ctx);
-        const auto type = BuildType(node.Head(), *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto type = ctx.BuildType(node.Head(), *node.GetTypeAnn());
         return ctx.ProgramBuilder.FromString(arg, type);
     });
 
     AddCallable("StrictFromString", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto arg = MkqlBuildExpr(node.Head(), ctx);
-        const auto type = BuildType(node.Head(), *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto type = ctx.BuildType(node.Head(), *node.GetTypeAnn());
         return ctx.ProgramBuilder.StrictFromString(arg, type);
     });
 
     AddCallable("FromBytes", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto arg = MkqlBuildExpr(node.Head(), ctx);
-        const auto type = BuildType(node, *node.GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType(), ctx.ProgramBuilder);
+        const auto type = ctx.BuildType(node, *node.GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType());
         return ctx.ProgramBuilder.FromBytes(arg, type);
     });
 
     AddCallable("Convert", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto arg = MkqlBuildExpr(node.Head(), ctx);
-        const auto type = BuildType(node.Head(), *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto type = ctx.BuildType(node.Head(), *node.GetTypeAnn());
         return ctx.ProgramBuilder.Convert(arg, type);
     });
 
     AddCallable("ToIntegral", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto arg = MkqlBuildExpr(node.Head(), ctx);
-        const auto type = BuildType(node.Head(), *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto type = ctx.BuildType(node.Head(), *node.GetTypeAnn());
         return ctx.ProgramBuilder.ToIntegral(arg, type);
     });
 
     AddCallable("UnsafeTimestampCast", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto arg = MkqlBuildExpr(node.Head(), ctx);
-        const auto type = BuildType(node.Head(), *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto type = ctx.BuildType(node.Head(), *node.GetTypeAnn());
         return ctx.ProgramBuilder.Convert(arg, type);
     });
 
     AddCallable("SafeCast", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto arg = MkqlBuildExpr(node.Head(), ctx);
-        const auto type = BuildType(node.Head(), *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto type = ctx.BuildType(node.Head(), *node.GetTypeAnn());
         return ctx.ProgramBuilder.Cast(arg, type);
     });
 
     AddCallable("Default", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto type = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto type = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.Default(type);
     });
 
@@ -1427,7 +1431,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable("EmptyFrom", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto type = BuildType(node.Head(), *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto type = ctx.BuildType(node.Head(), *node.GetTypeAnn());
         switch (node.GetTypeAnn()->GetKind()) {
             case ETypeAnnotationKind::Flow:
             case ETypeAnnotationKind::Stream:
@@ -1444,18 +1448,18 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable("Nothing", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto optType = BuildType(node.Head(), *node.Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder);
+        const auto optType = ctx.BuildType(node.Head(), *node.Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType());
         return ctx.ProgramBuilder.NewEmptyOptional(optType);
     });
 
     AddCallable("Unpickle", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto type = BuildType(node.Head(), *node.Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder);
+        const auto type = ctx.BuildType(node.Head(), *node.Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType());
         const auto serialized = MkqlBuildExpr(node.Tail(), ctx);
         return ctx.ProgramBuilder.Unpickle(type, serialized);
     });
 
     AddCallable("Optional", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto optType = BuildType(node.Head(), *node.Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder);
+        const auto optType = ctx.BuildType(node.Head(), *node.Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType());
         const auto arg = MkqlBuildExpr(node.Tail(), ctx);
         return ctx.ProgramBuilder.NewOptional(optType, arg);
     });
@@ -1467,7 +1471,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable("EmptyIterator", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto streamType = BuildType(node.Head(), *node.Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder);
+        const auto streamType = ctx.BuildType(node.Head(), *node.Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType());
         return ctx.ProgramBuilder.EmptyIterator(streamType);
     });
 
@@ -1495,11 +1499,11 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             }
 
             offset += outputStreams;
-            input.InputType = BuildType(lambdaArg, *lambdaArg.GetTypeAnn(), ctx.ProgramBuilder);
+            input.InputType = ctx.BuildType(lambdaArg, *lambdaArg.GetTypeAnn());
             inputs.emplace_back(input);
         }
 
-        const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.Switch(stream, inputs, [&](ui32 index, TRuntimeNode item) -> TRuntimeNode {
             return MkqlBuildLambda(*node.Child(2 + 2 * index + 1), ctx, {item});
         }, memoryLimitBytes, returnType);
@@ -1664,8 +1668,48 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                 ythrow TNodeException(node) << "Wrong MapJoinCore input item type: " << inputItemType;
         }
 
-        const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.MapJoinCore(list, dict, joinKind, leftKeyColumns, leftRenames, rightRenames, returnType);
+    });
+
+    AddCallable("BlockStorage", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto stream = MkqlBuildExpr(node.Head(), ctx);
+        const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.BlockStorage(stream, returnType);
+    });
+
+    AddCallable("BlockMapJoinIndex", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto blockStorage = MkqlBuildExpr(node.Head(), ctx);
+        const auto itemType = node.Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TMultiExprType>();
+
+        std::vector<ui32> keyColumns;
+        node.Child(2)->ForEachChild([&](const TExprNode& child){ keyColumns.emplace_back(*GetWideBlockFieldPosition(*itemType, child.Content())); });
+
+        const bool any = HasSetting(node.Tail(), "any");
+
+        const auto itemMkqlType = BuildType(*node.Child(1), *itemType, ctx.ProgramBuilder);
+        const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.BlockMapJoinIndex(blockStorage, itemMkqlType, keyColumns, any, returnType);
+    });
+
+    AddCallable("BlockMapJoinCore", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto leftStream = MkqlBuildExpr(node.Head(), ctx);
+        const auto rightBlockStorage = MkqlBuildExpr(*node.Child(1), ctx);
+
+        const auto leftItemType = node.Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
+        const auto rightItemType = node.Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TMultiExprType>();
+
+        const auto joinKind = GetJoinKind(node, node.Child(3)->Content());
+
+        std::vector<ui32> leftKeyColumns, leftKeyDrops, rightKeyColumns, rightKeyDrops;
+        node.Child(4)->ForEachChild([&](const TExprNode& child){ leftKeyColumns.emplace_back(*GetWideBlockFieldPosition(*leftItemType, child.Content())); });
+        node.Child(5)->ForEachChild([&](const TExprNode& child){ leftKeyDrops.emplace_back(*GetWideBlockFieldPosition(*leftItemType, child.Content())); });
+        node.Child(6)->ForEachChild([&](const TExprNode& child){ rightKeyColumns.emplace_back(*GetWideBlockFieldPosition(*rightItemType, child.Content())); });
+        node.Child(7)->ForEachChild([&](const TExprNode& child){ rightKeyDrops.emplace_back(*GetWideBlockFieldPosition(*rightItemType, child.Content())); });
+
+        const auto rightItemMkqlType = BuildType(*node.Child(2), *rightItemType, ctx.ProgramBuilder);
+        const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.BlockMapJoinCore(leftStream, rightBlockStorage, rightItemMkqlType, joinKind, leftKeyColumns, leftKeyDrops, rightKeyColumns, rightKeyDrops, returnType);
     });
 
     AddCallable({"GraceJoinCore", "GraceSelfJoinCore"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -1715,7 +1759,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                anyJoinSettings = EAnyJoinSettings::Left == anyJoinSettings ? EAnyJoinSettings::Both : EAnyJoinSettings::Right;
         });
 
-        const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
 
         return selfJoin
             ? ctx.ProgramBuilder.GraceSelfJoin(flowLeft, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings)
@@ -1800,7 +1844,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             }
         }
 
-        const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.CommonJoinCore(list, joinKind, leftColumns, rightColumns,
             requiredColumns, keyColumns, memLimit, sortedTableOrder, anyJoinSettings, tableIndexFieldPos, returnType);
     });
@@ -1809,7 +1853,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         NNodes::TCoCombineCore core(&node);
 
         const auto stream = MkqlBuildExpr(core.Input().Ref(), ctx);
-        const auto memLimit = FromString<ui64>(core.MemLimit().Cast().Value());
+        const auto memLimit = NNodes::TCoCombineCore::idx_MemLimit < node.ChildrenSize() ?
+                FromString<ui64>(core.MemLimit().Cast().Value()) : 0;
 
         const auto keyExtractor = [&](TRuntimeNode item) {
             return MkqlBuildLambda(core.KeyExtractor().Ref(), ctx, {item});
@@ -2084,7 +2129,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable("Dict", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto listType = BuildType(node.Head(), *node.Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder);
+        const auto listType = ctx.BuildType(node.Head(), *node.Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType());
         const auto dictType = AS_TYPE(TDictType, listType);
 
         std::vector<std::pair<TRuntimeNode, TRuntimeNode>> items;
@@ -2099,12 +2144,19 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable("Variant", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto varType = node.Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TVariantExprType>();
-        const auto type = BuildType(*node.Child(2), *varType, ctx.ProgramBuilder);
+        const auto type = ctx.BuildType(*node.Child(2), *varType);
 
         const auto item = MkqlBuildExpr(node.Head(), ctx);
         return varType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple ?
                 ctx.ProgramBuilder.NewVariant(item, FromString<ui32>(node.Child(1)->Content()), type) :
                 ctx.ProgramBuilder.NewVariant(item, node.Child(1)->Content(), type);
+    });
+
+    AddCallable("DynamicVariant", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto varType = ctx.BuildType(*node.Child(2), *node.Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
+        const auto item = MkqlBuildExpr(node.Head(), ctx);
+        const auto index = MkqlBuildExpr(*node.Child(1), ctx);
+        return ctx.ProgramBuilder.DynamicVariant(item, index, varType);
     });
 
     AddCallable("AsStruct", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2168,49 +2220,39 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                  "EmptyListType",
                  "EmptyDictType"},
         [](const TExprNode& node, TMkqlBuildContext& ctx) {
-            const auto type = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+            const auto type = ctx.BuildType(node, *node.GetTypeAnn());
             return TRuntimeNode(type, true);
         });
 
     AddCallable("ParseType", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto type = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto type = ctx.BuildType(node, *node.GetTypeAnn());
         return TRuntimeNode(type, true);
     });
 
     AddCallable("TypeOf", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto type = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto type = ctx.BuildType(node, *node.GetTypeAnn());
         return TRuntimeNode(type, true);
     });
 
     AddCallable("EmptyList", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         Y_UNUSED(node);
-        if (RuntimeVersion < 11) {
-            return ctx.ProgramBuilder.NewEmptyList(ctx.ProgramBuilder.NewVoid().GetStaticType());
-        } else {
-            return TRuntimeNode(ctx.ProgramBuilder.GetTypeEnvironment().GetEmptyListLazy(), true);
-        }
+        return TRuntimeNode(ctx.ProgramBuilder.GetTypeEnvironment().GetEmptyListLazy(), true);
     });
 
     AddCallable("EmptyDict", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         Y_UNUSED(node);
-        if (RuntimeVersion < 11) {
-           auto voidType = ctx.ProgramBuilder.NewVoid().GetStaticType();
-           auto dictType = ctx.ProgramBuilder.NewDictType(voidType, voidType, false);
-           return ctx.ProgramBuilder.NewDict(dictType, {});
-        } else {
-           return TRuntimeNode(ctx.ProgramBuilder.GetTypeEnvironment().GetEmptyDictLazy(), true);
-        }
+        return TRuntimeNode(ctx.ProgramBuilder.GetTypeEnvironment().GetEmptyDictLazy(), true);
     });
 
     AddCallable("SourceOf", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto type = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto type = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.SourceOf(type);
     });
 
     AddCallable("TypeHandle", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto type = node.Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
         const auto yson = WriteTypeToYson(type);
-        const auto retType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto retType = ctx.BuildType(node, *node.GetTypeAnn());
         TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), node.Content(), retType);
         call.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::Yson>(yson));
         return TRuntimeNode(call.Build(), false);
@@ -2220,7 +2262,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto type = node.Head().GetTypeAnn();
         const auto yson = WriteTypeToYson(type);
         const auto& args = GetAllArguments(node, ctx);
-        const auto retType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto retType = ctx.BuildType(node, *node.GetTypeAnn());
         const auto pos = ctx.ExprCtx.GetPosition(node.Pos());
         TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), node.Content(), retType);
         call.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(pos.File));
@@ -2244,7 +2286,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         "SerializeCode",
         }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto& args = GetAllArguments(node, ctx);
-        const auto retType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto retType = ctx.BuildType(node, *node.GetTypeAnn());
         TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), node.Content(), retType);
         for (auto arg : args) {
             call.Add(arg);
@@ -2291,7 +2333,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         "FuncCode",
         }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto& args = GetAllArguments(node, ctx);
-        const auto retType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto retType = ctx.BuildType(node, *node.GetTypeAnn());
         const auto pos = ctx.ExprCtx.GetPosition(node.Pos());
         TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), node.Content(), retType);
         call.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(pos.File));
@@ -2307,7 +2349,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable("LambdaCode", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto lambda = node.Child(node.ChildrenSize() - 1);
-        const auto retType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto retType = ctx.BuildType(node, *node.GetTypeAnn());
         const auto pos = ctx.ExprCtx.GetPosition(node.Pos());
         TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), node.Content(), retType);
         call.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(pos.File));
@@ -2325,7 +2367,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             TMkqlBuildContext::TArgumentsMap innerArguments;
             innerArguments.reserve(lambda->Head().ChildrenSize());
             lambda->Head().ForEachChild([&](const TExprNode& argNode) {
-                const auto argType = BuildType(argNode, *argNode.GetTypeAnn(), ctx.ProgramBuilder);
+                const auto argType = ctx.BuildType(argNode, *argNode.GetTypeAnn());
                 const auto arg = ctx.ProgramBuilder.Arg(argType);
                 innerArguments.emplace(&argNode, arg);
                 call.Add(arg);
@@ -2380,8 +2422,12 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable({ "AsTagged","Untag" }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto input = MkqlBuildExpr(node.Head(), ctx);
-        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.Nop(input, returnType);
+    });
+
+    AddCallable({"TableSource", "WideTableSource"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        return MkqlBuildExpr(node.Head(), ctx);
     });
 
     AddCallable({"WithWorld"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2453,9 +2499,9 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         YQL_ENSURE(node.ChildrenSize() == 8);
         std::string_view function = node.Head().Content();
         const auto runConfig = MkqlBuildExpr(*node.Child(1), ctx);
-        const auto userType = BuildType(*node.Child(2), *node.Child(2)->GetTypeAnn(), ctx.ProgramBuilder);
+        const auto userType = ctx.BuildType(*node.Child(2), *node.Child(2)->GetTypeAnn());
         const auto typeConfig = node.Child(3)->Content();
-        const auto callableType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto callableType = ctx.BuildType(node, *node.GetTypeAnn());
         const auto pos = ctx.ExprCtx.GetPosition(node.Pos());
         return ctx.ProgramBuilder.TypedUdf(function, callableType, runConfig, userType, typeConfig,
             pos.File, pos.Row, pos.Column);
@@ -2471,7 +2517,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         std::string_view funcName = node.Child(1)->Content();
         const auto typeNode = node.Child(2);
-        const auto funcType = BuildType(*typeNode, *typeNode->GetTypeAnn(), ctx.ProgramBuilder);
+        const auto funcType = ctx.BuildType(*typeNode, *typeNode->GetTypeAnn());
         const auto script = MkqlBuildExpr(*node.Child(3), ctx);
         const auto pos = ctx.ExprCtx.GetPosition(node.Pos());
         return ctx.ProgramBuilder.ScriptUdf(node.Head().Content(), funcName, funcType, script,
@@ -2534,7 +2580,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                 continue;
             }
 
-            auto mkqlType = BuildType(node, *callableType->GetArguments()[i].Type, ctx.ProgramBuilder);
+            auto mkqlType = ctx.BuildType(node, *callableType->GetArguments()[i].Type);
             arg = ctx.ProgramBuilder.NewEmptyOptional(mkqlType);
         }
 
@@ -2546,7 +2592,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable("Callable", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto callableType = BuildType(node.Head(), *node.Head().GetTypeAnn(), ctx.ProgramBuilder);
+        const auto callableType = ctx.BuildType(node.Head(), *node.Head().GetTypeAnn());
         return ctx.ProgramBuilder.Callable(callableType, [&](const TArrayRef<const TRuntimeNode>& args) {
             const auto& lambda = node.Tail();
             TMkqlBuildContext::TArgumentsMap innerArguments;
@@ -2560,7 +2606,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable("PgConst", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        auto type = AS_TYPE(TPgType, BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder));
+        auto type = AS_TYPE(TPgType, ctx.BuildType(node, *node.GetTypeAnn()));
         TRuntimeNode typeMod;
         if (node.ChildrenSize() >= 3) {
             typeMod = MkqlBuildExpr(*node.Child(2), ctx);
@@ -2581,7 +2627,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable("PgInternal0", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.PgInternal0(returnType);
     });
 
@@ -2601,7 +2647,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             }
         }
 
-        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.PgResolvedCall(node.IsCallable("PgResolvedCallCtx"), name, id, args, returnType, rangeFunction);
     });
 
@@ -2615,7 +2661,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             args.push_back(MkqlBuildExpr(*node.Child(i), ctx));
         }
 
-        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.PgResolvedCall(false, procName, procId, args, returnType, false);
     });
 
@@ -2628,7 +2674,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             args.push_back(MkqlBuildExpr(*node.Child(i), ctx));
         }
 
-        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.BlockPgResolvedCall(name, id, args, returnType);
     });
 
@@ -2642,14 +2688,14 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             args.push_back(MkqlBuildExpr(*node.Child(i), ctx));
         }
 
-        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.BlockPgResolvedCall(procName, procId, args, returnType);
     });
 
 
     AddCallable("PgCast", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto input = MkqlBuildExpr(*node.Child(0), ctx);
-        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         TRuntimeNode typeMod;
         if (node.ChildrenSize() >= 3) {
             typeMod = MkqlBuildExpr(*node.Child(2), ctx);
@@ -2685,25 +2731,25 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable("FromPg", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto input = MkqlBuildExpr(*node.Child(0), ctx);
-        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.FromPg(input, returnType);
     });
 
     AddCallable("ToPg", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto input = MkqlBuildExpr(*node.Child(0), ctx);
-        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.ToPg(input, returnType);
     });
 
     AddCallable("BlockFromPg", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto input = MkqlBuildExpr(*node.Child(0), ctx);
-        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.BlockFromPg(input, returnType);
     });
 
     AddCallable("BlockToPg", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto input = MkqlBuildExpr(*node.Child(0), ctx);
-        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.BlockToPg(input, returnType);
     });
 
@@ -2726,7 +2772,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable("PgTableContent", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.PgTableContent(
             node.Child(0)->Content(),
             node.Child(1)->Content(),
@@ -2754,14 +2800,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             args.push_back(MkqlBuildExpr(*node.Child(i), ctx));
         }
 
-        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.BlockFunc(node.Child(0)->Content(), returnType, args);
-    });
-
-    AddCallable("BlockBitCast", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        auto arg = MkqlBuildExpr(*node.Child(0), ctx);
-        auto targetType = BuildType(node, *node.Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder);
-        return ctx.ProgramBuilder.BlockBitCast(arg, targetType);
     });
 
     AddCallable("BlockMember", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2811,7 +2851,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             aggs.push_back(info);
         }
 
-        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.BlockCombineAll(arg, filterColumn, aggs, returnType);
     });
 
@@ -2838,7 +2878,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             aggs.push_back(info);
         }
 
-        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.BlockCombineHashed(arg, filterColumn, keys, aggs, returnType);
     });
 
@@ -2860,7 +2900,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             aggs.push_back(info);
         }
 
-        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.BlockMergeFinalizeHashed(arg, keys, aggs, returnType);
     });
 
@@ -2891,7 +2931,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             }
         }
 
-        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.BlockMergeManyFinalizeHashed(arg, keys, aggs, streamIndex, streams, returnType);
     });
 
@@ -2901,11 +2941,6 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.BlockCompress(flow, index);
     });
 
-    AddCallable("BlockExpandChunked", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto flow = MkqlBuildExpr(node.Head(), ctx);
-        return ctx.ProgramBuilder.BlockExpandChunked(flow);
-    });
-
     AddCallable("PgArray", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         std::vector<TRuntimeNode> args;
         args.reserve(node.ChildrenSize());
@@ -2913,7 +2948,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             args.push_back(MkqlBuildExpr(*node.Child(i), ctx));
         }
 
-        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.PgArray(args, returnType);
     });
 
@@ -2921,7 +2956,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto initCapacity = MkqlBuildExpr(*node.Child(1), ctx);
         const auto initSize = MkqlBuildExpr(*node.Child(2), ctx);
         const auto& args = GetArgumentsFrom<3U>(node, ctx);
-        const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.QueueCreate(initCapacity, initSize, args, returnType);
     });
 
@@ -2929,7 +2964,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto resource = MkqlBuildExpr(node.Head(), ctx);
         const auto index = MkqlBuildExpr(*node.Child(1), ctx);
         const auto& args = GetArgumentsFrom<2U>(node, ctx);
-        const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.QueuePeek(resource, index, args, returnType);
     });
 
@@ -2938,13 +2973,13 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto begin = MkqlBuildExpr(*node.Child(1), ctx);
         const auto end = MkqlBuildExpr(*node.Child(2), ctx);
         const auto& args = GetArgumentsFrom<3U>(node, ctx);
-        const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.QueueRange(resource, begin, end, args, returnType);
     });
 
     AddCallable("Seq", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto& args = GetArgumentsFrom<0U>(node, ctx);
-        const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        const auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
         return ctx.ProgramBuilder.Seq(args, returnType);
     });
 

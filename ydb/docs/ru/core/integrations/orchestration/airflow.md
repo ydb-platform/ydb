@@ -132,11 +132,11 @@ connection.close()
 
 Укажите реквизиты для одного из следующих способов аутентификации на кластере {{ ydb-full-name }}:
 
-- `Login` и `Password` - укажите реквизиты пользователя для аутентификации [по логину и паролю](../../concepts/auth.md#static-credentials).
-- `Service account auth JSON` - укажите значение [`Service Account Key`](../../concepts/auth.md#iam).
+- `Login` и `Password` - укажите реквизиты пользователя для аутентификации [по логину и паролю](../../security/authentication.md#static-credentials).
+- `Service account auth JSON` - укажите значение [`Service Account Key`](../../security/authentication.md#iam).
 - `Service account auth JSON file path` - укажите путь к файлу, содержащему `Service Account Key`.
-- `IAM token` - укажите [IAM токен](../../concepts/auth.md#iam).
-- `Use VM metadata` - указание использовать [метаданные виртуальной машины](../../concepts/auth.md#iam).
+- `IAM token` - укажите [IAM токен](../../security/authentication.md#iam).
+- `Use VM metadata` - указание использовать [метаданные виртуальной машины](../../security/authentication.md#iam).
 
 ## Соответствие YQL и Python-типов
 

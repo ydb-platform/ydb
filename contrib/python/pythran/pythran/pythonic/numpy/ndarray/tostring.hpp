@@ -3,10 +3,10 @@
 
 #include "pythonic/include/numpy/ndarray/tostring.hpp"
 
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/utils/numpy_conversion.hpp"
 #include "pythonic/types/ndarray.hpp"
 #include "pythonic/types/str.hpp"
+#include "pythonic/utils/functor.hpp"
+#include "pythonic/utils/numpy_conversion.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -22,7 +22,7 @@ namespace numpy
                         expr.flat_size() * sizeof(T));
     }
     NUMPY_EXPR_TO_NDARRAY0_IMPL(tostring);
-  }
-}
+  } // namespace ndarray
+} // namespace numpy
 PYTHONIC_NS_END
 #endif

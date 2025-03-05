@@ -3,7 +3,6 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_impl.h>
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -107,6 +106,11 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
         limit = settings.ItemsLimit;
         settings.ItemsLimit = nullptr;
 
+        matched->Settings = settings.BuildNode(ctx, matched->Settings.Pos());
+    }
+
+    if (kqpCtx.Config->HasMaxSequentialReadsInFlight()) {
+        settings.SequentialInFlight = *kqpCtx.Config->MaxSequentialReadsInFlight.Get();
         matched->Settings = settings.BuildNode(ctx, matched->Settings.Pos());
     }
 

@@ -1,205 +1,12 @@
-#include "schemeshard_utils.h"
-
 #include <ydb/core/base/table_vector_index.h>
-#include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/utils.h>
-#include <ydb/core/protos/counters_schemeshard.pb.h>
+
+#include "schemeshard_info_types.h"
+
+#include "schemeshard_utils.h"
 
 namespace NKikimr {
 namespace NSchemeShard {
-
-void TShardDeleter::Shutdown(const NActors::TActorContext &ctx) {
-    for (auto& info : PerHiveDeletions) {
-        NTabletPipe::CloseClient(ctx, info.second.PipeToHive);
-    }
-    PerHiveDeletions.clear();
-}
-
-void TShardDeleter::SendDeleteRequests(TTabletId hiveTabletId,
-                                       const THashSet<TShardIdx> &shardsToDelete,
-                                       const THashMap<NKikimr::NSchemeShard::TShardIdx, NKikimr::NSchemeShard::TShardInfo>& shardsInfos,
-                                       const NActors::TActorContext &ctx) {
-    if (shardsToDelete.empty())
-        return;
-
-    TPerHiveDeletions& info = PerHiveDeletions[hiveTabletId];
-    if (!info.PipeToHive) {
-        NTabletPipe::TClientConfig clientConfig;
-        clientConfig.RetryPolicy = HivePipeRetryPolicy;
-        info.PipeToHive = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, ui64(hiveTabletId), clientConfig));
-    }
-    info.ShardsToDelete.insert(shardsToDelete.begin(), shardsToDelete.end());
-
-    for (auto shardIdx : shardsToDelete) {
-        ShardHive[shardIdx] = hiveTabletId;
-        // !HACK: use shardIdx as  TxId because Hive only replies with TxId
-        // TODO: change hive events to get rid of this hack
-        // svc@ in progress fixing it
-        TAutoPtr<TEvHive::TEvDeleteTablet> event = new TEvHive::TEvDeleteTablet(shardIdx.GetOwnerId(), ui64(shardIdx.GetLocalId()), ui64(shardIdx.GetLocalId()));
-        auto itShard = shardsInfos.find(shardIdx);
-        if (itShard != shardsInfos.end()) {
-            TTabletId shardTabletId = itShard->second.TabletID;
-            if (shardTabletId) {
-                event->Record.AddTabletID(ui64(shardTabletId));
-            }
-        }
-
-        Y_ABORT_UNLESS(shardIdx);
-
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Free shard " << shardIdx << " hive " << hiveTabletId << " at ss " << MyTabletID);
-
-        NTabletPipe::SendData(ctx, info.PipeToHive, event.Release());
-    }
-}
-
-void TShardDeleter::ResendDeleteRequests(TTabletId hiveTabletId, const THashMap<TShardIdx, TShardInfo>& shardsInfos, const NActors::TActorContext &ctx) {
-    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                 "Resending tablet deletion requests from " << MyTabletID << " to " << hiveTabletId);
-
-    auto itPerHive = PerHiveDeletions.find(hiveTabletId);
-    if (itPerHive == PerHiveDeletions.end()) {
-        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "Hive " << hiveTabletId << " not found for delete requests");
-        return;
-    }
-
-    THashSet<TShardIdx> toResend(std::move(itPerHive->second.ShardsToDelete));
-    PerHiveDeletions.erase(itPerHive);
-
-    SendDeleteRequests(hiveTabletId, toResend, shardsInfos, ctx);
-}
-
-void TShardDeleter::ResendDeleteRequest(TTabletId hiveTabletId,
-                                        const THashMap<TShardIdx, TShardInfo>& shardsInfos,
-                                        TShardIdx shardIdx,
-                                        const NActors::TActorContext &ctx) {
-    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                 "Resending tablet deletion request from " << MyTabletID << " to " << hiveTabletId);
-
-    auto itPerHive = PerHiveDeletions.find(hiveTabletId);
-    if (itPerHive == PerHiveDeletions.end())
-        return;
-
-    auto itShardIdx = itPerHive->second.ShardsToDelete.find(shardIdx);
-    if (itShardIdx != itPerHive->second.ShardsToDelete.end()) {
-        THashSet<TShardIdx> toResend({shardIdx});
-        itPerHive->second.ShardsToDelete.erase(itShardIdx);
-        if (itPerHive->second.ShardsToDelete.empty()) {
-            PerHiveDeletions.erase(itPerHive);
-        }
-        SendDeleteRequests(hiveTabletId, toResend, shardsInfos, ctx);
-    } else {
-        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "Shard " << shardIdx << " not found for delete request for Hive " << hiveTabletId);
-    }
-}
-
-void TShardDeleter::RedirectDeleteRequest(TTabletId hiveFromTabletId,
-                                          TTabletId hiveToTabletId,
-                                          TShardIdx shardIdx,
-                                          const THashMap<TShardIdx, TShardInfo>& shardsInfos,
-                                          const NActors::TActorContext &ctx) {
-    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                 "Redirecting tablet deletion requests from " << hiveFromTabletId << " to " << hiveToTabletId);
-    auto itFromHive = PerHiveDeletions.find(hiveFromTabletId);
-    if (itFromHive != PerHiveDeletions.end()) {
-        auto& toHive(PerHiveDeletions[hiveToTabletId]);
-        auto itShardIdx = itFromHive->second.ShardsToDelete.find(shardIdx);
-        if (itShardIdx != itFromHive->second.ShardsToDelete.end()) {
-            toHive.ShardsToDelete.emplace(*itShardIdx);
-            itFromHive->second.ShardsToDelete.erase(itShardIdx);
-        } else {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "Shard " << shardIdx << " not found for delete request for Hive " << hiveFromTabletId);
-        }
-        if (itFromHive->second.ShardsToDelete.empty()) {
-            PerHiveDeletions.erase(itFromHive);
-        }
-    }
-
-    ResendDeleteRequest(hiveToTabletId, shardsInfos, shardIdx, ctx);
-}
-
-void TShardDeleter::ShardDeleted(TShardIdx shardIdx, const NActors::TActorContext &ctx) {
-    if (!ShardHive.contains(shardIdx))
-        return;
-
-    TTabletId hiveTabletId = ShardHive[shardIdx];
-    ShardHive.erase(shardIdx);
-    PerHiveDeletions[hiveTabletId].ShardsToDelete.erase(shardIdx);
-
-    if (PerHiveDeletions[hiveTabletId].ShardsToDelete.empty()) {
-        NTabletPipe::CloseClient(ctx, PerHiveDeletions[hiveTabletId].PipeToHive);
-        PerHiveDeletions.erase(hiveTabletId);
-    }
-}
-
-bool TShardDeleter::Has(TTabletId hiveTabletId, TActorId pipeClientActorId) const {
-    return PerHiveDeletions.contains(hiveTabletId) && PerHiveDeletions.at(hiveTabletId).PipeToHive == pipeClientActorId;
-}
-
-bool TShardDeleter::Has(TShardIdx shardIdx) const {
-    return ShardHive.contains(shardIdx);
-}
-
-bool TShardDeleter::Empty() const {
-    return PerHiveDeletions.empty();
-}
-
-void TSelfPinger::Handle(TEvSchemeShard::TEvMeasureSelfResponseTime::TPtr &ev, const NActors::TActorContext &ctx) {
-    Y_UNUSED(ev);
-    TInstant now = AppData(ctx)->TimeProvider->Now();
-    TDuration responseTime = now - SelfPingSentTime;
-    LastResponseTime = responseTime;
-    TabletCounters->Simple()[COUNTER_RESPONSE_TIME_USEC].Set(LastResponseTime.MicroSeconds());
-    if (responseTime.MilliSeconds() > 1000) {
-        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "Schemeshard " << TabletId << " response time is " << responseTime.MilliSeconds() << " msec");
-    }
-    SelfPingInFlight = false;
-    if (responseTime > SELF_PING_INTERVAL) {
-        DoSelfPing(ctx);
-    } else {
-        ScheduleSelfPingWakeup(ctx);
-    }
-}
-
-void TSelfPinger::Handle(TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime::TPtr &ev, const NActors::TActorContext &ctx) {
-    Y_UNUSED(ev);
-    SelfPingWakeupScheduled = false;
-    DoSelfPing(ctx);
-}
-
-void TSelfPinger::OnAnyEvent(const NActors::TActorContext &ctx) {
-    TInstant now = AppData(ctx)->TimeProvider->Now();
-    if (SelfPingInFlight) {
-        TDuration responseTime = now - SelfPingSentTime;
-        // Increase measured response time is ping is taking longer than then the previous one
-        LastResponseTime = Max(LastResponseTime, responseTime);
-        TabletCounters->Simple()[COUNTER_RESPONSE_TIME_USEC].Set(LastResponseTime.MicroSeconds());
-    } else if ((now - SelfPingWakeupScheduledTime) > SELF_PING_INTERVAL) {
-        DoSelfPing(ctx);
-    }
-}
-
-void TSelfPinger::DoSelfPing(const NActors::TActorContext &ctx) {
-    if (SelfPingInFlight)
-        return;
-
-    ctx.Send(ctx.SelfID, new TEvSchemeShard::TEvMeasureSelfResponseTime);
-    SelfPingSentTime = AppData(ctx)->TimeProvider->Now();
-    SelfPingInFlight = true;
-}
-
-void TSelfPinger::ScheduleSelfPingWakeup(const NActors::TActorContext &ctx) {
-    if (SelfPingWakeupScheduled)
-        return;
-
-    ctx.Schedule(SELF_PING_INTERVAL, new TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime);
-    SelfPingWakeupScheduled = true;
-    SelfPingWakeupScheduledTime = AppData(ctx)->TimeProvider->Now();
-}
 
 PQGroupReserve::PQGroupReserve(const ::NKikimrPQ::TPQTabletConfig& tabletConfig, ui64 partitions) {
     Storage = partitions * NPQ::TopicPartitionReserveSize(tabletConfig);
@@ -353,7 +160,8 @@ void SetImplTablePartitionConfig(
 
 void FillIndexImplTableColumns(
     const auto& baseTableColumns,
-    const TTableColumns& implTableColumns,
+    std::span<const TString> keys,
+    const THashSet<TString>& columns,
     NKikimrSchemeOp::TTableDescription& implTableDesc)
 {
     // The function that calls this may have already added some columns
@@ -361,8 +169,8 @@ void FillIndexImplTableColumns(
     const auto was = implTableDesc.ColumnsSize();
 
     THashMap<TString, ui32> implKeyToImplColumn;
-    for (ui32 keyId = 0; keyId < implTableColumns.Keys.size(); ++keyId) {
-        implKeyToImplColumn[implTableColumns.Keys[keyId]] = keyId;
+    for (ui32 keyId = 0; keyId < keys.size(); ++keyId) {
+        implKeyToImplColumn[keys[keyId]] = keyId;
     }
 
     // We want data columns order in index table same as in indexed table,
@@ -373,14 +181,14 @@ void FillIndexImplTableColumns(
         using TColumn = std::decay_t<decltype(columnIt)>;
         if constexpr (std::is_same_v<TColumn, std::pair<const ui32, NSchemeShard::TTableInfo::TColumn>>) {
             const auto& columnInfo = columnIt.second;
-            if (!columnInfo.IsDropped() && implTableColumns.Columns.contains(columnInfo.Name)) {
+            if (!columnInfo.IsDropped() && columns.contains(columnInfo.Name)) {
                 column = implTableDesc.AddColumns();
                 column->SetName(columnInfo.Name);
                 column->SetType(NScheme::TypeName(columnInfo.PType, columnInfo.PTypeMod));
                 column->SetNotNull(columnInfo.NotNull);
             }
         } else if constexpr (std::is_same_v<TColumn, NKikimrSchemeOp::TColumnDescription>) {
-            if (implTableColumns.Columns.contains(columnIt.GetName())) {
+            if (columns.contains(columnIt.GetName())) {
                 column = implTableDesc.AddColumns();
                 *column = columnIt;
                 column->ClearFamily();
@@ -409,7 +217,7 @@ void FillIndexImplTableColumns(
         column.ClearId();
     }
 
-    for (auto& keyName: implTableColumns.Keys) {
+    for (const auto& keyName: keys) {
         implTableDesc.AddKeyColumnNames(keyName);
     }
 }
@@ -438,7 +246,7 @@ auto CalcImplTableDescImpl(
     NKikimrSchemeOp::TTableDescription implTableDesc;
     implTableDesc.SetName(NTableIndex::ImplTable);
     SetImplTablePartitionConfig(GetPartitionConfig(baseTable), indexTableDesc, implTableDesc);
-    FillIndexImplTableColumns(GetColumns(baseTable), implTableColumns, implTableDesc);
+    FillIndexImplTableColumns(GetColumns(baseTable), implTableColumns.Keys, implTableColumns.Columns, implTableDesc);
     if (indexTableDesc.HasReplicationConfig()) {
         implTableDesc.MutableReplicationConfig()->CopyFrom(indexTableDesc.GetReplicationConfig());
     }
@@ -447,6 +255,7 @@ auto CalcImplTableDescImpl(
 }
 
 auto CalcVectorKmeansTreePostingImplTableDescImpl(
+    const THashSet<TString>& indexKeyColumns,
     const auto& baseTable,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const TTableColumns& implTableColumns,
@@ -458,12 +267,48 @@ auto CalcVectorKmeansTreePostingImplTableDescImpl(
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
     {
         auto parentColumn = implTableDesc.AddColumns();
-        parentColumn->SetName(NTableVectorKmeansTreeIndex::PostingTable_ParentColumn);
-        parentColumn->SetType("Uint32");
-        parentColumn->SetTypeId(NScheme::NTypeIds::Uint32);
+        parentColumn->SetName(NTableVectorKmeansTreeIndex::ParentColumn);
+        parentColumn->SetType(NTableIndex::ClusterIdTypeName);
+        parentColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
+        parentColumn->SetNotNull(true);
     }
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::PostingTable_ParentColumn);
-    FillIndexImplTableColumns(GetColumns(baseTable), implTableColumns, implTableDesc);
+    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::ParentColumn);
+    if (indexKeyColumns.empty()) {
+        FillIndexImplTableColumns(GetColumns(baseTable), implTableColumns.Keys, implTableColumns.Columns, implTableDesc);
+    } else {
+        auto keys = implTableColumns.Keys;
+        auto columns = implTableColumns.Columns;
+        std::erase_if(keys, [&](const auto& key) { return indexKeyColumns.contains(key); });
+        EraseNodesIf(columns, [&](const auto& key) { return indexKeyColumns.contains(key); });
+        FillIndexImplTableColumns(GetColumns(baseTable), keys, columns, implTableDesc);
+    }
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
+
+    return implTableDesc;
+}
+
+auto CalcVectorKmeansTreePrefixImplTableDescImpl(
+    const THashSet<TString>& indexKeyColumns,
+    const auto& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc
+) {
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+    implTableDesc.SetName(NTableVectorKmeansTreeIndex::PrefixTable);
+    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+    auto keys = implTableColumns.Keys;
+    std::erase_if(keys, [&](const auto& key) { return !indexKeyColumns.contains(key); });
+    FillIndexImplTableColumns(GetColumns(baseTable), keys, indexKeyColumns, implTableDesc);
+    {
+        auto idColumn = implTableDesc.AddColumns();
+        idColumn->SetName(NTableVectorKmeansTreeIndex::IdColumn);
+        idColumn->SetType(NTableIndex::ClusterIdTypeName);
+        idColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
+        idColumn->SetNotNull(true);
+    }
+    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::IdColumn);
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
 
@@ -500,25 +345,28 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
 
     {
         auto parentColumn = implTableDesc.AddColumns();
-        parentColumn->SetName(NTableVectorKmeansTreeIndex::LevelTable_ParentColumn);
-        parentColumn->SetType("Uint32");
-        parentColumn->SetTypeId(NScheme::NTypeIds::Uint32);
+        parentColumn->SetName(NTableVectorKmeansTreeIndex::ParentColumn);
+        parentColumn->SetType(NTableIndex::ClusterIdTypeName);
+        parentColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
+        parentColumn->SetNotNull(true);
     }
     {
         auto idColumn = implTableDesc.AddColumns();
-        idColumn->SetName(NTableVectorKmeansTreeIndex::LevelTable_IdColumn);
-        idColumn->SetType("Uint32");
-        idColumn->SetTypeId(NScheme::NTypeIds::Uint32);
+        idColumn->SetName(NTableVectorKmeansTreeIndex::IdColumn);
+        idColumn->SetType(NTableIndex::ClusterIdTypeName);
+        idColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
+        idColumn->SetNotNull(true);
     }
     {
         auto centroidColumn = implTableDesc.AddColumns();
-        centroidColumn->SetName(NTableVectorKmeansTreeIndex::LevelTable_EmbeddingColumn);
+        centroidColumn->SetName(NTableVectorKmeansTreeIndex::CentroidColumn);
         centroidColumn->SetType("String");
         centroidColumn->SetTypeId(NScheme::NTypeIds::String);
+        centroidColumn->SetNotNull(true);
     }
 
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::LevelTable_ParentColumn);
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::LevelTable_IdColumn);
+    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::ParentColumn);
+    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::IdColumn);
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
 
@@ -526,23 +374,45 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
 }
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
+    const THashSet<TString>& indexKeyColumns,
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     std::string_view suffix)
 {
-    return CalcVectorKmeansTreePostingImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, implTableColumns, indexTableDesc, suffix);
+    return CalcVectorKmeansTreePostingImplTableDescImpl(indexKeyColumns, baseTableInfo, baseTablePartitionConfig, implTableColumns, indexTableDesc, suffix);
 }
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
+    const THashSet<TString>& indexKeyColumns,
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     std::string_view suffix)
 {
-    return CalcVectorKmeansTreePostingImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc, suffix);
+    return CalcVectorKmeansTreePostingImplTableDescImpl(indexKeyColumns, baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc, suffix);
+}
+
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(
+    const THashSet<TString>& indexKeyColumns,
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+{
+    return CalcVectorKmeansTreePrefixImplTableDescImpl(indexKeyColumns, baseTableInfo, baseTablePartitionConfig, implTableColumns, indexTableDesc);
+}
+
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(
+    const THashSet<TString>& indexKeyColumns,
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+{
+    return CalcVectorKmeansTreePrefixImplTableDescImpl(indexKeyColumns, baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc);
 }
 
 bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDescr, TColumnTypes& columnTypes, TString& explain) {
@@ -555,7 +425,7 @@ bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDescr, TCol
 
         NScheme::TTypeInfo typeInfo;
         if (!GetTypeInfo(typeRegistry->GetType(typeName), column.GetTypeInfo(), typeName, columnName, typeInfo, explain)) {
-            return false; 
+            return false;
         }
 
         columnTypes[columnName] = typeInfo;
@@ -606,7 +476,7 @@ bool IsCompatibleKeyTypes(
             }
         }
 
-        if (!NSchemeShard::IsAllowedKeyType(typeInfo)) {
+        if (!NKikimr::IsAllowedKeyType(typeInfo)) {
             explain += TStringBuilder() << "Column '" << keyName << "' has wrong key type " << NScheme::TypeName(typeInfo) << " for being key";
             return false;
         }

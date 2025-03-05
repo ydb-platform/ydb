@@ -59,30 +59,35 @@ void WaitForPredicate(
             }
         }
     }
-    THROW_ERROR_EXCEPTION("Wait failed: %s", options.Message);
+    THROW_ERROR_EXCEPTION("Wait failed: %s", options.Message)
+        << TErrorAttribute("location", NYT::ToString(options.SourceLocation));
 }
 
 void WaitForPredicate(
     std::function<bool()> predicate,
-    const TString& message)
+    const TString& message,
+    TSourceLocation location)
 {
     WaitForPredicate(
         std::move(predicate),
         TWaitForPredicateOptions{
             .Message = message,
+            .SourceLocation = location,
         });
 }
 
 void WaitForPredicate(
     std::function<bool()> predicate,
     int iterationCount,
-    TDuration period)
+    TDuration period,
+    TSourceLocation location)
 {
     WaitForPredicate(
         std::move(predicate),
         TWaitForPredicateOptions{
             .IterationCount = iterationCount,
             .Period = period,
+            .SourceLocation = location,
         });
 }
 
@@ -150,6 +155,8 @@ Y_TEST_HOOK_BEFORE_RUN(GTEST_YT_SETUP)
     NYT::TSignalRegistry::Get()->PushCallback(NYT::AllCrashSignals, NYT::CrashSignalHandler);
     NYT::TSignalRegistry::Get()->PushDefaultSignalHandler(NYT::AllCrashSignals);
 #endif
+
+    NYT::TErrorCodicils::Initialize();
 
     auto config = NYT::NLogging::TLogManagerConfig::CreateYTServer("unittester", GetOutputPath().GetPath());
     NYT::NLogging::TLogManager::Get()->Configure(config);

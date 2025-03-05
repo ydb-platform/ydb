@@ -9,7 +9,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
@@ -23,6 +23,7 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_type_helpers.h>
 
 
 namespace NKikimr {
@@ -86,20 +87,19 @@ NKqpProto::TKqpPhyInternalBinding::EType GetPhyInternalBindingType(const std::st
     return bindingType;
 }
 
-NKqpProto::EStreamLookupStrategy GetStreamLookupStrategy(const std::string_view strategy) {
-    NKqpProto::EStreamLookupStrategy lookupStrategy = NKqpProto::EStreamLookupStrategy::UNSPECIFIED;
-
-    if (strategy == "LookupRows"sv) {
-        lookupStrategy = NKqpProto::EStreamLookupStrategy::LOOKUP;
-    } else if (strategy == "LookupJoinRows"sv) {
-        lookupStrategy = NKqpProto::EStreamLookupStrategy::JOIN;
-    } else if (strategy == "LookupSemiJoinRows"sv) {
-        lookupStrategy = NKqpProto::EStreamLookupStrategy::SEMI_JOIN;
+NKqpProto::EStreamLookupStrategy GetStreamLookupStrategy(EStreamLookupStrategyType strategy) {
+    switch (strategy) {
+        case EStreamLookupStrategyType::Unspecified:
+            break;
+        case EStreamLookupStrategyType::LookupRows:
+            return NKqpProto::EStreamLookupStrategy::LOOKUP;
+        case EStreamLookupStrategyType::LookupJoinRows:
+            return NKqpProto::EStreamLookupStrategy::JOIN;
+        case EStreamLookupStrategyType::LookupSemiJoinRows:
+            return NKqpProto::EStreamLookupStrategy::SEMI_JOIN;
     }
 
-    YQL_ENSURE(lookupStrategy != NKqpProto::EStreamLookupStrategy::UNSPECIFIED,
-        "Unexpected stream lookup strategy: " << strategy);
-    return lookupStrategy;
+    YQL_ENSURE(false, "Unspecified stream lookup strategy: " << strategy);
 }
 
 void FillTableId(const TKqpTable& table, NKqpProto::TKqpPhyTableId& tableProto) {
@@ -205,7 +205,7 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
         case NScheme::NTypeIds::Decimal: {
             ProtoFromDecimalType(column->TypeInfo.GetDecimalType(), *phyColumn.MutableTypeParam()->MutableDecimal());
             break;
-        }        
+        }
         }
 
     }
@@ -240,7 +240,7 @@ void FillNothingData(const TDataExprType& dataType, NKqpProto::TKqpPhyLiteralVal
     auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
 
     YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId) &&
-        NKikimr::NSchemeShard::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
+        NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
 
     value.MutableType()->SetKind(NKikimrMiniKQL::Optional);
     auto* toFill = value.MutableType()->MutableOptional()->MutableItem();
@@ -881,7 +881,7 @@ private:
         auto stageSettings = NDq::TDqStageSettings::Parse(stage);
         stageProto.SetStageGuid(stageSettings.Id);
         stageProto.SetIsSinglePartition(NDq::TDqStageSettings::EPartitionMode::Single == stageSettings.PartitionMode);
-        stageProto.SetAllowWithSpilling(Config->EnableSpillingGenericQuery);
+        stageProto.SetAllowWithSpilling(Config->EnableSpilling);
     }
 
     void CompileTransaction(const TKqpPhysicalTx& tx, NKqpProto::TKqpPhyTx& txProto, TExprContext& ctx) {
@@ -905,6 +905,7 @@ private:
             i.MutableProgram()->MutableSettings()->SetLevelDataPrediction(rPredictor.GetLevelDataVolume(i.GetProgram().GetSettings().GetStageLevel()));
         }
 
+        txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(false));
         txProto.SetHasEffects(hasEffectStage);
 
         for (const auto& paramBinding : tx.ParamBindings()) {
@@ -1092,7 +1093,10 @@ private:
             // We prepare a lot of partitions and distribute them between these tasks
             // Constraint of 1 task per partition is NOT valid anymore
             auto maxTasksPerStage = Config->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
-            dqIntegration->Partition(NYql::TDqSettings(), maxTasksPerStage, source.Ref(), partitionParams, &clusterName, ctx, false);
+            IDqIntegration::TPartitionSettings pSettings;
+            pSettings.MaxPartitions = maxTasksPerStage;
+            pSettings.CanFallback = false;
+            dqIntegration->Partition(source.Ref(), partitionParams, &clusterName, ctx, pSettings);
             externalSource.SetTaskParamKey(TString(dataSourceCategory));
             for (const TString& partitionParam : partitionParams) {
                 externalSource.AddPartitionedTaskParams(partitionParam);
@@ -1109,6 +1113,32 @@ private:
             YQL_ENSURE(!settings.type_url().empty(), "Data source provider \"" << dataSourceCategory << "\" didn't fill dq source settings for its dq source node");
             YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceCategory << "\" didn't fill dq source settings type for its dq source node");
         }
+    }
+
+    THashMap<TStringBuf, ui32> CreateColumnToOrder(
+            const TVector<TStringBuf>& columns,
+            const TKikimrTableMetadataPtr& tableMeta,
+            bool keysFirst) {
+        THashSet<TStringBuf> usedColumns;
+        for (const auto& columnName : columns) {
+            usedColumns.insert(columnName);
+        }
+
+        THashMap<TStringBuf, ui32> columnToOrder;
+        ui32 number = 0;
+        if (keysFirst) {
+            for (const auto& columnName : tableMeta->KeyColumnNames) {
+                YQL_ENSURE(usedColumns.contains(columnName));
+                columnToOrder[columnName] = number++;
+            }
+        }
+        for (const auto& columnName : tableMeta->ColumnOrder) {
+            if (usedColumns.contains(columnName) && !columnToOrder.contains(columnName)) {
+                columnToOrder[columnName] = number++;
+            }
+        }
+
+        return columnToOrder;
     }
 
     void FillKqpSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, const TDqPhyStage& stage) {
@@ -1162,9 +1192,26 @@ private:
                 fillColumnProto(columnName, columnMeta, columnProto);
             }
 
+            const auto columnToOrder = CreateColumnToOrder(
+                columns,
+                tableMeta,
+                settings.TableType().Cast().StringValue() == "oltp");
+            for (const auto& columnName : columns) {
+                settingsProto.AddWriteIndexes(columnToOrder.at(columnName));
+            }
+
             if (const auto inconsistentWrite = settings.InconsistentWrite().Cast(); inconsistentWrite.StringValue() == "true") {
                 settingsProto.SetInconsistentTx(true);
             }
+          
+            if (const auto streamWrite = settings.StreamWrite().Cast(); streamWrite.StringValue() == "true") {
+                settingsProto.SetEnableStreamWrite(true);
+            }
+          
+            if (const auto isBatch = settings.IsBatch().Cast(); isBatch.StringValue() == "true") {
+                settingsProto.SetIsBatch(true);
+            }
+            
             settingsProto.SetIsOlap(settings.TableType().Cast().StringValue() == "olap");
             settingsProto.SetPriority(FromString<i64>(settings.Priority().Cast().StringValue()));
 
@@ -1238,10 +1285,46 @@ private:
         }
 
         if (auto maybeShuffle = connection.Maybe<TDqCnHashShuffle>()) {
+            const auto& shuffle = maybeShuffle.Cast();
             auto& shuffleProto = *connectionProto.MutableHashShuffle();
-            for (const auto& keyColumn : maybeShuffle.Cast().KeyColumns()) {
+            for (const auto& keyColumn : shuffle.KeyColumns()) {
                 shuffleProto.AddKeyColumns(TString(keyColumn));
             }
+
+            if (Config->OptShuffleElimination.Get().GetOrElse(false)) {
+                auto& columnHashV1 = *shuffleProto.MutableColumnShardHashV1();
+
+                const auto& outputType = NYql::NDq::GetDqConnectionType(connection, ctx);
+                auto structType = outputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                for (const auto& column: shuffle.KeyColumns().Ptr()->Children()) {
+                    auto ty = NYql::NDq::GetColumnType(connection, *structType, column->Content(), column->Pos(), ctx);
+                    NYql::NUdf::EDataSlot slot;
+                    switch (ty->GetKind()) {
+                        case ETypeAnnotationKind::Data: {
+                            slot = ty->Cast<TDataExprType>()->GetSlot();
+                            break;
+                        }
+                        case ETypeAnnotationKind::Optional: {
+                            auto optionalType = ty->Cast<TOptionalExprType>()->GetItemType();
+                            Y_ENSURE(
+                                optionalType->GetKind() == ETypeAnnotationKind::Data, 
+                                TStringBuilder{} << "Can't retrieve type from optional" << static_cast<std::int64_t>(optionalType->GetKind()) << "for ColumnHashV1 Shuffling"
+                            );
+                            slot = optionalType->Cast<TDataExprType>()->GetSlot();
+                            break;
+                        }
+                        default: {
+                            Y_ENSURE(false, TStringBuilder{} << "Can't get type for ColumnHashV1 Shuffling: " << static_cast<std::int64_t>(ty->GetKind()));
+                        }
+                    }
+
+                    auto typeId = GetDataTypeInfo(slot).TypeId;
+                    columnHashV1.AddKeyColumnTypes(typeId);
+                }
+            } else {
+                shuffleProto.MutableHashV1();
+            }
+
             return;
         }
 
@@ -1343,9 +1426,12 @@ private:
             const auto resultItemType = resultType->Cast<TStreamExprType>()->GetItemType();
             streamLookupProto.SetResultType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *resultItemType), TypeEnv));
 
-            YQL_ENSURE(streamLookup.LookupStrategy().Maybe<TCoAtom>());
-            TString lookupStrategy = streamLookup.LookupStrategy().Maybe<TCoAtom>().Cast().StringValue();
-            streamLookupProto.SetLookupStrategy(GetStreamLookupStrategy(lookupStrategy));
+            auto settings = TKqpStreamLookupSettings::Parse(streamLookup);
+            streamLookupProto.SetLookupStrategy(GetStreamLookupStrategy(settings.Strategy));
+            streamLookupProto.SetKeepRowsOrder(Config->OrderPreservingLookupJoinEnabled());
+            if (settings.AllowNullKeysPrefixSize) {
+                streamLookupProto.SetAllowNullKeysPrefixSize(*settings.AllowNullKeysPrefixSize);
+            }
 
             switch (streamLookupProto.GetLookupStrategy()) {
                 case NKqpProto::EStreamLookupStrategy::LOOKUP: {
@@ -1404,7 +1490,7 @@ private:
                     break;
                 }
                 default:
-                    YQL_ENSURE(false, "Unexpected lookup strategy for stream lookup: " << lookupStrategy);
+                    YQL_ENSURE(false, "Unexpected lookup strategy for stream lookup: " << settings.Strategy);
             }
 
             return;

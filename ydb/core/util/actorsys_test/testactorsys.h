@@ -7,6 +7,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/mailbox.h>
 #include <ydb/library/actors/core/scheduler_queue.h>
+#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/interconnect/interconnect_common.h>
 #include <ydb/library/actors/util/should_continue.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
@@ -105,8 +106,7 @@ class TTestActorSystem {
         ui32 NextHint = 1;
     };
 
-    struct TMailboxInfo {
-        TMailboxHeader Header{TMailboxType::Simple};
+    struct TMailboxInfo : public TMailbox {
     };
 
     struct TAppDataInfo {
@@ -285,8 +285,7 @@ public:
         info.AppData = std::move(MakeAppData());
         info.ActorSystem = std::make_unique<TActorSystem>(setup, info.AppData.get(), LoggerSettings_);
         info.MailboxTable = std::make_unique<TMailboxTable>();
-        info.ExecutorThread = std::make_unique<TExecutorThread>(0, 0, info.ActorSystem.get(), pool,
-            info.MailboxTable.get(), "TestExecutor");
+        info.ExecutorThread = std::make_unique<TExecutorThread>(0, info.ActorSystem.get(), pool, "TestExecutor");
     }
 
     void StartNode(ui32 nodeId) {
@@ -311,8 +310,8 @@ public:
             for (auto it = Mailboxes.begin(); it != Mailboxes.end(); ) {
                 if (from <= it->first && it->first < to) {
                     TMailboxInfo& mbox = it->second;
-                    mbox.Header.ForEach([&](ui64 /*actorId*/, IActor *actor) { ActorName.erase(actor); });
-                    mbox.Header.CleanupActors();
+                    mbox.ForEach([&](ui64 /*actorId*/, IActor *actor) { ActorName.erase(actor); });
+                    mbox.CleanupActors();
                     it = Mailboxes.erase(it);
                     found = true;
                 } else {
@@ -442,13 +441,17 @@ public:
         }
     }
 
-    IActor *GetActor(const TActorId& actorId, TMailboxHeader **header = nullptr) {
+    IActor *GetActor(const TActorId& actorId, TMailbox **mailbox = nullptr) {
         if (const auto it = Mailboxes.find(actorId); it != Mailboxes.end()) {
             TMailboxInfo& mbox = it->second;
-            if (header) {
-                *header = &mbox.Header;
+            if (mailbox) {
+                *mailbox = &mbox;
             }
-            return mbox.Header.FindActor(actorId.LocalId());
+            IActor *actor = mbox.FindActor(actorId.LocalId());
+            if (!actor) {
+                actor = mbox.FindAlias(actorId.LocalId());
+            }
+            return actor;
         } else {
             return nullptr;
         }
@@ -493,9 +496,13 @@ public:
         }
 
         // register actor in mailbox
-        const auto& it = Mailboxes.try_emplace(TMailboxId(nodeId, poolId, mboxId)).first;
+        auto [it, mboxInserted] = Mailboxes.try_emplace(TMailboxId(nodeId, poolId, mboxId));
         TMailboxInfo& mbox = it->second;
-        mbox.Header.AttachActor(ActorLocalId, actor);
+        mbox.Hint = mboxId;
+        if (mboxInserted) {
+            mbox.LockFromFree();
+        }
+        mbox.AttachActor(ActorLocalId, actor);
 
         // generate actor id
         const TActorId actorId(nodeId, poolId, ActorLocalId, mboxId);
@@ -513,6 +520,24 @@ public:
 
     TActorId Register(IActor *actor, ui32 nodeId, ui32 poolId = 0) {
         return Register(actor, {}, poolId, {}, nodeId);
+    }
+
+    TActorId RegisterAlias(ui32 mboxId, IActor* actor, ui32 poolId, ui32 nodeId) {
+        auto it = Mailboxes.find(TMailboxId(nodeId, poolId, mboxId));
+        Y_ABORT_UNLESS(it != Mailboxes.end());
+        TMailboxInfo& mbox = it->second;
+        mbox.AttachAlias(ActorLocalId, actor);
+
+        const TActorId actorId(nodeId, poolId, ActorLocalId, mboxId);
+        ++ActorLocalId;
+        return actorId;
+    }
+
+    void UnregisterAlias(ui32 mboxId, const TActorId &actorId, ui32 poolId, ui32 nodeId) {
+        auto it = Mailboxes.find(TMailboxId(nodeId, poolId, mboxId));
+        Y_ABORT_UNLESS(it != Mailboxes.end());
+        TMailboxInfo& mbox = it->second;
+        mbox.DetachAlias(actorId.LocalId());
     }
 
     void RegisterService(const TActorId& serviceId, const TActorId& actorId) {
@@ -563,8 +588,12 @@ public:
             if (FilterFunction && !FilterFunction(item->NodeId, event)) { // event is dropped by the filter function
                 continue;
             }
-            const bool success = WrapInActorContext(TransformEvent(event.get(), item->NodeId), [&](IActor *actor) {
+            const bool success = WrapInActorContext(TransformEvent(event.get(), item->NodeId), [&](IActor *actor, bool alias) {
                 TAutoPtr<IEventHandle> ev(event.release());
+
+                if (alias) {
+                    ev->Rewrite(ev->GetTypeRewrite(), actor->SelfId());
+                }
 
                 const ui32 type = ev->GetTypeRewrite();
 
@@ -595,7 +624,16 @@ public:
             return false;
         }
         TMailboxInfo& mbox = mboxIt->second;
-        if (IActor *actor = mbox.Header.FindActor(actorId.LocalId())) {
+        IActor *actor = mbox.FindActor(actorId.LocalId());
+        bool alias = false;
+        if (!actor) {
+            actor = mbox.FindAlias(actorId.LocalId());
+            if (actor) {
+                actorId = actor->SelfId();
+                alias = true;
+            }
+        }
+        if (actor) {
             // obtain node info for this actor
             TPerNodeInfo *info = GetNode(actorId.NodeId());
 
@@ -603,14 +641,16 @@ public:
             info->SchedulerThread->AdjustClock(Clock);
 
             // allocate context and store its reference in TLS
-            TActorContext ctx(mbox.Header, *info->ExecutorThread, GetCycleCountFast(), actorId);
+            TActorContext ctx(mbox, *info->ExecutorThread, GetCycleCountFast(), actorId);
             TlsActivationContext = &ctx;
             CurrentRecipient = actorId;
             CurrentNodeId = actorId.NodeId();
 
             // invoke the callback
             try {
-                if constexpr (std::is_invocable_v<TCallback, IActor*>) {
+                if constexpr (std::is_invocable_v<TCallback, IActor*, bool>) {
+                    std::invoke(std::forward<TCallback>(callback), actor, alias);
+                } else if constexpr (std::is_invocable_v<TCallback, IActor*>) {
                     std::invoke(std::forward<TCallback>(callback), actor);
                 } else {
                     std::invoke(std::forward<TCallback>(callback));
@@ -641,7 +681,7 @@ public:
             info->ExecutorThread->DropUnregistered();
 
             // drop the mailbox if no actors remain there
-            if (mbox.Header.IsEmpty()) {
+            if (mbox.IsEmpty()) {
                 Mailboxes.erase(mboxIt);
             }
             return true;
@@ -690,19 +730,19 @@ public:
         TMailboxInfo& mbox = it->second;
 
         // update stats
-        const auto nameIt = ActorName.find(mbox.Header.FindActor(actorId.LocalId()));
+        const auto nameIt = ActorName.find(mbox.FindActor(actorId.LocalId()));
         Y_ABORT_UNLESS(nameIt != ActorName.end());
         ++ActorStats[nameIt->second].Destroyed;
         ActorName.erase(nameIt);
 
         // unregister actor through the executor
-        info->ExecutorThread->UnregisterActor(&mbox.Header, actorId);
+        info->ExecutorThread->UnregisterActor(&mbox, actorId);
 
         // terminate unregistered actor
         info->ExecutorThread->DropUnregistered();
 
         // delete mailbox if empty
-        if (mbox.Header.IsEmpty()) {
+        if (mbox.IsEmpty()) {
             Mailboxes.erase(actorId);
         }
     }

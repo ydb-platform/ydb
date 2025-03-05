@@ -3,8 +3,8 @@
 
 #include "pythonic/include/numpy/digitize.hpp"
 
-#include "pythonic/numpy/asarray.hpp"
 #include "pythonic/builtins/None.hpp"
+#include "pythonic/numpy/asarray.hpp"
 #include "pythonic/operator_/gt.hpp"
 #include "pythonic/operator_/lt.hpp"
 
@@ -31,7 +31,7 @@ namespace numpy
         _digitize((*begin).begin(), (*begin).end(), out, bins, op,
                   utils::int_<N - 1>());
     }
-  }
+  } // namespace
 
   template <class E, class F>
   types::ndarray<long, types::pshape<long>> digitize(E const &expr, F const &b)
@@ -50,7 +50,7 @@ namespace numpy
                 operator_::functor::gt(), utils::int_<E::value>());
     return out;
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

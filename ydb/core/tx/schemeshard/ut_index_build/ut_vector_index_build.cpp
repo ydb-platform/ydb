@@ -1,4 +1,5 @@
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
@@ -7,7 +8,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/metering/metering.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -128,7 +129,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
         UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
 
-        const TString meteringData = R"({"usage":{"start":2,"quantity":128,"finish":2,"unit":"request_unit","type":"delta"},"tags":{},"id":"106-72075186233409549-2-0-0-0-0-200-0-1290-0","cloud_id":"CLOUD_ID_VAL","source_wt":2,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})""\n";
+        const TString meteringData = R"({"usage":{"start":0,"quantity":128,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"106-72075186233409549-2-0-0-0-0-200-0-1290-0","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})""\n";
 
         UNIT_ASSERT_NO_DIFF(meteringMessages, meteringData);
 
@@ -249,12 +250,12 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
                 partition_at_keys {
                     split_points {
-                        type { tuple_type { elements { optional_type { item { type_id: UINT32 } } } } }
-                        value { items { uint32_value: 12345 } }
+                        type { tuple_type { elements { optional_type { item { type_id: UINT64 } } } } }
+                        value { items { uint64_value: 12345 } }
                     }
                     split_points {
-                        type { tuple_type { elements { optional_type { item { type_id: UINT32 } } } } }
-                        value { items { uint32_value: 54321 } }
+                        type { tuple_type { elements { optional_type { item { type_id: UINT64 } } } } }
+                        value { items { uint64_value: 54321 } }
                     }
                 }
                 partitioning_settings {
@@ -265,16 +266,20 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             globalIndexSettings = NYdb::NTable::TGlobalIndexSettings::FromProto(proto);
         }
 
-        std::unique_ptr<NYdb::NTable::TVectorIndexSettings> vectorIndexSettings;
+        std::unique_ptr<NYdb::NTable::TKMeansTreeSettings> kmeansTreeSettings;
         {
-            Ydb::Table::VectorIndexSettings proto;
+            Ydb::Table::KMeansTreeSettings proto;
             UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
-                metric: DISTANCE_COSINE,
-                vector_type: VECTOR_TYPE_FLOAT,
-                vector_dimension: 1024
+                settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                }
+                levels: 5
+                clusters: 4
             )", &proto));
-            using T = NYdb::NTable::TVectorIndexSettings;
-            vectorIndexSettings = std::make_unique<T>(T::FromProto(proto));
+            using T = NYdb::NTable::TKMeansTreeSettings;
+            kmeansTreeSettings = std::make_unique<T>(T::FromProto(proto));
         }
 
         TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> indexCreationBlocker(runtime, [](const auto& ev) {
@@ -285,7 +290,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         const ui64 buildIndexTx = ++txId;
         TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", TBuildIndexConfig{
             "by_embedding", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, { "embedding" }, { "covered" },
-            { globalIndexSettings, globalIndexSettings }, std::move(vectorIndexSettings)
+            { globalIndexSettings, globalIndexSettings }, std::move(kmeansTreeSettings)
         });
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
@@ -299,33 +304,41 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             buildIndexOperation.DebugString()
         );
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/by_embedding"), {
-            NLs::PathExist,
-            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
-            NLs::IndexKeys({"embedding"}),
-            NLs::IndexDataColumns({"covered"}),
-            NLs::VectorIndexDescription(
-                Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
-                Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
-                1024
-            )
-        });
-
         using namespace NKikimr::NTableIndex::NTableVectorKmeansTreeIndex;
         TestDescribeResult(DescribePrivatePath(runtime, JoinFsPaths("/MyRoot/vectors/by_embedding", LevelTable), true, true), {
             NLs::IsTable,
             NLs::PartitionCount(3),
             NLs::MinPartitionsCountEqual(3),
             NLs::MaxPartitionsCountEqual(3),
-            NLs::SplitBoundaries<ui32>({12345, 54321})
+            NLs::SplitBoundaries<ui64>({12345, 54321})
         });
         TestDescribeResult(DescribePrivatePath(runtime, JoinFsPaths("/MyRoot/vectors/by_embedding", PostingTable), true, true), {
             NLs::IsTable,
             NLs::PartitionCount(3),
             NLs::MinPartitionsCountEqual(3),
             NLs::MaxPartitionsCountEqual(3),
-            NLs::SplitBoundaries<ui32>({12345, 54321})
+            NLs::SplitBoundaries<ui64>({12345, 54321})
         });
+
+        for (size_t i = 0; i != 3; ++i) {
+            if (i != 0) {
+                // check that specialized index description persisted even after reboot
+                RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            }
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/by_embedding"), {
+                NLs::PathExist,
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
+                NLs::IndexKeys({"embedding"}),
+                NLs::IndexDataColumns({"covered"}),
+                NLs::KMeansTreeDescription(
+                    Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+                    Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
+                    1024,
+                    4,
+                    5
+                )
+            });
+        }
     }
 }

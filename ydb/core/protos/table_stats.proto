@@ -72,4 +72,8 @@ message TTableStats {
     // denotes that datashard should be background compacted 
     // even if it is single parted
     optional bool HasSchemaChanges = 33;
+
+    optional uint64 LocksAcquired = 34;
+    optional uint64 LocksWholeShard = 35;
+    optional uint64 LocksBroken = 36;
 }

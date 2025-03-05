@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cassert>
 #include <cstring>
+#include <limits>
 #include <type_traits>
 #include <system_error>
 #ifdef __has_include
@@ -14,40 +15,66 @@
 #endif
 #include "constexpr_feature_detect.h"
 
+#define FASTFLOAT_VERSION_MAJOR 8
+#define FASTFLOAT_VERSION_MINOR 0
+#define FASTFLOAT_VERSION_PATCH 0
+
+#define FASTFLOAT_STRINGIZE_IMPL(x) #x
+#define FASTFLOAT_STRINGIZE(x) FASTFLOAT_STRINGIZE_IMPL(x)
+
+#define FASTFLOAT_VERSION_STR                                                  \
+  FASTFLOAT_STRINGIZE(FASTFLOAT_VERSION_MAJOR)                                 \
+  "." FASTFLOAT_STRINGIZE(FASTFLOAT_VERSION_MINOR) "." FASTFLOAT_STRINGIZE(    \
+      FASTFLOAT_VERSION_PATCH)
+
+#define FASTFLOAT_VERSION                                                      \
+  (FASTFLOAT_VERSION_MAJOR * 10000 + FASTFLOAT_VERSION_MINOR * 100 +           \
+   FASTFLOAT_VERSION_PATCH)
+
 namespace fast_float {
 
-#define FASTFLOAT_JSONFMT (1 << 5)
-#define FASTFLOAT_FORTRANFMT (1 << 6)
+enum class chars_format : uint64_t;
 
-enum chars_format {
+namespace detail {
+constexpr chars_format basic_json_fmt = chars_format(1 << 5);
+constexpr chars_format basic_fortran_fmt = chars_format(1 << 6);
+} // namespace detail
+
+enum class chars_format : uint64_t {
   scientific = 1 << 0,
   fixed = 1 << 2,
   hex = 1 << 3,
   no_infnan = 1 << 4,
   // RFC 8259: https://datatracker.ietf.org/doc/html/rfc8259#section-6
-  json = FASTFLOAT_JSONFMT | fixed | scientific | no_infnan,
+  json = uint64_t(detail::basic_json_fmt) | fixed | scientific | no_infnan,
   // Extension of RFC 8259 where, e.g., "inf" and "nan" are allowed.
-  json_or_infnan = FASTFLOAT_JSONFMT | fixed | scientific,
-  fortran = FASTFLOAT_FORTRANFMT | fixed | scientific,
-  general = fixed | scientific
+  json_or_infnan = uint64_t(detail::basic_json_fmt) | fixed | scientific,
+  fortran = uint64_t(detail::basic_fortran_fmt) | fixed | scientific,
+  general = fixed | scientific,
+  allow_leading_plus = 1 << 7,
+  skip_white_space = 1 << 8,
 };
 
 template <typename UC> struct from_chars_result_t {
   UC const *ptr;
   std::errc ec;
 };
+
 using from_chars_result = from_chars_result_t<char>;
 
 template <typename UC> struct parse_options_t {
   constexpr explicit parse_options_t(chars_format fmt = chars_format::general,
-                                     UC dot = UC('.'))
-      : format(fmt), decimal_point(dot) {}
+                                     UC dot = UC('.'), int b = 10)
+      : format(fmt), decimal_point(dot), base(b) {}
 
   /** Which number formats are accepted */
   chars_format format;
   /** The character used as decimal point */
   UC decimal_point;
+  /** The base used for integers */
+  int base;
 };
+
 using parse_options = parse_options_t<char>;
 
 } // namespace fast_float
@@ -194,32 +221,58 @@ fastfloat_really_inline constexpr bool cpp20_and_in_constexpr() {
 }
 
 template <typename T>
-fastfloat_really_inline constexpr bool is_supported_float_type() {
-  return std::is_same<T, float>::value || std::is_same<T, double>::value
-#if __STDCPP_FLOAT32_T__
-         || std::is_same<T, std::float32_t>::value
+struct is_supported_float_type
+    : std::integral_constant<
+          bool, std::is_same<T, double>::value || std::is_same<T, float>::value
+#ifdef __STDCPP_FLOAT64_T__
+                    || std::is_same<T, std::float64_t>::value
 #endif
-#if __STDCPP_FLOAT64_T__
-         || std::is_same<T, std::float64_t>::value
+#ifdef __STDCPP_FLOAT32_T__
+                    || std::is_same<T, std::float32_t>::value
 #endif
-      ;
-}
+#ifdef __STDCPP_FLOAT16_T__
+                    || std::is_same<T, std::float16_t>::value
+#endif
+#ifdef __STDCPP_BFLOAT16_T__
+                    || std::is_same<T, std::bfloat16_t>::value
+#endif
+          > {
+};
+
+template <typename T>
+using equiv_uint_t = typename std::conditional<
+    sizeof(T) == 1, uint8_t,
+    typename std::conditional<
+        sizeof(T) == 2, uint16_t,
+        typename std::conditional<sizeof(T) == 4, uint32_t,
+                                  uint64_t>::type>::type>::type;
+
+template <typename T> struct is_supported_integer_type : std::is_integral<T> {};
 
 template <typename UC>
-fastfloat_really_inline constexpr bool is_supported_char_type() {
-  return std::is_same<UC, char>::value || std::is_same<UC, wchar_t>::value ||
-         std::is_same<UC, char16_t>::value || std::is_same<UC, char32_t>::value;
-}
+struct is_supported_char_type
+    : std::integral_constant<bool, std::is_same<UC, char>::value ||
+                                       std::is_same<UC, wchar_t>::value ||
+                                       std::is_same<UC, char16_t>::value ||
+                                       std::is_same<UC, char32_t>::value
+#ifdef __cpp_char8_t
+                                       || std::is_same<UC, char8_t>::value
+#endif
+                             > {
+};
 
 // Compares two ASCII strings in a case insensitive manner.
 template <typename UC>
 inline FASTFLOAT_CONSTEXPR14 bool
-fastfloat_strncasecmp(UC const *input1, UC const *input2, size_t length) {
-  char running_diff{0};
+fastfloat_strncasecmp(UC const *actual_mixedcase, UC const *expected_lowercase,
+                      size_t length) {
   for (size_t i = 0; i < length; ++i) {
-    running_diff |= (char(input1[i]) ^ char(input2[i]));
+    UC const actual = actual_mixedcase[i];
+    if ((actual < 256 ? actual | 32 : actual) != expected_lowercase[i]) {
+      return false;
+    }
   }
-  return (running_diff == 0) || (running_diff == 32);
+  return true;
 }
 
 #ifndef FLT_EVAL_METHOD
@@ -228,9 +281,11 @@ fastfloat_strncasecmp(UC const *input1, UC const *input2, size_t length) {
 
 // a pointer and a length to a contiguous block of memory
 template <typename T> struct span {
-  const T *ptr;
+  T const *ptr;
   size_t length;
-  constexpr span(const T *_ptr, size_t _length) : ptr(_ptr), length(_length) {}
+
+  constexpr span(T const *_ptr, size_t _length) : ptr(_ptr), length(_length) {}
+
   constexpr span() : ptr(nullptr), length(0) {}
 
   constexpr size_t len() const noexcept { return length; }
@@ -244,7 +299,9 @@ template <typename T> struct span {
 struct value128 {
   uint64_t low;
   uint64_t high;
+
   constexpr value128(uint64_t _low, uint64_t _high) : low(_low), high(_high) {}
+
   constexpr value128() : low(0), high(0) {}
 };
 
@@ -360,10 +417,12 @@ struct adjusted_mantissa {
   uint64_t mantissa{0};
   int32_t power2{0}; // a negative value indicates an invalid result
   adjusted_mantissa() = default;
-  constexpr bool operator==(const adjusted_mantissa &o) const {
+
+  constexpr bool operator==(adjusted_mantissa const &o) const {
     return mantissa == o.mantissa && power2 == o.power2;
   }
-  constexpr bool operator!=(const adjusted_mantissa &o) const {
+
+  constexpr bool operator!=(adjusted_mantissa const &o) const {
     return mantissa != o.mantissa || power2 != o.power2;
   }
 };
@@ -377,28 +436,27 @@ constexpr uint64_t constant_55555 = 5 * 5 * 5 * 5 * 5;
 template <typename T, typename U = void> struct binary_format_lookup_tables;
 
 template <typename T> struct binary_format : binary_format_lookup_tables<T> {
-  using equiv_uint =
-      typename std::conditional<sizeof(T) == 4, uint32_t, uint64_t>::type;
+  using equiv_uint = equiv_uint_t<T>;
 
-  static inline constexpr int mantissa_explicit_bits();
-  static inline constexpr int minimum_exponent();
-  static inline constexpr int infinite_power();
-  static inline constexpr int sign_index();
-  static inline constexpr int
+  static constexpr int mantissa_explicit_bits();
+  static constexpr int minimum_exponent();
+  static constexpr int infinite_power();
+  static constexpr int sign_index();
+  static constexpr int
   min_exponent_fast_path(); // used when fegetround() == FE_TONEAREST
-  static inline constexpr int max_exponent_fast_path();
-  static inline constexpr int max_exponent_round_to_even();
-  static inline constexpr int min_exponent_round_to_even();
-  static inline constexpr uint64_t max_mantissa_fast_path(int64_t power);
-  static inline constexpr uint64_t
+  static constexpr int max_exponent_fast_path();
+  static constexpr int max_exponent_round_to_even();
+  static constexpr int min_exponent_round_to_even();
+  static constexpr uint64_t max_mantissa_fast_path(int64_t power);
+  static constexpr uint64_t
   max_mantissa_fast_path(); // used when fegetround() == FE_TONEAREST
-  static inline constexpr int largest_power_of_ten();
-  static inline constexpr int smallest_power_of_ten();
-  static inline constexpr T exact_power_of_ten(int64_t power);
-  static inline constexpr size_t max_digits();
-  static inline constexpr equiv_uint exponent_mask();
-  static inline constexpr equiv_uint mantissa_mask();
-  static inline constexpr equiv_uint hidden_bit_mask();
+  static constexpr int largest_power_of_ten();
+  static constexpr int smallest_power_of_ten();
+  static constexpr T exact_power_of_ten(int64_t power);
+  static constexpr size_t max_digits();
+  static constexpr equiv_uint exponent_mask();
+  static constexpr equiv_uint mantissa_mask();
+  static constexpr equiv_uint hidden_bit_mask();
 };
 
 template <typename U> struct binary_format_lookup_tables<double, U> {
@@ -506,6 +564,7 @@ template <>
 inline constexpr int binary_format<double>::mantissa_explicit_bits() {
   return 52;
 }
+
 template <>
 inline constexpr int binary_format<float>::mantissa_explicit_bits() {
   return 23;
@@ -534,6 +593,7 @@ inline constexpr int binary_format<float>::min_exponent_round_to_even() {
 template <> inline constexpr int binary_format<double>::minimum_exponent() {
   return -1023;
 }
+
 template <> inline constexpr int binary_format<float>::minimum_exponent() {
   return -127;
 }
@@ -541,6 +601,7 @@ template <> inline constexpr int binary_format<float>::minimum_exponent() {
 template <> inline constexpr int binary_format<double>::infinite_power() {
   return 0x7FF;
 }
+
 template <> inline constexpr int binary_format<float>::infinite_power() {
   return 0xFF;
 }
@@ -548,6 +609,7 @@ template <> inline constexpr int binary_format<float>::infinite_power() {
 template <> inline constexpr int binary_format<double>::sign_index() {
   return 63;
 }
+
 template <> inline constexpr int binary_format<float>::sign_index() {
   return 31;
 }
@@ -556,6 +618,7 @@ template <>
 inline constexpr int binary_format<double>::max_exponent_fast_path() {
   return 22;
 }
+
 template <>
 inline constexpr int binary_format<float>::max_exponent_fast_path() {
   return 10;
@@ -565,6 +628,261 @@ template <>
 inline constexpr uint64_t binary_format<double>::max_mantissa_fast_path() {
   return uint64_t(2) << mantissa_explicit_bits();
 }
+
+template <>
+inline constexpr uint64_t binary_format<float>::max_mantissa_fast_path() {
+  return uint64_t(2) << mantissa_explicit_bits();
+}
+
+// credit: Jakub Jelínek
+#ifdef __STDCPP_FLOAT16_T__
+template <typename U> struct binary_format_lookup_tables<std::float16_t, U> {
+  static constexpr std::float16_t powers_of_ten[] = {1e0f16, 1e1f16, 1e2f16,
+                                                     1e3f16, 1e4f16};
+
+  // Largest integer value v so that (5**index * v) <= 1<<11.
+  // 0x800 == 1<<11
+  static constexpr uint64_t max_mantissa[] = {0x800,
+                                              0x800 / 5,
+                                              0x800 / (5 * 5),
+                                              0x800 / (5 * 5 * 5),
+                                              0x800 / (5 * 5 * 5 * 5),
+                                              0x800 / (constant_55555)};
+};
+
+#if FASTFLOAT_DETAIL_MUST_DEFINE_CONSTEXPR_VARIABLE
+
+template <typename U>
+constexpr std::float16_t
+    binary_format_lookup_tables<std::float16_t, U>::powers_of_ten[];
+
+template <typename U>
+constexpr uint64_t
+    binary_format_lookup_tables<std::float16_t, U>::max_mantissa[];
+
+#endif
+
+template <>
+inline constexpr std::float16_t
+binary_format<std::float16_t>::exact_power_of_ten(int64_t power) {
+  // Work around clang bug https://godbolt.org/z/zedh7rrhc
+  return (void)powers_of_ten[0], powers_of_ten[power];
+}
+
+template <>
+inline constexpr binary_format<std::float16_t>::equiv_uint
+binary_format<std::float16_t>::exponent_mask() {
+  return 0x7C00;
+}
+
+template <>
+inline constexpr binary_format<std::float16_t>::equiv_uint
+binary_format<std::float16_t>::mantissa_mask() {
+  return 0x03FF;
+}
+
+template <>
+inline constexpr binary_format<std::float16_t>::equiv_uint
+binary_format<std::float16_t>::hidden_bit_mask() {
+  return 0x0400;
+}
+
+template <>
+inline constexpr int binary_format<std::float16_t>::max_exponent_fast_path() {
+  return 4;
+}
+
+template <>
+inline constexpr int binary_format<std::float16_t>::mantissa_explicit_bits() {
+  return 10;
+}
+
+template <>
+inline constexpr uint64_t
+binary_format<std::float16_t>::max_mantissa_fast_path() {
+  return uint64_t(2) << mantissa_explicit_bits();
+}
+
+template <>
+inline constexpr uint64_t
+binary_format<std::float16_t>::max_mantissa_fast_path(int64_t power) {
+  // caller is responsible to ensure that
+  // power >= 0 && power <= 4
+  //
+  // Work around clang bug https://godbolt.org/z/zedh7rrhc
+  return (void)max_mantissa[0], max_mantissa[power];
+}
+
+template <>
+inline constexpr int binary_format<std::float16_t>::min_exponent_fast_path() {
+  return 0;
+}
+
+template <>
+inline constexpr int
+binary_format<std::float16_t>::max_exponent_round_to_even() {
+  return 5;
+}
+
+template <>
+inline constexpr int
+binary_format<std::float16_t>::min_exponent_round_to_even() {
+  return -22;
+}
+
+template <>
+inline constexpr int binary_format<std::float16_t>::minimum_exponent() {
+  return -15;
+}
+
+template <>
+inline constexpr int binary_format<std::float16_t>::infinite_power() {
+  return 0x1F;
+}
+
+template <> inline constexpr int binary_format<std::float16_t>::sign_index() {
+  return 15;
+}
+
+template <>
+inline constexpr int binary_format<std::float16_t>::largest_power_of_ten() {
+  return 4;
+}
+
+template <>
+inline constexpr int binary_format<std::float16_t>::smallest_power_of_ten() {
+  return -27;
+}
+
+template <>
+inline constexpr size_t binary_format<std::float16_t>::max_digits() {
+  return 22;
+}
+#endif // __STDCPP_FLOAT16_T__
+
+// credit: Jakub Jelínek
+#ifdef __STDCPP_BFLOAT16_T__
+template <typename U> struct binary_format_lookup_tables<std::bfloat16_t, U> {
+  static constexpr std::bfloat16_t powers_of_ten[] = {1e0bf16, 1e1bf16, 1e2bf16,
+                                                      1e3bf16};
+
+  // Largest integer value v so that (5**index * v) <= 1<<8.
+  // 0x100 == 1<<8
+  static constexpr uint64_t max_mantissa[] = {0x100, 0x100 / 5, 0x100 / (5 * 5),
+                                              0x100 / (5 * 5 * 5),
+                                              0x100 / (5 * 5 * 5 * 5)};
+};
+
+#if FASTFLOAT_DETAIL_MUST_DEFINE_CONSTEXPR_VARIABLE
+
+template <typename U>
+constexpr std::bfloat16_t
+    binary_format_lookup_tables<std::bfloat16_t, U>::powers_of_ten[];
+
+template <typename U>
+constexpr uint64_t
+    binary_format_lookup_tables<std::bfloat16_t, U>::max_mantissa[];
+
+#endif
+
+template <>
+inline constexpr std::bfloat16_t
+binary_format<std::bfloat16_t>::exact_power_of_ten(int64_t power) {
+  // Work around clang bug https://godbolt.org/z/zedh7rrhc
+  return (void)powers_of_ten[0], powers_of_ten[power];
+}
+
+template <>
+inline constexpr int binary_format<std::bfloat16_t>::max_exponent_fast_path() {
+  return 3;
+}
+
+template <>
+inline constexpr binary_format<std::bfloat16_t>::equiv_uint
+binary_format<std::bfloat16_t>::exponent_mask() {
+  return 0x7F80;
+}
+
+template <>
+inline constexpr binary_format<std::bfloat16_t>::equiv_uint
+binary_format<std::bfloat16_t>::mantissa_mask() {
+  return 0x007F;
+}
+
+template <>
+inline constexpr binary_format<std::bfloat16_t>::equiv_uint
+binary_format<std::bfloat16_t>::hidden_bit_mask() {
+  return 0x0080;
+}
+
+template <>
+inline constexpr int binary_format<std::bfloat16_t>::mantissa_explicit_bits() {
+  return 7;
+}
+
+template <>
+inline constexpr uint64_t
+binary_format<std::bfloat16_t>::max_mantissa_fast_path() {
+  return uint64_t(2) << mantissa_explicit_bits();
+}
+
+template <>
+inline constexpr uint64_t
+binary_format<std::bfloat16_t>::max_mantissa_fast_path(int64_t power) {
+  // caller is responsible to ensure that
+  // power >= 0 && power <= 3
+  //
+  // Work around clang bug https://godbolt.org/z/zedh7rrhc
+  return (void)max_mantissa[0], max_mantissa[power];
+}
+
+template <>
+inline constexpr int binary_format<std::bfloat16_t>::min_exponent_fast_path() {
+  return 0;
+}
+
+template <>
+inline constexpr int
+binary_format<std::bfloat16_t>::max_exponent_round_to_even() {
+  return 3;
+}
+
+template <>
+inline constexpr int
+binary_format<std::bfloat16_t>::min_exponent_round_to_even() {
+  return -24;
+}
+
+template <>
+inline constexpr int binary_format<std::bfloat16_t>::minimum_exponent() {
+  return -127;
+}
+
+template <>
+inline constexpr int binary_format<std::bfloat16_t>::infinite_power() {
+  return 0xFF;
+}
+
+template <> inline constexpr int binary_format<std::bfloat16_t>::sign_index() {
+  return 15;
+}
+
+template <>
+inline constexpr int binary_format<std::bfloat16_t>::largest_power_of_ten() {
+  return 38;
+}
+
+template <>
+inline constexpr int binary_format<std::bfloat16_t>::smallest_power_of_ten() {
+  return -60;
+}
+
+template <>
+inline constexpr size_t binary_format<std::bfloat16_t>::max_digits() {
+  return 98;
+}
+#endif // __STDCPP_BFLOAT16_T__
+
 template <>
 inline constexpr uint64_t
 binary_format<double>::max_mantissa_fast_path(int64_t power) {
@@ -574,10 +892,7 @@ binary_format<double>::max_mantissa_fast_path(int64_t power) {
   // Work around clang bug https://godbolt.org/z/zedh7rrhc
   return (void)max_mantissa[0], max_mantissa[power];
 }
-template <>
-inline constexpr uint64_t binary_format<float>::max_mantissa_fast_path() {
-  return uint64_t(2) << mantissa_explicit_bits();
-}
+
 template <>
 inline constexpr uint64_t
 binary_format<float>::max_mantissa_fast_path(int64_t power) {
@@ -594,6 +909,7 @@ binary_format<double>::exact_power_of_ten(int64_t power) {
   // Work around clang bug https://godbolt.org/z/zedh7rrhc
   return (void)powers_of_ten[0], powers_of_ten[power];
 }
+
 template <>
 inline constexpr float binary_format<float>::exact_power_of_ten(int64_t power) {
   // Work around clang bug https://godbolt.org/z/zedh7rrhc
@@ -603,6 +919,7 @@ inline constexpr float binary_format<float>::exact_power_of_ten(int64_t power) {
 template <> inline constexpr int binary_format<double>::largest_power_of_ten() {
   return 308;
 }
+
 template <> inline constexpr int binary_format<float>::largest_power_of_ten() {
   return 38;
 }
@@ -611,6 +928,7 @@ template <>
 inline constexpr int binary_format<double>::smallest_power_of_ten() {
   return -342;
 }
+
 template <> inline constexpr int binary_format<float>::smallest_power_of_ten() {
   return -64;
 }
@@ -618,6 +936,7 @@ template <> inline constexpr int binary_format<float>::smallest_power_of_ten() {
 template <> inline constexpr size_t binary_format<double>::max_digits() {
   return 769;
 }
+
 template <> inline constexpr size_t binary_format<float>::max_digits() {
   return 114;
 }
@@ -627,6 +946,7 @@ inline constexpr binary_format<float>::equiv_uint
 binary_format<float>::exponent_mask() {
   return 0x7F800000;
 }
+
 template <>
 inline constexpr binary_format<double>::equiv_uint
 binary_format<double>::exponent_mask() {
@@ -638,6 +958,7 @@ inline constexpr binary_format<float>::equiv_uint
 binary_format<float>::mantissa_mask() {
   return 0x007FFFFF;
 }
+
 template <>
 inline constexpr binary_format<double>::equiv_uint
 binary_format<double>::mantissa_mask() {
@@ -649,6 +970,7 @@ inline constexpr binary_format<float>::equiv_uint
 binary_format<float>::hidden_bit_mask() {
   return 0x00800000;
 }
+
 template <>
 inline constexpr binary_format<double>::equiv_uint
 binary_format<double>::hidden_bit_mask() {
@@ -658,11 +980,12 @@ binary_format<double>::hidden_bit_mask() {
 template <typename T>
 fastfloat_really_inline FASTFLOAT_CONSTEXPR20 void
 to_float(bool negative, adjusted_mantissa am, T &value) {
-  using fastfloat_uint = typename binary_format<T>::equiv_uint;
-  fastfloat_uint word = (fastfloat_uint)am.mantissa;
-  word |= fastfloat_uint(am.power2)
-          << binary_format<T>::mantissa_explicit_bits();
-  word |= fastfloat_uint(negative) << binary_format<T>::sign_index();
+  using equiv_uint = equiv_uint_t<T>;
+  equiv_uint word = equiv_uint(am.mantissa);
+  word = equiv_uint(word | equiv_uint(am.power2)
+                               << binary_format<T>::mantissa_explicit_bits());
+  word =
+      equiv_uint(word | equiv_uint(negative) << binary_format<T>::sign_index());
 #if FASTFLOAT_HAS_BIT_CAST
   value = std::bit_cast<T>(word);
 #else
@@ -670,7 +993,6 @@ to_float(bool negative, adjusted_mantissa am, T &value) {
 #endif
 }
 
-#ifdef FASTFLOAT_SKIP_WHITE_SPACE // disabled by default
 template <typename = void> struct space_lut {
   static constexpr bool value[] = {
       0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -692,8 +1014,9 @@ template <typename T> constexpr bool space_lut<T>::value[];
 
 #endif
 
-inline constexpr bool is_space(uint8_t c) { return space_lut<>::value[c]; }
-#endif
+template <typename UC> constexpr bool is_space(UC c) {
+  return c < 256 && space_lut<>::value[uint8_t(c)];
+}
 
 template <typename UC> static constexpr uint64_t int_cmp_zeros() {
   static_assert((sizeof(UC) == 1) || (sizeof(UC) == 2) || (sizeof(UC) == 4),
@@ -704,33 +1027,52 @@ template <typename UC> static constexpr uint64_t int_cmp_zeros() {
                 uint64_t(UC('0')) << 16 | UC('0'))
              : (uint64_t(UC('0')) << 32 | UC('0'));
 }
+
 template <typename UC> static constexpr int int_cmp_len() {
   return sizeof(uint64_t) / sizeof(UC);
 }
-template <typename UC> static constexpr UC const *str_const_nan() {
-  return nullptr;
-}
+
+template <typename UC> constexpr UC const *str_const_nan();
+
 template <> constexpr char const *str_const_nan<char>() { return "nan"; }
+
 template <> constexpr wchar_t const *str_const_nan<wchar_t>() { return L"nan"; }
+
 template <> constexpr char16_t const *str_const_nan<char16_t>() {
   return u"nan";
 }
+
 template <> constexpr char32_t const *str_const_nan<char32_t>() {
   return U"nan";
 }
-template <typename UC> static constexpr UC const *str_const_inf() {
-  return nullptr;
+
+#ifdef __cpp_char8_t
+template <> constexpr char8_t const *str_const_nan<char8_t>() {
+  return u8"nan";
 }
+#endif
+
+template <typename UC> constexpr UC const *str_const_inf();
+
 template <> constexpr char const *str_const_inf<char>() { return "infinity"; }
+
 template <> constexpr wchar_t const *str_const_inf<wchar_t>() {
   return L"infinity";
 }
+
 template <> constexpr char16_t const *str_const_inf<char16_t>() {
   return u"infinity";
 }
+
 template <> constexpr char32_t const *str_const_inf<char32_t>() {
   return U"infinity";
 }
+
+#ifdef __cpp_char8_t
+template <> constexpr char8_t const *str_const_inf<char8_t>() {
+  return u8"infinity";
+}
+#endif
 
 template <typename = void> struct int_luts {
   static constexpr uint8_t chdigit[] = {
@@ -796,6 +1138,102 @@ fastfloat_really_inline constexpr size_t max_digits_u64(int base) {
 fastfloat_really_inline constexpr uint64_t min_safe_u64(int base) {
   return int_luts<>::min_safe_u64[base - 2];
 }
+
+static_assert(std::is_same<equiv_uint_t<double>, uint64_t>::value,
+              "equiv_uint should be uint64_t for double");
+static_assert(std::numeric_limits<double>::is_iec559,
+              "double must fulfill the requirements of IEC 559 (IEEE 754)");
+
+static_assert(std::is_same<equiv_uint_t<float>, uint32_t>::value,
+              "equiv_uint should be uint32_t for float");
+static_assert(std::numeric_limits<float>::is_iec559,
+              "float must fulfill the requirements of IEC 559 (IEEE 754)");
+
+#ifdef __STDCPP_FLOAT64_T__
+static_assert(std::is_same<equiv_uint_t<std::float64_t>, uint64_t>::value,
+              "equiv_uint should be uint64_t for std::float64_t");
+static_assert(
+    std::numeric_limits<std::float64_t>::is_iec559,
+    "std::float64_t must fulfill the requirements of IEC 559 (IEEE 754)");
+#endif // __STDCPP_FLOAT64_T__
+
+#ifdef __STDCPP_FLOAT32_T__
+static_assert(std::is_same<equiv_uint_t<std::float32_t>, uint32_t>::value,
+              "equiv_uint should be uint32_t for std::float32_t");
+static_assert(
+    std::numeric_limits<std::float32_t>::is_iec559,
+    "std::float32_t must fulfill the requirements of IEC 559 (IEEE 754)");
+#endif // __STDCPP_FLOAT32_T__
+
+#ifdef __STDCPP_FLOAT16_T__
+static_assert(
+    std::is_same<binary_format<std::float16_t>::equiv_uint, uint16_t>::value,
+    "equiv_uint should be uint16_t for std::float16_t");
+static_assert(
+    std::numeric_limits<std::float16_t>::is_iec559,
+    "std::float16_t must fulfill the requirements of IEC 559 (IEEE 754)");
+#endif // __STDCPP_FLOAT16_T__
+
+#ifdef __STDCPP_BFLOAT16_T__
+static_assert(
+    std::is_same<binary_format<std::bfloat16_t>::equiv_uint, uint16_t>::value,
+    "equiv_uint should be uint16_t for std::bfloat16_t");
+static_assert(
+    std::numeric_limits<std::bfloat16_t>::is_iec559,
+    "std::bfloat16_t must fulfill the requirements of IEC 559 (IEEE 754)");
+#endif // __STDCPP_BFLOAT16_T__
+
+constexpr chars_format operator~(chars_format rhs) noexcept {
+  using int_type = std::underlying_type<chars_format>::type;
+  return static_cast<chars_format>(~static_cast<int_type>(rhs));
+}
+
+constexpr chars_format operator&(chars_format lhs, chars_format rhs) noexcept {
+  using int_type = std::underlying_type<chars_format>::type;
+  return static_cast<chars_format>(static_cast<int_type>(lhs) &
+                                   static_cast<int_type>(rhs));
+}
+
+constexpr chars_format operator|(chars_format lhs, chars_format rhs) noexcept {
+  using int_type = std::underlying_type<chars_format>::type;
+  return static_cast<chars_format>(static_cast<int_type>(lhs) |
+                                   static_cast<int_type>(rhs));
+}
+
+constexpr chars_format operator^(chars_format lhs, chars_format rhs) noexcept {
+  using int_type = std::underlying_type<chars_format>::type;
+  return static_cast<chars_format>(static_cast<int_type>(lhs) ^
+                                   static_cast<int_type>(rhs));
+}
+
+fastfloat_really_inline FASTFLOAT_CONSTEXPR14 chars_format &
+operator&=(chars_format &lhs, chars_format rhs) noexcept {
+  return lhs = (lhs & rhs);
+}
+
+fastfloat_really_inline FASTFLOAT_CONSTEXPR14 chars_format &
+operator|=(chars_format &lhs, chars_format rhs) noexcept {
+  return lhs = (lhs | rhs);
+}
+
+fastfloat_really_inline FASTFLOAT_CONSTEXPR14 chars_format &
+operator^=(chars_format &lhs, chars_format rhs) noexcept {
+  return lhs = (lhs ^ rhs);
+}
+
+namespace detail {
+// adjust for deprecated feature macros
+constexpr chars_format adjust_for_feature_macros(chars_format fmt) {
+  return fmt
+#ifdef FASTFLOAT_ALLOWS_LEADING_PLUS
+         | chars_format::allow_leading_plus
+#endif
+#ifdef FASTFLOAT_SKIP_WHITE_SPACE
+         | chars_format::skip_white_space
+#endif
+      ;
+}
+} // namespace detail
 
 } // namespace fast_float
 

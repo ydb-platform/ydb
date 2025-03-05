@@ -4,8 +4,8 @@
 #include "pythonic/include/builtins/list/append.hpp"
 
 #include "pythonic/builtins/None.hpp"
-#include "pythonic/types/list.hpp"
 #include "pythonic/types/NoneType.hpp"
+#include "pythonic/types/list.hpp"
 #include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
@@ -28,7 +28,7 @@ namespace builtins
       seq.push_back(std::forward<F>(value));
       return builtins::None;
     }
-  }
-}
+  } // namespace list
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

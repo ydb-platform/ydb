@@ -64,6 +64,7 @@ enum EIsolationLevel {
     ISOLATION_LEVEL_READ_UNCOMMITTED = 3;
     ISOLATION_LEVEL_READ_STALE = 4;
     ISOLATION_LEVEL_SNAPSHOT_RO = 5;
+    ISOLATION_LEVEL_SNAPSHOT_RW = 6;
 };
 
 message TTopicOperationsRequest {
@@ -561,6 +562,11 @@ message TEvStartKqpTasksRequest {
 
     optional double PoolMaxCpuShare = 12;
     optional double QueryCpuShare = 16;
+    optional double ResourceWeight = 18;
+
+    optional NKikimrDataEvents.ELockMode LockMode = 19;
+
+    optional string UserToken = 20;
 }
 
 message TEvStartKqpTasksResponse {
@@ -642,6 +648,19 @@ message TEvScanError {
     optional uint64 TabletId = 4;
 }
 
+message TEvKqpScanCursor {
+    message TColumnShardScanPlain {
+    }
+    message TColumnShardScanSimple {
+        optional uint64 SourceId = 1;
+        optional uint32 StartRecordIndex = 2;
+    }
+    oneof Implementation {
+        TColumnShardScanPlain ColumnShardPlain = 10;
+        TColumnShardScanSimple ColumnShardSimple = 11;
+    }
+}
+
 message TEvRemoteScanData {
     optional uint32 ScanId = 1;
     optional uint64 CpuTimeUs = 2;
@@ -665,6 +684,7 @@ message TEvRemoteScanData {
 
     optional bool RequestedBytesLimitReached = 11 [default = false];
     optional uint32 AvailablePacks = 12;
+    optional TEvKqpScanCursor LastCursor = 13;
 }
 
 message TEvRemoteScanDataAck {
@@ -719,6 +739,11 @@ message TKqpTableSinkSettings {
     optional NActorsProto.TActorId BufferActorId = 10;
     optional int64 Priority = 11;
     optional bool IsOlap = 12;
+    repeated uint32 WriteIndexes = 13;
+    optional NKikimrDataEvents.TMvccSnapshot MvccSnapshot = 14;
+    optional NKikimrDataEvents.ELockMode LockMode = 15;
+    optional bool EnableStreamWrite = 16;
+    optional bool IsBatch = 17;
 }
 
 message TKqpStreamLookupSettings {
@@ -732,6 +757,10 @@ message TKqpStreamLookupSettings {
     optional NKqpProto.EStreamLookupStrategy LookupStrategy = 8;
     optional bool AllowInconsistentReads = 9 [default = false];
     optional uint32 LockNodeId = 10;
+    optional bool KeepRowsOrder = 11;
+    optional bool AllowNullKeys = 12;
+    optional uint32 AllowNullKeysPrefixSize = 13;
+    optional NKikimrDataEvents.ELockMode LockMode = 14;
 }
 
 message TKqpSequencerSettings {

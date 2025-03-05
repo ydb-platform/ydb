@@ -1,5 +1,4 @@
 #include "yql_generic_dq_integration.h"
-
 #include "yql_generic_mkql_compiler.h"
 #include "yql_generic_predicate_pushdown.h"
 
@@ -7,8 +6,8 @@
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
-#include <ydb/library/yql/providers/generic/proto/range.pb.h>
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
+#include <ydb/library/yql/providers/generic/proto/partition.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
@@ -21,24 +20,26 @@ namespace NYql {
 
     namespace {
 
-        TString GetSourceType(NYql::NConnector::NApi::TDataSourceInstance dsi) {
+        TString GetSourceType(NYql::TGenericDataSourceInstance dsi) {
             switch (dsi.kind()) {
-                case NYql::NConnector::NApi::CLICKHOUSE:
+                case NYql::EGenericDataSourceKind::CLICKHOUSE:
                     return "ClickHouseGeneric";
-                case NYql::NConnector::NApi::POSTGRESQL:
+                case NYql::EGenericDataSourceKind::POSTGRESQL:
                     return "PostgreSqlGeneric";
-                case NYql::NConnector::NApi::MYSQL:
+                case NYql::EGenericDataSourceKind::MYSQL:
                     return "MySqlGeneric";
-                case NYql::NConnector::NApi::YDB:
+                case NYql::EGenericDataSourceKind::YDB:
                     return "YdbGeneric";
-                case NYql::NConnector::NApi::GREENPLUM:
+                case NYql::EGenericDataSourceKind::GREENPLUM:
                     return "GreenplumGeneric";
-                case NYql::NConnector::NApi::MS_SQL_SERVER:
+                case NYql::EGenericDataSourceKind::MS_SQL_SERVER:
                     return "MsSQLServerGeneric";
-                case NYql::NConnector::NApi::ORACLE:
+                case NYql::EGenericDataSourceKind::ORACLE:
                     return "OracleGeneric";
+                case NYql::EGenericDataSourceKind::LOGGING:
+                    return "LoggingGeneric";
                 default:
-                    ythrow yexception() << "Data source kind is unknown or not specified";
+                    throw yexception() << "Data source kind is unknown or not specified";
             }
         }
 
@@ -61,7 +62,7 @@ namespace NYql {
                 return Nothing();
             }
 
-            TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
+            TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
                 if (const auto maybeGenReadTable = TMaybeNode<TGenReadTable>(read)) {
                     const auto genReadTable = maybeGenReadTable.Cast();
                     YQL_ENSURE(genReadTable.Ref().GetTypeAnn(), "No type annotation for node " << genReadTable.Ref().Content());
@@ -89,7 +90,7 @@ namespace NYql {
                         .Input<TGenSourceSettings>()
                             .World(genReadTable.World())
                             .Cluster(genReadTable.DataSource().Cluster())
-                            .Table(genReadTable.Table())
+                            .Table(genReadTable.Table().Name())
                             .Token<TCoSecureParam>()
                                 .Name().Build(token)
                                 .Build()
@@ -104,14 +105,67 @@ namespace NYql {
                 return read;
             }
 
-            ui64 Partition(const TDqSettings&, size_t, const TExprNode&, TVector<TString>& partitions, TString*, TExprContext&,
-                           bool) override {
+            ui64 Partition(
+                const TExprNode& node,
+                TVector<TString>& partitions,
+                TString*,
+                TExprContext& ctx,
+                const TPartitionSettings& partitionSettings) override {
+                auto maybeDqSource = TMaybeNode<TDqSource>(&node);
+                if (!maybeDqSource) {
+                    return 0;
+                }
+
+                auto srcSettings = maybeDqSource.Cast().Settings();
+                auto maybeGenSourceSettings = TMaybeNode<TGenSourceSettings>(srcSettings.Raw());
+                Y_ENSURE(maybeGenSourceSettings);
+                auto genSourceSettings = maybeGenSourceSettings.Cast();
+
+                const TGenericState::TTableAddress tableAddress{
+                    genSourceSettings.Cluster().StringValue(),
+                    genSourceSettings.Table().StringValue()};
+
+                // Extract table metadata from provider state>.
+                auto [tableMeta, issues] = State_->GetTable(tableAddress);
+                if (issues) {
+                    for (const auto& issue : issues) {
+                        ctx.AddError(issue);
+                    }
+
+                    return 0;
+                }
+
+                const size_t totalSplits = tableMeta->Splits.size();
+
                 partitions.clear();
-                Generic::TRange range;
-                partitions.emplace_back();
-                TStringOutput out(partitions.back());
-                range.Save(&out);
-                return 0ULL;
+
+                if (totalSplits <= partitionSettings.MaxPartitions) {
+                    // If there are not too many splits, simply make a single-split partitions.
+                    for (size_t i = 0; i < totalSplits; i++) {
+                        NGeneric::TPartition partition;
+                        *partition.add_splits() = tableMeta->Splits[i];
+                        TString partitionStr;
+                        YQL_ENSURE(partition.SerializeToString(&partitionStr), "Failed to serialize partition");
+                        partitions.emplace_back(std::move(partitionStr));
+                    }
+                } else {
+                    // If the number of splits is greater than the partitions limit,
+                    // we have to make split batches in each partition.
+                    size_t splitsPerPartition = (totalSplits / partitionSettings.MaxPartitions - 1) + 1;
+
+                    for (size_t i = 0; i < totalSplits; i += splitsPerPartition) {
+                        NGeneric::TPartition partition;
+                        for (size_t j = i; j < i + splitsPerPartition && j < totalSplits; j++) {
+                            *partition.add_splits() = tableMeta->Splits[j];
+                        }
+                        TString partitionStr;
+                        YQL_ENSURE(partition.SerializeToString(&partitionStr), "Failed to serialize partition");
+                        partitions.emplace_back(std::move(partitionStr));
+                    }
+                }
+
+                // TODO: check what's the meaning of this value
+                return 0;
             }
 
             void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings,
@@ -120,29 +174,29 @@ namespace NYql {
                 if (const auto maybeSettings = source.Settings().Maybe<TGenSourceSettings>()) {
                     const auto settings = maybeSettings.Cast();
                     const auto& clusterName = source.DataSource().Cast<TGenDataSource>().Cluster().StringValue();
-                    const auto& table = settings.Table().StringValue();
+                    const auto& tableName = settings.Table().StringValue();
                     const auto& clusterConfig = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
                     const auto& endpoint = clusterConfig.endpoint();
 
-                    Generic::TSource source;
+                    NGeneric::TSource source;
 
                     YQL_CLOG(INFO, ProviderGeneric)
                         << "Filling source settings"
                         << ": cluster: " << clusterName
-                        << ", table: " << table
+                        << ", table: " << tableName
                         << ", endpoint: " << endpoint.ShortDebugString();
 
                     const auto& columns = settings.Columns();
 
-                    auto [tableMeta, issue] = State_->GetTable(clusterName, table);
-                    if (issue.has_value()) {
-                        ythrow yexception() << "Get table metadata: " << issue.value();
+                    auto [tableMeta, issues] = State_->GetTable({clusterName, tableName});
+                    if (issues) {
+                        throw yexception() << "Get table metadata: " << issues.ToOneLineString();
                     }
 
                     // prepare select
                     auto select = source.mutable_select();
-                    select->mutable_from()->set_table(TString(table));
-                    select->mutable_data_source_instance()->CopyFrom(tableMeta.value()->DataSourceInstance);
+                    select->mutable_from()->set_table(TString(tableName));
+                    *select->mutable_data_source_instance() = tableMeta->DataSourceInstance;
 
                     auto items = select->mutable_what()->mutable_items();
                     for (size_t i = 0; i < columns.Size(); i++) {
@@ -152,21 +206,21 @@ namespace NYql {
                         column->mutable_name()->assign(columnName);
 
                         // assign column type
-                        auto type = NConnector::GetColumnTypeByName(tableMeta.value()->Schema, columnName);
-                        column->mutable_type()->CopyFrom(type);
+                        auto type = NConnector::GetColumnTypeByName(tableMeta->Schema, columnName);
+                        *column->mutable_type() = type;
                     }
 
                     if (auto predicate = settings.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {
                         TStringBuilder err;
                         if (!SerializeFilterPredicate(predicate, select->mutable_where()->mutable_filter_typed(), err)) {
-                            ythrow yexception() << "Failed to serialize filter predicate for source: " << err;
+                            throw yexception() << "Failed to serialize filter predicate for source: " << err;
                         }
                     }
 
-                    // Managed YDB supports access via IAM token.
+                    // Managed YDB (including YDB underlying Logging) supports access via IAM token.
                     // If exist, copy service account creds to obtain tokens during request execution phase.
                     // If exists, copy previously created token.
-                    if (clusterConfig.kind() == NConnector::NApi::EDataSourceKind::YDB) {
+                    if (IsIn({NYql::EGenericDataSourceKind::YDB, NYql::EGenericDataSourceKind::LOGGING}, clusterConfig.kind())) {
                         source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
                         source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
                         source.SetToken(State_->Types->Credentials->FindCredentialContent(
@@ -193,37 +247,40 @@ namespace NYql {
 
                 const TGenSourceSettings settings = source.Settings().Cast<TGenSourceSettings>();
                 const TString& clusterName = source.DataSource().Cast<TGenDataSource>().Cluster().StringValue();
-                const TString& table = settings.Table().StringValue();
-                properties["Table"] = table;
-                auto [tableMeta, issue] = State_->GetTable(clusterName, table);
+                const TString& tableName = settings.Table().StringValue();
+                properties["Table"] = tableName;
+                auto [tableMeta, issue] = State_->GetTable({clusterName, tableName});
                 if (!issue) {
-                    const NConnector::NApi::TDataSourceInstance& dataSourceInstance = tableMeta.value()->DataSourceInstance;
+                    const NYql::TGenericDataSourceInstance& dataSourceInstance = tableMeta->DataSourceInstance;
                     switch (dataSourceInstance.kind()) {
-                        case NConnector::NApi::CLICKHOUSE:
+                        case NYql::EGenericDataSourceKind::CLICKHOUSE:
                             properties["SourceType"] = "ClickHouse";
                             break;
-                        case NConnector::NApi::POSTGRESQL:
+                        case NYql::EGenericDataSourceKind::POSTGRESQL:
                             properties["SourceType"] = "PostgreSql";
                             break;
-                        case NConnector::NApi::MYSQL:
+                        case NYql::EGenericDataSourceKind::MYSQL:
                             properties["SourceType"] = "MySql";
                             break;
-                        case NConnector::NApi::YDB:
+                        case NYql::EGenericDataSourceKind::YDB:
                             properties["SourceType"] = "Ydb";
                             break;
-                        case NConnector::NApi::GREENPLUM:
+                        case NYql::EGenericDataSourceKind::GREENPLUM:
                             properties["SourceType"] = "Greenplum";
                             break;
-                        case NConnector::NApi::MS_SQL_SERVER:
+                        case NYql::EGenericDataSourceKind::MS_SQL_SERVER:
                             properties["SourceType"] = "MsSQLServer";
                             break;
-                        case NConnector::NApi::ORACLE:
+                        case NYql::EGenericDataSourceKind::ORACLE:
                             properties["SourceType"] = "Oracle";
                             break;
-                        case NConnector::NApi::DATA_SOURCE_KIND_UNSPECIFIED:
+                        case NYql::EGenericDataSourceKind::LOGGING:
+                            properties["SourceType"] = "Logging";
+                            break;
+                        case NYql::EGenericDataSourceKind::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;
                         default:
-                            properties["SourceType"] = NConnector::NApi::EDataSourceKind_Name(dataSourceInstance.kind());
+                            properties["SourceType"] = NYql::EGenericDataSourceKind_Name(dataSourceInstance.kind());
                             break;
                     }
 
@@ -232,16 +289,15 @@ namespace NYql {
                     }
 
                     switch (dataSourceInstance.protocol()) {
-                        case NConnector::NApi::NATIVE:
+                        case NYql::EGenericProtocol::NATIVE:
                             properties["Protocol"] = "Native";
                             break;
-                        case NConnector::NApi::HTTP:
+                        case NYql::EGenericProtocol::HTTP:
                             properties["Protocol"] = "Http";
                             break;
-                        case NConnector::NApi::PROTOCOL_UNSPECIFIED:
-                            break;
+                        case NYql::EGenericProtocol::PROTOCOL_UNSPECIFIED:
                         default:
-                            properties["Protocol"] = NConnector::NApi::EProtocol_Name(dataSourceInstance.protocol());
+                            properties["Protocol"] = NYql::EGenericProtocol_Name(dataSourceInstance.protocol());
                             break;
                     }
                 }
@@ -266,29 +322,29 @@ namespace NYql {
                 const auto settings = wrap.Input().Cast<TGenSourceSettings>();
 
                 const auto& clusterName = wrap.DataSource().Cast<TGenDataSource>().Cluster().StringValue();
-                const auto& table = settings.Table().StringValue();
+                const auto& tableName = settings.Table().StringValue();
                 const auto& clusterConfig = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
                 const auto& endpoint = clusterConfig.endpoint();
 
                 YQL_CLOG(INFO, ProviderGeneric)
                     << "Filling lookup source settings"
                     << ": cluster: " << clusterName
-                    << ", table: " << table
+                    << ", table: " << tableName
                     << ", endpoint: " << endpoint.ShortDebugString();
 
-                auto [tableMeta, issue] = State_->GetTable(clusterName, table);
-                if (issue.has_value()) {
-                    ythrow yexception() << "Get table metadata: " << issue.value();
+                auto [tableMeta, issues] = State_->GetTable({clusterName, tableName});
+                if (issues) {
+                    throw yexception() << "Get table metadata: " << issues.ToOneLineString();
                 }
 
-                Generic::TLookupSource source;
-                source.set_table(table);
-                *source.mutable_data_source_instance() = tableMeta.value()->DataSourceInstance;
+                NGeneric::TLookupSource source;
+                source.set_table(tableName);
+                *source.mutable_data_source_instance() = tableMeta->DataSourceInstance;
 
                 // Managed YDB supports access via IAM token.
                 // If exist, copy service account creds to obtain tokens during request execution phase.
                 // If exists, copy previously created token.
-                if (clusterConfig.kind() == NConnector::NApi::EDataSourceKind::YDB) {
+                if (clusterConfig.kind() == NYql::EGenericDataSourceKind::YDB) {
                     source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
                     source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
                     source.SetToken(State_->Types->Credentials->FindCredentialContent(

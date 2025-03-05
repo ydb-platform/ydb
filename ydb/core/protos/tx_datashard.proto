@@ -261,6 +261,8 @@ message TKqpReadRangesSourceSettings {
     optional bool AllowInconsistentReads = 18 [default = false];
 
     repeated TKqpTransaction.TColumnMeta DuplicateCheckColumns = 19;
+
+    optional NKikimrDataEvents.ELockMode LockMode = 20;
 }
 
 message TKqpTaskInfo {
@@ -298,6 +300,7 @@ message TDataTransaction {
 
     // Datashard will subscribe to lock status when node id is non-zero
     optional uint32 LockNodeId = 17;
+    optional NKikimrDataEvents.ELockMode LockMode = 18;
 }
 
 message TCreateVolatileSnapshot {
@@ -1545,9 +1548,10 @@ message TEvLocalKMeansRequest {
     optional uint32 NeedsRounds = 14;
 
     // id of parent cluster
-    optional uint32 Parent = 15;
-    // [Child ... Child + K) ids reserved for this kmeans clusters
-    optional uint32 Child = 16;
+    optional uint64 ParentFrom = 15;
+    optional uint64 ParentTo = 21;
+    // [Child ... Child + K * (ParentFrom - ParentTo + 1)) ids reserved for this kmeans clusters
+    optional uint64 Child = 16;
 
     optional string LevelName = 17;
     optional string PostingName = 18;
@@ -1595,9 +1599,9 @@ message TEvReshuffleKMeansRequest {
     optional TEvLocalKMeansRequest.EState Upload = 9;
 
     // id of parent cluster
-    optional uint32 Parent = 10;
+    optional uint64 Parent = 10;
     // [Child ... Child + ClustersSize) ids of this kmeans clusters
-    optional uint32 Child = 11;
+    optional uint64 Child = 11;
     // centroids of clusters
     repeated string Clusters = 12;
 
@@ -1700,6 +1704,9 @@ message TEvKqpScan {
     optional TComputeShardingPolicy ComputeShardingPolicy = 23;
     optional uint64 LockTxId = 24;
     optional uint32 LockNodeId = 25;
+    optional string CSScanPolicy = 26;
+    optional NKikimrKqp.TEvKqpScanCursor ScanCursor = 27;
+    optional NKikimrDataEvents.ELockMode LockMode = 28;
 }
 
 message TEvCompactTable {
@@ -1885,6 +1892,8 @@ message TEvRead {
 
     optional bytes Program = 902;
     optional NKikimrSchemeOp.EOlapProgramType ProgramType = 903;
+
+    optional NKikimrDataEvents.ELockMode LockMode = 904;
 }
 
 message TReadContinuationToken {
@@ -2141,4 +2150,140 @@ message TSerializedEvent {
     optional bytes EventData = 1;
     // TEventSerializationInfo::IsExtendedFormat flag
     optional bool IsExtendedFormat = 2;
+}
+
+// In-memory variables that are important to restore between shard generations
+message TInMemoryVars {
+    optional NKikimrProto.TRowVersion ImmediateWriteEdge = 1;
+    optional NKikimrProto.TRowVersion ImmediateWriteEdgeReplied = 2;
+    optional NKikimrProto.TRowVersion UnprotectedReadEdge = 3;
+}
+
+// In-memory locks
+message TInMemoryLockInfo {
+    optional uint64 LockId = 1;
+    optional uint32 LockNodeId = 2;
+    optional uint32 Generation = 3;
+    optional uint32 Counter = 4;
+    optional uint64 CreateTs = 5;
+    optional uint64 Flags = 6;
+    optional NKikimrProto.TRowVersion BreakVersion = 7;
+    repeated NKikimrProto.TPathID ReadTables = 8;
+    repeated NKikimrProto.TPathID WriteTables = 9;
+}
+
+// In-memory ranges associated with the lock
+// Note: whole shard locks will have whole table read/write ranges
+message TInMemoryLockRange {
+    optional uint64 LockId = 1;
+    optional NKikimrProto.TPathID TableId = 2;
+    optional uint64 Flags = 3;
+    optional bytes Data = 4;
+}
+
+// In-memory conflicts between locks
+message TInMemoryLockConflict {
+    // When this lock is committed
+    optional uint64 LockId = 1;
+    // It must break another lock with the specified id
+    optional uint64 ConflictId = 2;
+}
+
+// In-memory volatile dependencies
+// This specifies that to commit this lock we must use a volatile transaction
+// that must have a dependency on the specified TxId.
+message TInMemoryLockVolatileDependency {
+    optional uint64 LockId = 1;
+    optional uint64 TxId = 2;
+}
+
+// In-memory prepared volatile transactions, i.e. those we have accepted for
+// execution and may be planned and executed later. This includes planned and
+// acknowledged transactions that haven't executed yet (including those that
+// have not been committed yet?)
+message TInMemoryPreparedVolatileTx {
+    optional uint64 TxId = 1;
+    optional NActorsProto.TActorId Source = 2;
+    optional uint64 Cookie = 3;
+    optional uint64 Type = 4;
+    optional bytes Body = 5;
+    optional uint64 Flags = 6;
+    // This is Min/Max step of a prepared transactions, mostly used for deadline cleanup
+    optional uint64 MinStep = 7;
+    optional uint64 MaxStep = 8;
+    // Specified when the transaction has been planned already (including predictions)
+    optional uint64 PredictedStep = 9;
+    optional uint64 Step = 10;
+}
+
+// In-memory waiting volatile transactions, i.e. those that have not been
+// decided yet (at least persistently), and for which we need to send a
+// result when they eventually commit or abort. This is matched against
+// transactions that are restored from disk.
+message TInMemoryWaitingVolatileTx {
+    optional uint64 TxId = 1;
+    optional NActorsProto.TActorId Source = 2;
+    optional uint64 Cookie = 3;
+    optional uint64 Type = 4;
+}
+
+// Partial in-memory state of the datashard
+message TInMemoryState {
+    optional TInMemoryVars Vars = 1;
+    repeated TInMemoryLockInfo Locks = 2;
+    repeated TInMemoryLockRange LockRanges = 3;
+    repeated TInMemoryLockConflict LockConflicts = 4;
+    repeated TInMemoryLockVolatileDependency LockVolatileDependencies = 5;
+    repeated TInMemoryPreparedVolatileTx PreparedVolatileTxs = 6;
+    repeated TInMemoryWaitingVolatileTx WaitingVolatileTxs = 7;
+}
+
+// Internal continuation token, may change between versions
+message TInMemoryStateContinuationToken {
+    // Index to continue from
+    optional uint64 NextIndex = 1;
+}
+
+// Sent to the state actor by new generations
+message TEvInMemoryStateRequest {
+    // Generation of the new tablet
+    optional uint32 Generation = 1;
+
+    // Continuation token to get the next response
+    optional bytes ContinuationToken = 2;
+}
+
+// Sent by the state actor to new generations
+message TEvInMemoryStateResponse {
+    // Partial serialized TInMemoryState chunk
+    optional uint32 SerializedStatePayloadIndex = 1;
+
+    // Optional checkpoint offsets within the chunk. The protobuf message may
+    // be parsed cleanly up to these offsets without the need to concatenate
+    // subsequent chunks.
+    repeated uint32 SerializedStateCheckpoints = 2 [packed = true];
+
+    // Will be set for incomplete replies
+    optional bytes ContinuationToken = 3;
+}
+
+// Forces cleanup-related operations in datashard tablet:
+// compaction, GC, GC log and other temporary data erasure.
+// Once the operation is done, any deleted data not used initially
+// will be included in garbage collection requests for the blobstorage.
+// Note: deleted data may still be used for a while, e.g. for history for MVCC.
+message TEvForceDataCleanup {
+    optional uint64 DataCleanupGeneration = 1; // increasing sequence
+}
+
+// Returns DataCleanupGeneration of the last successfully completed TEvForceDataCleanup request.
+// Intermediate requests and corresponding TEvForceDataCleanupResult's may be skipped.
+message TEvForceDataCleanupResult {
+    enum EStatus {
+        OK = 0;
+        FAILED = 1;
+    };
+    optional uint64 DataCleanupGeneration = 1; // from corresponding request (or greater)
+    optional uint64 TabletId = 2;
+    optional EStatus Status = 3;
 }

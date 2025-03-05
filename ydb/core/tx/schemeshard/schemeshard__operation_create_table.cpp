@@ -1,11 +1,17 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
+
+#include "schemeshard_utils.h"  // for IsAllowedKeyType
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 
+#include <ydb/core/scheme/scheme_tabledefs.h>  // for IsAllowedKeyType
+
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/mind/hive/hive.h>
 
 namespace {
 
@@ -118,7 +124,7 @@ bool DoInitPartitioning(TTableInfo::TPtr tableInfo,
     for (ui32 ki : keyColIds) {
         auto type = tableInfo->Columns[ki].PType;
 
-        if (!IsAllowedKeyType(type)) {
+        if (!NKikimr::IsAllowedKeyType(type)) {
             errStr = Sprintf("Column %s has wrong key type %s",
                 tableInfo->Columns[ki].Name.c_str(), NScheme::TypeName(type).c_str());
             return false;
@@ -163,7 +169,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateTable TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -244,7 +250,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateTable TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -497,9 +503,13 @@ public:
                     .IsValidLeafName()
                     .PathsLimit()
                     .DirChildrenLimit()
-                    .ShardsLimit(shardsToCreate)
-                    .PathShardsLimit(shardsToCreate)
                     .IsValidACL(acl);
+
+                if (!Transaction.GetInternal()) {
+                    checks
+                        .ShardsLimit(shardsToCreate)
+                        .PathShardsLimit(shardsToCreate);
+                }
             }
 
             if (!checks) {
@@ -666,8 +676,8 @@ public:
             newTable->SetAsyncReplica(true);
         }
 
-        if (tableInfo->IsRestoreTable()) {
-            newTable->SetRestoreTable();
+        if (tableInfo->IsIncrementalRestoreTable()) {
+            newTable->SetIncrementalRestoreTable();
         }
 
         context.SS->Tables[newTable->PathId] = tableInfo;
@@ -718,11 +728,20 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath.Base()->PathId);
 
         Y_ABORT_UNLESS(shardsToCreate == txState.Shards.size());
-        dstPath.DomainInfo()->IncPathsInside();
-        dstPath.DomainInfo()->AddInternalShards(txState);
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
+        dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
 
         dstPath.Base()->IncShardsInside(shardsToCreate);
-        parentPath.Base()->IncAliveChildren();
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
+
+        LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TCreateTable Propose creating new table"
+                << " opId# " << OperationId
+                << " path# " << dstPath.PathString()
+                << " pathId# " << newTable->PathId
+                << " schemeshard# " << ssId
+                << " tx# " << Transaction.DebugString()
+                );
 
         SetState(NextState());
         return result;
@@ -746,6 +765,33 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    if (tx.GetCreateTable().HasCopyFromTable()) {
+        return std::nullopt;
+    }
+    return tx.GetCreateTable().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreateTable()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences) {
     auto obj = MakeSubOperation<TCreateTable>(id, tx);

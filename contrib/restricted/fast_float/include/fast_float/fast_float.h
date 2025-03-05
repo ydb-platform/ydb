@@ -31,26 +31,29 @@ namespace fast_float {
  * `scientific`.
  */
 template <typename T, typename UC = char,
-          typename = FASTFLOAT_ENABLE_IF(is_supported_float_type<T>())>
+          typename = FASTFLOAT_ENABLE_IF(is_supported_float_type<T>::value)>
 FASTFLOAT_CONSTEXPR20 from_chars_result_t<UC>
 from_chars(UC const *first, UC const *last, T &value,
            chars_format fmt = chars_format::general) noexcept;
 
 /**
  * Like from_chars, but accepts an `options` argument to govern number parsing.
+ * Both for floating-point types and integer types.
  */
 template <typename T, typename UC = char>
 FASTFLOAT_CONSTEXPR20 from_chars_result_t<UC>
 from_chars_advanced(UC const *first, UC const *last, T &value,
                     parse_options_t<UC> options) noexcept;
+
 /**
  * from_chars for integer types.
  */
 template <typename T, typename UC = char,
-          typename = FASTFLOAT_ENABLE_IF(!is_supported_float_type<T>())>
+          typename = FASTFLOAT_ENABLE_IF(is_supported_integer_type<T>::value)>
 FASTFLOAT_CONSTEXPR20 from_chars_result_t<UC>
 from_chars(UC const *first, UC const *last, T &value, int base = 10) noexcept;
 
 } // namespace fast_float
+
 #include "parse_number.h"
 #endif // FASTFLOAT_FAST_FLOAT_H

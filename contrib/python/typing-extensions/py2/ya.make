@@ -2,8 +2,6 @@ PY2_LIBRARY()
 
 LICENSE(PSF-2.0)
 
-SUBSCRIBER(g:python-contrib)
-
 VERSION(3.10.0.2)
 
 NO_LINT()

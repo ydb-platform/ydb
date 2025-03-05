@@ -39,10 +39,14 @@ namespace NYT::NRpc {
 struct IClientRequest
     : public virtual TRefCounted
 {
+    //! Potentially heavy if IsAttachmentCompressionEnabled() returns true.
+    //! Callers should consider offloading calls to dedicated thread(s).
     virtual TSharedRefArray Serialize() = 0;
 
     virtual const NProto::TRequestHeader& Header() const = 0;
     virtual NProto::TRequestHeader& Header() = 0;
+
+    virtual bool IsAttachmentCompressionEnabled() const = 0;
 
     virtual bool IsStreamingEnabled() const = 0;
 
@@ -139,7 +143,7 @@ public:
     DEFINE_BYVAL_RW_PROPERTY(bool, ResponseHeavy);
     DEFINE_BYVAL_RW_PROPERTY(NCompression::ECodec, RequestCodec, NCompression::ECodec::None);
     DEFINE_BYVAL_RW_PROPERTY(NCompression::ECodec, ResponseCodec, NCompression::ECodec::None);
-    DEFINE_BYVAL_RW_PROPERTY(bool, EnableLegacyRpcCodecs, true);
+    DEFINE_BYVAL_RW_PROPERTY(bool, EnableLegacyRpcCodecs, false);
     DEFINE_BYVAL_RW_PROPERTY(bool, GenerateAttachmentChecksums, true);
     DEFINE_BYVAL_RW_PROPERTY(IMemoryUsageTrackerPtr, MemoryUsageTracker);
     // Field is used on client side only. So it is never serialized.
@@ -152,6 +156,8 @@ public:
 
     NProto::TRequestHeader& Header() override;
     const NProto::TRequestHeader& Header() const override;
+
+    bool IsAttachmentCompressionEnabled() const override;
 
     bool IsStreamingEnabled() const override;
 
@@ -255,6 +261,8 @@ private:
 
     void PrepareHeader();
     TSharedRefArray GetHeaderlessMessage() const;
+
+    NCompression::ECodec GetEffectiveAttachmentCompressionCodec() const;
 };
 
 DEFINE_REFCOUNTED_TYPE(TClientRequest)
@@ -372,7 +380,7 @@ private:
     void DoHandleError(TError error);
 
     void DoHandleResponse(TSharedRefArray message, const std::string& address);
-    void Deserialize(TSharedRefArray responseMessage);
+    TFuture<void> Deserialize(TSharedRefArray responseMessage) noexcept;
 };
 
 DEFINE_REFCOUNTED_TYPE(TClientResponse)
@@ -473,7 +481,7 @@ public:
     DEFINE_BYVAL_RW_PROPERTY(NCompression::ECodec, DefaultRequestCodec, NCompression::ECodec::None);
     DEFINE_BYVAL_RW_PROPERTY(NCompression::ECodec, DefaultResponseCodec, NCompression::ECodec::None);
     DEFINE_BYVAL_RW_PROPERTY(IMemoryUsageTrackerPtr, DefaultMemoryUsageTracker);
-    DEFINE_BYVAL_RW_PROPERTY(bool, DefaultEnableLegacyRpcCodecs, true);
+    DEFINE_BYVAL_RW_PROPERTY(bool, DefaultEnableLegacyRpcCodecs, false);
 
     DEFINE_BYREF_RW_PROPERTY(TStreamingParameters, DefaultClientAttachmentsStreamingParameters);
     DEFINE_BYREF_RW_PROPERTY(TStreamingParameters, DefaultServerAttachmentsStreamingParameters);

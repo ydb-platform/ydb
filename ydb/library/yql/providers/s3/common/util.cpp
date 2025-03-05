@@ -48,4 +48,50 @@ TString UrlEscapeRet(const TStringBuf from) {
     return to;
 }
 
+bool ValidateS3ReadWriteSchema(const TStructExprType* schemaStructRowType, TExprContext& ctx) {
+    for (const TItemExprType* item : schemaStructRowType->GetItems()) {
+        const TTypeAnnotationNode* rowType = item->GetItemType();
+        if (rowType->GetKind() == ETypeAnnotationKind::Optional) {
+            rowType = rowType->Cast<TOptionalExprType>()->GetItemType();
+        }
+
+        if (rowType->GetKind() == ETypeAnnotationKind::Optional) {
+            ctx.AddError(TIssue(TStringBuilder() << "Double optional types are not supported (you have '"
+                << item->GetName() << " " << FormatType(item->GetItemType()) << "' field)"));
+            return false;
+        }
+    }
+    return true;
+}
+
+TUrlBuilder::TUrlBuilder(const TString& uri)
+    : MainUri(uri)
+{}
+
+TUrlBuilder& TUrlBuilder::AddUrlParam(const TString& name, const TString& value) {
+    Params.emplace_back(name, value);
+    return *this;
+}
+
+TString TUrlBuilder::Build() const {
+    if (Params.empty()) {
+        return MainUri;
+    }
+
+    TStringBuilder result;
+    result << MainUri << "?";
+
+    TStringBuf separator = ""sv;
+    for (const auto& p : Params) {
+        result << separator << p.Name;
+        if (auto value = p.Value) {
+            Quote(value, "");
+            result << "=" << value;
+        }
+        separator = "&"sv;
+    }
+
+    return std::move(result);
+}
+
 }

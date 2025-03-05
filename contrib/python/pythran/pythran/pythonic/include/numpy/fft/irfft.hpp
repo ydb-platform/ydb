@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_FFT_IRFFT_HPP
 #define PYTHONIC_INCLUDE_NUMPY_FFT_IRFFT_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/types/ndarray.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 /**
  * **Noteable difference to numpy.fft.irfft:**
@@ -26,22 +26,22 @@ namespace numpy
   {
 
     template <class T, class pS>
-    types::ndarray<T, types::array<long, std::tuple_size<pS>::value>>
+    types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>
     irfft(types::ndarray<std::complex<T>, pS> const &a, long n = -1,
           long axis = -1, types::str const &norm = {});
 
     template <class T, class pS>
-    types::ndarray<T, types::array<long, std::tuple_size<pS>::value>>
+    types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>
     irfft(types::ndarray<std::complex<T>, pS> const &a, types::none_type n,
           long axis, types::str const &norm);
 
     template <class T, class pS>
-    types::ndarray<T, types::array<long, std::tuple_size<pS>::value>>
+    types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>
     irfft(types::ndarray<std::complex<T>, pS> const &a, long n, long axis,
           types::none_type norm);
 
     template <class T, class pS>
-    types::ndarray<T, types::array<long, std::tuple_size<pS>::value>>
+    types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>
     irfft(types::ndarray<std::complex<T>, pS> const &a, types::none_type n,
           long axis = -1, types::none_type norm = types::none_type{});
 
@@ -50,7 +50,7 @@ namespace numpy
                        !types::is_complex<T>::value,
                        typename std::conditional<std::is_integral<T>::value,
                                                  double, T>::type>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     irfft(types::ndarray<T, pS> const &a, long n = -1, long axis = -1,
           types::str const &norm = {});
 
@@ -59,7 +59,7 @@ namespace numpy
                        !types::is_complex<T>::value,
                        typename std::conditional<std::is_integral<T>::value,
                                                  double, T>::type>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     irfft(types::ndarray<T, pS> const &a, types::none_type n, long axis,
           types::str const &norm);
 
@@ -68,7 +68,7 @@ namespace numpy
                        !types::is_complex<T>::value,
                        typename std::conditional<std::is_integral<T>::value,
                                                  double, T>::type>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     irfft(types::ndarray<T, pS> const &a, long n, long axis,
           types::none_type norm);
 
@@ -77,14 +77,14 @@ namespace numpy
                        !types::is_complex<T>::value,
                        typename std::conditional<std::is_integral<T>::value,
                                                  double, T>::type>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     irfft(types::ndarray<T, pS> const &a, types::none_type n, long axis = -1,
           types::none_type norm = types::none_type{});
 
     NUMPY_EXPR_TO_NDARRAY0_DECL(irfft);
     DEFINE_FUNCTOR(pythonic::numpy::fft, irfft);
-  }
-}
+  } // namespace fft
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

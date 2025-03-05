@@ -14,7 +14,8 @@ namespace NKikimr::NKqp::NScanPrivate {
 
 class IExternalObjectsProvider {
 public:
-    virtual std::unique_ptr<TEvDataShard::TEvKqpScan> BuildEvKqpScan(const ui32 scanId, const ui32 gen, const TSmallVec<TSerializedTableRange>& ranges) const = 0;
+    virtual std::unique_ptr<TEvDataShard::TEvKqpScan> BuildEvKqpScan(const ui32 scanId, const ui32 gen, const TSmallVec<TSerializedTableRange>& ranges,
+        const std::optional<NKikimrKqp::TEvKqpScanCursor>& cursor) const = 0;
     virtual const TVector<NScheme::TTypeInfo>& GetKeyColumnTypes() const = 0;
 };
 
@@ -61,7 +62,7 @@ public:
 
         const auto& keyColumnTypes = externalObjectsProvider.GetKeyColumnTypes();
         auto ranges = state.GetScanRanges(keyColumnTypes);
-        auto ev = externalObjectsProvider.BuildEvKqpScan(ScanId, Generation, ranges);
+        auto ev = externalObjectsProvider.BuildEvKqpScan(ScanId, Generation, ranges, state.LastCursorProto);
 
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "start_scanner")("tablet_id", TabletId)("generation", Generation)
             ("info", state.ToString(keyColumnTypes))("range", DebugPrintRanges(keyColumnTypes, ranges, *AppData()->TypeRegistry))
@@ -69,6 +70,10 @@ public:
 
         NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(ev.release(), TabletId, !subscribed), IEventHandle::FlagTrackDelivery);
+    }
+
+    ui64 GetTabletId() const {
+        return TabletId;
     }
 
     TString ToString() const {
@@ -94,6 +99,10 @@ public:
             }
             ActorId = {};
         }
+    }
+
+    bool Stopped() {
+        return !ActorId.has_value();
     }
 
     void Start(const TActorId& actorId) {

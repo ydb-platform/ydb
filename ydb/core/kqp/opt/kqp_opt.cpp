@@ -83,9 +83,39 @@ bool IsKqpEffectsStage(const TDqStageBase& stage) {
 }
 
 bool NeedSinks(const TKikimrTableDescription& table, const TKqpOptimizeContext& kqpCtx) {
-    return (kqpCtx.IsGenericQuery() || (kqpCtx.IsDataQuery() && table.Metadata->Kind != EKikimrTableKind::Olap))
+    return (kqpCtx.IsGenericQuery()
+            || (kqpCtx.IsDataQuery() && (table.Metadata->Kind != EKikimrTableKind::Olap || kqpCtx.Config->AllowOlapDataQuery)))
         && (table.Metadata->Kind != EKikimrTableKind::Olap || kqpCtx.Config->EnableOlapSink)
         && (table.Metadata->Kind != EKikimrTableKind::Datashard || kqpCtx.Config->EnableOltpSink);
+}
+
+bool CanEnableStreamWrite(const NYql::TKikimrTableDescription& table, const TKqpOptimizeContext& kqpCtx) {
+    return table.Metadata->Kind == EKikimrTableKind::Olap
+            || (table.Metadata->Kind == EKikimrTableKind::Datashard && kqpCtx.Config->EnableStreamWrite);
+}
+
+bool HasReadTable(const TStringBuf table, const TExprNode::TPtr& root) {
+    bool result = false;
+    VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
+        if (NYql::NNodes::TKqpCnStreamLookup::Match(node.Get())) {
+            const auto& streamLookup = TExprBase(node).Cast<NYql::NNodes::TKqpCnStreamLookup>();
+            const TStringBuf tablePathId = streamLookup.Table().PathId().Value();
+            if (table == tablePathId) {
+                result = true;
+            }
+        } else if (NYql::NNodes::TDqSource::Match(node.Get())) {
+            const auto& source = TExprBase(node).Cast<NYql::NNodes::TDqSource>();
+            const auto sourceSettings = source.Settings().Maybe<TKqpReadRangesSourceSettings>();
+            if (sourceSettings) {
+                const TStringBuf tablePathId = sourceSettings.Cast().Table().PathId().Value();
+                if (table == tablePathId) {
+                    result = true;
+                }
+            }
+        }
+        return !result;
+    });
+    return result;
 }
 
 TExprBase ProjectColumns(const TExprBase& input, const TVector<TString>& columnNames, TExprContext& ctx) {

@@ -98,7 +98,7 @@
                                                                     }
                                                                 ],
                                                                 "Name": "Filter",
-                                                                "Predicate": "item.e > item.c Or item.e < item.d Or item.e + item.d >= item.a + item.b - 10 And item.e + item.d <= item.c + 130"
+                                                                "Predicate": "item.e > item.c OR item.e < item.d OR item.e + item.d >= item.a + item.b - 10 AND item.e + item.d <= item.c + 130"
                                                             }
                                                         ],
                                                         "PlanNodeId": 10,
@@ -109,6 +109,7 @@
                                                                     {
                                                                         "Inputs": [],
                                                                         "Name": "TableFullScan",
+                                                                        "Path": "/Root/sqllogictest_select1-2.test_plan/t1",
                                                                         "ReadColumns": [
                                                                             "a",
                                                                             "b",
@@ -155,7 +156,7 @@
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
-                        "Node Type": "Aggregate-Limit",
+                        "Node Type": "Aggregate-Limit-Aggregate",
                         "Operators": [
                             {
                                 "Inputs": [
@@ -163,7 +164,17 @@
                                         "InternalOperatorId": 1
                                     }
                                 ],
-                                "Name": "Aggregate"
+                                "Name": "Aggregate",
+                                "Phase": "Final"
+                            },
+                            {
+                                "Inputs": [
+                                    {
+                                        "InternalOperatorId": 2
+                                    }
+                                ],
+                                "Limit": "1",
+                                "Name": "Limit"
                             },
                             {
                                 "Inputs": [
@@ -171,8 +182,8 @@
                                         "ExternalPlanNodeId": 3
                                     }
                                 ],
-                                "Limit": "1",
-                                "Name": "Limit"
+                                "Name": "Aggregate",
+                                "Phase": "Final"
                             }
                         ],
                         "PlanNodeId": 4,
@@ -191,7 +202,8 @@
                                                         "ExternalPlanNodeId": 1
                                                     }
                                                 ],
-                                                "Name": "Aggregate"
+                                                "Name": "Aggregate",
+                                                "Phase": "Intermediate"
                                             }
                                         ],
                                         "PlanNodeId": 2,
@@ -202,6 +214,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/sqllogictest_select1-2.test_plan/t1",
                                                         "ReadColumns": [
                                                             "a",
                                                             "b",

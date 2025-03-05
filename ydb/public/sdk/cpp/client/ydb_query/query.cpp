@@ -2,7 +2,7 @@
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
-namespace NYdb::NQuery {
+namespace NYdb::inline V2::NQuery {
 
 std::optional<EStatsMode> ParseStatsMode(std::string_view statsMode) {
     if (statsMode == "unspecified") {

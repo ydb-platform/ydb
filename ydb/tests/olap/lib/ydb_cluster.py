@@ -3,11 +3,12 @@ import allure
 import logging
 import os
 import requests
-from ydb.tests.olap.lib.utils import get_external_param
+import yaml
 import ydb
+from ydb.tests.olap.lib.utils import get_external_param
 from copy import deepcopy
 from time import sleep, time
-from typing import List, Optional
+from typing import List, Optional, Callable
 from enum import Enum
 
 LOGGER = logging.getLogger()
@@ -53,8 +54,10 @@ class YdbCluster:
     _cluster_info = None
     ydb_endpoint = get_external_param('ydb-endpoint', 'grpc://ydb-olap-testing-vla-0002.search.yandex.net:2135')
     ydb_database = get_external_param('ydb-db', 'olap-testing/kikimr/testing/acceptance-2').lstrip('/')
+    ydb_mon_port = 8765
     tables_path = get_external_param('tables-path', 'olap_yatests')
     _monitoring_urls: list[YdbCluster.MonitoringUrl] = None
+    _dyn_nodes_count: Optional[int] = None
 
     @classmethod
     def get_monitoring_urls(cls) -> list[YdbCluster.MonitoringUrl]:
@@ -77,8 +80,7 @@ class YdbCluster:
     def _get_service_url(cls):
         host = cls.ydb_endpoint.split('://', 2)
         host = host[1 if len(host) > 1 else 0].split('/')[0].split(':')[0]
-        port = 8765
-        return f'http://{host}:{port}'
+        return f'http://{host}:{cls.ydb_mon_port}'
 
     @classmethod
     def get_cluster_nodes(cls, path: Optional[str] = None, db_only: bool = False) -> list[YdbCluster.Node]:
@@ -154,6 +156,14 @@ class YdbCluster:
             raise
 
     @classmethod
+    def reset(cls, ydb_endpoint, ydb_database, ydb_mon_port, dyn_nodes_count):
+        cls.ydb_endpoint = ydb_endpoint
+        cls.ydb_database = ydb_database
+        cls.ydb_mon_port = ydb_mon_port
+        cls._dyn_nodes_count = dyn_nodes_count
+        cls._ydb_driver = None
+
+    @classmethod
     def get_ydb_driver(cls):
         if cls._ydb_driver is None:
             cls._ydb_driver = cls._create_ydb_driver(
@@ -162,17 +172,20 @@ class YdbCluster:
         return cls._ydb_driver
 
     @classmethod
-    def list_directory(cls, root_path: str, rel_path: str) -> List[ydb.SchemeEntry]:
+    def list_directory(cls, root_path: str, rel_path: str, kind_order_key: Optional[Callable[[ydb.SchemeEntryType], int]] = None) -> List[ydb.SchemeEntry]:
         path = f'{root_path}/{rel_path}' if root_path else rel_path
         LOGGER.info(f'list {path}')
         result = []
-        for child in cls.get_ydb_driver().scheme_client.list_directory(path).children:
+        entries = cls.get_ydb_driver().scheme_client.list_directory(path).children
+        if kind_order_key is not None:
+            entries = sorted(entries, key=lambda x: kind_order_key(x.type))
+        for child in entries:
             if child.name == '.sys':
                 continue
             child.name = f'{rel_path}/{child.name}'
             result.append(child)
             if child.is_directory() or child.is_column_store():
-                result += cls.list_directory(root_path, child.name)
+                result += cls.list_directory(root_path, child.name, kind_order_key)
         return result
 
     @classmethod
@@ -219,6 +232,25 @@ class YdbCluster:
             raise
 
     @classmethod
+    def get_dyn_nodes_count(cls) -> int:
+        if cls._dyn_nodes_count is None:
+            cls._dyn_nodes_count = 0
+            if os.getenv('EXPECTED_DYN_NODES_COUNT'):
+                cls._dyn_nodes_count = int(os.getenv('EXPECTED_DYN_NODES_COUNT'))
+            elif os.getenv('CLUSTER_CONFIG'):
+                with open(os.getenv('CLUSTER_CONFIG'), 'r') as r:
+                    yaml_config = yaml.safe_load(r.read())
+                    for domain in yaml_config['domains']:
+                        if domain["domain_name"] == cls.ydb_database:
+                            cls._dyn_nodes_count = domain["domain_name"]["dynamic_slots"]
+                        for db in domain['databases']:
+                            if f'{domain["domain_name"]}/{db["name"]}' == cls.ydb_database:
+                                for cu in db['compute_units']:
+                                    cls._dyn_nodes_count += cu['count']
+
+        return cls._dyn_nodes_count
+
+    @classmethod
     @allure.step('Check if YDB alive')
     def check_if_ydb_alive(cls, timeout=10, balanced_paths=None) -> tuple[str, str]:
         def _check_node(n: YdbCluster.Node):
@@ -234,11 +266,10 @@ class YdbCluster:
         warnings = []
         try:
             nodes = cls.get_cluster_nodes(db_only=True)
-            expected_nodes_count = os.getenv('EXPECTED_DYN_NODES_COUNT')
+            expected_nodes_count = cls.get_dyn_nodes_count()
             nodes_count = len(nodes)
             if expected_nodes_count:
                 LOGGER.debug(f'Expected nodes count: {expected_nodes_count}')
-                expected_nodes_count = int(expected_nodes_count)
                 if nodes_count < expected_nodes_count:
                     errors.append(f"{expected_nodes_count - nodes_count} nodes from {expected_nodes_count} don't alive")
             ok_node_count = 0

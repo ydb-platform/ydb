@@ -27,7 +27,7 @@ private:
 public:
     using TBase::TBase;
 
-    virtual std::unique_ptr<TScanIteratorBase> StartScan(const std::shared_ptr<TReadContext>& /*readContext*/) const override;
+    virtual std::unique_ptr<TScanIteratorBase> StartScan(const std::shared_ptr<TReadContext>& readContext) const override;
     virtual std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const override;
 };
 
@@ -64,11 +64,7 @@ private:
 
     using TBase = NAbstract::TStatsIterator<NKikimr::NSysView::Schema::PrimaryIndexStats>;
 
-    virtual bool IsReadyForBatch() const override {
-        return IndexGranules.size() && IndexGranules.front().GetPortions().size() &&
-               FetchedAccessors.contains(IndexGranules.front().GetPortions().front()->GetPortionId());
-    }
-
+    virtual bool IsReadyForBatch() const override;
     virtual bool AppendStats(
         const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const override;
     virtual ui32 PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const override;
@@ -111,6 +107,7 @@ private:
         const NActors::TActorId OwnerId;
         const std::shared_ptr<NReader::TReadContext> Context;
 
+        virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override;
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*selfPtr*/) override {
             Guard = std::move(guard);
@@ -127,7 +124,7 @@ private:
                 AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
                 NActors::TActivationContext::AsActorContext().Send(
                     OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
-                                 std::make_shared<TApplyResult>(result.GetPortions(), std::move(WaitingCountersGuard))));
+                                 std::make_shared<TApplyResult>(result.ExtractPortionsVector(), std::move(WaitingCountersGuard))));
             }
         }
 
@@ -153,9 +150,8 @@ public:
 
 class TStoreSysViewPolicy: public NAbstract::ISysViewPolicy {
 protected:
-    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(
-        const TSnapshot& snapshot, const ui64 itemsLimit, const bool reverse) const override {
-        return std::make_unique<TConstructor>(snapshot, itemsLimit, reverse);
+    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(const TScannerConstructorContext& request) const override {
+        return std::make_unique<TConstructor>(request);
     }
     virtual std::shared_ptr<NAbstract::IMetadataFiller> DoCreateMetadataFiller() const override {
         return std::make_shared<NAbstract::TMetadataFromStore>();
@@ -168,9 +164,8 @@ public:
 
 class TTableSysViewPolicy: public NAbstract::ISysViewPolicy {
 protected:
-    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(
-        const TSnapshot& snapshot, const ui64 itemsLimit, const bool reverse) const override {
-        return std::make_unique<TConstructor>(snapshot, itemsLimit, reverse);
+    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(const TScannerConstructorContext& request) const override {
+        return std::make_unique<TConstructor>(request);
     }
     virtual std::shared_ptr<NAbstract::IMetadataFiller> DoCreateMetadataFiller() const override {
         return std::make_shared<NAbstract::TMetadataFromTable>();

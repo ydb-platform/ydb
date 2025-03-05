@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(0.6.26)
+VERSION(0.6.27)
 
-ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-auth/archive/v0.6.26.tar.gz)
+ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-auth/archive/v0.6.27.tar.gz)
 
 PEERDIR(
     contrib/restricted/aws/aws-c-cal
@@ -51,6 +51,12 @@ CFLAGS(
     -DS2N___RESTRICT__SUPPORTED
 )
 
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DAWS_AUTH_EXPORTS
+    )
+ENDIF()
+
 SRCS(
     source/auth.c
     source/aws_imds_client.c
@@ -68,6 +74,7 @@ SRCS(
     source/credentials_provider_imds.c
     source/credentials_provider_process.c
     source/credentials_provider_profile.c
+    source/credentials_provider_sso.c
     source/credentials_provider_static.c
     source/credentials_provider_sts.c
     source/credentials_provider_sts_web_identity.c
@@ -82,6 +89,9 @@ SRCS(
     source/signing_config.c
     source/signing_result.c
     source/sigv4_http_request.c
+    source/sso_token_utils.c
+    source/token_provider_sso_profile.c
+    source/token_provider_sso_session.c
 )
 
 END()

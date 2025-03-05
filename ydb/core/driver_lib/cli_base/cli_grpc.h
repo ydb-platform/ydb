@@ -2,9 +2,9 @@
 
 #include "cli_command.h"
 
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
 #include <ydb/public/lib/deprecated/client/grpc_client.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
@@ -23,7 +23,7 @@ int DoGRpcRequest(const NGRpcProxy::TGRpcClientConfig &clientConfig,
 {
     int res = 0;
 
-    if (!clientConfig.Locator) {
+    if (clientConfig.Locator.empty()) {
         Cerr << "GRPC call error: GRPC server is not specified (MBus protocol is not supported for this command)." << Endl;
         return -2;
     }
@@ -94,6 +94,8 @@ public:
         ClientConfig.MaxInFlight = CommandConfig.ClientConfig.MaxInFlight;
         ClientConfig.EnableSsl = CommandConfig.ClientConfig.EnableSsl;
         ClientConfig.SslCredentials.pem_root_certs = CommandConfig.ClientConfig.SslCredentials.pem_root_certs;
+        ClientConfig.SslCredentials.pem_cert_chain = CommandConfig.ClientConfig.SslCredentials.pem_cert_chain;
+        ClientConfig.SslCredentials.pem_private_key = CommandConfig.ClientConfig.SslCredentials.pem_private_key;
     }
 
     static int PrepareConfigCredentials(NGRpcProxy::TGRpcClientConfig clientConfig, TConfig& commandConfig) {
@@ -102,8 +104,8 @@ public:
         if (!commandConfig.StaticCredentials.User.empty()) {
             Ydb::Auth::LoginRequest request;
             Ydb::Operations::Operation response;
-            request.set_user(commandConfig.StaticCredentials.User);
-            request.set_password(commandConfig.StaticCredentials.Password);
+            request.set_user(TString(commandConfig.StaticCredentials.User));
+            request.set_password(TString(commandConfig.StaticCredentials.Password));
             res = DoGRpcRequest<Ydb::Auth::V1::AuthService,
                                 Ydb::Auth::LoginRequest,
                                 Ydb::Auth::LoginResponse>(clientConfig, request, response, &Ydb::Auth::V1::AuthService::Stub::AsyncLogin, {});
@@ -159,4 +161,3 @@ public:
 
 }
 }
-

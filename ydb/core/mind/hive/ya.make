@@ -45,6 +45,7 @@ SRCS(
     tablet_move_info.cpp
     tx__adopt_tablet.cpp
     tx__block_storage_result.cpp
+    tx__configure_scale_recommender.cpp
     tx__configure_subdomain.cpp
     tx__create_tablet.cpp
     tx__cut_tablet_history.cpp

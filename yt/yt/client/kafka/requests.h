@@ -10,6 +10,11 @@ namespace NYT::NKafka {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+using TMemberId = TString;
+using TGroupId = TString;
+
+////////////////////////////////////////////////////////////////////////////////
+
 DEFINE_ENUM(ERequestType,
     ((None)               (-1))
     ((Produce)            (0))
@@ -20,9 +25,10 @@ DEFINE_ENUM(ERequestType,
     ((OffsetCommit)       (8))
     ((OffsetFetch)        (9))
     ((FindCoordinator)    (10))
-    ((JoinGroup)          (11)) // Unimplemented.
-    ((Heartbeat)          (12)) // Unimplemented.
-    ((SyncGroup)          (14)) // Unimplemented.
+    ((JoinGroup)          (11))
+    ((Heartbeat)          (12))
+    ((LeaveGroup)         (13))
+    ((SyncGroup)          (14))
     ((DescribeGroups)     (15)) // Unimplemented.
     ((SaslHandshake)      (17))
     ((ApiVersions)        (18))
@@ -120,6 +126,13 @@ struct TRecord
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TReqBase
+{
+    int ApiVersion = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TReqApiVersions
 {
     static constexpr ERequestType RequestType = ERequestType::ApiVersions;
@@ -143,7 +156,7 @@ struct TRspApiKey
 
 struct TRspApiVersions
 {
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
     std::vector<TRspApiKey> ApiKeys;
     i32 ThrottleTimeMs = 0;
     std::vector<TTaggedField> TagBuffer;
@@ -180,7 +193,7 @@ struct TRspMetadataBroker
     i32 NodeId = 0;
     TString Host;
     i32 Port = 0;
-    TString Rack;
+    std::optional<TString> Rack;
     std::vector<TTaggedField> TagBuffer;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
@@ -188,7 +201,7 @@ struct TRspMetadataBroker
 
 struct TRspMetadataTopicPartition
 {
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
 
     i32 PartitionIndex = 0;
     i32 LeaderId = 0;
@@ -203,7 +216,7 @@ struct TRspMetadataTopicPartition
 
 struct TRspMetadataTopic
 {
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
     TString Name;
     TGuid TopicId;
     bool IsInternal = false;
@@ -218,7 +231,7 @@ struct TRspMetadata
 {
     i32 ThrottleTimeMs = 0;
     std::vector<TRspMetadataBroker> Brokers;
-    i32 ClusterId = 0;
+    std::optional<TString> ClusterId;
     i32 ControllerId = 0;
     std::vector<TRspMetadataTopic> Topics;
     std::vector<TTaggedField> TagBuffer;
@@ -239,7 +252,7 @@ struct TReqFindCoordinator
 
 struct TRspFindCoordinator
 {
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
     i32 NodeId = 0;
     TString Host;
     i32 Port = 0;
@@ -252,7 +265,7 @@ struct TRspFindCoordinator
 struct TReqJoinGroupProtocol
 {
     TString Name;
-    TString Metadata; // TODO(nadya73): bytes.
+    TString Metadata;
 
     void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
 };
@@ -261,9 +274,9 @@ struct TReqJoinGroup
 {
     static constexpr ERequestType RequestType = ERequestType::JoinGroup;
 
-    TString GroupId;
+    TGroupId GroupId;
     i32 SessionTimeoutMs = 0;
-    TString MemberId;
+    TMemberId MemberId;
     TString ProtocolType;
     std::vector<TReqJoinGroupProtocol> Protocols;
 
@@ -272,7 +285,7 @@ struct TReqJoinGroup
 
 struct TRspJoinGroupMember
 {
-    TString MemberId;
+    TMemberId MemberId;
     TString Metadata; // TODO(nadya73): bytes.
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
@@ -280,11 +293,11 @@ struct TRspJoinGroupMember
 
 struct TRspJoinGroup
 {
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
     i32 GenerationId = 0;
     TString ProtocolName;
     TString Leader;
-    TString MemberId;
+    TMemberId MemberId;
     std::vector<TRspJoinGroupMember> Members;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
@@ -294,7 +307,7 @@ struct TRspJoinGroup
 
 struct TReqSyncGroupAssignment
 {
-    TString MemberId;
+    TMemberId MemberId;
     TString Assignment;
 
     void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
@@ -304,26 +317,18 @@ struct TReqSyncGroup
 {
     static constexpr ERequestType RequestType = ERequestType::SyncGroup;
 
-    TString GroupId;
-    TString GenerationId;
-    TString MemberId;
+    TGroupId GroupId;
+    i32 GenerationId = 0;
+    TMemberId MemberId;
     std::vector<TReqSyncGroupAssignment> Assignments;
 
     void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
 };
 
-struct TRspSyncGroupAssignment
-{
-    TString Topic;
-    std::vector<i32> Partitions;
-
-    void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
-};
-
 struct TRspSyncGroup
 {
-    EErrorCode ErrorCode = EErrorCode::None;
-    std::vector<TRspSyncGroupAssignment> Assignments;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
+    TString Assignment;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
 };
@@ -334,16 +339,16 @@ struct TReqHeartbeat
 {
     static constexpr ERequestType RequestType = ERequestType::Heartbeat;
 
-    TString GroupId;
+    TGroupId GroupId;
     i32 GenerationId = 0;
-    TString MemberId;
+    TMemberId MemberId;
 
     void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
 };
 
 struct TRspHeartbeat
 {
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
 };
@@ -380,7 +385,7 @@ struct TReqOffsetCommit
 struct TRspOffsetCommitTopicPartition
 {
     i32 PartitionIndex = 0;
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
 };
@@ -425,7 +430,7 @@ struct TRspOffsetFetchTopicPartition
     i32 PartitionIndex = 0;
     i64 CommittedOffset = 0;
     std::optional<TString> Metadata;
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
 };
@@ -479,7 +484,7 @@ struct TReqFetch
 struct TRspFetchResponsePartition
 {
     i32 PartitionIndex = 0;
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
     i64 HighWatermark = 0;
     std::optional<std::vector<TRecord>> Records;
 
@@ -504,6 +509,7 @@ struct TRspFetch
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TReqSaslHandshake
+    : public TReqBase
 {
     static constexpr ERequestType RequestType = ERequestType::SaslHandshake;
 
@@ -514,7 +520,7 @@ struct TReqSaslHandshake
 
 struct TRspSaslHandshake
 {
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
     std::vector<TString> Mechanisms;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
@@ -533,7 +539,7 @@ struct TReqSaslAuthenticate
 
 struct TRspSaslAuthenticate
 {
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
     std::optional<TString> ErrorMessage;
     TString AuthBytes;
 
@@ -585,7 +591,7 @@ struct TRspProduceResponsePartitionResponseRecordError
 struct TRspProduceResponsePartitionResponse
 {
     i32 Index = 0;
-    EErrorCode ErrorCode = EErrorCode::None;
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
     i64 BaseOffset = 0;
     i64 LogAppendTimeMs = 0;
     i64 LogStartOffset = 0;
@@ -609,6 +615,71 @@ struct TRspProduce
 {
     std::vector<TRspProduceResponse> Responses;
     i32 ThrottleTimeMs = 0;
+    std::vector<TTaggedField> TagBuffer;
+
+    void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TReqListOffsetsTopicPartition
+{
+    i32 PartitionIndex = 0;
+    i64 Timestamp = 0;
+    i32 MaxNumOffsets = 0;
+
+    std::vector<TTaggedField> TagBuffer;
+
+    void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+};
+
+struct TReqListOffsetsTopic
+{
+    TString Name;
+    std::vector<TReqListOffsetsTopicPartition> Partitions;
+
+    std::vector<TTaggedField> TagBuffer;
+
+    void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+};
+
+struct TReqListOffsets
+{
+    static constexpr ERequestType RequestType = ERequestType::ListOffsets;
+
+    i32 ReplicaId = 0;
+    std::vector<TReqListOffsetsTopic> Topics;
+
+    std::vector<TTaggedField> TagBuffer;
+
+    void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+};
+
+struct TRspListOffsetsTopicPartition
+{
+    i32 PartitionIndex = 0;
+    NKafka::EErrorCode ErrorCode = EErrorCode::None;
+    i64 Offset = 0;
+
+    std::vector<TTaggedField> TagBuffer;
+
+    void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
+};
+
+struct TRspListOffsetsTopic
+{
+    TString Name;
+    std::vector<TRspListOffsetsTopicPartition> Partitions;
+
+    std::vector<TTaggedField> TagBuffer;
+
+    void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
+};
+
+struct TRspListOffsets
+{
+    std::vector<TRspListOffsetsTopic> Topics;
+
     std::vector<TTaggedField> TagBuffer;
 
     void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;

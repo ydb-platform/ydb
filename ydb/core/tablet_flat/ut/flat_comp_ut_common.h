@@ -90,17 +90,6 @@ public:
         return StartedCompactions.erase(compactionId) > 0;
     }
 
-    ui64 BeginRead(THolder<ICompactionRead> read) override {
-        Y_ABORT_UNLESS(read);
-        ui64 readId = NextReadId_++;
-        PendingReads[readId] = std::move(read);
-        return readId;
-    }
-
-    bool CancelRead(ui64 readId) override {
-        return PendingReads.erase(readId) > 0;
-    }
-
     void RequestChanges(ui32 table) override {
         Y_ABORT_UNLESS(table == 1, "Unexpected table");
         ChangesRequested_ = true;
@@ -108,27 +97,6 @@ public:
 
     bool CheckChangesFlag() {
         return std::exchange(ChangesRequested_, false);
-    }
-
-    struct TReadResult {
-        ui64 ReadId;
-        bool Completed;
-    };
-
-    TReadResult RunRead(IPages* env) {
-        Y_ABORT_UNLESS(PendingReads, "There are no pending reads");
-        ui64 readId = PendingReads.begin()->first;
-        return RunRead(readId, env);
-    }
-
-    TReadResult RunRead(ui64 readId, IPages* env) {
-        auto it = PendingReads.find(readId);
-        Y_ABORT_UNLESS(it != PendingReads.end());
-        bool completed = it->second->Execute(env);
-        if (completed) {
-            PendingReads.erase(readId);
-        }
-        return { readId, completed };
     }
 
     struct TRunCompactionResult {
@@ -157,10 +125,13 @@ public:
             SnapshotTable(params->Table);
         }
 
-        auto subset = DB.Subset(params->Table, { }, params->Edge.Head);
+        auto subset = DB.CompactionSubset(params->Table, params->Edge.Head, { });
         if (params->Parts) {
             subset->Flatten.insert(subset->Flatten.end(), params->Parts.begin(), params->Parts.end());
         }
+
+        // Note: we don't compact TxStatus in these tests
+        Y_ABORT_UNLESS(subset->TxStatus.empty());
 
         Y_ABORT_UNLESS(!*subset || subset->IsStickedToHead());
 
@@ -195,8 +166,7 @@ public:
             Y_ABORT_UNLESS(parts.back());
         }
 
-        auto partsCopy = parts;
-        DB.Replace(params->Table, partsCopy, *subset);
+        DB.Replace(params->Table, *subset, parts, { });
 
         return MakeHolder<TCompactionResult>(subset->Epoch(), std::move(parts));
     }
@@ -322,7 +292,6 @@ private:
 public:
     TDatabase DB;
     std::optional<TTestEnv> Env;
-    THashMap<ui64, THolder<ICompactionRead>> PendingReads;
     THashMap<ui64, THolder<TCompactionParams>> StartedCompactions;
     THashMap<ui32, THashMap<ui64, TString>> TableState;
     ui64 TabletId = 123;
@@ -332,7 +301,6 @@ private:
     ui32 Gen = 0;
     ui32 Step = 0;
 
-    ui64 NextReadId_ = 1;
     ui64 NextCompactionId_ = 1;
     ui64 NextForcedCompactionId_ = 1001;
 

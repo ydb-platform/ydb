@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/library/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/data_events.pb.h>
@@ -53,6 +53,7 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
     std::vector<std::vector<ui32>> SplittedBatches;
 
     TOwnedCellVec LastKey;
+    NKikimrKqp::TEvKqpScanCursor LastCursorProto;
     TDuration CpuTime;
     TDuration WaitTime;
     ui32 PageFaults = 0; // number of page faults occurred when filling in this message
@@ -120,6 +121,7 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
         ev->Finished = pbEv->Record.GetFinished();
         ev->RequestedBytesLimitReached = pbEv->Record.GetRequestedBytesLimitReached();
         ev->LastKey = TOwnedCellVec(TSerializedCellVec(pbEv->Record.GetLastKey()).GetCells());
+        ev->LastCursorProto = pbEv->Record.GetLastCursor();
         if (pbEv->Record.HasAvailablePacks()) {
             ev->AvailablePacks = pbEv->Record.GetAvailablePacks();
         }
@@ -153,6 +155,7 @@ private:
             Remote->Record.SetPageFaults(PageFaults);
             Remote->Record.SetPageFault(PageFault);
             Remote->Record.SetLastKey(TSerializedCellVec::Serialize(LastKey));
+            *Remote->Record.MutableLastCursor() = LastCursorProto;
             if (AvailablePacks) {
                 Remote->Record.SetAvailablePacks(*AvailablePacks);
             }
@@ -170,7 +173,7 @@ private:
                     Y_DEBUG_ABORT_UNLESS(ArrowBatch != nullptr);
                     auto* protoArrowBatch = Remote->Record.MutableArrowBatch();
                     protoArrowBatch->SetSchema(NArrow::SerializeSchema(*ArrowBatch->schema()));
-                    protoArrowBatch->SetBatch(NArrow::SerializeBatchNoCompression(NArrow::ToBatch(ArrowBatch, true)));
+                    protoArrowBatch->SetBatch(NArrow::SerializeBatchNoCompression(NArrow::ToBatch(ArrowBatch)));
                     break;
                 }
             }

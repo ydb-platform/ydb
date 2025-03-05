@@ -98,6 +98,26 @@ class TDqComputeActorBase : public NActors::TActorBootstrapped<TDerived>
                           , public TSinkCallbacks
                           , public TOutputTransformCallbacks
 {
+private:
+    struct TEvPrivate {
+        enum EEv : ui32 {
+            EvAsyncOutputError = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+            EvEnd
+        };
+
+        static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+        struct TEvAsyncOutputError : public NActors::TEventLocal<TEvAsyncOutputError, EvAsyncOutputError> {
+            TEvAsyncOutputError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues)
+                : StatusCode(statusCode)
+                , Issues(issues)
+            {}
+
+            NYql::NDqProto::StatusIds::StatusCode StatusCode;
+            NYql::TIssues Issues;
+        };
+    };
+
 protected:
     enum EEvWakeupTag : ui64 {
         TimeoutTag = 1,
@@ -110,14 +130,7 @@ public:
     void Bootstrap() {
         try {
             StartTime = TInstant::Now();
-            {
-                TStringBuilder prefixBuilder;
-                prefixBuilder << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". ";
-                if (RequestContext) {
-                    prefixBuilder << "Ctx: " << *RequestContext << ". ";
-                }
-                LogPrefix = prefixBuilder;
-            }
+            InitializeLogPrefix(); // re-initialize with SelfId
             CA_LOG_D("Start compute actor " << this->SelfId() << ", task: " << Task.GetId());
 
             Channels = new TDqComputeActorChannels(this->SelfId(), TxId, Task, !RuntimeSettings.FailOnUndelivery,
@@ -176,7 +189,7 @@ protected:
         , FunctionRegistry(functionRegistry)
         , CheckpointingMode(GetTaskCheckpointingMode(Task))
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
-        , WatermarksTracker(this->SelfId(), TxId, Task.GetId())
+        , WatermarksTracker(LogPrefix)
         , TaskCounters(taskCounters)
         , MetricsReporter(taskCounters)
         , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, std::move(traceId), "ComputeActor")
@@ -233,10 +246,29 @@ protected:
         }
     }
 
+    void InitializeLogPrefix() {
+        TStringBuilder prefixBuilder;
+        prefixBuilder << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". ";
+        if (RequestContext) {
+            prefixBuilder << "Ctx: " << *RequestContext << ". ";
+        }
+        LogPrefix = std::move(prefixBuilder);
+
+        WatermarksTracker.SetLogPrefix(LogPrefix);
+        for (auto& [_, info]: InputTransformsMap) {
+            info.SetLogPrefix(LogPrefix);
+        }
+        for (auto& [_, info]: SourcesMap) {
+            info.SetLogPrefix(LogPrefix);
+        }
+        for (auto& [_, info]: InputChannelsMap) {
+            info.SetLogPrefix(LogPrefix);
+        }
+    }
+
     void ReportEventElapsedTime() {
         if (RuntimeSettings.CollectBasic()) {
-            ui64 elapsedMicros = NActors::TlsActivationContext->GetCurrentEventTicksAsSeconds() * 1'000'000ull;
-            CpuTime += TDuration::MicroSeconds(elapsedMicros);
+            ComputeActorElapsedTicks += NActors::TlsActivationContext->GetCurrentEventTicks();
         }
     }
 
@@ -284,6 +316,7 @@ protected:
             hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleExecuteBase);
             hFunc(IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived, OnNewAsyncInputDataArrived);
             hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, OnAsyncInputError);
+            hFunc(TEvPrivate::TEvAsyncOutputError, HandleAsyncOutputError);
             default: {
                 CA_LOG_C("TDqComputeActorBase, unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
                 InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
@@ -355,12 +388,12 @@ protected:
     }
 
     void ProcessOutputsImpl(ERunStatus status) {
-        ProcessOutputsState.LastRunStatus = status;
-
         CA_LOG_T("ProcessOutputsState.Inflight: " << ProcessOutputsState.Inflight);
         if (ProcessOutputsState.Inflight == 0) {
             ProcessOutputsState = TProcessOutputsState();
         }
+
+        ProcessOutputsState.LastRunStatus = status;
 
         for (auto& entry : OutputChannelsMap) {
             const ui64 channelId = entry.first;
@@ -424,6 +457,14 @@ protected:
             // but idk what is the logic behind this
             ContinueExecute(EResumeSource::CAPendingInput);
             return;
+        }
+
+        if (status != ERunStatus::Finished) {
+            for (auto& [id, inputTransform] : InputTransformsMap) {
+                if (!inputTransform.Buffer->Empty()) {
+                    ContinueExecute(EResumeSource::CAPendingInput);
+                }
+            }
         }
 
         if (status != ERunStatus::Finished) {
@@ -788,7 +829,7 @@ protected:
 
 protected:
     struct TInputChannelInfo {
-        const TString LogPrefix;
+        TString LogPrefix;
         ui64 ChannelId;
         ui32 SrcStageId;
         IDqInputChannel::TPtr Channel;
@@ -814,7 +855,7 @@ protected:
         }
 
         bool IsPaused() const {
-            return PendingWatermarks.empty() || PendingCheckpoint.has_value();
+            return !PendingWatermarks.empty() || PendingCheckpoint.has_value();
         }
 
         void Pause(TInstant watermark) {
@@ -847,6 +888,10 @@ protected:
             if (Channel) {  // async actor doesn't hold channels, so channel is resumed in task runner actor
                 Channel->Resume();
             }
+        }
+
+        void SetLogPrefix(const TString& logPrefix) {
+            LogPrefix = logPrefix;
         }
     };
 
@@ -1500,7 +1545,7 @@ protected:
         }
 
         CA_LOG_E("Sink[" << outputIndex << "] fatal error: " << issues.ToOneLineString());
-        InternalError(fatalCode, issues);
+        this->Send(this->SelfId(), new TEvPrivate::TEvAsyncOutputError(fatalCode, issues));
     }
 
     void OnOutputTransformError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) override final {
@@ -1510,7 +1555,11 @@ protected:
         }
 
         CA_LOG_E("OutputTransform[" << outputIndex << "] fatal error: " << issues.ToOneLineString());
-        InternalError(fatalCode, issues);
+        this->Send(this->SelfId(), new TEvPrivate::TEvAsyncOutputError(fatalCode, issues));
+    }
+
+    void HandleAsyncOutputError(const TEvPrivate::TEvAsyncOutputError::TPtr& ev) {
+        InternalError(ev->Get()->StatusCode, ev->Get()->Issues);
     }
 
     bool AllAsyncOutputsFinished() const {
@@ -1609,6 +1658,7 @@ protected:
         RequestContext = MakeIntrusive<NYql::NDq::TRequestContext>(Task.GetRequestContext());
 
         InitializeWatermarks();
+        InitializeLogPrefix(); // note: SelfId is not initialized here
     }
 
 private:
@@ -1678,7 +1728,8 @@ public:
             ReportEventElapsedTime();
         }
 
-        dst->SetCpuTimeUs(CpuTime.MicroSeconds() + SourceCpuTime.MicroSeconds() + InputTransformCpuTime.MicroSeconds());
+        ui64 computeActorElapsedUs = NHPTimer::GetSeconds(ComputeActorElapsedTicks) * 1'000'000ull;
+        dst->SetCpuTimeUs(computeActorElapsedUs + SourceCpuTime.MicroSeconds() + InputTransformCpuTime.MicroSeconds());
         dst->SetMaxMemoryUsage(MemoryLimits.MemoryQuotaManager->GetMaxMemorySize());
 
         if (auto memProfileStats = GetMemoryProfileStats(); memProfileStats) {
@@ -1714,14 +1765,18 @@ public:
             auto cpuTimeUs = taskStats->ComputeCpuTime.MicroSeconds() + taskStats->BuildCpuTime.MicroSeconds();
             if (TDerived::HasAsyncTaskRunner) {
                 // Async TR is another actor, summarize CPU usage
-                cpuTimeUs += CpuTime.MicroSeconds();
+                cpuTimeUs = NHPTimer::GetSeconds(ComputeActorElapsedTicks + TaskRunnerActorElapsedTicks) * 1'000'000ull;
             }
-            // CpuTimeUs does include SourceCpuTime
+            // cpuTimeUs does include SourceCpuTime
             protoTask->SetCpuTimeUs(cpuTimeUs + SourceCpuTime.MicroSeconds() + InputTransformCpuTime.MicroSeconds());
             protoTask->SetSourceCpuTimeUs(SourceCpuTime.MicroSeconds());
 
             ui64 ingressBytes = 0;
             ui64 ingressRows = 0;
+            ui64 filteredBytes = 0;
+            ui64 filteredRows = 0;
+            ui64 queuedBytes = 0;
+            ui64 queuedRows = 0;
             ui64 ingressDecompressedBytes = 0;
             auto startTimeMs = protoTask->GetStartTimeMs();
 
@@ -1731,6 +1786,9 @@ public:
                     auto inputIndex = protoSource.GetInputIndex();
                     if (auto* sourceInfoPtr = SourcesMap.FindPtr(inputIndex)) {
                         auto& sourceInfo = *sourceInfoPtr;
+                        if (!sourceInfo.AsyncInput)
+                            continue;
+
                         protoSource.SetIngressName(sourceInfo.Type);
                         const auto& ingressStats = sourceInfo.AsyncInput->GetIngressStats();
                         FillAsyncStats(*protoSource.MutableIngress(), ingressStats);
@@ -1744,6 +1802,10 @@ public:
                                 startTimeMs = firstMessageMs;
                             }
                         }
+                        filteredBytes += ingressStats.FilteredBytes;
+                        filteredRows += ingressStats.FilteredRows;
+                        queuedBytes += ingressStats.QueuedBytes;
+                        queuedRows += ingressStats.QueuedRows;
                     }
                 }
             } else {
@@ -1757,6 +1819,10 @@ public:
                     // ingress rows are usually not reported, so we count rows in task runner input
                     ingressRows += ingressStats.Rows ? ingressStats.Rows : taskStats->Sources.at(inputIndex)->GetPopStats().Rows;
                     ingressDecompressedBytes += ingressStats.DecompressedBytes;
+                    filteredBytes += ingressStats.FilteredBytes;
+                    filteredRows += ingressStats.FilteredRows;
+                    queuedBytes += ingressStats.QueuedBytes;
+                    queuedRows += ingressStats.QueuedRows;
                 }
             }
 
@@ -1767,6 +1833,10 @@ public:
             protoTask->SetIngressBytes(ingressBytes);
             protoTask->SetIngressRows(ingressRows);
             protoTask->SetIngressDecompressedBytes(ingressDecompressedBytes);
+            protoTask->SetIngressFilteredBytes(filteredBytes);
+            protoTask->SetIngressFilteredRows(filteredRows);
+            protoTask->SetIngressQueuedBytes(queuedBytes);
+            protoTask->SetIngressQueuedRows(queuedRows);
 
             ui64 egressBytes = 0;
             ui64 egressRows = 0;
@@ -1800,6 +1870,10 @@ public:
                     // egress rows are usually not reported, so we count rows in task runner output
                     egressRows += egressStats.Rows ? egressStats.Rows : pushStats.Rows;
                     // p.s. sink == sinkInfo.Buffer
+                }
+
+                if (auto* source = sinkInfo.AsyncOutput) {
+                    source->FillExtraStats(protoTask, last, GetMeteringStats());
                 }
             }
 
@@ -1966,7 +2040,8 @@ protected:
     bool ResumeEventScheduled = false;
     NDqProto::EComputeState State;
     TIntrusivePtr<NYql::NDq::TRequestContext> RequestContext;
-    TDuration CpuTime;
+    ui64 ComputeActorElapsedTicks = 0;
+    ui64 TaskRunnerActorElapsedTicks = 0;
 
     struct TProcessOutputsState {
         int Inflight = 0;

@@ -17,3 +17,7 @@ RECURSE(
     scheme_cache_lib
     server
 )
+
+RECURSE_FOR_TESTS(
+    ut
+)

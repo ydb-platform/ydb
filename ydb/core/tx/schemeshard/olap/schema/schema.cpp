@@ -1,20 +1,22 @@
 #include "schema.h"
+
 #include <ydb/core/tx/schemeshard/common/validation.h>
 #include <ydb/core/tx/schemeshard/olap/ttl/validator.h>
 
 namespace NKikimr::NSchemeShard {
 
-bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl, IErrorCollector& errors) const {
+bool TOlapSchema::ValidateTtlSettings(
+    const NKikimrSchemeOp::TColumnDataLifeCycle& ttl, const TOperationContext& context, IErrorCollector& errors) const {
     using TTtlProto = NKikimrSchemeOp::TColumnDataLifeCycle;
     switch (ttl.GetStatusCase()) {
-        case TTtlProto::kEnabled:
+        case TTtlProto::kEnabled: 
         {
             const auto* column = Columns.GetByName(ttl.GetEnabled().GetColumnName());
             if (!column) {
                 errors.AddError("Incorrect ttl column - not found in scheme");
                 return false;
             }
-            return TTTLValidator::ValidateColumnTableTtl(ttl.GetEnabled(), Indexes, {}, Columns.GetColumns(), Columns.GetColumnsByName(), errors);
+            return TTTLValidator::ValidateColumnTableTtl(ttl.GetEnabled(), Indexes, {}, Columns.GetColumns(), Columns.GetColumnsByName(), context, errors);
         }
         case TTtlProto::kDisabled:
         default:
@@ -25,7 +27,11 @@ bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycl
 }
 
 bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors) {
-    if (!Columns.ApplyUpdate(schemaUpdate.GetColumns(), errors, NextColumnId)) {
+    if (!ColumnFamilies.ApplyUpdate(schemaUpdate.GetColumnFamilies(), errors, NextColumnFamilyId)) {
+        return false;
+    }
+
+    if (!Columns.ApplyUpdate(schemaUpdate.GetColumns(), ColumnFamilies, errors, NextColumnId)) {
         return false;
     }
 
@@ -43,8 +49,10 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
 
 void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
     NextColumnId = tableSchema.GetNextColumnId();
+    NextColumnFamilyId = tableSchema.GetNextColumnFamilyId();
     Version = tableSchema.GetVersion();
 
+    ColumnFamilies.Parse(tableSchema);
     Columns.Parse(tableSchema);
     Indexes.Parse(tableSchema);
     Options.Parse(tableSchema);
@@ -53,24 +61,30 @@ void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& ta
 void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt) const {
     NKikimrSchemeOp::TColumnTableSchema resultLocal;
     resultLocal.SetNextColumnId(NextColumnId);
+    resultLocal.SetNextColumnFamilyId(NextColumnFamilyId);
     resultLocal.SetVersion(Version);
 
+    ColumnFamilies.Serialize(resultLocal);
     Columns.Serialize(resultLocal);
     Indexes.Serialize(resultLocal);
     Options.Serialize(resultLocal);
     std::swap(resultLocal, tableSchemaExt);
 }
 
-bool TOlapSchema::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
-    if (!Columns.Validate(opSchema, errors)) {
+bool TOlapSchema::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
+    if (!Columns.ValidateForStore(opSchema, errors)) {
         return false;
     }
 
-    if (!Indexes.Validate(opSchema, errors)) {
+    if (!Indexes.ValidateForStore(opSchema, errors)) {
         return false;
     }
 
-    if (!Options.Validate(opSchema, errors)) {
+    if (!Options.ValidateForStore(opSchema, errors)) {
+        return false;
+    }
+
+    if (!ColumnFamilies.ValidateForStore(opSchema, errors)) {
         return false;
     }
     return true;

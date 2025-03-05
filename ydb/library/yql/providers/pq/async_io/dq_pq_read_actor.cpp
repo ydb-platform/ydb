@@ -19,8 +19,8 @@
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -31,6 +31,8 @@
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
@@ -94,17 +96,19 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
         TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
             , Counters(counters) {
-            SubGroup = Counters->GetSubgroup("sink", "PqRead");
-            auto sink = SubGroup->GetSubgroup("tx_id", TxId);
-            auto task = sink->GetSubgroup("task_id", ToString(taskId));
+            SubGroup = Counters->GetSubgroup("source", "PqRead");
+            auto source = SubGroup->GetSubgroup("tx_id", TxId);
+            auto task = source->GetSubgroup("task_id", ToString(taskId));
             InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
             InFlySubscribe = task->GetCounter("InFlySubscribe");
             AsyncInputDataRate = task->GetCounter("AsyncInputDataRate", true);
             ReconnectRate = task->GetCounter("ReconnectRate", true);
+            DataRate = task->GetCounter("DataRate", true);
+            WaitEventTimeMs = source->GetHistogram("WaitEventTimeMs", NMonitoring::ExplicitHistogram({5, 20, 100, 500, 2000}));
         }
 
         ~TMetrics() {
-            SubGroup->RemoveSubgroup("id", TxId);
+            SubGroup->RemoveSubgroup("tx_id", TxId);
         }
 
         TString TxId;
@@ -114,6 +118,8 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
         ::NMonitoring::TDynamicCounters::TCounterPtr AsyncInputDataRate;
         ::NMonitoring::TDynamicCounters::TCounterPtr ReconnectRate;
+        ::NMonitoring::TDynamicCounters::TCounterPtr DataRate;
+        NMonitoring::THistogramPtr WaitEventTimeMs;
     };
 
 public:
@@ -155,7 +161,7 @@ public:
     }
 
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const {
-        NYdb::NTopic::TTopicClientSettings opts;
+        NYdb::NTopic::TTopicClientSettings opts = PqGateway->GetTopicClientSettings();
         opts.Database(SourceParams.GetDatabase())
             .DiscoveryEndpoint(SourceParams.GetEndpoint())
             .SslCredentials(NYdb::TSslCredentials(SourceParams.GetUseSsl()))
@@ -208,7 +214,7 @@ public:
     }
 
     TString GetSessionId() const override {
-        return ReadSession ? ReadSession->GetSessionId() : TString{"empty"};
+        return ReadSession ? TString{ReadSession->GetSessionId()} : TString{"empty"};
     }
 
 private:
@@ -222,6 +228,11 @@ private:
         SubscribedOnEvent = false;
         if (ev.Get()->Cookie) {
             Metrics.InFlySubscribe->Dec();
+        }
+        if (WaitEventStartedAt) {
+            auto waitEventDurationMs = (TInstant::Now() - *WaitEventStartedAt).MilliSeconds();
+            Metrics.WaitEventTimeMs->Collect(waitEventDurationMs);
+            WaitEventStartedAt.Clear();
         }
         Metrics.InFlyAsyncInputData->Set(1);
         Metrics.AsyncInputDataRate->Inc();
@@ -279,7 +290,7 @@ private:
 
         if (!InflightReconnect && ReconnectPeriod != TDuration::Zero()) {
             Metrics.ReconnectRate->Inc();
-            Schedule(ReconnectPeriod, new TEvPrivate::TEvSourceDataReady());
+            Schedule(ReconnectPeriod, new TEvPrivate::TEvReconnectSession());
             InflightReconnect = true;
         }
 
@@ -291,7 +302,7 @@ private:
         bool recheckBatch = false;
 
         if (freeSpace > 0) {
-            auto events = GetReadSession().GetEvents(false, TMaybe<size_t>(), static_cast<size_t>(freeSpace));
+            auto events = GetReadSession().GetEvents(false, std::nullopt, static_cast<size_t>(freeSpace));
             recheckBatch = !events.empty();
 
             ui32 batchItemsEstimatedCount = 0;
@@ -385,6 +396,7 @@ private:
             SubscribedOnEvent = true;
             Metrics.InFlySubscribe->Inc();
             NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
+            WaitEventStartedAt = TInstant::Now();
             EventFuture = GetReadSession().WaitEvent().Subscribe([actorSystem, selfId = SelfId()](const auto&){
                 actorSystem->Send(selfId, new TEvPrivate::TEvSourceDataReady(), 0, 1);
             });
@@ -416,6 +428,7 @@ private:
         std::move(readyBatch.Data.begin(), readyBatch.Data.end(), std::back_inserter(buffer));
         watermark = readyBatch.Watermark;
         usedSpace = readyBatch.UsedSpace;
+        Metrics.DataRate->Add(readyBatch.UsedSpace);
 
         for (const auto& [PartitionSession, ranges] : readyBatch.OffsetRanges) {
             for (const auto& [start, end] : ranges) {
@@ -459,9 +472,9 @@ private:
             const auto partitionKey = MakePartitionKey(event.GetPartitionSession());
             const auto partitionKeyStr = ToString(partitionKey);
             for (const auto& message : event.GetMessages()) {
-                const TString& data = message.GetData();
+                const std::string& data = message.GetData();
                 Self.IngressStats.Bytes += data.size();
-                LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), data);
+                LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), TString{data});
                 SRC_LOG_T("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " Data received: " << message.DebugString(true));
 
                 if (message.GetWriteTime() < Self.StartingMessageTimestamp) {
@@ -490,7 +503,7 @@ private:
             SRC_LOG_E("SessionId: " << Self.GetSessionId() << " " << message << ": " << ev.DebugString());
             TIssue issue(message);
             for (const auto& subIssue : ev.GetIssues()) {
-                TIssuePtr newIssue(new TIssue(subIssue));
+                TIssuePtr newIssue(new TIssue(NYdb::NAdapters::ToYqlIssue(subIssue)));
                 issue.AddSubIssue(newIssue);
             }
             Self.Send(Self.ComputeActorId, new TEvAsyncInputError(Self.InputIndex, TIssues({issue}), NYql::NDqProto::StatusIds::BAD_REQUEST));
@@ -504,7 +517,7 @@ private:
 
             SRC_LOG_D("SessionId: " << Self.GetSessionId() << " Key: " << partitionKeyStr << " StartPartitionSessionEvent received");
 
-            TMaybe<ui64> readOffset;
+            std::optional<ui64> readOffset;
             const auto offsetIt = Self.PartitionToOffset.find(partitionKey);
             if (offsetIt != Self.PartitionToOffset.end()) {
                 readOffset = offsetIt->second;
@@ -560,7 +573,7 @@ private:
         }
 
         std::pair<NUdf::TUnboxedValuePod, i64> CreateItem(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
-            const TString& data = message.GetData();
+            const std::string& data = message.GetData();
 
             i64 usedSpace = 0;
             NUdf::TUnboxedValuePod item;
@@ -607,6 +620,7 @@ private:
     TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
     TMaybe<TInstant> NextIdlenesCheckAt;
     IPqGateway::TPtr PqGateway;
+    TMaybe<TInstant> WaitEventStartedAt;
 };
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
@@ -686,6 +700,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
         }
 
         return CreateDqPqRdReadActor(
+            args.TypeEnv,
             std::move(settings),
             args.InputIndex,
             args.StatsLevel,

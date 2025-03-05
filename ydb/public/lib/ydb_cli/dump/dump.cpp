@@ -2,19 +2,13 @@
 #include "dump_impl.h"
 #include "restore_impl.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb-cpp-sdk/client/driver/driver.h>
 
 #include <library/cpp/logger/log.h>
 
 #include <util/string/printf.h>
 
-namespace NYdb {
-namespace NDump {
-
-extern const char SCHEME_FILE_NAME[] = "scheme.pb";
-extern const char PERMISSIONS_FILE_NAME[] = "permissions.pb";
-extern const char INCOMPLETE_FILE_NAME[] = "incomplete";
-extern const char EMPTY_FILE_NAME[] = "empty_dir";
+namespace NYdb::NDump {
 
 TString DataFileName(ui32 id) {
     return Sprintf("data_%02d.csv", id);
@@ -36,6 +30,26 @@ public:
     TRestoreResult Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
         auto client = TRestoreClient(Driver, Log);
         return client.Restore(fsPath, dbPath, settings);
+    }
+
+    TDumpResult DumpCluster(const TString& fsPath) {
+        auto client = TDumpClient(Driver, Log);
+        return client.DumpCluster(fsPath);
+    }
+
+    TRestoreResult RestoreCluster(const TString& fsPath, const TRestoreClusterSettings& settings) {
+        auto client = TRestoreClient(Driver, Log);
+        return client.RestoreCluster(fsPath, settings);
+    }
+
+    TDumpResult DumpDatabase(const TString& database, const TString& fsPath) {
+        auto client = TDumpClient(Driver, Log);
+        return client.DumpDatabase(database, fsPath);
+    }
+
+    TRestoreResult RestoreDatabase(const TString& fsPath, const TRestoreDatabaseSettings& settings) {
+        auto client = TRestoreClient(Driver, Log);
+        return client.RestoreDatabase(fsPath, settings);
     }
 
 private:
@@ -72,5 +86,20 @@ TRestoreResult TClient::Restore(const TString& fsPath, const TString& dbPath, co
     return Impl_->Restore(fsPath, dbPath, settings);
 }
 
-} // NDump
-} // NYdb
+TDumpResult TClient::DumpCluster(const TString& fsPath) {
+    return Impl_->DumpCluster(fsPath);
+}
+
+TRestoreResult TClient::RestoreCluster(const TString& fsPath, const TRestoreClusterSettings& settings) {
+     return Impl_->RestoreCluster(fsPath, settings);
+}
+
+TDumpResult TClient::DumpDatabase(const TString& database, const TString& fsPath) {
+    return Impl_->DumpDatabase(database, fsPath);
+}
+
+TRestoreResult TClient::RestoreDatabase(const TString& fsPath, const TRestoreDatabaseSettings& settings) {
+    return Impl_->RestoreDatabase(fsPath, settings);
+}
+
+} // NYdb::NDump

@@ -184,6 +184,7 @@ void TReadQueryResultCommand::DoExecute(ICommandContextPtr context)
         context->GetOutputFormat(),
         rowset->GetNameTable(),
         {rowset->GetSchema()},
+        {Options.Columns},
         context->Request().OutputStream,
         /*enableContextSaving*/ false,
         New<TControlAttributesConfig>(),
@@ -390,6 +391,7 @@ void TGetQueryTrackerInfoCommand::DoExecute(ICommandContextPtr context)
             .Item("cluster_name").Value(result.ClusterName)
             .Item("supported_features").Value(result.SupportedFeatures)
             .Item("access_control_objects").Value(result.AccessControlObjects)
+            .Item("clusters").Value(result.Clusters)
         .EndMap());
 }
 

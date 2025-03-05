@@ -15,8 +15,8 @@ namespace NPDisk {
     XX(Black) \
     XX(Red) \
     XX(Orange) \
-    XX(LightOrange) \
     XX(PreOrange) \
+    XX(LightOrange) \
     XX(Yellow) \
     XX(LightYellow) \
     XX(Cyan) \

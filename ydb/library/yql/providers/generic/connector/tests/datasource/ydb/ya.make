@@ -38,17 +38,20 @@ ENV(COMPOSE_HTTP_TIMEOUT=1200)  # during parallel tests execution there could be
 INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 
 IF (OPENSOURCE)
-    IF (SANITIZER_TYPE)
-        # Too huge for precommit check with sanitizers
-        SIZE(LARGE)
-    ELSE()
-        # Including of docker_compose/recipe.inc automatically converts these tests into LARGE, 
-        # which makes it impossible to run them during precommit checks on Github CI. 
-        # Next several lines forces these tests to be MEDIUM. To see discussion, visit YDBOPS-8928.
-        SIZE(MEDIUM)
-    ENDIF()
-    SET(TEST_TAGS_VALUE)
-    SET(TEST_REQUIREMENTS_VALUE)
+    # TODO: uncomment these lines when build infrastructure is fixed.
+    #
+    # IF (SANITIZER_TYPE)
+    #     # Too huge for precommit check with sanitizers
+    #     SIZE(LARGE)
+    # ELSE()
+    #     # Including of docker_compose/recipe.inc automatically converts these tests into LARGE, 
+    #     # which makes it impossible to run them during precommit checks on Github CI. 
+    #     # Next several lines forces these tests to be MEDIUM. To see discussion, visit YDBOPS-8928.
+    #     SIZE(MEDIUM)
+    # ENDIF()
+    # SET(TEST_TAGS_VALUE)
+    # SET(TEST_REQUIREMENTS_VALUE)
+    
     # This requirement forces tests to be launched consequently,
     # otherwise CI system would be overloaded due to simultaneous launch of many Docker containers.
     # See DEVTOOLSSUPPORT-44103, YA-1759 for details.
@@ -64,7 +67,7 @@ TEST_SRCS(
 
 PEERDIR(
     contrib/python/pytest
-    ydb/library/yql/providers/generic/connector/api/common
+    yql/essentials/providers/common/proto
     ydb/library/yql/providers/generic/connector/tests/common_test_cases
     ydb/library/yql/providers/generic/connector/tests/utils
     ydb/library/yql/providers/generic/connector/tests/utils/run

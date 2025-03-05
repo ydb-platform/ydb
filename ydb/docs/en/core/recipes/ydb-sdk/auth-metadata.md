@@ -2,8 +2,6 @@
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-{% include [work in progress message](_includes/addition.md) %}
-
 Below are examples of the code for authentication using environment variables in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
@@ -83,12 +81,29 @@ Below are examples of the code for authentication using environment variables in
               .withAuthProvider(authProvider)
               .build());
 
-      TableClient tableClient = TableClient.newClient(transport).build();
+      QueryClient queryClient = QueryClient.newClient(transport).build();
 
-      doWork(tableClient);
+      doWork(queryClient);
 
-      tableClient.close();
+      queryClient.close();
       transport.close();
+  }
+  ```
+
+- JDBC
+
+  ```java
+  public void work() {
+      Properties props = new Properties();
+      props.setProperty("useMetadata", "true");
+      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
+        doWork(connection);
+      }
+
+      // Option useMetadata can be added to a JDBC URL directly
+      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local?useMetadata=true")) {
+        doWork(connection);
+      }
   }
   ```
 

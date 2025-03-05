@@ -36,6 +36,16 @@
                 "ColumnId": 6,
                 "ColumnName": "ServerlessComputeResourcesMode",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "ScaleRecommenderPolicies",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "Stopped",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -47,7 +57,9 @@
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -239,6 +251,11 @@
                 "ColumnType": "String"
             },
             {
+                "ColumnId": 124,
+                "ColumnName": "StoppedByTenant",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 11,
                 "ColumnName": "ActorToNotify",
                 "ColumnType": "ActorID"
@@ -308,6 +325,7 @@
                     122,
                     123,
                     7,
+                    124,
                     11,
                     13,
                     17,
@@ -696,6 +714,11 @@
                 "ColumnId": 11,
                 "ColumnName": "BecomeUpOnRestart",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "DrainSeqNo",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -712,7 +735,8 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12
                 ],
                 "RoomID": 0,
                 "Codec": 0,

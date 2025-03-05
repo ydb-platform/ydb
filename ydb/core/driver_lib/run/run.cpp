@@ -4,6 +4,7 @@
 #include "kikimr_services_initializers.h"
 
 #include <ydb/core/memory_controller/memory_controller.h>
+#include <ydb/library/actors/core/callstack.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -35,8 +36,7 @@
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/grpc_mon.h>
 #include <ydb/core/log_backend/log_backend.h>
-#include <ydb/core/mon/sync_http_mon.h>
-#include <ydb/core/mon/async_http_mon.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/mon/crossref.h>
 #include <ydb/core/mon_alloc/profiler.h>
 
@@ -65,6 +65,7 @@
 
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>
+#include <ydb/core/mind/node_broker.h>
 #include <ydb/core/base/hive.h>
 
 #include <ydb/core/base/tablet_resolver.h>
@@ -98,7 +99,7 @@
 
 #include <ydb/services/auth/grpc_service.h>
 #include <ydb/services/cms/grpc_service.h>
-#include <ydb/services/bsconfig/grpc_service.h>
+#include <ydb/services/config/grpc_service.h>
 #include <ydb/services/dynamic_config/grpc_service.h>
 #include <ydb/services/datastreams/grpc_service.h>
 #include <ydb/services/discovery/grpc_service.h>
@@ -123,6 +124,7 @@
 #include <ydb/services/backup/grpc_service.h>
 #include <ydb/services/ydb/ydb_logstore.h>
 #include <ydb/services/ydb/ydb_operation.h>
+#include <ydb/services/ydb/ydb_debug.h>
 #include <ydb/services/ydb/ydb_query.h>
 #include <ydb/services/ydb/ydb_scheme.h>
 #include <ydb/services/ydb/ydb_scripting.h>
@@ -241,6 +243,11 @@ public:
             TVector<TString> registerDynamicNodeAllowedSIDs(allowedSids.cbegin(), allowedSids.cend());
             appData->RegisterDynamicNodeAllowedSIDs = std::move(registerDynamicNodeAllowedSIDs);
         }
+        if (securityConfig.BootstrapAllowedSIDsSize() > 0) {
+            const auto& allowedSids = securityConfig.GetBootstrapAllowedSIDs();
+            TVector<TString> bootstrapAllowedSIDs(allowedSids.cbegin(), allowedSids.cend());
+            appData->BootstrapAllowedSIDs = std::move(bootstrapAllowedSIDs);
+        }
 
         appData->InitFeatureFlags(Config.GetFeatureFlags());
         appData->AllowHugeKeyValueDeletes = Config.GetFeatureFlags().GetAllowHugeKeyValueDeletes();
@@ -248,6 +255,7 @@ public:
 
         appData->CompactionConfig = Config.GetCompactionConfig();
         appData->BackgroundCleaningConfig = Config.GetBackgroundCleaningConfig();
+        appData->DataErasureConfig = Config.GetDataErasureConfig();
     }
 };
 
@@ -442,6 +450,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         monConfig.Address = appConfig.GetMonitoringConfig().GetMonitoringAddress();
         monConfig.Certificate = appConfig.GetMonitoringConfig().GetMonitoringCertificate();
         monConfig.MaxRequestsPerSecond = appConfig.GetMonitoringConfig().GetMaxRequestsPerSecond();
+        monConfig.InactivityTimeout = TDuration::Parse(appConfig.GetMonitoringConfig().GetInactivityTimeout());
         if (appConfig.GetMonitoringConfig().HasMonitoringCertificateFile()) {
             monConfig.Certificate = TUnbufferedFileInput(appConfig.GetMonitoringConfig().GetMonitoringCertificateFile()).ReadAll();
         }
@@ -470,11 +479,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         if (ModuleFactories && ModuleFactories->MonitoringFactory) {
             Monitoring = ModuleFactories->MonitoringFactory(std::move(monConfig), appConfig);
         } else {
-            if (appConfig.GetFeatureFlags().GetEnableAsyncHttpMon()) {
-                Monitoring = new NActors::TAsyncHttpMon(std::move(monConfig));
-            } else {
-                Monitoring = new NActors::TSyncHttpMon(std::move(monConfig));
-            }
+            Monitoring = new NActors::TMon(std::move(monConfig));
         }
         if (Monitoring) {
             Monitoring->RegisterCountersPage("counters", "Counters", Counters);
@@ -487,8 +492,15 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
 void TKikimrRunner::InitializeMonitoringLogin(const TKikimrRunConfig&)
 {
     if (Monitoring) {
-        Monitoring->RegisterHandler("/login", MakeWebLoginServiceId());
-        Monitoring->RegisterHandler("/logout", MakeWebLoginServiceId());
+        Monitoring->RegisterActorHandler({
+            .Path = "/login",
+            .Handler = MakeWebLoginServiceId(),
+            .UseAuth = false, // we don't require token for the login page - it's the page to get the token
+        });
+        Monitoring->RegisterActorHandler({
+            .Path = "/logout",
+            .Handler = MakeWebLoginServiceId(),
+        });
     }
 }
 
@@ -614,8 +626,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["tablet_service"] = &hasTabletService;
         TServiceCfg hasView = services.empty();
         names["view"] = &hasView;
-        TServiceCfg hasBSConfig = services.empty();
-        names["bsconfig"] = &hasBSConfig;
+        TServiceCfg hasConfig = services.empty();
+        names["config"] = &hasConfig;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -881,6 +893,9 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 grpcRequestProxies, hasDataStreams.IsRlAllowed(), grpcConfig.GetHandlersPerCompletionQueue()));
         }
 
+        server.AddService(new NGRpcService::TGRpcYdbDebugService(ActorSystem.Get(), Counters,
+            grpcRequestProxies, hasDataStreams.IsRlAllowed(), grpcConfig.GetHandlersPerCompletionQueue()));
+
         if (hasLogStore) {
             server.AddService(new NGRpcService::TGRpcYdbLogStoreService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasLogStore.IsRlAllowed()));
@@ -906,8 +921,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 grpcRequestProxies[0], hasView.IsRlAllowed()));
         }
 
-        if (hasBSConfig) {
-            server.AddService(new NGRpcService::TBSConfigGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+        if (hasConfig) {
+            server.AddService(new NGRpcService::TConfigGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
 
         if (ModuleFactories) {
@@ -973,13 +988,13 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             sslData.DoRequestClientCertificate = appConfig.GetClientCertificateAuthorization().GetRequestClientCertificate();
             sslOpts.SetSslData(sslData);
 
-            GRpcServers.push_back({ "grpcs", new NYdbGrpc::TGRpcServer(sslOpts) });
+            GRpcServers.push_back({ "grpcs", new NYdbGrpc::TGRpcServer(sslOpts, Counters) });
 
             fillFn(grpcConfig, *GRpcServers.back().second, sslOpts);
         }
 
         if (grpcConfig.GetPort()) {
-            GRpcServers.push_back({ "grpc", new NYdbGrpc::TGRpcServer(opts) });
+            GRpcServers.push_back({ "grpc", new NYdbGrpc::TGRpcServer(opts, Counters) });
 
             fillFn(grpcConfig, *GRpcServers.back().second, opts);
         }
@@ -996,7 +1011,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                     xopts.SetEndpointId(ex.GetEndpointId());
                 }
 
-                GRpcServers.push_back({ "grpc", new NYdbGrpc::TGRpcServer(xopts) });
+                GRpcServers.push_back({ "grpc", new NYdbGrpc::TGRpcServer(xopts, Counters) });
                 fillFn(ex, *GRpcServers.back().second, xopts);
             }
 
@@ -1035,7 +1050,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 Y_ABORT_UNLESS(xopts.SslData->Cert, "Cert not set");
                 Y_ABORT_UNLESS(xopts.SslData->Key, "Key not set");
 
-                GRpcServers.push_back({ "grpcs", new NYdbGrpc::TGRpcServer(xopts) });
+                GRpcServers.push_back({ "grpcs", new NYdbGrpc::TGRpcServer(xopts, Counters) });
                 fillFn(ex, *GRpcServers.back().second, xopts);
             }
         }
@@ -1048,6 +1063,11 @@ void TKikimrRunner::InitializeAllocator(const TKikimrRunConfig& runConfig) {
     for (const auto& a : allocConfig.GetParam()) {
         NMalloc::MallocInfo().SetParam(a.first.c_str(), a.second.c_str());
     }
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+    if (allocConfig.GetEnableDefaultAllocator()) {
+        NKikimr::UseDefaultAllocator();
+    }
+#endif
 }
 
 void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
@@ -1070,6 +1090,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->PersQueueMirrorReaderFactory = ModuleFactories ? ModuleFactories->PersQueueMirrorReaderFactory.get() : nullptr;
     AppData->PersQueueGetReadSessionsInfoWorkerFactory = ModuleFactories ? ModuleFactories->PQReadSessionsInfoWorkerFactory.get() : nullptr;
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
+    AppData->SchemeOperationFactory = ModuleFactories ? ModuleFactories->SchemeOperationFactory.get() : nullptr;
+    AppData->ConfigSwissKnife = ModuleFactories ? ModuleFactories->ConfigSwissKnife.get() : nullptr;
 
     AppData->SqsAuthFactory = ModuleFactories
         ? ModuleFactories->SqsAuthFactory.get()
@@ -1428,8 +1450,14 @@ void TKikimrRunner::InitializeActorSystem(
     }
 
     if (runConfig.AppConfig.HasGRpcConfig()) {
-        if (const ui32 grpcPort = runConfig.AppConfig.GetGRpcConfig().GetPort()) {
-            auto driverConfig = NYdb::TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << grpcPort);
+        ui32 port = runConfig.AppConfig.GetGRpcConfig().GetPort();
+
+        if (!port) {
+            port = runConfig.AppConfig.GetGRpcConfig().GetSslPort();
+        }
+
+        if (port) {
+            auto driverConfig = NYdb::TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << port);
             YdbDriver.Reset(new NYdb::TDriver(driverConfig));
             AppData->YdbDriver = YdbDriver.Get();
         }
@@ -1717,11 +1745,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TGraphServiceInitializer(runConfig));
     }
 
-#ifndef KIKIMR_DISABLE_S3_OPS
     if (serviceMask.EnableAwsService) {
         sil->AddServiceInitializer(new TAwsApiInitializer(*this));
     }
-#endif
 
     return sil;
 }
@@ -1765,6 +1791,27 @@ void TKikimrRunner::KikimrStart() {
 
 void TKikimrRunner::KikimrStop(bool graceful) {
     Y_UNUSED(graceful);
+
+    bool enableReleaseNodeNameOnGracefulShutdown = AppData->FeatureFlags.GetEnableReleaseNodeNameOnGracefulShutdown();
+
+    if (enableReleaseNodeNameOnGracefulShutdown) {
+        using namespace NKikimr::NNodeBroker;
+        using TEvent = TEvNodeBroker::TEvGracefulShutdownRequest;
+
+        const ui32 nodeId = ActorSystem->NodeId;
+        bool isDynamicNode = AppData->DynamicNameserviceConfig->MinDynamicNodeId <= nodeId;
+
+        if (isDynamicNode) {
+            NTabletPipe::TClientConfig pipeConfig;
+            pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
+            auto pipe = NTabletPipe::CreateClient({}, MakeNodeBrokerID(), pipeConfig);
+            TActorId nodeBrokerPipe = ActorSystem->Register(pipe);
+            THolder<TEvent> event = MakeHolder<TEvent>();
+            event->Record.SetNodeId(nodeId);
+
+            NTabletPipe::SendData({}, nodeBrokerPipe, event.Release());
+        }
+    }
 
     if (EnabledGrpcService) {
         ActorSystem->Send(new IEventHandle(NGRpcService::CreateGrpcPublisherServiceActorId(), {}, new TEvents::TEvPoisonPill));

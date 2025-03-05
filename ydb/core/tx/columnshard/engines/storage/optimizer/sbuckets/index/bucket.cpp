@@ -24,7 +24,7 @@ std::shared_ptr<TColumnEngineChanges> TPortionsBucket::BuildOptimizationTask(std
     ui64 size = 0;
     for (auto&& i : context.GetPortions()) {
         size += i->GetTotalBlobBytes();
-        AFL_VERIFY(!locksManager->IsLocked(*i));
+        AFL_VERIFY(!locksManager->IsLocked(*i, NDataLocks::ELockCategory::Compaction));
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("size", size)("next", Finish.DebugString())("count", context.GetPortions().size())(
         "event", "start_optimization");
@@ -39,7 +39,7 @@ std::shared_ptr<TColumnEngineChanges> TPortionsBucket::BuildOptimizationTask(std
 
 bool TPortionsBucket::IsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
     for (auto&& i : Portions) {
-        if (dataLocksManager->IsLocked(*i.second.GetPortionInfo())) {
+        if (dataLocksManager->IsLocked(*i.second.GetPortionInfo(), NDataLocks::ELockCategory::Compaction)) {
             return true;
         }
     }

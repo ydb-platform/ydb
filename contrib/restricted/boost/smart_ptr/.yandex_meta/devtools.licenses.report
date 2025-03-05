@@ -48,21 +48,6 @@ BELONGS ya.make
     Files with this license:
         include/boost/pointer_to_other.hpp [10:13]
 
-KEEP     BSL-1.0              3a9fe8c6f3dc56da59da6bb70a0cef2c
-BELONGS ya.make
-    License text:
-        Distributed under the Boost Software License, Version 1.0.
-        (http://www.boost.org/LICENSE_1_0.txt)
-    Scancode info:
-        Original SPDX id: BSL-1.0
-        Score           : 94.44
-        Match type      : NOTICE
-        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
-    Files with this license:
-        include/boost/smart_ptr/allocate_shared_array.hpp [5:6]
-        include/boost/smart_ptr/allocate_unique.hpp [5:6]
-        include/boost/smart_ptr/make_unique.hpp [5:6]
-
 KEEP     BSL-1.0              47a0454637d4fa45d78eb2557ccd70c4
 BELONGS ya.make
     License text:
@@ -112,8 +97,11 @@ BELONGS ya.make
     Files with this license:
         include/boost/make_unique.hpp [6:6]
         include/boost/smart_ptr/allocate_local_shared_array.hpp [6:6]
+        include/boost/smart_ptr/allocate_shared_array.hpp [6:6]
+        include/boost/smart_ptr/allocate_unique.hpp [6:6]
         include/boost/smart_ptr/make_local_shared_array.hpp [7:7]
         include/boost/smart_ptr/make_shared_array.hpp [6:6]
+        include/boost/smart_ptr/make_unique.hpp [6:6]
 
 KEEP     BSL-1.0              6fb8dab2fa17abac18f239108501392d
 BELONGS ya.make
@@ -141,10 +129,6 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
-        include/boost/detail/atomic_count.hpp [15:17]
-        include/boost/detail/lightweight_mutex.hpp [15:17]
-        include/boost/detail/lightweight_thread.hpp [15:17]
-        include/boost/detail/quick_allocator.hpp [16:18]
         include/boost/enable_shared_from_this.hpp [9:11]
         include/boost/intrusive_ptr.hpp [9:11]
         include/boost/make_shared.hpp [8:10]
@@ -153,16 +137,13 @@ BELONGS ya.make
         include/boost/smart_ptr/detail/atomic_count_spin.hpp [9:11]
         include/boost/smart_ptr/detail/atomic_count_std_atomic.hpp [11:13]
         include/boost/smart_ptr/detail/lightweight_thread.hpp [15:17]
-        include/boost/smart_ptr/detail/operator_bool.hpp [5:7]
         include/boost/smart_ptr/detail/sp_convertible.hpp [14:16]
         include/boost/smart_ptr/detail/sp_counted_base_gcc_sparc.hpp [16:18]
         include/boost/smart_ptr/detail/sp_counted_base_snc_ps3.hpp [16:18]
         include/boost/smart_ptr/detail/sp_counted_base_std_atomic.hpp [14:16]
         include/boost/smart_ptr/detail/sp_counted_base_sync.hpp [14:16]
-        include/boost/smart_ptr/detail/sp_forward.hpp [14:16]
         include/boost/smart_ptr/detail/sp_interlocked.hpp [15:17]
         include/boost/smart_ptr/detail/sp_noexcept.hpp [14:16]
-        include/boost/smart_ptr/detail/sp_nullptr_t.hpp [14:16]
         include/boost/smart_ptr/enable_shared_from.hpp [8:10]
         include/boost/smart_ptr/enable_shared_from_raw.hpp [10:12]
         include/boost/smart_ptr/enable_shared_from_this.hpp [9:11]
@@ -275,10 +256,16 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
+        include/boost/detail/atomic_count.hpp [6:6]
+        include/boost/detail/lightweight_mutex.hpp [6:6]
+        include/boost/detail/lightweight_thread.hpp [7:7]
+        include/boost/detail/quick_allocator.hpp [7:7]
         include/boost/smart_ptr/detail/atomic_count_gcc_atomic.hpp [11:11]
+        include/boost/smart_ptr/detail/deprecated_macros.hpp [6:6]
         include/boost/smart_ptr/detail/sp_thread_pause.hpp [6:6]
         include/boost/smart_ptr/detail/sp_thread_sleep.hpp [6:6]
         include/boost/smart_ptr/detail/sp_thread_yield.hpp [6:6]
+        include/boost/smart_ptr/detail/sp_type_traits.hpp [6:6]
         include/boost/smart_ptr/owner_equal_to.hpp [6:6]
         include/boost/smart_ptr/owner_hash.hpp [6:6]
 
@@ -292,11 +279,17 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
+        include/boost/detail/atomic_count.hpp [5:5]
+        include/boost/detail/lightweight_mutex.hpp [5:5]
+        include/boost/detail/lightweight_thread.hpp [6:6]
+        include/boost/detail/quick_allocator.hpp [6:6]
         include/boost/smart_ptr/detail/atomic_count_gcc_atomic.hpp [10:10]
+        include/boost/smart_ptr/detail/deprecated_macros.hpp [5:5]
         include/boost/smart_ptr/detail/lwm_std_mutex.hpp [5:5]
         include/boost/smart_ptr/detail/sp_thread_pause.hpp [5:5]
         include/boost/smart_ptr/detail/sp_thread_sleep.hpp [5:5]
         include/boost/smart_ptr/detail/sp_thread_yield.hpp [5:5]
+        include/boost/smart_ptr/detail/sp_type_traits.hpp [5:5]
         include/boost/smart_ptr/owner_equal_to.hpp [5:5]
         include/boost/smart_ptr/owner_hash.hpp [5:5]
 
@@ -311,7 +304,6 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
-        include/boost/smart_ptr/detail/requires_cxx11.hpp [5:6]
         include/boost/smart_ptr/detail/sp_counted_base_gcc_atomic.hpp [13:14]
         include/boost/smart_ptr/detail/sp_has_gcc_intrinsics.hpp [14:15]
         include/boost/smart_ptr/detail/sp_obsolete.hpp [14:15]
@@ -330,5 +322,8 @@ BELONGS ya.make
     Files with this license:
         include/boost/make_unique.hpp [5:5]
         include/boost/smart_ptr/allocate_local_shared_array.hpp [5:5]
+        include/boost/smart_ptr/allocate_shared_array.hpp [5:5]
+        include/boost/smart_ptr/allocate_unique.hpp [5:5]
         include/boost/smart_ptr/make_local_shared_array.hpp [6:6]
         include/boost/smart_ptr/make_shared_array.hpp [5:5]
+        include/boost/smart_ptr/make_unique.hpp [5:5]

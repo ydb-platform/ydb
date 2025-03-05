@@ -88,20 +88,25 @@ struct TEvService {
         explicit TEvGetTxId(const TContainer& container) {
             Record.MutableVersions()->Reserve(container.size());
             for (const auto& v : container) {
-                v.Serialize(*Record.AddVersions());
+                v.ToProto(Record.AddVersions());
             }
         }
     };
 
     struct TEvTxIdResult: public TEventPB<TEvTxIdResult, NKikimrReplication::TEvTxIdResult, EvTxIdResult> {
         TEvTxIdResult() = default;
+
+        explicit TEvTxIdResult(ui64 tabletId, ui64 generation) {
+            Record.MutableController()->SetTabletId(tabletId);
+            Record.MutableController()->SetGeneration(generation);
+        }
     };
 
     struct TEvHeartbeat: public TEventPB<TEvHeartbeat, NKikimrReplication::TEvHeartbeat, EvHeartbeat> {
         TEvHeartbeat() = default;
 
         explicit TEvHeartbeat(const TRowVersion& version) {
-            version.Serialize(*Record.MutableVersion());
+            version.ToProto(Record.MutableVersion());
         }
     };
 };

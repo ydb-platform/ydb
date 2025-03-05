@@ -9,10 +9,13 @@
 namespace NActors {
     static constexpr TDuration GetNodeRequestTimeout = TDuration::Seconds(5);
 
-    static TString PeerNameForHuman(ui32 nodeNum, const TString& longName, ui16 port) {
+    static TString PeerNameForHuman(const TString& longName, ui16 port) {
         TStringBuf token;
         TStringBuf(longName).NextTok('.', token);
-        return ToString<ui32>(nodeNum) + ":" + (token.size() > 0 ? TString(token) : longName) + ":" + ToString<ui16>(port);
+        return TStringBuilder()
+            << (token.size() > 0 ? TString(token) : longName)
+            << ':'
+            << port;
     }
 
     TInterconnectProxyTCP::TInterconnectProxyTCP(const ui32 node, TInterconnectProxyCommon::TPtr common,
@@ -106,12 +109,12 @@ namespace NActors {
             TransitToErrorState("cannot get node info");
         } else {
             auto& info = *ev->Get()->Node;
-            TString name = PeerNameForHuman(PeerNodeId, info.Host, info.Port);
+            TString name = PeerNameForHuman(info.Host, info.Port);
             TechnicalPeerHostName = info.Host;
             if (!Metrics) {
                 Metrics = Common->Metrics ? CreateInterconnectMetrics(Common) : CreateInterconnectCounters(Common);
             }
-            Metrics->SetPeerInfo(name, info.Location.GetDataCenterId());
+            Metrics->SetPeerInfo(PeerNodeId, name, info.Location.GetDataCenterId());
 
             LOG_DEBUG_IC("ICP02", "configured for host %s", name.data());
 
@@ -970,6 +973,13 @@ namespace NActors {
             }
         }
         FirstDisconnectWindowMinutes = currentMinutes;
+    }
+
+    TActorId TInterconnectProxyTCP::GenerateSessionVirtualId() {
+        ICPROXY_PROFILED;
+
+        const ui64 localId = TActivationContext::ActorSystem()->AllocateIDSpace(1);
+        return NActors::TActorId(SelfId().NodeId(), 0, localId, 0);
     }
 
 }

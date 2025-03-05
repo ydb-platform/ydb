@@ -6,7 +6,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NYdb;
-using namespace NYdb::NScripting;
+using namespace NYdb::V2::NScripting;
 
 Y_UNIT_TEST_SUITE(ResponseHeaders) {
     Y_UNIT_TEST(PassHeader) {

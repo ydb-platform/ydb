@@ -1,0 +1,16 @@
+(
+#comment
+(let config (DataSource 'config))
+
+(let res_sink (DataSink 'result))
+(let gen (NewMTRand (Uint64 '42)))
+(let p (NextMTRand gen))
+(let gen (Nth p '1))
+(let v1 (Nth p '0))
+(let p (NextMTRand gen))
+(let gen (Nth p '1))
+(let v2 (Nth p '0))
+(let world (Write! world res_sink (Key) '(v1 v2) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

@@ -11,163 +11,147 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
-    namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
+namespace {
+    TIntrusivePtr<IRandomProvider> CreateRandomProvider() {
+        return CreateDeterministicRandomProvider(1);
+    }
 
-        namespace {
-            TIntrusivePtr<IRandomProvider> CreateRandomProvider() {
-                return CreateDeterministicRandomProvider(1);
-            }
+    TIntrusivePtr<ITimeProvider> CreateTimeProvider() {
+        return CreateDeterministicTimeProvider(10000000);
+    }
 
-            TIntrusivePtr<ITimeProvider> CreateTimeProvider() {
-                return CreateDeterministicTimeProvider(10000000);
-            }
+    struct TSetup {
+        TSetup(TScopedAlloc& alloc)
+            : Alloc(alloc)
+        {
+            FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
+            RandomProvider = CreateRandomProvider();
+            TimeProvider = CreateTimeProvider();
 
-            struct TSetup {
-                TSetup(TScopedAlloc& alloc)
-                    : Alloc(alloc)
-                {
-                    FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
-                    RandomProvider = CreateRandomProvider();
-                    TimeProvider = CreateTimeProvider();
-
-                    Env.Reset(new TTypeEnvironment(Alloc));
-                    PgmBuilder.Reset(new TProgramBuilder(*Env, *FunctionRegistry));
-                }
-
-                THolder<IComputationGraph> BuildGraph(TRuntimeNode pgm, const std::vector<TNode*>& entryPoints = std::vector<TNode*>()) {
-                    Explorer.Walk(pgm.GetNode(), *Env);
-                    TComputationPatternOpts opts(
-                    Alloc.Ref(),
-                    *Env, GetBuiltinFactory(),
-                    FunctionRegistry.Get(),
-                    NUdf::EValidateMode::None,
-                    NUdf::EValidatePolicy::Fail, "OFF", EGraphPerProcess::Multi);
-                    Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
-                    TComputationOptsFull compOpts = opts.ToComputationOptions(*RandomProvider, *TimeProvider);
-                    return Pattern->Clone(compOpts);
-                }
-
-                TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
-                TIntrusivePtr<IRandomProvider> RandomProvider;
-                TIntrusivePtr<ITimeProvider> TimeProvider;
-                TScopedAlloc& Alloc;
-                THolder<TTypeEnvironment> Env;
-                THolder<TProgramBuilder> PgmBuilder;
-                TExploringNodeVisitor Explorer;
-                IComputationPattern::TPtr Pattern;
-            };
-
-            using TTestInputData = std::vector<std::tuple<i64, std::string, ui32, std::string>>;
-
-            THolder<IComputationGraph> BuildGraph(
-                TSetup& setup,
-                bool streamingMode,
-                const TTestInputData& input) {
-                TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-
-                auto structType = pgmBuilder.NewStructType({
-                    {"time", pgmBuilder.NewDataType(NUdf::TDataType<i64>::Id)},
-                    {"key", pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id)},
-                    {"sum", pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id)},
-                    {"part", pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id)}});
-
-                TVector<TRuntimeNode> items;
-                for (size_t i = 0; i < input.size(); ++i)
-                {
-                    auto time = pgmBuilder.NewDataLiteral<i64>(std::get<0>(input[i]));
-                    auto key = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(NUdf::TStringRef(std::get<1>(input[i])));
-                    auto sum = pgmBuilder.NewDataLiteral<ui32>(std::get<2>(input[i]));
-                    auto part = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(NUdf::TStringRef(std::get<3>(input[i])));
-
-                    auto item = pgmBuilder.NewStruct(structType,
-                        {{"time", time}, {"key", key}, {"sum", sum},  {"part", part}});
-                    items.push_back(std::move(item));
-                }
-                
-                const auto list = pgmBuilder.NewList(structType, std::move(items));
-                auto inputFlow = pgmBuilder.ToFlow(list);
-
-                TVector<TStringBuf> partitionColumns;
-                TVector<std::pair<TStringBuf, TProgramBuilder::TBinaryLambda>> getMeasures = {{
-                    std::make_pair(
-                        TStringBuf("key"),
-                        [&](TRuntimeNode /*measureInputDataArg*/, TRuntimeNode /*matchedVarsArg*/) {
-                            return pgmBuilder.NewDataLiteral<ui32>(56);
-                        }
-                )}};
-                TVector<std::pair<TStringBuf, TProgramBuilder::TTernaryLambda>> getDefines = {{
-                    std::make_pair(
-                        TStringBuf("A"),
-                        [&](TRuntimeNode /*inputDataArg*/, TRuntimeNode /*matchedVarsArg*/, TRuntimeNode /*currentRowIndexArg*/) {
-                            return pgmBuilder.NewDataLiteral<bool>(true);
-                        }
-                )}};
-
-                auto pgmReturn = pgmBuilder.MatchRecognizeCore(
-                    inputFlow,
-                    [&](TRuntimeNode item) {
-                        return pgmBuilder.Member(item, "part");
-                    },
-                    partitionColumns,
-                    getMeasures,
-                    {
-                        {NYql::NMatchRecognize::TRowPatternFactor{"A", 3, 3, false, false, false}}
-                    },
-                    getDefines,
-                    streamingMode,
-                    {NYql::NMatchRecognize::EAfterMatchSkipTo::NextRow, ""}
-                );
-
-                auto graph = setup.BuildGraph(pgmReturn);
-                return graph;
-            }
+            Env.Reset(new TTypeEnvironment(Alloc));
+            PgmBuilder.Reset(new TProgramBuilder(*Env, *FunctionRegistry));
         }
 
-        Y_UNIT_TEST_SUITE(TMiniKQLMatchRecognizeSaveLoadTest) {
-            void TestWithSaveLoadImpl(
-                bool streamingMode)
+        THolder<IComputationGraph> BuildGraph(TRuntimeNode pgm, const std::vector<TNode*>& entryPoints = std::vector<TNode*>()) {
+            Explorer.Walk(pgm.GetNode(), *Env);
+            TComputationPatternOpts opts(
+            Alloc.Ref(),
+            *Env, GetBuiltinFactory(),
+            FunctionRegistry.Get(),
+            NUdf::EValidateMode::None,
+            NUdf::EValidatePolicy::Fail, "OFF", EGraphPerProcess::Multi);
+            Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
+            TComputationOptsFull compOpts = opts.ToComputationOptions(*RandomProvider, *TimeProvider);
+            return Pattern->Clone(compOpts);
+        }
+
+        TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
+        TIntrusivePtr<IRandomProvider> RandomProvider;
+        TIntrusivePtr<ITimeProvider> TimeProvider;
+        TScopedAlloc& Alloc;
+        THolder<TTypeEnvironment> Env;
+        THolder<TProgramBuilder> PgmBuilder;
+        TExploringNodeVisitor Explorer;
+        IComputationPattern::TPtr Pattern;
+    };
+
+    using TTestInputData = std::vector<std::tuple<i64, std::string, ui32, std::string>>;
+
+    THolder<IComputationGraph> BuildGraph(
+        TSetup& setup,
+        bool streamingMode,
+        const TTestInputData& input) {
+        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+
+        const auto structType = pgmBuilder.NewStructType({
+            {"time", pgmBuilder.NewDataType(NUdf::EDataSlot::Int64)},
+            {"key", pgmBuilder.NewDataType(NUdf::EDataSlot::String)},
+            {"sum", pgmBuilder.NewDataType(NUdf::EDataSlot::Uint32)},
+            {"part", pgmBuilder.NewDataType(NUdf::EDataSlot::String)}
+        });
+
+        TVector<TRuntimeNode> items;
+        for (size_t i = 0; i < input.size(); ++i) {
+            const auto& [time, key, sum, part] = input[i];
+            items.push_back(pgmBuilder.NewStruct({
+                {"time", pgmBuilder.NewDataLiteral(time)},
+                {"key", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(key)},
+                {"sum", pgmBuilder.NewDataLiteral(sum)},
+                {"part", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(part)},
+            }));
+        }
+
+        const auto list = pgmBuilder.NewList(structType, std::move(items));
+        auto inputFlow = pgmBuilder.ToFlow(list);
+        auto pgmReturn = pgmBuilder.MatchRecognizeCore(
+            inputFlow,
+            [&](TRuntimeNode item) {
+                return pgmBuilder.NewTuple({pgmBuilder.Member(item, "part")});
+            },
+            {},
+            {"key"sv},
+            {[&](TRuntimeNode /*measureInputDataArg*/, TRuntimeNode /*matchedVarsArg*/) {
+                return pgmBuilder.NewDataLiteral<ui32>(56);
+            }},
             {
-                TScopedAlloc alloc(__LOCATION__);
-                std::vector<std::tuple<ui32, i64, ui32>> result;
-                TSetup setup1(alloc);
+                {NYql::NMatchRecognize::TRowPatternFactor{"A", 3, 3, false, false, false}}
+            },
+            {"A"sv},
+            {[&](TRuntimeNode /*inputDataArg*/, TRuntimeNode /*matchedVarsArg*/, TRuntimeNode /*currentRowIndexArg*/) {
+                return pgmBuilder.NewDataLiteral<bool>(true);
+            }},
+            streamingMode,
+            {NYql::NMatchRecognize::EAfterMatchSkipTo::NextRow, ""},
+            NYql::NMatchRecognize::ERowsPerMatch::OneRow
+        );
 
-                const TTestInputData input = {
-                    {1000, "A", 101, "P"},
-                    {1001, "B", 102, "P"},
-                    {1002, "C", 103, "P"},      // <- match end
-                    {1003, "D", 103, "P"}};     // <- not processed
-                    
-                auto graph1 = BuildGraph(setup1,streamingMode, input);
+        auto graph = setup.BuildGraph(pgmReturn);
+        return graph;
+    }
+}
 
-                auto value = graph1->GetValue();
+Y_UNIT_TEST_SUITE(MatchRecognizeSaveLoadTest) {
+    void TestWithSaveLoadImpl(bool streamingMode) {
+        TScopedAlloc alloc(__LOCATION__);
+        std::vector<std::tuple<ui32, i64, ui32>> result;
+        TSetup setup1(alloc);
 
-                UNIT_ASSERT(!value.IsFinish() && value);
-                auto v = value.GetElement(0).Get<ui32>();
+        const TTestInputData input = {
+            {1000, "A", 101, "P"},
+            {1001, "B", 102, "P"},
+            {1002, "C", 103, "P"},      // <- match end
+            {1003, "D", 103, "P"}};     // <- not processed
 
-                TString graphState = graph1->SaveGraphState();
+        auto graph1 = BuildGraph(setup1,streamingMode, input);
 
-                graph1.Reset();
+        auto value = graph1->GetValue();
 
-                TSetup setup2(alloc);
+        UNIT_ASSERT(!value.IsFinish() && value);
+        auto v = value.GetElement(0).Get<ui32>();
 
-                auto graph2 = BuildGraph(setup2, streamingMode, TTestInputData{{1003, "D", 103, "P"}});
-                graph2->LoadGraphState(graphState);
+        TString graphState = graph1->SaveGraphState();
 
-                value = graph2->GetValue();
-                UNIT_ASSERT(!value.IsFinish() && value);
-                v = value.GetElement(0).Get<ui32>();
-                UNIT_ASSERT_VALUES_EQUAL(56, v);
-            }
+        graph1.Reset();
 
-            Y_UNIT_TEST(StreamingMode) {
-                TestWithSaveLoadImpl(true);
-            }
+        TSetup setup2(alloc);
 
-            Y_UNIT_TEST(NotStreamingMode) {
-                TestWithSaveLoadImpl(false);
-            }
-        }
+        auto graph2 = BuildGraph(setup2, streamingMode, TTestInputData{{1003, "D", 103, "P"}});
+        graph2->LoadGraphState(graphState);
 
-    } // namespace NMiniKQL
-} // namespace NKikimr
+        value = graph2->GetValue();
+        UNIT_ASSERT(!value.IsFinish() && value);
+        v = value.GetElement(0).Get<ui32>();
+        UNIT_ASSERT_VALUES_EQUAL(56, v);
+    }
+
+    Y_UNIT_TEST(StreamingMode) {
+        TestWithSaveLoadImpl(true);
+    }
+
+    Y_UNIT_TEST(NotStreamingMode) {
+        TestWithSaveLoadImpl(false);
+    }
+}
+
+} // namespace NKikimr::NMiniKQL

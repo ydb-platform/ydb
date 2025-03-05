@@ -58,6 +58,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"EmitStartsWith", &TContext::EmitStartsWith},
     {"AnsiLike", &TContext::AnsiLike},
     {"UseBlocks", &TContext::UseBlocks},
+    {"EmitTableSource", &TContext::EmitTableSource},
     {"BlockEngineEnable", &TContext::BlockEngineEnable},
     {"BlockEngineForce", &TContext::BlockEngineForce},
     {"UnorderedResult", &TContext::UnorderedResult},
@@ -65,6 +66,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"ValidateUnusedExprs", &TContext::ValidateUnusedExprs},
     {"AnsiImplicitCrossJoin", &TContext::AnsiImplicitCrossJoin},
     {"DistinctOverWindow", &TContext::DistinctOverWindow},
+    {"EmitUnionMerge", &TContext::EmitUnionMerge},
     {"SeqMode", &TContext::SeqMode},
 };
 
@@ -79,20 +81,26 @@ THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
 
 } // namespace
 
-TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
+TContext::TContext(const TLexers& lexers, const TParsers& parsers,
+                   const NSQLTranslation::TTranslationSettings& settings,
                    const NSQLTranslation::TSQLHints& hints,
-                   TIssues& issues)
-    : ClusterMapping(settings.ClusterMapping)
+                   TIssues& issues,
+                   const TString& query)
+    : Lexers(lexers)
+    , Parsers(parsers)
+    , ClusterMapping(settings.ClusterMapping)
     , PathPrefix(settings.PathPrefix)
     , ClusterPathPrefixes(settings.ClusterPathPrefixes)
     , SQLHints(hints)
     , Settings(settings)
+    , Query(query)
     , Pool(new TMemoryPool(4096))
     , Issues(issues)
     , IncrementMonCounterFunction(settings.IncrementCounter)
     , HasPendingErrors(false)
     , DqEngineEnable(Settings.DqDefaultAuto->Allow())
     , AnsiQuotedIdentifiers(settings.AnsiLexer)
+    , WarningPolicy(settings.IsReplay)
     , BlockEngineEnable(Settings.BlockDefaultAuto->Allow())
 {
     for (auto lib : settings.Libraries) {
@@ -345,10 +353,6 @@ void TContext::DeclareVariable(const TString& varName, const TPosition& pos, con
 bool TContext::AddExport(TPosition pos, const TString& name) {
     if (IsAnonymousName(name)) {
         Error(pos) << "Can not export anonymous name " << name;
-        return false;
-    }
-    if (Exports.contains(name)) {
-        Error(pos) << "Duplicate export symbol: " << name;
         return false;
     }
     if (!Scoped->LookupNode(name)) {

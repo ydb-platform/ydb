@@ -16,16 +16,14 @@ from time import struct_time
 from urllib.parse import unquote_to_bytes as _unquote
 from urllib.request import parse_http_list as _parse_list_header
 
-from ._internal import _cookie_parse_impl
 from ._internal import _cookie_quote
+from ._internal import _dt_as_utc
 from ._internal import _make_cookie_domain
 from ._internal import _to_bytes
 from ._internal import _to_str
 from ._internal import _wsgi_decoding_dance
-from werkzeug._internal import _dt_as_utc
 
 if t.TYPE_CHECKING:
-    import typing_extensions as te
     from _typeshed.wsgi import WSGIEnvironment
 
 # for explanation of "media-range", etc. see Sections 5.3.{1,2} of RFC 7231
@@ -192,6 +190,15 @@ class COOP(Enum):
     SAME_ORIGIN = "same-origin"
 
 
+def _is_extended_parameter(key: str) -> bool:
+    """Per RFC 5987/8187, "extended" values may *not* be quoted.
+    This is in keeping with browser implementations. So we test
+    using this function to see if the key indicates this parameter
+    follows the `ext-parameter` syntax (using a trailing '*').
+    """
+    return key.strip().endswith("*")
+
+
 def quote_header_value(
     value: t.Union[str, int], extra_chars: str = "", allow_token: bool = True
 ) -> str:
@@ -256,6 +263,8 @@ def dump_options_header(
     for key, value in options.items():
         if value is None:
             segments.append(key)
+        elif _is_extended_parameter(key):
+            segments.append(f"{key}={value}")
         else:
             segments.append(f"{key}={quote_header_value(value)}")
     return "; ".join(segments)
@@ -284,6 +293,8 @@ def dump_header(
         for key, value in iterable.items():
             if value is None:
                 items.append(key)
+            elif _is_extended_parameter(key):
+                items.append(f"{key}={value}")
             else:
                 items.append(
                     f"{key}={quote_header_value(value, allow_token=allow_token)}"
@@ -376,42 +387,29 @@ def parse_dict_header(value: str, cls: t.Type[dict] = dict) -> t.Dict[str, str]:
     return result
 
 
-@typing.overload
-def parse_options_header(
-    value: t.Optional[str], multiple: "te.Literal[False]" = False
-) -> t.Tuple[str, t.Dict[str, str]]:
-    ...
-
-
-@typing.overload
-def parse_options_header(
-    value: t.Optional[str], multiple: "te.Literal[True]"
-) -> t.Tuple[t.Any, ...]:
-    ...
-
-
-def parse_options_header(
-    value: t.Optional[str], multiple: bool = False
-) -> t.Union[t.Tuple[str, t.Dict[str, str]], t.Tuple[t.Any, ...]]:
-    """Parse a ``Content-Type`` like header into a tuple with the content
-    type and the options:
+def parse_options_header(value: t.Optional[str]) -> t.Tuple[str, t.Dict[str, str]]:
+    """Parse a ``Content-Type``-like header into a tuple with the
+    value and any options:
 
     >>> parse_options_header('text/html; charset=utf8')
     ('text/html', {'charset': 'utf8'})
 
-    This should not be used to parse ``Cache-Control`` like headers that use
-    a slightly different format.  For these headers use the
-    :func:`parse_dict_header` function.
+    This should is not for ``Cache-Control``-like headers, which use a
+    different format. For those, use :func:`parse_dict_header`.
+
+    :param value: The header value to parse.
+
+    .. versionchanged:: 2.2
+        Option names are always converted to lowercase.
+
+    .. versionchanged:: 2.1
+        The ``multiple`` parameter is deprecated and will be removed in
+        Werkzeug 2.2.
 
     .. versionchanged:: 0.15
         :rfc:`2231` parameter continuations are handled.
 
     .. versionadded:: 0.5
-
-    :param value: the header to parse.
-    :param multiple: Whether try to parse and return multiple MIME types
-    :return: (mimetype, options) or (mimetype, options, mimetype, options, …)
-             if multiple=True
     """
     if not value:
         return "", {}
@@ -444,7 +442,7 @@ def parse_options_header(
                 if not encoding:
                     encoding = continued_encoding
                 continued_encoding = encoding
-            option = unquote_header_value(option)
+            option = unquote_header_value(option).lower()
 
             if option_value is not None:
                 option_value = unquote_header_value(option_value, option == "filename")
@@ -463,11 +461,9 @@ def parse_options_header(
 
             rest = rest[optmatch.end() :]
         result.append(options)
-        if multiple is False:
-            return tuple(result)
-        value = rest
+        return tuple(result)  # type: ignore[return-value]
 
-    return tuple(result) if result else ("", {})
+    return tuple(result) if result else ("", {})  # type: ignore[return-value]
 
 
 _TAnyAccept = t.TypeVar("_TAnyAccept", bound="ds.Accept")
@@ -777,15 +773,20 @@ def parse_range_header(
             begin_str, end_str = item.split("-", 1)
             begin_str = begin_str.strip()
             end_str = end_str.strip()
-            if not begin_str.isdigit():
+
+            try:
+                begin = int(begin_str)
+            except ValueError:
                 return None
-            begin = int(begin_str)
+
             if begin < last_end or last_end < 0:
                 return None
             if end_str:
-                if not end_str.isdigit():
+                try:
+                    end = int(end_str) + 1
+                except ValueError:
                     return None
-                end = int(end_str) + 1
+
                 if begin >= end:
                     return None
             else:
@@ -823,12 +824,16 @@ def parse_content_range_header(
     rng, length_str = rangedef.split("/", 1)
     if length_str == "*":
         length = None
-    elif length_str.isdigit():
-        length = int(length_str)
     else:
-        return None
+        try:
+            length = int(length_str)
+        except ValueError:
+            return None
 
     if rng == "*":
+        if not is_byte_range_valid(None, None, length):
+            return None
+
         return ds.ContentRange(units, None, None, length, on_update=on_update)
     elif "-" not in rng:
         return None
@@ -952,24 +957,6 @@ def parse_date(value: t.Optional[str]) -> t.Optional[datetime]:
     return dt
 
 
-def cookie_date(
-    expires: t.Optional[t.Union[datetime, date, int, float, struct_time]] = None
-) -> str:
-    """Format a datetime object or timestamp into an :rfc:`2822` date
-    string for ``Set-Cookie expires``.
-
-    .. deprecated:: 2.0
-        Will be removed in Werkzeug 2.1. Use :func:`http_date` instead.
-    """
-    warnings.warn(
-        "'cookie_date' is deprecated and will be removed in Werkzeug"
-        " 2.1. Use 'http_date' instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return http_date(expires)
-
-
 def http_date(
     timestamp: t.Optional[t.Union[datetime, date, int, float, struct_time]] = None
 ) -> str:
@@ -1069,57 +1056,17 @@ def is_resource_modified(
     .. versionchanged:: 1.0.0
         The check is run for methods other than ``GET`` and ``HEAD``.
     """
-    if etag is None and data is not None:
-        etag = generate_etag(data)
-    elif data is not None:
-        raise TypeError("both data and etag given")
-
-    unmodified = False
-    if isinstance(last_modified, str):
-        last_modified = parse_date(last_modified)
-
-    # HTTP doesn't use microsecond, remove it to avoid false positive
-    # comparisons. Mark naive datetimes as UTC.
-    if last_modified is not None:
-        last_modified = _dt_as_utc(last_modified.replace(microsecond=0))
-
-    if_range = None
-    if not ignore_if_range and "HTTP_RANGE" in environ:
-        # https://tools.ietf.org/html/rfc7233#section-3.2
-        # A server MUST ignore an If-Range header field received in a request
-        # that does not contain a Range header field.
-        if_range = parse_if_range_header(environ.get("HTTP_IF_RANGE"))
-
-    if if_range is not None and if_range.date is not None:
-        modified_since: t.Optional[datetime] = if_range.date
-    else:
-        modified_since = parse_date(environ.get("HTTP_IF_MODIFIED_SINCE"))
-
-    if modified_since and last_modified and last_modified <= modified_since:
-        unmodified = True
-
-    if etag:
-        etag, _ = unquote_etag(etag)
-        etag = t.cast(str, etag)
-
-        if if_range is not None and if_range.etag is not None:
-            unmodified = parse_etags(if_range.etag).contains(etag)
-        else:
-            if_none_match = parse_etags(environ.get("HTTP_IF_NONE_MATCH"))
-            if if_none_match:
-                # https://tools.ietf.org/html/rfc7232#section-3.2
-                # "A recipient MUST use the weak comparison function when comparing
-                # entity-tags for If-None-Match"
-                unmodified = if_none_match.contains_weak(etag)
-
-            # https://tools.ietf.org/html/rfc7232#section-3.1
-            # "Origin server MUST use the strong comparison function when
-            # comparing entity-tags for If-Match"
-            if_match = parse_etags(environ.get("HTTP_IF_MATCH"))
-            if if_match:
-                unmodified = not if_match.is_strong(etag)
-
-    return not unmodified
+    return _sansio_http.is_resource_modified(
+        http_range=environ.get("HTTP_RANGE"),
+        http_if_range=environ.get("HTTP_IF_RANGE"),
+        http_if_modified_since=environ.get("HTTP_IF_MODIFIED_SINCE"),
+        http_if_none_match=environ.get("HTTP_IF_NONE_MATCH"),
+        http_if_match=environ.get("HTTP_IF_MATCH"),
+        etag=etag,
+        data=data,
+        last_modified=last_modified,
+        ignore_if_range=ignore_if_range,
+    )
 
 
 def remove_entity_headers(
@@ -1212,29 +1159,15 @@ def parse_cookie(
        The ``cls`` parameter was added.
     """
     if isinstance(header, dict):
-        header = header.get("HTTP_COOKIE", "")
+        cookie = header.get("HTTP_COOKIE", "")
     elif header is None:
-        header = ""
+        cookie = ""
+    else:
+        cookie = header
 
-    # PEP 3333 sends headers through the environ as latin1 decoded
-    # strings. Encode strings back to bytes for parsing.
-    if isinstance(header, str):
-        header = header.encode("latin1", "replace")
-
-    if cls is None:
-        cls = ds.MultiDict
-
-    def _parse_pairs() -> t.Iterator[t.Tuple[str, str]]:
-        for key, val in _cookie_parse_impl(header):  # type: ignore
-            key_str = _to_str(key, charset, errors, allow_none_charset=True)
-
-            if not key_str:
-                continue
-
-            val_str = _to_str(val, charset, errors, allow_none_charset=True)
-            yield key_str, val_str
-
-    return cls(_parse_pairs())
+    return _sansio_http.parse_cookie(
+        cookie=cookie, charset=charset, errors=errors, cls=cls
+    )
 
 
 def dump_cookie(
@@ -1391,3 +1324,4 @@ def is_byte_range_valid(
 
 # circular dependencies
 from . import datastructures as ds
+from .sansio import http as _sansio_http

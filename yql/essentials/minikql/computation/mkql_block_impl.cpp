@@ -18,8 +18,7 @@ extern "C" uint64_t GetBlockCount(const NYql::NUdf::TUnboxedValuePod data) {
 }
 
 extern "C" uint64_t GetBitmapPopCountCount(const NYql::NUdf::TUnboxedValuePod data) {
-    const NYql::NUdf::TUnboxedValue v(data);
-    const auto& arr = NKikimr::NMiniKQL::TArrowBlock::From(v).GetDatum().array();
+    const auto& arr = NKikimr::NMiniKQL::TArrowBlock::From(data).GetDatum().array();
     const size_t len = (size_t)arr->length;
     MKQL_ENSURE(arr->GetNullCount() == 0, "Bitmap block should not have nulls");
     const ui8* src = arr->GetValues<ui8>(1);
@@ -115,8 +114,14 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
             const auto& str = value.AsStringRef();
             std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(str.Size(), &pool)));
             std::memcpy(buffer->mutable_data(), str.Data(), str.Size());
-            auto type = (slot == NUdf::EDataSlot::String || slot == NUdf::EDataSlot::Yson || slot == NUdf::EDataSlot::JsonDocument) ? arrow::binary() : arrow::utf8();
-            std::shared_ptr<arrow::Scalar> scalar = std::make_shared<arrow::BinaryScalar>(buffer, type);
+            std::shared_ptr<arrow::Scalar> scalar;
+            if (slot == NUdf::EDataSlot::String || slot == NUdf::EDataSlot::Yson || slot == NUdf::EDataSlot::JsonDocument) {
+                scalar = std::make_shared<arrow::BinaryScalar>(buffer, arrow::binary());
+            } else {
+                // NOTE: Do not use |arrow::BinaryScalar| for utf8 and json types directly.
+                // This is necessary so that the type of the scalar is clearly preserved at runtime.
+                scalar = std::make_shared<arrow::StringScalar>(buffer);
+            }
             return arrow::Datum(scalar);
         }
         case NUdf::EDataSlot::TzDate: {
@@ -259,7 +264,8 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
 
     std::vector<arrow::Datum> argDatums;
     for (ui32 i = 0; i < ArgsNodes.size(); ++i) {
-        argDatums.emplace_back(TArrowBlock::From(ArgsNodes[i]->GetValue(ctx)).GetDatum());
+        const auto& value = ArgsNodes[i]->GetValue(ctx);
+        argDatums.emplace_back(TArrowBlock::From(value).GetDatum());
         ARROW_DEBUG_CHECK_DATUM_TYPES(ArgsValuesDescr[i], argDatums.back().descr());
     }
 
@@ -352,7 +358,7 @@ void TBlockState::FillArrays() {
 
     for (size_t i = 0U; i < Deques.size(); ++i) {
         Deques[i].clear();
-        if (const auto value = Values[i]) {
+        if (const auto& value = Values[i]) {
             const auto& datum = TArrowBlock::From(value).GetDatum();
             if (datum.is_scalar()) {
                 return;

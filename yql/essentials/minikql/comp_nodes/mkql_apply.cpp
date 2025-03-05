@@ -54,7 +54,7 @@ public:
                     state.Args[i] = state.HolderFactory.CreateArrowBlock(arrow::Datum(batch.values[i]));
                 }
 
-                const auto ret = Callable_.Run(&state.ValueBuilder, state.Args.data());
+                const auto& ret = Callable_.Run(&state.ValueBuilder, state.Args.data());
                 *res = TArrowBlock::From(ret).GetDatum();
                 return arrow::Status::OK();
             })
@@ -172,7 +172,7 @@ public:
         } else {
             const auto callable = GetNodeValue(CallableNode, ctx, block);
             const auto calleePtr = GetElementPtrInst::CreateInBounds(GetCompContextType(context), ctx.Ctx, {ConstantInt::get(idxType, 0), ConstantInt::get(idxType, 6)}, "callee_ptr", block);
-            const auto previous = new LoadInst(calleePtr->getType()->getPointerElementType(), calleePtr, "previous", block);
+            const auto previous = new LoadInst(PointerType::getUnqual(GetSourcePosType(context)), calleePtr, "previous", block);
             const auto callee = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), ui64(&Position)), previous->getType(), "callee", block);
             new StoreInst(callee, calleePtr, block);
             CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Run>(pointer, callable, ctx.Codegen, block, ctx.GetBuilder(), args);
@@ -206,9 +206,8 @@ private:
 }
 
 IComputationNode* WrapApply(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    const bool withPos = callable.GetType()->GetName() == "Apply2";
-    const ui32 deltaArgs = withPos ? 3 : 0;
-    MKQL_ENSURE(callable.GetInputsCount() >= 2 + deltaArgs, "Expected at least " << (2 + deltaArgs) << " arguments");
+    MKQL_ENSURE(callable.GetInputsCount() >= 5, "Expected at least 5 arguments");
+    constexpr size_t posArgs = 3;
 
     const auto function = callable.GetInput(0);
     MKQL_ENSURE(!function.IsImmediate() && function.GetNode()->GetType()->IsCallable(),
@@ -218,11 +217,11 @@ IComputationNode* WrapApply(TCallable& callable, const TComputationNodeFactoryCo
     const auto returnType = functionCallable->GetType()->GetReturnType();
     MKQL_ENSURE(returnType->IsCallable(), "Expected callable as return type");
 
-    const TStringBuf file = withPos ? AS_VALUE(TDataLiteral, callable.GetInput(2))->AsValue().AsStringRef() : NUdf::TStringRef();
-    const ui32 row = withPos ? AS_VALUE(TDataLiteral, callable.GetInput(3))->AsValue().Get<ui32>() : 0;
-    const ui32 column = withPos ? AS_VALUE(TDataLiteral, callable.GetInput(4))->AsValue().Get<ui32>() : 0;
+    const TStringBuf file = AS_VALUE(TDataLiteral, callable.GetInput(2))->AsValue().AsStringRef();
+    const ui32 row = AS_VALUE(TDataLiteral, callable.GetInput(3))->AsValue().Get<ui32>();
+    const ui32 column = AS_VALUE(TDataLiteral, callable.GetInput(4))->AsValue().Get<ui32>();
 
-    const ui32 inputsCount = callable.GetInputsCount() - deltaArgs;
+    const ui32 inputsCount = callable.GetInputsCount() - posArgs;
     const ui32 argsCount = inputsCount - 2;
 
     const ui32 dependentCount = AS_VALUE(TDataLiteral, callable.GetInput(1))->AsValue().Get<ui32>();
@@ -235,11 +234,11 @@ IComputationNode* WrapApply(TCallable& callable, const TComputationNodeFactoryCo
 
     TComputationNodePtrVector argNodes(callableType->GetArgumentsCount() + dependentCount);
     for (ui32 i = 2; i < 2 + usedArgs; ++i) {
-        argNodes[i - 2] = LocateNode(ctx.NodeLocator, callable, i + deltaArgs);
+        argNodes[i - 2] = LocateNode(ctx.NodeLocator, callable, i + posArgs);
     }
 
     for (ui32 i = 2 + usedArgs; i < inputsCount; ++i) {
-        argNodes[callableType->GetArgumentsCount() + i - 2 - usedArgs] = LocateNode(ctx.NodeLocator, callable, i + deltaArgs);
+        argNodes[callableType->GetArgumentsCount() + i - 2 - usedArgs] = LocateNode(ctx.NodeLocator, callable, i + posArgs);
     }
 
     auto functionNode = LocateNode(ctx.NodeLocator, callable, 0);

@@ -58,30 +58,32 @@ DEFINE_ENUM(EFormatType,
     (WebJson)
     (Skiff)
     (Arrow)
+    (Yaml)
 );
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TYsonFormatConfig)
+DECLARE_REFCOUNTED_STRUCT(TYsonFormatConfig)
 DECLARE_REFCOUNTED_CLASS(TTableFormatConfigBase)
-DECLARE_REFCOUNTED_CLASS(TYamrFormatConfig)
+DECLARE_REFCOUNTED_STRUCT(TYamrFormatConfig)
 DECLARE_REFCOUNTED_CLASS(TYamrFormatConfigBase)
-DECLARE_REFCOUNTED_CLASS(TDsvFormatConfig)
+DECLARE_REFCOUNTED_STRUCT(TDsvFormatConfig)
 DECLARE_REFCOUNTED_CLASS(TDsvFormatConfigBase)
-DECLARE_REFCOUNTED_CLASS(TYamredDsvFormatConfig)
-DECLARE_REFCOUNTED_CLASS(TSchemafulDsvFormatConfig)
-DECLARE_REFCOUNTED_CLASS(TProtobufTypeConfig)
-DECLARE_REFCOUNTED_CLASS(TProtobufColumnConfig)
-DECLARE_REFCOUNTED_CLASS(TProtobufTableConfig)
-DECLARE_REFCOUNTED_CLASS(TProtobufFormatConfig)
-DECLARE_REFCOUNTED_CLASS(TWebJsonFormatConfig)
-DECLARE_REFCOUNTED_CLASS(TSkiffFormatConfig)
+DECLARE_REFCOUNTED_STRUCT(TYamredDsvFormatConfig)
+DECLARE_REFCOUNTED_STRUCT(TSchemafulDsvFormatConfig)
+DECLARE_REFCOUNTED_STRUCT(TProtobufTypeConfig)
+DECLARE_REFCOUNTED_STRUCT(TProtobufColumnConfig)
+DECLARE_REFCOUNTED_STRUCT(TProtobufTableConfig)
+DECLARE_REFCOUNTED_STRUCT(TProtobufFormatConfig)
+DECLARE_REFCOUNTED_STRUCT(TWebJsonFormatConfig)
+DECLARE_REFCOUNTED_STRUCT(TSkiffFormatConfig)
+DECLARE_REFCOUNTED_STRUCT(TYamlFormatConfig)
 
 DECLARE_REFCOUNTED_STRUCT(IYamrConsumer)
 
 DECLARE_REFCOUNTED_STRUCT(ISchemalessFormatWriter)
 
-DECLARE_REFCOUNTED_CLASS(TControlAttributesConfig)
+DECLARE_REFCOUNTED_STRUCT(TControlAttributesConfig)
 
 struct IParser;
 

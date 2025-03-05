@@ -1,0 +1,129 @@
+import yatest.common
+import os
+import time
+import logging
+import boto3
+import requests
+from library.recipes import common as recipes_common
+
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.harness.util import LogLevels
+from ydb.tests.olap.common.ydb_client import YdbClient
+
+logger = logging.getLogger(__name__)
+
+
+class S3Client:
+    def __init__(self, endpoint, region, key_id, key_secret):
+        self.endpoint = endpoint
+        self.region = region
+        self.key_id = key_id
+        self.key_secret = key_secret
+
+        session = boto3.session.Session()
+        self.s3 = session.resource(
+            service_name="s3",
+            aws_access_key_id=key_id,
+            aws_secret_access_key=key_secret,
+            region_name=region,
+            endpoint_url=endpoint
+        )
+        self.client = session.client(
+            service_name="s3",
+            aws_access_key_id=key_id,
+            aws_secret_access_key=key_secret,
+            region_name=region,
+            endpoint_url=endpoint
+        )
+
+    def create_bucket(self, name: str):
+        self.client.create_bucket(Bucket=name)
+
+    def get_bucket_stat(self, bucket_name: str) -> (int, int):
+        bucket = self.s3.Bucket(bucket_name)
+        count = 0
+        size = 0
+        for obj in bucket.objects.all():
+            count += 1
+            size += obj.size
+        return (count, size)
+
+
+class TllTieringTestBase(object):
+    @classmethod
+    def setup_class(cls):
+        cls._setup_ydb()
+        cls._setup_s3()
+
+    @classmethod
+    def teardown_class(cls):
+        recipes_common.stop_daemon(cls.s3_pid)
+        cls.ydb_client.stop()
+        cls.cluster.stop()
+
+    @classmethod
+    def _setup_ydb(cls):
+        ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
+        logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
+        config = KikimrConfigGenerator(
+            extra_feature_flags={
+                "enable_external_data_sources": True,
+                "enable_tiering_in_column_shard": True
+            },
+            column_shard_config={
+                "lag_for_compaction_before_tierings_ms": 0,
+                "compaction_actualization_lag_ms": 0,
+                "optimizer_freshness_check_duration_ms": 0,
+                "small_portion_detect_size_limit": 0,
+                "max_read_staleness_ms": 5000,
+                "alter_object_enabled": True,
+            },
+            additional_log_configs={
+                "TX_COLUMNSHARD_TIERING": LogLevels.DEBUG,
+                "TX_COLUMNSHARD_ACTUALIZATION": LogLevels.TRACE,
+                "TX_COLUMNSHARD_BLOBS_TIER": LogLevels.DEBUG,
+            },
+        )
+        cls.cluster = KiKiMR(config)
+        cls.cluster.start()
+        node = cls.cluster.nodes[1]
+        cls.ydb_client = YdbClient(database=f"/{config.domain_name}", endpoint=f"grpc://{node.host}:{node.port}")
+        cls.ydb_client.wait_connection()
+
+    @classmethod
+    def _setup_s3(cls):
+        s3_pid_file = "s3.pid"
+        moto_server_path = os.environ["MOTO_SERVER_PATH"]
+
+        port_manager = yatest.common.network.PortManager()
+        port = port_manager.get_port()
+        endpoint = f"http://localhost:{port}"
+        command = [yatest.common.binary_path(moto_server_path), "s3", "--port", str(port)]
+
+        def is_s3_ready():
+            try:
+                response = requests.get(endpoint)
+                response.raise_for_status()
+                return True
+            except requests.RequestException as err:
+                logging.debug(err)
+                return False
+
+        recipes_common.start_daemon(
+            command=command, environment=None, is_alive_check=is_s3_ready, pid_file_name=s3_pid_file
+        )
+
+        with open(s3_pid_file, 'r') as f:
+            cls.s3_pid = int(f.read())
+
+        cls.s3_client = S3Client(endpoint, "us-east-1", "fake_key_id", "fake_key_secret")
+
+    @staticmethod
+    def wait_for(condition_func, timeout_seconds):
+        t0 = time.time()
+        while time.time() - t0 < timeout_seconds:
+            if condition_func():
+                return True
+            time.sleep(1)
+        return False

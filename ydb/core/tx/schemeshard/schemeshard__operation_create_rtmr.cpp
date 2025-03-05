@@ -1,8 +1,10 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/mind/hive/hive.h>
 
 namespace {
 
@@ -62,7 +64,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateRTMR TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 public:
     TConfigureParts(TOperationId id)
@@ -75,7 +77,7 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateRTMR TConfigureParts ProgressState operationId#" << OperationId
+                     "TCreateRTMR TConfigureParts ProgressState operationId# " << OperationId
                      << " at tablet" << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
@@ -366,11 +368,11 @@ public:
         Y_ABORT_UNLESS(shardsToCreate == txState.Shards.size(), "shardsToCreate=%ld != txStateShards=%ld",
             shardsToCreate, txState.Shards.size());
 
-        dstPath.DomainInfo()->IncPathsInside();
-        dstPath.DomainInfo()->AddInternalShards(txState);
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
+        dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
 
         dstPath.Base()->IncShardsInside(shardsToCreate);
-        parentPath.Base()->IncAliveChildren();
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;
@@ -394,6 +396,30 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolume>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreateRtmrVolume().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreateRtmrVolume()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewRTMR(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateRTMR>(id, tx);

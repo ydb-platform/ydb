@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/generic/iterator.h>
 #include <util/generic/yexception.h>
 
 #include <algorithm>
@@ -49,7 +50,7 @@ public:
 
     constexpr inline TArrayRef(T* begin Y_LIFETIME_BOUND, T* end Y_LIFETIME_BOUND) noexcept
         : T_(begin)
-        , S_(end - begin)
+        , S_(NonNegativeDistance(begin, end))
     {
     }
 
@@ -77,7 +78,7 @@ public:
     }
 
     template <class TT, typename = std::enable_if_t<std::is_same<std::remove_const_t<T>, std::remove_const_t<TT>>::value>>
-    bool operator==(const TArrayRef<TT>& other) const noexcept {
+    bool operator==(const TArrayRef<TT>& other) const {
         return (S_ == other.size()) && std::equal(begin(), end(), other.begin());
     }
 
@@ -130,6 +131,8 @@ public:
     }
 
     constexpr inline reference front() const noexcept {
+        Y_ASSERT(S_ > 0);
+
         return *T_;
     }
 
@@ -207,7 +210,7 @@ public:
      *
      * DEPRECATED. DO NOT USE.
      */
-    TArrayRef SubRegion(size_t offset, size_t size) const {
+    TArrayRef SubRegion(size_t offset, size_t size) const noexcept {
         if (size == 0 || offset >= S_) {
             return TArrayRef();
         }
@@ -253,31 +256,31 @@ TArrayRef<char> as_writable_bytes(TArrayRef<T> arrayRef Y_LIFETIME_BOUND) noexce
 }
 
 template <class Range>
-constexpr TArrayRef<const typename Range::value_type> MakeArrayRef(const Range& range) {
+constexpr TArrayRef<const typename Range::value_type> MakeArrayRef(const Range& range) noexcept {
     return TArrayRef<const typename Range::value_type>(range);
 }
 
 template <class Range>
-constexpr TArrayRef<typename Range::value_type> MakeArrayRef(Range& range) {
+constexpr TArrayRef<typename Range::value_type> MakeArrayRef(Range& range) noexcept {
     return TArrayRef<typename Range::value_type>(range);
 }
 
 template <class Range>
-constexpr TArrayRef<const typename Range::value_type> MakeConstArrayRef(const Range& range) {
+constexpr TArrayRef<const typename Range::value_type> MakeConstArrayRef(const Range& range) noexcept {
     return TArrayRef<const typename Range::value_type>(range);
 }
 
 template <class Range>
-constexpr TArrayRef<const typename Range::value_type> MakeConstArrayRef(Range& range) {
+constexpr TArrayRef<const typename Range::value_type> MakeConstArrayRef(Range& range) noexcept {
     return TArrayRef<const typename Range::value_type>(range);
 }
 
 template <class T>
-constexpr TArrayRef<T> MakeArrayRef(T* data Y_LIFETIME_BOUND, size_t size) {
+constexpr TArrayRef<T> MakeArrayRef(T* data Y_LIFETIME_BOUND, size_t size) noexcept {
     return TArrayRef<T>(data, size);
 }
 
 template <class T>
-constexpr TArrayRef<T> MakeArrayRef(T* begin Y_LIFETIME_BOUND, T* end Y_LIFETIME_BOUND) {
+constexpr TArrayRef<T> MakeArrayRef(T* begin Y_LIFETIME_BOUND, T* end Y_LIFETIME_BOUND) noexcept {
     return TArrayRef<T>(begin, end);
 }

@@ -47,6 +47,9 @@ message TLoggingConfig {
         HTTP_GATEWAY = 23;
         PROVIDER_GENERIC = 24;
         PROVIDER_PG = 25;
+        PROVIDER_PURE = 26;
+        FAST_MAP_REDUCE = 27;
+        PROVIDER_YTFLOW = 28;
     }
 
     message TComponentLevel {

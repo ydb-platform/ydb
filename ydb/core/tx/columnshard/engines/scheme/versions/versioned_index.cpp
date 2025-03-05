@@ -15,15 +15,15 @@ void TVersionedIndex::RemoveVersion(const ui64 version) {
     Snapshots.erase(itSnap);
 }
 
-const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
+const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo) {
     if (Snapshots.empty()) {
-        PrimaryKey = indexInfo.GetPrimaryKey();
+        PrimaryKey = indexInfo->GetPrimaryKey();
     } else {
-        Y_ABORT_UNLESS(PrimaryKey->Equals(indexInfo.GetPrimaryKey()));
+        Y_ABORT_UNLESS(PrimaryKey->Equals(indexInfo->GetPrimaryKey()));
     }
 
-    const bool needActualization = indexInfo.GetSchemeNeedActualization();
-    auto newVersion = indexInfo.GetVersion();
+    const bool needActualization = indexInfo->GetSchemeNeedActualization();
+    auto newVersion = indexInfo->GetVersion();
     auto itVersion = SnapshotByVersion.emplace(newVersion, std::make_shared<TSnapshotSchema>(std::move(indexInfo), snapshot));
     if (!itVersion.second) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("message", "Skip registered version")("version", LastSchemaVersion);

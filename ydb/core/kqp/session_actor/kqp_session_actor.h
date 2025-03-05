@@ -9,7 +9,7 @@
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 
-#include <ydb/core/control/immediate_control_board_wrapper.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 #include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NKqp::NComputeActor {
@@ -57,7 +57,10 @@ struct TKqpWorkerSettings {
     }
 };
 
+class TKqpQueryCache;
+
 IActor* CreateKqpSessionActor(const TActorId& owner,
+    TIntrusivePtr<TKqpQueryCache> queryCache,
     std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> resourceManager_,
     std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> caFactory_,
     const TString& sessionId,

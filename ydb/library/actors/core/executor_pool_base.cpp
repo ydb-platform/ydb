@@ -1,10 +1,12 @@
 #include "actorsystem.h"
+#include "activity_guard.h"
 #include "actor.h"
 #include "executor_pool_base.h"
 #include "executor_pool_basic_feature_flags.h"
 #include "executor_thread.h"
 #include "mailbox.h"
 #include "probes.h"
+#include "debug.h"
 #include <ydb/library/actors/util/datetime.h>
 
 namespace NActors {
@@ -19,11 +21,12 @@ namespace NActors {
     TExecutorPoolBaseMailboxed::TExecutorPoolBaseMailboxed(ui32 poolId)
         : IExecutorPool(poolId)
         , ActorSystem(nullptr)
-        , MailboxTable(new TMailboxTable)
+        , MailboxTableHolder(new TMailboxTable)
+        , MailboxTable(MailboxTableHolder.Get())
     {}
 
     TExecutorPoolBaseMailboxed::~TExecutorPoolBaseMailboxed() {
-        MailboxTable.Destroy();
+        MailboxTableHolder.Destroy();
     }
 
 #if defined(ACTORSLIB_COLLECT_EXEC_STATS)
@@ -68,6 +71,7 @@ namespace NActors {
     TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue)
         : TExecutorPoolBaseMailboxed(poolId)
         , PoolThreads(threads)
+        , UseRingQueue(useRingQueue)
         , ThreadsAffinity(affinity)
     {
         if (useRingQueue) {
@@ -82,12 +86,7 @@ namespace NActors {
             ;
     }
 
-    void TExecutorPoolBaseMailboxed::ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingWriteCounter) {
-        Y_UNUSED(workerId);
-        MailboxTable->ReclaimMailbox(mailboxType, hint, revolvingWriteCounter);
-    }
-
-    TMailboxHeader *TExecutorPoolBaseMailboxed::ResolveMailbox(ui32 hint) {
+    TMailbox* TExecutorPoolBaseMailboxed::ResolveMailbox(ui32 hint) {
         return MailboxTable->Get(hint);
     }
 
@@ -103,7 +102,22 @@ namespace NActors {
         if (TlsThreadContext) {
             TlsThreadContext->IsCurrentRecipientAService = ev->Recipient.IsService();
         }
-        return MailboxTable->SendTo(ev, this);
+
+        if (TMailbox* mailbox = MailboxTable->Get(ev->GetRecipientRewrite().Hint())) {
+            switch (mailbox->Push(ev)) {
+                case EMailboxPush::Pushed:
+                    return true;
+                case EMailboxPush::Locked:
+                    mailbox->ScheduleMoment = GetCycleCountFast();
+                    ScheduleActivation(mailbox);
+                    return true;
+                case EMailboxPush::Free:
+                    // message cannot be delivered
+                    break;
+            }
+        }
+
+        return false;
     }
 
     bool TExecutorPoolBaseMailboxed::SpecificSend(TAutoPtr<IEventHandle>& ev) {
@@ -114,43 +128,60 @@ namespace NActors {
         if (TlsThreadContext) {
             TlsThreadContext->IsCurrentRecipientAService = ev->Recipient.IsService();
         }
-        return MailboxTable->SpecificSendTo(ev, this);
+
+        if (TMailbox* mailbox = MailboxTable->Get(ev->GetRecipientRewrite().Hint())) {
+            switch (mailbox->Push(ev)) {
+                case EMailboxPush::Pushed:
+                    return true;
+                case EMailboxPush::Locked:
+                    mailbox->ScheduleMoment = GetCycleCountFast();
+                    SpecificScheduleActivation(mailbox);
+                    return true;
+                case EMailboxPush::Free:
+                    // message cannot be delivered
+                    break;
+            }
+        }
+
+        return false;
     }
 
-    void TExecutorPoolBase::ScheduleActivation(ui32 activation) {
-#ifdef RING_ACTIVATION_QUEUE
-        ScheduleActivationEx(activation, 0);
-#else
-        ScheduleActivationEx(activation, AtomicIncrement(ActivationsRevolvingCounter));
-#endif
+    void TExecutorPoolBase::ScheduleActivation(TMailbox* mailbox) {
+        if (UseRingQueue) {
+            ScheduleActivationEx(mailbox, 0);
+        } else {
+            ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
+        }
     }
 
     Y_FORCE_INLINE bool IsAllowedToCapture(IExecutorPool *self) {
-        if (TlsThreadContext->Pool != self || TlsThreadContext->CapturedType == ESendingType::Tail) {
+        if (TlsThreadContext->Pool() != self || TlsThreadContext->CheckCapturedSendingType(ESendingType::Tail)) {
             return false;
         }
-        return TlsThreadContext->SendingType != ESendingType::Common;
+        return !TlsThreadContext->CheckSendingType(ESendingType::Common);
     }
 
     Y_FORCE_INLINE bool IsTailSend(IExecutorPool *self) {
-        return TlsThreadContext->Pool == self && TlsThreadContext->SendingType == ESendingType::Tail && TlsThreadContext->CapturedType != ESendingType::Tail;
+        return TlsThreadContext->Pool() == self && TlsThreadContext->CheckSendingType(ESendingType::Tail) && !TlsThreadContext->CheckCapturedSendingType(ESendingType::Tail);
     }
 
-    void TExecutorPoolBase::SpecificScheduleActivation(ui32 activation) {
+    void TExecutorPoolBase::SpecificScheduleActivation(TMailbox* mailbox) {
         if (NFeatures::IsCommon() && IsAllowedToCapture(this) || IsTailSend(this)) {
-            std::swap(TlsThreadContext->CapturedActivation, activation);
-            TlsThreadContext->CapturedType = TlsThreadContext->SendingType;
+            mailbox = TlsThreadContext->CaptureMailbox(mailbox);
         }
-        if (activation) {
-#ifdef RING_ACTIVATION_QUEUE
-        ScheduleActivationEx(activation, 0);
-#else
-        ScheduleActivationEx(activation, AtomicIncrement(ActivationsRevolvingCounter));
-#endif
+        if (mailbox && UseRingQueue) {
+            ScheduleActivationEx(mailbox, 0);
+        } else if (mailbox) {
+            ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));
         }
     }
 
-    TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingWriteCounter, const TActorId& parentId) {
+    TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailboxType::EType, ui64 revolvingWriteCounter, const TActorId& parentId) {
+        TMailboxCache empty;
+        return Register(actor, empty, revolvingWriteCounter, parentId);
+    }
+
+    TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailboxCache& cache, ui64 revolvingWriteCounter, const TActorId& parentId) {
         NHPTimer::STime hpstart = GetCycleCountFast();
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_REGISTER, false> activityGuard(hpstart);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
@@ -164,39 +195,17 @@ namespace NActors {
 #endif
         AtomicIncrement(ActorRegistrations);
 
-        // first step - find good enough mailbox
-        ui32 hint = 0;
-        TMailboxHeader* mailbox = nullptr;
+        TMailbox* mailbox = cache ? cache.Allocate() : MailboxTable->Allocate();
 
-        if (revolvingWriteCounter == 0)
-            revolvingWriteCounter = AtomicIncrement(RegisterRevolvingCounter);
-
-        {
-            ui32 hintBackoff = 0;
-
-            while (hint == 0) {
-                hint = MailboxTable->AllocateMailbox(mailboxType, ++revolvingWriteCounter);
-                mailbox = MailboxTable->Get(hint);
-
-                if (!mailbox->LockFromFree()) {
-                    MailboxTable->ReclaimMailbox(mailboxType, hintBackoff, ++revolvingWriteCounter);
-                    hintBackoff = hint;
-                    hint = 0;
-                }
-            }
-
-            MailboxTable->ReclaimMailbox(mailboxType, hintBackoff, ++revolvingWriteCounter);
-        }
+        // Free mailboxes are not executing, lock to a normal state
+        mailbox->LockFromFree();
 
         const ui64 localActorId = AllocateID();
-
-        // ok, got mailbox
         mailbox->AttachActor(localActorId, actor);
 
         // do init
-        const TActorId actorId(ActorSystem->NodeId, PoolId, localActorId, hint);
+        const TActorId actorId(ActorSystem->NodeId, PoolId, localActorId, mailbox->Hint);
         DoActorInit(ActorSystem, actor, actorId, parentId);
-
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         if (ActorSystem->MonitorStuckActors()) {
             with_lock (StuckObserverMutex) {
@@ -210,25 +219,7 @@ namespace NActors {
         // Once we unlock the mailbox the actor starts running and we cannot use the pointer any more
         actor = nullptr;
 
-        switch (mailboxType) {
-            case TMailboxType::Simple:
-                UnlockFromExecution((TMailboxTable::TSimpleMailbox*)mailbox, this, false, hint, MaxWorkers, ++revolvingWriteCounter);
-                break;
-            case TMailboxType::Revolving:
-                UnlockFromExecution((TMailboxTable::TRevolvingMailbox*)mailbox, this, false, hint, MaxWorkers, ++revolvingWriteCounter);
-                break;
-            case TMailboxType::HTSwap:
-                UnlockFromExecution((TMailboxTable::THTSwapMailbox*)mailbox, this, false, hint, MaxWorkers, ++revolvingWriteCounter);
-                break;
-            case TMailboxType::ReadAsFilled:
-                UnlockFromExecution((TMailboxTable::TReadAsFilledMailbox*)mailbox, this, false, hint, MaxWorkers, ++revolvingWriteCounter);
-                break;
-            case TMailboxType::TinyReadAsFilled:
-                UnlockFromExecution((TMailboxTable::TTinyReadAsFilledMailbox*)mailbox, this, false, hint, MaxWorkers, ++revolvingWriteCounter);
-                break;
-            default:
-                Y_ABORT();
-        }
+        mailbox->Unlock(this, GetCycleCountFast(), revolvingWriteCounter);
 
         NHPTimer::STime elapsed = GetCycleCountFast() - hpstart;
         if (elapsed > 1000000) {
@@ -238,7 +229,7 @@ namespace NActors {
         return actorId;
     }
 
-    TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId) {
+    TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailbox* mailbox, const TActorId& parentId) {
         NHPTimer::STime hpstart = GetCycleCountFast();
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_REGISTER, false> activityGuard(hpstart);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
@@ -249,10 +240,14 @@ namespace NActors {
 #endif
         AtomicIncrement(ActorRegistrations);
 
+        // Empty mailboxes are currently pending for reclamation
+        Y_ABORT_UNLESS(!mailbox->IsEmpty(),
+            "RegisterWithSameMailbox called on an empty mailbox");
+
         const ui64 localActorId = AllocateID();
         mailbox->AttachActor(localActorId, actor);
 
-        const TActorId actorId(ActorSystem->NodeId, PoolId, localActorId, hint);
+        const TActorId actorId(ActorSystem->NodeId, PoolId, localActorId, mailbox->Hint);
         DoActorInit(ActorSystem, actor, actorId, parentId);
 
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
@@ -273,6 +268,25 @@ namespace NActors {
         return actorId;
     }
 
+    TActorId TExecutorPoolBaseMailboxed::RegisterAlias(TMailbox* mailbox, IActor* actor) {
+        Y_ABORT_UNLESS(!mailbox->IsEmpty(),
+            "RegisterAlias called on an empty mailbox");
+
+        Y_DEBUG_ABORT_UNLESS(mailbox->FindActor(actor->SelfId().LocalId()) == actor,
+            "RegisterAlias called for an actor that is not register in the mailbox");
+
+        const ui64 localActorId = AllocateID();
+        mailbox->AttachAlias(localActorId, actor);
+        return TActorId(ActorSystem->NodeId, PoolId, localActorId, mailbox->Hint);
+    }
+
+    void TExecutorPoolBaseMailboxed::UnregisterAlias(TMailbox* mailbox, const TActorId& actorId) {
+        Y_DEBUG_ABORT_UNLESS(actorId.Hint() == mailbox->Hint);
+        Y_DEBUG_ABORT_UNLESS(actorId.PoolID() == PoolId);
+        Y_DEBUG_ABORT_UNLESS(actorId.NodeId() == ActorSystem->NodeId);
+        mailbox->DetachAlias(actorId.LocalId());
+    }
+
     TAffinity* TExecutorPoolBase::Affinity() const {
         return ThreadsAffinity.Get();
     }
@@ -283,5 +297,9 @@ namespace NActors {
 
     ui32 TExecutorPoolBase::GetThreads() const {
         return PoolThreads;
+    }
+
+    TMailboxTable* TExecutorPoolBaseMailboxed::GetMailboxTable() const {
+        return MailboxTable;
     }
 }

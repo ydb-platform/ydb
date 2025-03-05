@@ -11,6 +11,8 @@
 #pragma once
 #endif
 
+#include <boost/math/tools/config.hpp>
+#include <boost/math/tools/promotion.hpp>
 #include <boost/math/special_functions/math_fwd.hpp>
 #include <boost/math/special_functions/ellint_1.hpp>
 #include <boost/math/special_functions/ellint_rj.hpp>
@@ -27,7 +29,7 @@ namespace detail{
 
 // Elliptic integral - Jacobi Zeta
 template <typename T, typename Policy>
-T jacobi_zeta_imp(T phi, T k, const Policy& pol, T kp)
+BOOST_MATH_GPU_ENABLED T jacobi_zeta_imp(T phi, T k, const Policy& pol, T kp)
 {
     BOOST_MATH_STD_USING
     using namespace boost::math::tools;
@@ -55,14 +57,14 @@ T jacobi_zeta_imp(T phi, T k, const Policy& pol, T kp)
     return invert ? T(-result) : result;
 }
 template <typename T, typename Policy>
-inline T jacobi_zeta_imp(T phi, T k, const Policy& pol)
+BOOST_MATH_GPU_ENABLED inline T jacobi_zeta_imp(T phi, T k, const Policy& pol)
 {
    return jacobi_zeta_imp(phi, k, pol, T(1 - k * k));
 }
 } // detail
 
 template <class T1, class T2, class Policy>
-inline typename tools::promote_args<T1, T2>::type jacobi_zeta(T1 k, T2 phi, const Policy& pol)
+BOOST_MATH_GPU_ENABLED inline typename tools::promote_args<T1, T2>::type jacobi_zeta(T1 k, T2 phi, const Policy& pol)
 {
    typedef typename tools::promote_args<T1, T2>::type result_type;
    typedef typename policies::evaluation<result_type, Policy>::type value_type;
@@ -70,7 +72,7 @@ inline typename tools::promote_args<T1, T2>::type jacobi_zeta(T1 k, T2 phi, cons
 }
 
 template <class T1, class T2>
-inline typename tools::promote_args<T1, T2>::type jacobi_zeta(T1 k, T2 phi)
+BOOST_MATH_GPU_ENABLED inline typename tools::promote_args<T1, T2>::type jacobi_zeta(T1 k, T2 phi)
 {
    return boost::math::jacobi_zeta(k, phi, policies::policy<>());
 }

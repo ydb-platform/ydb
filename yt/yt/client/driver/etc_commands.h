@@ -173,7 +173,7 @@ private:
     TString PoolTree;
     NYTree::INodePtr ResourceDelta;
 
-    virtual void DoExecute(ICommandContextPtr context) override;
+    void DoExecute(ICommandContextPtr context) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -230,7 +230,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    NApi::EProxyType Type;
+    NApi::EProxyKind Kind;
     std::string Role;
     NApi::NRpcProxy::EAddressType AddressType;
     std::string NetworkName;

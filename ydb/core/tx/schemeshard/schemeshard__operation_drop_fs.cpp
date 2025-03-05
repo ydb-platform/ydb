@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/filestore/core/filestore.h>
 
 namespace {
 
@@ -57,8 +58,8 @@ public:
         path->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
-        domainInfo->DecPathsInside();
-        parentDir->DecAliveChildren();
+        domainInfo->DecPathsInside(context.SS);
+        DecAliveChildrenDirect(OperationId, parentDir, context); // for correct discard of ChildrenExist prop
 
         // KIKIMR-13173
         // Repeat it here for a while, delete it from TDeleteParts after

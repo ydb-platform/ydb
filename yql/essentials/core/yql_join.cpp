@@ -319,8 +319,16 @@ namespace {
                 }
             }
             else if (option.IsAtom("forceSortedMerge") || option.IsAtom("forceStreamLookup")) {
-                if (!EnsureTupleSize(*child, 1, ctx)) {
-                    return IGraphTransformer::TStatus::Error;
+                if (option.IsAtom("forceStreamLookup")) {
+                    if (child->ChildrenSize() % 2 == 0) {
+                        ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), TStringBuilder() <<
+                                    "streamlookup() expects KEY VALUE... pairs"));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                } else {
+                    if (!EnsureTupleSize(*child, 1, ctx)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
                 }
                 if (hasJoinStrategyHint) {
                     ctx.AddError(TIssue(ctx.GetPosition(option.Pos()), TStringBuilder() <<
@@ -330,6 +338,9 @@ namespace {
                 hasJoinStrategyHint = true;
             }
             else if (option.IsAtom("join_algo")) {
+                //do nothing
+            }
+            else if (option.IsAtom("shuffle_lhs_by") || option.IsAtom("shuffle_rhs_by")) {
                 //do nothing
             }
             else if (option.IsAtom("compact")) {
@@ -420,6 +431,31 @@ namespace {
 
         CollectEquiJoinKeyColumnsFromLeaf(*joinTree.Child(3), tableKeysMap);
         CollectEquiJoinKeyColumnsFromLeaf(*joinTree.Child(4), tableKeysMap);
+    }
+
+    void CollectAdditiveInputLabelsSide(const TCoEquiJoinTuple& joinTree, bool hasAny, THashMap<TStringBuf, bool>& isAdditiveByLabel,
+                                        bool isLeft, const TEquiJoinLinkSettings& settings);
+
+    void CollectAdditiveInputLabels(const TCoEquiJoinTuple& joinTree, bool hasAny, THashMap<TStringBuf, bool>& isAdditiveByLabel) {
+        auto settings = GetEquiJoinLinkSettings(joinTree.Options().Ref());
+        CollectAdditiveInputLabelsSide(joinTree, hasAny, isAdditiveByLabel, true, settings);
+        CollectAdditiveInputLabelsSide(joinTree, hasAny, isAdditiveByLabel, false, settings);
+    }
+
+    void CollectAdditiveInputLabelsSide(const TCoEquiJoinTuple& joinTree, bool hasAny, THashMap<TStringBuf, bool>& isAdditiveByLabel, bool isLeft, const TEquiJoinLinkSettings& settings) {
+        hasAny = hasAny || (isLeft ? settings.LeftHints : settings.RightHints).contains("any");
+        const auto scope = isLeft ? joinTree.LeftScope() : joinTree.RightScope();
+        TStringBuf joinKind = joinTree.Type().Value();
+        if (scope.Maybe<TCoEquiJoinTuple>()) {
+            CollectAdditiveInputLabels(scope.Cast<TCoEquiJoinTuple>(), hasAny, isAdditiveByLabel);
+        } else {
+            YQL_ENSURE(scope.Maybe<TCoAtom>());
+            bool additive = !hasAny && (joinKind == (isLeft ? "Left" : "Right") || joinKind == "Inner" || joinKind == "Cross");
+            TStringBuf label = scope.Cast<TCoAtom>().Value();
+            if (!additive || !isAdditiveByLabel.contains(label)) {
+                isAdditiveByLabel[label] = additive;
+            }
+        }
     }
 
     bool CollectEquiJoinOnlyParents(const TExprNode& current, const TExprNode* prev, ui32 depth,
@@ -779,6 +815,8 @@ IGraphTransformer::TStatus ValidateEquiJoinOptions(TPositionHandle positionHandl
             // do nothing
         } else if (optionName == "join_algo") {
             // do nothing
+        } else if (optionName == "shuffle_lhs_by" || optionName == "shuffle_rhs_by") {
+            // do nothing
         } else if (optionName == "compact") {
             options.Compact = true;
         } else {
@@ -941,6 +979,12 @@ bool IsRightJoinSideOptional(const TStringBuf& joinType) {
     }
 
     return false;
+}
+
+THashMap<TStringBuf, bool> CollectAdditiveInputLabels(const TCoEquiJoinTuple& joinTree) {
+    THashMap<TStringBuf, bool> result;
+    CollectAdditiveInputLabels(joinTree, false, result);
+    return result;
 }
 
 TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::TPtr& input,
@@ -1350,10 +1394,37 @@ TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings) {
         result.JoinAlgo = FromString<EJoinAlgoType>(algo->Child(1)->Content());
     }
 
+    auto collectShuffleColumnsFromSetting = [](const TExprNode::TPtr& shuffleSetting) -> TVector<NDq::TJoinColumn> {
+        TVector<NDq::TJoinColumn> shuffleBy;
+        shuffleBy.reserve(shuffleSetting->ChildrenSize());
+
+        for (std::size_t i = 1; i < shuffleSetting->ChildrenSize(); ++i) {
+            const auto& shuffleByNode = shuffleSetting->Child(i);
+            auto relName = TString(shuffleByNode->Child(0)->Content());
+            auto columnName = TString(shuffleByNode->Child(1)->Content());
+            shuffleBy.emplace_back(std::move(relName), std::move(columnName));
+        }
+
+        return shuffleBy;
+    };
+
+    if (auto shuffleLhsBy = GetSetting(linkSettings, "shuffle_lhs_by")) {
+        result.ShuffleLhsBy = collectShuffleColumnsFromSetting(shuffleLhsBy);
+    }
+
+    if (auto shuffleRhsBy = GetSetting(linkSettings, "shuffle_rhs_by")) {
+        result.ShuffleRhsBy = collectShuffleColumnsFromSetting(shuffleRhsBy);
+    }
+
     result.ForceSortedMerge = HasSetting(linkSettings, "forceSortedMerge");
-    
-    if (HasSetting(linkSettings, "forceStreamLookup")) {
+
+    if (auto streamlookup = GetSetting(linkSettings, "forceStreamLookup")) {
+        YQL_ENSURE(result.JoinAlgoOptions.empty());
         result.JoinAlgo = EJoinAlgoType::StreamLookupJoin;
+        auto size = streamlookup->ChildrenSize();
+        for (decltype(size) i = 1; i < size; ++i) {
+            result.JoinAlgoOptions.push_back(TString(streamlookup->Child(i)->Content()));
+        }
     }
 
     if (HasSetting(linkSettings, "compact")) {

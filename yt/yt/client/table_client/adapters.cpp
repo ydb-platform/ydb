@@ -25,47 +25,69 @@ static constexpr auto& Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <std::derived_from<ITableWriter> TInterface, std::derived_from<IUnversionedWriter> TUnderlyingInterface>
 class TApiFromSchemalessWriterAdapter
-    : public ITableWriter
+    : public TInterface
 {
 public:
-    explicit TApiFromSchemalessWriterAdapter(IUnversionedWriterPtr underlyingWriter)
+    explicit TApiFromSchemalessWriterAdapter(TIntrusivePtr<TUnderlyingInterface> underlyingWriter)
         : UnderlyingWriter_(std::move(underlyingWriter))
     { }
 
-    bool Write(TRange<TUnversionedRow> rows) override
+    bool Write(TRange<TUnversionedRow> rows) /*override*/
     {
         return UnderlyingWriter_->Write(rows);
     }
 
-    TFuture<void> GetReadyEvent() override
+    TFuture<void> GetReadyEvent() /*override*/
     {
         return UnderlyingWriter_->GetReadyEvent();
     }
 
-    TFuture<void> Close() override
+    TFuture<void> Close() /*override*/
     {
         return UnderlyingWriter_->Close();
     }
 
-    const TNameTablePtr& GetNameTable() const override
+    const TNameTablePtr& GetNameTable() const /*override*/
     {
         return UnderlyingWriter_->GetNameTable();
     }
 
-    const TTableSchemaPtr& GetSchema() const override
+    const TTableSchemaPtr& GetSchema() const /*override*/
     {
         return UnderlyingWriter_->GetSchema();
     }
 
-private:
-    const IUnversionedWriterPtr UnderlyingWriter_;
+protected:
+    const TIntrusivePtr<TUnderlyingInterface> UnderlyingWriter_;
 };
 
 ITableWriterPtr CreateApiFromSchemalessWriterAdapter(
     IUnversionedWriterPtr underlyingWriter)
 {
-    return New<TApiFromSchemalessWriterAdapter>(std::move(underlyingWriter));
+    return New<TApiFromSchemalessWriterAdapter<ITableWriter, IUnversionedWriter>>(std::move(underlyingWriter));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TApiFromSchemalessTableFragmentWriterAdapter
+    : public TApiFromSchemalessWriterAdapter<ITableFragmentWriter, IUnversionedTableFragmentWriter>
+{
+public:
+    using TBase = TApiFromSchemalessWriterAdapter<ITableFragmentWriter, IUnversionedTableFragmentWriter>;
+    using TBase::TBase;
+
+    TSignedWriteFragmentResultPtr GetWriteFragmentResult() const /*override*/
+    {
+        return TBase::UnderlyingWriter_->GetWriteFragmentResult();
+    }
+};
+
+ITableFragmentWriterPtr CreateApiFromSchemalessWriterAdapter(
+    IUnversionedTableFragmentWriterPtr underlyingWriter)
+{
+    return New<TApiFromSchemalessTableFragmentWriterAdapter>(std::move(underlyingWriter));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

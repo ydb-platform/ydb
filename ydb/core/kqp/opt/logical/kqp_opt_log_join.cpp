@@ -187,6 +187,8 @@ TExprBase BuildLookupIndex(TExprContext& ctx, const TPositionHandle pos,
 {
     if (kqpCtx.IsScanQuery()) {
         YQL_ENSURE(kqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin, "Stream lookup is not enabled for index lookup join");
+        TKqpStreamLookupSettings settings;
+        settings.Strategy = EStreamLookupStrategyType::LookupRows;
         return Build<TKqlStreamLookupIndex>(ctx, pos)
             .Table(table)
             .LookupKeys<TCoSkipNullMembers>()
@@ -198,7 +200,7 @@ TExprBase BuildLookupIndex(TExprContext& ctx, const TPositionHandle pos,
             .Columns(columns)
             .Index()
                 .Build(indexName)
-            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
+            .Settings(settings.BuildNode(ctx, pos))
             .Done();
     }
 
@@ -222,6 +224,8 @@ TExprBase BuildLookupTable(TExprContext& ctx, const TPositionHandle pos,
 {
     if (kqpCtx.IsScanQuery()) {
         YQL_ENSURE(kqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin, "Stream lookup is not enabled for index lookup join");
+        TKqpStreamLookupSettings settings;
+        settings.Strategy = EStreamLookupStrategyType::LookupRows;
         return Build<TKqlStreamLookupTable>(ctx, pos)
             .Table(table)
             .LookupKeys<TCoSkipNullMembers>()
@@ -231,11 +235,13 @@ TExprBase BuildLookupTable(TExprContext& ctx, const TPositionHandle pos,
                     .Build()
                 .Build()
             .Columns(columns)
-            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
+            .Settings(settings.BuildNode(ctx, pos))
             .Done();
     }
 
     if (kqpCtx.Config->EnableKqpDataQueryStreamLookup) {
+        TKqpStreamLookupSettings settings;
+        settings.Strategy = EStreamLookupStrategyType::LookupRows;
         return Build<TKqlStreamLookupTable>(ctx, pos)
             .Table(table)
             .LookupKeys<TCoSkipNullMembers>()
@@ -245,7 +251,7 @@ TExprBase BuildLookupTable(TExprContext& ctx, const TPositionHandle pos,
                     .Build()
                 .Build()
             .Columns(columns)
-            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
+            .Settings(settings.BuildNode(ctx, pos))
             .Done();
     }
 
@@ -397,9 +403,11 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
         }
     }
 
-    auto strategy = join.JoinType().Value() == "LeftSemi"
-        ? TKqpStreamLookupSemiJoinStrategyName
-        : TKqpStreamLookupJoinStrategyName;
+    TKqpStreamLookupSettings settings;
+    settings.AllowNullKeysPrefixSize = rightLookup.PrefixSize;
+    settings.Strategy = join.JoinType().Value() == "LeftSemi"
+        ? EStreamLookupStrategyType::LookupSemiJoinRows
+        : EStreamLookupStrategyType::LookupJoinRows;
 
     TMaybeNode<TExprBase> lookupJoin;
     if (indexName) {
@@ -408,14 +416,14 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
             .LookupKeys(leftInput)
             .Columns(lookupColumns.Cast())
             .Index().Build(indexName)
-            .LookupStrategy().Build(strategy)
+            .Settings(settings.BuildNode(ctx, join.Pos()))
             .Done();
     } else {
         lookupJoin = Build<TKqlStreamLookupTable>(ctx, join.Pos())
             .Table(rightLookup.MainTable)
             .LookupKeys(leftInput)
             .Columns(lookupColumns.Cast())
-            .LookupStrategy().Build(strategy)
+            .Settings(settings.BuildNode(ctx, join.Pos()))
             .Done();
     }
 
@@ -609,8 +617,37 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         leftJoinKeys.emplace(leftKey);
     }
 
+    auto rightPKContainsAllJoinKeyColumns = [&](const auto& rightKeyColumns, const auto& rightJoinKeyColumns) {
+        ui32 lookupPrefixSize = 0;
+        TSet<TString> lookupKeyColumns;
+        for (const auto& rightKeyColumn : rightKeyColumns) {
+            auto leftColumn = rightJoinKeyToLeft.FindPtr(rightKeyColumn);
+
+            if (lookupPrefixSize < rightPrefixSize) {
+                ++lookupPrefixSize;
+            } else {
+                if (!leftColumn) {
+                    break;
+                }
+            }
+
+            lookupKeyColumns.insert(rightKeyColumn);
+        }
+
+        for (auto& rightJoinKeyColumn : rightJoinKeyColumns) {
+            if (!lookupKeyColumns.contains(rightJoinKeyColumn.Value())) {
+                // this join key is non-pk column
+                return false;
+            }
+        }
+
+        return true;
+    };
+
     const bool useStreamIndexLookupJoin = (kqpCtx.IsDataQuery() || kqpCtx.IsGenericQuery())
-        && kqpCtx.Config->EnableKqpDataQueryStreamIdxLookupJoin;
+        && kqpCtx.Config->EnableKqpDataQueryStreamIdxLookupJoin
+        // StreamIndexLookupJoin can't execute join using non-pk columns
+        && rightPKContainsAllJoinKeyColumns(rightTableDesc.Metadata->KeyColumnNames, rightKeyColumns);
 
     auto leftRowArg = Build<TCoArgument>(ctx, join.Pos())
         .Name("leftRowArg")

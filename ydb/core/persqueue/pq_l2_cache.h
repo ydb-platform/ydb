@@ -58,7 +58,7 @@ public:
 
         bool operator == (const TKey& key) const {
             return TabletId == key.TabletId &&
-                Partition.IsEqual(key.Partition) &&
+                Partition == key.Partition &&
                 Offset == key.Offset &&
                 PartNo == key.PartNo;
         }
@@ -93,6 +93,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvPqCache::TEvCacheL2Request, Handle);
+            HFuncTraced(TEvPqCache::TEvCacheKeysRequest, Handle);
             HFuncTraced(NMon::TEvHttpInfo, Handle);
         default:
             break;
@@ -110,11 +111,15 @@ private:
     void Handle(TEvPqCache::TEvCacheL2Request::TPtr& ev, const TActorContext& ctx);
     void SendResponses(const TActorContext& ctx, const THashMap<TKey, TCacheValue::TPtr>& evicted);
 
+    void Handle(TEvPqCache::TEvCacheKeysRequest::TPtr& ev, const TActorContext& ctx);
+
     void AddBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs,
                   THashMap<TKey, TCacheValue::TPtr>& outEvicted);
     void RemoveBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs);
     void TouchBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs, bool isHit = true);
     void RegretBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs);
+    void RenameBlobs(const TActorContext& ctx, ui64 tabletId,
+                     const TVector<std::pair<TCacheBlobL2, TCacheBlobL2>>& blobs);
 
     static ui64 ClampMinSize(ui64 maxSize) {
         static const ui64 MIN_SIZE = 32_MB;
@@ -130,6 +135,8 @@ private:
     TL2Counters Counters;
 
     TString HttpForm() const;
+
+    size_t RenamedKeys = 0;
 };
 
 } // NPQ

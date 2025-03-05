@@ -3,13 +3,14 @@ LIBRARY()
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 SRCS(
+    config.cpp
     cube.cpp
     exporter.cpp
     helpers.cpp
     percpu.cpp
     producer.cpp
     proxy.cpp
-    registry.cpp
+    GLOBAL registry.cpp
     remote.cpp
     sensor.cpp
     sensor_service.cpp

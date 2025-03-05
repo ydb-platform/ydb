@@ -299,7 +299,7 @@ private:
 
     TMaybe<TFieldsLineage> ScanExprLineage(const TExprNode& node, const TExprNode* arg, const TLineage* src,
         TNodeMap<TMaybe<TFieldsLineage>>& visited,
-        const THashMap<const TExprNode*, TString>& flattenColumns) {
+        const THashMap<const TExprNode*, TMaybe<TFieldsLineage>>& flattenColumns) {
         if (&node == arg) {
             return Nothing();
         }
@@ -310,12 +310,12 @@ private:
         }
 
         if (auto itFlatten = flattenColumns.find(&node); itFlatten != flattenColumns.end()) {
-            return it->second = *(*src->Fields).FindPtr(itFlatten->second);
+            return it->second = itFlatten->second;
         }
 
         if (node.IsCallable("Member")) {
             if (&node.Head() == arg && src) {
-                return it->second = *(*src->Fields).FindPtr(node.Tail().Content());
+                return it->second = (*src->Fields).at(node.Tail().Content());
             }
 
             if (node.Head().IsCallable("Head")) {
@@ -337,7 +337,7 @@ private:
 
             if (inner->StructItems) {
                 TFieldsLineage result;
-                result.Items = *(*inner->StructItems).FindPtr(node.Tail().Content());
+                result.Items = (*inner->StructItems).at(node.Tail().Content());
                 return it->second = result;
             }
         }
@@ -397,7 +397,7 @@ private:
     }
 
     void MergeLineageFromUsedFields(const TExprNode& expr, const TExprNode& arg, const TLineage& src,
-        TFieldLineageSet& dst, const THashMap<const TExprNode*, TString>& flattenColumns,
+        TFieldLineageSet& dst, const THashMap<const TExprNode*, TMaybe<TFieldsLineage>>& flattenColumns,
         const TString& newTransforms = "") {
 
         TNodeMap<TMaybe<TFieldsLineage>> visited;
@@ -416,7 +416,7 @@ private:
     }
 
     void MergeLineageFromUsedFields(const TExprNode& expr, const TExprNode& arg, const TLineage& src,
-        TFieldsLineage& dst, bool produceStruct, const THashMap<const TExprNode*, TString>& flattenColumns,
+        TFieldsLineage& dst, bool produceStruct, const THashMap<const TExprNode*, TMaybe<TFieldsLineage>>& flattenColumns,
         const TString& newTransforms = "") {
         if (produceStruct) {
             auto root = &expr;
@@ -438,7 +438,7 @@ private:
                 }
             } else if (root->IsCallable("Member") && &root->Head() == &arg) {
                 auto fieldName = root->Tail().Content();
-                const auto& in = *(*src.Fields).FindPtr(fieldName);
+                const auto& in = (*src.Fields).at(fieldName);
                 dst.StructItems = in.StructItems;
             }
         }
@@ -447,13 +447,13 @@ private:
     }
 
     void FillStructLineage(TLineage& lineage, const TExprNode* value, const TExprNode& arg, const TLineage& innerLineage,
-        const TTypeAnnotationNode* extType, const THashMap<const TExprNode*, TString>& flattenColumns) {
+        const TTypeAnnotationNode* extType, const THashMap<const TExprNode*, TMaybe<TFieldsLineage>>& flattenColumns) {
         TMaybe<TString> oneField;
         if (value && value->IsCallable("Member") && &value->Head() == &arg) {
             TString field(value->Tail().Content());
-            auto f = innerLineage.Fields->FindPtr(field);
-            if (f->StructItems) {
-                for (const auto& x : *f->StructItems) {
+            auto& f = innerLineage.Fields->at(field);
+            if (f.StructItems) {
+                for (const auto& x : *f.StructItems) {
                     auto& res = (*lineage.Fields)[x.first];
                     res.Items = x.second;
                 }
@@ -533,7 +533,7 @@ private:
         const auto& lambda = node.Tail();
         const auto& arg = lambda.Head().Head();
         const auto& body = lambda.Tail();
-        THashMap<const TExprNode*, TString> flattenColumns;
+        THashMap<const TExprNode*, TMaybe<TFieldsLineage>> flattenColumns;
         const TExprNode* value = &body.Tail();
         if (body.IsCallable({"OptionalIf", "FlatListIf"})) {
             value = &body.Tail();
@@ -543,9 +543,9 @@ private:
             if (lambda.GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
                 value = &body;
                 while(value->IsCallable({"FlatMap", "OrderedFlatMap"})) {
-                    if (value->Head().IsCallable("Member") && &value->Head().Head() == &arg) {
-                        TString field(value->Head().Tail().Content());
-                        flattenColumns.emplace(value->Tail().Head().HeadPtr().Get(), field);
+                    TNodeMap<TMaybe<TFieldsLineage>> visited;
+                    if (auto res = ScanExprLineage(value->Head(), &arg, &innerLineage, visited, {})) {
+                        flattenColumns.emplace(value->Tail().Head().HeadPtr().Get(), res);
                     }
                     value = &value->Tail().Tail();
                 }
@@ -811,15 +811,15 @@ private:
 
             TStringBuf table, column;
             SplitTableName(originalName, table, column);
-            ui32 index = *inputLabels.FindPtr(table);
+            ui32 index = inputLabels.at(table);
             auto& res = (*lineage.Fields)[field->GetName()];
-            auto f = (*inners[index].Fields).FindPtr(column);
-            for (const auto& i: f->Items) {
+            auto& f = (*inners[index].Fields).at(column);
+            for (const auto& i: f.Items) {
                 res.Items.insert(i);
             }
 
             auto& h = hasStructItems[field->GetName()];
-            if (f->StructItems || f->Items.empty()) {
+            if (f.StructItems || f.Items.empty()) {
                 if (!h) {
                     h = true;
                 }
@@ -836,17 +836,17 @@ private:
 
             TStringBuf table, column;
             SplitTableName(originalName, table, column);
-            ui32 index = *inputLabels.FindPtr(table);
+            ui32 index = inputLabels.at(table);
             auto& res = (*lineage.Fields)[field->GetName()];
-            auto f = (*inners[index].Fields).FindPtr(column);
+            auto& f = (*inners[index].Fields).at(column);
             auto& h = hasStructItems[field->GetName()];
             if (h && *h) {
                 if (!res.StructItems) {
                     res.StructItems.ConstructInPlace();
                 }
 
-                if (f->StructItems) {
-                    for (const auto& i: *f->StructItems) {
+                if (f.StructItems) {
+                    for (const auto& i: *f.StructItems) {
                         for (const auto& x : i.second) {
                             (*res.StructItems)[i.first].insert(x);
                         }
@@ -914,7 +914,7 @@ private:
             writer.OnKeyedItem(f);
             writer.OnBeginList();
             TVector<TFieldLineage> items;
-            for (const auto& i : lineage.Fields->FindPtr(f)->Items) {
+            for (const auto& i : lineage.Fields->at(f).Items) {
                 items.push_back(i);
             }
 

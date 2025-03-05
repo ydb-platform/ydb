@@ -1,10 +1,10 @@
 # Authentication in the SDK
 
-As we discussed in the [{{ ydb-short-name }} server connection](../../../concepts/connect.md) article, the client must add an [authentication token](../../../concepts/auth.md) to each request. The authentication token is checked by the server. If the authentication is successful, the request is authorized and executed. Otherwise, the `Unauthenticated` error returns.
+As we discussed in the [{{ ydb-short-name }} server connection](../../../concepts/connect.md) article, the client must add an [authentication token](../../../security/authentication.md) to each request. The authentication token is checked by the server. If the authentication is successful, the request is authorized and executed. Otherwise, the `Unauthenticated` error returns.
 
 The {{ ydb-short-name }} SDK uses an object that is responsible for generating these tokens. SDK provides built-in methods for getting such an object:
 
-1. The methods that pass parameters explicitly, with each method implementing a certain [authentication mode](../../../concepts/auth.md).
+1. The methods that pass parameters explicitly, with each method implementing a certain [authentication mode](../../../security/authentication.md).
 2. The method that determines the authentication mode and relevant parameters based on environmental variables.
 
 Usually, you create a token generation object before you initialize the {{ ydb-short-name }} driver, and you pass the object to the driver constructor as a parameter. The C++ and Go SDKs additionally let you work with multiple databases and token generation objects through a single driver.
@@ -25,6 +25,7 @@ You can click any of the methods below to go to the source code of an example in
   | Access Token | [ydb.AccessTokenCredentials(token)](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/access-token-credentials) |
   | Metadata | [ydb.iam.MetadataUrlCredentials()](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/metadata-credentials) |
   | Service Account Key | [ydb.iam.ServiceAccountCredentials.from_file(<br/>key_file, iam_endpoint=None, iam_channel_credentials=None)](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/service-account-credentials) |
+  Static Credentials | [ydb.StaticCredentials.from_user_password(user, password)](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/static-credentials/example.py) |
   | OAuth 2.0 token exchange | [ydb.oauth2_token_exchange.Oauth2TokenExchangeCredentials()](https://github.com/ydb-platform/ydb-python-sdk/blob/main/ydb/oauth2_token_exchange/token_exchange.py),<br/>[ydb.oauth2_token_exchange.Oauth2TokenExchangeCredentials.from_file(cfg_file, iam_endpoint=None)](https://github.com/ydb-platform/ydb-python-sdk/blob/main/ydb/oauth2_token_exchange/token_exchange.py) |
   | Determined by environment variables | `ydb.credentials_from_env_variables()` |
 

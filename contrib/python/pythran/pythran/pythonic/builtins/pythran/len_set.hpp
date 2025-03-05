@@ -19,10 +19,11 @@ namespace builtins
     long len_set(Iterable const &s)
     {
       return std::set<typename std::iterator_traits<
-          typename Iterable::iterator>::value_type>(s.begin(), s.end()).size();
+          typename Iterable::iterator>::value_type>(s.begin(), s.end())
+          .size();
     }
-  }
-}
+  } // namespace pythran
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

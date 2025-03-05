@@ -1,8 +1,8 @@
 import base64
 import codecs
 import mimetypes
+import os
 import re
-import warnings
 from collections.abc import Collection
 from collections.abc import MutableSet
 from copy import deepcopy
@@ -11,9 +11,7 @@ from itertools import repeat
 from os import fspath
 
 from . import exceptions
-from ._internal import _make_encode_wrapper
 from ._internal import _missing
-from .filesystem import get_filesystem_encoding
 
 
 def is_immutable(self):
@@ -865,11 +863,14 @@ class Headers:
     `None` for ``headers['missing']``, whereas :class:`Headers` will raise
     a :class:`KeyError`.
 
-    To create a new :class:`Headers` object pass it a list or dict of headers
-    which are used as default values.  This does not reuse the list passed
-    to the constructor for internal usage.
+    To create a new ``Headers`` object, pass it a list, dict, or
+    other ``Headers`` object with default values. These values are
+    validated the same way values added later are.
 
     :param defaults: The list of default values for the :class:`Headers`.
+
+    .. versionchanged:: 2.1.0
+        Default values are validated the same as values added later.
 
     .. versionchanged:: 0.9
        This data structure now stores unicode values similar to how the
@@ -884,10 +885,7 @@ class Headers:
     def __init__(self, defaults=None):
         self._list = []
         if defaults is not None:
-            if isinstance(defaults, (list, Headers)):
-                self._list.extend(defaults)
-            else:
-                self.extend(defaults)
+            self.extend(defaults)
 
     def __getitem__(self, key, _get_mode=False):
         if not _get_mode:
@@ -1082,20 +1080,6 @@ class Headers:
             return False
         return True
 
-    def has_key(self, key):
-        """
-        .. deprecated:: 2.0
-            Will be removed in Werkzeug 2.1. Use ``key in data``
-            instead.
-        """
-        warnings.warn(
-            "'has_key' is deprecated and will be removed in Werkzeug"
-            " 2.1. Use 'key in data' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return key in self
-
     def __iter__(self):
         """Yield ``(key, value)`` tuples."""
         return iter(self._list)
@@ -1242,7 +1226,7 @@ class Headers:
                 (_unicodify_header_value(k), _unicodify_header_value(v))
                 for (k, v) in value
             ]
-            for (_, v) in value:
+            for _, v in value:
                 self._validate_value(v)
             if isinstance(key, int):
                 self._list[key] = value[0]
@@ -1547,20 +1531,6 @@ class CombinedMultiDict(ImmutableMultiDictMixin, MultiDict):
             if key in d:
                 return True
         return False
-
-    def has_key(self, key):
-        """
-        .. deprecated:: 2.0
-            Will be removed in Werkzeug 2.1. Use ``key in data``
-            instead.
-        """
-        warnings.warn(
-            "'has_key' is deprecated and will be removed in Werkzeug"
-            " 2.1. Use 'key in data' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return key in self
 
     def __repr__(self):
         return f"{type(self).__name__}({self.dicts!r})"
@@ -1991,16 +1961,6 @@ def cache_control_property(key, empty, type):
     )
 
 
-def cache_property(key, empty, type):
-    warnings.warn(
-        "'cache_property' is renamed to 'cache_control_property'. The"
-        " old name is deprecated and will be removed in Werkzeug 2.1.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return cache_control_property(key, empty, type)
-
-
 class _CacheControl(UpdateDictMixin, dict):
     """Subclass of a dict that stores values for a Cache-Control header.  It
     has accessors for all the cache-control directives specified in RFC 2616.
@@ -2013,6 +1973,10 @@ class _CacheControl(UpdateDictMixin, dict):
     the object into a string or call the :meth:`to_header` method.  If you plan
     to subclass it and add your own items have a look at the sourcecode for
     that class.
+
+    .. versionchanged:: 2.1.0
+        Setting int properties such as ``max_age`` will convert the
+        value to an int.
 
     .. versionchanged:: 0.4
 
@@ -2072,7 +2036,10 @@ class _CacheControl(UpdateDictMixin, dict):
             elif value is True:
                 self[key] = None
             else:
-                self[key] = value
+                if type is not None:
+                    self[key] = type(value)
+                else:
+                    self[key] = value
 
     def _del_cache_value(self, key):
         """Used internally by the accessor properties."""
@@ -2102,6 +2069,10 @@ class RequestCacheControl(ImmutableDictMixin, _CacheControl):
     you plan to subclass it and add your own items have a look at the sourcecode
     for that class.
 
+    .. versionchanged:: 2.1.0
+        Setting int properties such as ``max_age`` will convert the
+        value to an int.
+
     .. versionadded:: 0.5
        In previous versions a `CacheControl` class existed that was used
        both for request and response.
@@ -2122,6 +2093,13 @@ class ResponseCacheControl(_CacheControl):
     you plan to subclass it and add your own items have a look at the sourcecode
     for that class.
 
+    .. versionchanged:: 2.1.1
+        ``s_maxage`` converts the value to an int.
+
+    .. versionchanged:: 2.1.0
+        Setting int properties such as ``max_age`` will convert the
+        value to an int.
+
     .. versionadded:: 0.5
        In previous versions a `CacheControl` class existed that was used
        both for request and response.
@@ -2131,7 +2109,7 @@ class ResponseCacheControl(_CacheControl):
     private = cache_control_property("private", "*", None)
     must_revalidate = cache_control_property("must-revalidate", None, bool)
     proxy_revalidate = cache_control_property("proxy-revalidate", None, bool)
-    s_maxage = cache_control_property("s-maxage", None, None)
+    s_maxage = cache_control_property("s-maxage", None, int)
     immutable = cache_control_property("immutable", None, bool)
 
 
@@ -2933,22 +2911,22 @@ class FileStorage:
         self.name = name
         self.stream = stream or BytesIO()
 
-        # if no filename is provided we can attempt to get the filename
-        # from the stream object passed.  There we have to be careful to
-        # skip things like <fdopen>, <stderr> etc.  Python marks these
-        # special filenames with angular brackets.
+        # If no filename is provided, attempt to get the filename from
+        # the stream object. Python names special streams like
+        # ``<stderr>`` with angular brackets, skip these streams.
         if filename is None:
             filename = getattr(stream, "name", None)
-            s = _make_encode_wrapper(filename)
-            if filename and filename[0] == s("<") and filename[-1] == s(">"):
-                filename = None
 
-            # Make sure the filename is not bytes. This might happen if
-            # the file was opened from the bytes API.
-            if isinstance(filename, bytes):
-                filename = filename.decode(get_filesystem_encoding(), "replace")
+            if filename is not None:
+                filename = os.fsdecode(filename)
+
+            if filename and filename[0] == "<" and filename[-1] == ">":
+                filename = None
+        else:
+            filename = os.fsdecode(filename)
 
         self.filename = filename
+
         if headers is None:
             headers = Headers()
         self.headers = headers
@@ -2969,7 +2947,10 @@ class FileStorage:
     @property
     def content_length(self):
         """The content-length sent in the header.  Usually not available"""
-        return int(self.headers.get("content-length") or 0)
+        try:
+            return int(self.headers.get("content-length") or 0)
+        except ValueError:
+            return 0
 
     @property
     def mimetype(self):

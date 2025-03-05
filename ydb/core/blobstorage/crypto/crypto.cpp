@@ -173,14 +173,14 @@ const bool TStreamCypher::HasAVX512 = NX86::HaveAVX512F();
 Y_FORCE_INLINE void TStreamCypher::Encipher(const ui8* plaintext, ui8* ciphertext, size_t len) { 
     std::visit([&](auto&& chacha) {
         chacha.Encipher(plaintext, ciphertext, len);
-    }, *Cypher);
+    }, Cypher);
 }
 
 Y_FORCE_INLINE void TStreamCypher::SetKeyAndIV(const ui64 blockIdx) {
     std::visit([&](auto&& chacha) {
         chacha.SetKey((ui8*)&Key[0], sizeof(Key));
         chacha.SetIV((ui8*)&Nonce, (ui8*)&blockIdx);
-    }, *Cypher);
+    }, Cypher);
 }
 
 TStreamCypher::TStreamCypher()
@@ -189,15 +189,12 @@ TStreamCypher::TStreamCypher()
 {
 #if ENABLE_ENCRYPTION
     memset(Key, 0, sizeof(Key));
-
-    auto* chacha = new std::variant<ChaChaVec, ChaCha512>;
     
     if (HasAVX512) {
-        chacha->emplace<ChaCha512>(CYPHER_ROUNDS);
+        Cypher.emplace<ChaCha512>(CYPHER_ROUNDS);
     } else {
-        chacha->emplace<ChaChaVec>(CYPHER_ROUNDS);
+        Cypher.emplace<ChaChaVec>(CYPHER_ROUNDS);
     }
-    Cypher.reset(chacha);
 #else
     Y_UNUSED(Leftover);
     Y_UNUSED(Key);
@@ -306,7 +303,7 @@ static void Xor(void* destination, const void* a, const void* b, ui32 size) {
         ++srcB;
     }
 #else
-    if (NX86::HaveAVX512F()) {
+    if (TStreamCypher::HasAVX512) {
         XorAVX512(destination, a, b, size);
     } else {
         ui8 *dst = (ui8*)destination;

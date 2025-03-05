@@ -415,7 +415,7 @@ void TestPutResultWithVDiskResults(TBlobStorageGroupType type, TMap<TVDiskID, NK
     auto putActor = env.CreatePutRequestActor(ev);
     runtime.Register(putActor.release());
 
-    auto reportActor = std::unique_ptr<IActor>(CreateRequestReportingThrottler(1));
+    auto reportActor = std::unique_ptr<IActor>(CreateRequestReportingThrottler(1, 60000, 1));
     runtime.Register(reportActor.release());
 
     for (ui64 idx = 0; idx < expectedVdiskRequests; ++idx) {

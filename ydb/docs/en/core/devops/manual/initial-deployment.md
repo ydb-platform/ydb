@@ -484,7 +484,7 @@ Run additional dynamic nodes on other servers to ensure database scalability and
 
 If authentication mode is enabled in the cluster configuration file, initial account setup must be done before working with the {{ ydb-short-name }} cluster.
 
-The initial installation of the {{ ydb-short-name }} cluster automatically creates a `root` account with a blank password, as well as a standard set of user groups described in the [Access management](../../security/access-management.md) section.
+The initial installation of the {{ ydb-short-name }} cluster automatically creates a `root` account with a blank password, as well as a standard set of user groups described in the [{#T}](../../yql/reference/syntax/alter-group.md#builtin) section.
 
 To perform initial account setup in the created {{ ydb-short-name }} cluster, run the following operations:
 

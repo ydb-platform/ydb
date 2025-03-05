@@ -28,8 +28,11 @@ message TStorageConfig { // contents of storage metadata
     repeated TNodeIdentifier AllNodes = 5; // set of all known nodes
     string ClusterUUID = 6; // cluster GUID as provided in nameservice config
     string SelfAssemblyUUID = 7; // self-assembly UUID generated when config is first created
-    TStorageConfig PrevConfig = 8; // previous version of StorageConfig (if any)
-    optional bytes StorageConfigCompressedYAML = 12; // compressed stored storage config YAML (if stored)
+    optional bytes ConfigComposite = 12; // compressed stored storage config YAML (if stored)
+    NKikimrConfig.TSelfManagementConfig SelfManagementConfig = 13;
+    TStorageConfig PrevConfig = 100; // previous version of StorageConfig (if any)
+    optional bytes CompressedStorageYaml = 14; // compressed storage YAML config (if dual-config is enabled)
+    optional uint64 ExpectedStorageYamlVersion = 15;
 }
 
 message TPDiskMetadataRecord {
@@ -188,11 +191,22 @@ message TEvNodeConfigInvokeOnRoot {
     message TAdvanceGeneration
     {}
 
-    message TFetchStorageConfig
-    {}
+    message TFetchStorageConfig {
+        bool Manual = 1; // when set to true, distconf returns conventional configuration
+        bool MainConfig = 2;
+        bool StorageConfig = 3;
+    }
 
     message TReplaceStorageConfig {
-        string YAML = 1;
+        optional string YAML = 1;
+        optional string StorageYAML = 3;
+        optional bool SwitchDedicatedStorageSection = 4;
+        bool DedicatedStorageSectionConfigMode = 5;
+        bool SkipConsoleValidation = 2;
+    }
+
+    message TBootstrapCluster {
+        string SelfAssemblyUUID = 1;
     }
 
     oneof Request {
@@ -205,6 +219,7 @@ message TEvNodeConfigInvokeOnRoot {
         TAdvanceGeneration AdvanceGeneration = 7;
         TFetchStorageConfig FetchStorageConfig = 8;
         TReplaceStorageConfig ReplaceStorageConfig = 9;
+        TBootstrapCluster BootstrapCluster = 10;
     }
 }
 
@@ -228,7 +243,8 @@ message TEvNodeConfigInvokeOnRootResult {
     }
 
     message TFetchStorageConfig {
-        string YAML = 1;
+        optional string YAML = 1;
+        optional string StorageYAML = 2;
     }
 
     EStatus Status = 1;

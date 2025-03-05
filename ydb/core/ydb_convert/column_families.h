@@ -183,13 +183,15 @@ namespace NKikimr {
                 case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
                     break;
                 case Ydb::FeatureFlag::ENABLED:
-                    *code = Ydb::StatusIds::BAD_REQUEST;
-                    *error = TStringBuilder()
-                        << "Setting keep_in_memory to ENABLED is not supported in column family '"
-                        << familySettings.name() << "'";
-                    return false;
+                    if (!AppData()->FeatureFlags.GetEnablePublicApiKeepInMemory()) {
+                        *code = Ydb::StatusIds::BAD_REQUEST;
+                        *error = "Setting keep_in_memory to ENABLED is not allowed";
+                        return false;
+                    }
+                    family->SetColumnCache(NKikimrSchemeOp::ColumnCacheEver);
+                    break;
                 case Ydb::FeatureFlag::DISABLED:
-                    family->ClearColumnCache();
+                    family->SetColumnCache(NKikimrSchemeOp::ColumnCacheNone);
                     break;
                 default:
                     *code = Ydb::StatusIds::BAD_REQUEST;

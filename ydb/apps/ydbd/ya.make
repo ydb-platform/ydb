@@ -36,6 +36,7 @@ PEERDIR(
     ydb/core/driver_lib/run
     ydb/core/protos
     ydb/core/security
+    ydb/core/tx/schemeshard
     ydb/core/ymq/actor
     ydb/core/ymq/base
     ydb/library/folder_service/mock
@@ -53,6 +54,7 @@ PEERDIR(
     yql/essentials/udfs/common/hyperloglog
     yql/essentials/udfs/common/ip_base
     ydb/library/yql/udfs/common/knn
+    ydb/library/yql/udfs/common/roaring
     yql/essentials/udfs/common/json
     yql/essentials/udfs/common/json2
     yql/essentials/udfs/common/math
@@ -67,6 +69,7 @@ PEERDIR(
     yql/essentials/udfs/common/url_base
     yql/essentials/udfs/common/yson2
     yql/essentials/udfs/logs/dsv
+#    ydb/library/breakpad 
     ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
 )
 

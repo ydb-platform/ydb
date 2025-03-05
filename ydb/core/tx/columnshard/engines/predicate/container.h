@@ -2,9 +2,10 @@
 #include "predicate.h"
 
 #include <ydb/core/formats/arrow/arrow_filter.h>
-#include <ydb/library/formats/arrow/replace_key.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/conclusion/result.h>
+#include <ydb/library/formats/arrow/replace_key.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
@@ -49,6 +50,23 @@ private:
     }
 
 public:
+    bool IsSchemaEqualTo(const std::shared_ptr<arrow::Schema>& schema) const {
+        if (!Object) {
+            return false;
+        }
+        return Object->IsEqualSchema(schema);
+    }
+
+    bool IsEqualPointTo(const TPredicateContainer& item) const {
+        if (!Object != !item.Object) {
+            return false;
+        }
+        if (!Object) {
+            return IsForwardInterval() == item.IsForwardInterval();
+        }
+        return Object->IsEqualTo(*item.Object);
+    }
+
     NArrow::ECompareType GetCompareType() const {
         return CompareType;
     }
@@ -81,7 +99,7 @@ public:
 
     bool IsInclude() const;
 
-    bool CrossRanges(const TPredicateContainer& ext);
+    bool CrossRanges(const TPredicateContainer& ext) const;
 
     static TPredicateContainer BuildNullPredicateFrom() {
         return TPredicateContainer(NArrow::ECompareType::GREATER_OR_EQUAL);

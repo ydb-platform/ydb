@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     ydb/library/actors/core
+    ydb/library/wilson_ids
     library/cpp/containers/disjoint_interval_tree
     library/cpp/string_utils/base64
     ydb/core/util
@@ -12,6 +13,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tx/scheme_cache
+    ydb/core/ydb_convert
     ydb/library/aclib
     ydb/library/persqueue/topic_parser
     ydb/public/api/protos

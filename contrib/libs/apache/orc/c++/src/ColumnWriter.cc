@@ -24,6 +24,7 @@
 #include "RLE.hh"
 #include "Statistics.hh"
 #include "Timezone.hh"
+#include "Utils.hh"
 
 namespace orc {
   StreamsFactory::~StreamsFactory() {
@@ -33,24 +34,25 @@ namespace orc {
   class StreamsFactoryImpl : public StreamsFactory {
    public:
     StreamsFactoryImpl(const WriterOptions& writerOptions, OutputStream* outputStream)
-        : options(writerOptions), outStream(outputStream) {}
+        : options_(writerOptions), outStream_(outputStream) {}
 
     virtual std::unique_ptr<BufferedOutputStream> createStream(
         proto::Stream_Kind kind) const override;
 
    private:
-    const WriterOptions& options;
-    OutputStream* outStream;
+    const WriterOptions& options_;
+    OutputStream* outStream_;
   };
 
   std::unique_ptr<BufferedOutputStream> StreamsFactoryImpl::createStream(proto::Stream_Kind) const {
     // In the future, we can decide compression strategy and modifier
     // based on stream kind. But for now we just use the setting from
     // WriterOption
-    return createCompressor(options.getCompression(), outStream, options.getCompressionStrategy(),
-                            // BufferedOutputStream initial capacity
-                            options.getOutputBufferCapacity(), options.getCompressionBlockSize(),
-                            *options.getMemoryPool(), options.getWriterMetrics());
+    return createCompressor(
+        options_.getCompression(), outStream_, options_.getCompressionStrategy(),
+        // BufferedOutputStream initial capacity
+        options_.getOutputBufferCapacity(), options_.getCompressionBlockSize(),
+        options_.getMemoryBlockSize(), *options_.getMemoryPool(), options_.getWriterMetrics());
   }
 
   std::unique_ptr<StreamsFactory> createStreamsFactory(const WriterOptions& options,
@@ -252,6 +254,10 @@ namespace orc {
     // PASS
   }
 
+  void ColumnWriter::finishStreams() {
+    notNullEncoder->finishEncode();
+  }
+
   class StructColumnWriter : public ColumnWriter {
    public:
     StructColumnWriter(const Type& type, const StreamsFactory& factory,
@@ -281,8 +287,10 @@ namespace orc {
 
     virtual void reset() override;
 
+    virtual void finishStreams() override;
+
    private:
-    std::vector<std::unique_ptr<ColumnWriter>> children;
+    std::vector<std::unique_ptr<ColumnWriter>> children_;
   };
 
   StructColumnWriter::StructColumnWriter(const Type& type, const StreamsFactory& factory,
@@ -290,7 +298,7 @@ namespace orc {
       : ColumnWriter(type, factory, options) {
     for (unsigned int i = 0; i < type.getSubtypeCount(); ++i) {
       const Type& child = *type.getSubtype(i);
-      children.push_back(buildWriter(child, factory, options));
+      children_.push_back(buildWriter(child, factory, options));
     }
 
     if (enableIndex) {
@@ -307,8 +315,8 @@ namespace orc {
 
     ColumnWriter::add(rowBatch, offset, numValues, incomingMask);
     const char* notNull = structBatch->hasNulls ? structBatch->notNull.data() + offset : nullptr;
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->add(*structBatch->fields[i], offset, numValues, notNull);
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->add(*structBatch->fields[i], offset, numValues, notNull);
     }
 
     // update stats
@@ -330,22 +338,22 @@ namespace orc {
 
   void StructColumnWriter::flush(std::vector<proto::Stream>& streams) {
     ColumnWriter::flush(streams);
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->flush(streams);
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->flush(streams);
     }
   }
 
   void StructColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
     ColumnWriter::writeIndex(streams);
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->writeIndex(streams);
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->writeIndex(streams);
     }
   }
 
   uint64_t StructColumnWriter::getEstimatedSize() const {
     uint64_t size = ColumnWriter::getEstimatedSize();
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      size += children[i]->getEstimatedSize();
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      size += children_[i]->getEstimatedSize();
     }
     return size;
   }
@@ -355,62 +363,69 @@ namespace orc {
     encoding.set_kind(proto::ColumnEncoding_Kind_DIRECT);
     encoding.set_dictionary_size(0);
     encodings.push_back(encoding);
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->getColumnEncoding(encodings);
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->getColumnEncoding(encodings);
     }
   }
 
   void StructColumnWriter::getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getStripeStatistics(stats);
 
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->getStripeStatistics(stats);
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->getStripeStatistics(stats);
     }
   }
 
   void StructColumnWriter::mergeStripeStatsIntoFileStats() {
     ColumnWriter::mergeStripeStatsIntoFileStats();
 
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->mergeStripeStatsIntoFileStats();
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->mergeStripeStatsIntoFileStats();
     }
   }
 
   void StructColumnWriter::getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getFileStatistics(stats);
 
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->getFileStatistics(stats);
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->getFileStatistics(stats);
     }
   }
 
   void StructColumnWriter::mergeRowGroupStatsIntoStripeStats() {
     ColumnWriter::mergeRowGroupStatsIntoStripeStats();
 
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->mergeRowGroupStatsIntoStripeStats();
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->mergeRowGroupStatsIntoStripeStats();
     }
   }
 
   void StructColumnWriter::createRowIndexEntry() {
     ColumnWriter::createRowIndexEntry();
 
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->createRowIndexEntry();
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->createRowIndexEntry();
     }
   }
 
   void StructColumnWriter::reset() {
     ColumnWriter::reset();
 
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->reset();
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->reset();
     }
   }
 
   void StructColumnWriter::writeDictionary() {
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->writeDictionary();
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->writeDictionary();
+    }
+  }
+
+  void StructColumnWriter::finishStreams() {
+    ColumnWriter::finishStreams();
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->finishStreams();
     }
   }
 
@@ -431,21 +446,23 @@ namespace orc {
 
     virtual void recordPosition() const override;
 
+    virtual void finishStreams() override;
+
    protected:
     std::unique_ptr<RleEncoder> rleEncoder;
 
    private:
-    RleVersion rleVersion;
+    RleVersion rleVersion_;
   };
 
   template <typename BatchType>
   IntegerColumnWriter<BatchType>::IntegerColumnWriter(const Type& type,
                                                       const StreamsFactory& factory,
                                                       const WriterOptions& options)
-      : ColumnWriter(type, factory, options), rleVersion(options.getRleVersion()) {
+      : ColumnWriter(type, factory, options), rleVersion_(options.getRleVersion()) {
     std::unique_ptr<BufferedOutputStream> dataStream =
         factory.createStream(proto::Stream_Kind_DATA);
-    rleEncoder = createRleEncoder(std::move(dataStream), true, rleVersion, memPool,
+    rleEncoder = createRleEncoder(std::move(dataStream), true, rleVersion_, memPool,
                                   options.getAlignedBitpacking());
 
     if (enableIndex) {
@@ -512,7 +529,7 @@ namespace orc {
   void IntegerColumnWriter<BatchType>::getColumnEncoding(
       std::vector<proto::ColumnEncoding>& encodings) const {
     proto::ColumnEncoding encoding;
-    encoding.set_kind(RleVersionMapper(rleVersion));
+    encoding.set_kind(RleVersionMapper(rleVersion_));
     encoding.set_dictionary_size(0);
     if (enableBloomFilter) {
       encoding.set_bloom_encoding(BloomFilterVersion::UTF8);
@@ -524,6 +541,12 @@ namespace orc {
   void IntegerColumnWriter<BatchType>::recordPosition() const {
     ColumnWriter::recordPosition();
     rleEncoder->recordPosition(rowIndexPosition.get());
+  }
+
+  template <typename BatchType>
+  void IntegerColumnWriter<BatchType>::finishStreams() {
+    ColumnWriter::finishStreams();
+    rleEncoder->finishEncode();
   }
 
   template <typename BatchType>
@@ -542,8 +565,10 @@ namespace orc {
 
     virtual void recordPosition() const override;
 
+    virtual void finishStreams() override;
+
    private:
-    std::unique_ptr<ByteRleEncoder> byteRleEncoder;
+    std::unique_ptr<ByteRleEncoder> byteRleEncoder_;
   };
 
   template <typename BatchType>
@@ -552,7 +577,7 @@ namespace orc {
       : ColumnWriter(type, factory, options) {
     std::unique_ptr<BufferedOutputStream> dataStream =
         factory.createStream(proto::Stream_Kind_DATA);
-    byteRleEncoder = createByteRleEncoder(std::move(dataStream));
+    byteRleEncoder_ = createByteRleEncoder(std::move(dataStream));
 
     if (enableIndex) {
       recordPosition();
@@ -581,7 +606,7 @@ namespace orc {
     for (uint64_t i = 0; i < numValues; ++i) {
       byteData[i] = static_cast<char>(data[i]);
     }
-    byteRleEncoder->add(byteData, numValues, notNull);
+    byteRleEncoder_->add(byteData, numValues, notNull);
 
     uint64_t count = 0;
     for (uint64_t i = 0; i < numValues; ++i) {
@@ -590,7 +615,7 @@ namespace orc {
         if (enableBloomFilter) {
           bloomFilter->addLong(data[i]);
         }
-        intStats->update(static_cast<int64_t>(byteData[i]), 1);
+        intStats->update(static_cast<int64_t>(static_cast<signed char>(byteData[i])), 1);
       }
     }
     intStats->increase(count);
@@ -606,14 +631,14 @@ namespace orc {
     proto::Stream stream;
     stream.set_kind(proto::Stream_Kind_DATA);
     stream.set_column(static_cast<uint32_t>(columnId));
-    stream.set_length(byteRleEncoder->flush());
+    stream.set_length(byteRleEncoder_->flush());
     streams.push_back(stream);
   }
 
   template <typename BatchType>
   uint64_t ByteColumnWriter<BatchType>::getEstimatedSize() const {
     uint64_t size = ColumnWriter::getEstimatedSize();
-    size += byteRleEncoder->getBufferSize();
+    size += byteRleEncoder_->getBufferSize();
     return size;
   }
 
@@ -632,7 +657,13 @@ namespace orc {
   template <typename BatchType>
   void ByteColumnWriter<BatchType>::recordPosition() const {
     ColumnWriter::recordPosition();
-    byteRleEncoder->recordPosition(rowIndexPosition.get());
+    byteRleEncoder_->recordPosition(rowIndexPosition.get());
+  }
+
+  template <typename BatchType>
+  void ByteColumnWriter<BatchType>::finishStreams() {
+    ColumnWriter::finishStreams();
+    byteRleEncoder_->finishEncode();
   }
 
   template <typename BatchType>
@@ -652,8 +683,10 @@ namespace orc {
 
     virtual void recordPosition() const override;
 
+    virtual void finishStreams() override;
+
    private:
-    std::unique_ptr<ByteRleEncoder> rleEncoder;
+    std::unique_ptr<ByteRleEncoder> rleEncoder_;
   };
 
   template <typename BatchType>
@@ -663,7 +696,7 @@ namespace orc {
       : ColumnWriter(type, factory, options) {
     std::unique_ptr<BufferedOutputStream> dataStream =
         factory.createStream(proto::Stream_Kind_DATA);
-    rleEncoder = createBooleanRleEncoder(std::move(dataStream));
+    rleEncoder_ = createBooleanRleEncoder(std::move(dataStream));
 
     if (enableIndex) {
       recordPosition();
@@ -694,7 +727,7 @@ namespace orc {
     for (uint64_t i = 0; i < numValues; ++i) {
       byteData[i] = static_cast<char>(data[i]);
     }
-    rleEncoder->add(byteData, numValues, notNull);
+    rleEncoder_->add(byteData, numValues, notNull);
 
     uint64_t count = 0;
     for (uint64_t i = 0; i < numValues; ++i) {
@@ -719,14 +752,14 @@ namespace orc {
     proto::Stream stream;
     stream.set_kind(proto::Stream_Kind_DATA);
     stream.set_column(static_cast<uint32_t>(columnId));
-    stream.set_length(rleEncoder->flush());
+    stream.set_length(rleEncoder_->flush());
     streams.push_back(stream);
   }
 
   template <typename BatchType>
   uint64_t BooleanColumnWriter<BatchType>::getEstimatedSize() const {
     uint64_t size = ColumnWriter::getEstimatedSize();
-    size += rleEncoder->getBufferSize();
+    size += rleEncoder_->getBufferSize();
     return size;
   }
 
@@ -745,7 +778,13 @@ namespace orc {
   template <typename BatchType>
   void BooleanColumnWriter<BatchType>::recordPosition() const {
     ColumnWriter::recordPosition();
-    rleEncoder->recordPosition(rowIndexPosition.get());
+    rleEncoder_->recordPosition(rowIndexPosition.get());
+  }
+
+  template <typename BatchType>
+  void BooleanColumnWriter<BatchType>::finishStreams() {
+    ColumnWriter::finishStreams();
+    rleEncoder_->finishEncode();
   }
 
   template <typename ValueType, typename BatchType>
@@ -765,10 +804,12 @@ namespace orc {
 
     virtual void recordPosition() const override;
 
+    virtual void finishStreams() override;
+
    private:
-    bool isFloat;
-    std::unique_ptr<AppendOnlyBufferedStream> dataStream;
-    DataBuffer<char> buffer;
+    bool isFloat_;
+    std::unique_ptr<AppendOnlyBufferedStream> dataStream_;
+    DataBuffer<char> buffer_;
   };
 
   template <typename ValueType, typename BatchType>
@@ -777,10 +818,10 @@ namespace orc {
                                                                    const WriterOptions& options,
                                                                    bool isFloatType)
       : ColumnWriter(type, factory, options),
-        isFloat(isFloatType),
-        buffer(*options.getMemoryPool()) {
-    dataStream.reset(new AppendOnlyBufferedStream(factory.createStream(proto::Stream_Kind_DATA)));
-    buffer.resize(isFloat ? 4 : 8);
+        isFloat_(isFloatType),
+        buffer_(*options.getMemoryPool()) {
+    dataStream_.reset(new AppendOnlyBufferedStream(factory.createStream(proto::Stream_Kind_DATA)));
+    buffer_.resize(isFloat_ ? 4 : 8);
 
     if (enableIndex) {
       recordPosition();
@@ -816,17 +857,17 @@ namespace orc {
     const ValueType* doubleData = dblBatch->data.data() + offset;
     const char* notNull = dblBatch->hasNulls ? dblBatch->notNull.data() + offset : nullptr;
 
-    size_t bytes = isFloat ? 4 : 8;
-    char* data = buffer.data();
+    size_t bytes = isFloat_ ? 4 : 8;
+    char* data = buffer_.data();
     uint64_t count = 0;
     for (uint64_t i = 0; i < numValues; ++i) {
       if (!notNull || notNull[i]) {
-        if (isFloat) {
+        if (isFloat_) {
           encodeFloatNum<float, int32_t>(static_cast<float>(doubleData[i]), data);
         } else {
           encodeFloatNum<double, int64_t>(static_cast<double>(doubleData[i]), data);
         }
-        dataStream->write(data, bytes);
+        dataStream_->write(data, bytes);
         ++count;
         if (enableBloomFilter) {
           bloomFilter->addDouble(static_cast<double>(doubleData[i]));
@@ -847,14 +888,14 @@ namespace orc {
     proto::Stream stream;
     stream.set_kind(proto::Stream_Kind_DATA);
     stream.set_column(static_cast<uint32_t>(columnId));
-    stream.set_length(dataStream->flush());
+    stream.set_length(dataStream_->flush());
     streams.push_back(stream);
   }
 
   template <typename ValueType, typename BatchType>
   uint64_t FloatingColumnWriter<ValueType, BatchType>::getEstimatedSize() const {
     uint64_t size = ColumnWriter::getEstimatedSize();
-    size += dataStream->getSize();
+    size += dataStream_->getSize();
     return size;
   }
 
@@ -873,7 +914,13 @@ namespace orc {
   template <typename ValueType, typename BatchType>
   void FloatingColumnWriter<ValueType, BatchType>::recordPosition() const {
     ColumnWriter::recordPosition();
-    dataStream->recordPosition(rowIndexPosition.get());
+    dataStream_->recordPosition(rowIndexPosition.get());
+  }
+
+  template <typename ValueType, typename BatchType>
+  void FloatingColumnWriter<ValueType, BatchType>::finishStreams() {
+    ColumnWriter::finishStreams();
+    dataStream_->finishStream();
   }
 
   /**
@@ -887,10 +934,17 @@ namespace orc {
       size_t length;
     };
 
-    SortedStringDictionary() : totalLength(0) {}
+    struct DictEntryWithIndex {
+      DictEntryWithIndex(const char* str, size_t len, size_t index)
+          : entry(str, len), index(index) {}
+      DictEntry entry;
+      size_t index;
+    };
+
+    SortedStringDictionary() : totalLength_(0) {}
 
     // insert a new string into dictionary, return its insertion order
-    size_t insert(const char* data, size_t len);
+    size_t insert(const char* str, size_t len);
 
     // write dictionary data & length to output buffer
     void flush(AppendOnlyBufferedStream* dataStream, RleEncoder* lengthEncoder) const;
@@ -911,7 +965,9 @@ namespace orc {
 
    private:
     struct LessThan {
-      bool operator()(const DictEntry& left, const DictEntry& right) const {
+      bool operator()(const DictEntryWithIndex& l, const DictEntryWithIndex& r) {
+        const auto& left = l.entry;
+        const auto& right = r.entry;
         int ret = memcmp(left.data, right.data, std::min(left.length, right.length));
         if (ret != 0) {
           return ret < 0;
@@ -920,29 +976,25 @@ namespace orc {
       }
     };
 
-    std::map<DictEntry, size_t, LessThan> dict;
-    std::vector<std::vector<char>> data;
-    uint64_t totalLength;
+    mutable std::vector<DictEntryWithIndex> flatDict_;
+    std::unordered_map<std::string, size_t> keyToIndex_;
+    uint64_t totalLength_;
 
     // use friend class here to avoid being bothered by const function calls
     friend class StringColumnWriter;
     friend class CharColumnWriter;
     friend class VarCharColumnWriter;
     // store indexes of insertion order in the dictionary for not-null rows
-    std::vector<int64_t> idxInDictBuffer;
+    std::vector<int64_t> idxInDictBuffer_;
   };
 
   // insert a new string into dictionary, return its insertion order
   size_t SortedStringDictionary::insert(const char* str, size_t len) {
-    auto ret = dict.insert({DictEntry(str, len), dict.size()});
+    size_t index = flatDict_.size();
+    auto ret = keyToIndex_.emplace(std::string(str, len), index);
     if (ret.second) {
-      // make a copy to internal storage
-      data.push_back(std::vector<char>(len));
-      memcpy(data.back().data(), str, len);
-      // update dictionary entry to link pointer to internal storage
-      DictEntry* entry = const_cast<DictEntry*>(&(ret.first->first));
-      entry->data = data.back().data();
-      totalLength += len;
+      flatDict_.emplace_back(ret.first->first.data(), ret.first->first.size(), index);
+      totalLength_ += len;
     }
     return ret.first->second;
   }
@@ -950,9 +1002,12 @@ namespace orc {
   // write dictionary data & length to output buffer
   void SortedStringDictionary::flush(AppendOnlyBufferedStream* dataStream,
                                      RleEncoder* lengthEncoder) const {
-    for (auto it = dict.cbegin(); it != dict.cend(); ++it) {
-      dataStream->write(it->first.data, it->first.length);
-      lengthEncoder->write(static_cast<int64_t>(it->first.length));
+    std::sort(flatDict_.begin(), flatDict_.end(), LessThan());
+
+    for (const auto& entryWithIndex : flatDict_) {
+      const auto& entry = entryWithIndex.entry;
+      dataStream->write(entry.data, entry.length);
+      lengthEncoder->write(static_cast<int64_t>(entry.length));
     }
   }
 
@@ -968,10 +1023,9 @@ namespace orc {
    */
   void SortedStringDictionary::reorder(std::vector<int64_t>& idxBuffer) const {
     // iterate the dictionary to get mapping from insertion order to value order
-    std::vector<size_t> mapping(dict.size());
-    size_t dictIdx = 0;
-    for (auto it = dict.cbegin(); it != dict.cend(); ++it) {
-      mapping[it->second] = dictIdx++;
+    std::vector<size_t> mapping(flatDict_.size());
+    for (size_t i = 0; i < flatDict_.size(); ++i) {
+      mapping[flatDict_[i].index] = i;
     }
 
     // do the transformation
@@ -983,26 +1037,31 @@ namespace orc {
   // get dict entries in insertion order
   void SortedStringDictionary::getEntriesInInsertionOrder(
       std::vector<const DictEntry*>& entries) const {
-    entries.resize(dict.size());
-    for (auto it = dict.cbegin(); it != dict.cend(); ++it) {
-      entries[it->second] = &(it->first);
+    std::sort(flatDict_.begin(), flatDict_.end(),
+              [](const DictEntryWithIndex& left, const DictEntryWithIndex& right) {
+                return left.index < right.index;
+              });
+
+    entries.resize(flatDict_.size());
+    for (size_t i = 0; i < flatDict_.size(); ++i) {
+      entries[i] = &(flatDict_[i].entry);
     }
   }
 
   // return count of entries
   size_t SortedStringDictionary::size() const {
-    return dict.size();
+    return flatDict_.size();
   }
 
   // return total length of strings in the dictioanry
   uint64_t SortedStringDictionary::length() const {
-    return totalLength;
+    return totalLength_;
   }
 
   void SortedStringDictionary::clear() {
-    totalLength = 0;
-    data.clear();
-    dict.clear();
+    totalLength_ = 0;
+    keyToIndex_.clear();
+    flatDict_.clear();
   }
 
   class StringColumnWriter : public ColumnWriter {
@@ -1026,6 +1085,8 @@ namespace orc {
     virtual void writeDictionary() override;
 
     virtual void reset() override;
+
+    virtual void finishStreams() override;
 
    private:
     /**
@@ -1123,7 +1184,7 @@ namespace orc {
         const size_t len = static_cast<size_t>(length[i]);
         if (useDictionary) {
           size_t index = dictionary.insert(data[i], len);
-          dictionary.idxInDictBuffer.push_back(static_cast<int64_t>(index));
+          dictionary.idxInDictBuffer_.push_back(static_cast<int64_t>(index));
         } else {
           directDataStream->write(data[i], len);
         }
@@ -1184,7 +1245,7 @@ namespace orc {
     } else {
       size += dictionary.length();
       size += dictionary.size() * sizeof(int32_t);
-      size += dictionary.idxInDictBuffer.size() * sizeof(int32_t);
+      size += dictionary.idxInDictBuffer_.size() * sizeof(int32_t);
       if (useCompression) {
         size /= 3;  // estimated ratio is 3:1
       }
@@ -1215,15 +1276,23 @@ namespace orc {
       directLengthEncoder->recordPosition(rowIndexPosition.get());
     } else {
       if (enableIndex) {
-        startOfRowGroups.push_back(dictionary.idxInDictBuffer.size());
+        startOfRowGroups.push_back(dictionary.idxInDictBuffer_.size());
       }
+    }
+  }
+
+  void StringColumnWriter::finishStreams() {
+    ColumnWriter::finishStreams();
+    if (!useDictionary) {
+      directDataStream->finishStream();
+      directLengthEncoder->finishEncode();
     }
   }
 
   bool StringColumnWriter::checkDictionaryKeyRatio() {
     if (!doneDictionaryCheck) {
       useDictionary = dictionary.size() <=
-                      static_cast<size_t>(static_cast<double>(dictionary.idxInDictBuffer.size()) *
+                      static_cast<size_t>(static_cast<double>(dictionary.idxInDictBuffer_.size()) *
                                           dictSizeThreshold);
       doneDictionaryCheck = true;
     }
@@ -1244,7 +1313,7 @@ namespace orc {
     ColumnWriter::reset();
 
     dictionary.clear();
-    dictionary.idxInDictBuffer.resize(0);
+    dictionary.idxInDictBuffer_.resize(0);
     startOfRowGroups.clear();
     startOfRowGroups.push_back(0);
   }
@@ -1277,7 +1346,7 @@ namespace orc {
     dictStream.reset(nullptr);
 
     dictionary.clear();
-    dictionary.idxInDictBuffer.clear();
+    dictionary.idxInDictBuffer_.clear();
     startOfRowGroups.clear();
   }
 
@@ -1295,10 +1364,10 @@ namespace orc {
       dictionary.flush(dictStream.get(), dictLengthEncoder.get());
 
       // convert index from insertion order to dictionary order
-      dictionary.reorder(dictionary.idxInDictBuffer);
+      dictionary.reorder(dictionary.idxInDictBuffer_);
 
       // write data sequences
-      int64_t* data = dictionary.idxInDictBuffer.data();
+      int64_t* data = dictionary.idxInDictBuffer_.data();
       if (enableIndex) {
         size_t prevOffset = 0;
         for (size_t i = 0; i < startOfRowGroups.size(); ++i) {
@@ -1319,10 +1388,10 @@ namespace orc {
           prevOffset = offset;
         }
 
-        dictDataEncoder->add(data + prevOffset, dictionary.idxInDictBuffer.size() - prevOffset,
+        dictDataEncoder->add(data + prevOffset, dictionary.idxInDictBuffer_.size() - prevOffset,
                              nullptr);
       } else {
-        dictDataEncoder->add(data, dictionary.idxInDictBuffer.size(), nullptr);
+        dictDataEncoder->add(data, dictionary.idxInDictBuffer_.size(), nullptr);
       }
     }
   }
@@ -1345,9 +1414,9 @@ namespace orc {
 
     // store each length of the data into a vector
     const SortedStringDictionary::DictEntry* dictEntry = nullptr;
-    for (uint64_t i = 0; i != dictionary.idxInDictBuffer.size(); ++i) {
+    for (uint64_t i = 0; i != dictionary.idxInDictBuffer_.size(); ++i) {
       // write one row data in direct encoding
-      dictEntry = entries[static_cast<size_t>(dictionary.idxInDictBuffer[i])];
+      dictEntry = entries[static_cast<size_t>(dictionary.idxInDictBuffer_[i])];
       directDataStream->write(dictEntry->data, dictEntry->length);
       directLengthEncoder->write(static_cast<int64_t>(dictEntry->length));
     }
@@ -1355,91 +1424,22 @@ namespace orc {
     deleteDictStreams();
   }
 
-  struct Utf8Utils {
-    /**
-     * Counts how many utf-8 chars of the input data
-     */
-    static uint64_t charLength(const char* data, uint64_t length) {
-      uint64_t chars = 0;
-      for (uint64_t i = 0; i < length; i++) {
-        if (isUtfStartByte(data[i])) {
-          chars++;
-        }
-      }
-      return chars;
-    }
-
-    /**
-     * Return the number of bytes required to read at most maxCharLength
-     * characters in full from a utf-8 encoded byte array provided
-     * by data. This does not validate utf-8 data, but
-     * operates correctly on already valid utf-8 data.
-     *
-     * @param maxCharLength number of characters required
-     * @param data the bytes of UTF-8
-     * @param length the length of data to truncate
-     */
-    static uint64_t truncateBytesTo(uint64_t maxCharLength, const char* data, uint64_t length) {
-      uint64_t chars = 0;
-      if (length <= maxCharLength) {
-        return length;
-      }
-      for (uint64_t i = 0; i < length; i++) {
-        if (isUtfStartByte(data[i])) {
-          chars++;
-        }
-        if (chars > maxCharLength) {
-          return i;
-        }
-      }
-      // everything fits
-      return length;
-    }
-
-    /**
-     * Checks if b is the first byte of a UTF-8 character.
-     */
-    inline static bool isUtfStartByte(char b) {
-      return (b & 0xC0) != 0x80;
-    }
-
-    /**
-     * Find the start of the last character that ends in the current string.
-     * @param text the bytes of the utf-8
-     * @param from the first byte location
-     * @param until the last byte location
-     * @return the index of the last character
-     */
-    static uint64_t findLastCharacter(const char* text, uint64_t from, uint64_t until) {
-      uint64_t posn = until;
-      /* we don't expect characters more than 5 bytes */
-      while (posn >= from) {
-        if (isUtfStartByte(text[posn])) {
-          return posn;
-        }
-        posn -= 1;
-      }
-      /* beginning of a valid char not found */
-      throw std::logic_error("Could not truncate string, beginning of a valid char not found");
-    }
-  };
-
   class CharColumnWriter : public StringColumnWriter {
    public:
     CharColumnWriter(const Type& type, const StreamsFactory& factory, const WriterOptions& options)
         : StringColumnWriter(type, factory, options),
-          maxLength(type.getMaximumLength()),
-          padBuffer(*options.getMemoryPool()) {
+          maxLength_(type.getMaximumLength()),
+          padBuffer_(*options.getMemoryPool()) {
       // utf-8 is currently 4 bytes long, but it could be up to 6
-      padBuffer.resize(maxLength * 6);
+      padBuffer_.resize(maxLength_ * 6);
     }
 
     virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
                      const char* incomingMask) override;
 
    private:
-    uint64_t maxLength;
-    DataBuffer<char> padBuffer;
+    uint64_t maxLength_;
+    DataBuffer<char> padBuffer_;
   };
 
   void CharColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
@@ -1467,22 +1467,22 @@ namespace orc {
         const char* charData = nullptr;
         uint64_t originLength = static_cast<uint64_t>(length[i]);
         uint64_t charLength = Utf8Utils::charLength(data[i], originLength);
-        if (charLength >= maxLength) {
+        if (charLength >= maxLength_) {
           charData = data[i];
           length[i] =
-              static_cast<int64_t>(Utf8Utils::truncateBytesTo(maxLength, data[i], originLength));
+              static_cast<int64_t>(Utf8Utils::truncateBytesTo(maxLength_, data[i], originLength));
         } else {
-          charData = padBuffer.data();
+          charData = padBuffer_.data();
           // the padding is exactly 1 byte per char
-          length[i] = length[i] + static_cast<int64_t>(maxLength - charLength);
-          memcpy(padBuffer.data(), data[i], originLength);
-          memset(padBuffer.data() + originLength, ' ',
+          length[i] = length[i] + static_cast<int64_t>(maxLength_ - charLength);
+          memcpy(padBuffer_.data(), data[i], originLength);
+          memset(padBuffer_.data() + originLength, ' ',
                  static_cast<size_t>(length[i]) - originLength);
         }
 
         if (useDictionary) {
           size_t index = dictionary.insert(charData, static_cast<size_t>(length[i]));
-          dictionary.idxInDictBuffer.push_back(static_cast<int64_t>(index));
+          dictionary.idxInDictBuffer_.push_back(static_cast<int64_t>(index));
         } else {
           directDataStream->write(charData, static_cast<size_t>(length[i]));
         }
@@ -1509,7 +1509,7 @@ namespace orc {
    public:
     VarCharColumnWriter(const Type& type, const StreamsFactory& factory,
                         const WriterOptions& options)
-        : StringColumnWriter(type, factory, options), maxLength(type.getMaximumLength()) {
+        : StringColumnWriter(type, factory, options), maxLength_(type.getMaximumLength()) {
       // PASS
     }
 
@@ -1517,7 +1517,7 @@ namespace orc {
                      const char* incomingMask) override;
 
    private:
-    uint64_t maxLength;
+    uint64_t maxLength_;
   };
 
   void VarCharColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
@@ -1543,12 +1543,12 @@ namespace orc {
     for (uint64_t i = 0; i < numValues; ++i) {
       if (!notNull || notNull[i]) {
         uint64_t itemLength =
-            Utf8Utils::truncateBytesTo(maxLength, data[i], static_cast<uint64_t>(length[i]));
+            Utf8Utils::truncateBytesTo(maxLength_, data[i], static_cast<uint64_t>(length[i]));
         length[i] = static_cast<int64_t>(itemLength);
 
         if (useDictionary) {
           size_t index = dictionary.insert(data[i], static_cast<size_t>(length[i]));
-          dictionary.idxInDictBuffer.push_back(static_cast<int64_t>(index));
+          dictionary.idxInDictBuffer_.push_back(static_cast<int64_t>(index));
         } else {
           directDataStream->write(data[i], static_cast<size_t>(length[i]));
         }
@@ -1638,28 +1638,30 @@ namespace orc {
 
     virtual void recordPosition() const override;
 
+    virtual void finishStreams() override;
+
    protected:
     std::unique_ptr<RleEncoder> secRleEncoder, nanoRleEncoder;
 
    private:
-    RleVersion rleVersion;
-    const Timezone* timezone;
-    const bool isUTC;
+    RleVersion rleVersion_;
+    const Timezone* timezone_;
+    const bool isUTC_;
   };
 
   TimestampColumnWriter::TimestampColumnWriter(const Type& type, const StreamsFactory& factory,
                                                const WriterOptions& options, bool isInstantType)
       : ColumnWriter(type, factory, options),
-        rleVersion(options.getRleVersion()),
-        timezone(isInstantType ? &getTimezoneByName("GMT") : &options.getTimezone()),
-        isUTC(isInstantType || options.getTimezoneName() == "GMT") {
+        rleVersion_(options.getRleVersion()),
+        timezone_(isInstantType ? &getTimezoneByName("GMT") : &options.getTimezone()),
+        isUTC_(isInstantType || options.getTimezoneName() == "GMT") {
     std::unique_ptr<BufferedOutputStream> dataStream =
         factory.createStream(proto::Stream_Kind_DATA);
     std::unique_ptr<BufferedOutputStream> secondaryStream =
         factory.createStream(proto::Stream_Kind_SECONDARY);
-    secRleEncoder = createRleEncoder(std::move(dataStream), true, rleVersion, memPool,
+    secRleEncoder = createRleEncoder(std::move(dataStream), true, rleVersion_, memPool,
                                      options.getAlignedBitpacking());
-    nanoRleEncoder = createRleEncoder(std::move(secondaryStream), false, rleVersion, memPool,
+    nanoRleEncoder = createRleEncoder(std::move(secondaryStream), false, rleVersion_, memPool,
                                       options.getAlignedBitpacking());
 
     if (enableIndex) {
@@ -1712,8 +1714,8 @@ namespace orc {
       if (notNull == nullptr || notNull[i]) {
         // TimestampVectorBatch already stores data in UTC
         int64_t millsUTC = secs[i] * 1000 + nanos[i] / 1000000;
-        if (!isUTC) {
-          millsUTC = timezone->convertToUTC(secs[i]) * 1000 + nanos[i] / 1000000;
+        if (!isUTC_) {
+          millsUTC = timezone_->convertToUTC(secs[i]) * 1000 + nanos[i] / 1000000;
         }
         ++count;
         if (enableBloomFilter) {
@@ -1725,7 +1727,7 @@ namespace orc {
           secs[i] += 1;
         }
 
-        secs[i] -= timezone->getEpoch();
+        secs[i] -= timezone_->getEpoch();
         nanos[i] = formatNano(nanos[i]);
       }
     }
@@ -1764,7 +1766,7 @@ namespace orc {
   void TimestampColumnWriter::getColumnEncoding(
       std::vector<proto::ColumnEncoding>& encodings) const {
     proto::ColumnEncoding encoding;
-    encoding.set_kind(RleVersionMapper(rleVersion));
+    encoding.set_kind(RleVersionMapper(rleVersion_));
     encoding.set_dictionary_size(0);
     if (enableBloomFilter) {
       encoding.set_bloom_encoding(BloomFilterVersion::UTF8);
@@ -1776,6 +1778,12 @@ namespace orc {
     ColumnWriter::recordPosition();
     secRleEncoder->recordPosition(rowIndexPosition.get());
     nanoRleEncoder->recordPosition(rowIndexPosition.get());
+  }
+
+  void TimestampColumnWriter::finishStreams() {
+    ColumnWriter::finishStreams();
+    secRleEncoder->finishEncode();
+    nanoRleEncoder->finishEncode();
   }
 
   class DateColumnWriter : public IntegerColumnWriter<LongVectorBatch> {
@@ -1847,6 +1855,8 @@ namespace orc {
 
     virtual void recordPosition() const override;
 
+    virtual void finishStreams() override;
+
    protected:
     RleVersion rleVersion;
     uint64_t precision;
@@ -1855,7 +1865,7 @@ namespace orc {
     std::unique_ptr<RleEncoder> scaleEncoder;
 
    private:
-    char buffer[10];
+    char buffer_[10];
   };
 
   Decimal64ColumnWriter::Decimal64ColumnWriter(const Type& type, const StreamsFactory& factory,
@@ -1897,7 +1907,7 @@ namespace orc {
     for (uint64_t i = 0; i < numValues; ++i) {
       if (!notNull || notNull[i]) {
         int64_t val = zigZag(values[i]);
-        char* data = buffer;
+        char* data = buffer_;
         while (true) {
           if ((val & ~0x7f) == 0) {
             *(data++) = (static_cast<char>(val));
@@ -1908,7 +1918,7 @@ namespace orc {
             val = (static_cast<uint64_t>(val) >> 7);
           }
         }
-        valueStream->write(buffer, static_cast<size_t>(data - buffer));
+        valueStream->write(buffer_, static_cast<size_t>(data - buffer_));
         ++count;
         if (enableBloomFilter) {
           std::string decimal = Decimal(values[i], static_cast<int32_t>(scale)).toString(true);
@@ -1965,6 +1975,12 @@ namespace orc {
     scaleEncoder->recordPosition(rowIndexPosition.get());
   }
 
+  void Decimal64ColumnWriter::finishStreams() {
+    ColumnWriter::finishStreams();
+    valueStream->finishStream();
+    scaleEncoder->finishEncode();
+  }
+
   class Decimal64ColumnWriterV2 : public ColumnWriter {
    public:
     Decimal64ColumnWriterV2(const Type& type, const StreamsFactory& factory,
@@ -1980,6 +1996,8 @@ namespace orc {
     virtual void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
 
     virtual void recordPosition() const override;
+
+    virtual void finishStreams() override;
 
    protected:
     uint64_t precision;
@@ -2071,6 +2089,11 @@ namespace orc {
     valueEncoder->recordPosition(rowIndexPosition.get());
   }
 
+  void Decimal64ColumnWriterV2::finishStreams() {
+    ColumnWriter::finishStreams();
+    valueEncoder->finishEncode();
+  }
+
   class Decimal128ColumnWriter : public Decimal64ColumnWriter {
    public:
     Decimal128ColumnWriter(const Type& type, const StreamsFactory& factory,
@@ -2080,7 +2103,7 @@ namespace orc {
                      const char* incomingMask) override;
 
    private:
-    char buffer[20];
+    char buffer_[20];
   };
 
   Decimal128ColumnWriter::Decimal128ColumnWriter(const Type& type, const StreamsFactory& factory,
@@ -2126,7 +2149,7 @@ namespace orc {
     for (uint64_t i = 0; i < numValues; ++i) {
       if (!notNull || notNull[i]) {
         Int128 val = zigZagInt128(values[i]);
-        char* data = buffer;
+        char* data = buffer_;
         while (true) {
           if ((val & ~0x7f) == 0) {
             *(data++) = (static_cast<char>(val.getLowBits()));
@@ -2136,7 +2159,7 @@ namespace orc {
             val >>= 7;
           }
         }
-        valueStream->write(buffer, static_cast<size_t>(data - buffer));
+        valueStream->write(buffer_, static_cast<size_t>(data - buffer_));
 
         ++count;
         if (enableBloomFilter) {
@@ -2186,22 +2209,24 @@ namespace orc {
 
     virtual void reset() override;
 
+    virtual void finishStreams() override;
+
    private:
-    std::unique_ptr<RleEncoder> lengthEncoder;
-    RleVersion rleVersion;
-    std::unique_ptr<ColumnWriter> child;
+    std::unique_ptr<RleEncoder> lengthEncoder_;
+    RleVersion rleVersion_;
+    std::unique_ptr<ColumnWriter> child_;
   };
 
   ListColumnWriter::ListColumnWriter(const Type& type, const StreamsFactory& factory,
                                      const WriterOptions& options)
-      : ColumnWriter(type, factory, options), rleVersion(options.getRleVersion()) {
+      : ColumnWriter(type, factory, options), rleVersion_(options.getRleVersion()) {
     std::unique_ptr<BufferedOutputStream> lengthStream =
         factory.createStream(proto::Stream_Kind_LENGTH);
-    lengthEncoder = createRleEncoder(std::move(lengthStream), false, rleVersion, memPool,
-                                     options.getAlignedBitpacking());
+    lengthEncoder_ = createRleEncoder(std::move(lengthStream), false, rleVersion_, memPool,
+                                      options.getAlignedBitpacking());
 
     if (type.getSubtypeCount() == 1) {
-      child = buildWriter(*type.getSubtype(0), factory, options);
+      child_ = buildWriter(*type.getSubtype(0), factory, options);
     }
 
     if (enableIndex) {
@@ -2239,10 +2264,10 @@ namespace orc {
     }
 
     // unnecessary to deal with null as elements are packed together
-    if (child.get()) {
-      child->add(*listBatch->elements, elemOffset, totalNumValues, nullptr);
+    if (child_.get()) {
+      child_->add(*listBatch->elements, elemOffset, totalNumValues, nullptr);
     }
-    lengthEncoder->add(offsets, numValues, notNull);
+    lengthEncoder_->add(offsets, numValues, notNull);
 
     if (enableIndex) {
       if (!notNull) {
@@ -2272,93 +2297,101 @@ namespace orc {
     proto::Stream stream;
     stream.set_kind(proto::Stream_Kind_LENGTH);
     stream.set_column(static_cast<uint32_t>(columnId));
-    stream.set_length(lengthEncoder->flush());
+    stream.set_length(lengthEncoder_->flush());
     streams.push_back(stream);
 
-    if (child.get()) {
-      child->flush(streams);
+    if (child_.get()) {
+      child_->flush(streams);
     }
   }
 
   void ListColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
     ColumnWriter::writeIndex(streams);
-    if (child.get()) {
-      child->writeIndex(streams);
+    if (child_.get()) {
+      child_->writeIndex(streams);
     }
   }
 
   uint64_t ListColumnWriter::getEstimatedSize() const {
     uint64_t size = ColumnWriter::getEstimatedSize();
-    if (child.get()) {
-      size += lengthEncoder->getBufferSize();
-      size += child->getEstimatedSize();
+    if (child_.get()) {
+      size += lengthEncoder_->getBufferSize();
+      size += child_->getEstimatedSize();
     }
     return size;
   }
 
   void ListColumnWriter::getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const {
     proto::ColumnEncoding encoding;
-    encoding.set_kind(RleVersionMapper(rleVersion));
+    encoding.set_kind(RleVersionMapper(rleVersion_));
     encoding.set_dictionary_size(0);
     if (enableBloomFilter) {
       encoding.set_bloom_encoding(BloomFilterVersion::UTF8);
     }
     encodings.push_back(encoding);
-    if (child.get()) {
-      child->getColumnEncoding(encodings);
+    if (child_.get()) {
+      child_->getColumnEncoding(encodings);
     }
   }
 
   void ListColumnWriter::getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getStripeStatistics(stats);
-    if (child.get()) {
-      child->getStripeStatistics(stats);
+    if (child_.get()) {
+      child_->getStripeStatistics(stats);
     }
   }
 
   void ListColumnWriter::mergeStripeStatsIntoFileStats() {
     ColumnWriter::mergeStripeStatsIntoFileStats();
-    if (child.get()) {
-      child->mergeStripeStatsIntoFileStats();
+    if (child_.get()) {
+      child_->mergeStripeStatsIntoFileStats();
     }
   }
 
   void ListColumnWriter::getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getFileStatistics(stats);
-    if (child.get()) {
-      child->getFileStatistics(stats);
+    if (child_.get()) {
+      child_->getFileStatistics(stats);
     }
   }
 
   void ListColumnWriter::mergeRowGroupStatsIntoStripeStats() {
     ColumnWriter::mergeRowGroupStatsIntoStripeStats();
-    if (child.get()) {
-      child->mergeRowGroupStatsIntoStripeStats();
+    if (child_.get()) {
+      child_->mergeRowGroupStatsIntoStripeStats();
     }
   }
 
   void ListColumnWriter::createRowIndexEntry() {
     ColumnWriter::createRowIndexEntry();
-    if (child.get()) {
-      child->createRowIndexEntry();
+    if (child_.get()) {
+      child_->createRowIndexEntry();
     }
   }
 
   void ListColumnWriter::recordPosition() const {
     ColumnWriter::recordPosition();
-    lengthEncoder->recordPosition(rowIndexPosition.get());
+    lengthEncoder_->recordPosition(rowIndexPosition.get());
   }
 
   void ListColumnWriter::reset() {
     ColumnWriter::reset();
-    if (child) {
-      child->reset();
+    if (child_) {
+      child_->reset();
     }
   }
 
   void ListColumnWriter::writeDictionary() {
-    if (child) {
-      child->writeDictionary();
+    if (child_) {
+      child_->writeDictionary();
+    }
+  }
+
+  void ListColumnWriter::finishStreams() {
+    ColumnWriter::finishStreams();
+    lengthEncoder_->finishEncode();
+    if (child_) {
+      child_->finishStreams();
     }
   }
 
@@ -2394,27 +2427,29 @@ namespace orc {
 
     virtual void reset() override;
 
+    virtual void finishStreams() override;
+
    private:
-    std::unique_ptr<ColumnWriter> keyWriter;
-    std::unique_ptr<ColumnWriter> elemWriter;
-    std::unique_ptr<RleEncoder> lengthEncoder;
-    RleVersion rleVersion;
+    std::unique_ptr<ColumnWriter> keyWriter_;
+    std::unique_ptr<ColumnWriter> elemWriter_;
+    std::unique_ptr<RleEncoder> lengthEncoder_;
+    RleVersion rleVersion_;
   };
 
   MapColumnWriter::MapColumnWriter(const Type& type, const StreamsFactory& factory,
                                    const WriterOptions& options)
-      : ColumnWriter(type, factory, options), rleVersion(options.getRleVersion()) {
+      : ColumnWriter(type, factory, options), rleVersion_(options.getRleVersion()) {
     std::unique_ptr<BufferedOutputStream> lengthStream =
         factory.createStream(proto::Stream_Kind_LENGTH);
-    lengthEncoder = createRleEncoder(std::move(lengthStream), false, rleVersion, memPool,
-                                     options.getAlignedBitpacking());
+    lengthEncoder_ = createRleEncoder(std::move(lengthStream), false, rleVersion_, memPool,
+                                      options.getAlignedBitpacking());
 
     if (type.getSubtypeCount() > 0) {
-      keyWriter = buildWriter(*type.getSubtype(0), factory, options);
+      keyWriter_ = buildWriter(*type.getSubtype(0), factory, options);
     }
 
     if (type.getSubtypeCount() > 1) {
-      elemWriter = buildWriter(*type.getSubtype(1), factory, options);
+      elemWriter_ = buildWriter(*type.getSubtype(1), factory, options);
     }
 
     if (enableIndex) {
@@ -2451,14 +2486,14 @@ namespace orc {
       offsets[i] = offsets[i + 1] - offsets[i];
     }
 
-    lengthEncoder->add(offsets, numValues, notNull);
+    lengthEncoder_->add(offsets, numValues, notNull);
 
     // unnecessary to deal with null as keys and values are packed together
-    if (keyWriter.get()) {
-      keyWriter->add(*mapBatch->keys, elemOffset, totalNumValues, nullptr);
+    if (keyWriter_.get()) {
+      keyWriter_->add(*mapBatch->keys, elemOffset, totalNumValues, nullptr);
     }
-    if (elemWriter.get()) {
-      elemWriter->add(*mapBatch->elements, elemOffset, totalNumValues, nullptr);
+    if (elemWriter_.get()) {
+      elemWriter_->add(*mapBatch->elements, elemOffset, totalNumValues, nullptr);
     }
 
     if (enableIndex) {
@@ -2489,126 +2524,137 @@ namespace orc {
     proto::Stream stream;
     stream.set_kind(proto::Stream_Kind_LENGTH);
     stream.set_column(static_cast<uint32_t>(columnId));
-    stream.set_length(lengthEncoder->flush());
+    stream.set_length(lengthEncoder_->flush());
     streams.push_back(stream);
 
-    if (keyWriter.get()) {
-      keyWriter->flush(streams);
+    if (keyWriter_.get()) {
+      keyWriter_->flush(streams);
     }
-    if (elemWriter.get()) {
-      elemWriter->flush(streams);
+    if (elemWriter_.get()) {
+      elemWriter_->flush(streams);
     }
   }
 
   void MapColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
     ColumnWriter::writeIndex(streams);
-    if (keyWriter.get()) {
-      keyWriter->writeIndex(streams);
+    if (keyWriter_.get()) {
+      keyWriter_->writeIndex(streams);
     }
-    if (elemWriter.get()) {
-      elemWriter->writeIndex(streams);
+    if (elemWriter_.get()) {
+      elemWriter_->writeIndex(streams);
     }
   }
 
   uint64_t MapColumnWriter::getEstimatedSize() const {
     uint64_t size = ColumnWriter::getEstimatedSize();
-    size += lengthEncoder->getBufferSize();
-    if (keyWriter.get()) {
-      size += keyWriter->getEstimatedSize();
+    size += lengthEncoder_->getBufferSize();
+    if (keyWriter_.get()) {
+      size += keyWriter_->getEstimatedSize();
     }
-    if (elemWriter.get()) {
-      size += elemWriter->getEstimatedSize();
+    if (elemWriter_.get()) {
+      size += elemWriter_->getEstimatedSize();
     }
     return size;
   }
 
   void MapColumnWriter::getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const {
     proto::ColumnEncoding encoding;
-    encoding.set_kind(RleVersionMapper(rleVersion));
+    encoding.set_kind(RleVersionMapper(rleVersion_));
     encoding.set_dictionary_size(0);
     if (enableBloomFilter) {
       encoding.set_bloom_encoding(BloomFilterVersion::UTF8);
     }
     encodings.push_back(encoding);
-    if (keyWriter.get()) {
-      keyWriter->getColumnEncoding(encodings);
+    if (keyWriter_.get()) {
+      keyWriter_->getColumnEncoding(encodings);
     }
-    if (elemWriter.get()) {
-      elemWriter->getColumnEncoding(encodings);
+    if (elemWriter_.get()) {
+      elemWriter_->getColumnEncoding(encodings);
     }
   }
 
   void MapColumnWriter::getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getStripeStatistics(stats);
-    if (keyWriter.get()) {
-      keyWriter->getStripeStatistics(stats);
+    if (keyWriter_.get()) {
+      keyWriter_->getStripeStatistics(stats);
     }
-    if (elemWriter.get()) {
-      elemWriter->getStripeStatistics(stats);
+    if (elemWriter_.get()) {
+      elemWriter_->getStripeStatistics(stats);
     }
   }
 
   void MapColumnWriter::mergeStripeStatsIntoFileStats() {
     ColumnWriter::mergeStripeStatsIntoFileStats();
-    if (keyWriter.get()) {
-      keyWriter->mergeStripeStatsIntoFileStats();
+    if (keyWriter_.get()) {
+      keyWriter_->mergeStripeStatsIntoFileStats();
     }
-    if (elemWriter.get()) {
-      elemWriter->mergeStripeStatsIntoFileStats();
+    if (elemWriter_.get()) {
+      elemWriter_->mergeStripeStatsIntoFileStats();
     }
   }
 
   void MapColumnWriter::getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getFileStatistics(stats);
-    if (keyWriter.get()) {
-      keyWriter->getFileStatistics(stats);
+    if (keyWriter_.get()) {
+      keyWriter_->getFileStatistics(stats);
     }
-    if (elemWriter.get()) {
-      elemWriter->getFileStatistics(stats);
+    if (elemWriter_.get()) {
+      elemWriter_->getFileStatistics(stats);
     }
   }
 
   void MapColumnWriter::mergeRowGroupStatsIntoStripeStats() {
     ColumnWriter::mergeRowGroupStatsIntoStripeStats();
-    if (keyWriter.get()) {
-      keyWriter->mergeRowGroupStatsIntoStripeStats();
+    if (keyWriter_.get()) {
+      keyWriter_->mergeRowGroupStatsIntoStripeStats();
     }
-    if (elemWriter.get()) {
-      elemWriter->mergeRowGroupStatsIntoStripeStats();
+    if (elemWriter_.get()) {
+      elemWriter_->mergeRowGroupStatsIntoStripeStats();
     }
   }
 
   void MapColumnWriter::createRowIndexEntry() {
     ColumnWriter::createRowIndexEntry();
-    if (keyWriter.get()) {
-      keyWriter->createRowIndexEntry();
+    if (keyWriter_.get()) {
+      keyWriter_->createRowIndexEntry();
     }
-    if (elemWriter.get()) {
-      elemWriter->createRowIndexEntry();
+    if (elemWriter_.get()) {
+      elemWriter_->createRowIndexEntry();
     }
   }
 
   void MapColumnWriter::recordPosition() const {
     ColumnWriter::recordPosition();
-    lengthEncoder->recordPosition(rowIndexPosition.get());
+    lengthEncoder_->recordPosition(rowIndexPosition.get());
   }
 
   void MapColumnWriter::reset() {
     ColumnWriter::reset();
-    if (keyWriter) {
-      keyWriter->reset();
+    if (keyWriter_) {
+      keyWriter_->reset();
     }
-    if (elemWriter) {
-      elemWriter->reset();
+    if (elemWriter_) {
+      elemWriter_->reset();
     }
   }
 
   void MapColumnWriter::writeDictionary() {
-    if (keyWriter) {
-      keyWriter->writeDictionary();
+    if (keyWriter_) {
+      keyWriter_->writeDictionary();
     }
-    if (elemWriter) {
-      elemWriter->writeDictionary();
+    if (elemWriter_) {
+      elemWriter_->writeDictionary();
+    }
+  }
+
+  void MapColumnWriter::finishStreams() {
+    ColumnWriter::finishStreams();
+    lengthEncoder_->finishEncode();
+    if (keyWriter_) {
+      keyWriter_->finishStreams();
+    }
+    if (elemWriter_) {
+      elemWriter_->finishStreams();
     }
   }
 
@@ -2644,9 +2690,11 @@ namespace orc {
 
     virtual void reset() override;
 
+    virtual void finishStreams() override;
+
    private:
-    std::unique_ptr<ByteRleEncoder> rleEncoder;
-    std::vector<std::unique_ptr<ColumnWriter>> children;
+    std::unique_ptr<ByteRleEncoder> rleEncoder_;
+    std::vector<std::unique_ptr<ColumnWriter>> children_;
   };
 
   UnionColumnWriter::UnionColumnWriter(const Type& type, const StreamsFactory& factory,
@@ -2654,10 +2702,10 @@ namespace orc {
       : ColumnWriter(type, factory, options) {
     std::unique_ptr<BufferedOutputStream> dataStream =
         factory.createStream(proto::Stream_Kind_DATA);
-    rleEncoder = createByteRleEncoder(std::move(dataStream));
+    rleEncoder_ = createByteRleEncoder(std::move(dataStream));
 
     for (uint64_t i = 0; i != type.getSubtypeCount(); ++i) {
-      children.push_back(buildWriter(*type.getSubtype(i), factory, options));
+      children_.push_back(buildWriter(*type.getSubtype(i), factory, options));
     }
 
     if (enableIndex) {
@@ -2678,8 +2726,8 @@ namespace orc {
     unsigned char* tags = unionBatch->tags.data() + offset;
     uint64_t* offsets = unionBatch->offsets.data() + offset;
 
-    std::vector<int64_t> childOffset(children.size(), -1);
-    std::vector<uint64_t> childLength(children.size(), 0);
+    std::vector<int64_t> childOffset(children_.size(), -1);
+    std::vector<uint64_t> childLength(children_.size(), 0);
 
     for (uint64_t i = 0; i != numValues; ++i) {
       if (childOffset[tags[i]] == -1) {
@@ -2688,12 +2736,12 @@ namespace orc {
       ++childLength[tags[i]];
     }
 
-    rleEncoder->add(reinterpret_cast<char*>(tags), numValues, notNull);
+    rleEncoder_->add(reinterpret_cast<char*>(tags), numValues, notNull);
 
-    for (uint32_t i = 0; i < children.size(); ++i) {
+    for (uint32_t i = 0; i < children_.size(); ++i) {
       if (childLength[i] > 0) {
-        children[i]->add(*unionBatch->children[i], static_cast<uint64_t>(childOffset[i]),
-                         childLength[i], nullptr);
+        children_[i]->add(*unionBatch->children[i], static_cast<uint64_t>(childOffset[i]),
+                          childLength[i], nullptr);
       }
     }
 
@@ -2725,26 +2773,26 @@ namespace orc {
     proto::Stream stream;
     stream.set_kind(proto::Stream_Kind_DATA);
     stream.set_column(static_cast<uint32_t>(columnId));
-    stream.set_length(rleEncoder->flush());
+    stream.set_length(rleEncoder_->flush());
     streams.push_back(stream);
 
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->flush(streams);
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->flush(streams);
     }
   }
 
   void UnionColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
     ColumnWriter::writeIndex(streams);
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->writeIndex(streams);
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->writeIndex(streams);
     }
   }
 
   uint64_t UnionColumnWriter::getEstimatedSize() const {
     uint64_t size = ColumnWriter::getEstimatedSize();
-    size += rleEncoder->getBufferSize();
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      size += children[i]->getEstimatedSize();
+    size += rleEncoder_->getBufferSize();
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      size += children_[i]->getEstimatedSize();
     }
     return size;
   }
@@ -2757,61 +2805,69 @@ namespace orc {
       encoding.set_bloom_encoding(BloomFilterVersion::UTF8);
     }
     encodings.push_back(encoding);
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->getColumnEncoding(encodings);
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->getColumnEncoding(encodings);
     }
   }
 
   void UnionColumnWriter::getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getStripeStatistics(stats);
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->getStripeStatistics(stats);
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->getStripeStatistics(stats);
     }
   }
 
   void UnionColumnWriter::mergeStripeStatsIntoFileStats() {
     ColumnWriter::mergeStripeStatsIntoFileStats();
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->mergeStripeStatsIntoFileStats();
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->mergeStripeStatsIntoFileStats();
     }
   }
 
   void UnionColumnWriter::getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getFileStatistics(stats);
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->getFileStatistics(stats);
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->getFileStatistics(stats);
     }
   }
 
   void UnionColumnWriter::mergeRowGroupStatsIntoStripeStats() {
     ColumnWriter::mergeRowGroupStatsIntoStripeStats();
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->mergeRowGroupStatsIntoStripeStats();
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->mergeRowGroupStatsIntoStripeStats();
     }
   }
 
   void UnionColumnWriter::createRowIndexEntry() {
     ColumnWriter::createRowIndexEntry();
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->createRowIndexEntry();
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->createRowIndexEntry();
     }
   }
 
   void UnionColumnWriter::recordPosition() const {
     ColumnWriter::recordPosition();
-    rleEncoder->recordPosition(rowIndexPosition.get());
+    rleEncoder_->recordPosition(rowIndexPosition.get());
   }
 
   void UnionColumnWriter::reset() {
     ColumnWriter::reset();
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->reset();
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->reset();
     }
   }
 
   void UnionColumnWriter::writeDictionary() {
-    for (uint32_t i = 0; i < children.size(); ++i) {
-      children[i]->writeDictionary();
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->writeDictionary();
+    }
+  }
+
+  void UnionColumnWriter::finishStreams() {
+    ColumnWriter::finishStreams();
+    rleEncoder_->finishEncode();
+    for (uint32_t i = 0; i < children_.size(); ++i) {
+      children_[i]->finishStreams();
     }
   }
 

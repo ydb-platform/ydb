@@ -10,7 +10,7 @@
 
 #include <ydb/core/fq/libs/protos/fq_private.pb.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
+#include <ydb-cpp-sdk/client/params/params.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
 
@@ -19,7 +19,7 @@
 #include <ydb/core/fq/libs/control_plane_storage/proto/yq_internal.pb.h>
 #include <ydb/core/fq/libs/events/event_subspace.h>
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NFq {
 
@@ -392,6 +392,7 @@ struct TEvControlPlaneStorage {
 
     // internal messages
     struct TEvWriteResultDataRequest : NActors::TEventLocal<TEvWriteResultDataRequest, EvWriteResultDataRequest> {
+        using TProto = Fq::Private::WriteTaskResultRequest;
 
         TEvWriteResultDataRequest() = default;
 
@@ -410,6 +411,8 @@ struct TEvControlPlaneStorage {
 
     struct TEvWriteResultDataResponse : NActors::TEventLocal<TEvWriteResultDataResponse, EvWriteResultDataResponse> {
         static constexpr bool Auditable = false;
+
+        using TProto = Fq::Private::WriteTaskResultResult;
 
         explicit TEvWriteResultDataResponse(
             const Fq::Private::WriteTaskResultResult& record)
@@ -434,6 +437,7 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvGetTaskRequest : NActors::TEventLocal<TEvGetTaskRequest, EvGetTaskRequest> {
+        using TProto = Fq::Private::GetTaskRequest;
 
         TEvGetTaskRequest() = default;
 
@@ -453,6 +457,8 @@ struct TEvControlPlaneStorage {
 
     struct TEvGetTaskResponse : NActors::TEventLocal<TEvGetTaskResponse, EvGetTaskResponse> {
         static constexpr bool Auditable = false;
+
+        using TProto = Fq::Private::GetTaskResult;
 
         explicit TEvGetTaskResponse(
             const Fq::Private::GetTaskResult& record)
@@ -499,6 +505,7 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvPingTaskRequest : NActors::TEventLocal<TEvPingTaskRequest, EvPingTaskRequest> {
+        using TProto = Fq::Private::PingTaskRequest;
 
         TEvPingTaskRequest() = default;
 
@@ -518,6 +525,8 @@ struct TEvControlPlaneStorage {
 
     struct TEvPingTaskResponse : NActors::TEventLocal<TEvPingTaskResponse, EvPingTaskResponse> {
         static constexpr bool Auditable = false;
+
+        using TProto = Fq::Private::PingTaskResult;
 
         explicit TEvPingTaskResponse(
             const Fq::Private::PingTaskResult& record)
@@ -542,6 +551,7 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvNodesHealthCheckRequest : NActors::TEventLocal<TEvNodesHealthCheckRequest, EvNodesHealthCheckRequest> {
+        using TProto = Fq::Private::NodesHealthCheckRequest;
 
         TEvNodesHealthCheckRequest() = default;
 
@@ -560,6 +570,8 @@ struct TEvControlPlaneStorage {
 
     struct TEvNodesHealthCheckResponse : NActors::TEventLocal<TEvNodesHealthCheckResponse, EvNodesHealthCheckResponse> {
         static constexpr bool Auditable = false;
+
+        using TProto = Fq::Private::NodesHealthCheckResult;
 
         explicit TEvNodesHealthCheckResponse(
             const Fq::Private::NodesHealthCheckResult& record)

@@ -13,6 +13,7 @@
 namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////
+
 // Generic forward declarations.
 
 template <class T>
@@ -43,8 +44,6 @@ TYsonString ConvertToYsonString<ui64>(const ui64& value);
 
 template <>
 TYsonString ConvertToYsonString<TString>(const TString& value);
-template <>
-TYsonString ConvertToYsonString<std::string>(const std::string& value);
 template <>
 TYsonString ConvertToYsonString<TStringBuf>(const TStringBuf& value);
 TYsonString ConvertToYsonString(const char* value);
@@ -93,6 +92,8 @@ ui64 ConvertFromYsonString<ui64>(const TYsonStringBuf& str);
 
 template <>
 TString ConvertFromYsonString<TString>(const TYsonStringBuf& str);
+template <>
+std::string ConvertFromYsonString<std::string>(const TYsonStringBuf& str);
 
 template <>
 float ConvertFromYsonString<float>(const TYsonStringBuf& str);

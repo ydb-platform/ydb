@@ -1,10 +1,10 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_UNWRAP_HPP
 #define PYTHONIC_INCLUDE_NUMPY_UNWRAP_HPP
 
+#include "pythonic/include/numpy/pi.hpp"
+#include "pythonic/include/types/ndarray.hpp"
 #include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/utils/int_.hpp"
-#include "pythonic/include/types/ndarray.hpp"
-#include "pythonic/include/numpy/pi.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -15,7 +15,7 @@ namespace numpy
                                                      double discont = pi);
 
   DEFINE_FUNCTOR(pythonic::numpy, unwrap)
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

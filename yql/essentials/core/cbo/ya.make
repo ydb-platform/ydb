@@ -9,7 +9,10 @@ GENERATE_ENUM_SERIALIZATION(cbo_optimizer_new.h)
 
 END()
 
+RECURSE(
+    simple
+)
+
 RECURSE_FOR_TESTS(
     ut
 )
-

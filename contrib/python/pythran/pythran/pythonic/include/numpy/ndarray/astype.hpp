@@ -14,8 +14,8 @@ namespace numpy
     auto astype(E &&e, dtype d) -> decltype(asarray(std::forward<E>(e), d));
 
     DEFINE_FUNCTOR(pythonic::numpy::ndarray, astype);
-  }
-}
+  } // namespace ndarray
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

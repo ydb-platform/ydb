@@ -3,7 +3,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 bool IsTokenCorrect(const TStringType& in) {
     for (char c : in) {

@@ -21,6 +21,6 @@ namespace numpy
         -> decltype(partial_sum<numpy::functor::UFUNC_NAME>(std::forward<T>(a),
                                                             axis, d));
     DEFINE_FUNCTOR(pythonic::numpy::UFUNC_NAME, accumulate);
-  }
-}
+  } // namespace UFUNC_NAME
+} // namespace numpy
 PYTHONIC_NS_END

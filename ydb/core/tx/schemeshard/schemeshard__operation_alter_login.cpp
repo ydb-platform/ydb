@@ -1,6 +1,11 @@
+#include "schemeshard_audit_log.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+
+#include <ydb/library/security/util.h>
+#include <ydb/core/base/auth.h>
+
 #include <ydb/core/protos/auth.pb.h>
 
 namespace {
@@ -15,7 +20,8 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         NIceDb::TNiceDb db(context.GetTxc().DB); // do not track is there are direct writes happen
         TTabletId ssId = context.SS->SelfTabletId();
-        auto result = MakeHolder<TProposeResponse>(OperationId.GetTxId(), ssId);
+        const auto txId = OperationId.GetTxId();
+        auto result = MakeHolder<TProposeResponse>(txId, ssId);
         if (!AppData()->AuthConfig.GetEnableLoginAuthentication()) {
             result->SetStatus(NKikimrScheme::StatusPreconditionFailed, "Login authentication is disabled");
         } else if (Transaction.GetWorkingDir() != context.SS->LoginProvider.Audience) {
@@ -23,16 +29,30 @@ public:
         } else {
             const NKikimrConfig::TDomainsConfig::TSecurityConfig& securityConfig = context.SS->GetDomainsConfig().GetSecurityConfig();
             const NKikimrSchemeOp::TAlterLogin& alterLogin = Transaction.GetAlterLogin();
+
+            TParts additionalParts;
+
             switch (alterLogin.GetAlterCase()) {
                 case NKikimrSchemeOp::TAlterLogin::kCreateUser: {
                     const auto& createUser = alterLogin.GetCreateUser();
-                    auto response = context.SS->LoginProvider.CreateUser(
-                        {.User = createUser.GetUser(), .Password = createUser.GetPassword()});
+
+                    NLogin::TLoginProvider::TCreateUserRequest request;
+                    request.User = createUser.GetUser();
+                    request.Password = createUser.GetPassword();
+                    request.CanLogin = createUser.GetCanLogin();
+                    request.IsHashedPassword = createUser.GetIsHashedPassword();
+
+                    auto response = context.SS->LoginProvider.CreateUser(request);
+
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[createUser.GetUser()];
-                        db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::SidHash>(sid.Type, sid.Hash);
+                        db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
+                                                                           Schema::LoginSids::SidHash,
+                                                                           Schema::LoginSids::CreatedAt,
+                                                                           Schema::LoginSids::IsEnabled>(sid.Type, sid.PasswordHash, ToMicroSeconds(sid.CreatedAt), sid.IsEnabled);
+
                         if (securityConfig.HasAllUsersGroup()) {
                             auto response = context.SS->LoginProvider.AddGroupMembership({
                                 .Group = securityConfig.GetAllUsersGroup(),
@@ -43,36 +63,58 @@ public:
                             }
                         }
                         result->SetStatus(NKikimrScheme::StatusSuccess);
+
+                        AddIsUserAdmin(createUser.GetUser(), context.SS->LoginProvider, additionalParts);
                     }
                     break;
                 }
                 case NKikimrSchemeOp::TAlterLogin::kModifyUser: {
                     const auto& modifyUser = alterLogin.GetModifyUser();
-                    auto response = context.SS->LoginProvider.ModifyUser({.User = modifyUser.GetUser(), .Password = modifyUser.GetPassword()});
+
+                    NLogin::TLoginProvider::TModifyUserRequest request;
+
+                    request.User = modifyUser.GetUser();
+
+                    if (modifyUser.HasPassword()) {
+                        request.Password = modifyUser.GetPassword();
+                        request.IsHashedPassword = modifyUser.GetIsHashedPassword();
+                    }
+
+                    if (modifyUser.HasCanLogin()) {
+                        request.CanLogin = modifyUser.GetCanLogin();
+                    }
+
+                    auto response = context.SS->LoginProvider.ModifyUser(request);
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[modifyUser.GetUser()];
-                        db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::SidHash>(sid.Type, sid.Hash);
+                        db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
+                                                                           Schema::LoginSids::SidHash,
+                                                                           Schema::LoginSids::IsEnabled,
+                                                                           Schema::LoginSids::FailedAttemptCount>(sid.Type, sid.PasswordHash, sid.IsEnabled, sid.FailedLoginAttemptCount);
                         result->SetStatus(NKikimrScheme::StatusSuccess);
+
+                        AddIsUserAdmin(modifyUser.GetUser(), context.SS->LoginProvider, additionalParts);
+                        AddLastSuccessfulLogin(sid, additionalParts);
                     }
                     break;
                 }
                 case NKikimrSchemeOp::TAlterLogin::kRemoveUser: {
                     const auto& removeUser = alterLogin.GetRemoveUser();
-                    const TString& user = removeUser.GetUser();
-                    auto response = context.SS->LoginProvider.RemoveUser({
-                        .User = user,
-                        .MissingOk = removeUser.GetMissingOk()
-                    });
+
+                    auto sid = context.SS->LoginProvider.Sids.find(removeUser.GetUser());
+                    if (context.SS->LoginProvider.Sids.end() != sid) {
+                        AddLastSuccessfulLogin(sid->second, additionalParts);
+                    }
+
+                    auto response = RemoveUser(context, removeUser, db);
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
-                        db.Table<Schema::LoginSids>().Key(user).Delete();
-                        for (const TString& group : response.TouchedGroups) {
-                            db.Table<Schema::LoginSidMembers>().Key(group, user).Delete();
-                        }
                         result->SetStatus(NKikimrScheme::StatusSuccess);
+
+                        AddIsUserAdmin(removeUser.GetUser(), context.SS->LoginProvider, additionalParts);
                     }
                     break;
                 }
@@ -84,7 +126,8 @@ public:
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[group];
-                        db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType>(sid.Type);
+                        db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
+                                                                           Schema::LoginSids::CreatedAt>(sid.Type, ToMicroSeconds(sid.CreatedAt));
                         result->SetStatus(NKikimrScheme::StatusSuccess);
                     }
                     break;
@@ -94,7 +137,7 @@ public:
                     auto response = context.SS->LoginProvider.AddGroupMembership({
                         .Group = addGroupMembership.GetGroup(),
                         .Member = addGroupMembership.GetMember()
-                        });
+                    });
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
@@ -111,7 +154,7 @@ public:
                     auto response = context.SS->LoginProvider.RemoveGroupMembership({
                         .Group = removeGroupMembership.GetGroup(),
                         .Member = removeGroupMembership.GetMember()
-                        });
+                    });
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
@@ -145,18 +188,10 @@ public:
                 }
                 case NKikimrSchemeOp::TAlterLogin::kRemoveGroup: {
                     const auto& removeGroup = alterLogin.GetRemoveGroup();
-                    const TString& group = removeGroup.GetGroup();
-                    auto response = context.SS->LoginProvider.RemoveGroup({
-                        .Group = group,
-                        .MissingOk = removeGroup.GetMissingOk()
-                    });
+                    auto response = RemoveGroup(context, removeGroup, db);
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
-                        db.Table<Schema::LoginSids>().Key(group).Delete();
-                        for (const TString& parent : response.TouchedGroups) {
-                            db.Table<Schema::LoginSidMembers>().Key(parent, group).Delete();
-                        }
                         result->SetStatus(NKikimrScheme::StatusSuccess);
                     }
                     break;
@@ -166,6 +201,15 @@ public:
                     break;
                 }
             }
+
+            TString userSID, sanitizedToken;
+            if (context.UserToken) {
+                userSID = context.UserToken->GetUserSID();
+                sanitizedToken = context.UserToken->GetSanitizedToken();
+            }
+            const auto status = result->Record.GetStatus();
+            const auto reason = result->Record.HasReason() ? result->Record.GetReason() : TString();
+            AuditLogModifySchemeOperation(Transaction, status, reason, context.SS, context.PeerName, userSID, sanitizedToken, ui64(txId), additionalParts);
         }
 
         if (result->Record.GetStatus() == NKikimrScheme::StatusSuccess) {
@@ -191,6 +235,102 @@ public:
 
     void AbortUnsafe(TTxId, TOperationContext&) override {
         Y_ABORT("no AbortUnsafe for TAlterLogin");
+    }
+
+    NLogin::TLoginProvider::TBasicResponse RemoveUser(TOperationContext& context, const NKikimrSchemeOp::TLoginRemoveUser& removeUser, NIceDb::TNiceDb& db) {
+        const TString& user = removeUser.GetUser();
+
+        if (!context.SS->LoginProvider.CheckUserExists(user)) {
+            if (removeUser.GetMissingOk()) {
+                return {}; // success
+            }
+            return {.Error = "User not found"};
+        }
+
+        if (auto canRemove = CanRemoveSid(context, user, "User"); canRemove.Error) {
+            return canRemove;
+        }
+
+        auto removeUserResponse = context.SS->LoginProvider.RemoveUser(user);
+        if (removeUserResponse.Error) {
+            return removeUserResponse;
+        }
+
+        db.Table<Schema::LoginSids>().Key(user).Delete();
+        for (const TString& group : removeUserResponse.TouchedGroups) {
+            db.Table<Schema::LoginSidMembers>().Key(group, user).Delete();
+        }
+
+        return {}; // success
+    }
+
+    NLogin::TLoginProvider::TBasicResponse RemoveGroup(TOperationContext& context, const NKikimrSchemeOp::TLoginRemoveGroup& removeGroup, NIceDb::TNiceDb& db) {
+        const TString& group = removeGroup.GetGroup();
+
+        if (!context.SS->LoginProvider.CheckGroupExists(group)) {
+            if (removeGroup.GetMissingOk()) {
+                return {}; // success
+            }
+            return {.Error = "Group not found"};
+        }
+
+        if (auto canRemove = CanRemoveSid(context, group, "Group"); canRemove.Error) {
+            return canRemove;
+        }
+
+        auto removeGroupResponse = context.SS->LoginProvider.RemoveGroup(group);
+        if (removeGroupResponse.Error) {
+            return removeGroupResponse;
+        }
+
+        db.Table<Schema::LoginSids>().Key(group).Delete();
+        for (const TString& parent : removeGroupResponse.TouchedGroups) {
+            db.Table<Schema::LoginSidMembers>().Key(parent, group).Delete();
+        }
+
+        return {}; // success
+    }
+
+    NLogin::TLoginProvider::TBasicResponse CanRemoveSid(TOperationContext& context, const TString sid, const TString& sidType) {
+        if (!AppData()->FeatureFlags.GetEnableStrictAclCheck()) {
+            return {}; 
+        }
+
+        auto subTree = context.SS->ListSubTree(context.SS->RootPathId(), context.Ctx);
+        for (auto pathId : subTree) {
+            TPathElement::TPtr path = context.SS->PathsById.at(pathId);
+            if (path->Owner == sid) {
+                auto pathStr = TPath::Init(pathId, context.SS).PathString();
+                return {.Error = TStringBuilder() <<
+                    sidType << " " << sid << " owns " << pathStr << " and can't be removed"};
+            }
+            NACLib::TACL acl(path->ACL);
+            if (acl.HasAccess(sid)) {
+                auto pathStr = TPath::Init(pathId, context.SS).PathString();
+                return {.Error = TStringBuilder() <<
+                    sidType << " " << sid << " has an ACL record on " << pathStr << " and can't be removed"};
+            }
+        }
+
+        return {}; // success
+    }
+
+    void AddIsUserAdmin(const TString& user, NLogin::TLoginProvider& loginProvider, TParts& additionalParts) {
+        const auto providerGroups = loginProvider.GetGroupsMembership(user);
+        const TVector<NACLib::TSID> groups(providerGroups.begin(), providerGroups.end());
+        const auto userToken = NACLib::TUserToken(user, groups);
+
+        if (IsAdministrator(AppData(), &userToken)) {
+            additionalParts.emplace_back("login_user_level", "admin");
+        }
+    }
+
+    void AddLastSuccessfulLogin(NLogin::TLoginProvider::TSidRecord& sid, TParts& additionalParts) {
+        const auto duration = sid.LastSuccessfulLogin.time_since_epoch();
+        const auto time = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+        if (time) {
+            additionalParts.emplace_back("last_login", TInstant::MicroSeconds(time).ToString());
+        }
     }
 };
 

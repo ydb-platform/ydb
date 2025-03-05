@@ -1,6 +1,10 @@
 #include "data_generator.h"
+#include <ydb/library/yaml_json/yaml_to_json.h>
+#include <library/cpp/resource/resource.h>
 #include <library/cpp/streams/factory/open_by_signature/factory.h>
+#include <contrib/libs/yaml-cpp/include/yaml-cpp/node/parse.h>
 #include <util/stream/file.h>
+
 #include <thread>
 
 namespace NYdbWorkload {
@@ -94,24 +98,13 @@ public:
         , Delimiter(delimiter)
         , Foramt(foramt)
     {
-        const auto schema = NResource::Find("click_bench_schema.sql");
-        TStringInput si (schema);
+        const auto yaml = YAML::Load(NResource::Find("click_bench_schema.yaml").c_str());
+        const auto json = NKikimr::NYaml::Yaml2Json(yaml, true);
+        const auto& columns = json["table"]["columns"].GetArray();
         TVector<TString> header;
-        header.reserve(105);
-        TString line;
-        ui32 field = 0;
-        while (si.ReadLine(line)) {
-            if (line.find("{notnull}") != TString::npos) {
-                const auto parts = StringSplitter(line).Split(' ').SkipEmpty().ToList<TString>();
-                header.push_back(parts[0]);
-                if (parts[1].StartsWith("Date")) {
-                    DateFileds.insert(field);
-                }
-                if (parts[1].StartsWith("Timestamp")) {
-                    TsFileds.insert(field);
-                }
-                ++field;
-            }
+        header.reserve(columns.size());
+        for (const auto& c: columns) {
+            header.emplace_back(c["name"].GetString());
         }
         Header = JoinSeq(Delimiter, header);
     }
@@ -159,8 +152,6 @@ private:
     TString Path;
     THolder<IInputStream> Decompressor;
     TString Header;
-    TSet<ui32> DateFileds;
-    TSet<ui32> TsFileds;
     const TString& Delimiter;
     const TString& Foramt;
     TAdaptiveLock Lock;

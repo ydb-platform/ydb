@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	SELECT Yson::From(1, 2, 3);
+	^
+        <tmp_path>/program.sql:<main>:2:14: Error: At function: Apply, At function: Udf, At Yson2.From
+        	SELECT Yson::From(1, 2, 3);
+	             ^
+            <tmp_path>/program.sql:<main>:2:14: Error: Failed to find UDF function: Yson2.From, reason: Error: Module: Yson2, function: From, error: Expected single argument.
+            	SELECT Yson::From(1, 2, 3);
+	             ^

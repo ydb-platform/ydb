@@ -1,3 +1,29 @@
+diff --git a/include/__algorithm/simd_utils.h b/include/__algorithm/simd_utils.h
+index 549197b..c0d04c4 100644
+--- a/include/__algorithm/simd_utils.h
++++ b/include/__algorithm/simd_utils.h
+@@ -28,7 +28,7 @@ _LIBCPP_PUSH_MACROS
+ #include <__undef_macros>
+ 
+ // TODO: Find out how altivec changes things and allow vectorizations there too.
+-#if _LIBCPP_STD_VER >= 14 && defined(_LIBCPP_CLANG_VER) && !defined(__ALTIVEC__)
++#if _LIBCPP_STD_VER >= 14 && defined(_LIBCPP_CLANG_VER) && !defined(__ALTIVEC__) && !defined(__CUDACC__)
+ #  define _LIBCPP_HAS_ALGORITHM_VECTOR_UTILS 1
+ #else
+ #  define _LIBCPP_HAS_ALGORITHM_VECTOR_UTILS 0
+diff --git a/include/__iterator/reverse_iterator.h b/include/__iterator/reverse_iterator.h
+index 50c0f21..a2e3528 100644
+--- a/include/__iterator/reverse_iterator.h
++++ b/include/__iterator/reverse_iterator.h
+@@ -132,7 +132,7 @@ public:
+     return *--__tmp;
+   }
+ 
+-#if _LIBCPP_STD_VER >= 20
++#if _LIBCPP_STD_VER >= 20 && !defined(__CUDACC__)
+   _LIBCPP_HIDE_FROM_ABI constexpr pointer operator->() const
+     requires is_pointer_v<_Iter> || requires(const _Iter __i) { __i.operator->(); }
+   {
 diff --git a/include/__iterator/segmented_iterator.h b/include/__iterator/segmented_iterator.h
 index f3cd1e5..c0a77ef 100644
 --- a/include/__iterator/segmented_iterator.h
@@ -14,58 +40,76 @@ index f3cd1e5..c0a77ef 100644
  template <class _Iterator>
  using __is_segmented_iterator = __has_specialization<__segmented_iterator_traits<_Iterator> >;
 diff --git a/include/__math/traits.h b/include/__math/traits.h
-index da585af..bc68e78 100644
+index a448266..9fdf409 100644
 --- a/include/__math/traits.h
 +++ b/include/__math/traits.h
-@@ -67,7 +67,7 @@ _LIBCPP_NODISCARD_EXT _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool i
-   return false;
- }
- 
--#ifdef _LIBCPP_PREFERRED_OVERLOAD
-+#ifdef _LIBCPP_PREFERRED_OVERLOAD  && !defined(__CUDACC__)
- _LIBCPP_NODISCARD_EXT inline _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool isinf(float __x) _NOEXCEPT {
-   return __builtin_isinf(__x);
- }
-@@ -94,7 +94,7 @@ _LIBCPP_NODISCARD_EXT _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool i
+@@ -67,7 +67,7 @@ _LIBCPP_NODISCARD _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool isinf
    return false;
  }
  
 -#ifdef _LIBCPP_PREFERRED_OVERLOAD
 +#ifdef _LIBCPP_PREFERRED_OVERLOAD && !defined(__CUDACC__)
- _LIBCPP_NODISCARD_EXT inline _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool isnan(float __x) _NOEXCEPT {
+ _LIBCPP_NODISCARD inline _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool isinf(float __x) _NOEXCEPT {
+   return __builtin_isinf(__x);
+ }
+@@ -94,7 +94,7 @@ _LIBCPP_NODISCARD _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool isnan
+   return false;
+ }
+ 
+-#ifdef _LIBCPP_PREFERRED_OVERLOAD
++#ifdef _LIBCPP_PREFERRED_OVERLOAD && !defined(__CUDACC__)
+ _LIBCPP_NODISCARD inline _LIBCPP_CONSTEXPR_SINCE_CXX23 _LIBCPP_HIDE_FROM_ABI bool isnan(float __x) _NOEXCEPT {
    return __builtin_isnan(__x);
  }
 diff --git a/include/complex b/include/complex
-index c8ffde9..7f44242 100644
+index 22271ac..bfe61c5 100644
 --- a/include/complex
 +++ b/include/complex
-@@ -1526,7 +1526,7 @@ inline namespace literals
-         return { 0.0, static_cast<double>(__im) };
-     }
+@@ -1453,6 +1453,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<double> operator""i(unsigned long
+   return {0.0, static_cast<double>(__im)};
+ }
  
--
-+#if !defined(__CUDACC__)
-     _LIBCPP_HIDE_FROM_ABI constexpr complex<float> operator""if(long double __im)
-     {
-         return { 0.0f, static_cast<float>(__im) };
-@@ -1536,6 +1536,7 @@ inline namespace literals
-     {
-         return { 0.0f, static_cast<float>(__im) };
-     }
-+#endif
-   } // namespace complex_literals
++#  if !defined(__CUDACC__)
+ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double __im) {
+   return {0.0f, static_cast<float>(__im)};
+ }
+@@ -1460,6 +1461,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double _
+ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(unsigned long long __im) {
+   return {0.0f, static_cast<float>(__im)};
+ }
++#  endif
+ } // namespace complex_literals
  } // namespace literals
  #endif
 diff --git a/include/tuple b/include/tuple
-index e7fc1e2..eb1785c 100644
+index 26652ff..9caeaaf 100644
 --- a/include/tuple
 +++ b/include/tuple
-@@ -308,7 +308,7 @@ class __tuple_leaf
+@@ -296,7 +296,7 @@ class __tuple_leaf {
  
-     template <class _Tp>
-     static _LIBCPP_HIDE_FROM_ABI constexpr bool __can_bind_reference() {
--#if __has_keyword(__reference_binds_to_temporary)
-+#if __has_keyword(__reference_binds_to_temporary) && !defined(__CUDACC__)
-       return !__reference_binds_to_temporary(_Hp, _Tp);
- #else
-       return true;
+   template <class _Tp>
+   static _LIBCPP_HIDE_FROM_ABI constexpr bool __can_bind_reference() {
+-#  if __has_keyword(__reference_binds_to_temporary)
++#  if __has_keyword(__reference_binds_to_temporary) && !defined(__CUDACC__)
+     return !__reference_binds_to_temporary(_Hp, _Tp);
+ #  else
+     return true;
+@@ -603,8 +603,16 @@ public:
+               is_constructible<_Tp, _Up>... > {};
+ 
+   template <class... _Up,
+-            __enable_if_t< _And< _BoolConstant<sizeof...(_Up) == sizeof...(_Tp)>, _EnableUTypesCtor<_Up...> >::value,
+-                           int> = 0>
++      __enable_if_t< _And< _BoolConstant<sizeof...(_Up) == sizeof...(_Tp)>,
++                           _EnableUTypesCtor<_Up...>
++// nvcc 12.2 cannot choose between tuple(const T& ... t) and tuple(U&&... u)
++// so we have to added an explicit requires in enable_if
++#  ifdef __CUDACC__
++                           ,
++                           _Not<_And<is_copy_constructible<_Tp>..., _Lazy<_And, is_convertible<_Up, const _Tp&>...>> >
++#  endif
++                           >::value,
++                     int> = 0>
+   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 explicit(_Not<_Lazy<_And, is_convertible<_Up, _Tp>...> >::value)
+       tuple(_Up&&... __u) noexcept(_And<is_nothrow_constructible<_Tp, _Up>...>::value)
+       : __base_(typename __make_tuple_indices<sizeof...(_Up)>::type(),

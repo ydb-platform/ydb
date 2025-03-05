@@ -164,7 +164,7 @@ void YTreeNodeToUnversionedValue(
 } // namespace
 
 TUnversionedOwningRow YsonToSchemafulRow(
-    const TString& yson,
+    TStringBuf yson,
     const TTableSchema& tableSchema,
     bool treatMissingAsNull,
     NYson::EYsonType ysonType,
@@ -172,8 +172,7 @@ TUnversionedOwningRow YsonToSchemafulRow(
 {
     auto nameTable = TNameTable::FromSchema(tableSchema);
 
-    auto rowParts = ConvertTo<THashMap<TString, INodePtr>>(
-        TYsonString(yson, ysonType));
+    auto rowParts = ConvertTo<THashMap<TString, INodePtr>>(TYsonString(yson, ysonType));
 
     TUnversionedOwningRowBuilder rowBuilder;
     auto validateAndAddValue = [&rowBuilder, &validateValues] (const TUnversionedValue& value, const TColumnSchema& column) {
@@ -243,8 +242,7 @@ TUnversionedOwningRow YsonToSchemafulRow(
         } else if (treatMissingAsNull) {
             validateAndAddValue(MakeUnversionedSentinelValue(EValueType::Null, id), tableSchema.Columns()[id]);
         } else if (validateValues && tableSchema.Columns()[id].Required()) {
-            THROW_ERROR_EXCEPTION(
-                EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Required column %v cannot have %Qlv value",
                 tableSchema.Columns()[id].GetDiagnosticNameString(),
                 EValueType::Null);
@@ -256,8 +254,7 @@ TUnversionedOwningRow YsonToSchemafulRow(
         int id = nameTable->GetIdOrRegisterName(name);
         if (id >= std::ssize(tableSchema.Columns())) {
             if (validateValues && tableSchema.GetStrict()) {
-                THROW_ERROR_EXCEPTION(
-                    EErrorCode::SchemaViolation,
+                THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                     "Unknown column %Qv in strict schema",
                     name);
             }
@@ -268,7 +265,7 @@ TUnversionedOwningRow YsonToSchemafulRow(
     return rowBuilder.FinishRow();
 }
 
-TUnversionedOwningRow YsonToSchemalessRow(const TString& valueYson)
+TUnversionedOwningRow YsonToSchemalessRow(TStringBuf valueYson)
 {
     TUnversionedOwningRowBuilder builder;
 
@@ -287,8 +284,8 @@ TUnversionedOwningRow YsonToSchemalessRow(const TString& valueYson)
 
 TVersionedRow YsonToVersionedRow(
     const TRowBufferPtr& rowBuffer,
-    const TString& keyYson,
-    const TString& valueYson,
+    TStringBuf keyYson,
+    TStringBuf valueYson,
     const std::vector<TTimestamp>& deleteTimestamps,
     const std::vector<TTimestamp>& extraWriteTimestamps)
 {
@@ -351,18 +348,18 @@ TVersionedRow YsonToVersionedRow(
 }
 
 TVersionedOwningRow YsonToVersionedRow(
-    const TString& keyYson,
-    const TString& valueYson,
+    TStringBuf keyYson,
+    TStringBuf valueYson,
     const std::vector<TTimestamp>& deleteTimestamps,
     const std::vector<TTimestamp>& extraWriteTimestamps)
 {
-    // NB: this implementation is extra slow, it is intended only for using in tests.
+    // NB: This implementation is extra slow, it is intended only for using in tests.
     auto rowBuffer = New<TRowBuffer>();
     auto row = YsonToVersionedRow(rowBuffer, keyYson, valueYson, deleteTimestamps, extraWriteTimestamps);
     return TVersionedOwningRow(row);
 }
 
-TUnversionedOwningRow YsonToKey(const TString& yson)
+TUnversionedOwningRow YsonToKey(TStringBuf yson)
 {
     TUnversionedOwningRowBuilder keyBuilder;
     auto keyParts = ConvertTo<std::vector<INodePtr>>(
@@ -828,7 +825,7 @@ void UnversionedValueToProtobufImpl(
         THROW_ERROR_EXCEPTION("Cannot parse a protobuf message from %Qlv",
             unversionedValue.Type);
     }
-    TString wireBytes;
+    TProtobufString wireBytes;
     StringOutputStream outputStream(&wireBytes);
     TProtobufWriterOptions options;
     options.UnknownYsonFieldModeResolver = TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(EUnknownYsonFieldsMode::Keep);
@@ -992,7 +989,7 @@ void UnversionedValueToListImpl(
         std::unique_ptr<IYsonConsumer> Underlying_;
         int Depth_ = 0;
 
-        TString WireBytes_;
+        TProtobufString WireBytes_;
         StringOutputStream OutputStream_;
 
 
@@ -1301,7 +1298,7 @@ void UnversionedValueToMapImpl(
         std::unique_ptr<IYsonConsumer> Underlying_;
         int Depth_ = 0;
 
-        TString WireBytes_;
+        TProtobufString WireBytes_;
         StringOutputStream OutputStream_;
 
 
@@ -1610,13 +1607,16 @@ TUnversionedValueRangeTruncationResult TruncateUnversionedValues(
     std::vector<TUnversionedValue> truncatedValues;
     truncatedValues.reserve(values.size());
 
+    i64 inputSize = 0;
     int truncatableValueCount = 0;
     i64 remainingSize = options.MaxTotalSize;
     for (const auto& value : values) {
+        auto valueSize = EstimateRowValueSize(value);
+        inputSize += valueSize;
         if (IsStringLikeType(value.Type)) {
             ++truncatableValueCount;
         } else {
-            remainingSize -= EstimateRowValueSize(value);
+            remainingSize -= valueSize;
         }
     }
 
@@ -1659,7 +1659,9 @@ TUnversionedValueRangeTruncationResult TruncateUnversionedValues(
         }
     }
 
-    return {MakeSharedRange(std::move(truncatedValues), rowBuffer), resultSize, clipped};
+    auto sampleSize = options.UseOriginalDataWeightInSamples ? inputSize : resultSize;
+
+    return {MakeSharedRange(std::move(truncatedValues), rowBuffer), sampleSize, clipped};
 }
 
 ////////////////////////////////////////////////////////////////////////////////

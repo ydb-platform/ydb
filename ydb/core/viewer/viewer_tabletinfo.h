@@ -72,8 +72,10 @@ class TJsonTabletInfo : public TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletSt
     using TThis = TJsonTabletInfo;
     THashMap<ui64, NKikimrTabletBase::TTabletTypes::EType> Tablets;
     std::unordered_map<ui64, TString> EndOfRangeKeyPrefix;
-    TTabletId HiveId;
+    TTabletId HiveId = 0;
     bool IsBase64Encode = true;
+    NKikimr::TSubDomainKey FilterTenantId;
+
 public:
     TJsonTabletInfo(IViewer *viewer, NMon::TEvHttpInfo::TPtr &ev)
         : TJsonWhiteboardRequest(viewer, ev)
@@ -88,8 +90,25 @@ public:
         }
         const auto& params(Event->Get()->Request.GetParams());
         TBase::RequestSettings.Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        if (Database) {
-            RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(Database), TBase::SelfId(), EBoardLookupMode::Second));
+        if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
+            TPathId domainRoot;
+            if (AppData()) {
+                TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
+                auto* domain = domains->GetDomain();
+                if (domain) {
+                    domainRoot = TPathId(domain->SchemeRoot, 1);
+                }
+            }
+            if (DatabaseNavigateResponse->Get()->Request->ResultSet.front().DomainInfo->DomainKey != domainRoot) {
+                const TPathId& pathId(DatabaseNavigateResponse->Get()->Request->ResultSet.front().DomainInfo->DomainKey);
+                FilterTenantId.first = pathId.OwnerId;
+                FilterTenantId.second = pathId.LocalPathId;
+            }
+        }
+        if (DatabaseBoardInfoResponse && DatabaseBoardInfoResponse->IsOk()) {
+            TBase::RequestSettings.FilterNodeIds = TBase::GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef());
+        } else if (Database || SharedDatabase) {
+            RequestStateStorageEndpointsLookup(SharedDatabase ? SharedDatabase : Database);
             Become(&TThis::StateRequestedLookup, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
             return;
         }
@@ -103,13 +122,7 @@ public:
         if (params.Has("path")) {
             TBase::RequestSettings.Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
             IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), IsBase64Encode);
-            THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
-            if (!Event->Get()->UserToken.empty()) {
-                request->Record.SetUserToken(Event->Get()->UserToken);
-            }
-            NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
-            record->SetPath(params.Get("path"));
-            TBase::Send(MakeTxProxyID(), request.Release());
+            RequestTxProxyDescribe(params.Get("path"));
             Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
         } else {
             TBase::Bootstrap();
@@ -128,12 +141,17 @@ public:
                 }
             }
         }
+        if (FilterTenantId) {
+            request->Record.MutableFilterTenantId()->SetSchemeShard(FilterTenantId.GetSchemeShard());
+            request->Record.MutableFilterTenantId()->SetPathId(FilterTenantId.GetPathId());
+        }
         return request;
     }
 
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
         TBase::RequestSettings.FilterNodeIds = TBase::GetNodesFromBoardReply(ev);
         CheckPath();
+        RequestDone();
     }
 
     TString GetColumnValue(const TCell& cell, const NKikimrSchemeOp::TColumnDescription& type) {
@@ -182,7 +200,7 @@ public:
             NScheme::TTypeInfo typeInfo = NKikimr::NScheme::TypeInfoFromProto(type.GetTypeId(), type.GetTypeInfo());
             auto convert = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(),typeInfo.GetPgTypeDesc());
             return TStringBuilder() << '"' << (!convert.Error ? convert.Str : *convert.Error) << '"';;
-        }        
+        }
         case NScheme::NTypeIds::DyNumber:        return "DyNumber";
         case NScheme::NTypeIds::Uuid:            return "Uuid";
         default:
@@ -243,6 +261,9 @@ public:
             for (const auto& partition : pathDescription.GetPersQueueGroup().GetPartitions()) {
                 Tablets[partition.GetTabletId()] = NKikimrTabletBase::TTabletTypes::PersQueue;
             }
+            if (pathDescription.HasPersQueueGroup()) {
+                Tablets[pathDescription.GetPersQueueGroup().GetBalancerTabletID()] = NKikimrTabletBase::TTabletTypes::PersQueueReadBalancer;
+            }
             if (pathDescription.HasRtmrVolumeDescription()) {
                 for (const auto& partition : pathDescription.GetRtmrVolumeDescription().GetPartitions()) {
                     Tablets[partition.GetTabletId()] = NKikimrTabletBase::TTabletTypes::RTMRPartition;
@@ -294,6 +315,8 @@ public:
                     if (domainDescription.GetProcessingParams().HasHive()) {
                         Tablets[pathDescription.GetDomainDescription().GetProcessingParams().GetHive()] = NKikimrTabletBase::TTabletTypes::Hive;
                         HiveId = domainDescription.GetProcessingParams().GetHive();
+                    } else {
+                        HiveId = domainDescription.GetSharedHive();
                     }
                     if (domainDescription.GetProcessingParams().HasGraphShard()) {
                         Tablets[pathDescription.GetDomainDescription().GetProcessingParams().GetGraphShard()] = NKikimrTabletBase::TTabletTypes::GraphShard;
@@ -331,14 +354,13 @@ public:
                 }
             }
         }
-        if (Tablets.empty()) {
-            ReplyAndPassAway();
-        } else {
+        if (!Tablets.empty()) {
             TBase::Bootstrap();
             for (auto tablet : Tablets) {
                 Request->Record.AddFilterTabletId(tablet.first);
             }
         }
+        RequestDone();
     }
 
     virtual void FilterResponse(NKikimrWhiteboard::TEvTabletStateResponse& response) override {
@@ -363,13 +385,22 @@ public:
                     deadTablet->SetState(NKikimrWhiteboard::TTabletStateInfo::Dead);
                     deadTablet->SetType(tablet.second);
                     deadTablet->SetHiveId(HiveId);
+                    if (FilterTenantId) {
+                        deadTablet->MutableTenantId()->CopyFrom(FilterTenantId);
+                    }
                 }
             }
             result.SetResponseTime(response.GetResponseTime());
             response = std::move(result);
         }
-        for (NKikimrWhiteboard::TTabletStateInfo& info : *response.MutableTabletStateInfo()) {
-            info.SetOverall(GetWhiteboardFlag(GetFlagFromTabletState(info.GetState())));
+        auto& cont(*response.MutableTabletStateInfo());
+        for (auto it = cont.begin(); it != cont.end();) {
+            if (FilterTenantId && NKikimr::TSubDomainKey(it->GetTenantId()) != FilterTenantId) {
+                it = cont.erase(it);
+            } else {
+                it->SetOverall(GetWhiteboardFlag(GetFlagFromTabletState(it->GetState())));
+                ++it;
+            }
         }
         TBase::FilterResponse(response);
     }

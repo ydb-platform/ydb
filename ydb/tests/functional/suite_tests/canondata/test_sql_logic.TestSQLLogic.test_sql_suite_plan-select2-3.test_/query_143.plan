@@ -48,7 +48,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "item.a > item.b Or item.a != 0"
+                                                "Predicate": "item.a > item.b OR item.a != 0"
                                             }
                                         ],
                                         "PlanNodeId": 2,
@@ -59,6 +59,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/sqllogictest_select2-3.test_plan/t1",
                                                         "ReadColumns": [
                                                             "a",
                                                             "b",

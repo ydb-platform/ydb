@@ -14,6 +14,7 @@ from botocore.config import Config
 from botocore.handlers import BUILTIN_HANDLERS
 
 from moto import settings
+from moto.core.utils import BackendDict
 from .botocore_stubber import BotocoreStubber
 from .custom_responses_mock import (
     get_response_mock,
@@ -21,20 +22,8 @@ from .custom_responses_mock import (
     not_implemented_callback,
     reset_responses_mock,
 )
-from .utils import convert_flask_to_responses_response
 
-ACCOUNT_ID = os.environ.get("MOTO_ACCOUNT_ID", "123456789012")
-
-
-def _get_default_account_id():
-    return ACCOUNT_ID
-
-
-account_id_resolver = _get_default_account_id
-
-
-def get_account_id():
-    return account_id_resolver()
+DEFAULT_ACCOUNT_ID = "123456789012"
 
 
 class BaseMockAWS:
@@ -42,23 +31,25 @@ class BaseMockAWS:
     mocks_active = False
 
     def __init__(self, backends):
-        from moto.instance_metadata import instance_metadata_backend
+        from moto.instance_metadata import instance_metadata_backends
         from moto.moto_api._internal.models import moto_api_backend
 
         self.backends = backends
 
-        self.backends_for_urls = {}
-        default_backends = {
-            "instance_metadata": instance_metadata_backend,
-            "moto_api": moto_api_backend,
-        }
-        if "us-east-1" in self.backends:
+        self.backends_for_urls = []
+        default_account_id = DEFAULT_ACCOUNT_ID
+        default_backends = [
+            instance_metadata_backends[default_account_id]["global"],
+            moto_api_backend,
+        ]
+        backend_default_account = self.backends[default_account_id]
+        if "us-east-1" in backend_default_account:
             # We only need to know the URL for a single region - they will be the same everywhere
-            self.backends_for_urls["us-east-1"] = self.backends["us-east-1"]
-        elif "global" in self.backends:
+            self.backends_for_urls.append(backend_default_account["us-east-1"])
+        elif "global" in backend_default_account:
             # If us-east-1 is not available, it's probably a global service
-            self.backends_for_urls["global"] = self.backends["global"]
-        self.backends_for_urls.update(default_backends)
+            self.backends_for_urls.append(backend_default_account["global"])
+        self.backends_for_urls.extend(default_backends)
 
         self.FAKE_KEYS = {
             "AWS_ACCESS_KEY_ID": "foobar_key",
@@ -281,9 +272,12 @@ class BotocoreEventMockAWS(BaseMockAWS):
         reset_responses_mock(responses_mock)
 
     def enable_patching(self, reset=True):  # pylint: disable=unused-argument
+        # Circumvent circular imports
+        from .utils import convert_flask_to_responses_response
+
         botocore_stubber.enabled = True
         for method in BOTOCORE_HTTP_METHODS:
-            for backend in self.backends_for_urls.values():
+            for backend in self.backends_for_urls:
                 for key, value in backend.urls.items():
                     pattern = re.compile(key)
                     botocore_stubber.register_response(method, pattern, value)
@@ -295,7 +289,7 @@ class BotocoreEventMockAWS(BaseMockAWS):
 
         for method in RESPONSES_METHODS:
             # for backend in default_backends.values():
-            for backend in self.backends_for_urls.values():
+            for backend in self.backends_for_urls:
                 for key, value in backend.urls.items():
                     responses_mock.add(
                         CallbackResponse(
@@ -333,16 +327,23 @@ MockAWS = BotocoreEventMockAWS
 
 
 class ServerModeMockAWS(BaseMockAWS):
+
+    RESET_IN_PROGRESS = False
+
     def __init__(self, *args, **kwargs):
         self.test_server_mode_endpoint = settings.test_server_mode_endpoint()
         super().__init__(*args, **kwargs)
 
     def reset(self):
         call_reset_api = os.environ.get("MOTO_CALL_RESET_API")
-        if not call_reset_api or call_reset_api.lower() != "false":
-            import requests
+        call_reset_api = not call_reset_api or call_reset_api.lower() != "false"
+        if call_reset_api:
+            if not ServerModeMockAWS.RESET_IN_PROGRESS:
+                ServerModeMockAWS.RESET_IN_PROGRESS = True
+                import requests
 
-            requests.post(f"{self.test_server_mode_endpoint}/moto-api/reset")
+                requests.post(f"{self.test_server_mode_endpoint}/moto-api/reset")
+                ServerModeMockAWS.RESET_IN_PROGRESS = False
 
     def enable_patching(self, reset=True):
         if self.__class__.nested_count == 1 and reset:
@@ -390,7 +391,7 @@ class ServerModeMockAWS(BaseMockAWS):
 class base_decorator:
     mock_backend = MockAWS
 
-    def __init__(self, backends):
+    def __init__(self, backends: BackendDict):
         self.backends = backends
 
     def __call__(self, func=None):

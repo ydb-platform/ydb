@@ -33,7 +33,7 @@ public:
         return Nothing();
     }
 
-    TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
+    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& ) override {
         if (const auto maybeClReadTable = TMaybeNode<TClReadTable>(read)) {
             const auto clReadTable = maybeClReadTable.Cast();
             const auto token = TString("cluster:default_") += clReadTable.DataSource().Cluster().StringValue();
@@ -66,7 +66,7 @@ public:
         return read;
     }
 
-    ui64 Partition(const TDqSettings&, size_t, const TExprNode&, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
+    ui64 Partition(const TExprNode&, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings&) override {
         partitions.clear();
         NCH::TRange range;
 //      range.SetRange("limit 42 offset 42 order by ...."); // Possible set range like this.

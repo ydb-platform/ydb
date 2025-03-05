@@ -4,9 +4,10 @@
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/time_provider/time_provider.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/nameservice.h>
@@ -64,17 +65,17 @@ public:
         , NodeId(nodeId)
     {}
 
-    ui32 GetReadyActivation(TWorkerContext& /*wctx*/, ui64 /*revolvingCounter*/) override {
+    TMailbox* GetReadyActivation(ui64 /*revolvingCounter*/) override {
         Y_ABORT();
     }
 
-    void ReclaimMailbox(TMailboxType::EType /*mailboxType*/, ui32 /*hint*/, NActors::TWorkerId /*workerId*/, ui64 /*revolvingCounter*/) override {
-        Y_ABORT();
-    }
-
-    TMailboxHeader *ResolveMailbox(ui32 hint) override {
+    TMailbox* ResolveMailbox(ui32 hint) override {
         const auto it = Context->Mailboxes.find({NodeId, PoolId, hint});
-        return it != Context->Mailboxes.end() ? &it->second.Header : nullptr;
+        return it != Context->Mailboxes.end() ? &it->second : nullptr;
+    }
+
+    TMailboxTable* GetMailboxTable() const override {
+        return Context->PerNodeInfo[NodeId].MailboxTable.get();
     }
 
     void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, NActors::TWorkerId /*workerId*/) override {
@@ -105,15 +106,15 @@ public:
         return Send(ev);
     }
 
-    void ScheduleActivation(ui32 /*activation*/) override {
+    void ScheduleActivation(TMailbox* /*mailbox*/) override {
         Y_ABORT();
     }
 
-    void SpecificScheduleActivation(ui32 /*activation*/) override {
+    void SpecificScheduleActivation(TMailbox* /*mailbox*/) override {
         Y_ABORT();
     }
 
-    void ScheduleActivationEx(ui32 /*activation*/, ui64 /*revolvingCounter*/) override {
+    void ScheduleActivationEx(TMailbox* /*mailbox*/, ui64 /*revolvingCounter*/) override {
         Y_ABORT();
     }
 
@@ -121,8 +122,20 @@ public:
         return Context->Register(actor, parentId, PoolId, std::nullopt, NodeId);
     }
 
-    TActorId Register(IActor* actor, TMailboxHeader* /*mailbox*/, ui32 hint, const TActorId& parentId) override {
-        return Context->Register(actor, parentId, PoolId, hint, NodeId);
+    TActorId Register(IActor* actor, TMailboxCache& /*cache*/, ui64 /*revolvingCounter*/, const TActorId& parentId) override {
+        return Context->Register(actor, parentId, PoolId, std::nullopt, NodeId);
+    }
+
+    TActorId Register(IActor* actor, TMailbox* mailbox, const TActorId& parentId) override {
+        return Context->Register(actor, parentId, PoolId, mailbox->Hint, NodeId);
+    }
+
+    TActorId RegisterAlias(TMailbox* mailbox, IActor* actor) override {
+        return Context->RegisterAlias(mailbox->Hint, actor, PoolId, NodeId);
+    }
+
+    void UnregisterAlias(TMailbox* mailbox, const TActorId& actorId) override {
+        return Context->UnregisterAlias(mailbox->Hint, actorId, PoolId, NodeId);
     }
 
     void Prepare(TActorSystem* /*actorSystem*/, NSchedulerQueue::TReader** /*scheduleReaders*/, ui32* /*scheduleSz*/) override {
@@ -139,6 +152,14 @@ public:
 
     bool Cleanup() override {
         return true;
+    }
+
+    ui64 TimePerMailboxTs() const override {
+        return TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX.SecondsFloat() * NHPTimer::GetClockRate();
+    }
+
+    ui32 EventsPerMailbox() const override {
+        return TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
     }
 
     TAffinity* Affinity() const override {

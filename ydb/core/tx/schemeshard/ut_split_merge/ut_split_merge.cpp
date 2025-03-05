@@ -1,12 +1,33 @@
 #include <ydb/core/tablet_flat/util_fmt_cell.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/protos/counters_schemeshard.pb.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
+
+namespace {
+
+void WaitForTableSplit(TTestActorRuntime& runtime, const TString& path, size_t requiredPartitionCount = 10) {
+    while (true) {
+        TVector<THolder<IEventHandle>> suppressed;
+        auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvGetTableStatsResult::EventType);
+
+        WaitForSuppressed(runtime, suppressed, 1, prevObserver);
+        for (auto &msg : suppressed) {
+            runtime.Send(msg.Release());
+        }
+        suppressed.clear();
+
+        const auto result = DescribePath(runtime, path, true);
+        if (result.GetPathDescription().TablePartitionsSize() >= requiredPartitionCount)
+            return;
+    }        
+} 
+}
 
 Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
     Y_UNIT_TEST(Test) {
@@ -131,34 +152,67 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
                     )");
         env.TestWaitNotification(runtime, txId);
 
-        while (true) {
-            TVector<THolder<IEventHandle>> suppressed;
-            auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvGetTableStatsResult::EventType);
-
-            WaitForSuppressed(runtime, suppressed, 1, prevObserver);
-            for (auto &msg : suppressed) {
-                runtime.Send(msg.Release());
-            }
-            suppressed.clear();
-
-            bool itIsEnough = false;
-
-            NLs::TCheckFunc checkPartitionCount = [&] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-                if (record.GetPathDescription().TablePartitionsSize() >= 10) {
-                    itIsEnough = true;
-                }
-            };
-
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
-                               {checkPartitionCount});
-
-            if (itIsEnough) {
-                return;
-            }
-        }
+        WaitForTableSplit(runtime, "/MyRoot/Table");
     }
 
-    Y_UNIT_TEST(SplitShardsWhithPgKey) {
+    Y_UNIT_TEST(SplitShardsWithDecimalKey) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+        opts.EnableParameterizedDecimal(true);
+
+        TTestEnv env(runtime, opts);
+
+        ui64 txId = 100;
+
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(1);
+        NDataShard::gDbStatsDataSizeResolution = 10;
+        NDataShard::gDbStatsRowCountResolution = 10;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_ERROR);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_ERROR);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
+                        Name: "Table"
+                        Columns { Name: "key"  Type: "Decimal(35, 10)"}
+                        Columns { Name: "decimal_value" Type: "Decimal(2, 1)"}
+                        Columns { Name: "string_value" Type: "Utf8"}
+                        KeyColumnNames: ["key"]
+                        )_");
+        env.TestWaitNotification(runtime, txId);
+
+        const std::pair<ui64, ui64> decimalValue = NYql::NDecimal::MakePair(
+            NYql::NDecimal::FromString("32.1", 2, 1));
+        TString stringValue(1000, 'A');
+
+        for (ui64 key = 0; key < 1000; ++key) {
+            const std::pair<ui64, ui64> decimalKey = NYql::NDecimal::MakePair(
+                NYql::NDecimal::FromString(Sprintf("%d.123456789", key * 1'000'000), 35, 10));
+            UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2, 3}, 
+                {TCell::Make<std::pair<ui64, ui64>>(decimalKey)}, 
+                {TCell::Make<std::pair<ui64, ui64>>(decimalValue), TCell(stringValue)});
+        }
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                           {NLs::PartitionCount(1)});
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+                        Name: "Table"
+                        PartitionConfig {
+                            PartitioningPolicy {
+                                MinPartitionsCount: 100
+                                MaxPartitionsCount: 100
+                                SizeToSplit: 1
+                            }
+                        }
+                    )");
+        env.TestWaitNotification(runtime, txId);
+
+        WaitForTableSplit(runtime, "/MyRoot/Table");
+    }
+
+    Y_UNIT_TEST(SplitShardsWithPgKey) {
         TTestBasicRuntime runtime;
 
         TTestEnvOptions opts;
@@ -184,7 +238,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
                         )");
         env.TestWaitNotification(runtime, txId);
 
-        TString valueString = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"; 
+        TString valueString(1000, 'A');;
         for (ui64 key = 0; key < 1000; ++key) {
             auto pgKey = NPg::PgNativeBinaryFromNativeText(ToString(key * 1'000'000), NPg::TypeDescFromPgTypeName("pgint8")).Str;
             UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell(pgKey)}, {TCell(valueString)});
@@ -205,31 +259,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
                     )");
         env.TestWaitNotification(runtime, txId);
 
-        while (true) {
-            TVector<THolder<IEventHandle>> suppressed;
-            auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvGetTableStatsResult::EventType);
-
-            WaitForSuppressed(runtime, suppressed, 1, prevObserver);
-            for (auto &msg : suppressed) {
-                runtime.Send(msg.Release());
-            }
-            suppressed.clear();
-
-            bool itIsEnough = false;
-
-            NLs::TCheckFunc checkPartitionCount = [&] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-                if (record.GetPathDescription().TablePartitionsSize() >= 10) {
-                    itIsEnough = true;
-                }
-            };
-
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
-                               {checkPartitionCount});
-
-            if (itIsEnough) {
-                return;
-            }
-        }
+        WaitForTableSplit(runtime, "/MyRoot/Table");
     }
 
     Y_UNIT_TEST(Merge1KShards) {

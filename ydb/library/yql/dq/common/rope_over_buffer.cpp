@@ -37,7 +37,7 @@ TRope MakeReadOnlyRope(TChunkedBuffer&& buffer) {
     while (!buffer.Empty()) {
         auto& front = buffer.Front();
         TRope chunk(new TContigousChunkOverBuf(front.Owner, {front.Buf.data(), front.Buf.size()}));
-        result.Insert(result.End(), TRope(new TContigousChunkOverBuf(front.Owner, {front.Buf.data(), front.Buf.size()})));
+        result.Insert(result.End(), std::move(chunk));
         buffer.Erase(front.Buf.size());
     }
 

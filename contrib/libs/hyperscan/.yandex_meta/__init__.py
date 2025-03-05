@@ -61,7 +61,7 @@ def instantiate_runtime(self, *, runtime_name, runtime_yamake):
         # list of symbols that will be duplicated if compiled without proper wrapping.
         # It can be obtained with compiling runtime_* libraries and applying
         # nm --defined-only --extern-only --format=posix -o *.a | awk '{print $2}'
-        with open(P.join(self.meta_dir, 'symbols.json')) as f:
+        with open(P.join(self.meta_dir, "symbols.json")) as f:
             symbols_to_rename = json.load(f)
 
         # rename symbols that would be duplicated between runtimes otherwise
@@ -102,11 +102,6 @@ def post_install(self):
     runtime_yamake = self.yamakes.pop("runtime")
     for runtime_name in RUNTIMES.keys():
         instantiate_runtime(self, runtime_name=runtime_name, runtime_yamake=runtime_yamake)
-
-    with self.yamakes["runtime_avx512"] as m:
-        # Do not sanitize to workaround the ICE in clang-16
-        # See DEVTOOLSSUPPORT-49258 for details.
-        m.NO_SANITIZE = True
 
     with self.yamakes["."] as hyperscan:
         hyperscan.RECURSE = [f"runtime_{name}" for name in sorted(RUNTIMES.keys())]

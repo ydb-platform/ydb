@@ -66,19 +66,9 @@ def parse_erasure(args):
 
 
 def driver_path_packages(package_path):
-    return yatest.common.build_path(
-        "{}/Berkanavt/kikimr/bin/kikimr".format(
-            package_path
-        )
-    )
-
-
-def udfs_path_packages(package_path):
-    return yatest.common.build_path(
-        "{}/Berkanavt/kikimr/libs".format(
-            package_path
-        )
-    )
+    if os.getenv('YDB_DRIVER_BINARY') is not None:
+        return os.getenv('YDB_DRIVER_BINARY')
+    return yatest.common.build_path("{}/ydbd".format(package_path))
 
 
 def wrap_path(path):
@@ -223,6 +213,9 @@ class Recipe(object):
     def write_certificates_path(self, certificates_path):
         self.setenv('YDB_SSL_ROOT_CERTIFICATES_FILE', certificates_path)
 
+    def write_mon_port(self, mon_port):
+        self.setenv('YDB_MON_PORT', str(mon_port))
+
     def read_metafile(self):
         return json.loads(self.read(self.metafile_path()))
 
@@ -260,12 +253,12 @@ def default_users():
     return {user: password}
 
 
-def enable_survive_restart():
-    return os.getenv('YDB_LOCAL_SURVIVE_RESTART') == 'true'
-
-
 def enable_tls():
     return os.getenv('YDB_GRPC_ENABLE_TLS') == 'true'
+
+
+def report_monitoring_info():
+    return os.getenv('YDB_REPORT_MONITORING_INFO') == 'true'
 
 
 def generic_connector_config():
@@ -324,7 +317,7 @@ def deploy(arguments):
     initialize_working_dir(arguments)
     recipe = Recipe(arguments)
 
-    if os.path.exists(recipe.metafile_path()) and enable_survive_restart():
+    if os.path.exists(recipe.metafile_path()):
         return start(arguments)
 
     if getattr(arguments, 'use_packages', None) is not None:
@@ -359,6 +352,16 @@ def deploy(arguments):
     if 'YDB_EXPERIMENTAL_PG' in os.environ:
         optionals['pg_compatible_expirement'] = True
 
+    kafka_api_port = int(os.environ.get("YDB_KAFKA_PROXY_PORT", "0"))
+    if kafka_api_port != 0:
+        optionals['kafka_api_port'] = kafka_api_port
+
+    enabled_grpc_services = arguments.enabled_grpc_services.copy()  # type: typing.List[str]
+    if 'YDB_GRPC_SERVICES' in os.environ:
+        services = os.environ['YDB_GRPC_SERVICES'].split(",")
+        for service in services:
+            enabled_grpc_services.append(service)
+
     configuration = KikimrConfigGenerator(
         erasure=parse_erasure(arguments),
         binary_paths=[arguments.ydb_binary_path] if arguments.ydb_binary_path else None,
@@ -378,7 +381,7 @@ def deploy(arguments):
         use_log_files=not arguments.dont_use_log_files,
         default_users=default_users(),
         extra_feature_flags=enable_feature_flags,
-        extra_grpc_services=arguments.enabled_grpc_services,
+        extra_grpc_services=enabled_grpc_services,
         generic_connector_config=generic_connector_config(),
         **optionals
     )
@@ -388,6 +391,7 @@ def deploy(arguments):
 
     info = {'nodes': {}}
     endpoints = []
+    mon_port = None
     for node_id, node in cluster.nodes.items():
         info['nodes'][node_id] = {
             'pid': node.pid,
@@ -405,6 +409,9 @@ def deploy(arguments):
             ]
         }
 
+        if mon_port is None:
+            mon_port = node.mon_port
+
         endpoints.append("localhost:%d" % node.grpc_port)
 
     endpoint = endpoints[0]
@@ -413,6 +420,8 @@ def deploy(arguments):
     recipe.write_endpoint(endpoint)
     recipe.write_database(cluster.domain_name)
     recipe.write_connection_string(("grpcs://" if enable_tls() else "grpc://") + endpoint + "?database=/" + cluster.domain_name)
+    if report_monitoring_info():
+        recipe.write_mon_port(mon_port)
     if enable_tls():
         recipe.write_certificates_path(configuration.grpc_tls_ca.decode("utf-8"))
     return endpoint, database

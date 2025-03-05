@@ -24,6 +24,7 @@ public:
 using IRePtr = std::unique_ptr<IRe>;
 
 namespace NDispatcher {
+    bool Has(ui32 id);
     IRePtr Compile(const TStringBuf& regex, unsigned int flags, ui32 id);
     IRePtr Deserialize(const TStringBuf& serializedRegex);
 }

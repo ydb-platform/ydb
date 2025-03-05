@@ -105,7 +105,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             const ui32 portionRecordsCountLimit =
                 batchResult->num_rows() / (batchResult->num_rows() / NSplitter::TSplitSettings().GetExpectedRecordsCountOnPage() + 1) + 1;
 
-            TChunkMergeContext context(portionRecordsCountLimit, batchIdx, batchResult->num_rows());
+            TChunkMergeContext context(portionRecordsCountLimit, batchIdx, batchResult->num_rows(), Context.Counters);
             chunkGroups[batchIdx][columnId] = merger->Execute(context, mergingContext);
             ++batchIdx;
         }
@@ -147,7 +147,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
         for (auto&& i : packs) {
             TGeneralSerializedSlice slicePrimary(std::move(i));
             auto dataWithSecondary = resultFiltered->GetIndexInfo()
-                                         .AppendIndexes(slicePrimary.GetPortionChunksToHash(), SaverContext.GetStoragesManager())
+                    .AppendIndexes(slicePrimary.GetPortionChunksToHash(), SaverContext.GetStoragesManager(), slicePrimary.GetRecordsCount())
                                          .DetachResult();
             TGeneralSerializedSlice slice(dataWithSecondary.GetExternalData(), schemaDetails, Context.Counters.SplitterCounters);
 

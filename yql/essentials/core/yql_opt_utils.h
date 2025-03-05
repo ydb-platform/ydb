@@ -168,6 +168,34 @@ TPartOfConstraintBase::TSetType GetPathsToKeys(const TExprNode& body, const TExp
 // prefix should start with "_yql"
 TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf prefix, size_t count);
 
-bool CheckSupportedTypes(const TTypeAnnotationNode::TListType& typesToCheck, const TSet<TString>& typesSupported, const TSet<NUdf::EDataSlot>& dataSlotsSupported, std::function<void(const TString&)> unsupportedTypeHandler);
+bool CheckSupportedTypes(
+    const TTypeAnnotationNode::TListType& typesToCheck,
+    const TSet<TString>& typesSupported,
+    const TSet<NUdf::EDataSlot>& dataSlotsSupported,
+    std::function<void(const TString&)> unsupportedTypeHandler,
+    bool allowNestedOptionals = true
+);
+
+template<const char* OptName>
+bool IsOptimizerEnabled(const TTypeAnnotationContext& types) {
+    struct TFlag {
+        TFlag(const TTypeAnnotationContext& types)
+            : Value(types.OptimizerFlags.contains(to_lower(TString(OptName))))
+        {}
+        const bool Value;
+    };
+    return Singleton<TFlag>(types)->Value;
+}
+
+template<const char* OptName>
+bool IsOptimizerDisabled(const TTypeAnnotationContext& types) {
+    struct TFlag {
+        TFlag(const TTypeAnnotationContext& types)
+            : Value(types.OptimizerFlags.contains(to_lower("Disable" + TString(OptName))))
+        {}
+        const bool Value;
+    };
+    return Singleton<TFlag>(types)->Value;
+}
 
 }

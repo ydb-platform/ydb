@@ -15,7 +15,7 @@
 #include <yt/yt/core/rpc/public.h>
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
-#include <library/cpp/yt/small_containers/compact_flat_map.h>
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
 namespace NYT::NApi {
 
@@ -84,7 +84,7 @@ DEFINE_ENUM(ETransactionCoordinatorPrepareMode,
     ((Late)             (1))
 );
 
-DEFINE_ENUM(EProxyType,
+DEFINE_ENUM(EProxyKind,
     ((Http) (1))
     ((Rpc)  (2))
     ((Grpc) (3))
@@ -121,7 +121,7 @@ using TClientOptions = NAuth::TAuthenticationOptions;
 
 struct TTransactionParticipantOptions;
 
-struct TTimeoutOptions;
+using TTimeoutOptions = NRpc::TTimeoutOptions;
 struct TTransactionalOptions;
 struct TPrerequisiteOptions;
 struct TMasterReadOptions;
@@ -146,6 +146,8 @@ DECLARE_REFCOUNTED_STRUCT(IRowBatchWriter)
 DECLARE_REFCOUNTED_STRUCT(ITableReader)
 DECLARE_REFCOUNTED_STRUCT(ITableWriter)
 
+DECLARE_REFCOUNTED_STRUCT(ITableFragmentWriter);
+
 DECLARE_REFCOUNTED_STRUCT(IFileReader)
 DECLARE_REFCOUNTED_STRUCT(IFileWriter)
 
@@ -154,17 +156,17 @@ DECLARE_REFCOUNTED_STRUCT(IJournalWriter)
 
 DECLARE_REFCOUNTED_CLASS(TPersistentQueuePoller)
 
-DECLARE_REFCOUNTED_CLASS(TTableMountCacheConfig)
-DECLARE_REFCOUNTED_CLASS(TConnectionConfig)
-DECLARE_REFCOUNTED_CLASS(TConnectionDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TPersistentQueuePollerConfig)
+DECLARE_REFCOUNTED_STRUCT(TTableMountCacheConfig)
+DECLARE_REFCOUNTED_STRUCT(TConnectionConfig)
+DECLARE_REFCOUNTED_STRUCT(TConnectionDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TPersistentQueuePollerConfig)
 
-DECLARE_REFCOUNTED_CLASS(TFileReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TFileWriterConfig)
-DECLARE_REFCOUNTED_CLASS(TJournalReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TFileReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TFileWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TJournalReaderConfig)
 
-DECLARE_REFCOUNTED_CLASS(TJournalChunkWriterConfig)
-DECLARE_REFCOUNTED_CLASS(TJournalWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TJournalChunkWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TJournalWriterConfig)
 
 DECLARE_REFCOUNTED_CLASS(TJournalChunkWriterOptions)
 
@@ -186,10 +188,6 @@ DECLARE_REFCOUNTED_STRUCT(TTableBackupManifest)
 DECLARE_REFCOUNTED_STRUCT(TBackupManifest)
 
 DECLARE_REFCOUNTED_STRUCT(TListOperationsAccessFilter)
-
-DECLARE_REFCOUNTED_CLASS(TDistributedWriteSession)
-DECLARE_REFCOUNTED_CLASS(TFragmentWriteCookie)
-struct IDistributedTableClientBase;
 
 DECLARE_REFCOUNTED_STRUCT(TShuffleHandle)
 
@@ -240,5 +238,11 @@ using TMaintenanceCountsPerTarget = TCompactFlatMap<std::string, TMaintenanceCou
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NApi
+using NTableClient::TSignedDistributedWriteSessionPtr;
+using NTableClient::TSignedWriteFragmentCookiePtr;
+using NTableClient::TSignedWriteFragmentResultPtr;
+struct TWriteFragmentCookie;
 
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NApi

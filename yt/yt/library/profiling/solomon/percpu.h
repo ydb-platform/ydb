@@ -12,7 +12,7 @@ namespace NYT::NProfiling {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPerCpuCounter
-    : public ICounterImpl
+    : public ICounter
 {
 public:
     void Increment(i64 delta) override;
@@ -33,7 +33,7 @@ static_assert(sizeof(TPerCpuCounter) == 64 + 64 * 64);
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPerCpuTimeCounter
-    : public ITimeCounterImpl
+    : public ITimeCounter
 {
 public:
     void Add(TDuration delta) override;
@@ -54,7 +54,7 @@ static_assert(sizeof(TPerCpuCounter) == 64 + 64 * 64);
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPerCpuGauge
-    : public IGaugeImpl
+    : public IGauge
 {
 public:
     void Update(double value) override;
@@ -94,7 +94,7 @@ static_assert(sizeof(TPerCpuCounter) == 64 + 64 * 64);
 
 template <class T>
 class TPerCpuSummary
-    : public ISummaryImplBase<T>
+    : public ISummaryBase<T>
 {
 public:
     void Record(T value) override;

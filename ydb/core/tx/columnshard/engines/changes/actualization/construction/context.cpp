@@ -19,13 +19,13 @@ TTieringProcessContext::TTieringProcessContext(const ui64 memoryUsageLimit, cons
 
 }
 
-bool TTieringProcessContext::AddPortion(
+TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
     const std::shared_ptr<const TPortionInfo>& info, TPortionEvictionFeatures&& features, const std::optional<TDuration> dWait) {
     if (!UsedPortions.emplace(info->GetAddress()).second) {
-        return true;
+        return EAddPortionResult::PORTION_LOCKED;
     }
-    if (DataLocksManager->IsLocked(*info)) {
-        return true;
+    if (DataLocksManager->IsLocked(*info, NDataLocks::ELockCategory::Actualization)) {
+        return EAddPortionResult::PORTION_LOCKED;
     }
 
     const auto buildNewTask = [&]() {
@@ -40,7 +40,7 @@ bool TTieringProcessContext::AddPortion(
         if (Controller->IsNewTaskAvailable(it->first, it->second.size())) {
             it->second.emplace_back(buildNewTask());
         } else {
-            return false;
+            return EAddPortionResult::TASK_LIMIT_EXCEEDED;
         }
         features.OnSkipPortionWithProcessMemory(Counters, *dWait);
     }
@@ -49,7 +49,7 @@ bool TTieringProcessContext::AddPortion(
             if (Controller->IsNewTaskAvailable(it->first, it->second.size())) {
                 it->second.emplace_back(buildNewTask());
             } else {
-                return false;
+                return EAddPortionResult::TASK_LIMIT_EXCEEDED;
             }
             features.OnSkipPortionWithTxLimit(Counters, *dWait);
         }
@@ -68,9 +68,9 @@ bool TTieringProcessContext::AddPortion(
             Counters.OnPortionToEvict(info->GetTotalBlobBytes(), *dWait);
         }
         it->second.back().GetTask()->AddPortionToEvict(info, std::move(features));
-        AFL_VERIFY(!it->second.back().GetTask()->HasPortionsToRemove())("rw", features.GetRWAddress().DebugString())("f", it->first.DebugString());
+        AFL_VERIFY(!it->second.back().GetTask()->GetPortionsToRemove().HasPortions())("rw", features.GetRWAddress().DebugString())("f", it->first.DebugString());
     }
-    return true;
+    return EAddPortionResult::SUCCESS;
 }
 
 }

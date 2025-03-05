@@ -712,7 +712,7 @@ public:
         record.SetSeqNo(State.SeqNo + 1);
 
         if (!State.IsHeadRead) {
-            State.ReadVersion.Serialize(*record.MutableSnapshot());
+            State.ReadVersion.ToProto(record.MutableSnapshot());
         }
 
         return useful;
@@ -1848,8 +1848,12 @@ public:
         if (hadWrites)
             return EExecutionStatus::DelayCompleteNoMoreRestarts;
 
-        if (Self->Pipeline.HasCommittingOpsBelow(state.ReadVersion) || Reader && Reader->NeedVolatileWaitForCommit())
+        if (Reader && Reader->NeedVolatileWaitForCommit() ||
+            Self->Pipeline.HasCommittingOpsBelow(state.ReadVersion) ||
+            Self->GetVolatileTxManager().HasUnstableVolatileTxsAtSnapshot(state.ReadVersion))
+        {
             return EExecutionStatus::DelayComplete;
+        }
 
         Complete(ctx);
         return EExecutionStatus::Executed;
@@ -2322,7 +2326,7 @@ private:
             sysLocks.BreakSetLocks();
         }
 
-        auto locks = sysLocks.ApplyLocks();
+        auto [locks, _] = sysLocks.ApplyLocks();
 
         for (auto& lock : locks) {
             NKikimrDataEvents::TLock* addLock;
@@ -2739,10 +2743,29 @@ public:
             return true;
         }
 
+        Result = MakeEvReadResult(ctx.SelfID.NodeId());
+
+        if (Self->IsFollower()) {
+            NKikimrTxDataShard::TError::EKind status = NKikimrTxDataShard::TError::OK;
+            TString errMessage;
+
+            if (!Self->SyncSchemeOnFollower(txc, ctx, status, errMessage)) {
+                return false;
+            }
+
+            if (status != NKikimrTxDataShard::TError::OK) {
+                SetStatusError(
+                    Result->Record,
+                    Ydb::StatusIds::INTERNAL_ERROR,
+                    TStringBuilder() << "Failed to sync follower: " << errMessage
+                        << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
+                SendResult(ctx);
+                return true;
+            }
+        }
+
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ReadContinue for iterator# " << state.ReadId
             << ", firstUnprocessedQuery# " << state.FirstUnprocessedQuery);
-
-        Result = MakeEvReadResult(ctx.SelfID.NodeId());
 
         const auto& tableId = state.PathId.LocalPathId;
         if (state.PathId.OwnerId == Self->GetPathOwnerId()) {
@@ -2862,10 +2885,13 @@ public:
 
             ApplyLocks(ctx);
 
-            if (!Reader->NeedVolatileWaitForCommit()) {
-                SendResult(ctx);
-            } else {
+            if (Reader->NeedVolatileWaitForCommit() ||
+                Self->Pipeline.HasCommittingOpsBelow(state.ReadVersion) ||
+                Self->GetVolatileTxManager().HasUnstableVolatileTxsAtSnapshot(state.ReadVersion))
+            {
                 DelayedResult = true;
+            } else {
+                SendResult(ctx);
             }
             return true;
         }
@@ -2874,6 +2900,12 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (DelayedResult) {
+            if (!Self->ReadIteratorsByLocalReadId.contains(LocalReadId)) {
+                // the one who removed the iterator should have replied to the user
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << LocalReadId
+                    << " has been invalidated before TTxReadContinue::Complete()");
+                return;
+            }
             SendResult(ctx);
         }
     }
@@ -2926,7 +2958,7 @@ public:
                 state.Lock = nullptr;
             } else {
                 // Lock valid, apply conflict changes
-                auto locks = sysLocks.ApplyLocks();
+                auto [locks, _] = sysLocks.ApplyLocks();
                 Y_ABORT_UNLESS(locks.empty(), "ApplyLocks acquired unexpected locks");
             }
         }

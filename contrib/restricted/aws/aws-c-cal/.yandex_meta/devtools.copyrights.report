@@ -68,6 +68,11 @@ BELONGS ya.make
         source/unix/opensslcrypto_ecc.c [2:2]
         source/unix/opensslcrypto_hash.c [2:2]
         source/unix/opensslcrypto_hmac.c [2:2]
+        source/windows/bcrypt_aes.c [2:2]
+        source/windows/bcrypt_ecc.c [2:2]
+        source/windows/bcrypt_hash.c [2:2]
+        source/windows/bcrypt_hmac.c [2:2]
+        source/windows/bcrypt_platform_init.c [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 9b3428451fa759287a2e04cd16a4619c
 BELONGS ya.make

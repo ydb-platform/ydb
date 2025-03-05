@@ -11,10 +11,13 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-void AuditLogLogin(IAuditCtx* ctx, const TString& database, const Ydb::Auth::LoginRequest& request, const Ydb::Auth::LoginResponse& response, const TString& errorDetails)
+void AuditLogLogin(IAuditCtx* ctx, const TString& database, const Ydb::Auth::LoginRequest& request,
+                   const Ydb::Auth::LoginResponse& response, const TString& errorDetails,
+                   const TString& sanitizedToken, bool isAdmin)
 {
     static const TString GrpcLoginComponentName = "grpc-login";
     static const TString LoginOperationName = "LOGIN";
+    static const TString AdminAccountType = "admin";
 
     //NOTE: EmptyValue couldn't be an empty string as AUDIT_PART() skips parts with an empty values
     static const TString EmptyValue = "{none}";
@@ -49,6 +52,8 @@ void AuditLogLogin(IAuditCtx* ctx, const TString& database, const Ydb::Auth::Log
 
         // Login
         AUDIT_PART("login_user", (!request.user().empty() ? request.user() : EmptyValue))
+        AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue))
+        AUDIT_PART("login_user_level", AdminAccountType, (isAdmin && status == Ydb::StatusIds::SUCCESS))
 
         //TODO: (?) it is possible to show masked version of the resulting token here
     );
@@ -56,4 +61,3 @@ void AuditLogLogin(IAuditCtx* ctx, const TString& database, const Ydb::Auth::Log
 
 }
 }
-

@@ -6,7 +6,7 @@
 #include "blobstorage_pdisk_util_devicemode.h"
 
 #include <ydb/core/base/blobstorage.h>
-#include <ydb/core/control/immediate_control_board_wrapper.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/pdisk_io/drivedata.h>
 #include <ydb/library/pdisk_io/sector_map.h>
@@ -65,9 +65,9 @@ class TPDisk;
 IBlockDevice* CreateRealBlockDevice(const TString &path, TPDiskMon &mon,
         ui64 reorderingCycles, ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags,
         ui32 maxQueuedCompletionActions, ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap,
-        TPDisk * const pdisk = nullptr);
+        TPDisk * const pdisk = nullptr, bool readOnly = false);
 IBlockDevice* CreateRealBlockDeviceWithDefaults(const TString &path, TPDiskMon &mon, TDeviceMode::TFlags flags,
-        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk = nullptr);
+        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk = nullptr, bool readOnly = false);
 
 } // NPDisk
 } // NKikimr

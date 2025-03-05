@@ -9,14 +9,14 @@ namespace {
 
 struct TSimpleToken
 {
-    bool IsCancelationRequested() const noexcept
+    friend bool TagInvoke(TTagInvokeTag<IsCancelationRequested>, const TSimpleToken& token) noexcept
     {
-        return !Error.IsOK();
+        return !token.Error.IsOK();
     }
 
-    const TError& GetCancelationError() const noexcept
+    friend const TError& TagInvoke(TTagInvokeTag<GetCancelationError>, const TSimpleToken& token)
     {
-        return Error;
+        return token.Error;
     }
 
     TError Error;
@@ -72,52 +72,53 @@ TEST(TAnyTokenTest, JustWorks)
 {
     ResetCounters();
     TAnyCancelationToken any{TSimpleToken{}};
-    EXPECT_FALSE(any.IsCancelationRequested());
+    EXPECT_FALSE(IsCancelationRequested(any));
 }
 
 TEST(TAnyTokenTest, Copy)
 {
     ResetCounters();
-    TSimpleToken token{TError(EErrorCode::Canceled, "Boo")};
+    TSimpleToken token{TError(NYT::EErrorCode::Canceled, "Boo")};
 
     TAnyCancelationToken any{token};
     EXPECT_EQ(TSimpleToken::CtorCount, 0);
     EXPECT_EQ(TSimpleToken::CopyCount, 1);
     EXPECT_EQ(TSimpleToken::MoveCount, 0);
 
-    EXPECT_TRUE(any.IsCancelationRequested());
+    EXPECT_TRUE(IsCancelationRequested(any));
 
     token.Error = TError{};
 
     TAnyCancelationToken any1{};
 
-    // NB: Implicit move ctor.
+    // NB: Implicit copy ctor and then move assign.
     any1 = token;
+
     EXPECT_EQ(TSimpleToken::CtorCount, 0);
     EXPECT_EQ(TSimpleToken::CopyCount, 2);
     EXPECT_EQ(TSimpleToken::MoveCount, 1);
     EXPECT_EQ(TSimpleToken::DtorCount, 1);
-    EXPECT_FALSE(any1.IsCancelationRequested());
+    EXPECT_FALSE(IsCancelationRequested(any1));
 
     any1 = any;
     EXPECT_EQ(TSimpleToken::CtorCount, 0);
     EXPECT_EQ(TSimpleToken::CopyCount, 3);
     EXPECT_EQ(TSimpleToken::MoveCount, 1);
     EXPECT_EQ(TSimpleToken::DtorCount, 2);
-    EXPECT_TRUE(any1.IsCancelationRequested());
+    EXPECT_TRUE(IsCancelationRequested(any1));
 }
 
 TEST(TAnyTokenTest, MoveSmallToken)
 {
     ResetCounters();
-    TSimpleToken token{TError(EErrorCode::Canceled, "Oi")};
+    TSimpleToken token{TError(NYT::EErrorCode::Canceled, "Oi")};
 
     TAnyCancelationToken any{std::move(token)};
     EXPECT_EQ(TSimpleToken::CtorCount, 0);
     EXPECT_EQ(TSimpleToken::CopyCount, 0);
     EXPECT_EQ(TSimpleToken::MoveCount, 1);
 
-    EXPECT_TRUE(any.IsCancelationRequested());
+    EXPECT_TRUE(IsCancelationRequested(any));
 
     token.Error = TError{};
 
@@ -132,14 +133,14 @@ TEST(TAnyTokenTest, MoveSmallToken)
     EXPECT_EQ(TSimpleToken::CopyCount, 0);
     EXPECT_EQ(TSimpleToken::MoveCount, 3);
     EXPECT_EQ(TSimpleToken::DtorCount, 1);
-    EXPECT_FALSE(any1.IsCancelationRequested());
+    EXPECT_FALSE(IsCancelationRequested(any1));
 
     any1 = std::move(any);
     EXPECT_EQ(TSimpleToken::CtorCount, 0);
     EXPECT_EQ(TSimpleToken::CopyCount, 0);
     EXPECT_EQ(TSimpleToken::MoveCount, 4);
     EXPECT_EQ(TSimpleToken::DtorCount, 3);
-    EXPECT_TRUE(any1.IsCancelationRequested());
+    EXPECT_TRUE(IsCancelationRequested(any1));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

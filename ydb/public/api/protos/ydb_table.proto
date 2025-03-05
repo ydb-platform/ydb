@@ -433,8 +433,13 @@ message ColumnMeta {
     }
 }
 
+message EvictionToExternalStorageSettings {
+    // Path to external data source
+    string storage = 1;
+}
+
 message DateTypeColumnModeSettings {
-    // The row will be considered as expired at the moment of time, when the value
+    // The row will be considered as expired or assigned a tier at the moment of time, when the value
     // stored in <column_name> is less than or equal to the current time (in epoch
     // time format), and <expire_after_seconds> has passed since that moment;
     // i.e. the expiration threshold is the value of <column_name> plus <expire_after_seconds>.
@@ -471,10 +476,27 @@ message ValueSinceUnixEpochModeSettings {
     uint32 expire_after_seconds = 3;
 }
 
+message TtlTier {
+    oneof expression {
+        DateTypeColumnModeSettings date_type_column = 1;
+        ValueSinceUnixEpochModeSettings value_since_unix_epoch = 2;
+    }
+
+    oneof action {
+        google.protobuf.Empty delete = 3;
+        EvictionToExternalStorageSettings evict_to_external_storage = 4;
+    }
+}
+
+message TieredModeSettings {
+    repeated TtlTier tiers = 1;
+}
+
 message TtlSettings {
     oneof mode {
         DateTypeColumnModeSettings date_type_column = 1;
         ValueSinceUnixEpochModeSettings value_since_unix_epoch = 2;
+        TieredModeSettings tiered_ttl = 4;
     }
 
     // There is no guarantee that expired row will be deleted immediately upon
@@ -518,10 +540,10 @@ message ColumnFamily {
         COMPRESSION_UNSPECIFIED = 0;
         COMPRESSION_NONE = 1;
         COMPRESSION_LZ4 = 2;
+        COMPRESSION_ZSTD = 3;
     }
 
-    // Name of the column family, the name "default" must be used for the
-    // primary column family that contains at least primary key columns
+    // Name of the column family
     string name = 1;
 
     // This specifies data storage settings for column family
@@ -534,8 +556,9 @@ message ColumnFamily {
     // WARNING: DO NOT USE
     Ydb.FeatureFlag.Status keep_in_memory = 4;
 
-    // Not all compression algorithms support
-    // Set if want to change default value
+    // Set the compression level for selected compression type. If no value is specified, default value will be chosen.
+    // For ZSTD compression level must be in range [-131072:22]
+    // For other compression types compression level must be empty
     optional int32 compression_level = 5;
 }
 
@@ -624,8 +647,7 @@ message CreateTableRequest {
     Ydb.FeatureFlag.Status key_bloom_filter = 16;
     // Read replicas settings for table
     ReadReplicasSettings read_replicas_settings = 17;
-    // Tiering rules name. It specifies how data migrates from one tier (logical storage) to another.
-    string tiering = 18;
+    reserved 18;
     // Is temporary table
     bool temporary = 19;
     // Is table column or row oriented
@@ -704,11 +726,7 @@ message AlterTableRequest {
     repeated string drop_changefeeds = 20;
     // Rename existed index
     repeated RenameIndexItem rename_indexes = 21;
-    // Setup or remove tiering
-    oneof tiering_action {
-        string set_tiering = 22;
-        google.protobuf.Empty drop_tiering = 23;
-    }
+    reserved 22, 23;
 }
 
 message AlterTableResponse {
@@ -861,12 +879,16 @@ message StaleModeSettings {
 message SnapshotModeSettings {
 }
 
+message SnapshotRWModeSettings {
+}
+
 message TransactionSettings {
     oneof tx_mode {
         SerializableModeSettings serializable_read_write = 1;
         OnlineModeSettings online_read_only = 2;
         StaleModeSettings stale_read_only = 3;
         SnapshotModeSettings snapshot_read_only = 4;
+        SnapshotRWModeSettings snapshot_read_write = 5;
     }
 }
 
@@ -1252,7 +1274,7 @@ message ExecuteScanQueryRequest {
     QueryStatsCollection.Mode collect_stats = 8;
     // works only in mode: MODE_EXPLAIN,
     // collects additional diagnostics about query compilation, including query plan and scheme
-    bool collect_full_diagnostics = 9;
+    bool collect_full_diagnostics = 9 [deprecated=true];
 }
 
 message ExecuteScanQueryPartialResponse {
@@ -1270,5 +1292,45 @@ message ExecuteScanQueryPartialResult {
     Ydb.TableStats.QueryStats query_stats = 6;
     // works only in mode: MODE_EXPLAIN,
     // collects additional diagnostics about query compilation, including query plan and scheme
-    string query_full_diagnostics = 7;
+    string query_full_diagnostics = 7 [deprecated = true];
+}
+
+// Returns information about an external data source with a given path.
+message DescribeExternalDataSourceRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string path = 2;
+}
+
+message DescribeExternalDataSourceResponse {
+    // Holds DescribeExternalDataSourceResult in case of a successful call.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribeExternalDataSourceResult {
+    // Description of a generic scheme object.
+    Ydb.Scheme.Entry self = 1;
+    optional string source_type = 2;
+    optional string location = 3;
+    map<string, string> properties = 4;
+}
+
+// Returns information about an external table with a given path.
+message DescribeExternalTableRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string path = 2;
+}
+
+message DescribeExternalTableResponse {
+    // Holds DescribeExternalTableResult in case of a successful call.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribeExternalTableResult {
+    // Description of a generic scheme object.
+    Ydb.Scheme.Entry self = 1;
+    optional string source_type = 2;
+    optional string data_source_path = 3;
+    optional string location = 4;
+    repeated ColumnMeta columns = 5;
+    map<string, string> content = 6;
 }

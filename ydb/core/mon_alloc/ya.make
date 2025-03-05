@@ -1,11 +1,5 @@
 LIBRARY()
 
-IF (PROFILE_MEMORY_ALLOCATIONS)
-    CFLAGS(
-        -DPROFILE_MEMORY_ALLOCATIONS
-    )
-ENDIF()
-
 SRCS(
     memory_info.cpp
     monitor.cpp
@@ -31,10 +25,11 @@ PEERDIR(
     library/cpp/malloc/api
     library/cpp/monlib/service/pages
     ydb/core/base
-    ydb/core/control
+    ydb/core/control/lib
     ydb/library/actors/core
     ydb/library/actors/prof
     ydb/library/services
+    yql/essentials/utils/memory_profiling
 )
 
 END()

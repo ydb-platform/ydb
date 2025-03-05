@@ -8,7 +8,6 @@
 #include "default_building_consumer.h"
 #include "serialize.h"
 #include "tree_builder.h"
-#include "helpers.h"
 
 #include <yt/yt/core/ypath/token.h>
 
@@ -158,7 +157,10 @@ INodePtr ConvertToNode(
 template <class T>
 IAttributeDictionaryPtr ConvertToAttributes(const T& value)
 {
-    auto attributes = CreateEphemeralAttributes();
+    // Forward declaration.
+    IAttributeDictionaryPtr CreateEphemeralAttributes(std::optional<int> ysonNestingLevelLimit);
+
+    auto attributes = CreateEphemeralAttributes(std::nullopt);
     TAttributeConsumer consumer(attributes.Get());
     Serialize(value, &consumer);
     return attributes;
@@ -184,10 +186,10 @@ T ConstructYTreeConvertibleObject()
 
 namespace {
 
-////////////////////////////////////////////////////////////////////////////////
-
 double ConvertYsonStringBaseToDouble(const NYson::TYsonStringBuf& yson)
 {
+    using namespace NYT::NYTree;
+
     NYson::TTokenizer tokenizer(yson.AsStringBuf());
     const auto& token = SkipAttributes(&tokenizer);
     switch (token.GetType()) {
@@ -204,8 +206,12 @@ double ConvertYsonStringBaseToDouble(const NYson::TYsonStringBuf& yson)
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 TString ConvertYsonStringBaseToString(const NYson::TYsonStringBuf& yson)
 {
+    using namespace NYT::NYTree;
+
     NYson::TTokenizer tokenizer(yson.AsStringBuf());
     const auto& token = SkipAttributes(&tokenizer);
     switch (token.GetType()) {
@@ -218,27 +224,13 @@ TString ConvertYsonStringBaseToString(const NYson::TYsonStringBuf& yson)
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-}
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NYTree
-
-namespace NYT::NConvertToImpl {
-
-////////////////////////////////////////////////////////////////////////////////
-
-// NB(arkady-e1ppa): TTagInvokeTag uses decltype under the hood
-// meaning the resulting expression is not viable for template argument deduction
-// thus we have to write the type by hand in order to have TTo deducible
-// automatically.
 template <class TTo>
-TTo TagInvoke(NConvertToImpl::TFn<TTo>, const NYTree::INodePtr& node)
+TTo ConvertTo(const NYTree::INodePtr& node)
 {
-    using namespace NYTree;
-
     auto result = ConstructYTreeConvertibleObject<TTo>();
     Deserialize(result, node);
     return result;
@@ -247,10 +239,8 @@ TTo TagInvoke(NConvertToImpl::TFn<TTo>, const NYTree::INodePtr& node)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TTo, class TFrom>
-TTo TagInvoke(NConvertToImpl::TFn<TTo>, const TFrom& value)
+TTo ConvertTo(const TFrom& value)
 {
-    using namespace NYTree;
-
     auto type = GetYsonType(value);
     if constexpr (
         NYson::ArePullParserDeserializable<TTo>() &&
@@ -281,9 +271,8 @@ TTo TagInvoke(NConvertToImpl::TFn<TTo>, const TFrom& value)
 
 #define IMPLEMENT_CHECKED_INTEGRAL_CONVERT_TO(type) \
     template <> \
-    inline type TagInvoke(TTagInvokeTag<ConvertTo<type>>, const NYson::TYsonString& str) \
+    inline type ConvertTo(const NYson::TYsonString& str) \
     { \
-        using namespace NYTree; \
         NYson::TTokenizer tokenizer(str.AsStringBuf()); \
         const auto& token = SkipAttributes(&tokenizer); \
         switch (token.GetType()) { \
@@ -312,29 +301,50 @@ IMPLEMENT_CHECKED_INTEGRAL_CONVERT_TO(ui8)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <>
-inline double TagInvoke(TTagInvokeTag<ConvertTo<double>>, const NYson::TYsonString& str)
+inline double ConvertTo(const NYson::TYsonString& str)
 {
-    return NYTree::ConvertYsonStringBaseToDouble(str);
+    return ConvertYsonStringBaseToDouble(str);
 }
 
 template <>
-inline double TagInvoke(TTagInvokeTag<ConvertTo<double>>, const NYson::TYsonStringBuf& str)
+inline double ConvertTo(const NYson::TYsonStringBuf& str)
 {
-    return NYTree::ConvertYsonStringBaseToDouble(str);
+    return ConvertYsonStringBaseToDouble(str);
 }
 
 template <>
-inline TString TagInvoke(TTagInvokeTag<ConvertTo<TString>>, const NYson::TYsonString& str)
+inline TString ConvertTo(const NYson::TYsonString& str)
 {
-    return NYTree::ConvertYsonStringBaseToString(str);
+    return ConvertYsonStringBaseToString(str);
 }
 
 template <>
-inline TString TagInvoke(TTagInvokeTag<ConvertTo<TString>>, const NYson::TYsonStringBuf& str)
+inline TString ConvertTo(const NYson::TYsonStringBuf& str)
 {
-    return NYTree::ConvertYsonStringBaseToString(str);
+    return ConvertYsonStringBaseToString(str);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NConvertToImpl
+} // namespace NYT::NYTree
+
+namespace NYT::NAttributeValueConversionImpl {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+    requires (!CPrimitiveConvertible<T>)
+T TagInvoke(TFrom<T>, TStringBuf value)
+{
+    return NYTree::ConvertTo<T>(NYson::TYsonString(value));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NAttributeValueConversionImpl
+
+namespace NYT {
+
+using NYT::NYTree::ConvertTo;
+
+} // namespace NYT

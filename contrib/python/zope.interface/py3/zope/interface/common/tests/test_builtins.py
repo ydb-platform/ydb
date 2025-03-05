@@ -12,6 +12,7 @@
 
 import unittest
 
+from zope.interface._compat import PY313_OR_OLDER
 from zope.interface.common import builtins
 
 from . import VerifyClassMixin
@@ -24,16 +25,22 @@ class TestVerifyClass(VerifyClassMixin,
     pass
 
 
-add_verify_tests(TestVerifyClass, (
+VERIFY_TESTS = [
     (builtins.IList, (list,)),
     (builtins.ITuple, (tuple,)),
     (builtins.ITextString, (str,)),
-    (builtins.IByteString, (bytes,)),
     (builtins.INativeString, (str,)),
     (builtins.IBool, (bool,)),
     (builtins.IDict, (dict,)),
     (builtins.IFile, ()),
-))
+
+]
+if PY313_OR_OLDER:
+    VERIFY_TESTS.append(
+        (builtins.IByteString, (bytes,))
+    )
+
+add_verify_tests(TestVerifyClass, tuple(VERIFY_TESTS))
 
 
 class TestVerifyObject(VerifyObjectMixin,

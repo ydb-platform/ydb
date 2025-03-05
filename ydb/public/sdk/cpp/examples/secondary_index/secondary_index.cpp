@@ -1,8 +1,8 @@
 #include "secondary_index.h"
 
-#include <util/folder/pathsplit.h>
+#include <filesystem>
 
-TString GetCmdList() {
+std::string GetCmdList() {
     return "create_tables, drop_tables, update_views, list, generate, delete";
 }
 
@@ -28,13 +28,13 @@ ECmd ParseCmd(const char* cmd) {
     return ECmd::NONE;
 }
 
-TString JoinPath(const TString& prefix, const TString& path) {
+std::string JoinPath(const std::string& prefix, const std::string& path) {
     if (prefix.empty()) {
         return path;
     }
 
-    TPathSplitUnix prefixPathSplit(prefix);
-    prefixPathSplit.AppendComponent(path);
+    std::filesystem::path prefixPathSplit(prefix);
+    prefixPathSplit /= path;
 
-    return prefixPathSplit.Reconstruct();
+    return prefixPathSplit;
 }

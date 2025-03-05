@@ -29,7 +29,7 @@ namespace builtins
         fmt(f % std::get<std::tuple_size<Tuple>::value - I>(a), a,
             utils::int_<I - 1>());
       }
-    }
+    } // namespace details
 
     template <class T>
     types::str __mod__(types::str const &s, T const &arg)
@@ -46,13 +46,14 @@ namespace builtins
       return fmter.str();
     }
     template <size_t N, class T>
-    types::str __mod__(types::str const &s, types::array<T, N> const &args)
+    types::str __mod__(types::str const &s,
+                       types::array_tuple<T, N> const &args)
     {
       boost::format fmter(s.chars());
       details::fmt(fmter, args, utils::int_<N>());
       return fmter.str();
     }
-  }
-}
+  } // namespace str
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

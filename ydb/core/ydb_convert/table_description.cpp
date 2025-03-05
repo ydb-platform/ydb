@@ -3,18 +3,19 @@
 #include "table_settings.h"
 #include "ydb_convert.h"
 
-#include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
+#include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/scheme/protos/type_info.pb.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
-#include <ydb/core/scheme/scheme_pathid.h>
-#include <ydb/core/scheme/protos/type_info.pb.h>
-#include <ydb/core/protos/kqp_physical.pb.h>
-#include <ydb/core/protos/table_stats.pb.h>
-#include <ydb/core/protos/follower_group.pb.h>
 
 #include <util/generic/hash.h>
 
@@ -48,8 +49,6 @@ THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTabl
         req->alter_columns_size() ||
         req->ttl_action_case() !=
             Ydb::Table::AlterTableRequest::TTL_ACTION_NOT_SET ||
-        req->tiering_action_case() !=
-            Ydb::Table::AlterTableRequest::TIERING_ACTION_NOT_SET ||
         req->has_alter_storage_settings() || req->add_column_families_size() ||
         req->alter_column_families_size() || req->set_compaction_policy() ||
         req->has_alter_partitioning_settings() ||
@@ -507,36 +506,8 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
     return columnType;
 }
 
-template <typename TYdbProto, typename TTtl>
-static void AddTtl(TYdbProto& out, const TTtl& inTTL) {
-    switch (inTTL.GetColumnUnit()) {
-    case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO: {
-        auto& outTTL = *out.mutable_ttl_settings()->mutable_date_type_column();
-        outTTL.set_column_name(inTTL.GetColumnName());
-        outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
-        break;
-    }
-
-    case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
-    case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
-    case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
-    case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS: {
-        auto& outTTL = *out.mutable_ttl_settings()->mutable_value_since_unix_epoch();
-        outTTL.set_column_name(inTTL.GetColumnName());
-        outTTL.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(inTTL.GetColumnUnit()));
-        outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
-        break;
-    }
-
-    default:
-        break;
-    }
-
-    if constexpr (std::is_same_v<TTtl, NKikimrSchemeOp::TTTLSettings::TEnabled>) {
-        if (inTTL.HasSysSettings() && inTTL.GetSysSettings().HasRunInterval()) {
-            out.mutable_ttl_settings()->set_run_interval_seconds(TDuration::FromValue(inTTL.GetSysSettings().GetRunInterval()).Seconds());
-        }
-    }
+void FillColumnDescription(Ydb::Table::ColumnMeta& out, const NKikimrSchemeOp::TColumnDescription& in) {
+    AddColumn(&out, in);
 }
 
 template <typename TYdbProto>
@@ -570,11 +541,11 @@ void FillColumnDescriptionImpl(TYdbProto& out,
 
     if (in.HasTTLSettings()) {
         if (in.GetTTLSettings().HasEnabled()) {
-            AddTtl(out, in.GetTTLSettings().GetEnabled());
-        }
-
-        if (in.GetTTLSettings().HasUseTiering()) {
-            out.set_tiering(in.GetTTLSettings().GetUseTiering());
+            Ydb::StatusIds::StatusCode code;
+            TString error;
+            if (!FillTtlSettings(*out.mutable_ttl_settings(), in.GetTTLSettings().GetEnabled(), code, error)) {
+                ythrow yexception() << "invalid TTL settings: " << error;
+            }
         }
     }
 }
@@ -610,11 +581,11 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
 
     if (in.HasTtlSettings()) {
         if (in.GetTtlSettings().HasEnabled()) {
-            AddTtl(out, in.GetTtlSettings().GetEnabled());
-        }
-
-        if (in.GetTtlSettings().HasUseTiering()) {
-            out.set_tiering(in.GetTtlSettings().GetUseTiering());
+            Ydb::StatusIds::StatusCode status;
+            TString error;
+            if (!FillTtlSettings(*out.mutable_ttl_settings(), in.GetTtlSettings().GetEnabled(), status, error)) {
+                ythrow yexception() << "invalid TTL settings: " << error;
+            }
         }
     }
 
@@ -765,6 +736,10 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
         if (NScheme::NTypeIds::IsParametrizedType(typeInfo.GetTypeId())) {
             NScheme::ProtoFromTypeInfo(typeInfo, typeMod, *columnDesc->MutableTypeInfo());
         }
+
+        if (!column.Getfamily().empty()) {
+            columnDesc->SetColumnFamilyName(column.Getfamily());
+        }
     }
 
     return true;
@@ -778,6 +753,38 @@ bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out, const 
 bool FillColumnDescription(NKikimrSchemeOp::TAlterColumnTable& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
     Ydb::StatusIds::StatusCode& status, TString& error) {
     return FillColumnDescriptionImpl(out, in, status, error);
+}
+
+bool FillColumnFamily(
+    const Ydb::Table::ColumnFamily& from, NKikimrSchemeOp::TFamilyDescription* to, Ydb::StatusIds::StatusCode& status, TString& error) {
+    to->SetName(from.name());
+    if (from.has_data()) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = TStringBuilder() << "Field `DATA` is not supported for OLAP tables in column family '" << from.name() << "'";
+        return false;
+    }
+    switch (from.compression()) {
+        case Ydb::Table::ColumnFamily::COMPRESSION_UNSPECIFIED:
+            break;
+        case Ydb::Table::ColumnFamily::COMPRESSION_NONE:
+            to->SetColumnCodec(NKikimrSchemeOp::ColumnCodecPlain);
+            break;
+        case Ydb::Table::ColumnFamily::COMPRESSION_LZ4:
+            to->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+            break;
+        case Ydb::Table::ColumnFamily::COMPRESSION_ZSTD:
+            to->SetColumnCodec(NKikimrSchemeOp::ColumnCodecZSTD);
+            break;
+        default:
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Unsupported compression value " << (ui32)from.compression() << " in column family '" << from.name()
+                                     << "'";
+            return false;
+    }
+    if (from.has_compression_level()) {
+        to->SetColumnCodecLevel(from.compression_level());
+    }
+    return true;
 }
 
 bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
@@ -822,18 +829,37 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             return false;
         }
 
+        for (const auto& alter : req->alter_columns()) {
+            auto alterColumn = alterColumnTable->MutableAlterSchema()->AddAlterColumns();
+            alterColumn->SetName(alter.Getname());
+
+            if (!alter.family().empty()) {
+                alterColumn->SetColumnFamilyName(alter.family());
+            }
+        }
+
+        for (const auto& add : req->add_column_families()) {
+            if (add.compression() == Ydb::Table::ColumnFamily::COMPRESSION_UNSPECIFIED) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Compression value is not set for column family '" << add.name() << "'";
+            }
+            if (!FillColumnFamily(add, alterColumnTable->MutableAlterSchema()->AddAddColumnFamily(), status, error)) {
+                return false;
+            }
+        }
+
+        for (const auto& alter : req->alter_column_families()) {
+            if (!FillColumnFamily(alter, alterColumnTable->MutableAlterSchema()->AddAlterColumnFamily(), status, error)) {
+                return false;
+            }
+        }
+
         if (req->has_set_ttl_settings()) {
             if (!FillTtlSettings(*alterColumnTable->MutableAlterTtlSettings()->MutableEnabled(), req->Getset_ttl_settings(), status, error)) {
                 return false;
             }
         } else if (req->has_drop_ttl_settings()) {
             alterColumnTable->MutableAlterTtlSettings()->MutableDisabled();
-        }
-
-        if (req->has_set_tiering()) {
-            alterColumnTable->MutableAlterTtlSettings()->SetUseTiering(req->set_tiering());
-        } else if (req->has_drop_tiering()) {
-            alterColumnTable->MutableAlterTtlSettings()->SetUseTiering("");
         }
     }
 
@@ -1114,69 +1140,73 @@ void FillAttributesImpl(TOutProto& out, const TInProto& in) {
         outAttrs[inAttr.GetKey()] = inAttr.GetValue();
     }
 }
+void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
+    const NKikimrSchemeOp::TCdcStreamDescription& in) {
 
+    out.set_name(in.GetName());
+    out.set_virtual_timestamps(in.GetVirtualTimestamps());
+    out.set_aws_region(in.GetAwsRegion());
+
+    if (const auto value = in.GetResolvedTimestampsIntervalMs()) {
+        out.mutable_resolved_timestamps_interval()->set_seconds(TDuration::MilliSeconds(value).Seconds());
+    }
+
+    switch (in.GetMode()) {
+    case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeKeysOnly:
+    case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeUpdate:
+    case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeNewImage:
+    case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeOldImage:
+    case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeNewAndOldImages:
+        out.set_mode(static_cast<Ydb::Table::ChangefeedMode::Mode>(in.GetMode()));
+        break;
+    default:
+        break;
+    }
+
+    switch (in.GetFormat()) {
+    case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson:
+        out.set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+        break;
+    case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDynamoDBStreamsJson:
+        out.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
+        break;
+    case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDebeziumJson:
+        out.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON);
+        break;
+    default:
+        break;
+    }
+
+    switch (in.GetState()) {
+    case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateReady:
+    case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateDisabled:
+    case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan:
+        out.set_state(static_cast<Ydb::Table::ChangefeedDescription::State>(in.GetState()));
+        break;
+    default:
+        break;
+    }
+
+    if (in.HasScanProgress()) {
+        auto& scanProgress = *out.mutable_initial_scan_progress();
+        scanProgress.set_parts_total(in.GetScanProgress().GetShardsTotal());
+        scanProgress.set_parts_completed(in.GetScanProgress().GetShardsCompleted());
+    }
+
+    FillAttributesImpl(out, in);
+
+}
 void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
         const NKikimrSchemeOp::TTableDescription& in) {
 
     for (const auto& stream : in.GetCdcStreams()) {
-        auto changefeed = out.add_changefeeds();
-
-        changefeed->set_name(stream.GetName());
-        changefeed->set_virtual_timestamps(stream.GetVirtualTimestamps());
-        changefeed->set_aws_region(stream.GetAwsRegion());
-
-        if (const auto value = stream.GetResolvedTimestampsIntervalMs()) {
-            changefeed->mutable_resolved_timestamps_interval()->set_seconds(TDuration::MilliSeconds(value).Seconds());
-        }
-
-        switch (stream.GetMode()) {
-        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeKeysOnly:
-        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeUpdate:
-        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeNewImage:
-        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeOldImage:
-        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeNewAndOldImages:
-            changefeed->set_mode(static_cast<Ydb::Table::ChangefeedMode::Mode>(stream.GetMode()));
-            break;
-        default:
-            break;
-        }
-
-        switch (stream.GetFormat()) {
-        case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson:
-            changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
-            break;
-        case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDynamoDBStreamsJson:
-            changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
-            break;
-        case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDebeziumJson:
-            changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON);
-            break;
-        default:
-            break;
-        }
-
-        switch (stream.GetState()) {
-        case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateReady:
-        case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateDisabled:
-        case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan:
-            changefeed->set_state(static_cast<Ydb::Table::ChangefeedDescription::State>(stream.GetState()));
-            break;
-        default:
-            break;
-        }
-
-        if (stream.HasScanProgress()) {
-            auto& scanProgress = *changefeed->mutable_initial_scan_progress();
-            scanProgress.set_parts_total(stream.GetScanProgress().GetShardsTotal());
-            scanProgress.set_parts_completed(stream.GetScanProgress().GetShardsCompleted());
-        }
-
-        FillAttributesImpl(*changefeed, stream);
+        FillChangefeedDescription(*out.add_changefeeds(), stream);
     }
 }
 
-bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
-        const Ydb::Table::Changefeed& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+template <typename T>
+bool FillChangefeedDescriptionCommon(NKikimrSchemeOp::TCdcStreamDescription& out,
+        const T& in, Ydb::StatusIds::StatusCode& status, TString& error) {
 
     out.SetName(in.name());
     out.SetVirtualTimestamps(in.virtual_timestamps());
@@ -1216,6 +1246,17 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
         return false;
     }
 
+    for (const auto& [key, value] : in.attributes()) {
+        auto& attr = *out.AddUserAttributes();
+        attr.SetKey(key);
+        attr.SetValue(value);
+    }
+
+    return true;
+}
+
+bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
+        const Ydb::Table::Changefeed& in, Ydb::StatusIds::StatusCode& status, TString& error) {
     if (in.initial_scan()) {
         if (!AppData()->FeatureFlags.GetEnableChangefeedInitialScan()) {
             status = Ydb::StatusIds::UNSUPPORTED;
@@ -1224,14 +1265,12 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
         }
         out.SetState(NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan);
     }
+    return FillChangefeedDescriptionCommon(out, in, status, error);
+}
 
-    for (const auto& [key, value] : in.attributes()) {
-        auto& attr = *out.AddUserAttributes();
-        attr.SetKey(key);
-        attr.SetValue(value);
-    }
-
-    return true;
+bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
+        const Ydb::Table::ChangefeedDescription& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+    return FillChangefeedDescriptionCommon(out, in, status, error);
 }
 
 void FillTableStats(Ydb::Table::DescribeTableResult& out,

@@ -1,6 +1,7 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__backup_collection_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
 
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -110,11 +111,6 @@ class TCreateBackupCollection : public TSubOperation {
         return backupCollection;
     }
 
-    static void UpdatePathSizeCounts(const TPath& parentPath, const TPath& dstPath) {
-        dstPath.DomainInfo()->IncPathsInside();
-        parentPath.Base()->IncAliveChildren();
-    }
-
 public:
     using TSubOperation::TSubOperation;
 
@@ -130,7 +126,7 @@ public:
                                                     static_cast<ui64>(OperationId.GetTxId()),
                                                     static_cast<ui64>(context.SS->SelfTabletId()));
 
-        auto bcPaths = ResolveBackupCollectionPaths(rootPathStr, name, true, context, result, false);
+        auto bcPaths = NBackup::ResolveBackupCollectionPaths(rootPathStr, name, true, context, result, false);
         if (!bcPaths) {
             return result;
         }
@@ -176,8 +172,8 @@ public:
         AddPathInSchemeShard(result, dstPath, owner);
         auto pathEl = CreateBackupCollectionPathElement(dstPath);
 
-        rootPath->IncAliveChildren();
-        rootPath.DomainInfo()->IncPathsInside();
+        IncAliveChildrenDirect(OperationId, rootPath, context); // for correct discard of ChildrenExist prop
+        rootPath.DomainInfo()->IncPathsInside(context.SS);
 
         auto backupCollection = TBackupCollectionInfo::Create(desc);
         context.SS->BackupCollections[dstPath->PathId] = backupCollection;
@@ -219,8 +215,6 @@ public:
                                                           context.SS,
                                                           context.OnComplete);
 
-        UpdatePathSizeCounts(rootPath, dstPath);
-
         SetState(NextState());
         return result;
     }
@@ -237,6 +231,30 @@ public:
 };
 
 }  // anonymous namespace
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreateBackupCollection().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreateBackupCollection()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewBackupCollection(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateBackupCollection>(id, tx);

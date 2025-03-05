@@ -3,19 +3,18 @@
 #include <ydb/core/formats/arrow/reader/position.h>
 
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/services/services.pb.h>
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
-#include <ydb/library/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
+#include <ydb/library/services/services.pb.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
-
-#include <util/system/types.h>
-#include <util/string/join.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <util/generic/string.h>
+#include <util/string/join.h>
+#include <util/system/types.h>
 
-#include <vector>
 #include <optional>
+#include <vector>
 
 namespace NKikimr::NArrow::NHash {
 
@@ -26,13 +25,15 @@ public:
         Verify,
         ReturnEmpty
     };
+
 private:
     ui64 Seed = 0;
     const std::vector<TString> ColumnNames;
     const ENoColumnPolicy NoColumnPolicy;
 
     template <class TDataContainer>
-    std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> GetColumns(const std::shared_ptr<TDataContainer>& batch) const {
+    std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> GetColumns(
+        const std::shared_ptr<TDataContainer>& batch) const {
         std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> columns;
         columns.reserve(ColumnNames.size());
         for (auto& colName : ColumnNames) {
@@ -51,8 +52,8 @@ private:
             }
         }
         if (columns.empty()) {
-            AFL_WARN(NKikimrServices::ARROW_HELPER)("event", "cannot_read_all_columns")("reason", "fields_not_found")
-                ("field_names", JoinSeq(",", ColumnNames))("batch_fields", JoinSeq(",", batch->schema()->field_names()));
+            AFL_WARN(NKikimrServices::ARROW_HELPER)("event", "cannot_read_all_columns")("reason", "fields_not_found")(
+                "field_names", JoinSeq(",", ColumnNames))("batch_fields", JoinSeq(",", batch->schema()->field_names()));
         }
         return columns;
     }
@@ -65,8 +66,15 @@ public:
         return ColumnNames;
     }
 
+    static void CalcForAll(
+        const std::shared_ptr<arrow::Array>& array, const ui64 seed, const std::function<void(const ui64 hash, const ui32 idx)>& action);
+    static ui64 CalcSimple(const std::string_view data, const ui64 seed);
+    static ui64 CalcSimple(const void* data, const ui32 dataSize, const ui64 seed);
+    static ui64 CalcForScalar(const std::shared_ptr<arrow::Scalar>& scalar, const ui64 seed);
     static void AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NXX64::TStreamStringHashCalcer& hashCalcer);
     static void AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TStreamStringHashCalcer& hashCalcer);
+    static void AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NXX64::TStreamStringHashCalcer_H3& hashCalcer);
+    static void AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TStreamStringHashCalcer_H3& hashCalcer);
     static ui64 CalcHash(const std::shared_ptr<arrow::Scalar>& scalar);
     std::optional<std::vector<ui64>> Execute(const std::shared_ptr<arrow::RecordBatch>& batch) const;
 
@@ -79,9 +87,9 @@ public:
 
         std::vector<NAccessor::IChunkedArray::TReader> columnScanners;
         for (auto&& i : columns) {
-            columnScanners.emplace_back(NAccessor::IChunkedArray::TReader(std::make_shared<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TAccessor>(i)));
+            columnScanners.emplace_back(
+                NAccessor::IChunkedArray::TReader(std::make_shared<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TAccessor>(i)));
         }
-
 
         {
             NXX64::TStreamStringHashCalcer hashCalcer(Seed);
@@ -126,7 +134,6 @@ public:
         AFL_VERIFY(ExecuteToArrayImpl(batch, acceptor));
         return result;
     }
-
 };
 
-}
+}   // namespace NKikimr::NArrow::NHash

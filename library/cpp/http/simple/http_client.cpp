@@ -1,7 +1,6 @@
 #include "http_client.h"
 
 #include <library/cpp/string_utils/url/url.h>
-#include <library/cpp/uri/http_url.h>
 
 #include <util/stream/output.h>
 #include <util/string/cast.h>
@@ -26,26 +25,30 @@ TKeepAliveHttpClient::TKeepAliveHttpClient(const TString& host,
 TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoGet(const TStringBuf relativeUrl,
                                                             IOutputStream* output,
                                                             const THeaders& headers,
-                                                            THttpHeaders* outHeaders) {
+                                                            THttpHeaders* outHeaders,
+                                                            NThreading::TCancellationToken cancellation) {
     return DoRequest(TStringBuf("GET"),
                      relativeUrl,
                      {},
                      output,
                      headers,
-                     outHeaders);
+                     outHeaders,
+                     std::move(cancellation));
 }
 
 TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoPost(const TStringBuf relativeUrl,
                                                              const TStringBuf body,
                                                              IOutputStream* output,
                                                              const THeaders& headers,
-                                                             THttpHeaders* outHeaders) {
+                                                             THttpHeaders* outHeaders,
+                                                             NThreading::TCancellationToken cancellation) {
     return DoRequest(TStringBuf("POST"),
                      relativeUrl,
                      body,
                      output,
                      headers,
-                     outHeaders);
+                     outHeaders,
+                     std::move(cancellation));
 }
 
 TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoRequest(const TStringBuf method,
@@ -53,15 +56,17 @@ TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoRequest(const TStringBuf
                                                                 const TStringBuf body,
                                                                 IOutputStream* output,
                                                                 const THeaders& inHeaders,
-                                                                THttpHeaders* outHeaders) {
+                                                                THttpHeaders* outHeaders,
+                                                                NThreading::TCancellationToken cancellation) {
     const TString contentLength = IntToString<10, size_t>(body.size());
-    return DoRequestReliable(FormRequest(method, relativeUrl, body, inHeaders, contentLength), output, outHeaders);
+    return DoRequestReliable(FormRequest(method, relativeUrl, body, inHeaders, contentLength), output, outHeaders, std::move(cancellation));
 }
 
 TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoRequestRaw(const TStringBuf raw,
                                                                    IOutputStream* output,
-                                                                   THttpHeaders* outHeaders) {
-    return DoRequestReliable(raw, output, outHeaders);
+                                                                   THttpHeaders* outHeaders,
+                                                                   NThreading::TCancellationToken cancellation) {
+    return DoRequestReliable(raw, output, outHeaders, std::move(cancellation));
 }
 
 void TKeepAliveHttpClient::DisableVerificationForHttps() {
@@ -190,28 +195,28 @@ void TSimpleHttpClient::EnableVerificationForHttps() {
     HttpsVerification = true;
 }
 
-void TSimpleHttpClient::DoGet(const TStringBuf relativeUrl, IOutputStream* output, const THeaders& headers) const {
+void TSimpleHttpClient::DoGet(const TStringBuf relativeUrl, IOutputStream* output, const THeaders& headers, THttpHeaders* outHeaders, NThreading::TCancellationToken cancellation) const {
     TKeepAliveHttpClient cl = CreateClient();
 
-    TKeepAliveHttpClient::THttpCode code = cl.DoGet(relativeUrl, output, headers);
+    TKeepAliveHttpClient::THttpCode code = cl.DoGet(relativeUrl, output, headers, outHeaders, std::move(cancellation));
 
     Y_ENSURE(cl.GetHttpInput());
     ProcessResponse(relativeUrl, *cl.GetHttpInput(), output, code);
 }
 
-void TSimpleHttpClient::DoPost(const TStringBuf relativeUrl, TStringBuf body, IOutputStream* output, const THashMap<TString, TString>& headers) const {
+void TSimpleHttpClient::DoPost(const TStringBuf relativeUrl, TStringBuf body, IOutputStream* output, const THashMap<TString, TString>& headers, THttpHeaders* outHeaders, NThreading::TCancellationToken cancellation) const {
     TKeepAliveHttpClient cl = CreateClient();
 
-    TKeepAliveHttpClient::THttpCode code = cl.DoPost(relativeUrl, body, output, headers);
+    TKeepAliveHttpClient::THttpCode code = cl.DoPost(relativeUrl, body, output, headers, outHeaders, std::move(cancellation));
 
     Y_ENSURE(cl.GetHttpInput());
     ProcessResponse(relativeUrl, *cl.GetHttpInput(), output, code);
 }
 
-void TSimpleHttpClient::DoPostRaw(const TStringBuf relativeUrl, const TStringBuf rawRequest, IOutputStream* output) const {
+void TSimpleHttpClient::DoPostRaw(const TStringBuf relativeUrl, const TStringBuf rawRequest, IOutputStream* output, THttpHeaders* outHeaders, NThreading::TCancellationToken cancellation) const {
     TKeepAliveHttpClient cl = CreateClient();
 
-    TKeepAliveHttpClient::THttpCode code = cl.DoRequestRaw(rawRequest, output);
+    TKeepAliveHttpClient::THttpCode code = cl.DoRequestRaw(rawRequest, output, outHeaders, std::move(cancellation));
 
     Y_ENSURE(cl.GetHttpInput());
     ProcessResponse(relativeUrl, *cl.GetHttpInput(), output, code);
@@ -325,32 +330,24 @@ void TRedirectableHttpClient::ProcessResponse(const TStringBuf relativeUrl, THtt
                 ythrow THttpRequestException(statusCode) << "Exceeds MaxRedirectCount limit, code " << statusCode << " at " << Host << relativeUrl;
             }
 
-            TVector<TString> request_url_parts, request_body_parts;
-
-            size_t splitted_index = 0;
-            for (auto& iter : StringSplitter(i->Value()).Split('/')) {
-                if (splitted_index < 3) {
-                    request_url_parts.push_back(TString(iter.Token()));
+            TStringBuf schemeHostPort = GetSchemeHostAndPort(i->Value());
+            TStringBuf scheme("http://");
+            TStringBuf host("unknown");
+            ui16 port = 0;
+            GetSchemeHostAndPort(schemeHostPort, scheme, host, port);
+            TStringBuf body = GetPathAndQuery(i->Value(), false);
+            if (port == 0) {
+                if (scheme.StartsWith("https")) {
+                    port = 443;
+                } else if (scheme.StartsWith("http")) {
+                    port = 80;
                 } else {
-                    request_body_parts.push_back(TString(iter.Token()));
-                }
-                ++splitted_index;
-            }
-
-            TString url = JoinSeq("/", request_url_parts);
-            ui16 port = 443;
-
-            THttpURL u;
-            if (THttpURL::ParsedOK == u.Parse(url)) {
-                const char* p = u.Get(THttpURL::FieldPort);
-                if (p) {
-                    port = FromString<ui16>(p);
-                    url = u.PrintS(THttpURL::FlagScheme | THttpURL::FlagHost);
+                    port = 80;
                 }
             }
 
             auto opts = Opts;
-            opts.Host(url);
+            opts.Host(TString(scheme) + TString(host));
             opts.Port(port);
             opts.MaxRedirectCount(opts.MaxRedirectCount() - 1);
 
@@ -358,7 +355,7 @@ void TRedirectableHttpClient::ProcessResponse(const TStringBuf relativeUrl, THtt
             if (HttpsVerification) {
                 cl.EnableVerificationForHttps();
             }
-            cl.DoGet(TString("/") + JoinSeq("/", request_body_parts), output);
+            cl.DoGet(body, output);
             return;
         }
     }

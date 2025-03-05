@@ -3,10 +3,10 @@
 
 #include "pythonic/include/numpy/insert.hpp"
 
-#include "pythonic/utils/functor.hpp"
+#include "pythonic/builtins/None.hpp"
 #include "pythonic/types/ndarray.hpp"
 #include "pythonic/types/traits.hpp"
-#include "pythonic/builtins/None.hpp"
+#include "pythonic/utils/functor.hpp"
 
 #include <algorithm>
 
@@ -73,7 +73,7 @@ namespace numpy
   {
     throw std::runtime_error("insert only partially supported");
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

@@ -30,7 +30,7 @@ public:
 };
 
 // Holds all metadata that is needed to perform read/scan
-struct TReadMetadataBase {
+class TReadMetadataBase {
 public:
     enum class ESorting {
         NONE = 0 /* "not_sorted" */,
@@ -39,12 +39,16 @@ public:
     };
 
 private:
+    YDB_ACCESSOR_DEF(TString, ScanIdentifier);
+    std::optional<ui64> FilteredCountLimit;
+    std::optional<ui64> RequestedLimit;
     const ESorting Sorting = ESorting::ASC;   // Sorting inside returned batches
     std::shared_ptr<TPKRangesFilter> PKRangesFilter;
     TProgramContainer Program;
     std::shared_ptr<TVersionedIndex> IndexVersionsPointer;
     TSnapshot RequestSnapshot;
     std::optional<TGranuleShardingInfo> RequestShardingInfo;
+    std::shared_ptr<IScanCursor> ScanCursor;
     virtual void DoOnReadFinished(NColumnShard::TColumnShard& /*owner*/) const {
     }
     virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& /*owner*/) const {
@@ -60,12 +64,33 @@ protected:
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
 
+    void SetRequestedLimit(const ui64 value) { 
+        AFL_VERIFY(!RequestedLimit);
+        if (value == 0 || value >= Max<i64>()) {
+            return;
+        }
+        RequestedLimit = value;
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("requested_limit_detected", RequestedLimit);
+    }
+
+    i64 GetLimitRobust() const {
+        return std::min<i64>(FilteredCountLimit.value_or(Max<i64>()), RequestedLimit.value_or(Max<i64>()));
+    }
+
+    bool HasLimit() const {
+        return !!FilteredCountLimit || !!RequestedLimit;
+    }
+
     void OnReplyConstruction(const ui64 tabletId, NKqp::NInternalImplementation::TEvScanData& scanData) const {
         DoOnReplyConstruction(tabletId, scanData);
     }
 
     ui64 GetTxId() const {
         return TxId;
+    }
+
+    const std::shared_ptr<IScanCursor>& GetScanCursor() const {
+        return ScanCursor;
     }
 
     std::optional<ui64> GetLockId() const {
@@ -94,6 +119,14 @@ public:
         Y_ABORT_UNLESS(IsSorted() && value->IsReverse() == IsDescSorted());
         Y_ABORT_UNLESS(!PKRangesFilter);
         PKRangesFilter = value;
+        if (ResultIndexSchema) {
+            FilteredCountLimit = PKRangesFilter->GetFilteredCountLimit(ResultIndexSchema->GetIndexInfo().GetReplaceKey());
+            if (FilteredCountLimit) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("filter_limit_detected", FilteredCountLimit);
+            } else {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("filter_limit_not_detected", PKRangesFilter->DebugString());
+            }
+        }
     }
 
     const TPKRangesFilter& GetPKRangesFilter() const {
@@ -111,13 +144,13 @@ public:
         return ResultIndexSchema;
     }
 
-    bool HasGuaranteeExclusivePK() const {
-        return GetIndexInfo().GetExternalGuaranteeExclusivePK();
+    bool HasResultSchema() const {
+        return !!ResultIndexSchema;
     }
 
     ISnapshotSchema::TPtr GetLoadSchemaVerified(const TPortionInfo& porition) const;
 
-    const std::shared_ptr<NArrow::TSchemaLite>& GetBlobSchema(const ui64 version) const {
+    NArrow::TSchemaLiteView GetBlobSchema(const ui64 version) const {
         return GetIndexVersions().GetSchemaVerified(version)->GetIndexInfo().ArrowSchema();
     }
 
@@ -135,28 +168,25 @@ public:
     }
 
     TReadMetadataBase(const std::shared_ptr<TVersionedIndex> index, const ESorting sorting, const TProgramContainer& ssaProgram,
-        const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot)
+        const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot, const std::shared_ptr<IScanCursor>& scanCursor)
         : Sorting(sorting)
         , Program(ssaProgram)
         , IndexVersionsPointer(index)
         , RequestSnapshot(requestSnapshot)
-        , ResultIndexSchema(schema) {
+        , ScanCursor(scanCursor)
+        , ResultIndexSchema(schema)
+    {
     }
     virtual ~TReadMetadataBase() = default;
 
-    ui64 Limit = 0;
-
-    virtual void Dump(IOutputStream& out) const {
-        out << " predicate{" << (PKRangesFilter ? PKRangesFilter->DebugString() : "no_initialized") << "}"
+    virtual TString DebugString() const {
+        return TStringBuilder() << " predicate{" << (PKRangesFilter ? PKRangesFilter->DebugString() : "no_initialized") << "}"
             << " " << Sorting << " sorted";
     }
 
     std::set<ui32> GetProcessingColumnIds() const {
         AFL_VERIFY(ResultIndexSchema);
-        std::set<ui32> result;
-        for (auto&& i : GetProgram().GetProcessingColumns()) {
-            result.emplace(ResultIndexSchema->GetIndexInfo().GetColumnIdVerified(i));
-        }
+        std::set<ui32> result(GetProgram().GetProcessingColumns().begin(), GetProgram().GetProcessingColumns().end());
         return result;
     }
     bool IsAscSorted() const {
@@ -171,12 +201,6 @@ public:
 
     virtual std::unique_ptr<TScanIteratorBase> StartScan(const std::shared_ptr<TReadContext>& readContext) const = 0;
     virtual std::vector<TNameTypeInfo> GetKeyYqlSchema() const = 0;
-
-    // TODO:  can this only be done for base class?
-    friend IOutputStream& operator<<(IOutputStream& out, const TReadMetadataBase& meta) {
-        meta.Dump(out);
-        return out;
-    }
 
     const TProgramContainer& GetProgram() const {
         return Program;

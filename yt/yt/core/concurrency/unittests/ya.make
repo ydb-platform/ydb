@@ -2,13 +2,10 @@ GTEST(unittester-core-concurrency)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
-IF (NOT OS_WINDOWS AND NOT ARCH_AARCH64)
-    ALLOCATOR(YT)
-ENDIF()
-
 PROTO_NAMESPACE(yt)
 
 SRCS(
+    arcadia_interop_ut.cpp
     async_barrier_ut.cpp
     async_looper_ut.cpp
     async_rw_lock_ut.cpp
@@ -16,6 +13,7 @@ SRCS(
     async_stream_pipe_ut.cpp
     async_stream_ut.cpp
     async_yson_writer_ut.cpp
+    bounded_concurrency_invoker_ut.cpp
     coroutines_ut.cpp
     count_down_latch_ut.cpp
     delayed_executor_ut.cpp
@@ -50,6 +48,7 @@ PEERDIR(
     yt/yt/core/test_framework
 
     library/cpp/json/yson
+    library/cpp/threading/future
 )
 
 REQUIREMENTS(

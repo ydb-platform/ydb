@@ -2,15 +2,16 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
-#include <ydb/library/mkql_proto/mkql_proto.h>
+#include <ydb/core/kqp/common/simple/helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/library/mkql_proto/mkql_proto.h>
+#include <ydb/library/mkql_proto/mkql_proto.h>
+#include <ydb/library/services/services.pb.h>
 #include <yql/essentials/core/yql_data_provider.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_node.h>
-#include <ydb/library/mkql_proto/mkql_proto.h>
-#include <ydb/core/kqp/common/simple/helpers.h>
-#include <ydb/core/protos/kqp_physical.pb.h>
-#include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/actors/core/log.h>
 

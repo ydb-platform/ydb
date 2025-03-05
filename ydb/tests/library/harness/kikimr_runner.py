@@ -5,14 +5,17 @@ import shutil
 import tempfile
 import time
 import itertools
+import threading
 from importlib_resources import read_binary
 from google.protobuf import text_format
+import yaml
+
+from six.moves.queue import Queue
 
 import yatest
 
 from ydb.tests.library.common.wait_for import wait_for
 from . import daemon
-from . import param_constants
 from . import kikimr_config
 from . import kikimr_node_interface
 from . import kikimr_cluster_interface
@@ -130,6 +133,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         if self.__configurator.suppress_version_check:
             command.append("--suppress-version-check")
 
+        if self.__configurator.use_config_store:
+            command.append("--config-dir=%s" % self.__config_path)
+        else:
+            command.append("--yaml-config=%s" % os.path.join(self.__config_path, "config.yaml"))
+
         if self.__node_broker_port is not None:
             command.append("--node-broker=%s%s:%d" % (
                 "grpcs://" if self.__configurator.grpc_ssl_enable else "",
@@ -167,7 +175,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         command.extend(
             [
-                "--yaml-config=%s" % os.path.join(self.__config_path, "config.yaml"),
                 "--grpc-port=%s" % self.grpc_port,
                 "--mon-port=%d" % self.mon_port,
                 "--ic-port=%d" % self.ic_port,
@@ -226,6 +233,15 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         finally:
             logger.info("Started node %s", self)
 
+    def read_node_config(self):
+        config_file = os.path.join(self.__config_path, "config.yaml")
+        with open(config_file) as f:
+            return yaml.safe_load(f)
+
+    def get_config_version(self):
+        config = self.read_node_config()
+        return config.get('metadata', {}).get('version', 0)
+
 
 class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
     def __init__(self, configurator=None, cluster_name='cluster'):
@@ -240,9 +256,14 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._slots = {}
         self.__server = 'localhost'
         self.__storage_pool_id_allocator = itertools.count(1)
-        self.__config_path = ensure_path_exists(
-            os.path.join(self.__configurator.working_dir, self.__cluster_name, "kikimr_configs")
-        )
+        if self.__configurator.separate_node_configs:
+            self.__config_base_path = ensure_path_exists(
+                os.path.join(self.__configurator.working_dir, self.__cluster_name, "kikimr_configs")
+            )
+        else:
+            self.__config_path = ensure_path_exists(
+                os.path.join(self.__configurator.working_dir, self.__cluster_name, "kikimr_configs")
+            )
         self._slot_index_allocator = itertools.count(1)
         self._node_index_allocator = itertools.count(1)
         self.default_channel_bindings = None
@@ -268,7 +289,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
     def server(self):
         return self.__server
 
-    def __call_kikimr_new_cli(self, cmd, connect_to_server=True):
+    def __call_kikimr_new_cli(self, cmd, connect_to_server=True, token=None):
         server = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
         binary_path = self.__configurator.get_binary_path(0)
         full_command = [binary_path]
@@ -276,9 +297,15 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             full_command += ["--server={server}".format(server=server)]
         full_command += cmd
 
+        env = None
+        token = token or self.__configurator.default_clusteradmin
+        if token is not None:
+            env = os.environ.copy()
+            env['YDB_TOKEN'] = token
+
         logger.debug("Executing command = {}".format(full_command))
         try:
-            return yatest.common.execute(full_command)
+            return yatest.common.execute(full_command, env=env)
         except yatest.common.ExecutionError as e:
             logger.exception("KiKiMR command '{cmd}' failed with error: {e}\n\tstdout: {out}\n\tstderr: {err}".format(
                 cmd=" ".join(str(x) for x in full_command),
@@ -345,7 +372,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         logger.info("Cluster started and initialized")
 
         if bs_needed:
-            self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"))
+            self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"), token=self.__configurator.default_clusteradmin)
 
     def __run_node(self, node_id):
         """
@@ -358,13 +385,21 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
     def __register_node(self):
         node_index = next(self._node_index_allocator)
+
+        if self.__configurator.separate_node_configs:
+            node_config_path = ensure_path_exists(
+                os.path.join(self.__config_base_path, "node_{}".format(node_index))
+            )
+        else:
+            node_config_path = self.__config_path
+
         data_center = None
         if isinstance(self.__configurator.dc_mapping, dict):
             if node_index in self.__configurator.dc_mapping:
                 data_center = self.__configurator.dc_mapping[node_index]
         self._nodes[node_index] = KiKiMRNode(
             node_id=node_index,
-            config_path=self.config_path,
+            config_path=node_config_path,
             port_allocator=self.__port_allocator.get_node_port_allocator(node_index),
             cluster_name=self.__cluster_name,
             configurator=self.__configurator,
@@ -431,17 +466,23 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         return ret
 
     def stop(self, kill=False):
-        saved_exceptions = []
+        saved_exceptions_queue = Queue()
 
-        for slot in self.slots.values():
-            exception = self.__stop_node(slot, kill)
-            if exception is not None:
-                saved_exceptions.append(exception)
-
-        for node in self.nodes.values():
+        def stop_node(node, kill):
             exception = self.__stop_node(node, kill)
             if exception is not None:
-                saved_exceptions.append(exception)
+                saved_exceptions_queue.put(exception)
+
+        # do in parallel to faster stopping (important for tests)
+        threads = []
+        for node in list(self.slots.values()) + list(self.nodes.values()):
+            thread = threading.Thread(target=stop_node, args=(node, kill))
+            thread.start()
+            threads.append(thread)
+        for thread in threads:
+            thread.join()
+
+        saved_exceptions = list(saved_exceptions_queue.queue)
 
         self.__port_allocator.release_ports()
 
@@ -455,10 +496,19 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
     @property
     def config_path(self):
+        if self.__configurator.separate_node_configs:
+            return self.__config_base_path
         return self.__config_path
 
     def __write_configs(self):
-        self.__configurator.write_proto_configs(self.config_path)
+        if self.__configurator.separate_node_configs:
+            for node_id in self.__configurator.all_node_ids():
+                node_config_path = ensure_path_exists(
+                    os.path.join(self.__config_base_path, "node_{}".format(node_id))
+                )
+                self.__configurator.write_proto_configs(node_config_path)
+        else:
+            self.__configurator.write_proto_configs(self.__config_path)
 
     def __instantiate_udfs_dir(self):
         to_load = self.__configurator.get_yql_udfs_to_load()
@@ -571,6 +621,7 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
 
     def __init__(
             self,
+            kikimr_configure_binary_path,
             kikimr_path,
             kikimr_next_path,
             node_id,
@@ -600,6 +651,7 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
 
         self._can_update = None
         self.current_version_idx = 0
+        self.__kikimr_configure_binary_path = kikimr_configure_binary_path
         self.versions = [
             self.kikimr_binary_deploy_path + "_last",
             self.kikimr_binary_deploy_path + "_next",
@@ -733,7 +785,7 @@ mon={mon}""".format(
 
     def prepare_artifacts(self, cluster_yml):
         self.copy_file_or_dir(
-            param_constants.kikimr_configure_binary_path(), self.kikimr_configure_binary_deploy_path)
+            self.__kikimr_configure_binary_path, self.kikimr_configure_binary_deploy_path)
 
         for version, local_driver in zip(self.versions, self.local_drivers_path):
             self.ssh_command("sudo rm -rf %s" % version)

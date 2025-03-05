@@ -431,28 +431,8 @@ struct TEvWhiteboard{
 
     struct TEvSystemStateResponse : public TEventPB<TEvSystemStateResponse, NKikimrWhiteboard::TEvSystemStateResponse, EvSystemStateResponse> {};
 
-    struct TEvClockSkewUpdate : TEventPB<TEvClockSkewUpdate, NKikimrWhiteboard::TNodeClockSkew, EvClockSkewUpdate> {
-        TEvClockSkewUpdate() = default;
-
-        TEvClockSkewUpdate(const ui32 peerNodeId, i64 clockSkewUs) {
-            Record.SetPeerNodeId(peerNodeId);
-            Record.SetClockSkewUs(clockSkewUs);
-        }
-    };
-
     struct TEvNodeStateUpdate : TEventPB<TEvNodeStateUpdate, NKikimrWhiteboard::TNodeStateInfo, EvNodeStateUpdate> {
         TEvNodeStateUpdate() = default;
-
-        TEvNodeStateUpdate(const TString& peerName, bool connected) {
-            Record.SetPeerName(peerName);
-            Record.SetConnected(connected);
-        }
-
-        TEvNodeStateUpdate(const TString& peerName, bool connected, NKikimrWhiteboard::EFlag connectStatus) {
-            Record.SetPeerName(peerName);
-            Record.SetConnected(connected);
-            Record.SetConnectStatus(connectStatus);
-        }
     };
 
     struct TEvNodeStateDelete : TEventPB<TEvNodeStateDelete, NKikimrWhiteboard::TNodeStateInfo, EvNodeStateDelete> {

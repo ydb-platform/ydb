@@ -11,6 +11,7 @@
 #include <util/stream/file.h>
 #include <util/system/fstat.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/tablet_types.h>
@@ -70,74 +71,80 @@ public:
             }
             mon->RegisterActorPage({
                 .RelPath = "viewer",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
             });
             mon->RegisterActorPage({
+                .RelPath = "viewer/capabilities",
+                .ActorSystem = ctx.ActorSystem(),
+                .ActorId = ctx.SelfID,
+                .UseAuth = false,
+            });
+            mon->RegisterActorPage({
                 .Title = "Viewer",
                 .RelPath = "viewer/v2",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
             });
             mon->RegisterActorPage({
                 .Title = "Monitoring",
                 .RelPath = "monitoring",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "counters/hosts",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "healthcheck",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "vdisk",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "pdisk",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "operation",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "query",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "scheme",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "storage",
-                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = viewerAllowedSIDs,
@@ -173,6 +180,18 @@ public:
             JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodelist"] = JsonHandlers.JsonHandlersIndex["/viewer/nodelist"];
             JsonHandlers.JsonHandlersIndex["/viewer/v2/json/tabletinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/tabletinfo"];
             JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodeinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/nodeinfo"];
+
+            for (const auto& [name, handler] : JsonHandlers.JsonHandlersIndex) {
+                // temporary handling of new handlers
+                if (handler->IsHttpEvent()) {
+                    mon->RegisterActorHandler({
+                        .Path = name,
+                        .Handler = ctx.SelfID,
+                        .UseAuth = true,
+                        .AllowedSIDs = viewerAllowedSIDs,
+                    });
+                }
+            }
         }
     }
 
@@ -183,6 +202,7 @@ public:
     void FillCORS(TStringBuilder& stream, const TRequestState& request);
     void FillTraceId(TStringBuilder& stream, const TRequestState& request);
     TString GetHTTPOK(const TRequestState& request, TString type, TString response, TInstant lastModified) override;
+    TString GetChunkedHTTPOK(const TRequestState& request, TString contentType = {}) override;
     TString GetHTTPGATEWAYTIMEOUT(const TRequestState& request, TString type, TString response) override;
     TString GetHTTPBADREQUEST(const TRequestState& request, TString type, TString response) override;
     TString GetHTTPFORBIDDEN(const TRequestState& request, TString type, TString response) override;
@@ -191,21 +211,13 @@ public:
     TString GetHTTPFORWARD(const TRequestState& request, const TString& location) override;
 
     bool CheckAccessAdministration(const TRequestState& request) override {
+        auto userTokenObject = request.GetUserTokenObject();
         if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
-            if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || request->UserToken.empty()) {
+            if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || userTokenObject.empty()) {
                 return true;
             }
         }
-        if (request->UserToken.empty()) {
-            return false;
-        }
-        auto token = std::make_unique<NACLib::TUserToken>(request->UserToken);
-        for (const auto& allowedSID : KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetAdministrationAllowedSIDs()) {
-            if (token->IsExist(allowedSID)) {
-                return true;
-            }
-        }
-        return false;
+        return IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
     }
 
     static bool IsStaticGroup(ui32 groupId) {
@@ -280,17 +292,17 @@ public:
         if (nodes.empty()) {
             return GetHTTPBADREQUEST(request, "text/plain", "Couldn't resolve database nodes");
         }
-        if (!request.Request->Request.GetHeader("X-Forwarded-From-Node").empty()) {
+        if (!request.GetHeader("X-Forwarded-From-Node").empty()) {
             return GetHTTPBADREQUEST(request, "text/plain", "Can't do double forward");
         }
         // we expect that nodes order is the same for all requests
-        ui64 hash = std::hash<TString>()(request->Request.GetRemoteAddr());
+        ui64 hash = std::hash<TString>()(request.GetRemoteAddr());
         auto it = std::next(nodes.begin(), hash % nodes.size());
 
         TStringBuilder redirect;
         redirect << "/node/";
         redirect << *it;
-        redirect << request->Request.GetUri();
+        redirect << request.GetUri();
         return GetHTTPFORWARD(request, redirect);
     }
 
@@ -375,6 +387,7 @@ private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NMon::TEvHttpInfo, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
             hFunc(TEvViewer::TEvViewerRequest, Handle);
         }
     }
@@ -458,11 +471,15 @@ private:
                 response << "HTTP/1.1 200 Ok\r\n";
                 response << "Content-Type: " << type << "\r\n";
                 response << "Content-Length: " << blob.size() << "\r\n";
-                response << "Date: " << TInstant::Now().ToRfc822String() << "\r\n";
-                if (lastModified) {
-                    response << "Last-Modified: " << lastModified << "\r\n";
+                if (name == "/monitoring/index.html") {
+                    response << "Cache-Control: no-store,max-age=0\r\n"; // do not cache
+                } else {
+                    response << "Date: " << TInstant::Now().ToRfc822String() << "\r\n";
+                    if (lastModified) {
+                        response << "Last-Modified: " << lastModified << "\r\n";
+                    }
+                    response << "Cache-Control: max-age=604800\r\n"; // one week
                 }
-                response << "Cache-Control: max-age=604800\r\n"; // one week
                 response << "\r\n";
                 response.Write(blob.data(), blob.size());
                 Send(ev->Sender, new NMon::TEvHttpInfoRes(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
@@ -493,7 +510,7 @@ private:
             TStringBuilder response;
             response << "HTTP/1.1 204 No Content\r\n";
             FillCORS(response, msg);
-            response << "Content-Type: " + type + "\r\n"
+            response << "Content-Type: " << type << "\r\n"
                         "Connection: Keep-Alive\r\n\r\n";
             Send(ev->Sender, new NMon::TEvHttpInfoRes(response, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return;
@@ -511,7 +528,12 @@ private:
         if (handler) {
             auto sender(ev->Sender);
             try {
-                ctx.ExecutorThread.RegisterActor(handler->CreateRequestActor(this, ev));
+                IActor* requestActor = handler->CreateRequestActor(this, ev);
+                if (requestActor == nullptr) {
+                    Send(sender, new NMon::TEvHttpInfoRes(GetHTTPINTERNALERROR(ev->Get(), "text/plain", "Wrong type of the handler (not evinfo)"), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                } else {
+                    Register(requestActor);
+                }
                 return;
             }
             catch (const std::exception& e) {
@@ -520,11 +542,11 @@ private:
             }
         }
         if (path.StartsWith("/counters/hosts")) {
-            ctx.ExecutorThread.RegisterActor(new TCountersHostsList(this, ev));
+            Register(new TCountersHostsList(this, ev));
             return;
         }
         if (path.StartsWith("/healthcheck")) { // healthcheck no auth scrapping
-            ctx.ExecutorThread.RegisterActor(new TJsonHealthCheck(this, ev));
+            Register(new TJsonHealthCheck(this, ev));
             return;
         }
         // TODO: check path validity
@@ -563,6 +585,56 @@ private:
         }
         Send(ev->Sender, new NMon::TEvHttpInfoRes(GetHTTPNOTFOUND(ev->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
     }
+
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+        if (ev->Get()->Request->Method == "OPTIONS") {
+            TString uri(ev->Get()->Request->GetURI());
+            TString type = mimetypeByExt(uri.c_str());
+            if (type.empty()) {
+                type = "application/json";
+            }
+            TStringBuilder response;
+            response << "HTTP/1.1 204 No Content\r\n";
+            FillCORS(response, ev->Get());
+            response << "Content-Type: " << type << "\r\n"
+                        "Connection: Keep-Alive\r\n\r\n";
+            Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseString(response)));
+            return;
+        }
+        TString path(ev->Get()->Request->GetURI());
+        auto itRedirect307 = Redirect307.find(path);
+        if (itRedirect307 != Redirect307.end()) {
+            TString redirect(ev->Get()->Request->URL);
+            redirect.erase(0, itRedirect307->first.size());
+            redirect.insert(0, itRedirect307->second);
+            TStringBuilder response;
+            response << "HTTP/1.1 307 Temporary Redirect\r\n";
+            FillCORS(response, ev->Get());
+            response << "Location: " + redirect + "\r\n"
+                        "Connection: Keep-Alive\r\n\r\n";
+            Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseString(response)));
+            return;
+        }
+        auto handler = JsonHandlers.FindHandler(path);
+        if (handler) {
+            auto sender(ev->Sender);
+            try {
+                IActor* requestActor = handler->CreateRequestActor(this, ev);
+                if (requestActor == nullptr) {
+                    Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseString(
+                        GetHTTPINTERNALERROR(ev->Get(), "text/plain", "Wrong type of the handler (not http)"))));
+                } else {
+                    Register(requestActor);
+                }
+                return;
+            }
+            catch (const std::exception& e) {
+                Send(sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseBadRequest()));
+                return;
+            }
+        }
+        Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseString(GetHTTPNOTFOUND(ev->Get()))));
+    }
 };
 
 TString IViewer::TContentRequestContext::Dump() const
@@ -600,8 +672,8 @@ void TViewer::FillCORS(TStringBuilder& stream, const TRequestState& request) {
     TString origin;
     if (AllowOrigin) {
         origin = AllowOrigin;
-    } else if (request && request->Request.GetHeaders().HasHeader("Origin")) {
-        origin = request->Request.GetHeader("Origin");
+    } else if (request && request.HasHeader("Origin")) {
+        origin = request.GetHeader("Origin");
     }
     if (origin.empty()) {
         origin = "*";
@@ -624,19 +696,20 @@ void TViewer::FillTraceId(TStringBuilder& stream, const TRequestState& request) 
 
 TString TViewer::GetHTTPGATEWAYTIMEOUT(const TRequestState& request, TString contentType, TString response) {
     TStringBuilder res;
-    res << "HTTP/1.1 504 Gateway Time-out\r\n"
+    res << "HTTP/1.1 504 Gateway Timeout\r\n"
         << "Connection: Close\r\n"
         << "X-Worker-Name: " << CurrentWorkerName << "\r\n";
     if (contentType) {
         res << "Content-Type: " << contentType << "\r\n";
+    }
+    if (response) {
+        res << "Content-Length: " << response.size() << "\r\n";
     }
     FillCORS(res, request);
     FillTraceId(res, request);
     res << "\r\n";
     if (response) {
         res << response << "\r\n";
-    } else {
-        res << "Gateway Time-out\r\n";
     }
     return res;
 }
@@ -648,6 +721,9 @@ TString TViewer::GetHTTPBADREQUEST(const TRequestState& request, TString content
         << "X-Worker-Name: " << CurrentWorkerName << "\r\n";
     if (contentType) {
         res << "Content-Type: " << contentType << "\r\n";
+    }
+    if (response) {
+        res << "Content-Length: " << response.size() << "\r\n";
     }
     FillCORS(res, request);
     FillTraceId(res, request);
@@ -665,6 +741,9 @@ TString TViewer::GetHTTPFORBIDDEN(const TRequestState& request, TString contentT
     if (contentType) {
         res << "Content-Type: " << contentType << "\r\n";
     }
+    if (response) {
+        res << "Content-Length: " << response.size() << "\r\n";
+    }
     FillCORS(res, request);
     FillTraceId(res, request);
     res << "\r\n";
@@ -677,7 +756,9 @@ TString TViewer::GetHTTPFORBIDDEN(const TRequestState& request, TString contentT
 TString TViewer::GetHTTPNOTFOUND(const TRequestState& request) {
     TStringBuilder res;
     res << "HTTP/1.1 404 Not Found\r\n"
-        << "Connection: Close\r\n";
+        << "X-Worker-Name: " << CurrentWorkerName << "\r\n"
+        << "Connection: Close\r\n"
+        << "Content-Length: 0\r\n";
     FillCORS(res, request);
     FillTraceId(res, request);
     res << "\r\n";
@@ -698,11 +779,27 @@ TString TViewer::GetHTTPOK(const TRequestState& request, TString contentType, TS
             res << "Last-Modified: " << lastModified.ToRfc822String() << "\r\n";
             res << "Cache-Control: max-age=604800\r\n"; // one week
         }
+    } else {
+        res << "Content-Length: 0\r\n";
     }
     res << "\r\n";
     if (response) {
         res << response;
     }
+    return res;
+}
+
+TString TViewer::GetChunkedHTTPOK(const TRequestState& request, TString contentType) {
+    TStringBuilder res;
+    res << "HTTP/1.1 200 Ok\r\n"
+        << "X-Worker-Name: " << CurrentWorkerName << "\r\n";
+    FillCORS(res, request);
+    FillTraceId(res, request);
+    if (contentType) {
+        res << "Content-Type: " << contentType << "\r\n";
+    }
+    res << "Transfer-Encoding: chunked\r\n";
+    res << "\r\n";
     return res;
 }
 
@@ -715,6 +812,8 @@ TString TViewer::GetHTTPINTERNALERROR(const TRequestState& request, TString cont
     if (response) {
         res << "Content-Type: " << contentType << "\r\n";
         res << "Content-Length: " << response.size() << "\r\n";
+    } else {
+        res << "Content-Length: 0\r\n";
     }
     res << "\r\n";
     if (response) {
@@ -726,7 +825,9 @@ TString TViewer::GetHTTPINTERNALERROR(const TRequestState& request, TString cont
 TString TViewer::GetHTTPFORWARD(const TRequestState& request, const TString& location) {
     TStringBuilder res;
     res << "HTTP/1.1 307 Temporary Redirect\r\n"
-        << "Location: " << location << "\r\n";
+        << "Location: " << location << "\r\n"
+        << "Connection: Keep-Alive\r\n"
+        << "Content-Length: 0\r\n";
     FillCORS(res, request);
     FillTraceId(res, request);
     res << "\r\n";
@@ -816,6 +917,7 @@ NKikimrViewer::EFlag GetPDiskStateFlag(const NKikimrWhiteboard::TPDiskStateInfo&
         case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError:
         case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError:
         case NKikimrBlobStorage::TPDiskState::OpenFileError:
+        case NKikimrBlobStorage::TPDiskState::Stopped:
             flag = NKikimrViewer::EFlag::Red;
             break;
         default:

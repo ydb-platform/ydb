@@ -13,7 +13,7 @@ namespace io
     {
       USING_FUNCTOR(seek, builtins::file::functor::seek);
     }
-  }
-}
+  } // namespace _io
+} // namespace io
 PYTHONIC_NS_END
 #endif

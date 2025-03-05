@@ -25,8 +25,8 @@
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/ydb/actors/yql_ydb_source_factory.h>
-#include <ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
-#include <ydb/library/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
+#include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
+#include <yt/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
 #include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
 #include <ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_factory.h>
 #include <ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_dq_transform.h>
@@ -115,11 +115,12 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, I
         std::make_shared<TPqGatewayConfig>(),
         nullptr
     );
-    RegisterDqPqReadActorFactory(*factory, driver, nullptr, CreatePqNativeGateway(std::move(pqServices)));
+    auto pqGateway = CreatePqNativeGateway(std::move(pqServices));
+    RegisterDqPqReadActorFactory(*factory, driver, nullptr, pqGateway);
 
     RegisterYdbReadActorFactory(*factory, driver, nullptr);
     RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
-    RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
+    RegisterDqPqWriteActorFactory(*factory, driver, nullptr, pqGateway);
 
     auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
     auto retryPolicy = GetHTTPDefaultRetryPolicy();
@@ -133,7 +134,7 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, I
 
 int main(int argc, char** argv) {
 
-    const auto driverConfig = NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr"));
+    const auto driverConfig = NYdb::TDriverConfig().SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
     NYdb::TDriver driver(driverConfig);
 
     Y_DEFER {

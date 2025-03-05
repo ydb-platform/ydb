@@ -25,18 +25,25 @@ TPeriodicExecutorBase<TInvocationTimePolicy>::TPeriodicExecutorBase(
 template <CInvocationTimePolicy TInvocationTimePolicy>
 void TPeriodicExecutorBase<TInvocationTimePolicy>::Start()
 {
+    YT_UNUSED_FUTURE(StartAndGetFirstExecutedEvent());
+}
+
+template <CInvocationTimePolicy TInvocationTimePolicy>
+TFuture<void> TPeriodicExecutorBase<TInvocationTimePolicy>::StartAndGetFirstExecutedEvent()
+{
     auto guard = Guard(SpinLock_);
 
-    if (Started_) {
-        return;
+    if (!Started_) {
+        FirstExecutedEventPromise_ = NewPromise<void>();
+        ExecutedPromise_ = TPromise<void>();
+        IdlePromise_ = TPromise<void>();
+        Started_ = true;
+        if (TInvocationTimePolicy::IsEnabled()) {
+            PostDelayedCallback(TInvocationTimePolicy::KickstartDeadline());
+        }
     }
 
-    ExecutedPromise_ = TPromise<void>();
-    IdlePromise_ = TPromise<void>();
-    Started_ = true;
-    if (TInvocationTimePolicy::IsEnabled()) {
-        PostDelayedCallback(TInvocationTimePolicy::KickstartDeadline());
-    }
+    return FirstExecutedEventPromise_.ToFuture().ToUncancelable();
 }
 
 template <CInvocationTimePolicy TInvocationTimePolicy>
@@ -58,6 +65,7 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::DoStop(TGuard<NThreading::TSp
     TInvocationTimePolicy::Reset();
 
     auto executedPromise = ExecutedPromise_;
+    auto firstExecutedEventPromise = FirstExecutedEventPromise_;
     auto executionCanceler = ExecutionCanceler_;
     TDelayedExecutor::CancelAndClear(Cookie_);
 
@@ -66,6 +74,8 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::DoStop(TGuard<NThreading::TSp
     if (executedPromise) {
         executedPromise.TrySet(MakeStoppedError());
     }
+
+    firstExecutedEventPromise.TrySet(MakeStoppedError());
 
     if (executionCanceler) {
         executionCanceler(MakeStoppedError());
@@ -145,7 +155,7 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::ScheduleOutOfBand()
 template <CInvocationTimePolicy TInvocationTimePolicy>
 void TPeriodicExecutorBase<TInvocationTimePolicy>::PostDelayedCallback(TInstant deadline)
 {
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
     TDelayedExecutor::CancelAndClear(Cookie_);
     Cookie_ = TDelayedExecutor::Submit(
         BIND_NO_PROPAGATE(&TThis::OnTimer, MakeWeak(this)),
@@ -207,9 +217,11 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::RunCallback()
         }
 
         TPromise<void> idlePromise;
+        TPromise<void> firstExecutedEventPromise;
         {
             auto guard = Guard(SpinLock_);
             idlePromise = IdlePromise_;
+            firstExecutedEventPromise = FirstExecutedEventPromise_;
             ExecutingCallback_ = false;
             ExecutionCanceler_.Reset();
         }
@@ -221,6 +233,8 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::RunCallback()
         if (executedPromise) {
             executedPromise.TrySet();
         }
+
+        firstExecutedEventPromise.TrySet();
 
         auto guard = Guard(SpinLock_);
 

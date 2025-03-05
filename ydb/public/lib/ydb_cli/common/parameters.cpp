@@ -343,7 +343,7 @@ void TCommandWithParameters::GetParamTypes(const TDriver& driver, const TString&
         queryText,
         explainSettings
     ).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     ParamTypes = result.GetParameterTypes();
 }
 
@@ -405,7 +405,7 @@ bool TCommandWithParameters::GetNextParams(const TDriver& driver, const TString&
                     }
                     case EDataFormat::Csv:
                     case EDataFormat::Tsv: {
-                        CsvParser.GetParams(std::move(*data), *paramBuilder, TCsvParser::TParseMetadata{});
+                        CsvParser.BuildParams(*data, *paramBuilder, TCsvParser::TParseMetadata{});
                         break;
                     }
                     default:
@@ -449,7 +449,7 @@ bool TCommandWithParameters::GetNextParams(const TDriver& driver, const TString&
                         case EDataFormat::Csv:
                         case EDataFormat::Tsv: {
                             TValueBuilder valueBuilder;
-                            CsvParser.GetValue(std::move(*data), valueBuilder, type, TCsvParser::TParseMetadata{});
+                            CsvParser.BuildValue(*data, valueBuilder, type, TCsvParser::TParseMetadata{});
                             paramBuilder->AddParam(fullname, valueBuilder.Build());
                             break;
                         }
@@ -533,7 +533,7 @@ bool TCommandWithParameters::GetNextParams(const TDriver& driver, const TString&
                     case EDataFormat::Csv:
                     case EDataFormat::Tsv: {
                         valueBuilder.AddListItem();
-                        CsvParser.GetValue(std::move(*data), valueBuilder, type.GetProto().list_type().item(), TCsvParser::TParseMetadata{});
+                        CsvParser.BuildValue(*data, valueBuilder, type.GetProto().list_type().item(), TCsvParser::TParseMetadata{});
                         break;
                     }
                     default:

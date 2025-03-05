@@ -29,10 +29,13 @@ SRCS(
     resetable_setting.h
     retry.cpp
     retry.h
+    runnable.h
     sort.cpp
     sort.h
     swap_bytes.cpp
     swap_bytes.h
+    tty.cpp
+    tty.h
     url_builder.cpp
     utf8.cpp
     yql_panic.cpp
@@ -63,6 +66,7 @@ IF (OPENSOURCE_PROJECT != "yt")
         log
         memory_profiling
         network
+        oom_helper
         signals
         sys
         test_http_server

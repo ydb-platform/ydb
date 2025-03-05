@@ -1,6 +1,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard__op_traits.h>
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -43,7 +44,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateOlapStore TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -93,13 +94,16 @@ public:
             TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
 
             if (shard.TabletType == ETabletType::ColumnShard) {
+                const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId;
                 auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
                     NKikimrTxColumnShard::TX_KIND_SCHEMA,
                     context.SS->TabletID(),
                     context.Ctx.SelfID,
                     ui64(OperationId.GetTxId()),
                     columnShardTxBody, seqNo,
-                    context.SS->SelectProcessingParams(txState->TargetPathId));
+                    context.SS->SelectProcessingParams(txState->TargetPathId),
+                    0,
+                    subDomainPathId);
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
             } else {
@@ -124,7 +128,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateOlapStore TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -209,7 +213,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateOlapStore TProposedWaitParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -329,9 +333,9 @@ public:
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard() && context.SS->OlapStores.empty()) {
+        if (!AppDataVerified().FeatureFlags.GetEnableColumnStore()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                "OLAP schema operations are not supported");
+                "Column stores are not supported");
             return result;
         }
 
@@ -499,10 +503,10 @@ public:
         context.SS->ClearDescribePathCaches(dstPath.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath.Base()->PathId);
 
-        dstPath.DomainInfo()->IncPathsInside();
-        dstPath.DomainInfo()->AddInternalShards(txState);
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
+        dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
         dstPath.Base()->IncShardsInside(shardsToCreate);
-        parentPath.Base()->IncAliveChildren();
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;
@@ -526,6 +530,30 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreateColumnStore().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreateColumnStore()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateOlapStore>(id, tx);

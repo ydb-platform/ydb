@@ -3,11 +3,11 @@
 
 #include "pythonic/include/numpy/nan_to_num.hpp"
 
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/types/ndarray.hpp"
-#include "pythonic/utils/numpy_traits.hpp"
 #include "pythonic/numpy/isinf.hpp"
 #include "pythonic/numpy/isnan.hpp"
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
+#include "pythonic/utils/numpy_traits.hpp"
 
 #include <limits>
 
@@ -31,12 +31,12 @@ namespace numpy
       else
         return a;
     }
-  }
+  } // namespace wrapper
 
 #define NUMPY_NARY_FUNC_NAME nan_to_num
 #define NUMPY_NARY_FUNC_SYM wrapper::nan_to_num
 #include "pythonic/types/numpy_nary_expr.hpp"
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

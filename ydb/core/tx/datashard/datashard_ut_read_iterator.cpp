@@ -17,7 +17,7 @@
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/protos/query_stats.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb-cpp-sdk/client/result/result.h>
 
 #include <algorithm>
 #include <map>
@@ -3143,7 +3143,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // Read in a transaction.
         auto readRequest1 = helper.GetBaseReadRequest(tableName, 1);
         readRequest1->Record.SetLockTxId(lockTxId);
-        snapshot.Serialize(*readRequest1->Record.MutableSnapshot());
+        snapshot.ToProto(readRequest1->Record.MutableSnapshot());
         AddKeyQuery(*readRequest1, {1, 1, 1});
 
         auto readResult1 = helper.SendRead(tableName, readRequest1.release());
@@ -3705,7 +3705,16 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // 2. tx2: upsert into range2 > range1 range and commit.
         // 3. tx1: read range2 -> lock should be broken
 
-        TTestHelper helper;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        TTestHelper helper(serverSettings);
 
         auto readVersion = CreateVolatileSnapshot(
             helper.Server,
@@ -3723,9 +3732,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         CheckResult(helper.Tables[tableName].UserTable, *readResult1, {});
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.TxLocksSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.BrokenTxLocksSize(), 0);
-
-        auto rows = EvWrite ? TEvWriteRows{{{300, 0, 0, 3000}}} : TEvWriteRows{};
-        auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(*helper.Server->GetRuntime(), rows);
 
         // write new data above snapshot
         ExecSQL(helper.Server, helper.Sender, R"(
@@ -4594,7 +4600,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
                 auto* msg = ev->Get();
                 if (!msg->Record.HasSnapshot()) {
                     Cerr << "... forcing read snapshot " << txVersion << Endl;
-                    txVersion.Serialize(*msg->Record.MutableSnapshot());
+                    txVersion.ToProto(msg->Record.MutableSnapshot());
                 }
             }
         });

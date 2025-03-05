@@ -75,7 +75,7 @@ Symbol Symbol::enumAdjustSymbol(const NodePtr &writer, const NodePtr &reader) {
     }
 
     size_t wc = writer->names();
-    vector<int> adj;
+    vector<int> adj; // enums are encoded as ints
     adj.reserve(wc);
 
     vector<string> err;
@@ -85,10 +85,10 @@ Symbol Symbol::enumAdjustSymbol(const NodePtr &writer, const NodePtr &reader) {
         vector<string>::const_iterator it = find(rs.begin(), rs.end(), s);
         if (it == rs.end()) {
             auto pos = err.size() + 1;
-            adj.push_back(-pos);
+            adj.push_back(static_cast<int>(-pos));
             err.push_back(s);
         } else {
-            adj.push_back(it - rs.begin());
+            adj.push_back(static_cast<int>(it - rs.begin()));
         }
     }
     return Symbol(Kind::EnumAdjust, make_pair(adj, err));

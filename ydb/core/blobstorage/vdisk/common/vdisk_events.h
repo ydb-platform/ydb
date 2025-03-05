@@ -703,8 +703,8 @@ namespace NKikimr {
                 if (costSettings.HasWriteBlockSize()) {
                     str << " WriteBlockSize# " << costSettings.GetWriteBlockSize();
                 }
-                if (costSettings.HasMinREALHugeBlobInBytes()) {
-                    str << " MinREALHugeBlobInBytes# " << costSettings.GetMinREALHugeBlobInBytes();
+                if (costSettings.HasMinHugeBlobInBytes()) {
+                    str << " MinHugeBlobInBytes# " << costSettings.GetMinHugeBlobInBytes();
                 }
                 str << "}";
             }
@@ -770,6 +770,8 @@ namespace NKikimr {
         // In current realization it is intentionaly lost on event serialization since
         // LWTrace doesn't support distributed shuttels yet
         mutable NLWTrace::TOrbit Orbit;
+
+        TDiskPart WrittenLocation;
 
         TEvVPutResult();
 
@@ -1109,7 +1111,7 @@ namespace NKikimr {
             ShowInternals = 2,
         };
 
-        using TForceBlockTabletData = TEvBlobStorage::TEvGet::TTabletData;
+        using TForceBlockTabletData = TEvBlobStorage::TEvGet::TForceBlockTabletData;
 
         struct TExtremeQuery : std::tuple<TLogoBlobID, ui32, ui32, const ui64*> {
             TExtremeQuery(const TLogoBlobID &logoBlobId, ui32 sh, ui32 sz, const ui64 *cookie = nullptr)
@@ -2996,14 +2998,35 @@ namespace NKikimr {
         }
     };
 
+    struct TNodeLayoutInfo : TThrRefBase {
+        // indexed by NodeId
+        TNodeLocation SelfLocation;
+        TVector<TNodeLocation> LocationPerOrderNumber;
+
+        TNodeLayoutInfo(const TNodeLocation& selfLocation, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
+                THashMap<ui32, TNodeLocation>& map)
+            : SelfLocation(selfLocation)
+            , LocationPerOrderNumber(info->GetTotalVDisksNum())
+        {
+            for (ui32 i = 0; i < LocationPerOrderNumber.size(); ++i) {
+                LocationPerOrderNumber[i] = map[info->GetActorId(i).NodeId()];
+            }
+        }
+    };
+
+    using TNodeLayoutInfoPtr = TIntrusivePtr<TNodeLayoutInfo>;
+
     struct TEvBlobStorage::TEvConfigureProxy
         : public TEventLocal<TEvBlobStorage::TEvConfigureProxy, TEvBlobStorage::EvConfigureProxy>
     {
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
+        TNodeLayoutInfoPtr NodeLayoutInfo;
         TIntrusivePtr<TStoragePoolCounters> StoragePoolCounters;
 
-        TEvConfigureProxy(TIntrusivePtr<TBlobStorageGroupInfo> info, TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = nullptr)
+        TEvConfigureProxy(TIntrusivePtr<TBlobStorageGroupInfo> info, TNodeLayoutInfoPtr nodeLayoutInfo,
+                TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = nullptr)
             : Info(std::move(info))
+            , NodeLayoutInfo(std::move(nodeLayoutInfo))
             , StoragePoolCounters(std::move(storagePoolCounters))
         {}
 
@@ -3199,9 +3222,9 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TEvMinHugeBlobSizeUpdate : public TEventLocal<TEvMinHugeBlobSizeUpdate, TEvBlobStorage::EvMinHugeBlobSizeUpdate> {
     public:
-        ui32 MinREALHugeBlobInBytes;
+        ui32 MinHugeBlobInBytes;
 
-        TEvMinHugeBlobSizeUpdate(ui32 minREALHugeBlobInBytes) : MinREALHugeBlobInBytes(minREALHugeBlobInBytes) {  
+        TEvMinHugeBlobSizeUpdate(ui32 minHugeBlobInBytes) : MinHugeBlobInBytes(minHugeBlobInBytes) {  
         };
     };
 } // NKikimr

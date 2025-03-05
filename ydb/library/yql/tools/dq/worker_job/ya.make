@@ -11,7 +11,6 @@ PEERDIR(
     yt/cpp/mapreduce/interface
     yt/yt/core
     ydb/library/yql/dq/actors/spilling
-    yql/essentials/minikql/comp_nodes/llvm14
     yql/essentials/providers/common/metrics
     ydb/library/yql/providers/dq/runtime
     ydb/library/yql/providers/dq/service

@@ -11,7 +11,7 @@ namespace builtins
   {
     USING_FUNCTOR(update, pythonic::__dispatch__::functor::update);
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

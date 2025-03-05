@@ -22,7 +22,7 @@ namespace builtins
         return {};
       return {chars.begin(), chars.begin() + stop + 1};
     }
-  }
-}
+  } // namespace str
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

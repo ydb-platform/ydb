@@ -342,6 +342,13 @@ namespace TEvDataShard {
         EvReadScanStarted,
         EvReadScanFinished,
 
+        // Used to transfer in-memory state between generations
+        EvInMemoryStateRequest,
+        EvInMemoryStateResponse,
+
+        EvForceDataCleanup,
+        EvForceDataCleanupResult,
+
         EvEnd
     };
 
@@ -1558,6 +1565,26 @@ namespace TEvDataShard {
         }
     };
 
+    struct TEvForceDataCleanup : TEventPB<TEvForceDataCleanup, NKikimrTxDataShard::TEvForceDataCleanup,
+                                          TEvDataShard::EvForceDataCleanup> {
+        TEvForceDataCleanup() = default;
+
+        TEvForceDataCleanup(ui64 dataCleanupGeneration) {
+            Record.SetDataCleanupGeneration(dataCleanupGeneration);
+        }
+    };
+
+    struct TEvForceDataCleanupResult : TEventPB<TEvForceDataCleanupResult, NKikimrTxDataShard::TEvForceDataCleanupResult,
+                                                TEvDataShard::EvForceDataCleanupResult> {
+        TEvForceDataCleanupResult() = default;
+
+        TEvForceDataCleanupResult(ui64 dataCleanupGeneration, ui64 tabletId, NKikimrTxDataShard::TEvForceDataCleanupResult::EStatus status) {
+            Record.SetDataCleanupGeneration(dataCleanupGeneration);
+            Record.SetTabletId(tabletId);
+            Record.SetStatus(status);
+        }
+    };
+
     /**
      * This message is used to ask datashard to compact any borrowed parts it has
      * for the specified user table.
@@ -1768,6 +1795,29 @@ namespace TEvDataShard {
             Record.SetStatus(status);
             Record.SetErrorDescription(error);
         }
+    };
+
+    struct TEvInMemoryStateRequest
+        : public TEventPB<TEvInMemoryStateRequest,
+                          NKikimrTxDataShard::TEvInMemoryStateRequest,
+                          EvInMemoryStateRequest>
+    {
+        TEvInMemoryStateRequest() = default;
+
+        explicit TEvInMemoryStateRequest(ui32 generation, const TString& continuationToken = {}) {
+            Record.SetGeneration(generation);
+            if (!continuationToken.empty()) {
+                Record.SetContinuationToken(continuationToken);
+            }
+        }
+    };
+
+    struct TEvInMemoryStateResponse
+        : public TEventPB<TEvInMemoryStateResponse,
+                          NKikimrTxDataShard::TEvInMemoryStateResponse,
+                          EvInMemoryStateResponse>
+    {
+        TEvInMemoryStateResponse() = default;
     };
 };
 

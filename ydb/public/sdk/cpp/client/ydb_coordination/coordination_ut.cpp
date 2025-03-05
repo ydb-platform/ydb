@@ -11,7 +11,7 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 
 using namespace NYdb;
-using namespace NYdb::NCoordination;
+using namespace NYdb::V2::NCoordination;
 
 namespace {
 

@@ -15,8 +15,13 @@ namespace NMiniKQL {
 namespace {
 
 constexpr auto border = 9124596000000000ULL;
-constexpr ui64 g_Yield = std::numeric_limits<ui64>::max();
-constexpr ui64 g_TestYieldStreamData[] = {0, 1, 0, 2, g_Yield, 0, g_Yield, 1, 2, 0, 1, 3, 0, g_Yield, 1, 2};
+
+struct TTestStreamParams {
+    static constexpr ui64 Yield = std::numeric_limits<ui64>::max();
+
+    ui64 StringSize = 1;
+    std::vector<ui64> TestYieldStreamData;
+};
 
 class TTestStreamWrapper: public TMutableComputationNode<TTestStreamWrapper> {
 using TBaseComputation = TMutableComputationNode<TTestStreamWrapper>;
@@ -25,19 +30,19 @@ public:
     public:
         using TBase = TComputationValue<TStreamValue>;
 
-        TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx)
-            : TBase(memInfo), CompCtx(compCtx)
+        TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, TTestStreamParams& params)
+            : TBase(memInfo), CompCtx(compCtx), Params(params)
         {}
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
 
-            constexpr auto size = Y_ARRAY_SIZE(g_TestYieldStreamData);
+            auto size = Params.TestYieldStreamData.size();
             if (Index == size) {
                 return NUdf::EFetchStatus::Finish;
             }
 
-            const auto val = g_TestYieldStreamData[Index];
-            if (g_Yield == val) {
+            const auto val = Params.TestYieldStreamData[Index];
+            if (Params.Yield == val) {
                 ++Index;
                 return NUdf::EFetchStatus::Yield;
             }
@@ -45,7 +50,7 @@ public:
             NUdf::TUnboxedValue* items = nullptr;
             result = CompCtx.HolderFactory.CreateDirectArrayHolder(2, items);
             items[0] = NUdf::TUnboxedValuePod(val);
-            items[1] =  NUdf::TUnboxedValuePod(MakeString(ToString(val)));
+            items[1] = NUdf::TUnboxedValuePod(MakeString(ToString(val) * Params.StringSize));
 
             ++Index;
 
@@ -55,27 +60,31 @@ public:
     private:
         TComputationContext& CompCtx;
         ui64 Index = 0;
+        TTestStreamParams& Params;
     };
 
-    TTestStreamWrapper(TComputationMutables& mutables)
+    TTestStreamWrapper(TComputationMutables& mutables, TTestStreamParams& params)
         : TBaseComputation(mutables)
+        , Params(params)
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(ctx);
+        return ctx.HolderFactory.Create<TStreamValue>(ctx, Params);
     }
 private:
     void RegisterDependencies() const final {}
+
+    TTestStreamParams& Params;
 };
 
-IComputationNode* WrapTestStream(const TComputationNodeFactoryContext& ctx) {
-    return new TTestStreamWrapper(ctx.Mutables);
+IComputationNode* WrapTestStream(const TComputationNodeFactoryContext& ctx, TTestStreamParams& params) {
+    return new TTestStreamWrapper(ctx.Mutables, params);
 }
 
-TComputationNodeFactory GetNodeFactory() {
-    return [](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
+TComputationNodeFactory GetNodeFactory(TTestStreamParams& params) {
+    return [&params](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
         if (callable.GetType()->GetName() == "TestYieldStream") {
-            return WrapTestStream(ctx);
+            return WrapTestStream(ctx, params);
         }
         return GetBuiltinFactory()(callable, ctx);
     };
@@ -146,7 +155,6 @@ void CheckIfStreamHasExpectedStringValues(const NUdf::TUnboxedValue& streamValue
 
 } // unnamed
 
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 18u
 Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerTest) {
     Y_UNIT_TEST_LLVM(TestLongStringsRefCounting) {
         TSetup<LLVM> setup;
@@ -456,7 +464,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerTest) {
     }
 #if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 46u
     Y_UNIT_TEST_LLVM(TestHasLimitButPasstroughtYields) {
-        TSetup<LLVM> setup(GetNodeFactory());
+        TTestStreamParams params;
+        params.TestYieldStreamData = {0, 1, 0, 2, TTestStreamParams::Yield, 0, TTestStreamParams::Yield, 1, 2, 0, 1, 3, 0, TTestStreamParams::Yield, 1, 2};
+        TSetup<LLVM> setup(GetNodeFactory(params));
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         const auto stream = MakeStream<LLVM>(setup);
@@ -482,6 +492,40 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerTest) {
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "222");
         UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "3");
+        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Finish);
+        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Finish);
+    }
+#endif
+#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 46u
+    Y_UNIT_TEST_LLVM(TestSkipYieldRespectsMemLimit) {
+        TTestStreamParams params;
+        params.StringSize = 50000;
+        params.TestYieldStreamData = {0, TTestStreamParams::Yield, 2, TTestStreamParams::Yield, 3, TTestStreamParams::Yield, 4};
+        TSetup<LLVM> setup(GetNodeFactory(params));
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        const auto stream = MakeStream<LLVM>(setup);
+        const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(stream),
+            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Member(item, "a"), pb.Member(item, "b")}; }), -100000LL,
+            [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
+            [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return items; },
+            [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList { return {state.front(), pb.AggrConcat(state.back(), items.back())}; },
+            [&](TRuntimeNode::TList, TRuntimeNode::TList state) -> TRuntimeNode::TList { return state; }),
+            [&](TRuntimeNode::TList items) { return items.back(); }
+        ));
+        const auto graph = setup.BuildGraph(pgmReturn);
+        const auto streamVal = graph->GetValue();
+        NUdf::TUnboxedValue result;
+
+        // skip first 2 yields
+        UNIT_ASSERT_VALUES_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Yield);
+        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Yield);
+        // return all the collected values
+        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
+        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
+        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
+        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Yield);
+        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
         UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Finish);
         UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Finish);
     }
@@ -1020,7 +1064,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerPerfTest) {
         Cerr << "Runtime is " << t2 - t1 << " vs C++ " << cppTime << Endl;
     }
 }
-#endif
+
 #if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 29u
 Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
     Y_UNIT_TEST_LLVM_SPILLING(TestLongStringsRefCounting) {
@@ -1350,6 +1394,63 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         NUdf::TUnboxedValue item;
         const auto fetchStatus = streamVal.Fetch(item);
         UNIT_ASSERT_EQUAL(fetchStatus, NUdf::EFetchStatus::Finish);
+    }
+
+    Y_UNIT_TEST_LLVM(TestSpillingBucketsDistribution) {
+        const size_t expectedBucketsCount = 128;
+        const size_t sampleSize = 8 * 128;
+
+        TSetup<LLVM, true> setup;
+
+        std::vector<std::pair<ui64, ui64>> samples(sampleSize);
+        std::generate(samples.begin(), samples.end(), [key = (ui64)1] () mutable -> std::pair<ui64, ui64> {
+            key += 64;
+            return {key, 1};
+        });
+
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        const auto listType = pb.NewListType(pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui64>::Id), pb.NewDataType(NUdf::TDataType<ui64>::Id)}));
+        const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
+
+        const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideLastCombinerWithSpilling(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+            [&](TRuntimeNode item) -> TRuntimeNode::TList { return { pb.Nth(item, 0U), pb.Nth(item, 1U) }; }),
+            [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
+            [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back()}; },
+            [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList { return {pb.AggrAdd(state.front(), items.back())}; },
+            [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList { return {keys.front(), state.front()}; }),
+            [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }
+        ));
+
+        const auto spillerFactory = std::make_shared<TMockSpillerFactory>();
+        const auto graph = setup.BuildGraph(pgmReturn, {list});
+        graph->GetContext().SpillerFactory = spillerFactory;
+
+        NUdf::TUnboxedValue* items = nullptr;
+        graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(samples.size(), items));
+        for (const auto& sample : samples) {
+            NUdf::TUnboxedValue* pair = nullptr;
+            *items++ = graph->GetHolderFactory().CreateDirectArrayHolder(2U, pair);
+            pair[0] = NUdf::TUnboxedValuePod(sample.first);
+            pair[1] = NUdf::TUnboxedValuePod(sample.second);
+        }
+
+        const auto& value = graph->GetValue();
+
+        NUdf::TUnboxedValue item;
+        while (value.Fetch(item) != NUdf::EFetchStatus::Finish) {
+            ;
+        }
+
+        UNIT_ASSERT_EQUAL_C(spillerFactory->GetCreatedSpillers().size(), 1, "WideLastCombiner expected to create one spiller ");
+        const auto wideCombinerSpiller = std::dynamic_pointer_cast<TMockSpiller>(spillerFactory->GetCreatedSpillers()[0]);
+        UNIT_ASSERT_C(wideCombinerSpiller != nullptr, "MockSpillerFactory expected to create only MockSpillers");
+
+        auto flushedBucketsSizes = wideCombinerSpiller->GetPutSizes();
+        UNIT_ASSERT_EQUAL_C(flushedBucketsSizes.size(), expectedBucketsCount, "Spiller doesn't Put expected number of buckets");
+
+        auto anyEmpty = std::any_of(flushedBucketsSizes.begin(), flushedBucketsSizes.end(), [](size_t size) { return size == 0; });
+        UNIT_ASSERT_C(!anyEmpty, "Spiller flushed empty bucket");
     }
 }
 

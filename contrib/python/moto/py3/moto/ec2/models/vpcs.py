@@ -4,12 +4,12 @@ import weakref
 from collections import defaultdict
 from operator import itemgetter
 
-from moto.core import get_account_id
 from moto.core import CloudFormationModel
 from .core import TaggedEC2Resource
 from ..exceptions import (
     CidrLimitExceeded,
     UnsupportedTenancy,
+    DefaultVpcAlreadyExists,
     DependencyViolationError,
     InvalidCIDRBlockParameterError,
     InvalidServiceName,
@@ -76,6 +76,20 @@ class VPCEndPoint(TaggedEC2Resource, CloudFormationModel):
 
         self.created_at = utc_date_and_time()
 
+    def modify(self, policy_doc, add_subnets, add_route_tables, remove_route_tables):
+        if policy_doc:
+            self.policy_document = policy_doc
+        if add_subnets:
+            self.subnet_ids.extend(add_subnets)
+        if add_route_tables:
+            self.route_table_ids.extend(add_route_tables)
+        if remove_route_tables:
+            self.route_table_ids = [
+                rt_id
+                for rt_id in self.route_table_ids
+                if rt_id not in remove_route_tables
+            ]
+
     def get_filter_value(self, filter_name):
         if filter_name in ("vpc-endpoint-type", "vpc_endpoint_type"):
             return self.endpoint_type
@@ -84,7 +98,7 @@ class VPCEndPoint(TaggedEC2Resource, CloudFormationModel):
 
     @property
     def owner_id(self):
-        return get_account_id()
+        return self.ec2_backend.account_id
 
     @property
     def physical_resource_id(self):
@@ -100,7 +114,7 @@ class VPCEndPoint(TaggedEC2Resource, CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
         from ..models import ec2_backends
 
@@ -115,7 +129,7 @@ class VPCEndPoint(TaggedEC2Resource, CloudFormationModel):
         route_table_ids = properties.get("RouteTableIds")
         security_group_ids = properties.get("SecurityGroupIds")
 
-        ec2_backend = ec2_backends[region_name]
+        ec2_backend = ec2_backends[account_id][region_name]
         vpc_endpoint = ec2_backend.create_vpc_endpoint(
             vpc_id=vpc_id,
             service_name=service_name,
@@ -138,6 +152,7 @@ class VPC(TaggedEC2Resource, CloudFormationModel):
         is_default,
         instance_tenancy="default",
         amazon_provided_ipv6_cidr_block=False,
+        ipv6_cidr_block_network_border_group=None,
     ):
 
         self.ec2_backend = ec2_backend
@@ -160,11 +175,12 @@ class VPC(TaggedEC2Resource, CloudFormationModel):
             self.associate_vpc_cidr_block(
                 cidr_block,
                 amazon_provided_ipv6_cidr_block=amazon_provided_ipv6_cidr_block,
+                ipv6_cidr_block_network_border_group=ipv6_cidr_block_network_border_group,
             )
 
     @property
     def owner_id(self):
-        return get_account_id()
+        return self.ec2_backend.account_id
 
     @staticmethod
     def cloudformation_name_type():
@@ -177,13 +193,13 @@ class VPC(TaggedEC2Resource, CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
         from ..models import ec2_backends
 
         properties = cloudformation_json["Properties"]
 
-        ec2_backend = ec2_backends[region_name]
+        ec2_backend = ec2_backends[account_id][region_name]
         vpc = ec2_backend.create_vpc(
             cidr_block=properties["CidrBlock"],
             instance_tenancy=properties.get("InstanceTenancy", "default"),
@@ -245,7 +261,10 @@ class VPC(TaggedEC2Resource, CloudFormationModel):
         return True
 
     def associate_vpc_cidr_block(
-        self, cidr_block, amazon_provided_ipv6_cidr_block=False
+        self,
+        cidr_block,
+        amazon_provided_ipv6_cidr_block=False,
+        ipv6_cidr_block_network_border_group=None,
     ):
         max_associations = 5 if not amazon_provided_ipv6_cidr_block else 1
 
@@ -273,6 +292,11 @@ class VPC(TaggedEC2Resource, CloudFormationModel):
         association_set["cidr_block"] = (
             random_ipv6_cidr() if amazon_provided_ipv6_cidr_block else cidr_block
         )
+        if amazon_provided_ipv6_cidr_block:
+            association_set["ipv6_pool"] = "Amazon"
+            association_set[
+                "ipv6_cidr_block_network_border_group"
+            ] = ipv6_cidr_block_network_border_group
         self.cidr_block_association_set[association_id] = association_set
         return association_set
 
@@ -332,12 +356,21 @@ class VPCBackend:
         self.vpc_end_points = {}
         self.vpc_refs[self.__class__].add(weakref.ref(self))
 
+    def create_default_vpc(self):
+        default_vpc = self.describe_vpcs(filters={"is-default": "true"})
+        if default_vpc:
+            raise DefaultVpcAlreadyExists
+        cidr_block = "172.31.0.0/16"
+        return self.create_vpc(cidr_block=cidr_block, is_default=True)
+
     def create_vpc(
         self,
         cidr_block,
         instance_tenancy="default",
         amazon_provided_ipv6_cidr_block=False,
+        ipv6_cidr_block_network_border_group=None,
         tags=None,
+        is_default=False,
     ):
         vpc_id = random_vpc_id()
         try:
@@ -350,9 +383,10 @@ class VPCBackend:
             self,
             vpc_id,
             cidr_block,
-            len(self.vpcs) == 0,
-            instance_tenancy,
-            amazon_provided_ipv6_cidr_block,
+            is_default=is_default,
+            instance_tenancy=instance_tenancy,
+            amazon_provided_ipv6_cidr_block=amazon_provided_ipv6_cidr_block,
+            ipv6_cidr_block_network_border_group=ipv6_cidr_block_network_border_group,
         )
 
         for tag in tags or []:
@@ -573,6 +607,12 @@ class VPCBackend:
 
         return vpc_end_point
 
+    def modify_vpc_endpoint(
+        self, vpc_id, policy_doc, add_subnets, remove_route_tables, add_route_tables
+    ):
+        endpoint = self.describe_vpc_endpoints(vpc_end_point_ids=[vpc_id])[0]
+        endpoint.modify(policy_doc, add_subnets, add_route_tables, remove_route_tables)
+
     def delete_vpc_endpoints(self, vpce_ids=None):
         for vpce_id in vpce_ids or []:
             vpc_endpoint = self.vpc_end_points.get(vpce_id, None)
@@ -608,7 +648,7 @@ class VPCBackend:
         return generic_filter(filters, vpc_end_points)
 
     @staticmethod
-    def _collect_default_endpoint_services(region):
+    def _collect_default_endpoint_services(account_id, region):
         """Return list of default services using list of backends."""
         if DEFAULT_VPC_ENDPOINT_SERVICES:
             return DEFAULT_VPC_ENDPOINT_SERVICES
@@ -622,7 +662,8 @@ class VPCBackend:
 
         from moto import backends  # pylint: disable=import-outside-toplevel
 
-        for _backends in backends.unique_backends():
+        for _backends in backends.service_backends():
+            _backends = _backends[account_id]
             if region in _backends:
                 service = _backends[region].default_vpc_endpoint_service(region, zones)
                 if service:
@@ -736,7 +777,9 @@ class VPCBackend:
 
         The DryRun parameter is ignored.
         """
-        default_services = self._collect_default_endpoint_services(region)
+        default_services = self._collect_default_endpoint_services(
+            self.account_id, region
+        )
         for service_name in service_names:
             if service_name not in [x["ServiceName"] for x in default_services]:
                 raise InvalidServiceName(service_name)

@@ -1,5 +1,10 @@
 PROGRAM(kqprun)
 
+IF (PROFILE_MEMORY_ALLOCATIONS)
+    MESSAGE("Enabled profile memory allocations")
+    ALLOCATOR(LF_DBG)
+ENDIF()
+
 SRCS(
     kqprun.cpp
 )
@@ -8,9 +13,10 @@ PEERDIR(
     library/cpp/getopt
 
     yql/essentials/parser/pg_wrapper
-    ydb/library/yql/providers/yt/gateway/file
+    yt/yql/providers/yt/gateway/file
     yql/essentials/sql/pg
 
+    ydb/tests/tools/kqprun/runlib
     ydb/tests/tools/kqprun/src
 )
 

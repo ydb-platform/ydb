@@ -965,12 +965,13 @@ tlsg_session_pinning( LDAP *ld, tls_session *sess, char *hashalg, struct berval 
 	}
 
 	if ( hashalg ) {
-		keyhash.bv_len = gnutls_hash_get_len( alg );
-		keyhash.bv_val = LDAP_MALLOC( keyhash.bv_len );
+		len = gnutls_hash_get_len( alg );
+		keyhash.bv_val = LDAP_MALLOC( len );
 		if ( !keyhash.bv_val || gnutls_fingerprint( alg, &key,
-					keyhash.bv_val, &keyhash.bv_len ) < 0 ) {
+					keyhash.bv_val, &len ) < 0 ) {
 			goto done;
 		}
+		keyhash.bv_len = len;
 	} else {
 		keyhash.bv_val = (char *)key.data;
 		keyhash.bv_len = key.size;

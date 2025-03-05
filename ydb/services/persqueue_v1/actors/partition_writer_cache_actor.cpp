@@ -76,7 +76,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvTxWriteReque
         }
 
         writer->LastActivity = ctx.Now();
-        writer->OnWriteRequest(std::move(event.Request), ctx);
+        writer->OnWriteRequest(std::move(event.Request), std::move(ev->TraceId), ctx);
     } else {
         ReplyError(event.SessionId, event.TxId,
                    EErrorCode::OverloadError, "limit of active transactions has been exceeded",
@@ -149,7 +149,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteAccepte
     auto p = Writers.find(key);
     Y_ABORT_UNLESS(p != Writers.end());
 
-    if (result.Cookie == p->second->SentRequests.front()) {
+    if (result.Cookie == p->second->SentRequests.front().Cookie) {
         p->second->OnWriteAccepted(result, ctx);
 
         TryForwardToOwner(ev->Release().Release(), PendingWriteAccepted,
@@ -158,7 +158,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteAccepte
     } else {
         ReplyError(result.SessionId, result.TxId,
                    EErrorCode::InternalError, "out of order reserve bytes response from server, may be previous is lost",
-                   p->second->SentRequests.front(),
+                   p->second->SentRequests.front().Cookie,
                    ctx);
         this->Become(&TPartitionWriterCacheActor::StateBroken);
     }
@@ -166,7 +166,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteAccepte
 
 void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr& ev, const TActorContext& ctx)
 {
-    const auto& result = *ev->Get();
+    auto& result = *ev->Get();
 
     auto key = std::make_pair(result.SessionId, result.TxId);
     auto p = Writers.find(key);
@@ -174,7 +174,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteRespons
 
     if (result.IsSuccess()) {
         ui64 cookie = result.Record.GetPartitionResponse().GetCookie();
-        if (cookie == p->second->AcceptedRequests.front()) {
+        if (cookie == p->second->AcceptedRequests.front().Cookie) {
             p->second->OnWriteResponse(result);
 
             TryForwardToOwner(ev->Release().Release(), PendingWriteResponse,
@@ -183,7 +183,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteRespons
         } else {
             ReplyError(result.SessionId, result.TxId,
                        EErrorCode::InternalError, "out of order write response from server, may be previous is lost",
-                       p->second->AcceptedRequests.front(),
+                       p->second->AcceptedRequests.front().Cookie,
                        ctx);
             this->Become(&TPartitionWriterCacheActor::StateBroken);
         }

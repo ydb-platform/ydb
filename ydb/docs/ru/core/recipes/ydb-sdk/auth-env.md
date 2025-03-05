@@ -1,7 +1,5 @@
 # Аутентификация при помощи переменных окружения
 
-{% include [work in progress message](_includes/addition.md) %}
-
 При использовании данного метода режим аутентификации и его параметры будут определены окружением, в котором запускается приложение, в [описанном здесь порядке](../../reference/ydb-sdk/auth.md#env).
 
 Установив одну из следующих переменных окружения, можно управлять способом аутентификации:
@@ -82,17 +80,17 @@
 
   ```java
   public void work(String connectionString) {
-      AuthProvider authProvider = CloudAuthHelper.getAuthProviderFromEnviron();
+      AuthProvider authProvider = new EnvironAuthProvider();
 
       GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
               .withAuthProvider(authProvider)
               .build());
 
-      TableClient tableClient = TableClient.newClient(transport).build();
+      QueryClient queryClient = QueryClient.newClient(transport).build();
 
-      doWork(tableClient);
+      doWork(queryClient);
 
-      tableClient.close();
+      queryClient.close();
       transport.close();
   }
   ```
@@ -148,10 +146,6 @@
 
     asyncio.run(ydb_init())
   ```
-
-- C#
-
-  {% include [work in progress message](_includes/addition.md) %}
 
 - PHP
 

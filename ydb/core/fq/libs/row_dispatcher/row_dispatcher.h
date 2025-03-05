@@ -13,6 +13,10 @@
 
 #include <memory>
 
+namespace NActors {
+    class TMon;
+}
+
 namespace NFq {
 
 std::unique_ptr<NActors::IActor> NewRowDispatcher(
@@ -23,6 +27,8 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    const NYql::IPqGateway::TPtr& pqGateway);
+    const ::NMonitoring::TDynamicCounterPtr& countersRoot,
+    const NYql::IPqGateway::TPtr& pqGateway,
+    NActors::TMon* monitoring = nullptr);
 
 } // namespace NFq

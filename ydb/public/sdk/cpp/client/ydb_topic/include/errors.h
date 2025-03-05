@@ -5,7 +5,7 @@
 
 #include <library/cpp/retry/retry_policy.h>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 ERetryErrorClass GetRetryErrorClass(EStatus status);
 ERetryErrorClass GetRetryErrorClassV2(EStatus status);

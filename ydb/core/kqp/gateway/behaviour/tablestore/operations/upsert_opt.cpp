@@ -10,7 +10,12 @@ TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsIm
         return TConclusionStatus::Fail("Incorrect value for SCHEME_NEED_ACTUALIZATION: cannot parse as boolean");
     }
     SchemeNeedActualization = *value;
-    ExternalGuaranteeExclusivePK = features.Extract<bool>("EXTERNAL_GUARANTEE_EXCLUSIVE_PK");
+    ScanReaderPolicyName = features.Extract<TString>("SCAN_READER_POLICY_NAME");
+    if (ScanReaderPolicyName) {
+        if (*ScanReaderPolicyName != "PLAIN" && *ScanReaderPolicyName != "SIMPLE") {
+            return TConclusionStatus::Fail("SCAN_READER_POLICY_NAME have to be in ['PLAIN', 'SIMPLE']");
+        }
+    }
     if (const auto className = features.Extract<TString>("COMPACTION_PLANNER.CLASS_NAME")) {
         if (!CompactionPlannerConstructor.Initialize(*className)) {
             return TConclusionStatus::Fail("incorrect class name for compaction planner:" + *className);
@@ -52,8 +57,8 @@ TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsIm
 
 void TUpsertOptionsOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchema& schemaData) const {
     schemaData.MutableOptions()->SetSchemeNeedActualization(SchemeNeedActualization);
-    if (ExternalGuaranteeExclusivePK) {
-        schemaData.MutableOptions()->SetExternalGuaranteeExclusivePK(*ExternalGuaranteeExclusivePK);
+    if (ScanReaderPolicyName) {
+        schemaData.MutableOptions()->SetScanReaderPolicyName(*ScanReaderPolicyName);
     }
     if (CompactionPlannerConstructor.HasObject()) {
         CompactionPlannerConstructor.SerializeToProto(*schemaData.MutableOptions()->MutableCompactionPlannerConstructor());

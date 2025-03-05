@@ -15,13 +15,13 @@ namespace numpy
     types::ndarray<double, pS> geometric(double p, pS const &shape);
 
     auto geometric(double p, long size)
-        -> decltype(geometric(p, types::array<long, 1>{{size}}));
+        -> decltype(geometric(p, types::array_tuple<long, 1>{{size}}));
 
     double geometric(double, types::none_type size = {});
 
     DEFINE_FUNCTOR(pythonic::numpy::random, geometric);
-  }
-}
+  } // namespace random
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

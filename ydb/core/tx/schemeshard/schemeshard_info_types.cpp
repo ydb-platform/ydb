@@ -1,6 +1,6 @@
 #include "schemeshard_info_types.h"
 #include "schemeshard_path.h"
-#include "schemeshard_utils.h"
+#include "schemeshard_utils.h"  // for IsValidColumnName
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tx_processing.h>
@@ -608,8 +608,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
         switch (cfg.GetMode()) {
         case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE:
-            if (cfg.HasConsistency() && cfg.GetConsistency() != NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_UNKNOWN) {
-                errStr = "Cannot set replication consistency";
+            if (cfg.HasConsistencyLevel() && cfg.GetConsistencyLevel() != NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_UNKNOWN) {
+                errStr = "Cannot set replication consistency level";
                 return nullptr;
             }
             break;
@@ -648,6 +648,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     }
 
     alterData->IsBackup = op.GetIsBackup();
+    alterData->IsRestore = op.GetIsRestore();
 
     if (source && op.KeyColumnNamesSize() == 0)
         return alterData;
@@ -731,7 +732,7 @@ TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
     if (!TableDescription.HasPathId()) {
         TableDescription.SetName(pathInfo->Name);
         TableDescription.SetId_Deprecated(pathInfo->PathId.LocalPathId);
-        PathIdFromPathId(pathInfo->PathId, TableDescription.MutablePathId());
+        pathInfo->PathId.ToProto(TableDescription.MutablePathId());
 
         for (auto& c : Columns) {
             const TColumn& column = c.second;
@@ -1962,6 +1963,11 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
         return false;
     }
 
+    // Don't split/merge restore tables
+    if (IsRestore) {
+        return false;
+    }
+
     // Ignore stats from unknown datashard (it could have been split)
     if (!Stats.PartitionStats.contains(shardIdx)) {
         return false;
@@ -2011,6 +2017,10 @@ bool TTableInfo::CheckSplitByLoad(
 {
     // Don't split/merge backup tables
     if (IsBackup)
+        return false;
+
+    // Don't split/merge restore tables
+    if (IsRestore)
         return false;
 
     if (!splitSettings.SplitByLoadEnabled)
@@ -2091,6 +2101,7 @@ TString TExportInfo::TItem::ToString(ui32 idx) const {
         << " Idx: " << idx
         << " SourcePathName: '" << SourcePathName << "'"
         << " SourcePathId: " << SourcePathId
+        << " SourcePathType: " << SourcePathType
         << " State: " << State
         << " SubState: " << SubState
         << " WaitTxId: " << WaitTxId
@@ -2192,6 +2203,59 @@ void TIndexBuildInfo::SerializeToProto([[maybe_unused]] TSchemeShard* ss, NKikim
     result->SetTable(TargetName);
     for(const auto& column : BuildColumns) {
         column.SerializeToProto(result->add_column());
+    }
+}
+
+void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx shard) {
+    if (KMeans.Parent == 0) {
+        Y_ASSERT(KMeans.ParentEnd == 0);
+        // For Parent == 0 only single kmeans needed, so there is only two options:
+        // 1. It fits entirely in the single shard => local kmeans for single shard
+        // 2. It doesn't fit entirely in the single shard => global kmeans for all shards
+        return;
+    }
+    const auto [parentFrom, parentTo] = KMeans.RangeToBorders(range);
+    // TODO(mbkkt) We can make it more granular
+
+    // if new range is not intersect with other ranges, it's local
+    auto itFrom = Cluster2Shards.lower_bound(parentFrom);
+    if (itFrom == Cluster2Shards.end() || parentTo < itFrom->second.From) {
+        Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Local = shard});
+        return;
+    }
+
+    // otherwise, this range is global and we need to merge all intersecting ranges
+    auto itTo = parentTo < itFrom->first ? itFrom : Cluster2Shards.lower_bound(parentTo);
+    if (itTo == Cluster2Shards.end()) {
+        itTo = Cluster2Shards.rbegin().base();
+    }
+    if (itTo->first < parentTo) {
+        const bool needsToReplaceFrom = itFrom == itTo;
+        auto node = Cluster2Shards.extract(itTo);
+        node.key() = parentTo;
+        itTo = Cluster2Shards.insert(Cluster2Shards.end(), std::move(node));
+        itFrom = needsToReplaceFrom ? itTo : itFrom;
+    }
+    auto& [toFrom, toLocal, toGlobal] = itTo->second;
+
+    toFrom = std::min(toFrom, parentFrom);
+    if (toLocal != InvalidShardIdx) {
+        toGlobal.emplace_back(toLocal);
+        toLocal = InvalidShardIdx;
+    }
+    toGlobal.emplace_back(shard);
+
+    while (itFrom != itTo) {
+        const auto& [fromFrom, fromLocal, fromGlobal] = itFrom->second;
+        toFrom = std::min(toFrom, fromFrom);
+        if (fromLocal != InvalidShardIdx) {
+            Y_ASSERT(fromGlobal.empty());
+            toGlobal.emplace_back(fromLocal);
+        } else {
+            Y_ASSERT(!fromGlobal.empty());
+            toGlobal.insert(toGlobal.end(), fromGlobal.begin(), fromGlobal.end());
+        }
+        itFrom = Cluster2Shards.erase(itFrom);
     }
 }
 

@@ -4,8 +4,8 @@
 #include "private.h"
 
 #include <yt/yt/core/actions/invoker_util.h>
+
 #include <yt/yt/core/misc/relaxed_mpsc_queue.h>
-#include <yt/yt/core/misc/singleton.h>
 
 #include <yt/yt/core/threading/thread.h>
 
@@ -85,11 +85,11 @@ DEFINE_REFCOUNTED_TYPE(TDelayedExecutorEntry)
     R^acq(Stopping_, false)    (c)       RMW^acq(Queue_, empty, empty) (f)
 
     Since (c) reads |false| it must be reading from Stopping_ ctor which is
-    W^na(Stopping_, false) which preceedes (d) in modification order. Thus
+    W^na(Stopping_, false) which precedes (d) in modification order. Thus
     (c) must read-from some modification preceding (d) in modification order (ctor)
     and therefore (c) -cob-> (d) (coherence ordered before).
     Likewise, (f) reads |empty| which can only be read from Queue_ ctor or
-    prior Dequeue both of which preceede (a) in modification order (ctor is obvious;
+    prior Dequeue both of which precede (a) in modification order (ctor is obvious;
     former Dequeue by assumption that no one has read |CB| ever: if some (a) was
     prior to some Dequeue in modification order, |CB| would inevitably be read).
     So, (f) -cob-> (a). For fences we now have to relations:
@@ -239,10 +239,10 @@ private:
         TActionQueuePtr DelayedQueue_;
         IInvokerPtr DelayedInvoker_;
 
-        NProfiling::TGauge ScheduledCallbacksGauge_ = ConcurrencyProfiler.Gauge("/delayed_executor/scheduled_callbacks");
-        NProfiling::TCounter SubmittedCallbacksCounter_ = ConcurrencyProfiler.Counter("/delayed_executor/submitted_callbacks");
-        NProfiling::TCounter CanceledCallbacksCounter_ = ConcurrencyProfiler.Counter("/delayed_executor/canceled_callbacks");
-        NProfiling::TCounter StaleCallbacksCounter_ = ConcurrencyProfiler.Counter("/delayed_executor/stale_callbacks");
+        NProfiling::TGauge ScheduledCallbacksGauge_ = ConcurrencyProfiler().Gauge("/delayed_executor/scheduled_callbacks");
+        NProfiling::TCounter SubmittedCallbacksCounter_ = ConcurrencyProfiler().Counter("/delayed_executor/submitted_callbacks");
+        NProfiling::TCounter CanceledCallbacksCounter_ = ConcurrencyProfiler().Counter("/delayed_executor/canceled_callbacks");
+        NProfiling::TCounter StaleCallbacksCounter_ = ConcurrencyProfiler().Counter("/delayed_executor/stale_callbacks");
 
         class TCallbackGuard
         {
@@ -334,7 +334,10 @@ private:
             // NB: The callbacks are forwarded to the DelayedExecutor thread to prevent any user-code
             // from leaking to the Delayed Poller thread, which is, e.g., fiber-unfriendly.
             auto runAbort = [&] (const TDelayedExecutorEntryPtr& entry) {
-                RunCallback(entry, /*aborted*/ true);
+                if (auto callback = TakeCallback(entry)) {
+                    const auto& invoker = entry->Invoker ? entry->Invoker : DelayedInvoker_;
+                    invoker->Invoke(BIND_NO_PROPAGATE(TCallbackGuard(std::move(callback), /*aborted*/ true)));
+                }
             };
             for (const auto& entry : ScheduledEntries_) {
                 runAbort(entry);
@@ -405,32 +408,33 @@ private:
             }
 
             ScheduledCallbacksGauge_.Update(ScheduledEntries_.size());
+            THashMap<IInvokerPtr, std::vector<TClosure>> invokerToCallbacks;
             while (!ScheduledEntries_.empty()) {
                 auto it = ScheduledEntries_.begin();
                 const auto& entry = *it;
+
                 if (entry->Deadline > now + CoalescingInterval) {
                     break;
                 }
+
                 if (entry->Deadline + LateWarningThreshold < now) {
                     StaleCallbacksCounter_.Increment();
                     YT_LOG_DEBUG("Found a late delayed scheduled callback (Deadline: %v, Now: %v)",
                         entry->Deadline,
                         now);
                 }
-                RunCallback(entry, false);
+
+                if (auto callback = TakeCallback(entry)) {
+                    auto [it, _] = invokerToCallbacks.emplace(std::move(entry->Invoker), std::vector<TClosure>());
+                    it->second.push_back(BIND_NO_PROPAGATE(TCallbackGuard(std::move(callback), /*abort*/ false)));
+                }
+
                 entry->Iterator.reset();
                 ScheduledEntries_.erase(it);
             }
-        }
 
-        void RunCallback(const TDelayedExecutorEntryPtr& entry, bool abort)
-        {
-            if (auto callback = TakeCallback(entry)) {
-                const auto& invoker = entry->Invoker
-                    ? entry->Invoker
-                    : DelayedInvoker_;
-                invoker
-                    ->Invoke(BIND_NO_PROPAGATE(TCallbackGuard(std::move(callback), abort)));
+            for (auto& [invoker, callbacks] : invokerToCallbacks) {
+                (invoker ? invoker : DelayedInvoker_)->Invoke(TMutableRange(callbacks));
             }
         }
     };

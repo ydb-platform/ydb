@@ -1,11 +1,11 @@
 #include "error.h"
 #include "serialize.h"
-#include "origin_attributes.h"
 
-#include <yt/yt/core/concurrency/public.h>
+#include <yt/yt/core/concurrency/fls.h>
 
 #include <yt/yt/core/net/local_address.h>
 
+#include <yt/yt/core/misc/collection_helpers.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/tracing/trace_context.h>
@@ -18,6 +18,8 @@
 #include <yt/yt_proto/yt/core/misc/proto/error.pb.h>
 
 #include <library/cpp/yt/global/variable.h>
+
+#include <library/cpp/yt/misc/global.h>
 
 namespace NYT {
 
@@ -32,6 +34,8 @@ using NYT::ToProto;
 
 constexpr TStringBuf OriginalErrorDepthAttribute = "original_error_depth";
 
+bool TErrorCodicils::Initialized_ = false;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NDetail {
@@ -41,7 +45,7 @@ namespace {
 struct TExtensionData
 {
     NConcurrency::TFiberId Fid = NConcurrency::InvalidFiberId;
-    const char* HostName = nullptr;
+    TStringBuf HostName;
     TTraceId TraceId = InvalidTraceId;
     TSpanId SpanId = InvalidSpanId;
 };
@@ -142,9 +146,9 @@ TOriginAttributes::TErasedExtensionData GetExtensionDataOverride()
 {
     TExtensionData result;
     result.Fid = NConcurrency::GetCurrentFiberId();
-    result.HostName = NNet::ReadLocalHostName();
+    result.HostName = NNet::GetLocalHostNameRaw();
 
-    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
+    if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
         result.TraceId = traceContext->GetTraceId();
         result.SpanId = traceContext->GetSpanId();
     }
@@ -169,7 +173,7 @@ TString FormatOriginOverride(const TOriginAttributes& attributes)
         GetFid(attributes));
 }
 
-TOriginAttributes ExtractFromDictionaryOverride(const NYTree::IAttributeDictionaryPtr& attributes)
+TOriginAttributes ExtractFromDictionaryOverride(TErrorAttributes* attributes)
 {
     auto result = NYT::NDetail::ExtractFromDictionaryDefault(attributes);
 
@@ -360,7 +364,7 @@ void Serialize(
                 }
                 for (const auto& [key, value] : error.Attributes().ListPairs()) {
                     fluent
-                        .Item(key).Value(value);
+                        .Item(key).Value(NYson::TYsonString(value));
                 }
             })
             .DoIf(!error.InnerErrors().empty(), [&] (auto fluent) {
@@ -368,7 +372,7 @@ void Serialize(
             })
             .DoIf(valueProducer != nullptr, [&] (auto fluent) {
                 auto* consumer = fluent.GetConsumer();
-                // NB: we are forced to deal with a bare consumer here because
+                // NB: We are forced to deal with a bare consumer here because
                 // we can't use void(TFluentMap) in a function signature as it
                 // will lead to the inclusion of fluent.h in error.h and a cyclic
                 // inclusion error.h -> fluent.h -> callback.h -> error.h
@@ -399,8 +403,10 @@ void Deserialize(TError& error, const NYTree::INodePtr& node)
     auto children = mapNode->GetChildOrThrow(AttributesKey)->AsMap()->GetChildren();
 
     for (const auto& [key, value] : children) {
-        // TODO(babenko): migrate to std::string
-        error <<= TErrorAttribute(TString(key), ConvertToYsonString(value));
+        // NB(arkady-e1ppa): Serialization may add some attributes in normal yson
+        // format (in legacy versions) thus we have to reconvert them into the
+        // text ones in order to make sure that everything is in the text format.
+        error <<= TErrorAttribute(key, ConvertToYsonString(value));
     }
 
     error.UpdateOriginAttributes();
@@ -444,7 +450,7 @@ void ToProto(NYT::NProto::TError* protoError, const TError& error)
         for (const auto& [key, value] : pairs) {
             auto* protoAttribute = protoAttributes->add_attributes();
             protoAttribute->set_key(key);
-            protoAttribute->set_value(value.ToString());
+            protoAttribute->set_value(value);
         }
     }
 
@@ -504,6 +510,8 @@ void FromProto(TError* error, const NYT::NProto::TError& protoError)
     error->SetMessage(FromProto<TString>(protoError.message()));
     if (protoError.has_attributes()) {
         for (const auto& protoAttribute : protoError.attributes().attributes()) {
+            // NB(arkady-e1ppa): Again for compatibility reasons we have to reconvert stuff
+            // here as well.
             auto key = FromProto<TString>(protoAttribute.key());
             auto value = FromProto<TString>(protoAttribute.value());
             (*error) <<= TErrorAttribute(key, TYsonString(value));
@@ -608,8 +616,10 @@ void TErrorSerializer::Save(TStreamSaveContext& context, const TError& error)
             return lhs.first < rhs.first;
         });
         for (const auto& [key, value] : attributePairs) {
-            Save(context, key);
-            Save(context, value);
+            // NB(arkady-e1ppa): For the sake of compatibility we keep the old
+            // serialization format.
+            Save(context, TString(key));
+            Save(context, NYson::TYsonString(value));
         }
     } else {
         Save(context, false);
@@ -627,7 +637,6 @@ void TErrorSerializer::Load(TStreamLoadContext& context, TError& error)
     auto code = Load<TErrorCode>(context);
     auto message = Load<TString>(context);
 
-    IAttributeDictionaryPtr attributes;
     if (Load<bool>(context)) {
         size_t size = TSizeSerializer::Load(context);
         for (size_t index = 0; index < size; ++index) {
@@ -648,6 +657,98 @@ void TErrorSerializer::Load(TStreamLoadContext& context, TError& error)
     error.UpdateOriginAttributes();
     error.SetMessage(std::move(message));
     *error.MutableInnerErrors() = std::move(innerErrors);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static YT_DEFINE_GLOBAL(NConcurrency::TFlsSlot<TErrorCodicils>, ErrorCodicilsSlot);
+
+TErrorCodicils::TGuard::~TGuard()
+{
+    TErrorCodicils::GetOrCreate().Set(std::move(Key_), std::move(OldGetter_));
+}
+
+TErrorCodicils::TGuard::TGuard(
+    std::string key,
+    TGetter oldGetter)
+    : Key_(std::move(key))
+    , OldGetter_(std::move(oldGetter))
+{ }
+
+void TErrorCodicils::Initialize()
+{
+    if (Initialized_) {
+        // Multiple calls are OK.
+        return;
+    }
+    Initialized_ = true;
+
+    ErrorCodicilsSlot(); // Warm up the slot.
+    TError::RegisterEnricher([] (TError& error) {
+        if (auto* codicils = TErrorCodicils::MaybeGet()) {
+            codicils->Apply(error);
+        }
+    });
+}
+
+TErrorCodicils& TErrorCodicils::GetOrCreate()
+{
+    return *ErrorCodicilsSlot().GetOrCreate();
+}
+
+TErrorCodicils* TErrorCodicils::MaybeGet()
+{
+    return ErrorCodicilsSlot().MaybeGet();
+}
+
+std::optional<std::string> TErrorCodicils::MaybeEvaluate(const std::string& key)
+{
+    auto* instance = MaybeGet();
+    if (!instance) {
+        return {};
+    }
+
+    auto getter = instance->Get(key);
+    if (!getter) {
+        return {};
+    }
+
+    return getter();
+}
+
+auto TErrorCodicils::Guard(std::string key, TGetter getter) -> TGuard
+{
+    auto& instance = GetOrCreate();
+    auto [it, added] = instance.Getters_.try_emplace(key, getter);
+    TGetter oldGetter;
+    if (!added) {
+        oldGetter = std::move(it->second);
+        it->second = std::move(getter);
+    }
+    return TGuard(std::move(key), std::move(oldGetter));
+}
+
+void TErrorCodicils::Apply(TError& error) const
+{
+    for (const auto& [key, getter] : Getters_) {
+        error <<= TErrorAttribute(key, getter());
+    }
+}
+
+void TErrorCodicils::Set(std::string key, TGetter getter)
+{
+    // We could enforce Initialized_, but that could make an error condition worse at runtime.
+    // Instead, let's keep enrichment optional.
+    if (getter) {
+        Getters_.insert_or_assign(std::move(key), std::move(getter));
+    } else {
+        Getters_.erase(std::move(key));
+    }
+}
+
+auto TErrorCodicils::Get(const std::string& key) const -> TGetter
+{
+    return GetOrDefault(Getters_, std::move(key));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

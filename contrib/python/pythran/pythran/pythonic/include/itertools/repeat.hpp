@@ -43,7 +43,7 @@ namespace itertools
   _repeat<T, true> repeat(T iter);
 
   DEFINE_FUNCTOR(pythonic::itertools, repeat);
-}
+} // namespace itertools
 PYTHONIC_NS_END
 
 /* type inference stuff  {*/

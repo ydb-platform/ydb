@@ -1,5 +1,5 @@
 #include "index_events_processor.h"
-#include <ydb/public/sdk/cpp/client/ydb_types/ydb.h>
+#include <ydb-cpp-sdk/client/types/ydb.h>
 
 namespace NKikimr::NSQS {
 using namespace NActors;
@@ -34,13 +34,13 @@ void TSearchEventsProcessor::InitQueries(const TString& root) {
     SelectQueuesQuery = TStringBuilder()
             << "--!syntax_v1\n"
             << "DECLARE $Account as Utf8; DECLARE $QueueName as Utf8; "
-            << "SELECT Account, QueueName, CustomQueueName, CreatedTimestamp, FolderId from `"
+            << "SELECT Account, QueueName, CustomQueueName, CreatedTimestamp, FolderId, Tags from `"
             << getTableFullPath(".Queues") << "` "
             << "WHERE Account > $Account OR (Account = $Account AND QueueName > $QueueName);";
 
     SelectEventsQuery = TStringBuilder()
             << "--!syntax_v1\n"
-            << "SELECT Account, QueueName, EventType, CustomQueueName, EventTimestamp, FolderId "
+            << "SELECT Account, QueueName, EventType, CustomQueueName, EventTimestamp, FolderId, Labels "
             << "FROM `"<< eventsTablePath << "`;";
 
     DeleteEventQuery = TStringBuilder()
@@ -155,8 +155,9 @@ void TSearchEventsProcessor::OnQueuesListQueryComplete(NKqp::TEvKqp::TEvQueryRes
         auto customName = *parser.ColumnParser(2).GetOptionalUtf8();
         auto createTs = *parser.ColumnParser(3).GetOptionalUint64();
         auto folderId = *parser.ColumnParser(4).GetOptionalUtf8();
+        auto tags = parser.ColumnParser(5).GetOptionalUtf8().value_or("{}");
         auto insResult = ExistingQueues.insert(std::make_pair(
-                queueName, TQueueEvent{EQueueEventType::Existed, createTs, customName, cloudId, folderId}
+                queueName, TQueueEvent{EQueueEventType::Existed, createTs, customName, cloudId, folderId, tags}
         ));
         Y_ABORT_UNLESS(insResult.second);
     }
@@ -189,16 +190,17 @@ void TSearchEventsProcessor::OnEventsListingDone(NKqp::TEvKqp::TEvQueryResponse:
     NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
 
     while (parser.TryNextRow()) {
-        // "SELECT Account, QueueName, EventType, CustomQueueName, EventTimestamp, FolderId
+        // "SELECT Account, QueueName, EventType, CustomQueueName, EventTimestamp, FolderId, Labels
         auto cloudId = *parser.ColumnParser(0).GetOptionalUtf8();
         auto queueName = *parser.ColumnParser(1).GetOptionalUtf8();
         auto evType = *parser.ColumnParser(2).GetOptionalUint64();
         auto customName = *parser.ColumnParser(3).GetOptionalUtf8();
         auto timestamp = *parser.ColumnParser(4).GetOptionalUint64();
         auto folderId = *parser.ColumnParser(5).GetOptionalUtf8();
+        auto labels = parser.ColumnParser(6).GetOptionalUtf8().value_or("{}");
         auto& qEvents = QueuesEvents[queueName];
         auto insResult = qEvents.insert(std::make_pair(
-                timestamp, TQueueEvent{EQueueEventType(evType), timestamp, customName, cloudId, folderId}
+                timestamp, TQueueEvent{EQueueEventType(evType), timestamp, customName, cloudId, folderId, labels}
         ));
         Y_ABORT_UNLESS(insResult.second);
     }
@@ -367,6 +369,7 @@ void TSearchEventsProcessor::SaveQueueEvent(
         writer.Write("permission", "ymq.queues.list");
         writer.Write("cloud_id", event.CloudId);
         writer.Write("folder_id", event.FolderId);
+        writer.Write("labels", event.Labels);
         writer.OpenArray("resource_path");
         writer.OpenMap();
         writer.Write("resource_type", "resource-manager.folder");

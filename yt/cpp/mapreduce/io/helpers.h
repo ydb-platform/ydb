@@ -63,9 +63,7 @@ inline TNode FormIORequestParameters(
     if (options.Config_) {
         params[TIOOptionsTraits<TTableReaderOptions>::ConfigName] = *options.Config_;
     }
-    if (options.Offset_) {
-        params["offset"] = *options.Offset_;
-    }
+    params["offset"] = options.Offset_;
     if (options.Length_) {
         params["length"] = *options.Length_;
     }

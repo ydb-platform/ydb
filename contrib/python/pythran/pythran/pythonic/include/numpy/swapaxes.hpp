@@ -8,12 +8,14 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class T>
-  auto swapaxes(T &&a, int axis1, int axis2) -> decltype(functor::transpose{}(
-      std::forward<T>(a),
-      std::declval<types::array<long, std::decay<T>::type::value>>()));
+  auto swapaxes(T &&a, int axis1, int axis2)
+      -> decltype(functor::transpose{}(
+          std::forward<T>(a),
+          std::declval<
+              types::array_tuple<long, std::decay<T>::type::value>>()));
 
   DEFINE_FUNCTOR(pythonic::numpy, swapaxes);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

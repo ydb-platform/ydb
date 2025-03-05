@@ -1,15 +1,14 @@
 #include "secondary_index.h"
 
-#include <util/system/env.h>
-
 using namespace NLastGetopt;
 using namespace NYdb;
+using namespace NYdb::NStatusHelpers;
 
 int main(int argc, char** argv) {
 
-    TString endpoint;
-    TString database;
-    TString command;
+    std::string endpoint;
+    std::string database;
+    std::string command;
 
     TOpts opts = TOpts::Default();
 
@@ -30,14 +29,14 @@ int main(int argc, char** argv) {
     TCommand cmd = Parse(command.c_str());
 
     if (cmd == TCommand::NONE) {
-        Cerr << "Unsupported command: " << command << Endl;
+        std::cerr << "Unsupported command: " << command << std::endl;
         return 1;
     }
 
     auto config = TDriverConfig()
         .SetEndpoint(endpoint)
         .SetDatabase(database)
-        .SetAuthToken(GetEnv("YDB_TOKEN"));
+        .SetAuthToken(std::getenv("YDB_TOKEN") ? std::getenv("YDB_TOKEN") : "");
 
     TDriver driver(config);
 
@@ -58,7 +57,7 @@ int main(int argc, char** argv) {
         }
 
     } catch (const TYdbErrorException& e) {
-        Cerr << "Execution failed: " << e << Endl;
+        std::cerr << "Execution failed: " << e.what() << std::endl;
         return 1;
     }
 }

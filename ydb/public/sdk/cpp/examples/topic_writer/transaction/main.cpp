@@ -1,20 +1,11 @@
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-
-void ThrowOnError(const NYdb::TStatus& status)
-{
-    if (status.IsSuccess()) {
-        return;
-    }
-
-    ythrow yexception() << status;
-}
+#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 int main()
 {
-    const TString ENDPOINT = "HOST:PORT";
-    const TString DATABASE = "DATABASE";
-    const TString TOPIC = "PATH/TO/TOPIC";
+    const std::string ENDPOINT = "HOST:PORT";
+    const std::string DATABASE = "DATABASE";
+    const std::string TOPIC = "PATH/TO/TOPIC";
 
     NYdb::TDriverConfig config;
     config.SetEndpoint(ENDPOINT);

@@ -2,8 +2,8 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/tx/sequenceshard/public/events.h>
 #include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/tx/sequenceshard/public/events.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -16,7 +16,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateSequence TConfigureParts"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -170,7 +170,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCreateSequence TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:
@@ -524,7 +524,7 @@ public:
             txState.Shards.emplace_back(sequenceShard, ETabletType::SequenceShard, TTxState::CreateParts);
             txState.State = TTxState::CreateParts;
             context.SS->PathsById.at(domainPathId)->IncShardsInside();
-            domainInfo->AddInternalShard(sequenceShard);
+            domainInfo->AddInternalShard(sequenceShard, context.SS);
             domainInfo->AddSequenceShard(sequenceShard);
         } else {
             txState.Shards.emplace_back(sequenceShard, ETabletType::SequenceShard, TTxState::ConfigureParts);
@@ -576,8 +576,8 @@ public:
         context.SS->ClearDescribePathCaches(dstPath.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath->PathId);
 
-        domainInfo->IncPathsInside();
-        parentPath->IncAliveChildren();
+        domainInfo->IncPathsInside(context.SS);
+        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;

@@ -11,7 +11,7 @@ PEERDIR(
     contrib/python/PyYAML
     contrib/python/patch
     library/python/svn_version
-    contrib/ydb/library/yql/tests/postgresql/common
+    yql/essentials/tests/postgresql/common
 )
 
 END()

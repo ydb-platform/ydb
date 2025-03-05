@@ -39,19 +39,19 @@
             "formula": {
                 "by_platform": {
                     "darwin-arm64": {
-                        "uri": "sbr:7257127197"
+                        "uri": "sbr:8110637457"
                     },
                     "darwin-x86_64": {
-                        "uri": "sbr:7257128993"
+                        "uri": "sbr:8110637758"
                     },
                     "linux-aarch64": {
-                        "uri": "sbr:7257125308"
+                        "uri": "sbr:8110637017"
                     },
                     "linux-x86_64": {
-                        "uri": "sbr:7257132940"
+                        "uri": "sbr:8110638456"
                     },
                     "win32-x86_64": {
-                        "uri": "sbr:7257131047"
+                        "uri": "sbr:8110638108"
                     }
                 }
             }
@@ -84,7 +84,15 @@
                     "clang-format"
                 ]
             },
-            "formula": "build/platform/clang/clang-format16.json"
+            "formula": "build/platform/clang/clang-format/clang-format16.json"
+        },
+        "clang-format-18": {
+            "executable": {
+                "clang-format": [
+                    "clang-format"
+                ]
+            },
+            "formula": "build/platform/clang/clang-format/clang-format18.json"
         },
         "clang16": {
             "executable": {
@@ -484,6 +492,49 @@
                 }
             }
         },
+        "clang-format-18": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "x86_64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "clang-format-18": {
+                    "bottle": "clang-format-18",
+                    "executable": "clang-format"
+                }
+            }
+        },
         "clang16": {
             "env": {
                 "CPATH": [
@@ -499,16 +550,16 @@
             "params": {
                 "c_compiler": "$(CLANG)/bin/clang",
                 "cxx_compiler": "$(CLANG)/bin/clang++",
-                "gcc_version": "16",
                 "llvm-symbolizer": "$(CLANG)/bin/llvm-symbolizer",
                 "match_root": "CLANG",
+                "nm": "$(CLANG)/bin/llvm-nm",
                 "objcopy": "$(CLANG)/bin/llvm-objcopy",
                 "profiles": "$(XCODE_TOOLS_ROOT-sbr:799017771)/Xcode/Contents/Developer/Platforms/iPhoneOS.platform/Developer/Library/CoreSimulator/Profiles",
                 "simctl": "$(XCODE_TOOLS_ROOT-sbr:799017771)/Xcode/SystemRoot/PrivateFrameworks/CoreSimulator.framework/Resources/bin/simctl",
                 "strip": "$(CLANG)/bin/llvm-strip",
                 "type": "clang",
                 "use_bundle": true,
-                "werror_mode": "all"
+                "version": "16"
             },
             "platforms": [
                 {
@@ -1075,8 +1126,7 @@
                 "type": "msvc",
                 "use_bundle": true,
                 "use_clang": true,
-                "version": "2019",
-                "werror_mode": "all"
+                "version": "16"
             },
             "platforms": [
                 {
@@ -1178,16 +1228,16 @@
             "params": {
                 "c_compiler": "$(CLANG)/bin/clang",
                 "cxx_compiler": "$(CLANG)/bin/clang++",
-                "gcc_version": "18",
                 "llvm-symbolizer": "$(CLANG)/bin/llvm-symbolizer",
                 "match_root": "CLANG",
+                "nm": "$(CLANG)/bin/llvm-nm",
                 "objcopy": "$(CLANG)/bin/llvm-objcopy",
                 "profiles": "$(XCODE_TOOLS_ROOT-sbr:799017771)/Xcode/Contents/Developer/Platforms/iPhoneOS.platform/Developer/Library/CoreSimulator/Profiles",
                 "simctl": "$(XCODE_TOOLS_ROOT-sbr:799017771)/Xcode/SystemRoot/PrivateFrameworks/CoreSimulator.framework/Resources/bin/simctl",
                 "strip": "$(CLANG)/bin/llvm-strip",
                 "type": "clang",
                 "use_bundle": true,
-                "werror_mode": "all"
+                "version": "18"
             },
             "platforms": [
                 {
@@ -1754,8 +1804,7 @@
                 "type": "msvc",
                 "use_bundle": true,
                 "use_clang": true,
-                "version": "2019",
-                "werror_mode": "all"
+                "version": "18"
             },
             "platforms": [
                 {
@@ -2301,6 +2350,9 @@
         },
         "clang-format": {
             "description": "Run Clang-Format source code formatter"
+        },
+        "clang-format-18": {
+            "description": "Run Clang-Format source code formatter (18 version)"
         },
         "clang-rename": {
             "description": "Run Clang-Rename refactoring tool"

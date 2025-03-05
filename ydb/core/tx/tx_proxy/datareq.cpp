@@ -1382,7 +1382,7 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
                 settings.LlvmRuntime = true;
             }
             if (ctx.LoggerSettings()->Satisfies(NLog::PRI_DEBUG, NKikimrServices::MINIKQL_ENGINE, TxId)) {
-                auto actorSystem = ctx.ExecutorThread.ActorSystem;
+                auto actorSystem = ctx.ActorSystem();
                 auto txId = TxId;
                 settings.BacktraceWriter = [txId, actorSystem](const char* operation, ui32 line, const TBackTrace* backtrace) {
                     LOG_DEBUG_SAMPLED_BY(*actorSystem, NKikimrServices::MINIKQL_ENGINE, txId,

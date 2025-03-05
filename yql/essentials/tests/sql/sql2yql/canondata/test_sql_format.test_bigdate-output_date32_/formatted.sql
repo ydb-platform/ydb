@@ -1,0 +1,21 @@
+SELECT
+    CAST(CAST(-53375810 AS date32) AS string),
+    2,
+    CAST(CAST(-53375809 AS date32) AS string),
+    3,
+    CAST(CAST(-1 AS date32) AS string),
+    4,
+    CAST(CAST(0 AS date32) AS string),
+    5,
+    CAST(CAST(1 AS date32) AS string),
+    6,
+    CAST(CAST(18000u AS date32) AS string),
+    7,
+    CAST(CAST(49673u - 1u AS date32) AS string),
+    8,
+    CAST(CAST(49673u AS date32) AS string),
+    9,
+    CAST(CAST(53375807ul AS date32) AS string),
+    10,
+    CAST(CAST(53375808ul AS date32) AS string)
+;

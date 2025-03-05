@@ -37,7 +37,9 @@ public:
     }
 
     virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& /*columnShardConfig*/) const {
+    }
 
+    virtual void CorrectFeatureFlagsOnStart(TFeatureFlags& /*featuresFlags*/) const {
     }
 
     virtual ui64 RecordsCountAfterReboot(const ui64 initialRecodsCount) const {
@@ -87,7 +89,7 @@ public:
         for (auto&& key : portion2Key) {
             NKikimrTxColumnShard::TIndexColumnMeta metaProto;
             UNIT_ASSERT(metaProto.ParseFromArray(key.Metadata.data(), key.Metadata.size()));
-            metaProto.ClearNumRows();
+//            metaProto.ClearNumRows();
             metaProto.ClearRawBytes();
 
             db.Table<Schema::IndexColumns>()
@@ -122,9 +124,6 @@ public:
             db.Table<Schema::TableVersionInfo>().Key(1, 5, 1).Update(
                 NIceDb::TUpdate<Schema::TableVersionInfo::InfoProto>(versionInfo.SerializeAsString()));
         }
-
-        db.Table<Schema::SchemaPresetInfo>().Key(10).Update(NIceDb::TUpdate<Schema::SchemaPresetInfo::Name>("default"));
-
     }
 };
 
@@ -254,6 +253,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         TTester::Setup(runtime);
 
         checker.CorrectConfigurationOnStart(runtime.GetAppData().ColumnShardConfig); 
+        checker.CorrectFeatureFlagsOnStart(runtime.GetAppData().FeatureFlags); 
 
         const ui64 tableId = 1;
         const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
@@ -292,12 +292,36 @@ Y_UNIT_TEST_SUITE(Normalizers) {
     }
 
     Y_UNIT_TEST(PortionsNormalizer) {
-        TestNormalizerImpl<TPortionsCleaner>();
+        class TLocalNormalizerChecker: public TNormalizerChecker {
+        public:
+            virtual ui64 RecordsCountAfterReboot(const ui64 /*initialRecodsCount*/) const override {
+                return 0;
+            }
+            virtual void CorrectFeatureFlagsOnStart(TFeatureFlags & featuresFlags) const override{
+                featuresFlags.SetEnableWritePortionsOnInsert(true);
+            }
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                {
+                    auto* repair = columnShardConfig.MutableRepairs()->Add();
+                    repair->SetClassName("EmptyPortionsCleaner");
+                    repair->SetDescription("Removing unsync portions");
+                }
+                {
+                    auto* repair = columnShardConfig.MutableRepairs()->Add();
+                    repair->SetClassName("LeakedBlobsNormalizer");
+                    repair->SetDescription("Removing leaked blobs");
+                }
+            }
+        };
+        TestNormalizerImpl<TPortionsCleaner>(TLocalNormalizerChecker());
     }
 
     Y_UNIT_TEST(SchemaVersionsNormalizer) {
         class TLocalNormalizerChecker: public TNormalizerChecker {
         public:
+            virtual void CorrectFeatureFlagsOnStart(TFeatureFlags& featuresFlags) const override {
+                featuresFlags.SetEnableWritePortionsOnInsert(true);
+            }
             virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
                 auto* repair = columnShardConfig.MutableRepairs()->Add();
                 repair->SetClassName("SchemaVersionCleaner");

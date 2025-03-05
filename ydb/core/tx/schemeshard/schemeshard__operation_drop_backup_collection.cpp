@@ -46,8 +46,8 @@ public:
         context.SS->PersistRemoveBackupCollection(db, pathId);
 
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
-        domainInfo->DecPathsInside();
-        parentDirPtr->DecAliveChildren();
+        domainInfo->DecPathsInside(context.SS);
+        DecAliveChildrenDirect(OperationId, parentDirPtr, context); // for correct discard of ChildrenExist prop
         context.SS->TabletCounters->Simple()[COUNTER_BACKUP_COLLECTION_COUNT].Sub(1);
 
         ++parentDirPtr->DirAlterVersion;
@@ -132,7 +132,7 @@ public:
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 
-        auto bcPaths = ResolveBackupCollectionPaths(rootPathStr, name, false, context, result);
+        auto bcPaths = NBackup::ResolveBackupCollectionPaths(rootPathStr, name, false, context, result);
         if (!bcPaths) {
             return result;
         }

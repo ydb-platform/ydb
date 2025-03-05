@@ -8,7 +8,7 @@ namespace itertools
 
   struct npos {
   };
-}
+} // namespace itertools
 PYTHONIC_NS_END
 
 #endif

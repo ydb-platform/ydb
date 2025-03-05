@@ -7,7 +7,7 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <util/generic/guid.h>
@@ -21,7 +21,7 @@ TTopicOperationsScenario::TTopicOperationsScenario() :
 {
 }
 
-int TTopicOperationsScenario::Run(const TConfig& config)
+int TTopicOperationsScenario::Run(TConfig& config)
 {
     InitLog(config);
     InitDriver(config);
@@ -60,17 +60,17 @@ THolder<TLogBackend> TTopicOperationsScenario::MakeLogBackend(TConfig::EVerbosit
                             TConfig::VerbosityLevelToELogPriority(level));
 }
 
-void TTopicOperationsScenario::InitLog(const TConfig& config)
+void TTopicOperationsScenario::InitLog(TConfig& config)
 {
     Log = std::make_shared<TLog>(MakeLogBackend(config.VerbosityLevel));
     Log->SetFormatter(GetPrefixLogFormatter(""));
 }
 
-void TTopicOperationsScenario::InitDriver(const TConfig& config)
+void TTopicOperationsScenario::InitDriver(TConfig& config)
 {
     Driver =
         std::make_unique<NYdb::TDriver>(TYdbCommand::CreateDriver(config,
-                                                                  MakeLogBackend(config.VerbosityLevel)));
+                                                                  std::unique_ptr<TLogBackend>(MakeLogBackend(config.VerbosityLevel).Release())));
 }
 
 void TTopicOperationsScenario::InitStatsCollector()
@@ -115,7 +115,7 @@ void TTopicOperationsScenario::DropTopic(const TString& database,
         TCommandWorkloadTopicDescribe::GenerateFullTopicName(database, topic);
 
     auto result = client.DropTopic(topicPath).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 }
 
 void TTopicOperationsScenario::DropTable(const TString& database, const TString& table)
@@ -123,7 +123,7 @@ void TTopicOperationsScenario::DropTable(const TString& database, const TString&
     NTable::TTableClient client(*Driver);
     auto session = GetSession(client);
     auto result = session.DropTable(database + "/" + table).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 }
 
 void TTopicOperationsScenario::ExecSchemeQuery(const TString& query)
@@ -131,7 +131,7 @@ void TTopicOperationsScenario::ExecSchemeQuery(const TString& query)
     NTable::TTableClient client(*Driver);
     auto session = GetSession(client);
     auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 }
 
 void TTopicOperationsScenario::ExecDataQuery(const TString& query,
@@ -142,7 +142,7 @@ void TTopicOperationsScenario::ExecDataQuery(const TString& query,
     auto result = session.ExecuteDataQuery(query,
                                            NTable::TTxControl::BeginTx(NTable::TTxSettings::SerializableRW()).CommitTx(),
                                            params).ExtractValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 }
 
 void TTopicOperationsScenario::EnsureTopicNotExist(const TString& topic)
@@ -194,13 +194,13 @@ void TTopicOperationsScenario::CreateTopic(const TString& topic,
     }
 
     auto result = client.CreateTopic(topic, settings).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 }
 
 NTable::TSession TTopicOperationsScenario::GetSession(NTable::TTableClient& client)
 {
     auto result = client.GetSession({}).GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     return result.GetSession();
 }
 
@@ -226,11 +226,11 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
                 .ConsumerPrefix = ConsumerPrefix,
                 .ReaderIdx = readerIdx,
                 .UseTransactions = UseTransactions,
-                .UseTopicCommit = OnlyTableInTx,
+                .UseTopicCommit = OnlyTopicInTx,
                 .UseTableSelect = UseTableSelect && !OnlyTopicInTx,
                 .UseTableUpsert = !OnlyTopicInTx,
                 .ReadWithoutConsumer = ReadWithoutConsumer,
-                .CommitPeriod = CommitPeriod,
+                .CommitPeriodMs = TxCommitIntervalMs != 0 ? TxCommitIntervalMs : CommitPeriodSeconds * 1000, // seconds to ms conversion,
                 .CommitMessages = CommitMessages
             };
 
@@ -243,6 +243,10 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
     }
 }
 
+/*!
+ * This method starts producers threads specified in -t option, that will write to topic in parallel. Every producer thread will create 
+ * WriteSession for every partition in the topic and will write in partitions in round robin manner. 
+ * */
 void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void>>& threads,
                                                     ui32 partitionCount,
                                                     ui32 partitionSeed,
@@ -265,18 +269,19 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .GeneratedMessages = generatedMessages,
             .Database = database,
             .TopicName = TopicName,
-            .ByteRate = MessageRate != 0 ? MessageRate * MessageSize : ByteRate,
-            .MessageSize = MessageSize,
+            .BytesPerSec = MessagesPerSec != 0 ? MessagesPerSec * MessageSizeBytes : BytesPerSec,
+            .MessageSize = MessageSizeBytes,
             .ProducerThreadCount = ProducerThreadCount,
             .WriterIdx = writerIdx,
-            .ProducerId = TGUID::CreateTimebased().AsGuidString(),
-            .PartitionId = (partitionSeed + writerIdx) % partitionCount,
+            .PartitionCount = partitionCount,
+            .PartitionSeed = partitionSeed,
             .Direct = Direct,
             .Codec = Codec,
             .UseTransactions = UseTransactions,
             .UseAutoPartitioning = useAutoPartitioning,
-            .CommitPeriod = CommitPeriod,
-            .CommitMessages = CommitMessages
+            .CommitIntervalMs = TxCommitIntervalMs != 0 ? TxCommitIntervalMs : CommitPeriodSeconds * 1000, // seconds to ms conversion
+            .CommitMessages = CommitMessages,
+            .UseCpuTimestamp = UseCpuTimestamp
         };
 
         threads.push_back(std::async([writerParams = std::move(writerParams)]() mutable { TTopicWorkloadWriterWorker::RetryableWriterLoop(writerParams); }));

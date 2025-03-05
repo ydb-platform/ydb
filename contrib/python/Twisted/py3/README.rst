@@ -23,7 +23,7 @@ If you'd like to join them, please consider `sponsoring Twisted's <https://docs.
 What is this?
 -------------
 
-Twisted is an event-based framework for internet applications, supporting Python 3.6+.
+Twisted is a Python event-based framework for internet applications.
 It includes modules for many different purposes, including the following:
 
 - ``twisted.web``: HTTP clients and servers, HTML templating, and a WSGI server

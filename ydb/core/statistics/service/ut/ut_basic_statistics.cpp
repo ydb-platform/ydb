@@ -16,15 +16,7 @@ using namespace NYdb::NScheme;
 
 namespace {
 
-void CreateTable(TTestEnv& env, const TString& databaseName, const TString& tableName, size_t rowCount) {
-    ExecuteYqlScript(env, Sprintf(R"(
-        CREATE TABLE `Root/%s/%s` (
-            Key Uint64,
-            Value Uint64,
-            PRIMARY KEY (Key)
-        );
-    )", databaseName.c_str(), tableName.c_str()));
-
+void FillTable(TTestEnv& env, const TString& databaseName, const TString& tableName, size_t rowCount) {
     TStringBuilder replace;
     replace << Sprintf("REPLACE INTO `Root/%s/%s` (Key, Value) VALUES ",
         databaseName.c_str(), tableName.c_str());
@@ -36,6 +28,29 @@ void CreateTable(TTestEnv& env, const TString& databaseName, const TString& tabl
     }
     replace << ";";
     ExecuteYqlScript(env, replace);
+}
+
+void CreateTable(TTestEnv& env, const TString& databaseName, const TString& tableName, size_t rowCount) {
+    ExecuteYqlScript(env, Sprintf(R"(
+        CREATE TABLE `Root/%s/%s` (
+            Key Uint64,
+            Value Uint64,
+            PRIMARY KEY (Key)
+        );
+    )", databaseName.c_str(), tableName.c_str()));
+    FillTable(env, databaseName, tableName, rowCount);
+}
+
+void CreateTableWithGlobalIndex(TTestEnv& env, const TString& databaseName, const TString& tableName, size_t rowCount) {
+    ExecuteYqlScript(env, Sprintf(R"(
+        CREATE TABLE `Root/%s/%s` (
+            Key Uint64,
+            Value Uint64,
+            INDEX ValueIndex GLOBAL ON ( Value ),
+            PRIMARY KEY (Key)
+        );
+    )", databaseName.c_str(), tableName.c_str()));
+    FillTable(env, databaseName, tableName, rowCount);
 }
 
 void ValidateRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId, size_t expectedRowCount) {
@@ -97,7 +112,6 @@ ui64 GetRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(BasicStatistics) {
-
     Y_UNIT_TEST(Simple) {
         TTestEnv env(1, 1);
 
@@ -253,6 +267,29 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         CreateColumnStoreTable(env, "Database", "Table", 4);
 
         TestNotFullStatistics(env, 1000);
+    }
+
+    Y_UNIT_TEST(SimpleGlobalIndex) {
+        TTestEnv env(1, 1);
+
+        CreateDatabase(env, "Database");
+        CreateTableWithGlobalIndex(env, "Database", "Table", 5);
+
+        auto& runtime = *env.GetServer().GetRuntime();
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table/ValueIndex/indexImplTable");
+        ValidateRowCount(runtime, 1, pathId, 5);
+    }
+
+    Y_UNIT_TEST(ServerlessGlobalIndex) {
+        TTestEnv env(1, 1);
+
+        CreateDatabase(env, "Shared", 1, true);
+        CreateServerlessDatabase(env, "Serverless", "/Root/Shared");
+        CreateTableWithGlobalIndex(env, "Serverless", "Table", 5);
+
+        auto& runtime = *env.GetServer().GetRuntime();
+        auto pathId = ResolvePathId(runtime, "/Root/Serverless/Table/ValueIndex/indexImplTable");
+        ValidateRowCount(runtime, 1, pathId, 5);
     }
 }
 

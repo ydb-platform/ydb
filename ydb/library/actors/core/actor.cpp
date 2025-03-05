@@ -1,8 +1,20 @@
 #include "actor.h"
+#include "debug.h"
 #include "actor_virtual.h"
 #include "actorsystem.h"
 #include "executor_thread.h"
 #include <ydb/library/actors/util/datetime.h>
+
+#define POOL_ID() \
+    (!TlsThreadContext ? "OUTSIDE" : \
+    (TlsThreadContext->IsShared() ? "Shared[" + ToString(TlsThreadContext->OwnerPoolId()) + "]_" + ToString(TlsThreadContext->PoolId()) : \
+    ("Pool_" + ToString(TlsThreadContext->PoolId()))))
+
+#define WORKER_ID() ("Worker_" + ToString(TlsThreadContext ? TlsThreadContext->WorkerId() : Max<TWorkerId>()))
+
+#define ACTOR_DEBUG(level, ...) \
+    ACTORLIB_DEBUG(level, POOL_ID(), " ", WORKER_ID(), " ", __func__, ": ", __VA_ARGS__)
+
 
 namespace NActors {
     Y_POD_THREAD(TThreadContext*) TlsThreadContext(nullptr);
@@ -134,15 +146,23 @@ namespace NActors {
     TActorId TActivationContext::RegisterWithSameMailbox(IActor* actor, TActorId parentId) {
         Y_DEBUG_ABORT_UNLESS(parentId);
         auto& ctx = *TlsActivationContext;
-        return ctx.ExecutorThread.RegisterActor(actor, &ctx.Mailbox, parentId.Hint(), parentId);
+        return ctx.ExecutorThread.RegisterActor(actor, &ctx.Mailbox, parentId);
     }
 
     TActorId TActorContext::RegisterWithSameMailbox(IActor* actor) const {
-        return ExecutorThread.RegisterActor(actor, &Mailbox, SelfID.Hint(), SelfID);
+        return ExecutorThread.RegisterActor(actor, &Mailbox, SelfID);
     }
 
     TActorId IActor::RegisterWithSameMailbox(IActor* actor) const noexcept {
-        return TlsActivationContext->ExecutorThread.RegisterActor(actor, &TlsActivationContext->Mailbox, SelfActorId.Hint(), SelfActorId);
+        return TlsActivationContext->ExecutorThread.RegisterActor(actor, &TlsActivationContext->Mailbox, SelfActorId);
+    }
+
+    TActorId IActor::RegisterAlias() noexcept {
+        return TlsActivationContext->ExecutorThread.RegisterAlias(&TlsActivationContext->Mailbox, this);
+    }
+
+    void IActor::UnregisterAlias(const TActorId& actorId) noexcept {
+        return TlsActivationContext->ExecutorThread.UnregisterAlias(&TlsActivationContext->Mailbox, actorId);
     }
 
     TActorId TActivationContext::InterconnectProxy(ui32 destinationNodeId) {
@@ -260,7 +280,7 @@ namespace NActors {
     void IActor::Registered(TActorSystem* sys, const TActorId& owner) {
         // fallback to legacy method, do not use it anymore
         if (auto eh = AfterRegister(SelfId(), owner)) {
-            if (!TlsThreadContext || TlsThreadContext->SendingType == ESendingType::Common) {
+            if (!TlsThreadContext || TlsThreadContext->CheckSendingType(ESendingType::Common)) {
                 sys->Send(eh);
             } else {
                 sys->SpecificSend(eh);
@@ -274,71 +294,80 @@ namespace NActors {
         }
     }
 
-    template bool TGenericExecutorThread::Send<ESendingType::Common>(TAutoPtr<IEventHandle> ev);
-    template bool TGenericExecutorThread::Send<ESendingType::Lazy>(TAutoPtr<IEventHandle> ev);
-    template bool TGenericExecutorThread::Send<ESendingType::Tail>(TAutoPtr<IEventHandle> ev);
+    template bool TExecutorThread::Send<ESendingType::Common>(TAutoPtr<IEventHandle> ev);
+    template bool TExecutorThread::Send<ESendingType::Lazy>(TAutoPtr<IEventHandle> ev);
+    template bool TExecutorThread::Send<ESendingType::Tail>(TAutoPtr<IEventHandle> ev);
 
     template <ESendingType SendingType>
-    bool TGenericExecutorThread::Send(TAutoPtr<IEventHandle> ev) {
+    bool TExecutorThread::Send(TAutoPtr<IEventHandle> ev) {
 #ifdef USE_ACTOR_CALLSTACK
         do {
             (ev)->Callstack = TCallstack::GetTlsCallstack();
             (ev)->Callstack.Trace();
         } while (false)
 #endif
-        Ctx.IncrementSentEvents();
+        ExecutionStats.IncrementSentEvents();
         return ActorSystem->Send<SendingType>(ev);
     }
 
-    template TActorId TGenericExecutorThread::RegisterActor<ESendingType::Common>(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId,
+    template TActorId TExecutorThread::RegisterActor<ESendingType::Common>(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId,
             TActorId parentId);
-    template TActorId TGenericExecutorThread::RegisterActor<ESendingType::Lazy>(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId,
+    template TActorId TExecutorThread::RegisterActor<ESendingType::Lazy>(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId,
             TActorId parentId);
-    template TActorId TGenericExecutorThread::RegisterActor<ESendingType::Tail>(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId,
+    template TActorId TExecutorThread::RegisterActor<ESendingType::Tail>(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId,
             TActorId parentId);
 
     template <ESendingType SendingType>
-    TActorId TGenericExecutorThread::RegisterActor(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId,
+    TActorId TExecutorThread::RegisterActor(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId,
             TActorId parentId)
     {
         if (!parentId) {
             parentId = CurrentRecipient;
         }
         if (poolId == Max<ui32>()) {
+            TActorId id;
             if constexpr (SendingType == ESendingType::Common) {
-                return Ctx.Executor->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
+                id = ThreadCtx.Pool()->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
             } else if (!TlsThreadContext) {
-                return Ctx.Executor->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
+                id = ThreadCtx.Pool()->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
             } else {
-                ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
-                TActorId id = Ctx.Executor->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
-                TlsThreadContext->SendingType = previousType;
-                return id;
+                ESendingType previousType = TlsThreadContext->ExchangeSendingType(SendingType);
+                id = ThreadCtx.Pool()->Register(actor, mailboxType, ++RevolvingWriteCounter, parentId);
+                TlsThreadContext->SetSendingType(previousType);
             }
+            return id;
         } else {
             return ActorSystem->Register<SendingType>(actor, mailboxType, poolId, ++RevolvingWriteCounter, parentId);
         }
     }
 
-    template TActorId TGenericExecutorThread::RegisterActor<ESendingType::Common>(IActor* actor, TMailboxHeader* mailbox, ui32 hint, TActorId parentId);
-    template TActorId TGenericExecutorThread::RegisterActor<ESendingType::Lazy>(IActor* actor, TMailboxHeader* mailbox, ui32 hint, TActorId parentId);
-    template TActorId TGenericExecutorThread::RegisterActor<ESendingType::Tail>(IActor* actor, TMailboxHeader* mailbox, ui32 hint, TActorId parentId);
+    template TActorId TExecutorThread::RegisterActor<ESendingType::Common>(IActor* actor, TMailbox* mailbox, TActorId parentId);
+    template TActorId TExecutorThread::RegisterActor<ESendingType::Lazy>(IActor* actor, TMailbox* mailbox, TActorId parentId);
+    template TActorId TExecutorThread::RegisterActor<ESendingType::Tail>(IActor* actor, TMailbox* mailbox, TActorId parentId);
 
     template <ESendingType SendingType>
-    TActorId TGenericExecutorThread::RegisterActor(IActor* actor, TMailboxHeader* mailbox, ui32 hint, TActorId parentId) {
+    TActorId TExecutorThread::RegisterActor(IActor* actor, TMailbox* mailbox, TActorId parentId) {
         if (!parentId) {
             parentId = CurrentRecipient;
         }
         if constexpr (SendingType == ESendingType::Common) {
-            return Ctx.Executor->Register(actor, mailbox, hint, parentId);
+            return ThreadCtx.Pool()->Register(actor, mailbox, parentId);
         } else if (!TlsActivationContext) {
-            return Ctx.Executor->Register(actor, mailbox, hint, parentId);
+            return ThreadCtx.Pool()->Register(actor, mailbox, parentId);
         } else {
-            ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
-            TActorId id = Ctx.Executor->Register(actor, mailbox, hint, parentId);
-            TlsThreadContext->SendingType = previousType;
+            ESendingType previousType = TlsThreadContext->ExchangeSendingType(SendingType);
+            TActorId id = ThreadCtx.Pool()->Register(actor, mailbox, parentId);
+            TlsThreadContext->SetSendingType(previousType);
             return id;
         }
+    }
+
+    TActorId TExecutorThread::RegisterAlias(TMailbox* mailbox, IActor* actor) {
+        return ThreadCtx.Pool()->RegisterAlias(mailbox, actor);
+    }
+
+    void TExecutorThread::UnregisterAlias(TMailbox* mailbox, const TActorId& actorId) {
+        ThreadCtx.Pool()->UnregisterAlias(mailbox, actorId);
     }
 
     template bool TActivationContext::Send<ESendingType::Common>(TAutoPtr<IEventHandle> ev);
@@ -477,9 +506,9 @@ namespace NActors {
         } else if (!TlsThreadContext) {
             return CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
         } else {
-            ESendingType previousType = std::exchange(TlsThreadContext->SendingType, SendingType);
+            ESendingType previousType = TlsThreadContext->ExchangeSendingType(SendingType);
             TActorId id = CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
-            TlsThreadContext->SendingType = previousType;
+            TlsThreadContext->SetSendingType(previousType);
             return id;
         }
     }
@@ -495,5 +524,21 @@ namespace NActors {
         } else {
             return this->SpecificSend(ev, SendingType);
         }
+    }
+
+    ui32 TActivationContext::GetOverwrittenEventsPerMailbox() {
+        return TlsActivationContext->ExecutorThread.GetOverwrittenEventsPerMailbox();
+    }
+
+    void TActivationContext::SetOverwrittenEventsPerMailbox(ui32 value) {
+        TlsActivationContext->ExecutorThread.SetOverwrittenEventsPerMailbox(value);
+    }
+
+    ui64 TActivationContext::GetOverwrittenTimePerMailboxTs() {
+        return TlsActivationContext->ExecutorThread.GetOverwrittenTimePerMailboxTs();
+    }
+
+    void TActivationContext::SetOverwrittenTimePerMailboxTs(ui64 value) {
+        TlsActivationContext->ExecutorThread.SetOverwrittenTimePerMailboxTs(value);
     }
 }

@@ -328,7 +328,7 @@ protected:
     struct TSerializedResponse
     {
         TSharedRef Body;
-        std::vector<TSharedRef> Attachments;
+        TFuture<std::vector<TSharedRef>> AttachmentsFuture;
     };
 
     TSerializedResponse SerializeResponse()
@@ -336,15 +336,22 @@ protected:
         const auto& underlyingContext = this->GetUnderlyingContext();
         const auto& requestHeader = underlyingContext->GetRequestHeader();
 
-        auto codecId = underlyingContext->GetResponseCodec();
-        auto serializedBody = SerializeProtoToRefWithCompression(*Response_, codecId);
-        underlyingContext->SetResponseBodySerializedWithCompression();
+        // COMPAT(danilalexeev): legacy RPC codecs.
+        NCompression::ECodec attachmentCodecId = NCompression::ECodec::None;
+        auto bodyCodecId = underlyingContext->GetResponseCodec();
+        TSharedRef serializedBody;
+        if (requestHeader.has_response_codec()) {
+            serializedBody = SerializeProtoToRefWithCompression(*Response_, bodyCodecId);
+            attachmentCodecId = bodyCodecId;
+            underlyingContext->SetResponseBodySerializedWithCompression();
+        } else {
+            serializedBody = SerializeProtoToRefWithEnvelope(*Response_, bodyCodecId);
+        }
 
         if (requestHeader.has_response_format()) {
             auto format = TryCheckedEnumCast<EMessageFormat>(requestHeader.response_format());
             if (!format) {
-                THROW_ERROR_EXCEPTION(
-                    EErrorCode::ProtocolError,
+                THROW_ERROR_EXCEPTION(NRpc::EErrorCode::ProtocolError,
                     "Message format %v is not supported",
                     requestHeader.response_format());
             }
@@ -363,11 +370,11 @@ protected:
             }
         }
 
-        auto responseAttachments = CompressAttachments(Response_->Attachments(), codecId);
+        auto responseAttachmentsFuture = AsyncCompressAttachments(Response_->Attachments(), attachmentCodecId);
 
         return TSerializedResponse{
             .Body = std::move(serializedBody),
-            .Attachments = std::move(responseAttachments),
+            .AttachmentsFuture = std::move(responseAttachmentsFuture),
         };
     }
 
@@ -384,11 +391,18 @@ protected:
                 return;
             }
 
-            underlyingContext->SetResponseBody(std::move(response.Body));
-            underlyingContext->ResponseAttachments() = std::move(response.Attachments);
+            response.AttachmentsFuture.SubscribeUnique(
+                BIND([this, this_ = MakeStrong(this), responseBody = std::move(response.Body)] (TErrorOr<std::vector<TSharedRef>>&& compressedAttachments) {
+                    const auto& underlyingContext = this->GetUnderlyingContext();
+                    if (compressedAttachments.IsOK()) {
+                        underlyingContext->SetResponseBody(std::move(responseBody));
+                        underlyingContext->ResponseAttachments() = std::move(compressedAttachments.Value());
+                    }
+                    underlyingContext->Reply(TError(std::move(compressedAttachments)));
+                }));
+        } else {
+            underlyingContext->Reply(error);
         }
-
-        underlyingContext->Reply(error);
     }
 };
 
@@ -423,7 +437,7 @@ protected:
             return ::NYT::NRpc::TServiceBase::TLiteHandler(); \
         } \
         return \
-            BIND([this, typedContext = std::move(typedContext)] ( \
+            BIND_NO_PROPAGATE([this, typedContext = std::move(typedContext)] ( \
                 const ::NYT::NRpc::IServiceContextPtr&, \
                 const ::NYT::NRpc::THandlerInvocationOptions&) \
             { \
@@ -477,38 +491,21 @@ TRequestQueuePtr CreateRequestQueue(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class TValue>
 class TDynamicConcurrencyLimit
 {
 public:
     DEFINE_SIGNAL(void(), Updated);
 
-    void Reconfigure(int limit);
-    int GetLimitFromConfiguration() const;
+    void Reconfigure(TValue limit);
+    TValue GetLimitFromConfiguration() const;
 
-    int GetDynamicLimit() const;
-    void SetDynamicLimit(std::optional<int> dynamicLimit);
-
-private:
-    std::atomic<int> ConfigLimit_ = 0;
-    std::atomic<int> DynamicLimit_ = 0;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TDynamicConcurrencyByteLimit
-{
-public:
-    DEFINE_SIGNAL(void(), Updated);
-
-    void Reconfigure(i64 limit);
-    i64 GetByteLimitFromConfiguration() const;
-
-    i64 GetDynamicByteLimit() const;
-    void SetDynamicByteLimit(std::optional<i64> dynamicLimit);
+    TValue GetDynamicLimit() const;
+    void SetDynamicLimit(std::optional<TValue> dynamicLimit);
 
 private:
-    std::atomic<i64> ConfigByteLimit_ = 0;
-    std::atomic<i64> DynamicByteLimit_ = 0;
+    std::atomic<TValue> ConfigLimit_{};
+    std::atomic<TValue> DynamicLimit_{};
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -757,8 +754,8 @@ protected:
         std::atomic<int> QueueSizeLimit = 0;
         std::atomic<i64> QueueByteSizeLimit = 0;
 
-        TDynamicConcurrencyLimit ConcurrencyLimit;
-        TDynamicConcurrencyByteLimit ConcurrencyByteLimit;
+        TDynamicConcurrencyLimit<int> ConcurrencyLimit;
+        TDynamicConcurrencyLimit<i64> ConcurrencyByteLimit;
         std::atomic<double> WaitingTimeoutFraction = 0;
 
         NProfiling::TCounter RequestQueueSizeLimitErrorCounter;
@@ -769,7 +766,7 @@ protected:
         std::atomic<TDuration> LoggingSuppressionTimeout = {};
 
         using TNonowningPerformanceCountersKey = std::tuple<TStringBuf, TRequestQueue*>;
-        using TOwningPerformanceCountersKey = std::tuple<TString, TRequestQueue*>;
+        using TOwningPerformanceCountersKey = std::tuple<std::string, TRequestQueue*>;
         using TPerformanceCountersKeyHash = THash<TNonowningPerformanceCountersKey>;
 
         struct TPerformanceCountersKeyEquals
@@ -816,7 +813,7 @@ protected:
         const NProfiling::TProfiler Profiler_;
 
         //! Number of requests per user agent.
-        NConcurrency::TSyncMap<TString, NProfiling::TCounter> RequestsPerUserAgent_;
+        NConcurrency::TSyncMap<std::string, NProfiling::TCounter, THash<TStringBuf>, TEqualTo<TStringBuf>> RequestsPerUserAgent_;
     };
 
     using TPerformanceCountersPtr = TIntrusivePtr<TPerformanceCounters>;
@@ -933,7 +930,7 @@ private:
 
     std::atomic<bool> Active_ = false;
 
-    THashMap<TString, TRuntimeMethodInfoPtr> MethodMap_;
+    THashMap<std::string, TRuntimeMethodInfoPtr, THash<std::string>, TEqualTo<>> MethodMap_;
 
     THashSet<int> SupportedServerFeatureIds_;
 
@@ -990,10 +987,11 @@ private:
 
     std::atomic<bool> EnableErrorCodeCounter_ = false;
 
-    const NConcurrency::TPeriodicExecutorPtr ServiceLivenessChecker_;
+    std::atomic<bool> ServiceLivenessCheckerStarted_ = false;
+    TAtomicIntrusivePtr<NConcurrency::TPeriodicExecutor> ServiceLivenessChecker_;
 
     using TDiscoverRequestSet = TConcurrentHashMap<TCtxDiscoverPtr, int>;
-    THashMap<TString, TDiscoverRequestSet> DiscoverRequestsByPayload_;
+    THashMap<std::string, TDiscoverRequestSet> DiscoverRequestsByPayload_;
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, DiscoverRequestsByPayloadLock_);
 
     const TPerformanceCountersPtr PerformanceCounters_;
@@ -1078,6 +1076,7 @@ private:
     void IncrementActiveRequestCount();
     void DecrementActiveRequestCount();
 
+    void StartServiceLivenessChecker();
     void RegisterDiscoverRequest(const TCtxDiscoverPtr& context);
     void ReplyDiscoverRequest(const TCtxDiscoverPtr& context, bool isUp);
 
@@ -1113,7 +1112,7 @@ public:
     int GetConcurrency() const;
     i64 GetConcurrencyByte() const;
 
-    void OnRequestArrived(const TServiceBase::TServiceContextPtr& context);
+    void OnRequestArrived(TServiceBase::TServiceContextPtr context);
     void OnRequestFinished(i64 requestTotalSize);
 
     void ConfigureWeightThrottler(const NConcurrency::TThroughputThrottlerConfigPtr& config);
@@ -1154,10 +1153,10 @@ private:
     void ScheduleRequestsFromQueue();
     void RunRequest(TServiceBase::TServiceContextPtr context);
 
-    void IncrementQueueSize(const TServiceBase::TServiceContextPtr& context);
-    void DecrementQueueSize(const TServiceBase::TServiceContextPtr& context);
+    void IncrementQueueSize(i64 requestTotalSize);
+    void DecrementQueueSize(i64 requestTotalSize);
 
-    bool IncrementConcurrency(const TServiceBase::TServiceContextPtr& context);
+    bool IncrementConcurrency(i64 requestTotalSize);
     void DecrementConcurrency(i64 requestTotalSize);
 
     bool AreThrottlersOverdrafted() const;

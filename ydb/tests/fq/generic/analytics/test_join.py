@@ -7,12 +7,12 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.fq.generic.utils.settings import Settings
 from ydb.library.yql.providers.generic.connector.tests.utils.one_time_waiter import OneTimeWaiter
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 import conftest
 
 
 one_time_waiter = OneTimeWaiter(
-    data_source_kind=EDataSourceKind.YDB,
+    data_source_kind=EGenericDataSourceKind.YDB,
     docker_compose_file_path=conftest.docker_compose_file_path,
     expected_tables=["join_table", "dummy_table"],
 )
@@ -24,8 +24,7 @@ class TestJoinAnalytics:
         "mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-analytics-ydb:2136"}], indirect=True
     )
     @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder"}], indirect=True)
-    @pytest.mark.parametrize("query_type", [fq.QueryContent.QueryType.ANALYTICS, fq.QueryContent.QueryType.STREAMING])
-    def test_simple(self, fq_client: FederatedQueryClient, settings: Settings, query_type):
+    def test_simple(self, fq_client: FederatedQueryClient, settings: Settings):
         table_name = "join_table"
         ch_conn_name = f"ch_conn_{table_name}"
         gp_conn_name = f"gp_conn_{table_name}"
@@ -76,7 +75,7 @@ class TestJoinAnalytics:
             ORDER BY data_pg;
             """
 
-        query_id = fq_client.create_query(query_name, sql, type=query_type).result.query_id
+        query_id = fq_client.create_query(query_name, sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         fq_client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
         data = fq_client.get_result_data(query_id)

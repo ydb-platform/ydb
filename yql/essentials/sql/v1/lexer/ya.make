@@ -2,10 +2,7 @@ LIBRARY()
 
 PEERDIR(
     yql/essentials/core/issue/protos
-    yql/essentials/parser/proto_ast/gen/v1
-    yql/essentials/parser/proto_ast/gen/v1_ansi
-    yql/essentials/parser/proto_ast/gen/v1_antlr4
-    yql/essentials/parser/proto_ast/gen/v1_ansi_antlr4
+    yql/essentials/sql/settings
 )
 
 SRCS(
@@ -18,6 +15,14 @@ SUPPRESSIONS(
 
 END()
 
+RECURSE(
+    antlr3
+    antlr3_ansi
+    antlr4
+    antlr4_ansi
+)
+
 RECURSE_FOR_TESTS(
     ut
 )
+

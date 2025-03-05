@@ -40,6 +40,7 @@ BELONGS ya.make
     Files with this license:
         include/__format/escaped_output_table.h [29:29]
         include/__format/extended_grapheme_cluster_table.h [29:29]
+        include/__format/indic_conjunct_break_table.h [29:29]
         include/__format/width_estimation_table.h [29:29]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 33fb5dcc2845a99d87d337644dac5e88
@@ -60,7 +61,7 @@ BELONGS ya.make
         src/include/ryu/d2s_intrinsics.h [12:13]
         src/include/ryu/digit_table.h [12:13]
         src/include/ryu/f2s.h [12:13]
-        src/include/ryu/ryu.h [14:15]
+        src/include/ryu/ryu.h [13:14]
         src/ryu/d2fixed.cpp [12:13]
         src/ryu/d2s.cpp [12:13]
         src/ryu/f2s.cpp [12:13]
@@ -75,11 +76,13 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        include/__atomic/atomic_ref.h [9:10]
         include/__fwd/mdspan.h [9:10]
         include/__mdspan/default_accessor.h [9:10]
         include/__mdspan/extents.h [9:10]
         include/__mdspan/layout_left.h [9:10]
         include/__mdspan/layout_right.h [9:10]
+        include/__mdspan/layout_stride.h [9:10]
         include/__mdspan/mdspan.h [9:10]
 
 KEEP     COPYRIGHT_SERVICE_LABEL e0df4d49b106bd82efbad864a93ffce1
@@ -92,7 +95,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        src/charconv.cpp [40:41]
+        src/charconv.cpp [31:32]
         src/include/ryu/common.h [9:10]
         src/include/ryu/common.h [12:13]
         src/include/ryu/d2fixed.h [9:10]
@@ -110,7 +113,7 @@ BELONGS ya.make
         src/include/ryu/f2s.h [9:10]
         src/include/ryu/f2s.h [12:13]
         src/include/ryu/ryu.h [10:11]
-        src/include/ryu/ryu.h [14:15]
+        src/include/ryu/ryu.h [13:14]
         src/include/to_chars_floating_point.h [9:10]
         src/ryu/d2fixed.cpp [9:10]
         src/ryu/d2fixed.cpp [12:13]

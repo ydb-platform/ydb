@@ -26,6 +26,8 @@
 
 namespace NKikimr::NKqp {
 
+class TKqpQueryCache;
+
 // basically it's a state that holds all the context
 // about the specific query execution.
 // it holds the unique pointer to the query request, which may include
@@ -168,6 +170,17 @@ public:
     ui32 StatementResultSize = 0;
 
     TMaybe<TString> CommandTagName;
+    THashSet<ui32> ParticipantNodes;
+
+    bool IsLocalExecution(ui32 nodeId) const {
+        if (RequestEv->GetRequestCtx() == nullptr) {
+            return false;
+        }
+        if (ParticipantNodes.size() == 1) {
+            return *ParticipantNodes.begin() == nodeId;
+        }
+        return false;
+    }
 
     NKikimrKqp::EQueryAction GetAction() const {
         return QueryAction;
@@ -352,6 +365,12 @@ public:
             return false;
         }
 
+        if (TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
+            // ReadWrite snapshot isolation transaction with can only use uncommitted data.
+            // WriteOnly snapshot isolation transaction is executed like serializable transaction.
+            return !TxCtx->HasTableRead;
+        }
+
         if (TxCtx->NeedUncommittedChangesFlush || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
             if (tx && tx->GetHasEffects()) {
                 YQL_ENSURE(tx->ResultsSize() == 0);
@@ -368,7 +387,8 @@ public:
 
     bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         Y_UNUSED(tx);
-        if (*TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) {
+        if (*TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE &&
+                *TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
             return false;
         }
 
@@ -412,8 +432,8 @@ public:
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
         auto tx = PreparedQuery->GetPhyTxOrEmpty(CurrentTx);
 
-        if (TxCtx->CanDeferEffects()) { 
-            // At current time sinks require separate tnx with commit.
+        if (TxCtx->CanDeferEffects()) {
+            // Olap sinks require separate tnx with commit.
             while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable) {
                 QueryData->CreateKqpValueMap(tx);
                 bool success = TxCtx->AddDeferredEffect(tx, QueryData);
@@ -470,9 +490,17 @@ public:
     // execution.
     std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> BuildNavigateKeySet();
     // same the context of the compiled query to the query state.
+    bool SaveAndCheckCompileResult(TKqpCompileResult::TConstPtr compileResult);
     bool SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev);
     bool SaveAndCheckParseResult(TEvKqp::TEvParseResponse&& ev);
     bool SaveAndCheckSplitResult(TEvKqp::TEvSplitResponse* ev);
+
+    bool TryGetFromCache(
+        TKqpQueryCache& cache,
+        const TGUCSettings::TPtr& gUCSettingsPtr,
+        TIntrusivePtr<TKqpCounters>& counters,
+        const TActorId& sender);
+
     // build the compilation request.
     std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr);
     // TODO(gvit): get rid of code duplication in these requests,

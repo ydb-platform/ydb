@@ -16,7 +16,7 @@ namespace builtins
 
     template <typename T, typename... Types>
     types::none_type difference_update(types::set<T> &set,
-                                       Types const &... others)
+                                       Types const &...others)
     {
       set.difference_update(others...);
       return {};
@@ -24,7 +24,7 @@ namespace builtins
 
     template <typename T, typename... Types>
     types::none_type difference_update(types::set<T> &&set,
-                                       Types const &... others)
+                                       Types const &...others)
     {
       // nothing to be done as we work on rvalue
       return {};
@@ -32,12 +32,12 @@ namespace builtins
 
     template <typename... Types>
     types::none_type difference_update(types::empty_set const &set,
-                                       Types const &... others)
+                                       Types const &...others)
     {
       // nothing can be removed in set
       return {};
     }
-  }
-}
+  } // namespace set
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

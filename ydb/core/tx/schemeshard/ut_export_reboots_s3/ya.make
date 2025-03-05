@@ -2,14 +2,12 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(12)
+SPLIT_FACTOR(18)
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    TIMEOUT(3600)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -19,10 +17,10 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
-    contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
     ydb/core/testlib/default
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
+    ydb/core/util
     ydb/core/wrappers/ut_helpers
     yql/essentials/public/udf/service/exception_policy
 )

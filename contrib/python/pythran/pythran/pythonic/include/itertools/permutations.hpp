@@ -88,7 +88,7 @@ namespace itertools
   permutations(T0 iter);
 
   template <typename T0, long N0>
-  _permutations<T0, types::array<typename T0::value_type, (size_t)N0>>
+  _permutations<T0, types::array_tuple<typename T0::value_type, (size_t)N0>>
   permutations(T0 iter, std::integral_constant<long, N0>);
 
   DEFINE_FUNCTOR(pythonic::itertools, permutations);

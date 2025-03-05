@@ -14,6 +14,28 @@
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapWrite) {
+    Y_UNIT_TEST(WriteFails) {
+        auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NOlap::TWaitCompactionController>();
+        csController->SetSmallSizeDetector(1000000);
+        csController->SetIndexWriteControllerEnabled(false);
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideBlobPutResultOnWriteValue(NKikimrProto::EReplyStatus::BLOCKED);
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->ResetWriteCounters();
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableWritePortionsOnInsert(true);
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        Tests::NCommon::TLoggerInit(kikimr)
+            .SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS")
+            .SetPriority(NActors::NLog::PRI_DEBUG)
+            .Initialize();
+        {
+            auto batch = TLocalHelper(kikimr).TestArrowBatch(30000, 1000000, 11000);
+            TLocalHelper(kikimr).SendDataViaActorSystem("/Root/olapStore/olapTable", batch, Ydb::StatusIds::INTERNAL_ERROR);
+        }
+    }
+
     Y_UNIT_TEST(TierDraftsGC) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NOlap::TWaitCompactionController>();
         csController->SetSmallSizeDetector(1000000);
@@ -172,6 +194,115 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("count")), 800000);
     }
 
+    Y_UNIT_TEST(MultiWriteInTime) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(15000);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
+        TTypedLocalHelper helper("Utf8", kikimr);
+        helper.CreateTestOlapTable();
+        auto writeSession = helper.StartWriting("/Root/olapStore/olapTable");
+        writeSession.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "aaa", 1), 0, 800000);
+        Sleep(TDuration::Seconds(1));
+        writeSession.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "bbb", 1), 0.5, 800000);
+        Sleep(TDuration::Seconds(1));
+        writeSession.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "ccc", 1), 0.75, 800000);
+        Sleep(TDuration::Seconds(1));
+        writeSession.Finalize();
+        {
+            auto selectQuery = TString(R"(
+                SELECT
+                    field, count(*) as count,
+                FROM `/Root/olapStore/olapTable`
+                GROUP BY field
+                ORDER BY field
+            )");
+
+            auto tableClient = kikimr.GetTableClient();
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("count")), 400000);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("field")), "aaa");
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("count")), 200000);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[1].at("field")), "bbb");
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("count")), 800000);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[2].at("field")), "ccc");
+        }
+        {
+            auto selectQuery = TString(R"(
+                SELECT COUNT(*) as count, MAX(PortionId) as portion_id, TabletId
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+                GROUP BY TabletId
+            )");
+
+            auto tableClient = kikimr.GetTableClient();
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("count")), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("count")), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("count")), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("portion_id")), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("portion_id")), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("portion_id")), 1);
+        }
+        AFL_VERIFY(csController->GetCompactionStartedCounter().Val() == 0);
+    }
+
+    Y_UNIT_TEST(MultiWriteInTimeDiffSchemas) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(15000);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
+        TTypedLocalHelper helper("Utf8", "Utf8", kikimr);
+        helper.CreateTestOlapTable();
+        auto writeGuard = helper.StartWriting("/Root/olapStore/olapTable");
+        writeGuard.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "aaa", 1), 0, 800000);
+        Sleep(TDuration::Seconds(1));
+        writeGuard.FillTable("field1", NArrow::NConstruction::TStringPoolFiller(1, 1, "bbb", 1), 0.5, 800000);
+        Sleep(TDuration::Seconds(1));
+        writeGuard.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "ccc", 1), 0.75, 800000);
+        Sleep(TDuration::Seconds(1));
+        writeGuard.Finalize();
+        {
+            auto selectQuery = TString(R"(
+                SELECT
+                    field, count(*) as count,
+                FROM `/Root/olapStore/olapTable`
+                GROUP BY field
+                ORDER BY field
+            )");
+
+            auto tableClient = kikimr.GetTableClient();
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("count")), 200000);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("field")), "");
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("count")), 400000);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[1].at("field")), "aaa");
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("count")), 800000);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[2].at("field")), "ccc");
+        }
+        {
+            auto selectQuery = TString(R"(
+                SELECT COUNT(*) as count, MAX(PortionId) as portion_id, TabletId
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+                GROUP BY TabletId
+            )");
+
+            auto tableClient = kikimr.GetTableClient();
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("count")), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("count")), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("count")), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("portion_id")), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("portion_id")), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("portion_id")), 1);
+        }
+        AFL_VERIFY(csController->GetCompactionStartedCounter().Val() == 0);
+    }
+
     Y_UNIT_TEST(WriteDeleteCleanGC) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NOlap::TWaitCompactionController>();
         csController->SetSmallSizeDetector(1000000);
@@ -228,7 +359,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                           .ExtractValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         }
-        csController->SetOverrideReadTimeoutClean(TDuration::Zero());
+        csController->SetOverrideMaxReadStaleness(TDuration::Zero());
         csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::GC);
         {
             const TInstant start = TInstant::Now();

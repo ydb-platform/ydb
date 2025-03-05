@@ -1,6 +1,7 @@
 IF (NOT SANITIZER_TYPE AND NOT WITH_VALGRIND)
     PY3TEST()
     ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+    ENV(YDB_ENABLE_COLUMN_TABLES="true")
     ENV(USE_IN_MEMORY_PDISKS=true)
     TEST_SRCS(
         test_base.py
@@ -9,7 +10,6 @@ IF (NOT SANITIZER_TYPE AND NOT WITH_VALGRIND)
         test_stream_query.py
     )
 
-    TIMEOUT(600)
     SIZE(MEDIUM)
 
     DEPENDS(

@@ -1,4 +1,8 @@
 #include <yql/essentials/sql/v1/format/sql_format.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <google/protobuf/arena.h>
@@ -43,7 +47,13 @@ int RunFormat(int argc, char* argv[]) {
     NSQLTranslation::TTranslationSettings settings;
     settings.Arena = &arena;
     settings.AnsiLexer = res.Has("ansi-lexer");
-    auto formatter = NSQLFormat::MakeSqlFormatter(settings);
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
     TString frm_query;
     TString error;
     NYql::TIssues issues;
@@ -52,7 +62,7 @@ int RunFormat(int argc, char* argv[]) {
         ++errors;
         Cerr << "Error formatting query: " << issues.ToString() << Endl;
     } else {
-        out << frm_query << Endl;
+        out << frm_query;
     }
 
     return errors;

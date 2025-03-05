@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
@@ -27,15 +28,15 @@ public:
 
     using TClient::FlatQuery;
 
-    NKikimrMiniKQL::TResult FlatQuery(const TString& mkql) {
+    NKikimrMiniKQL::TResult FlatQuery(NActors::TTestActorRuntime* runtime, const TString& mkql) {
         NKikimrMiniKQL::TResult res;
         TClient::TFlatQueryOptions opts;
-        bool success = TClient::FlatQuery(mkql, opts, res, NMsgBusProxy::MSTATUS_OK);
+        bool success = TClient::FlatQuery(runtime, mkql, opts, res, NMsgBusProxy::MSTATUS_OK);
         UNIT_ASSERT(success);
         return res;
     }
 
-    NKikimrMiniKQL::TResult FlatQuery(const TString& mkql, ui32 expectedStatus, ui32 expectedProxyErrorCode = TEvTxUserProxy::TResultStatus::Unknown) {
+    NKikimrMiniKQL::TResult FlatQuery(NActors::TTestActorRuntime* runtime, const TString& mkql, ui32 expectedStatus, ui32 expectedProxyErrorCode = TEvTxUserProxy::TResultStatus::Unknown) {
         NKikimrMiniKQL::TResult res;
         TClient::TFlatQueryOptions opts;
         NKikimrClient::TResponse expectedResponse;
@@ -43,7 +44,7 @@ public:
         if (expectedProxyErrorCode != TEvTxUserProxy::TResultStatus::Unknown) {
             expectedResponse.SetProxyErrorCode(expectedProxyErrorCode);
         }
-        bool success = TClient::FlatQuery(mkql, opts, res, expectedResponse);
+        bool success = TClient::FlatQuery(runtime, mkql, opts, res, expectedResponse);
         UNIT_ASSERT(success == (expectedStatus == NMsgBusProxy::MSTATUS_OK));
         return res;
     }

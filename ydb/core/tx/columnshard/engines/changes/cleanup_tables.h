@@ -3,7 +3,8 @@
 
 namespace NKikimr::NOlap {
 
-class TCleanupTablesColumnEngineChanges: public TColumnEngineChanges {
+class TCleanupTablesColumnEngineChanges: public TColumnEngineChanges,
+                                         public NColumnShard::TMonitoringObjectsCounter<TCleanupTablesColumnEngineChanges> {
 private:
     using TBase = TColumnEngineChanges;
 protected:
@@ -29,8 +30,11 @@ protected:
     virtual ui64 DoCalcMemoryForUsage() const override {
         return 0;
     }
+    virtual NDataLocks::ELockCategory GetLockCategory() const override {
+        return NDataLocks::ELockCategory::Tables;
+    }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override {
-        return std::make_shared<NDataLocks::TListTablesLock>(TypeString() + "::" + GetTaskIdentifier(), TablesToDrop);
+        return std::make_shared<NDataLocks::TListTablesLock>(TypeString() + "::" + GetTaskIdentifier(), TablesToDrop, GetLockCategory());
     }
 
 public:

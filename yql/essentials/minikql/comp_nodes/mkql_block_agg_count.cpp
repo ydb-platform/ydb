@@ -148,6 +148,16 @@ public:
         }
     }
 
+    void SerializeState(void* state, NUdf::TOutputBuffer& buffer) final {
+        auto typedState = static_cast<TState*>(state);
+        buffer.PushNumber(typedState->Count_);
+    }
+
+    void DeserializeState(void* state, NUdf::TInputBuffer& buffer) final {
+        auto typedState = static_cast<TState*>(state);
+        buffer.PopNumber(typedState->Count_);
+    }
+
     std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) final {
         return std::make_unique<TColumnBuilder>(size, Ctx_);
     }
@@ -417,6 +427,6 @@ std::unique_ptr<IBlockAggregatorFactory> MakeBlockCountAllFactory() {
 std::unique_ptr<IBlockAggregatorFactory> MakeBlockCountFactory() {
     return std::make_unique<TBlockCountFactory>();
 }
- 
+
 }
 }

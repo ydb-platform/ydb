@@ -23,7 +23,7 @@ struct TExternalSourceFactory : public IExternalSourceFactory {
         if (it != Sources.end()) {
             return it->second;
         }
-        ythrow TExternalSourceException() << "External source with type " << type << " was not found";
+        throw TExternalSourceException() << "External source with type " << type << " was not found";
     }
 
 private:
@@ -75,7 +75,16 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         {
             ToString(NYql::EDatabaseType::Oracle),
             CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC"}, {"database_name", "use_tls", "service_name"}, hostnamePatternsRegEx)
-        }}); 
+        },
+        {
+            ToString(NYql::EDatabaseType::Logging),
+            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"SERVICE_ACCOUNT"}, {"folder_id"}, hostnamePatternsRegEx)
+        },
+        {
+            ToString(NYql::EDatabaseType::Solomon),
+            CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN"}, {}, hostnamePatternsRegEx)
+        }
+    }); 
 }
 
 }

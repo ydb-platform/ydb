@@ -154,6 +154,7 @@ void TColumnShardScan::HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/) {
 
     if (TMonotonic::Now() >= GetDeadline()) {
         CheckHanging(true);
+        LastResultInstant = TMonotonic::Now();
         //        SendScanError("ColumnShard scanner timeout: HAS_ACK=" + ::ToString(!!AckReceivedInstant));
         //        Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
     } else {

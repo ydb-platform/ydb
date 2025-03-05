@@ -564,14 +564,14 @@ def invoke_bsc_public_api(func, *params, explicit_host=None, endpoint=None):
     else:
         with grpc.insecure_channel(hostport, options) as channel:
             retval = work(channel)
-    
+
     if retval.status != public_api_status.StatusIds.SUCCESS:
         request_s = ''
         for param in params:
             request_s += text_format.MessageToString(param, as_one_line=True) + ', '
         response_s = text_format.MessageToString(retval, as_one_line=True)
         raise QueryError('Failed to gRPC-query blob storage controller; request: %s; response: %s' % (request_s, response_s))
-    
+
     return retval
 
 

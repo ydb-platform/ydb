@@ -19,9 +19,6 @@ void TAccessorsCollection::AddVerified(const ui32 columnId, const std::shared_pt
 
 void TAccessorsCollection::AddVerified(const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter) {
     AFL_VERIFY(columnId);
-    if (!Filter->IsTotalAllowFilter()) {
-        AFL_VERIFY(!data.GetItWasScalar());
-    }
     if (UseFilter && withFilter && !Filter->IsTotalAllowFilter()) {
         auto filtered = Filter->Apply(data.GetData());
         RecordsCountActual = filtered->GetRecordsCount();

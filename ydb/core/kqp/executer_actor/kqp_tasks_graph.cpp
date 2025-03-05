@@ -382,6 +382,10 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
 
     settings->MutableTable()->CopyFrom(streamLookup.GetTable());
 
+    if (streamLookup.HasIndex()) {
+        settings->MutableIndex()->CopyFrom(streamLookup.GetIndex());
+    }
+
     auto columnToProto = [] (TString columnName,
         TMap<TString, NSharding::IShardingBase::TColumn>::const_iterator columnIt,
         ::NKikimrKqp::TKqpColumnMetadataProto* columnProto)

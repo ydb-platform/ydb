@@ -1414,6 +1414,17 @@ private:
             FillTablesMap(streamLookup.Table(), streamLookup.Columns(), tablesMap);
             FillTableId(streamLookup.Table(), *streamLookupProto.MutableTable());
 
+            TKikimrTableMetadataPtr indexMeta;
+            auto settings = TKqpStreamLookupSettings::Parse(streamLookup);
+            if (settings.IndexName) {
+                indexMeta = tableMeta->GetIndexMetadata(*settings.IndexName).first;
+                YQL_ENSURE(indexMeta);
+
+                // TODO: FillTablesMap for index table
+                //FillTablesMap(streamLookup.Table(), streamLookup.Columns(), tablesMap);
+                FillTableId(*indexMeta, *streamLookupProto.MutableIndex());
+            }
+
             const auto inputType = streamLookup.InputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             YQL_ENSURE(inputType, "Empty stream lookup input type");
             YQL_ENSURE(inputType->GetKind() == ETypeAnnotationKind::List, "Unexpected stream lookup input type");
@@ -1426,7 +1437,6 @@ private:
             const auto resultItemType = resultType->Cast<TStreamExprType>()->GetItemType();
             streamLookupProto.SetResultType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *resultItemType), TypeEnv));
 
-            auto settings = TKqpStreamLookupSettings::Parse(streamLookup);
             streamLookupProto.SetLookupStrategy(GetStreamLookupStrategy(settings.Strategy));
             streamLookupProto.SetKeepRowsOrder(Config->OrderPreservingLookupJoinEnabled());
             if (settings.AllowNullKeysPrefixSize) {

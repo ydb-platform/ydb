@@ -43,8 +43,19 @@ public:
         }
     };
 
+    struct TSettings {
+        TString TablePath;
+        TTableId TableId;
+        std::unordered_map<TString, TSysTables::TTableColumnInfo> KeyColumns;
+        std::vector<TSysTables::TTableColumnInfo*> LookupKeyColumns;
+        std::vector<TSysTables::TTableColumnInfo> Columns;
+        std::optional<ui32> AllowNullKeysPrefixSize;
+        std::optional<bool> KeepRowsOrder;
+        NKqpProto::EStreamLookupStrategy LookupStrategy;
+    };
+
 public:
-    TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings, const NMiniKQL::TTypeEnvironment& typeEnv,
+    TKqpStreamLookupWorker(TSettings&& settings, const NMiniKQL::TTypeEnvironment& typeEnv,
         const NMiniKQL::THolderFactory& holderFactory, const NYql::NDqProto::TTaskInput& inputDesc);
 
     virtual ~TKqpStreamLookupWorker();
@@ -63,18 +74,13 @@ public:
     virtual void ResetRowsProcessing(ui64 readId, ui32 firstUnprocessedQuery, TMaybe<TOwnedCellVec> lastProcessedKey) = 0;
 
 protected:
-    const NKikimrKqp::TKqpStreamLookupSettings Settings;
+    const TSettings Settings;
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NMiniKQL::THolderFactory& HolderFactory;
     const NYql::NDqProto::TTaskInput& InputDesc;
-    const TString TablePath;
-    const TTableId TableId;
-    std::unordered_map<TString, TSysTables::TTableColumnInfo> KeyColumns;
-    std::vector<TSysTables::TTableColumnInfo*> LookupKeyColumns;
-    std::vector<TSysTables::TTableColumnInfo> Columns;
 };
 
-std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,
+std::vector<std::unique_ptr<TKqpStreamLookupWorker>> CreateStreamLookupWorkers(NKikimrKqp::TKqpStreamLookupSettings&& settings,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
     const NYql::NDqProto::TTaskInput& inputDesc);
 

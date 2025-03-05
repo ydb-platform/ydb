@@ -324,6 +324,9 @@ public:
         return *StageData;
     }
 
+    virtual const NArrow::TReplaceKey& GetMinPK() const = 0;
+    virtual const NArrow::TReplaceKey& GetMaxPK() const = 0;
+
     TFetchedData& MutableStageData() {
         AFL_VERIFY(StageData);
         return *StageData;

@@ -15,9 +15,9 @@ Released on March 5, 2025. To update to version **2.20.0**, select the [Download
   * `--client-cert-key-password-file`: File containing a password for the private key (if the key is encrypted).
 * Queries in the `{{ ydb-cli }} workload run` command are now executed in random order.
 * **_(Requires server v25.1+)_** Added [external data sources](./concepts/datamodel/external_data_source.md) and [external tables](./concepts/datamodel/external_table.md) support in the `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md).
-* **_(Experimental)_** Added the `{{ ydb-cli }} admin node config init` command to initialize directory with node config files.
-* **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin cluster config generate` command to generate dynamic config file from cluster static config file.
-* **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin cluster dump` and `{{ ydb-cli }} admin cluster restore` commands for dumping all cluster-level data. Such dumps contain database list with metadata, users and groups, but does not contain scheme objects.
+* **_(Experimental)_** Added the `{{ ydb-cli }} admin node config init` command to initialize a directory with the node configuration files.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin cluster config generate` command to generate a dynamic configuration file from a cluster static configuration file.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin cluster dump` and `{{ ydb-cli }} admin cluster restore` commands for dumping all cluster-level data. Such dumps contain a list of databases with metadata, users and groups, but do not contain scheme objects.
 * **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin database dump` and `{{ ydb-cli }} admin database restore` commands for dumping all database-level data. Such dumps contain database metadata, scheme objects, their data, users and groups.
 * **_(Requires server v25.1+)_** **_(Experimental)_** Added new options `--dedicated-storage-section` and `--dedicated-cluster-section` to the `ydb admin cluster config fetch` command, allowing to fetch cluster and storage config sections separately.
 

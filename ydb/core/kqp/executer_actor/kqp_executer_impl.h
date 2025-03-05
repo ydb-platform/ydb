@@ -1017,10 +1017,12 @@ protected:
         for (ui32 i = 0; i < taskCount; i++) {
             auto& task = TasksGraph.AddTask(stageInfo);
 
-            auto& input = task.Inputs[stageSource.GetInputIndex()];
-            input.ConnectionInfo = NYql::NDq::TSourceInput{};
-            input.SourceSettings = externalSource.GetSettings();
-            input.SourceType = externalSource.GetType();
+            if (!externalSource.GetEmbedded()) {
+                auto& input = task.Inputs[stageSource.GetInputIndex()];
+                input.ConnectionInfo = NYql::NDq::TSourceInput{};
+                input.SourceSettings = externalSource.GetSettings();
+                input.SourceType = externalSource.GetType();
+            }
 
             if (structuredToken) {
                 task.Meta.SecureParams.emplace(sourceName, structuredToken);

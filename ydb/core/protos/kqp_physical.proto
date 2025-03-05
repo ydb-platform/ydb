@@ -351,6 +351,7 @@ message TKqpReadRangesSource {
 message TKqpExternalSource {
     string Type = 1;
     google.protobuf.Any Settings = 2;
+    bool Embedded = 7;
 
     // Partitioning
     string TaskParamKey = 3;

@@ -45,11 +45,14 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     featureFlags.SetEnableBackgroundCompaction(false);
     featureFlags.SetEnableResourcePools(true);
     featureFlags.SetEnableFollowerStats(true);
+    featureFlags.SetEnableVectorIndex(true);
     Settings->SetFeatureFlags(featureFlags);
 
     Settings->SetEnablePersistentQueryStats(settings.EnableSVP);
     Settings->SetEnableDbCounters(settings.EnableSVP);
     Settings->SetEnableForceFollowers(settings.EnableForceFollowers);
+    Settings->SetEnableTablePgTypes(true);
+    Settings->SetEnableShowCreate(true);
 
     NKikimrConfig::TAppConfig appConfig;
     *appConfig.MutableFeatureFlags() = Settings->FeatureFlags;
@@ -64,6 +67,10 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
 
     Server = new Tests::TServer(*Settings);
     Server->EnableGRpc(grpcPort);
+
+    if (settings.ShowCreateTable) {
+        this->Server->SetupDefaultProfiles();
+    }
 
     auto* runtime = Server->GetRuntime();
     for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
@@ -82,7 +89,11 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     }
 
     Endpoint = "localhost:" + ToString(grpcPort);
-    DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);
+    if (settings.ShowCreateTable) {
+        DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint).SetDatabase("/Root");
+    } else {
+        DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);
+    }
     Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
 
     Server->GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);

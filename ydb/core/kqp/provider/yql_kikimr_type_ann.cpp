@@ -164,6 +164,17 @@ private:
 
                 auto listSelectType = ctx.MakeType<TListExprType>(selectType);
 
+                if (!SessionCtx->Config().FeatureFlags.GetEnableShowCreate()) {
+                    for (auto setting : readTable.Settings()) {
+                        auto name = setting.Name().Value();
+                        if (name == "showCreateTable") {
+                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), 
+                                TStringBuilder() << "SHOW CREATE statement is not supported"));
+                            return TStatus::Error;
+                        }
+                    }
+                }
+
                 TTypeAnnotationNode::TListType children;
                 children.push_back(node.World().Ref().GetTypeAnn());
                 children.push_back(listSelectType);

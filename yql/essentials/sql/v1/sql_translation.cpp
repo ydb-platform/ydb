@@ -74,11 +74,7 @@ TNodePtr BuildViewSelect(const TRule_select_stmt& selectStatement, TContext& con
     TModeGuard guard(context.Settings.Mode, ESqlMode::LIMITED_VIEW);
     TSqlSelect selectTranslator(context, context.Settings.Mode);
     auto position = context.Pos();
-    auto source = selectTranslator.Build(selectStatement, position);
-    if (!source) {
-        return nullptr;
-    }
-    return BuildSelectResult(position, source, false, false, context.Scoped);
+    return selectTranslator.Build(selectStatement, position);
 }
 
 }

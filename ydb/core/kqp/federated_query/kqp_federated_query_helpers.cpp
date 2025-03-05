@@ -57,6 +57,23 @@ namespace NKikimr::NKqp {
         return std::make_pair(ToString(host), scheme == "grpcs");
     }
 
+    bool IsValidExternalDataSourceType(const TString& type) {
+        static TSet<TString> allTypes = {
+            ToString(NYql::EDatabaseType::ObjectStorage),
+            ToString(NYql::EDatabaseType::ClickHouse),
+            ToString(NYql::EDatabaseType::PostgreSQL),
+            ToString(NYql::EDatabaseType::MySQL),
+            ToString(NYql::EDatabaseType::Ydb),
+            ToString(NYql::EDatabaseType::YT),
+            ToString(NYql::EDatabaseType::Greenplum),
+            ToString(NYql::EDatabaseType::MsSQLServer),
+            ToString(NYql::EDatabaseType::Oracle),
+            ToString(NYql::EDatabaseType::Logging),
+            ToString(NYql::EDatabaseType::Solomon)
+        };
+        return allTypes.contains(type);
+    }
+
     // TKqpFederatedQuerySetupFactoryDefault contains network clients and service actors necessary
     // for federated queries. HTTP Gateway (required by S3 provider) is run by default even without
     // explicit configuration. Token Accessor and Connector Client are run only if config is provided.
@@ -160,6 +177,11 @@ namespace NKikimr::NKqp {
             return std::make_shared<TKqpFederatedQuerySetupFactoryNoop>();
         }
 
+        for (const auto& source : appConfig.GetQueryServiceConfig().GetAvailableExternalDataSources()) {
+            if (!IsValidExternalDataSourceType(source)) {
+                ythrow yexception() << "wrong AvailableExternalDataSources \"" << source << "\"";
+            }
+        }
         return std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryDefault>(setup, appData, appConfig);
     }
 

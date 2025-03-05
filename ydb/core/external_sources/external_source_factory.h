@@ -16,6 +16,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
                                                          size_t pathsLimit = 50000,
                                                          std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory = nullptr,
                                                          bool enableInfer = false,
-                                                         bool allowLocalFiles = false);
+                                                         bool allowLocalFiles = false,
+                                                         const std::set<TString>& availableExternalDataSources = {});
 
 }

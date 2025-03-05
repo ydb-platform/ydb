@@ -12,6 +12,8 @@ PEERDIR(
 
     ydb/tests/tools/kqprun/runlib
     ydb/tests/tools/kqprun/src/proto
+
+    yt/yql/providers/yt/mkql_dq
 )
 
 GENERATE_ENUM_SERIALIZATION(common.h)

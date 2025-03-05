@@ -1022,8 +1022,8 @@ public:
 
                 for (size_t i = 0; i < KeyColumnIndexes.size(); ++i) {
                     auto keyIdx = KeyColumnIndexes[i];
-                    NScheme::TTypeInfoOrder typeDescending(KeyColumnTypes[i], NScheme::EOrder::Ascending);
-                    if (CompareTypedCells(BatchMaxRow[keyIdx], cells[keyIdx], typeDescending) < 0) {
+                    NScheme::TTypeInfoOrder typeOrder(KeyColumnTypes[i], NScheme::EOrder::Ascending);
+                    if (CompareTypedCells(BatchMaxRow[keyIdx], cells[keyIdx], typeOrder) < 0) {
                         BatchMaxRow = TOwnedCellVec::Make(cells);
                         break;
                     }

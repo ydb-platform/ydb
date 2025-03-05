@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import base64
 import collections
 import copy
 import os
@@ -682,6 +683,13 @@ class ClusterDetailsProvider(object):
             log_config = config_pb2.TLogConfig()
             if "default_level" not in log_config_dict:
                 log_config["default_level"] = self.default_log_level
+
+            # This little dance is required because 'entry.component' field is `bytes` in
+            # proto specification, attempting to deserialize it from plain text will fail
+            for i, entry in enumerate(log_config_dict.get("entry", [])):
+                entry["component"] = base64.b64encode(entry.get("component").encode('utf-8'))
+                log_config_dict["entry"][i] = entry
+
             utils.wrap_parse_dict(log_config_dict, log_config)
             return log_config
 

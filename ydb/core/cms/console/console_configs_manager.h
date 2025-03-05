@@ -216,12 +216,18 @@ private:
             HandleUnauthorized(ev, ctx);
         };
 
-        constexpr bool IsGetAllConfigsRequest = std::is_same_v<
+        constexpr bool HasBypassAuth = std::is_same_v<
             std::decay_t<T>, 
             typename TEvConsole::TEvGetAllConfigsRequest::TPtr
+        > || std::is_same_v<
+            std::decay_t<T>,
+            typename TEvConsole::TEvReplaceYamlConfigRequest::TPtr
+        > || std::is_same_v<
+            std::decay_t<T>,
+            typename TEvConsole::TEvSetYamlConfigRequest::TPtr
         >;
 
-        if constexpr (IsGetAllConfigsRequest) {
+        if constexpr (HasBypassAuth) {
             if (ev->Get()->Record.HasBypassAuth() && ev->Get()->Record.GetBypassAuth()) {
                 Handle(ev, ctx);
                 return;

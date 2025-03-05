@@ -265,6 +265,7 @@ message TSetYamlConfigRequest {
     optional bytes UserToken = 2;
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
+    optional bool BypassAuth = 5;
 }
 
 message TSetYamlConfigResponse {

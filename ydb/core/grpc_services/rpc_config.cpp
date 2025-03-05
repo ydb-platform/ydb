@@ -233,21 +233,13 @@ private:
     std::optional<TString> TargetDatabase;
 
     void CheckDatabaseAuthorization() {
-        try {
-            auto doc = NFyaml::TDocument::Parse(*DatabaseConfig);
-            if (doc.Root().Map().Has("metadata")) {
-                auto metadata = doc.Root().Map().at("metadata").Map();
-                if (metadata.Has("database")) {
-                    TargetDatabase = metadata.at("database").Scalar();
-                }
-                else {
-                    Reply(Ydb::StatusIds::BAD_REQUEST, "No database name found in metadata", 
-                            NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
-                    return;
-                }
-            }
-        } catch (const std::exception& ex) {
-            Reply(Ydb::StatusIds::BAD_REQUEST, "Failed to parse YAML: " + TString(ex.what()), 
+        const auto& metadata = NYamlConfig::GetDatabaseMetadata(*DatabaseConfig);
+
+        if (metadata.Database) {
+            TargetDatabase = metadata.Database;
+        }
+        else {
+            Reply(Ydb::StatusIds::BAD_REQUEST, "No database name found in metadata", 
                     NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
             return;
         }
@@ -260,7 +252,7 @@ private:
         }
         bool isAdministrator = NKikimr::IsAdministrator(AppData(), Request_->GetSerializedToken());
         if (!isAdministrator) {
-            auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+            auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
             request->DatabaseName = *TargetDatabase;
 
             auto& entry = request->ResultSet.emplace_back();
@@ -268,7 +260,7 @@ private:
             entry.Path = NKikimr::SplitPath(*TargetDatabase);
 
             auto* self = Self();
-            self->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+            self->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
             self->Become(&TReplaceStorageConfigRequest::StateWaitResolveDatabase);
             return;
         }
@@ -282,18 +274,26 @@ private:
         };
         auto pipe = NTabletPipe::CreateClient(SelfId(), MakeConsoleID(), pipeConfig);
         ConsolePipe = RegisterWithSameMailbox(pipe);
+        
+        auto PrepareAndSendRequest = [&](auto requestType) {
+            using TRequestType = decltype(requestType);
+            auto request = std::make_unique<TRequestType>();
+            request->Record.SetUserToken(Request_->GetSerializedToken());
+            request->Record.SetPeerName(Request_->GetPeerName());
+            request->Record.SetIngressDatabase(*TargetDatabase);
+            
+            auto& req = *request->Record.MutableRequest();
+            req.set_config(*DatabaseConfig);
 
-        auto request = MakeHolder<NConsole::TEvConsole::TEvReplaceYamlConfigRequest>();
-        request->Record.SetUserToken(Request_->GetSerializedToken());
-        request->Record.SetPeerName(Request_->GetPeerName());
-        request->Record.SetIngressDatabase(*TargetDatabase);
+            request->Record.SetBypassAuth(true);
+            NTabletPipe::SendData(SelfId(), ConsolePipe, request.release());
+        };
 
-        auto& req = *request->Record.MutableRequest();
-        req.set_config(*DatabaseConfig);
-
-        request->Record.SetBypassAuth(true);
-
-        NTabletPipe::SendData(SelfId(), ConsolePipe, request.Release());
+        if (GetProtoRequest()->bypass_checks()) {
+            PrepareAndSendRequest(NConsole::TEvConsole::TEvSetYamlConfigRequest());
+        } else {
+            PrepareAndSendRequest(NConsole::TEvConsole::TEvReplaceYamlConfigRequest());
+        }
         Self()->Become(&TReplaceStorageConfigRequest::StateConsoleReplaceFunc);
     }
 
@@ -334,13 +334,19 @@ private:
 
     STFUNC(StateConsoleReplaceFunc) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NConsole::TEvConsole::TEvReplaceYamlConfigResponse, Handle);
+            hFunc(NConsole::TEvC onsole::TEvReplaceYamlConfigResponse, Handle);
+            hFunc(NConsole::TEvConsole::TEvSetYamlConfigResponse, Handle);
             default:
                 return StateConsoleFunc(ev);
         }
     }
 
     void Handle(NConsole::TEvConsole::TEvReplaceYamlConfigResponse::TPtr& ev) {
+        auto* self = Self();
+        self->Reply(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetIssues(), self->ActorContext());
+    }
+
+    void Handle(NConsole::TEvConsole::TEvSetYamlConfigResponse::TPtr& ev) {
         auto* self = Self();
         self->Reply(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetIssues(), self->ActorContext());
     }
@@ -462,7 +468,7 @@ private:
         auto pipe = NTabletPipe::CreateClient(SelfId(), MakeConsoleID(), pipeConfig);
         ConsolePipe = RegisterWithSameMailbox(pipe);
 
-        auto request = MakeHolder<NConsole::TEvConsole::TEvGetAllConfigsRequest>();
+        auto request = std::make_unique<NConsole::TEvConsole::TEvGetAllConfigsRequest>();
         request->Record.SetUserToken(Request_->GetSerializedToken());
         request->Record.SetPeerName(Request_->GetPeerName());
         if (Request_->GetDatabaseName()) {
@@ -470,7 +476,7 @@ private:
         }
         request->Record.SetBypassAuth(true);
 
-        NTabletPipe::SendData(SelfId(), ConsolePipe, request.Release());
+        NTabletPipe::SendData(SelfId(), ConsolePipe, request.release());
         Self()->Become(&TFetchStorageConfigRequest::StateConsoleFetchFunc);
     }
 

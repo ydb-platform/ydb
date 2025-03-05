@@ -277,14 +277,34 @@ namespace NKikimr::NBsController {
             PendingYamlConfig.reset();
         }
 
-        if (PendingYamlConfig && !NYamlConfig::IsMainConfig(*PendingYamlConfig)) {
-            return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
-                "cluster YAML config is not of MainConfig kind");
+        if (PendingYamlConfig) {
+            const ui64 expected = Self.YamlConfig
+                ? GetVersion(*Self.YamlConfig) + 1
+                : 0;
+
+            if (!NYamlConfig::IsMainConfig(*PendingYamlConfig)) {
+                return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
+                    "cluster YAML config is not of MainConfig kind");
+            } else if (const auto& meta = NYamlConfig::GetMainMetadata(*PendingYamlConfig); meta.Version != expected) {
+                return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
+                     TStringBuilder() << "cluster YAML config version mismatch got# " << meta.Version
+                         << " expected# " << expected);
+           }
         }
 
-        if (PendingStorageYamlConfig && *PendingStorageYamlConfig && !NYamlConfig::IsStorageConfig(**PendingStorageYamlConfig)) {
-            return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
-                "storage YAML config is not of StorageConfig kind");
+        if (PendingStorageYamlConfig && *PendingStorageYamlConfig) {
+            const ui64 expected = Self.StorageYamlConfig
+                ? Self.StorageYamlConfigVersion + 1
+                : 0;
+
+            if (!NYamlConfig::IsStorageConfig(**PendingStorageYamlConfig)) {
+                return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
+                    "storage YAML config is not of StorageConfig kind");
+            } else if (const auto& meta = NYamlConfig::GetStorageMetadata(**PendingStorageYamlConfig); meta.Version != expected) {
+                return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
+                    TStringBuilder() << "storage YAML config version mismatch got# " << meta.Version
+                        << " expected# " << expected);
+            }
         }
 
         if (record.GetSkipConsoleValidation() || !record.HasClusterYaml()) {

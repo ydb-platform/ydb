@@ -164,6 +164,7 @@ class KikimrConfigGenerator(object):
             separate_node_configs=False,
             default_clusteradmin=None,
             enable_resource_pools=None,
+            table_service_config=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -287,6 +288,8 @@ class KikimrConfigGenerator(object):
                 self.yaml_config['pqconfig']['client_service_type'].append({'name': service_type})
         if column_shard_config:
             self.yaml_config["column_shard_config"] = column_shard_config
+        if table_service_config:
+            self.yaml_config["table_service_config"] = table_service_config
 
         self.yaml_config['grpc_config']['services'].extend(extra_grpc_services)
 
@@ -355,6 +358,8 @@ class KikimrConfigGenerator(object):
             self.yaml_config["data_shard_config"] = datashard_config
         if columnshard_config:
             self.yaml_config["column_shard_config"] = columnshard_config
+        if table_service_config:
+            self.yaml_config["table_service_config"] = table_service_config
 
         self.__build()
 

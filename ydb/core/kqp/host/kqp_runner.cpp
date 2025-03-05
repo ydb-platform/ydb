@@ -23,6 +23,7 @@
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/dq/opt/dqs_opt.h>
 
 #include <util/generic/is_in.h>
 
@@ -278,7 +279,7 @@ private:
         auto preparedExplainTransformer = CreateKqpExplainPreparedTransformer(
             Gateway, Cluster, TransformCtx, &funcRegistry, *typesCtx, OptimizeCtx);
 
-        auto physicalOptimizeTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)
+        auto physicalOptimizePipeline = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
             .Add(Log("PhysicalOptimize"), "LogPhysicalOptimize")
             .AddPreTypeAnnotation()
@@ -294,7 +295,13 @@ private:
             .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config), "LogicalOptimize")
             .Add(CreateLogicalDataProposalsInspector(*typesCtx), "ProvidersLogicalOptimize")
-            .Add(CreateKqpPhyOptTransformer(OptimizeCtx, *typesCtx, Config), "KqpPhysicalOptimize")
+            .Add(CreateKqpPhyOptTransformer(OptimizeCtx, *typesCtx, Config), "KqpPhysicalOptimize");
+
+        if (sessionCtx->Config().UseBlockReader.Get().GetOrElse(false)) {
+            physicalOptimizePipeline.Add(NDqs::CreateDqsRewritePhyBlockReadOnDqIntegrationTransformer(*typesCtx), "ReplaceWideReadsWithBlock");
+        }
+
+        auto physicalOptimizeTransformer = CreateKqpQueryBlocksTransformer(physicalOptimizePipeline
             .Add(CreatePhysicalDataProposalsInspector(*typesCtx), "ProvidersPhysicalOptimize")
             .Add(CreateKqpFinalizingOptTransformer(OptimizeCtx), "FinalizingOptimize")
             .Add(CreateKqpQueryPhasesTransformer(), "QueryPhases")

@@ -8,12 +8,28 @@ from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 class FunctionalTestBase:
     cluster = None
 
+    table_service_config_for_spilling = {
+        'enable_spilling_nodes': 'All',
+        'spilling_service_config': {
+            'local_file_config': {
+                'enable': True,
+                'max_total_size': 536870912000,
+                'max_file_size': 107374182400,
+            }
+        },
+    }
+
     @classmethod
-    def setup_cluster(cls) -> None:
+    def setup_cluster(cls, with_spilling: bool = False) -> None:
+        table_service_config = {}
+        if with_spilling:
+            table_service_config = cls.table_service_config_for_spilling
+        print('MISHA', table_service_config)
         cls.cluster = KiKiMR(configurator=KikimrConfigGenerator(
             domain_name='local',
             extra_feature_flags=["enable_resource_pools"],
             use_in_memory_pdisks=True,
+            table_service_config=table_service_config,
         ))
         cls.cluster.start()
         node = cls.cluster.nodes[1]

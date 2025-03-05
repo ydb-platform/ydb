@@ -547,9 +547,11 @@ struct TTxn : public TOperation {
         };
 
         out << "Txn(";
-
-        for (const auto& cmp : Compares)
-            cmp.Dump(out);
+        if (!Compares.empty()) {
+            out << "if ";
+            for (const auto& cmp : Compares)
+                cmp.Dump(out);
+        }
         if (!Success.empty()) {
             out << " then ";
             dump(Success, out);
@@ -825,6 +827,8 @@ private:
         return TRequest::TRequest::descriptor()->name();
     }
 
+    virtual std::ostream& Dump(std::ostream& out) const = 0;
+
     void SendDatabaseRequest() {
         std::ostringstream sql;
         NYdb::TParamsBuilder params;
@@ -850,13 +854,13 @@ private:
     }
 
     void Handle(NEtcd::TEvQueryResult::TPtr &ev, const TActorContext& ctx) {
-        this->ReplyWith(ev->Get()->Results, ctx);
+        ReplyWith(ev->Get()->Results, ctx);
     }
 
     void Handle(NEtcd::TEvQueryError::TPtr &ev, const TActorContext& ctx) {
         TryToRollbackRevision();
         std::ostringstream err;
-        err << GetRequestName() << " SQL error received:" << std::endl << ev->Get()->Issues.ToString() << std::endl;
+        Dump(err) << " SQL error received:" << std::endl << ev->Get()->Issues.ToString() << std::endl;
         std::cout << err.view();
         Reply(grpc::StatusCode::INTERNAL, err.view(), ctx);
     }
@@ -913,8 +917,12 @@ private:
 
     void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
         auto response = Range.MakeResponse(Revision, results);
-        Range.Dump(std::cout) << '=' << response.count() << std::endl;
+        Dump(std::cout) << '=' << response.count() << std::endl;
         return Reply(response, ctx);
+    }
+
+    std::ostream& Dump(std::ostream& out) const final {
+        return Range.Dump(out);
     }
 
     TRange Range;
@@ -946,7 +954,7 @@ private:
         };
 
         auto response = Put.MakeResponse(Revision, results, notifier);
-        Put.Dump(std::cout) << '=';
+        Dump(std::cout) << '=';
         if (const auto good = std::get_if<etcdserverpb::PutResponse>(&response)) {
             std::cout << "ok" << std::endl;
             return Reply(*good, ctx);
@@ -955,6 +963,10 @@ private:
             std::cout << bad->second << std::endl;
             return Reply(bad->first, bad->second, ctx);
         }
+    }
+
+    std::ostream& Dump(std::ostream& out) const final {
+        return Put.Dump(out);
     }
 
     TPut Put;
@@ -988,8 +1000,12 @@ private:
         if (!response.deleted())
             TryToRollbackRevision();
 
-        DeleteRange.Dump(std::cout) << '=' << response.deleted() << std::endl;
+        Dump(std::cout) << '=' << response.deleted() << std::endl;
         return Reply(response, ctx);
+    }
+
+    std::ostream& Dump(std::ostream& out) const final {
+        return DeleteRange.Dump(out);
     }
 
     TDeleteRange DeleteRange;
@@ -1031,7 +1047,7 @@ private:
         };
 
         auto response = Txn.MakeResponse(Revision, results, notifier);
-        Txn.Dump(std::cout) << '=';
+        Dump(std::cout) << '=';
         if (const auto good = std::get_if<etcdserverpb::TxnResponse>(&response)) {
             std::cout << (good->succeeded() ? "success" : "failure") << std::endl;
             return Reply(*good, ctx);
@@ -1040,6 +1056,10 @@ private:
             std::cout << bad->second << std::endl;
             return Reply(bad->first, bad->second, ctx);
         }
+    }
+
+    std::ostream& Dump(std::ostream& out) const final {
+        return Txn.Dump(out);
     }
 
     TTxn Txn;
@@ -1068,8 +1088,12 @@ private:
     void ReplyWith(const NYdb::TResultSets&, const TActorContext& ctx) final {
         etcdserverpb::CompactionResponse response;
         FillHeader(Revision, *response.mutable_header());
-        std::cout << "Compact(" << KeyRevision << ')' << std::endl;
+        Dump(std::cout) << std::endl;
         return Reply(response, ctx);
+    }
+
+    std::ostream& Dump(std::ostream& out) const final {
+        return out << "Compact(" << KeyRevision << ')';
     }
 
     i64 KeyRevision;
@@ -1103,8 +1127,12 @@ private:
         FillHeader(Revision, *response.mutable_header());
         response.set_id(Lease);
         response.set_ttl(TTL);
-        std::cout << "Grant(" << TTL << ")=" << response.id() << ',' << response.ttl() << std::endl;
+        Dump(std::cout) << '=' << response.id() << ',' << response.ttl() << std::endl;
         return Reply(response, ctx);
+    }
+
+    std::ostream& Dump(std::ostream& out) const final {
+        return out << "Grant(" << TTL << ')';
     }
 
     i64 Lease, TTL;
@@ -1172,8 +1200,12 @@ private:
 
         etcdserverpb::LeaseRevokeResponse response;
         FillHeader(Revision, *response.mutable_header());
-        std::cout << "Revoke(" << Lease << ')' << std::endl;
+        Dump(std::cout) << std::endl;
         return Reply(response, ctx);
+    }
+
+    std::ostream& Dump(std::ostream& out) const final {
+        return out << "Revoke(" << Lease << ')';
     }
 
     i64 Lease;
@@ -1221,8 +1253,12 @@ private:
             }
         }
 
-        std::cout << "TimeToLive(" << Lease << ")=" << response.ttl() << ',' << response.grantedttl() << std::endl;
+        Dump(std::cout) << '=' << response.ttl() << ',' << response.grantedttl() << std::endl;
         return Reply(response, ctx);
+    }
+
+    std::ostream& Dump(std::ostream& out) const final {
+        return out << "TimeToLive(" << Lease << ')';
     }
 
     i64 Lease = 0LL;
@@ -1252,8 +1288,12 @@ private:
             response.add_leases()->set_id(NYdb::TValueParser(parser.GetValue(0)).GetInt64());
         }
 
-        std::cout << "Leases()=" << response.leases().size() << std::endl;
+        Dump(std::cout) << '=' << response.leases().size() << std::endl;
         return Reply(response, ctx);
+    }
+
+    std::ostream& Dump(std::ostream& out) const final {
+        return out << "Leases()";
     }
 };
 

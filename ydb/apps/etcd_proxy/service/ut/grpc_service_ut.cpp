@@ -785,7 +785,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                     compare->set_result(etcdserverpb::Compare_CompareResult_LESS);
                     compare->set_target(etcdserverpb::Compare_CompareTarget_VALUE);
                     compare->set_key("one");
-                    compare->set_value("dd");
+                    compare->set_value("ff");
                 }
 
                 {
@@ -860,7 +860,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                     compare->set_result(etcdserverpb::Compare_CompareResult_LESS);
                     compare->set_target(etcdserverpb::Compare_CompareTarget_VALUE);
                     compare->set_key("one");
-                    compare->set_value("first");
+                    compare->set_value("ff");
                 }
 
                 {
@@ -868,7 +868,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                     compare->set_result(etcdserverpb::Compare_CompareResult_GREATER);
                     compare->set_target(etcdserverpb::Compare_CompareTarget_VALUE);
                     compare->set_key("two");
-                    compare->set_value("second");
+                    compare->set_value("tt");
                 }
 
                 {
@@ -876,7 +876,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                     compare->set_result(etcdserverpb::Compare_CompareResult_NOT_EQUAL);
                     compare->set_target(etcdserverpb::Compare_CompareTarget_VALUE);
                     compare->set_key("three");
-                    compare->set_value("third");
+                    compare->set_value("xx");
                 }
 
                 {

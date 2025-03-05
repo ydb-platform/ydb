@@ -2969,7 +2969,7 @@
     "test.test_viewer_nodes_issue_14992": {
         "response_group": {
             "FieldsAvailable": "0000000110111110111111100000111",
-            "FieldsRequired": "0000000001000000010000000000101",
+            "FieldsRequired": "0000000001100000010000000000101",
             "FoundNodes": "3",
             "MaximumDisksPerNode": "1",
             "Nodes": [
@@ -3190,7 +3190,7 @@
         },
         "response_group_by": {
             "FieldsAvailable": "0000000110111110111111100000111",
-            "FieldsRequired": "0000000001000000010000000000101",
+            "FieldsRequired": "0000000001100000010000000000101",
             "FoundNodes": "3",
             "MaximumDisksPerNode": "1",
             "NodeGroups": [

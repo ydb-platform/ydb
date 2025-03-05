@@ -56,7 +56,7 @@ void RefreshTiering(TTestBasicRuntime& runtime, const TActorId& sender) {
 
 bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, NOlap::TSnapshot snap) {
     auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
-        NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, snap.GetTxId(), txBody);
+        NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, snap.GetTxId(), txBody, 0, 0);
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
     auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
@@ -207,7 +207,8 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, scan.release());
 }
 
-void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& /* writeIds */, const ui64 lockId) {
+template<class Checker>
+void ProposeCommitCheck(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& /* writeIds */, const ui64 lockId, Checker&& checker) {
     auto write = std::make_unique<NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
     auto* lock = write->Record.MutableLocks()->AddLocks();
     lock->SetLockId(lockId);
@@ -219,12 +220,29 @@ void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, u
     UNIT_ASSERT(event);
 
     auto& res = event->Record;
-    AFL_VERIFY(res.GetTxId() == txId)("tx_id", txId)("res", res.GetTxId());
-    UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+    checker(res);
+}
+
+void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
+    ProposeCommitCheck(runtime, sender, shardId, txId, writeIds, lockId, [&](auto& res) {
+        AFL_VERIFY(res.GetTxId() == txId)("tx_id", txId)("res", res.GetTxId());
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+    });
+}
+
+void ProposeCommitFail(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
+    ProposeCommitCheck(runtime, sender, shardId, txId, writeIds, lockId, [&](auto& res) {
+        UNIT_ASSERT_UNEQUAL(res.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+    });
 }
 
 void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
     ProposeCommit(runtime, sender, TTestTxConfig::TxTablet0, txId, writeIds, lockId);
+}
+
+
+void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds) {
+    ProposeCommit(runtime, sender, TTestTxConfig::TxTablet0, txId, writeIds);
 }
 
 void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, const TSet<ui64>& txIds) {

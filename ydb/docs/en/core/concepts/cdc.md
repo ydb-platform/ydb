@@ -249,7 +249,7 @@ You can add a changefeed to an existing table or erase it using the [ADD CHANGEF
 
 ## Getting and updating topic settings {#topic-settings}
 
-You can get the settings using an [SDK](../reference/ydb-sdk/topic.md#describe-topic) or the [{{ ydb-short-name }} CLI](../reference/ydb-cli/commands/scheme-describe.md) by passing the path to the changefeed in the arguments, which has the following format:
+You can get topic settings using an [SDK](../reference/ydb-sdk/topic.md#describe-topic) or the [{{ ydb-short-name }} CLI](../reference/ydb-cli/commands/scheme-describe.md) by passing the changefeed path in the arguments. A changefeed path has the following format:
 
 ```txt
 path/to/table/changefeed_name
@@ -261,14 +261,14 @@ For example, if a table named `table` contains a changefeed named `updates_feed`
 my/table/updates_feed
 ```
 
-The topic settings can be updated using the expression [ALTER TOPIC](../yql/reference/syntax/alter-topic.md). Supported actions:
+The topic settings can be updated using the [ALTER TOPIC](../yql/reference/syntax/alter-topic.md) expression. Supported actions:
 
 * [updating settings](../yql/reference/syntax/alter-topic.md#updating-topic-settings):
 
-  * `retention_period`;
-  * `retention_storage_mb`;
+  * `retention_period`
+  * `retention_storage_mb`
 
-* [updating consumers](../yql/reference/syntax/alter-topic.md#updating-a-set-of-consumers).
+* [updating consumers](../yql/reference/syntax/alter-topic.md#updating-a-set-of-consumers)
 
 ## CDC purpose and use {#best_practices}
 

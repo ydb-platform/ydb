@@ -2460,7 +2460,10 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::ABORTED,
                 NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                TStringBuilder() << "Transaction locks invalidated. Tables: " << getPathes() << ".",
+                TStringBuilder()
+                    << "Transaction locks invalidated. "
+                    << (TxManager->GetShardTableInfo(ev->Get()->Record.GetOrigin()).Pathes.size() == 1 ? "Table: " : "Tables: ")
+                    << getPathes() << ".",
                 getIssues());
             return;
         }

@@ -33,6 +33,12 @@ LIBRARY()
         group_metrics_exchange.cpp
         mon_main.cpp
         mon_main.h
+        s3.cpp
+        s3_delete.cpp
+        s3_scan.cpp
+        s3_upload.cpp
+        s3_write.cpp
+        s3.h
         space_monitor.cpp
         space_monitor.h
         testing.cpp
@@ -49,6 +55,7 @@ LIBRARY()
         ydb/core/blobstorage/vdisk/common
         ydb/core/tablet_flat
         ydb/core/protos
+        ydb/core/wrappers
     )
 
     GENERATE_ENUM_SERIALIZATION(schema.h)

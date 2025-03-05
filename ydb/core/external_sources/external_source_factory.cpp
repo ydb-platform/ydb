@@ -27,14 +27,14 @@ struct TExternalSourceFactory : public IExternalSourceFactory {
             throw TExternalSourceException() << "External source with type " << type << " was not found";
         }
         if (!AvailableExternalDataSources.empty() && !AvailableExternalDataSources.contains(type)) {
-            throw TExternalSourceException() << "External source with type " << type << " are disabled. Please contact your system administrator to enable it";
+            throw TExternalSourceException() << "External source with type " << type << " is disabled. Please contact your system administrator to enable it";
         }
         return it->second;
     }
 
 private:
-    TMap<TString, IExternalSource::TPtr> Sources;
-    std::set<TString> AvailableExternalDataSources;
+    const TMap<TString, IExternalSource::TPtr> Sources;
+    const std::set<TString> AvailableExternalDataSources;
 };
 
 }

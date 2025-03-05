@@ -450,7 +450,7 @@ void TDataShard::Handle(TEvPrivate::TEvChangeExchangeExecuteHandshakes::TPtr&, c
 void TDataShard::RunChangeExchangeHandshakeTx() {
     if (!ChangeExchangeHandshakeTxScheduled && !PendingChangeExchangeHandshakes.empty()) {
         ChangeExchangeHandshakeTxScheduled = true;
-        EnqueueExecute(new TTxChangeExchangeHandshake(this));
+        Enqueue(new TTxChangeExchangeHandshake(this));
     }
 }
 

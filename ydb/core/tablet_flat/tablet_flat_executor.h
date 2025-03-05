@@ -565,7 +565,26 @@ namespace NFlatExecutorSetup {
         virtual void FollowerGcApplied(ui32 step, TDuration followerSyncDelay) = 0;
 
         virtual void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) = 0;
-        virtual void Enqueue(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) = 0;
+
+        /**
+         * Enqueue a transaction for execution
+         * Returns the unique id that may be used for cancellation.
+         */
+        virtual ui64 Enqueue(TAutoPtr<ITransaction> transaction) = 0;
+
+        /**
+         * Enqueue a transaction that is low priority with respect to other
+         * mailbox events. Every transaction in turn is scheduled at the end of
+         * the current mailbox, which allows actors to handle possible cancellation
+         * before each transaction's execution.
+         * Returns the unique id that may be used for cancellation.
+         */
+        virtual ui64 EnqueueLowPriority(TAutoPtr<ITransaction> transaction) = 0;
+
+        /**
+         * Cancel a previously enqueued transaction with the specified id.
+         */
+        virtual bool CancelTransaction(ui64 id) = 0;
 
         virtual void ConfirmReadOnlyLease(TMonotonic at) = 0;
         virtual void ConfirmReadOnlyLease(TMonotonic at, std::function<void()> callback) = 0;

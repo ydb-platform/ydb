@@ -1368,11 +1368,7 @@ TStatus TImportFileClient::TImpl::GenerateCreateTableFromCsv(IInputStream& input
         auto& possibleTypeIt = possibleType.GetIterator();
         TString typeText = possibleTypeIt != possibleType.GetAvailableTypesEnd()
             && possibleType.GetHasNonNulls() ? possibleTypeIt->ToString() : "Text";
-        res << "    `" << header[i] << "` " << typeText;
-        if (!possibleType.GetHasNulls()) {
-            res << " NOT NULL";
-        }
-        res << ",";
+        res << "    `" << header[i] << "` " << typeText << ",";
         if (!possibleType.GetHasNonNulls()) {
             res << " -- No data in this column to infer type";
         }

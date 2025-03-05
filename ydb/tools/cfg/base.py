@@ -105,7 +105,7 @@ Domain = collections.namedtuple(
 )
 
 KiKiMRHost = collections.namedtuple(
-    "_KiKiMRHost", ["hostname", "node_id", "drives", "ic_port", "body", "datacenter", "rack", "host_config_id"]
+    "_KiKiMRHost", ["hostname", "node_id", "drives", "ic_port", "body", "datacenter", "rack", "host_config_id", "port"]
 )
 
 DEFAULT_PLAN_RESOLUTION = 10
@@ -426,6 +426,7 @@ class ClusterDetailsProvider(object):
             datacenter=self._get_datacenter(host_description),
             rack=self._get_rack(host_description),
             host_config_id=host_description.get("host_config_id", None),
+            port=host_description.get("port", DEFAULT_INTERCONNECT_PORT),
         )
 
     @property

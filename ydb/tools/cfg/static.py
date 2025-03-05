@@ -542,16 +542,16 @@ class StaticConfigGenerator(object):
         if "hive_config" in normalized_config["domains_config"]:
             del normalized_config["domains_config"]["hive_config"]
 
-        hostname_to_host_config_id = {node.hostname: node.host_config_id for node in self.__cluster_details.hosts}
+        node_to_host_config_id = {( node.hostname, node.port ): node.host_config_id for node in self.__cluster_details.hosts}
         normalized_config["hosts"] = []
         for node in normalized_config["nameservice_config"]["node"]:
-            if "port" in node and int(node.get("port")) == 19001:
+            if "port" in node and int(node.get("port")) == base.DEFAULT_INTERCONNECT_PORT:
                 del node["port"]
 
             if "interconnect_host" in node and node["interconnect_host"] == node["host"]:
                 del node["interconnect_host"]
 
-            host_config_id = hostname_to_host_config_id[node["host"]]
+            host_config_id = node_to_host_config_id[(node["host"], node.get("port", base.DEFAULT_INTERCONNECT_PORT) )]
             if host_config_id is not None:
                 node["host_config_id"] = host_config_id
             normalized_config["hosts"].append(node)
@@ -1283,9 +1283,12 @@ class StaticConfigGenerator(object):
             utils.wrap_parse_dict(self.__cluster_details.nameservice_config, self.names_txt)
 
         for host in self.__cluster_details.hosts:
+            port = host.port
+            if port is base.DEFAULT_INTERCONNECT_PORT:
+                port = host.ic_port
             node = self.names_txt.Node.add(
                 NodeId=host.node_id,
-                Port=host.ic_port,
+                Port=port,
                 Host=host.hostname,
                 InterconnectHost=host.hostname,
             )

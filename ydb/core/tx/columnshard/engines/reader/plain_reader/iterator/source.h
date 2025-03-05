@@ -283,6 +283,13 @@ public:
         return Portion;
     }
 
+    virtual const NArrow::TReplaceKey& GetMinPK() const override {
+        return Portion->IndexKeyStart();
+    }
+    virtual const NArrow::TReplaceKey& GetMaxPK() const override {
+        return Portion->IndexKeyEnd();
+    }
+
     TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context)
         : TBase(portion->GetPortionId(), sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(),
               portion->RecordSnapshotMin(TSnapshot::Zero()), portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(),

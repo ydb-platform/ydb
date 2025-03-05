@@ -847,7 +847,10 @@ private:
         auto it = OutputChannelsMap.find(ev->Get()->ChannelId);
         Y_ABORT_UNLESS(it != OutputChannelsMap.end());
         TOutputChannelInfo& outputChannel = it->second;
-        if (!Channels->ShouldSkipData(outputChannel.ChannelId) && !Channels->CanSendChannelData(outputChannel.ChannelId)) { // When channel will be connected (or finish retrying), they will call resume execution.
+        // This condition was already checked in ProcessOutputsImpl, but since then
+        // RetryState could've been changed. Recheck it once again:
+        if (!Channels->ShouldSkipData(outputChannel.ChannelId) && !Channels->CanSendChannelData(outputChannel.ChannelId)) {
+            // Once RetryState will be reset, channel will trigger either ResumeExecution or PeerFinished; either way execution will re-reach this function
             CA_LOG_D("OnOutputChannelData return because Channel can't send channel data, channel: " << outputChannel.ChannelId);
             return;
         }

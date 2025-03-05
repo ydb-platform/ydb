@@ -76,7 +76,7 @@ void TKqpComputeActor::DoBootstrap() {
         settings.ReadRanges.push_back(readRange);
     }
 
-    if (FederatedQuerySetup) {
+    if (FederatedQuerySetup && FederatedQuerySetup->DqTaskTransformFactory) {
         execCtx.FuncProvider = FederatedQuerySetup->DqTaskTransformFactory({settings.TaskParams, settings.ReadRanges}, TBase::FunctionRegistry);
     }
 

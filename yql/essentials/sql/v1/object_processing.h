@@ -22,6 +22,7 @@ protected:
 
     virtual INode::TPtr BuildOptions() const = 0;
     virtual INode::TPtr FillFeatures(INode::TPtr options) const = 0;
+    virtual void AddNamedChildren(INode::TPtr options) const = 0;
     INode::TPtr BuildKeys() const;
 public:
     TObjectProcessorImpl(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context);
@@ -37,6 +38,7 @@ class TCreateObject: public TObjectProcessorImpl {
 private:
     using TBase = TObjectProcessorImpl;
     std::map<TString, TDeferredAtom> Features;
+    std::map<TString, TNodePtr> NamedChildren;
     std::set<TString> FeaturesToReset;
 protected:
     bool ExistingOk = false;
@@ -56,6 +58,7 @@ protected:
     }
     virtual INode::TPtr FillFeatures(INode::TPtr options) const override;
     bool DoInit(TContext& ctx, ISource* src) override;
+    virtual void AddNamedChildren(INode::TPtr options) const override;
 public:
     TCreateObject(TPosition pos, const TString& objectId,
         const TString& typeId, bool existingOk, bool replaceIfExists, std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context)
@@ -63,8 +66,10 @@ public:
         , Features(std::move(features))
         , FeaturesToReset(std::move(featuresToReset))
         , ExistingOk(existingOk)
-        , ReplaceIfExists(replaceIfExists) {
-        }
+        , ReplaceIfExists(replaceIfExists)
+    {}
+
+    void AddNamedChild(TStringBuf name, TNodePtr node);
 };
 
 class TUpsertObject final: public TCreateObject {

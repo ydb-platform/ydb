@@ -5126,6 +5126,7 @@ bool TSqlTranslation::ValidateExternalTable(const TCreateTableParameters& params
 
 bool TSqlTranslation::ParseViewQuery(
     std::map<TString, TDeferredAtom>& features,
+    TNodePtr& queryAst,
     const TRule_select_stmt& query
 ) {
     TString queryText = CollectTokens(query);
@@ -5149,11 +5150,10 @@ bool TSqlTranslation::ParseViewQuery(
 
     // AST is needed for ready-made validation of CREATE VIEW statement.
     // Query is stored as plain text, not AST.
-    const auto viewSelect = BuildViewSelect(query, Ctx, contextRecreationQuery);
-    if (!viewSelect) {
+    queryAst = BuildViewSelect(query, Ctx);
+    if (!queryAst) {
         return false;
     }
-    features["query_ast"] = {viewSelect, Ctx};
 
     return true;
 }

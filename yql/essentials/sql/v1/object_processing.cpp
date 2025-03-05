@@ -25,6 +25,7 @@ bool TObjectProcessorImpl::DoInit(TContext& ctx, ISource* src) {
     Y_UNUSED(src);
     Scoped->UseCluster(ServiceId, Cluster);
     auto options = FillFeatures(BuildOptions());
+    AddNamedChildren(options);
     auto keys = BuildKeys();
 
     Add("block", Q(Y(
@@ -75,6 +76,20 @@ bool TCreateObject::DoInit(TContext& ctx, ISource* src) {
         return false;
     }
     return TObjectProcessorImpl::DoInit(ctx, src);
+}
+
+void TCreateObject::AddNamedChildren(TNodePtr options) const {
+    if (!NamedChildren.empty()) {
+        auto namedChildren = Y();
+        for (const auto& [name, node] : NamedChildren) {
+            namedChildren->Add(Q(Y(BuildQuotedAtom(Pos, name), node)));
+        }
+        options->Add(Q(Y(Q("namedChildren"), Q(namedChildren))));
+    }
+}
+
+void TCreateObject::AddNamedChild(TStringBuf name, TNodePtr node) {
+    NamedChildren.emplace(name, node);
 }
 
 TObjectOperatorContext::TObjectOperatorContext(TScopedStatePtr scoped)

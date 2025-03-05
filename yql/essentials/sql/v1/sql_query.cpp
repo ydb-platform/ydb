@@ -1356,7 +1356,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     return false;
                 }
             }
-            if (!ParseViewQuery(features, node.GetRule_select_stmt7())) {
+            TNodePtr queryAst;
+            if (!ParseViewQuery(features, queryAst, node.GetRule_select_stmt7())) {
                 return false;
             }
 

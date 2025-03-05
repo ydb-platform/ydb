@@ -31,6 +31,7 @@ target_link_libraries(ydb-core-blob_depot PUBLIC
   blobstorage-vdisk-common
   ydb-core-tablet_flat
   ydb-core-protos
+  ydb-core-wrappers
   tools-enum_parser-enum_serialization_runtime
 )
 
@@ -52,6 +53,11 @@ target_sources(ydb-core-blob_depot PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/given_id_range.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/group_metrics_exchange.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/mon_main.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/s3.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/s3_delete.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/s3_scan.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/s3_upload.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/s3_write.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/space_monitor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/testing.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/op_apply_config.cpp
@@ -72,6 +78,7 @@ target_sources(ydb-core-blob_depot PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/data_uncertain.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/garbage_collection.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/mon_main.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/s3.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/space_monitor.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/testing.h
 )

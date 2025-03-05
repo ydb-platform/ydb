@@ -54,6 +54,8 @@ target_link_libraries(ydb-core-tablet_flat PUBLIC
   tools-enum_parser-enum_serialization_runtime
   contrib-libs-protobuf
   library-actors-util
+  library-actors-core
+  ydb-library-services
   cpp-containers-absl_flat_hash
   cpp-containers-intrusive_rb_tree
   cpp-containers-stack_vector

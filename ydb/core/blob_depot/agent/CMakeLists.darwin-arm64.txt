@@ -21,6 +21,7 @@ target_link_libraries(core-blob_depot-agent PUBLIC
   blobstorage-vdisk-common
   ydb-core-blob_depot
   ydb-core-protos
+  ydb-core-wrappers
 )
 
 target_sources(core-blob_depot-agent PRIVATE

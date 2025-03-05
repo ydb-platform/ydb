@@ -133,6 +133,7 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
         //   2) The database path in the request is simply wrong: the client should get the BAD_REQUEST status.
         if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || status.GetStatus() == EStatus::BAD_REQUEST) {
             LOG_LAZY(DbDriverState_->Log, TLOG_INFO, TStringBuilder()
+                << status
                 << "OnFederationDiscovery fall back to single mode, database=" << DbDriverState_->Database);
             FederatedDbState->Status = TPlainStatus{};  // SUCCESS
             FederatedDbState->ControlPlaneEndpoint = DbDriverState_->DiscoveryEndpoint;
@@ -171,6 +172,7 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
             // TODO update only if new state differs
             std::swap(FederatedDbState, newInfo);
         }
+        Cerr << "FederatedDbState = " << *FederatedDbState << " DiscoveryEndpoint = " << DbDriverState_->DiscoveryEndpoint << '/' << DbDriverState_->Database<< Endl;
     }
 
     if (!PromiseToInitState.HasValue()) {
@@ -196,6 +198,9 @@ IOutputStream& operator<<(IOutputStream& out, TFederatedDbState const& state) {
             out << "{ " << info->ShortDebugString() << " }";
         }
         out << " ]";
+    }
+    if (!state.ControlPlaneEndpoint.empty()) {
+        out << " ControlPlaneEndpoint: " << state.ControlPlaneEndpoint;
     }
     return out << " }";
 }

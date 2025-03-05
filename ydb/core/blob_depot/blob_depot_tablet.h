@@ -168,6 +168,7 @@ namespace NKikimr::NBlobDepot {
         void OnActivateExecutor(const TActorContext&) override {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT24, "OnActivateExecutor", (Id, GetLogId()));
             Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
+            TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_STARTING] = 1;
             ExecuteTxInitSchema();
         }
 
@@ -186,6 +187,8 @@ namespace NKikimr::NBlobDepot {
             StartDataLoad();
             UpdateThroughputs();
             InitS3Manager();
+            TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_STARTING] = 0;
+            TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_LOADING_KEYS] = 1;
         }
 
         void StartDataLoad();
@@ -339,6 +342,7 @@ namespace NKikimr::NBlobDepot {
         class TGroupAssimilator;
 
         void StartGroupAssimilator();
+        void OnUpdateDecommitState();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Group metrics exchange

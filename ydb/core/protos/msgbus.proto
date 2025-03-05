@@ -13,7 +13,6 @@ import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/msgbus_pq.proto";
 import "ydb/core/protos/scheme_log.proto";
 import "ydb/core/protos/tablet.proto";
-import "ydb/core/protos/blobstorage.proto";
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/node_broker.proto";
 import "ydb/core/protos/cms.proto";

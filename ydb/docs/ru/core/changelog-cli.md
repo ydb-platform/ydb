@@ -21,6 +21,7 @@
 * **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлена команда `{{ ydb-cli }} admin cluster config generate` для генерации файла динамической конфигурации из файла статической конфигурации кластера.
 * **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлены команды `{{ ydb-cli }} admin cluster dump` и `{{ ydb-cli }} admin cluster restore` для создания дампа кластера. Дамп кластера содержит список баз данных с метаданными, пользователей и группы, но не содержит схемные объекты.
 * **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлены команды `{{ ydb-cli }} admin database dump` и `{{ ydb-cli }} admin database restore` для создания дампа базы данных. Такой дамп содержит метаданные базы данных, схемные объекты, данные в них, пользователей и группы.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `ydb admin cluster config fetch` добавлены новые опции `--dedicated-storage-section` и `--dedicated-cluster-section`, позволяющие получать части конфигурации для кластера и хранилища отдельно.
 
 ### Исправления ошибок
 
@@ -49,8 +50,8 @@
 
 * **_(Требуется сервер v25.1+)_** Добавлена опция `--skip-checksum-validation` для [команды](./reference/ydb-cli/export-import/import-s3.md) `{{ ydb-cli }} import s3`, позволяющая отключить валидацию контрольной суммы на стороне сервера.
 * **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `{{ ydb-cli }} debug ping` добавлены новые опции: `--chain-length`, `--chain-work-duration`, `--no-tail-chain`.
-* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `{{ ydb-cli }} admin storage fetch` добавлены новые опции: `--dedicated-storage-section` and `--dedicated-cluster-section`.
-* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `{{ ydb-cli }} admin storage replace` добавлены новые опции: `--filename`, `--dedicated-cluster-yaml`, `--dedicated-storage-yaml`, `--enable-dedicated-storage-section` and `--disable-dedicated-storage-section`.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `{{ ydb-cli }} admin storage fetch` добавлены новые опции: `--dedicated-storage-section` и `--dedicated-cluster-section`.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `{{ ydb-cli }} admin storage replace` добавлены новые опции: `--filename`, `--dedicated-cluster-yaml`, `--dedicated-storage-yaml`, `--enable-dedicated-storage-section` и `--disable-dedicated-storage-section`.
 
 ### Исправления ошибок
 

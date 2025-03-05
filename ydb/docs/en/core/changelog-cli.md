@@ -19,6 +19,7 @@ Released on March 5, 2025. To update to version **2.20.0**, select the [Download
 * **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin cluster config generate` command to generate dynamic config file from cluster static config file.
 * **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin cluster dump` and `{{ ydb-cli }} admin cluster restore` commands for dumping all cluster-level data. Such dumps contain database list with metadata, users and groups, but does not contain scheme objects.
 * **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin database dump` and `{{ ydb-cli }} admin database restore` commands for dumping all database-level data. Such dumps contain database metadata, scheme objects, their data, users and groups.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Added new options `--dedicated-storage-section` and `--dedicated-cluster-section` to the `ydb admin cluster config fetch` command, allowing to fetch cluster and storage config sections separately.
 
 ### Bug fixes
 

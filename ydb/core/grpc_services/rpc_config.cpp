@@ -11,6 +11,8 @@
 #include <ydb/core/protos/local.pb.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/base/auth.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -136,9 +138,27 @@ void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb
 
 class TReplaceStorageConfigRequest : public TBSConfigRequestGrpc<TReplaceStorageConfigRequest, TEvReplaceStorageConfigRequest,
     Ydb::Config::ReplaceConfigResult> {
-public:
     using TBase = TBSConfigRequestGrpc<TReplaceStorageConfigRequest, TEvReplaceStorageConfigRequest, Ydb::Config::ReplaceConfigResult>;
+    using TRpcBase = TRpcOperationRequestActor<TReplaceStorageConfigRequest, TEvReplaceStorageConfigRequest>;
+public:
     using TBase::TBase;
+
+    void Bootstrap(const TActorContext& ctx) {
+        TRpcBase::Bootstrap(ctx);
+        auto *self = Self();
+        self->OnBootstrap();
+        const auto& request = *GetProtoRequest();
+        auto shim = ConvertConfigReplaceRequest(request);
+        if (shim.MainConfig) {
+            if (NYamlConfig::IsDatabaseConfig(*shim.MainConfig)) {
+                DatabaseConfig = shim.MainConfig;
+                CheckDatabaseAuthorization();
+                return;
+            }
+        }
+        self->Become(&TReplaceStorageConfigRequest::StateFunc);
+        self->Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvNodeWardenQueryStorageConfig(false)); 
+    }
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) override {
         const auto& request = *GetProtoRequest();
@@ -207,6 +227,129 @@ public:
             request->allow_unknown_fields() || request->bypass_checks(),
             request->bypass_checks());
     }
+
+private:
+    std::optional<TString> DatabaseConfig;
+    std::optional<TString> TargetDatabase;
+
+    void CheckDatabaseAuthorization() {
+        const auto& metadata = NYamlConfig::GetDatabaseMetadata(*DatabaseConfig);
+
+        if (metadata.Database) {
+            TargetDatabase = metadata.Database;
+        }
+        else {
+            Reply(Ydb::StatusIds::BAD_REQUEST, "No database name found in metadata", 
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+            return;
+        }
+
+        if (*TargetDatabase == ("/" + AppData()->DomainsInfo->Domain->Name) || 
+            *TargetDatabase == AppData()->DomainsInfo->Domain->Name) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, "Provided database is a domain database.", 
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+            return;
+        }
+        bool isAdministrator = NKikimr::IsAdministrator(AppData(), Request_->GetSerializedToken());
+        if (!isAdministrator) {
+            auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+            request->DatabaseName = *TargetDatabase;
+
+            auto& entry = request->ResultSet.emplace_back();
+            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+            entry.Path = NKikimr::SplitPath(*TargetDatabase);
+
+            auto* self = Self();
+            self->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
+            self->Become(&TReplaceStorageConfigRequest::StateWaitResolveDatabase);
+            return;
+        }
+        SendRequestToConsole();
+    }
+
+    void SendRequestToConsole() {
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = {
+            .RetryLimitCount = 10,
+        };
+        auto pipe = NTabletPipe::CreateClient(SelfId(), MakeConsoleID(), pipeConfig);
+        ConsolePipe = RegisterWithSameMailbox(pipe);
+        
+        auto PrepareAndSendRequest = [&](auto requestType) {
+            using TRequestType = decltype(requestType);
+            auto request = std::make_unique<TRequestType>();
+            request->Record.SetUserToken(Request_->GetSerializedToken());
+            request->Record.SetPeerName(Request_->GetPeerName());
+            request->Record.SetIngressDatabase(*TargetDatabase);
+            
+            auto& req = *request->Record.MutableRequest();
+            req.set_config(*DatabaseConfig);
+
+            request->Record.SetBypassAuth(true);
+            NTabletPipe::SendData(SelfId(), ConsolePipe, request.release());
+        };
+
+        if (GetProtoRequest()->bypass_checks()) {
+            PrepareAndSendRequest(NConsole::TEvConsole::TEvSetYamlConfigRequest());
+        } else {
+            PrepareAndSendRequest(NConsole::TEvConsole::TEvReplaceYamlConfigRequest());
+        }
+        Self()->Become(&TReplaceStorageConfigRequest::StateConsoleReplaceFunc);
+    }
+
+    STFUNC(StateWaitResolveDatabase) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveDatabase);
+            default:
+                return TBase::StateFuncBase(ev);
+        }
+    }
+
+    void HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request.Get();
+        auto *self = Self();
+        if (request.ResultSet.empty() || request.ErrorCount > 0) {
+            self->Reply(Ydb::StatusIds::SCHEME_ERROR, "Error resolving database",
+                  NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, self->ActorContext());
+            return;
+        }
+
+        const auto& entry = request.ResultSet.front();
+        const auto& databaseOwner = entry.Self->Info.GetOwner();
+
+        NACLibProto::TUserToken tokenPb;
+        if (!tokenPb.ParseFromString(Request_->GetSerializedToken())) {
+            tokenPb = NACLibProto::TUserToken();
+        }
+        const auto& parsedToken = NACLib::TUserToken(tokenPb);
+
+        bool isDatabaseAdmin = NKikimr::IsDatabaseAdministrator(&parsedToken, databaseOwner);
+        if (!isDatabaseAdmin) {
+            self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a database administrator.",
+                  NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
+            return;
+        }
+        SendRequestToConsole();
+    }
+
+    STFUNC(StateConsoleReplaceFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NConsole::TEvConsole::TEvReplaceYamlConfigResponse, Handle);
+            hFunc(NConsole::TEvConsole::TEvSetYamlConfigResponse, Handle);
+            default:
+                return StateConsoleFunc(ev);
+        }
+    }
+
+    void Handle(NConsole::TEvConsole::TEvReplaceYamlConfigResponse::TPtr& ev) {
+        auto* self = Self();
+        self->Reply(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetIssues(), self->ActorContext());
+    }
+
+    void Handle(NConsole::TEvConsole::TEvSetYamlConfigResponse::TPtr& ev) {
+        auto* self = Self();
+        self->Reply(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetIssues(), self->ActorContext());
+    }
 };
 
 class TFetchStorageConfigRequest : public TBSConfigRequestGrpc<TFetchStorageConfigRequest, TEvFetchStorageConfigRequest,
@@ -214,6 +357,7 @@ class TFetchStorageConfigRequest : public TBSConfigRequestGrpc<TFetchStorageConf
 public:
     using TBase = TBSConfigRequestGrpc<TFetchStorageConfigRequest, TEvFetchStorageConfigRequest, Ydb::Config::FetchConfigResult>;
     using TBase::TBase;
+    using TRpcBase = TRpcOperationRequestActor<TFetchStorageConfigRequest, TEvFetchStorageConfigRequest>;
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) override {
         const auto& request = *GetProtoRequest();
@@ -227,6 +371,20 @@ public:
 
     NACLib::EAccessRights GetRequiredAccessRights() const {
         return NACLib::GenericManage;
+    }
+
+    void Bootstrap(const TActorContext &ctx) {
+        TRpcBase::Bootstrap(ctx);
+        auto *self = Self();
+        self->OnBootstrap();
+
+        if (self->Request_->GetDatabaseName()) {
+            SendRequestToConsole();
+            return;
+        }
+
+        self->Become(&TFetchStorageConfigRequest::StateFunc);
+        self->Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvNodeWardenQueryStorageConfig(false));
     }
 
     void FillDistconfQuery(NStorage::TEvNodeConfigInvokeOnRoot& ev) const {
@@ -300,6 +458,39 @@ public:
 
         return ev;
     }
+
+private:
+    void SendRequestToConsole() {
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = {
+            .RetryLimitCount = 10,
+        };
+        auto pipe = NTabletPipe::CreateClient(SelfId(), MakeConsoleID(), pipeConfig);
+        ConsolePipe = RegisterWithSameMailbox(pipe);
+
+        auto request = std::make_unique<NConsole::TEvConsole::TEvGetAllConfigsRequest>();
+        request->Record.SetUserToken(Request_->GetSerializedToken());
+        request->Record.SetPeerName(Request_->GetPeerName());
+        if (Request_->GetDatabaseName()) {
+            request->Record.SetIngressDatabase(*Request_->GetDatabaseName());
+        }
+        request->Record.SetBypassAuth(true);
+
+        NTabletPipe::SendData(SelfId(), ConsolePipe, request.release());
+        Self()->Become(&TFetchStorageConfigRequest::StateConsoleFetchFunc);
+    }
+
+    STFUNC(StateConsoleFetchFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NConsole::TEvConsole::TEvGetAllConfigsResponse, Handle);
+            default:
+                return StateConsoleFunc(ev);
+        }
+    }
+
+    void Handle(NConsole::TEvConsole::TEvGetAllConfigsResponse::TPtr& ev) {
+        ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), ActorContext());
+    }
 };
 
 void DoReplaceConfig(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
@@ -372,3 +563,4 @@ void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
 }
 
 } // namespace NKikimr::NGRpcService
+

@@ -31,7 +31,6 @@ struct TEnvironmentSetup {
 
     static const std::initializer_list<ui32> DebugLogComponents;
 
-    std::unordered_map<TIcbControlKey, TControlWrapper> IcbControls;
     std::unordered_map<TScbControlKey, TControlWrapper> StaticControls;
 
     struct TSettings {
@@ -519,13 +518,6 @@ config:
 
                 TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();
 
-#define ADD_ICB_CONTROL(controlName, defaultVal, minVal, maxVal, currentValue) {        \
-                    TControlWrapper control(defaultVal, minVal, maxVal);                \
-                    appData->Icb->RegisterSharedControl(control, controlName);          \
-                    control = currentValue;                                             \
-                    IcbControls.insert({{nodeId, controlName}, std::move(control)});    \
-                }
-
 #define ADD_SCB_CONTROL(controlName, defaultVal, minVal, maxVal, currentValue) {        \
                     TControlWrapper control(defaultVal, minVal, maxVal);                \
                     appData->StaticControlBoard->RegisterSharedControl(control, controlName);          \
@@ -542,6 +534,7 @@ config:
                 ADD_SCB_CONTROL(EStaticControlType::VDiskControlsDiskTimeAvailableScaleSSD, 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
                 ADD_SCB_CONTROL(EStaticControlType::VDiskControlsDiskTimeAvailableScaleNVME, 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
 
+<<<<<<< HEAD
                 ADD_ICB_CONTROL("DSProxyControls.SlowDiskThreshold", 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
                 ADD_ICB_CONTROL("DSProxyControls.SlowDiskThresholdHDD", 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
                 ADD_ICB_CONTROL("DSProxyControls.SlowDiskThresholdSSD", 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
@@ -552,6 +545,19 @@ config:
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksHDD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksSSD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL("VDiskControls.EnableDeepScrubbing", false, false, true, Settings.EnableDeepScrubbing);
+=======
+                ADD_SCB_CONTROL(EStaticControlType::DSProxyControlsSlowDiskThreshold, 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
+                ADD_SCB_CONTROL(EStaticControlType::DSProxyControlsSlowDiskThresholdHDD, 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
+                ADD_SCB_CONTROL(EStaticControlType::DSProxyControlsSlowDiskThresholdSSD, 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
+                ADD_SCB_CONTROL(EStaticControlType::DSProxyControlsPredictedDelayMultiplier, 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
+                ADD_SCB_CONTROL(EStaticControlType::DSProxyControlsPredictedDelayMultiplierHDD, 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
+                ADD_SCB_CONTROL(EStaticControlType::DSProxyControlsPredictedDelayMultiplierSSD, 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
+                ADD_SCB_CONTROL(EStaticControlType::DSProxyControlsMaxNumOfSlowDisks, 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                ADD_SCB_CONTROL(EStaticControlType::DSProxyControlsMaxNumOfSlowDisksHDD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                ADD_SCB_CONTROL(EStaticControlType::DSProxyControlsMaxNumOfSlowDisksSSD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
+
+#undef ADD_SCB_CONTROL
+>>>>>>> (=) blobcache and dsproxy
 
 #undef ADD_ICB_CONTROL
 >>>>>>> (=) vdiskcontrols

@@ -364,12 +364,11 @@ void TNodeWarden::Bootstrap() {
     DsProxyNodeMonActor = Register(CreateDsProxyNodeMon(DsProxyNodeMon));
     DsProxyPerPoolCounters = new TDsProxyPerPoolCounters(AppData()->Counters);
 
-    if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
-        const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
+    if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->StaticControlBoard) {
         const TIntrusivePtr<NKikimr::TStaticControlBoard>& scb = actorSystem->AppData<TAppData>()->StaticControlBoard;
 
-        icb->RegisterLocalControl(EnablePutBatching, "BlobStorage_EnablePutBatching");
-        icb->RegisterLocalControl(EnableVPatch, "BlobStorage_EnableVPatch");
+        scb->RegisterLocalControl(EnablePutBatching, EStaticControlType::BlobStorageEnablePutBatching);
+        scb->RegisterLocalControl(EnableVPatch, EStaticControlType::BlobStorageEnableVPatch);
         scb->RegisterSharedControl(EnableLocalSyncLogDataCutting, EStaticControlType::VDiskControlsEnableLocalSyncLogDataCutting);
         scb->RegisterSharedControl(EnableSyncLogChunkCompressionHDD, EStaticControlType::VDiskControlsEnableSyncLogChunkCompressionHDD);
         scb->RegisterSharedControl(EnableSyncLogChunkCompressionSSD, EStaticControlType::VDiskControlsEnableSyncLogChunkCompressionSSD);
@@ -391,7 +390,7 @@ void TNodeWarden::Bootstrap() {
         scb->RegisterSharedControl(ThrottlingMinLogChunkCount, EStaticControlType::VDiskControlsThrottlingMinLogChunkCount);
         scb->RegisterSharedControl(ThrottlingMaxLogChunkCount, EStaticControlType::VDiskControlsThrottlingMaxLogChunkCount);
 
-        icb->RegisterSharedControl(MaxInProgressSyncCount, "VDiskControls.MaxInProgressSyncCount");
+        scb->RegisterSharedControl(MaxInProgressSyncCount, EStaticControlType::VDiskControlsMaxInProgressSyncCount);
 
         scb->RegisterSharedControl(MaxCommonLogChunksHDD, EStaticControlType::PDiskControlsMaxCommonLogChunksHDD);
         scb->RegisterSharedControl(MaxCommonLogChunksSSD, EStaticControlType::PDiskControlsMaxCommonLogChunksSSD);
@@ -409,17 +408,17 @@ void TNodeWarden::Bootstrap() {
         scb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].DiskTimeAvailableScale,
                 EStaticControlType::VDiskControlsDiskTimeAvailableScaleNVME);
 
-        icb->RegisterSharedControl(SlowDiskThreshold, "DSProxyControls.SlowDiskThreshold");
-        icb->RegisterSharedControl(SlowDiskThresholdHDD, "DSProxyControls.SlowDiskThresholdHDD");
-        icb->RegisterSharedControl(SlowDiskThresholdSSD, "DSProxyControls.SlowDiskThresholdSSD");
+        scb->RegisterSharedControl(SlowDiskThreshold, EStaticControlType::DSProxyControlsSlowDiskThreshold);
+        scb->RegisterSharedControl(SlowDiskThresholdHDD, EStaticControlType::DSProxyControlsSlowDiskThresholdHDD);
+        scb->RegisterSharedControl(SlowDiskThresholdSSD, EStaticControlType::DSProxyControlsSlowDiskThresholdSSD);
 
-        icb->RegisterSharedControl(PredictedDelayMultiplier, "DSProxyControls.PredictedDelayMultiplier");
-        icb->RegisterSharedControl(PredictedDelayMultiplierHDD, "DSProxyControls.PredictedDelayMultiplierHDD");
-        icb->RegisterSharedControl(PredictedDelayMultiplierSSD, "DSProxyControls.PredictedDelayMultiplierSSD");
+        scb->RegisterSharedControl(PredictedDelayMultiplier, EStaticControlType::DSProxyControlsPredictedDelayMultiplier);
+        scb->RegisterSharedControl(PredictedDelayMultiplierHDD, EStaticControlType::DSProxyControlsPredictedDelayMultiplierHDD);
+        scb->RegisterSharedControl(PredictedDelayMultiplierSSD, EStaticControlType::DSProxyControlsPredictedDelayMultiplierSSD);
 
-        icb->RegisterSharedControl(MaxNumOfSlowDisks, "DSProxyControls.MaxNumOfSlowDisks");
-        icb->RegisterSharedControl(MaxNumOfSlowDisksHDD, "DSProxyControls.MaxNumOfSlowDisksHDD");
-        icb->RegisterSharedControl(MaxNumOfSlowDisksSSD, "DSProxyControls.MaxNumOfSlowDisksSSD");
+        scb->RegisterSharedControl(MaxNumOfSlowDisks, EStaticControlType::DSProxyControlsMaxNumOfSlowDisks);
+        scb->RegisterSharedControl(MaxNumOfSlowDisksHDD, EStaticControlType::DSProxyControlsMaxNumOfSlowDisksHDD);
+        scb->RegisterSharedControl(MaxNumOfSlowDisksSSD, EStaticControlType::DSProxyControlsMaxNumOfSlowDisksSSD);
 
         icb->RegisterSharedControl(LongRequestThresholdMs, "DSProxyControls.LongRequestThresholdMs");
         icb->RegisterSharedControl(ReportingControllerBucketSize, "DSProxyControls.RequestReportingSettings.BucketSize");
@@ -427,6 +426,10 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(ReportingControllerLeakRate, "DSProxyControls.RequestReportingSettings.LeakRate");
 
         icb->RegisterSharedControl(EnableDeepScrubbing, "VDiskControls.EnableDeepScrubbing");
+        scb->RegisterSharedControl(LongRequestThresholdMs, EStaticControlType::DSProxyControlsLongRequestThresholdMs);
+        scb->RegisterSharedControl(ReportingControllerBucketSize, EStaticControlType::DSProxyControlsRequestReportingSettingsBucketSize);
+        scb->RegisterSharedControl(ReportingControllerLeakDurationMs, EStaticControlType::DSProxyControlsRequestReportingSettingsLeakDurationMs);
+        scb->RegisterSharedControl(ReportingControllerLeakRate, EStaticControlType::DSProxyControlsRequestReportingSettingsLeakRate);
     }
 
     // start replication broker

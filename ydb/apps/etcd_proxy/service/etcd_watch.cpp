@@ -25,6 +25,7 @@ public:
         Ctx->Attach(ctx.SelfID);
         if (!Ctx->Read())
             return Die(ctx);
+        std::cout << "Keeper started." << std::endl;
     }
 private:
     STFUNC(StateFunc) {
@@ -56,19 +57,20 @@ private:
     }
 
     void Handle(TEvQueryError::TPtr &ev) {
-        std::cerr << "Keep error received: " << ev->Get()->Issues.ToString() << std::endl;
+        std::cout << "Keep error received: " << ev->Get()->Issues.ToString() << std::endl;
     }
 
     void Handle(IStreamCtx::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
         if (!ev->Get()->Success)
             return Die(ctx);
 
-        std::ostringstream sql;
-        sql << "update `leases` set `updated` = CurrentUtcDatetime() where $Lease = `id`;" << std::endl;
-        sql << "select `id`, `ttl` - unwrap(cast(CurrentUtcDatetime() - `updated` as Int64) / 1000000L) as `granted` from `leases` where $Lease = `id`;" << std::endl;
-
         NYdb::TParamsBuilder params;
-        params.AddParam("$Lease").Int64(ev->Get()->Record.id()).Build();
+        const auto& leasePraramName = AddParam<i64>("Lease", params, ev->Get()->Record.id());
+
+        std::ostringstream sql;
+        sql << "update `leases` set `updated` = CurrentUtcDatetime() where " << leasePraramName << " = `id`;" << std::endl;
+        sql << "select `id`, `ttl` - unwrap(cast(CurrentUtcDatetime() - `updated` as Int64) / 1000000L) as `granted` from `leases` where " << leasePraramName << " = `id`;" << std::endl;
+
         const auto my = this->SelfId();
         const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
         Stuff->Client->ExecuteQuery(sql.str(), NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my, ass](const auto& future) {
@@ -88,7 +90,7 @@ private:
     }
 
     void Handle(IStreamCtx::TEvNotifiedWhenDone::TPtr& ev, const TActorContext& ctx) {
-        std::cerr << "Keep " << (ev->Get()->Success ? "finished." : "failed!") << std::endl;
+        std::cout << "Keep " << (ev->Get()->Success ? "finished." : "failed!") << std::endl;
         return Die(ctx);
     }
 
@@ -219,7 +221,7 @@ private:
     }
 
     void Handle(TEvQueryError::TPtr &ev, const TActorContext& ctx) {
-        std::cerr << "Watch error received: " << ev->Get()->Issues.ToString() << std::endl;
+        DumpKeyRange(std::cout << "Watch ", Key, RangeEnd) << " error received: " << ev->Get()->Issues.ToString() << std::endl;
         UnsubscribeAndDie(ctx);
     }
 
@@ -394,7 +396,7 @@ private:
     }
 
     void Handle(IStreamCtx::TEvNotifiedWhenDone::TPtr& ev, const TActorContext& ctx) {
-        std::cerr << "Watch " << (ev->Get()->Success ? "finished." : "failed!") << std::endl;
+        std::cout << "Watch " << (ev->Get()->Success ? "finished." : "failed!") << std::endl;
         return UnsubscribeAndDie(ctx);
     }
 
@@ -574,16 +576,17 @@ private:
     }
 
     void Wakeup(const TActorContext&) {
+        Revision = Stuff->Revision.fetch_add(1LL) + 1LL;
+
         std::ostringstream sql;
         NYdb::TParamsBuilder params;
-        Revision = Stuff->Revision.fetch_add(1LL) + 1LL;
-        params.AddParam("$Revision").Int64(Revision).Build();
+        const auto& revName = AddParam("Revision", params, Revision);
 
         sql << "$Expired = select `id` from `leases` where unwrap(interval('PT1S') * `ttl` + `updated`) < CurrentUtcDatetime();" << std::endl;
         sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `huidig` as h" << std::endl;
         sql << '\t' << "left semi join $Expired as l on h.`lease` = l.`id`;" << std::endl;
         sql << "insert into `verhaal`" << std::endl;
-        sql << "select `key`, `created`, $Revision as `modified`, 0L as `version`, `value`, `lease` from $Victims;" << std::endl;
+        sql << "select `key`, `created`, " << revName << " as `modified`, 0L as `version`, `value`, `lease` from $Victims;" << std::endl;
 
         if constexpr (NotifyWatchtower) {
             sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from $Victims;" << std::endl;
@@ -633,7 +636,7 @@ private:
     }
 
     void Handle(TEvQueryError::TPtr &ev, const TActorContext& ctx) {
-        std::cerr << "Watch error received " << ev->Get()->Issues.ToString() << std::endl;
+        std::cout << "Watch error received " << ev->Get()->Issues.ToString() << std::endl;
         ctx.Schedule(TDuration::Seconds(7), new TEvents::TEvWakeup);
     }
 

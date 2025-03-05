@@ -390,6 +390,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     Y_UNIT_TEST_TWIN(OutOfSpaceYQLUpsertFail, useSink) {
+        UNIT_ASSERT(!useSink);
         auto app = NKikimrConfig::TAppConfig();
         app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);

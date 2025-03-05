@@ -179,12 +179,14 @@ public:
     }
 
     TString GetDatabaseForLoginOperation() const {
-        const auto domainLoginOnly = AppData()->AuthConfig.GetDomainLoginOnly();
-        const auto domain = AppData()->DomainsInfo ? AppData()->DomainsInfo->GetDomain() : nullptr;
-        const auto domainName = domain ? domain->Name : "";
-        TString database;
-        return NSchemeHelpers::SetDatabaseForLoginOperation(database, domainLoginOnly, domainName, Database)
-            ? database : Database;
+        const bool domainLoginOnly = AppData()->AuthConfig.GetDomainLoginOnly();
+        TMaybe<TString> domainName;
+        if (domainLoginOnly && AppData()->DomainsInfo) {
+            domainName = AppData()->DomainsInfo->GetDomain()->Name;
+        }
+        TString result;
+        return NSchemeHelpers::SetDatabaseForLoginOperation(result, domainLoginOnly, domainName, Database)
+            ? result : Database;
     }
 
     void MakeSchemeOperationRequest() {

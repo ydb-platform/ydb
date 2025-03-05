@@ -104,6 +104,7 @@ enum EServiceKikimr {
     OPS_BACKUP = 668;
     SAUSAGE_BIO = 669;
     FAKE_ENV = 670;
+    TABLET_STATS_BUILDER = 671;
 
     // PIPE section
     PIPE_CLIENT = 320;

@@ -1262,7 +1262,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
 
     EProcessResult ret = EProcessResult::Continue;
     const auto& knownSourceIds = SourceIdStorage.GetInMemorySourceIds();
-    THashSet<TString> txSourceIds;
+    THashMap<TString, ui64> txSourceIds;
     for (auto& s : srcIdInfo) {
         if (TxAffectedSourcesIds.contains(s.first)) {
             ret = EProcessResult::Blocked;
@@ -1275,7 +1275,17 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
                 ret = EProcessResult::Blocked;
                 break;
             }
-            txSourceIds.insert(s.first);
+            txSourceIds.insert(std::make_pair(s.first, s.second.SeqNo));
+        }
+        auto inFlightIter = TxInflightMaxSeqNoPerSourceId.find(s.first);
+        if (!inFlightIter.IsEnd()) {
+            Y_ABORT_UNLESS(!inFlightIter->second.empty());
+            if (s.second.MinSeqNo <= *inFlightIter->second.rbegin()) {
+                tx.Predicate = false;
+                tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
+                tx.WriteInfoApplied = true;
+                break;
+            }
         }
 
         auto existing = knownSourceIds.find(s.first);
@@ -1289,10 +1299,10 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
         }
     }
     if (ret == EProcessResult::Continue && tx.Predicate.GetOrElse(true)) {
-        TxAffectedSourcesIds.insert(txSourceIds.begin(), txSourceIds.end());
-
-        // A temporary solution. This line should be deleted when we fix the error with the SeqNo promotion.
-        WriteAffectedSourcesIds.insert(txSourceIds.begin(), txSourceIds.end());
+        for (const auto& s : txSourceIds) {
+            TxAffectedSourcesIds.insert(s.first);
+            TxInflightMaxSeqNoPerSourceId[s.first].insert(s.second);
+        }
 
         tx.WriteInfoApplied = true;
         WriteKeysSizeEstimate += tx.WriteInfo->BodyKeys.size();
@@ -2543,6 +2553,19 @@ void TPartition::RollbackTransaction(TSimpleSharedPtr<TTransaction>& t)
 
     if (t->Tx) {
         Y_ABORT_UNLESS(t->Predicate.Defined());
+        if (t->WriteInfo && t->WriteInfoApplied) {
+            for (const auto& [srcId, info] : t->WriteInfo->SrcIdInfo) {
+                auto iter = TxInflightMaxSeqNoPerSourceId.find(srcId);
+                if (!iter.IsEnd()) {
+                    iter->second.erase(info.SeqNo);
+                    if (iter->second.empty()) {
+                        TxInflightMaxSeqNoPerSourceId.erase(iter);
+                    }
+                }
+
+            }
+
+        }
         ChangePlanStepAndTxId(t->Tx->Step, t->Tx->TxId);
     } else if (t->ProposeConfig) {
         Y_ABORT_UNLESS(t->Predicate.Defined());

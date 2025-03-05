@@ -2753,9 +2753,6 @@ Y_UNIT_TEST_F(TestTxBatchInFederation, TPartitionTxTestHelper) {
 }
 
 Y_UNIT_TEST_F(ConflictingActsInSeveralBatches, TPartitionTxTestHelper) {
-    // A temporary solution. This line should be deleted when we fix the error with the SeqNo promotion.
-    return;
-
     TTxBatchingTestParams params {.WriterSessions{"src1", "src4"},.EndOffset=1};
     Init(std::move(params));
 
@@ -2837,9 +2834,6 @@ Y_UNIT_TEST_F(ConflictingTxIsAborted, TPartitionTxTestHelper) {
 }
 
 Y_UNIT_TEST_F(ConflictingTxProceedAfterRollback, TPartitionTxTestHelper) {
-    // A temporary solution. This line should be deleted when we fix the error with the SeqNo promotion.
-    return;
-
     Init();
 
     auto tx1 = MakeAndSendWriteTx({{"src1", {1, 3}}, {"src2", {5, 10}}});

@@ -299,6 +299,7 @@ public:
         try {
             switch(ev->GetTypeRewrite()) {
                 hFunc(TEvKqp::TEvAbortExecution, HandleFinalize);
+                hFunc(TEvKqpBuffer::TEvError, Handle);
                 hFunc(TEvKqpBuffer::TEvResult, HandleFinalize);
                 hFunc(TEvents::TEvUndelivered, HandleFinalize);
 
@@ -403,6 +404,7 @@ public:
                 hFunc(TEvSaveScriptExternalEffectResponse, HandleResolve);
                 hFunc(TEvDescribeSecretsResponse, HandleResolve);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(TEvKqpBuffer::TEvError, Handle);
                 default:
                     UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
             }
@@ -454,6 +456,7 @@ private:
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePrepare);
                 hFunc(TEvKqp::TEvAbortExecution, HandlePrepare);
+                hFunc(TEvKqpBuffer::TEvError, Handle);
                 hFunc(TEvents::TEvUndelivered, HandleUndelivered);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
@@ -1132,6 +1135,7 @@ private:
                 hFunc(NYql::NDq::TEvDqCompute::TEvChannelData, HandleChannelData);
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvKqp::TEvAbortExecution, HandleExecute);
+                hFunc(TEvKqpBuffer::TEvError, Handle);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 default:
                     UnexpectedEvent("ExecuteState", ev->GetTypeRewrite());
@@ -1186,6 +1190,11 @@ private:
         } else {
             LOG_D("Got TEvAbortExecution from : " << ev->Sender << " but cancelation is not alowed");
         }
+    }
+
+    void Handle(TEvKqpBuffer::TEvError::TPtr& ev) {
+        auto& msg = *ev->Get();
+        TBase::HandleAbortExecution(msg.StatusCode, msg.Issues, false);
     }
 
     void HandleExecute(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev) {
@@ -2287,6 +2296,7 @@ private:
             switch (ev->GetTypeRewrite()) {
                 hFunc(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult, Handle);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(TEvKqpBuffer::TEvError, Handle);
                 default:
                     UnexpectedEvent("WaitSnapshotState", ev->GetTypeRewrite());
             }

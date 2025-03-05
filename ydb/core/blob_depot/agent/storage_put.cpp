@@ -3,7 +3,8 @@
 namespace NKikimr::NBlobDepot {
 
     template<>
-    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvPut>(std::unique_ptr<IEventHandle> ev) {
+    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvPut>(std::unique_ptr<IEventHandle> ev,
+            TMonotonic received) {
         class TPutQuery : public TBlobStorageQuery<TEvBlobStorage::TEvPut> {
             const bool SuppressFooter = true;
             const bool IssueUncertainWrites = false;
@@ -418,17 +419,22 @@ namespace NKikimr::NBlobDepot {
                 WriterActorId = {};
 
                 if (error) {
+                    ++*Agent.S3PutsError;
+
                     // LocatorInFlight is not reset here on purpose: OnDestroy will generate spoiled blob message to the
                     // tablet
                     EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to put object to S3: " << *error);
                 } else {
+                    ++*Agent.S3PutsOk;
+                    *Agent.S3PutBytesOk += LocatorInFlight->Len;
+
                     LocatorInFlight.reset();
                     IssueCommitBlobSeq(false);
                 }
             }
         };
 
-        return new TPutQuery(*this, std::move(ev));
+        return new TPutQuery(*this, std::move(ev), received);
     }
 
 } // NKikimr::NBlobDepot

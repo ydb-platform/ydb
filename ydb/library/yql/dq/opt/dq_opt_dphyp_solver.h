@@ -6,6 +6,21 @@
 
 namespace NYql::NDq {
 
+TString GetJoinOrderString(const std::shared_ptr<IBaseOptimizerNode>& node) {
+    if (node->Kind == EOptimizerNodeKind::RelNodeType) {
+        return node->Labels()[0];
+    }
+
+    auto joinNode = std::static_pointer_cast<TJoinOptimizerNodeInternal>(node);
+    return  "(" + GetJoinOrderString(joinNode->LeftArg) + "," + GetJoinOrderString(joinNode->RightArg) + ")";
+}
+
+struct TBestJoin {
+    TOptimizerStatistics Stats;
+    EJoinAlgoType Algo;
+    bool IsReversed; // todo ticket #12291
+};
+
 /*
  * DPHyp (Dynamic Programming with Hypergraph) is a graph-aware
  * join eumeration algorithm that only considers CSGs (Connected Sub-Graphs) of
@@ -18,11 +33,11 @@ namespace NYql::NDq {
  *
  * This class is templated by std::bitset with the largest number of joins we can process
  * or std::bitset<64>, which has a more efficient implementation of enumerating subsets of set.
- * 
+ *
  * TDPHypSolverBase class contains core enumeration logic. It is templated with TDerived parameter.
- * TDerived is a class which is derived from TDPHypSolverBase. This class contains DPTable and 
+ * TDerived is a class which is derived from TDPHypSolverBase. This class contains DPTable and
  * saving the lowest cost plan logic (EmitCsgCmp method).
- * 
+ *
  * Also, it has a bool ProcessCycles template parameter, which makes algorithm consider all edges
  * between csg-cmp. It makes dphyp slower, but without it we can miss a condition in case of cycles
  */
@@ -34,8 +49,8 @@ public:
         IProviderContext& ctx,
         TOrderingsStateMachine& orderingFSM,
         TDerived& derived
-    ) 
-        : Graph_(graph) 
+    )
+        : Graph_(graph)
         , NNodes_(graph.GetNodes().size())
         , Pctx_(ctx)
         , OrderingsFSM(orderingFSM)
@@ -74,7 +89,7 @@ private:
 
     // Count the size of the dynamic programming table recursively
     ui32 CountCCRec(const TNodeSet&, const TNodeSet&, ui32, ui32);
-    
+
 protected:
     TJoinHypergraph<TNodeSet>& Graph_;
     size_t NNodes_;
@@ -118,12 +133,6 @@ public:
         return "DPHypShuffleElimination";
     }
 
-    struct TBestJoin {
-        TOptimizerStatistics Stats;
-        EJoinAlgoType Algo;
-        bool IsReversed; // todo ticket #12291
-    };
-
     void InitDpEntry(const TNodeSet& nodes, const std::shared_ptr<IBaseOptimizerNode>& relNode) {
         DpTable_[nodes].emplace_back(relNode);
     }
@@ -140,8 +149,8 @@ public:
     }
 
     void EmitCsgCmp(
-        const TNodeSet& s1, 
-        const TNodeSet& s2, 
+        const TNodeSet& s1,
+        const TNodeSet& s2,
         const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge,
         const typename TJoinHypergraph<TNodeSet>::TEdge* reversedCsgCmpEdge
     );
@@ -223,20 +232,18 @@ public:
     }
 
     void EmitCsgCmp(
-        const TNodeSet& s1, 
-        const TNodeSet& s2, 
+        const TNodeSet& s1,
+        const TNodeSet& s2,
         const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge,
         const typename TJoinHypergraph<TNodeSet>::TEdge* reversedCsgCmpEdge
     );
 
     THashMap<TNodeSet, std::shared_ptr<IBaseOptimizerNode>, std::hash<TNodeSet>> DpTable_;
 private:
-    std::shared_ptr<TJoinOptimizerNodeInternal> PickBestJoin(
+    TBestJoin PickBestJoin(
         const std::shared_ptr<IBaseOptimizerNode>& left,
         const std::shared_ptr<IBaseOptimizerNode>& right,
         EJoinKind joinKind,
-        bool leftAny,
-        bool rightAny,
         bool isCommutative,
         const TVector<TJoinColumn>& leftJoinKeys,
         const TVector<TJoinColumn>& rightJoinKeys,
@@ -247,12 +254,12 @@ private:
 
 };
 
-/* 
+/*
  * Emit a single CSG + CMP pair
  */
  template<typename TNodeSet> void TDPHypSolverClassic<TNodeSet>::EmitCsgCmp(
-    const TNodeSet& s1, 
-    const TNodeSet& s2, 
+    const TNodeSet& s1,
+    const TNodeSet& s2,
     const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge,
     const typename TJoinHypergraph<TNodeSet>::TEdge* reversedCsgCmpEdge
 ) {
@@ -264,7 +271,7 @@ private:
 
     auto leftNodes = DpTable_[s1];
     auto rightNodes = DpTable_[s2];
-    
+
     if (csgCmpEdge->IsReversed) {
         std::swap(csgCmpEdge, reversedCsgCmpEdge);
         std::swap(leftNodes, rightNodes);
@@ -279,8 +286,6 @@ private:
         leftNodes,
         rightNodes,
         csgCmpEdge->JoinKind,
-        csgCmpEdge->LeftAny,
-        csgCmpEdge->RightAny,
         csgCmpEdge->IsCommutative,
         csgCmpEdge->LeftJoinKeys,
         csgCmpEdge->RightJoinKeys,
@@ -289,8 +294,11 @@ private:
         maybeJoinAlgoHint
     );
 
-    if (!DpTable_.contains(joined) || bestJoin->Stats.Cost < DpTable_[joined]->Stats.Cost) {
-        DpTable_[joined] = bestJoin;
+    if (!DpTable_.contains(joined) || bestJoin.Stats.Cost < DpTable_[joined]->Stats.Cost) {
+        DpTable_[joined] =
+            bestJoin.IsReversed?
+            MakeJoinInternal(std::move(bestJoin.Stats), rightNodes, leftNodes, csgCmpEdge->RightJoinKeys, csgCmpEdge->LeftJoinKeys, csgCmpEdge->JoinKind, bestJoin.Algo, csgCmpEdge->RightAny, csgCmpEdge->LeftAny, std::nullopt) :
+            MakeJoinInternal(std::move(bestJoin.Stats), leftNodes, rightNodes, csgCmpEdge->LeftJoinKeys, csgCmpEdge->RightJoinKeys, csgCmpEdge->JoinKind, bestJoin.Algo, csgCmpEdge->LeftAny, csgCmpEdge->RightAny, std::nullopt);
     }
 
     #ifndef NDEBUG
@@ -300,12 +308,10 @@ private:
     #endif
 }
 
-template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSolverClassic<TNodeSet>::PickBestJoin(
+template <typename TNodeSet> TBestJoin TDPHypSolverClassic<TNodeSet>::PickBestJoin(
     const std::shared_ptr<IBaseOptimizerNode>& left,
     const std::shared_ptr<IBaseOptimizerNode>& right,
     EJoinKind joinKind,
-    bool leftAny,
-    bool rightAny,
     bool isCommutative,
     const TVector<TJoinColumn>& leftJoinKeys,
     const TVector<TJoinColumn>& rightJoinKeys,
@@ -316,7 +322,7 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
     if (maybeJoinAlgoHint) {
         maybeJoinAlgoHint->Applied = true;
         auto stats = ctx.ComputeJoinStatsV1(left->Stats, right->Stats, leftJoinKeys, rightJoinKeys, maybeJoinAlgoHint->Algo, joinKind, maybeCardHint, false, false);
-        return MakeJoinInternal(std::move(stats), left, right, leftJoinKeys, rightJoinKeys, joinKind, maybeJoinAlgoHint->Algo, leftAny, rightAny, std::nullopt);
+        return TBestJoin{.Stats = std::move(stats), .Algo = maybeJoinAlgoHint->Algo, .IsReversed = false};
     }
 
     TOptimizerStatistics bestJoinStats;
@@ -349,12 +355,7 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
     }
 
     Y_ENSURE(bestAlgo != EJoinAlgoType::Undefined, "No join was chosen!");
-
-    if (bestJoinIsReversed) {
-        return MakeJoinInternal(std::move(bestJoinStats), right, left, rightJoinKeys, leftJoinKeys, joinKind, bestAlgo, rightAny, leftAny, std::nullopt);
-    }
-    
-    return MakeJoinInternal(std::move(bestJoinStats), left, right, leftJoinKeys, rightJoinKeys, joinKind, bestAlgo, leftAny, rightAny, std::nullopt);
+    return TBestJoin{.Stats = std::move(bestJoinStats), .Algo = bestAlgo, .IsReversed = bestJoinIsReversed};
 }
 
 /*
@@ -416,7 +417,7 @@ template<typename TNodeSet, typename TDerived> TNodeSet TDPHypSolverBase<TNodeSe
     TSetBitsIt<TNodeSet> setBitsIt(s);
     while (setBitsIt.HasNext()) {
         size_t nodeId = setBitsIt.Next();
-        
+
         neighs |= nodes[nodeId].SimpleNeighborhood;
 
         for (const auto& edgeId: nodes[nodeId].ComplexEdgesId) {
@@ -424,7 +425,7 @@ template<typename TNodeSet, typename TDerived> TNodeSet TDPHypSolverBase<TNodeSe
             if (
                 IsSubset(edge.Left, s) &&
                 !Overlaps(edge.Right, x) &&
-                !Overlaps(edge.Right, s) && 
+                !Overlaps(edge.Right, s) &&
                 !Overlaps(edge.Right, neighs)
             ) {
                 neighs[GetLowestSetBit(edge.Right)] = 1;
@@ -492,7 +493,7 @@ template<typename TNodeSet,  typename TDerived> std::shared_ptr<TJoinOptimizerNo
         s[i] = 1;
 
         Derived.InitDpEntry(s, nodes[i].RelationOptimizerNode);
-        
+
         if (CardHintsTable_.contains(s)){
             double& nRows = nodes[i].RelationOptimizerNode->Stats.Nrows;
             nRows = CardHintsTable_.at(s)->ApplyHint(nRows);
@@ -511,6 +512,8 @@ template<typename TNodeSet,  typename TDerived> std::shared_ptr<TJoinOptimizerNo
     for (size_t i = 0; i < NNodes_; ++i) {
         allNodes[i] = 1;
     }
+
+    Cout << Endl;
     auto minCostTree = Derived.GetLowestCostTree(allNodes);
     return std::static_pointer_cast<TJoinOptimizerNodeInternal>(minCostTree);
 }
@@ -548,10 +551,10 @@ template <typename TNodeSet, typename TDerived> void TDPHypSolverBase<TNodeSet, 
         next = NextBitset(prev, neighs);
 
         EnumerateCsgRec(s1 | next, x | neighs);
-        
+
         if (next == neighs) {
             break;
-        
+
         }
 
         prev = next;
@@ -626,7 +629,7 @@ template <typename TNodeSet, typename TDerived> void TDPHypSolverBase<TNodeSet, 
         if (next == neighs) {
             break;
         }
-        
+
         prev = next;
     }
 }
@@ -657,7 +660,7 @@ template <typename TNodeSet, typename TDerived> TNodeSet TDPHypSolverBase<TNodeS
     return res;
 }
 
-template <typename TNodeSet> TDPHypSolverShuffleElimination<TNodeSet>::TBestJoin TDPHypSolverShuffleElimination<TNodeSet>::PickBestJoin(
+template <typename TNodeSet> TBestJoin TDPHypSolverShuffleElimination<TNodeSet>::PickBestJoin(
     const std::shared_ptr<IBaseOptimizerNode>& left,
     const std::shared_ptr<IBaseOptimizerNode>& right,
     const TJoinHypergraph<TNodeSet>::TEdge& edge,
@@ -679,7 +682,7 @@ template <typename TNodeSet> TDPHypSolverShuffleElimination<TNodeSet>::TBestJoin
             return {.Stats = std::move(reversedStats), .Algo = maybeJoinAlgoHint->Algo, .IsReversed = true};
         }
     }
-    
+
     if (shuffleLeftSide || shuffleRightSide) { // we don't have rules to put shuffles into not grace join yet.
         auto stats = this->Pctx_.ComputeJoinStatsV1(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::GraceJoin, edge.JoinKind, maybeCardHint, shuffleLeftSide, shuffleRightSide);
         return TBestJoin {
@@ -705,7 +708,7 @@ template <typename TNodeSet> TDPHypSolverShuffleElimination<TNodeSet>::TBestJoin
             }
         }
 
-        
+
         if (edge.IsCommutative) {
             if (this->Pctx_.IsJoinApplicable(right, left, edge.RightJoinKeys, edge.LeftJoinKeys, joinAlgo, edge.JoinKind)){
                 auto stats = this->Pctx_.ComputeJoinStatsV1(right->Stats, left->Stats,  edge.RightJoinKeys, edge.LeftJoinKeys, joinAlgo, edge.JoinKind, maybeCardHint, shuffleRightSide, shuffleLeftSide);
@@ -849,7 +852,7 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 3> 
         trees[treeCount++] = std::move(tree);
     }
 
-    
+
     if ((edge.IsCommutative && this->Pctx_.IsJoinApplicable(right, left, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind) && !maybeAlgoHint) || (maybeAlgoHint && maybeAlgoHint->Algo == EJoinAlgoType::MapJoin)) {
         auto stats = this->Pctx_.ComputeJoinStatsV1(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, false);
         auto tree = MakeJoinInternal(std::move(stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, right->LogicalOrderings);
@@ -865,7 +868,7 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 3> 
     EMinCostTree minCostTree;
     double minCost = std::numeric_limits<double>::max();
 
-    // V Now we don't support shuffling sides not of the GraceJoin 
+    // V Now we don't support shuffling sides not of the GraceJoin
 
     // TOptimizerStatistics shuffleLeftSideAndMapJoinStats;
     // shuffleLeftSideAndMapJoinStats.Cost = std::numeric_limits<double>::max();
@@ -900,7 +903,7 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 3> 
         //     tree->ShuffleLeftSideByOrderingIdx = edge.LeftJoinKeysShuffleOrderingIdx;
         //     break;
         // }
-        // case EMinCostTree::EShuffleRightSideAndReversedMapJoin: { 
+        // case EMinCostTree::EShuffleRightSideAndReversedMapJoin: {
         //     tree = MakeJoinInternal(std::move(shuffleRightSideAndReversedMapJoinStats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, this->OrderingsFSM.CreateState());
         //     tree->LogicalOrderings.SetOrdering(edge.RightJoinKeysShuffleOrderingIdx);
         //     tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs() | right->LogicalOrderings.GetFDs());
@@ -937,13 +940,13 @@ template <typename TNodeSet>  std::array<std::shared_ptr<IBaseOptimizerNode>, 2>
     TCardinalityHints::TCardinalityHint* maybeCardHint
 ) {
     std::array<std::shared_ptr<IBaseOptimizerNode>, 2> trees = { nullptr, nullptr };
-    
+
     auto stats = this->Pctx_.ComputeJoinStatsV1(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::Undefined, edge.JoinKind, maybeCardHint, false, false);
     trees[0] = MakeJoinInternal(std::move(stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::Undefined, edge.LeftAny, edge.RightAny, left->LogicalOrderings);
 
     auto reversedStats = this->Pctx_.ComputeJoinStatsV1(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::Undefined, edge.JoinKind, maybeCardHint, false, false);
     trees[1] = MakeJoinInternal(std::move(reversedStats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::Undefined, edge.RightAny, edge.LeftAny, right->LogicalOrderings);
-    
+
     return trees;
 }
 
@@ -955,7 +958,7 @@ inline void AddNodeToDpTableEntries(
 
     for (auto& entry: dpTableEntries) {
         if (entry->LogicalOrderings.IsSubsetOf(node->LogicalOrderings)) {
-            if (entry->Stats.Cost < node->Stats.Cost) {
+            if (node->Stats.Cost < entry->Stats.Cost) {
                 entry = std::move(node);
                 return;
             }
@@ -968,12 +971,12 @@ inline void AddNodeToDpTableEntries(
     dpTableEntries.push_back(std::move(node));
 }
 
-/* 
+/*
  * Emit a single CSG + CMP pair
  */
 template<typename TNodeSet> void TDPHypSolverShuffleElimination<TNodeSet>::EmitCsgCmp(
-    const TNodeSet& s1, 
-    const TNodeSet& s2, 
+    const TNodeSet& s1,
+    const TNodeSet& s2,
     const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge,
     const typename TJoinHypergraph<TNodeSet>::TEdge* reversedCsgCmpEdge
 ) {
@@ -985,7 +988,7 @@ template<typename TNodeSet> void TDPHypSolverShuffleElimination<TNodeSet>::EmitC
 
     const auto* leftNodes =  &DpTable_[s1];
     const auto* rightNodes = &DpTable_[s2];
-    
+
     if (csgCmpEdge->IsReversed) {
         std::swap(csgCmpEdge, reversedCsgCmpEdge);
         std::swap(leftNodes, rightNodes);
@@ -1005,15 +1008,15 @@ template<typename TNodeSet> void TDPHypSolverShuffleElimination<TNodeSet>::EmitC
                 continue;
             }
 
-            bool lhsShuffled = 
+            bool lhsShuffled =
                 leftNode->LogicalOrderings.HasState() && // we may not have state for the Node in case there is no info about shuffling (statistics propogation problem)
                 leftNode->LogicalOrderings.ContainsShuffle(csgCmpEdge->LeftJoinKeysShuffleOrderingIdx) &&
                 leftNode->LogicalOrderings.GetShuffleHashFuncArgsCount() == static_cast<std::int64_t>(csgCmpEdge->LeftJoinKeys.size());
-            bool rhsShuffled = 
+            bool rhsShuffled =
                 rightNode->LogicalOrderings.HasState() &&
                 rightNode->LogicalOrderings.ContainsShuffle(csgCmpEdge->RightJoinKeysShuffleOrderingIdx) &&
                 rightNode->LogicalOrderings.GetShuffleHashFuncArgsCount() == static_cast<std::int64_t>(csgCmpEdge->RightJoinKeys.size());
-            // TODO: we can remove shuffle from here, joinkeys.size() == getshufflehashargscount() isn't nescesary condition. GetShuffleHashFuncArgsCount must be equal, otherwise we will reshuffle. 
+            // TODO: we can remove shuffle from here, joinkeys.size() == getshufflehashargscount() isn't nescesary condition. GetShuffleHashFuncArgsCount must be equal, otherwise we will reshuffle.
 
             // bool sameHashFuncArgCount = leftNode->LogicalOrderings.GetShuffleHashFuncArgsCount() == rightNode->LogicalOrderings.GetShuffleHashFuncArgsCount();
             if (lhsShuffled && rhsShuffled /* we don't support not shuffling two inputs in the execution, so we must shuffle at least one*/) {
@@ -1024,8 +1027,8 @@ template<typename TNodeSet> void TDPHypSolverShuffleElimination<TNodeSet>::EmitC
                 }
             }
 
-            // TODO: don't add shuffle, if it won't be used 
-            /* if (lhsShuffled && rhsShuffled) { // we don't support not shuffling two inputs in the execution 
+            // TODO: don't add shuffle, if it won't be used
+            /* if (lhsShuffled && rhsShuffled) { // we don't support not shuffling two inputs in the execution
                 ++bothSidesShuffled;
                 auto bestJoin = PickBestJoinBothSidesShuffled(leftNode, rightNode, *csgCmpEdge, maybeCardHint, maybeJoinAlgoHint);
                 AddNodeToDpTableEntries(std::move(bestJoin), DpTable_[joined]);

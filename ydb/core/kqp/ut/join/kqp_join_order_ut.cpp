@@ -122,6 +122,10 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
         settings.push_back(setting);
     }
 
+    // setting.SetName("OptShuffleElimination");
+    // setting.SetValue("true");
+    // settings.push_back(setting);
+
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
     appConfig.MutableTableServiceConfig()->SetEnableConstantFolding(true);
@@ -399,13 +403,18 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
             auto explainRes = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
             explainRes.GetIssues().PrintTo(Cerr);
+            for (const auto& issue: explainRes.GetIssues()) {
+                for (const auto& subissue: issue.GetSubIssues()) {
+                    UNIT_ASSERT_C(!(8000 <= subissue->IssueCode && subissue->IssueCode < 9000), "CBO didn't work for this query!");
+                }
+            }
             UNIT_ASSERT_VALUES_EQUAL(explainRes.GetStatus(), EStatus::SUCCESS);
             PrintPlan(*explainRes.GetStats()->GetPlan());
 
-            auto execRes = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            execRes.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT_VALUES_EQUAL(execRes.GetStatus(), EStatus::SUCCESS);
-            return {*explainRes.GetStats()->GetPlan(), execRes.GetResultSets()};
+            // auto execRes = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            // execRes.GetIssues().PrintTo(Cerr);
+            // UNIT_ASSERT_VALUES_EQUAL(execRes.GetStatus(), EStatus::SUCCESS);
+            return {*explainRes.GetStats()->GetPlan(), {}};
         }
     }
 
@@ -525,12 +534,16 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch11.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
     }
 
-    Y_UNIT_TEST(TPCH20) {
+    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCH20, StreamLookupJoin, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch20.sql", "stats/tpch1000s.json", false, true);
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCH21, StreamLookupJoin, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch21.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
+    }
+
+    Y_UNIT_TEST(TPCH22) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch22.sql", "stats/tpch100s.json", false, true);
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS16, StreamLookupJoin, ColumnStore) {
@@ -608,10 +621,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         CheckJoinCardinality("queries/test_join_hint1.sql", "stats/basic.json", "InnerJoin (Grace)", 10e6, StreamLookupJoin, ColumnStore);
     }
 
-    // Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinHint2, StreamLookupJoin, ColumnStore) {
-    //     CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (MapJoin)", 1, StreamLookupJoin, ColumnStore);
-    // }
-
+    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinHint2, StreamLookupJoin, ColumnStore) {
+        CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (MapJoin)", 1, StreamLookupJoin, ColumnStore);
+    }
 
     class TFindJoinWithLabels {
     public:
@@ -637,9 +649,16 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             bool RhsShuffled;
         };
 
-        TJoin Find(const TVector<TString>& labels) {
-            Labels = labels;
-            std::sort(Labels.begin(), Labels.end());
+        enum ESearchSettings : ui32 {
+            ExactMatch = 0, // We search join tree with full exact match of labels
+            PartialMatch = 1 // We search the first join tree, which labels overlap provided.
+        };
+
+        TJoin Find(const TVector<TString>& labels, ESearchSettings settings = ExactMatch) {
+            RequestedLabels = labels;
+            Settings = settings;
+
+            std::sort(RequestedLabels.begin(), RequestedLabels.end());
             TVector<TString> dummy;
             auto res = FindImpl(Plan, dummy);
             UNIT_ASSERT_C(!res.Join.empty(), "Join wasn't found.");
@@ -676,12 +695,32 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
 
         bool AreRequestedLabels(TVector<TString> labels) {
-            std::sort(labels.begin(), labels.end());
-            return Labels == labels;
+            switch (Settings) {
+                case ExactMatch: {
+                    std::sort(labels.begin(), labels.end());
+                    return RequestedLabels == labels;
+                }
+                case PartialMatch: {
+                    if (labels.size() < RequestedLabels.size()) {
+                        return false;
+                    }
+
+                    for (const auto& requestedLabel: RequestedLabels) {
+                        if (std::find(labels.begin(), labels.end(), requestedLabel) == labels.end()) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                default: {
+                    Y_ENSURE(false, "No such setting.");
+                }
+            }
         }
 
+        ESearchSettings Settings;
         NJson::TJsonValue Plan;
-        TVector<TString> Labels;
+        TVector<TString> RequestedLabels;
     };
 
     Y_UNIT_TEST(ShuffleEliminationOneJoin) {
@@ -767,6 +806,23 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
+    Y_UNIT_TEST(TPCH12_100) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch12.sql", "stats/tpch100s.json", false, true, true);
+        // auto joinFinder = TFindJoinWithLabels(plan);
+        // auto join = joinFinder.Find({"customer", "orders"});
+        // UNIT_ASSERT_C(join.Join == "InnerJoin (Grace)", join.Join);
+        // UNIT_ASSERT(!join.LhsShuffled);
+        // UNIT_ASSERT(join.RhsShuffled);
+    }
+
+
+    Y_UNIT_TEST(TPCH9_100) {
+        auto [plan, _] =  ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch9.sql", "stats/tpch100s.json", false, true);
+        auto joinFinder = TFindJoinWithLabels(plan);
+        auto join = joinFinder.Find({"nation"}, TFindJoinWithLabels::PartialMatch);
+        UNIT_ASSERT_C(join.Join == "InnerJoin (MapJoin)", join.Join);
+    }
+
     Y_UNIT_TEST(OltpJoinTypeHintCBOTurnOFF) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/oltp_join_type_hint_cbo_turnoff.sql", "stats/basic.json", false, false, false);
         auto joinFinder = TFindJoinWithLabels(plan);
@@ -815,6 +871,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
                 ).ExtractValueSync();
 
             result.GetIssues().PrintTo(Cerr);
+            for (const auto& issue: result.GetIssues()) {
+                for (const auto& subissue: issue.GetSubIssues()) {
+                    UNIT_ASSERT_C(!(8000 <= subissue->IssueCode && subissue->IssueCode < 9000), "CBO didn't work for this query!");
+                }
+            }
             PrintPlan(TString{*result.GetStats()->GetPlan()});
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 

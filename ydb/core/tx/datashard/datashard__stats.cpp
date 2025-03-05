@@ -113,7 +113,7 @@ public:
         auto msg = ev->Get();
 
         if (msg->Status != NKikimrProto::OK) {
-            LOG_ERROR_S(GetActorContext(), NKikimrServices::TX_DATASHARD, "[BuildStats] Failed to build at datashard "
+            LOG_ERROR_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Failed to build at datashard "
                 << TabletId << ", for tableId " << TableId << " requested pages but got " << msg->Status);
             throw TExTableStatsError(ECode::FETCH_PAGE_FAILED, NKikimrProto::EReplyStatus_Name(msg->Status));
         }
@@ -169,7 +169,7 @@ private:
         
         Y_DEBUG_ABORT_UNLESS(IndexSize == ev->Stats.IndexSize.Size);
 
-        LOG_DEBUG_S(GetActorContext(), NKikimrServices::TX_DATASHARD, "[BuildStats] Stats at datashard " << TabletId << ", for tableId " << TableId << ": "
+        LOG_INFO_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Stats at datashard " << TabletId << ", for tableId " << TableId << ": "
             << ev->Stats.ToString()
             << " PartCount: " << ev->PartCount
             << (ev->PartOwners.size() > 1 || ev->PartOwners.size() == 1 && *ev->PartOwners.begin() != TabletId ? ", with borrowed parts" : "")
@@ -182,10 +182,12 @@ private:
     }
 
     void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) {
-        switch (const ui32 type = ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) {
             case TEvResourceBroker::EvTaskOperationError: {
                 const auto* msg = ev->CastAsLocal<TEvResourceBroker::TEvTaskOperationError>();
-                LOG_ERROR_S(GetActorContext(), NKikimrServices::TX_DATASHARD, "[BuildStats] TEvResourceAllocated: " << msg->Status.Message);
+                LOG_ERROR_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Failed to allocate resource" 
+                    << " error '" << msg->Status.Message << "'"
+                    << " at datashard " << TabletId << ", for tableId " << TableId);
                 throw TExTableStatsError(ECode::RESOURCE_ALLOCATION_FAILED, msg->Status.Message);
             }
 
@@ -362,18 +364,18 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
     ui64 tableId = ev->Get()->TableId;
 
     if (!TableInfos.contains(tableId)) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "[BuildStats] Result dropped at datashard " << TabletID()
-            << ", built for tableId " << tableId << ", but table is gone (moved ot dropped)");
+        LOG_INFO_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Result dropped at datashard " << TabletID() << ", for tableId " << tableId
+            << ", but table is gone (moved ot dropped)");
         return;
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "[BuildStats] Result received at datashard " << TabletID() 
-        << ", for tableId " << tableId << ": " << ev->Get()->Stats.ToString());
+    LOG_INFO_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Result received at datashard " << TabletID() << ", for tableId " << tableId
+        << ": " << ev->Get()->Stats.ToString());
 
     const TUserTable& tableInfo = *TableInfos[tableId];
 
     if (!tableInfo.StatsUpdateInProgress) { // how can this happen?
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "[BuildStats] Unexpected async stats update at datashard " << TabletID());
+        LOG_ERROR_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Unexpected async stats update at datashard " << TabletID() << ", for tableId " << tableId);
     }
 
     tableInfo.Stats.DataStats = std::move(ev->Get()->Stats);
@@ -400,10 +402,9 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
         TStringBuilder names;
         ListTableNames(GetUserTables(), names);
 
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "[BuildStats] Data size " << tableInfo.Stats.DataStats.DataSize.Size
+        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Data size " << tableInfo.Stats.DataStats.DataSize.Size
             << " is higher than threshold of " << (i64)HighDataSizeReportThresholdBytes
-            << " at datashard: " << TabletID()
-            << " table: " << names
+            << " at datashard " << TabletID() << ", for tables " << names
             << " consider reconfiguring table partitioning settings");
     }
 }
@@ -413,8 +414,9 @@ void TDataShard::Handle(TEvPrivate::TEvTableStatsError::TPtr& ev, const TActorCo
 
     auto msg = ev->Get();
 
-    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "[BuildStats] Stats rebuilt error '" << msg->Message 
-        << "', code: " << ui32(msg->Code) << ", datashard " << TabletID() << ", tableId " << msg->TableId);
+    LOG_ERROR_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Stats rebuilt error '" << msg->Message 
+        << "', code: " << ui32(msg->Code) 
+        << " at datashard " << TabletID() << ", for tableId " << msg->TableId);
 
     auto it = TableInfos.find(msg->TableId);
     if (it != TableInfos.end()) {
@@ -494,7 +496,7 @@ public:
                 stats.SearchHeight = searchHeight;
                 stats.HasSchemaChanges = hasSchemaChanges;
 
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "[BuildStats] Skipped at datashard " << Self->TabletID() << ", for tableId " << tableId << ": "
+                LOG_INFO_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Skipped at datashard " << Self->TabletID() << ", for tableId " << tableId << ": "
                     << stats.DataStats.ToString() << " PartCount " << stats.PartCount
                     << (stats.HasSchemaChanges ? ", with schema changes" : ""));
 
@@ -601,7 +603,7 @@ void TDataShard::UpdateTableStats(const TActorContext &ctx) {
 
     LastDbStatsUpdateTime = now;
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "[BuildStats] UpdateTableStats at datashard " << TabletID());
+    LOG_INFO_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "UpdateTableStats at datashard " << TabletID());
 
     Executor()->Execute(new TTxInitiateStatsUpdate(this), ctx);
 }
@@ -630,9 +632,9 @@ void TDataShard::CollectCpuUsage(const TActorContext &ctx) {
         TStringBuilder names;
         ListTableNames(GetUserTables(), names);
 
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "[BuildStats] CPU usage " << cpuPercent
-                    << "% is higher than threshold of " << (i64)CpuUsageReportThresholdPercent
-                    << "% in-flight Tx: " << TxInFly()
+        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "CPU usage " << cpuPercent
+                    << " is higher than threshold of " << (i64)CpuUsageReportThresholdPercent
+                    << " in-flight Tx: " << TxInFly()
                     << " immediate Tx: " << ImmediateInFly()
                     << " readIterators: " << ReadIteratorsInFly()
                     << " at datashard: " << TabletID()

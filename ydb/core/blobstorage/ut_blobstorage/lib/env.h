@@ -27,8 +27,10 @@ struct TEnvironmentSetup {
     std::unordered_map<ui32, TString> Cache;
 
     using TIcbControlKey = std::pair<ui32, TString>;  // { nodeId, name }
+    using TScbControlKey = std::pair<ui32, EStaticControlType>; // { nodeId, type }
 
     std::unordered_map<TIcbControlKey, TControlWrapper> IcbControls;
+    std::unordered_map<TScbControlKey, TControlWrapper> StaticControls;
 
     struct TSettings {
         const ui32 NodeCount = 9;
@@ -457,14 +459,21 @@ struct TEnvironmentSetup {
                     IcbControls.insert({{nodeId, controlName}, std::move(control)});    \
                 }
 
-                if (Settings.BurstThresholdNs) {
-                    ADD_ICB_CONTROL("VDiskControls.BurstThresholdNsHDD", 200'000'000, 1, 1'000'000'000'000, Settings.BurstThresholdNs);
-                    ADD_ICB_CONTROL("VDiskControls.BurstThresholdNsSSD", 50'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
-                    ADD_ICB_CONTROL("VDiskControls.BurstThresholdNsNVME", 32'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
+#define ADD_SCB_CONTROL(controlName, defaultVal, minVal, maxVal, currentValue) {        \
+                    TControlWrapper control(defaultVal, minVal, maxVal);                \
+                    appData->StaticControlBoard->RegisterSharedControl(control, controlName);          \
+                    control = currentValue;                                             \
+                    StaticControls.insert({{nodeId, controlName}, std::move(control)});    \
                 }
-                ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleHDD", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
-                ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleSSD", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
-                ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleNVME", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
+
+                if (Settings.BurstThresholdNs) {
+                    ADD_SCB_CONTROL(EStaticControlType::VDiskControlsBurstThresholdNsHDD, 200'000'000, 1, 1'000'000'000'000, Settings.BurstThresholdNs);
+                    ADD_SCB_CONTROL(EStaticControlType::VDiskControlsBurstThresholdNsSSD, 50'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
+                    ADD_SCB_CONTROL(EStaticControlType::VDiskControlsBurstThresholdNsNVME, 32'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
+                }
+                ADD_SCB_CONTROL(EStaticControlType::VDiskControlsDiskTimeAvailableScaleHDD, 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
+                ADD_SCB_CONTROL(EStaticControlType::VDiskControlsDiskTimeAvailableScaleSSD, 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
+                ADD_SCB_CONTROL(EStaticControlType::VDiskControlsDiskTimeAvailableScaleNVME, 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
 
                 ADD_ICB_CONTROL("DSProxyControls.SlowDiskThreshold", 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
                 ADD_ICB_CONTROL("DSProxyControls.SlowDiskThresholdHDD", 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
@@ -475,7 +484,8 @@ struct TEnvironmentSetup {
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisks", 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksHDD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksSSD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
-                
+
+#undef ADD_SCB_CONTROL
 #undef ADD_ICB_CONTROL
 
                 {
@@ -1026,16 +1036,16 @@ struct TEnvironmentSetup {
         return ctr;
     };
 
-    void SetIcbControl(ui32 nodeId, TString controlName, ui64 value) {
+    void SetStaticControlBoardControl(ui32 nodeId, EStaticControlType controlType, ui64 value) {
         if (nodeId == 0) {
             for (nodeId = 1; nodeId <= Settings.NodeCount; ++nodeId) {
-                auto it = IcbControls.find({nodeId, controlName});
-                Y_ABORT_UNLESS(it != IcbControls.end());
+                auto it = StaticControls.find({nodeId, controlType});
+                Y_ABORT_UNLESS(it != StaticControls.end());
                 it->second = value;
             }
         } else {
-            auto it = IcbControls.find({nodeId, controlName});
-            Y_ABORT_UNLESS(it != IcbControls.end());
+            auto it = StaticControls.find({nodeId, controlType});
+            Y_ABORT_UNLESS(it != StaticControls.end());
             it->second = value;
         }
     }

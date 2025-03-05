@@ -1,10 +1,14 @@
 #include "checker.h"
+
 #include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom/checker.h>
+
 #include <ydb/library/formats/arrow/validation/validation.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
-namespace NKikimr::NOlap::NIndexes {
+namespace NKikimr::NOlap::NIndexes::NCategoriesBloom {
 
 void TBloomFilterChecker::DoSerializeToProtoImpl(NKikimrSSA::TProgram::TOlapIndexChecker& proto) const {
     for (auto&& i : HashValues) {
@@ -23,9 +27,9 @@ bool TBloomFilterChecker::DoCheckImpl(const std::vector<TString>& blobs) const {
                 break;
             }
         }
-//        Cerr << bits.DebugString() << Endl;
+        //        Cerr << bits.DebugString() << Endl;
         if (found) {
-//            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("size", bArray.length())("data", bArray.ToString())("index_id", GetIndexId());
+            //            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("size", bArray.length())("data", bArray.ToString())("index_id", GetIndexId());
             return true;
         }
     }
@@ -45,4 +49,4 @@ bool TBloomFilterChecker::DoDeserializeFromProtoImpl(const NKikimrSSA::TProgram:
     return true;
 }
 
-}   // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NIndexes::NCategoriesBloom

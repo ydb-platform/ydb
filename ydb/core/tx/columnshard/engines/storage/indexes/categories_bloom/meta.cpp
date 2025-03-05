@@ -1,7 +1,10 @@
 #include "checker.h"
+#include "header.h"
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/hash/calcer.h>
+#include <ydb/core/tx/columnshard/engines/protos/index.pb.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom/checker.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
@@ -44,11 +47,12 @@ public:
 
 class TCategoryBuilder {
 private:
-    YDB_READONLY_DEF(std::set<ui64>, Hashes);
-    YDB_READONLY_DEF(std::vector<bool>, Filter);
+    YDB_READONLY_DEF(std::set<ui64>, Categories);
+    YDB_ACCESSOR_DEF(std::vector<bool>, Filter);
 
 public:
-    TCategoryBuilder(std::set<ui64>&& hashes, const ui32 count, const ui32 hashesCount) {
+    TCategoryBuilder(std::set<ui64>&& categories, const ui32 count, const ui32 hashesCount)
+        : Categories(categories) {
         AFL_VERIFY(count);
         const ui32 bitsCount = TFixStringBitsStorage::GrowBitsCountToByte(hashesCount * std::max<ui32>(count, 10) / std::log(2));
         AFL_VERIFY(bitsCount);
@@ -65,12 +69,12 @@ public:
     std::vector<bool>& MutableFilter(const ui64 hashBase) {
         auto it = FiltersByHash.find(hashBase);
         AFL_VERIFY(it != FiltersByHash.end());
-        return it->second;
+        return *it->second;
     }
 
-    void AddCategory(std::set<ui64>&& hashes, const ui32 count, const ui32 hashesCount) {
-        Builders.emplace_back(std::move(hashes), count, hashesCount);
-        for (auto&& i : Builders.back().GetHashes()) {
+    void AddCategory(std::set<ui64>&& categories, const ui32 count, const ui32 hashesCount) {
+        Builders.emplace_back(std::move(categories), count, hashesCount);
+        for (auto&& i : Builders.back().GetCategories()) {
             AFL_VERIFY(FiltersByHash.emplace(i, &Builders.back().MutableFilter()).second);
         }
     }
@@ -92,7 +96,7 @@ public:
 
     [[nodiscard]] TFiltersBuilder Finalize(const ui32 hashesCount, const ui32 hitsLimit) {
         std::map<ui32, std::vector<ui64>> hashesBySize;
-        for (auto&& i : CountByHashes) {
+        for (auto&& i : CountByHash) {
             hashesBySize[i.second].emplace_back(i.first);
         }
         TFiltersBuilder result;
@@ -103,14 +107,14 @@ public:
                 currentCount += i.first;
                 currentHashes.emplace(c);
                 if (currentCount >= hitsLimit) {
-                    result.AddCategory(std::move(currentHashes), currentCount);
+                    result.AddCategory(std::move(currentHashes), currentCount, hashesCount);
                     currentCount = 0;
                     currentHashes.clear();
                 }
             }
         }
         if (currentCount) {
-            result.AddCategory(std::move(currentHashes), currentCount);
+            result.AddCategory(std::move(currentHashes), currentCount, hashesCount);
         }
         return result;
     }
@@ -137,7 +141,7 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
             [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase) {
                 auto& filterBits = filtersBuilder.MutableFilter(hashBase);
                 const auto pred = [&](const ui64 hash, const ui32 /*idx*/) {
-                    filterBits[hash % bitsCount] = true;
+                    filterBits[hash % filterBits.size()] = true;
                 };
                 for (ui64 i = 0; i < HashesCount; ++i) {
                     NArrow::NHash::TXX64::CalcForAll(arr, i, pred);
@@ -147,7 +151,7 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
                 auto& filterBits = filtersBuilder.MutableFilter(hashBase);
                 for (ui64 i = 0; i < HashesCount; ++i) {
                     const ui64 hash = NArrow::NHash::TXX64::CalcSimple(data, i);
-                    filterBits[hash % bitsCount] = true;
+                    filterBits[hash % filterBits.size()] = true;
                 }
             });
         dataOwners.pop_front();
@@ -158,9 +162,9 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
     for (auto&& i : filtersBuilder.GetBuilders()) {
         filterDescriptions.emplace_back(TFixStringBitsStorage(i.GetFilter()).GetData());
         filtersSumSize += filterDescriptions.back().size();
-        auto* category = protoDescription.AddCategory();
+        auto* category = protoDescription.AddCategories();
         category->SetFilterSize(filterDescriptions.back().size());
-        for (auto&& h : i.GetHashes()) {
+        for (auto&& h : i.GetCategories()) {
             category->AddHashes(h);
         }
     }
@@ -202,7 +206,7 @@ TConclusion<std::shared_ptr<IIndexHeader>> TIndexMeta::DoBuildHeader(const TChun
     if (!data.HasData()) {
         return std::shared_ptr<IIndexHeader>();
     }
-    auto conclusion = TCompositeBloomHeader::ReadHeader(data.GetDataVerified());
+    auto conclusion = IIndexHeader::ReadHeader(data.GetDataVerified());
     if (conclusion.IsFail()) {
         return conclusion;
     }
@@ -210,7 +214,7 @@ TConclusion<std::shared_ptr<IIndexHeader>> TIndexMeta::DoBuildHeader(const TChun
     if (!proto.ParseFromArray(conclusion->data(), conclusion->size())) {
         return TConclusionStatus::Fail("cannot parse proto in header");
     }
-    return std::make_shared<TCompositeBloomHeader>(std::move(proto), TCompositeBloomHeader::ReadHeaderSize(data.GetDataVerified(), true));
+    return std::make_shared<TCompositeBloomHeader>(std::move(proto), IIndexHeader::ReadHeaderSize(data.GetDataVerified(), true).DetachResult());
 }
 
-}   // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NIndexes::NCategoriesBloom

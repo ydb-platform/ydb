@@ -1,12 +1,12 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/abstract.h>
-namespace NKikimr::NOlap::NIndexes {
+namespace NKikimr::NOlap::NIndexes::NCategoriesBloom {
 
 class TBloomIndexConstructor: public IIndexMetaConstructor {
 public:
     static TString GetClassNameStatic() {
-        return "BLOOM_FILTER";
+        return "CATEGORY_BLOOM_FILTER";
     }
 
 private:

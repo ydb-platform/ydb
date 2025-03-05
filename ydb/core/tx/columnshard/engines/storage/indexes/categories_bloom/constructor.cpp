@@ -4,7 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
-namespace NKikimr::NOlap::NIndexes {
+namespace NKikimr::NOlap::NIndexes::NCategoriesBloom {
 
 std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
     const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
@@ -18,7 +18,7 @@ std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
         AFL_VERIFY(columnIds.emplace(columnInfo->GetId()).second);
     }
     AFL_VERIFY(columnIds.size() == 1);
-    return std::make_shared<TBloomIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId), *columnIds.begin(),
+    return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId), *columnIds.begin(),
         FalsePositiveProbability, std::make_shared<TDefaultDataExtractor>());
 }
 

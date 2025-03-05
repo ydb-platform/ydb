@@ -1,9 +1,12 @@
 #pragma once
+#include "common.h"
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
 #include <library/cpp/object_factory/object_factory.h>
+#include <util/digest/numeric.h>
 
 namespace NKikimr::NOlap::NIndexes {
 
@@ -13,6 +16,8 @@ private:
     YDB_READONLY_DEF(std::optional<ui64>, Category);
 
 public:
+    TIndexDataAddress() = default;
+
     explicit TIndexDataAddress(const ui32 indexId)
         : IndexId(indexId) {
         AFL_VERIFY(IndexId);
@@ -27,6 +32,18 @@ public:
     bool operator<(const TIndexDataAddress& item) const {
         return std::tie(IndexId, Category) < std::tie(item.IndexId, item.Category);
     }
+
+    bool operator==(const TIndexDataAddress& item) const {
+        return std::tie(IndexId, Category) == std::tie(item.IndexId, item.Category);
+    }
+
+    operator size_t() const {
+        if (Category) {
+            return CombineHashes<ui64>(IndexId, *Category);
+        } else {
+            return IndexId;
+        }
+    }
 };
 
 class IIndexChecker {
@@ -40,7 +57,7 @@ public:
     using TFactory = NObjectFactory::TObjectFactory<IIndexChecker, TString>;
     using TProto = NKikimrSSA::TProgram::TOlapIndexChecker;
     virtual ~IIndexChecker() = default;
-    bool Check(const THashMap<TOriginalDataAddress, std::vector<TString>>& blobs) const {
+    bool Check(const THashMap<TIndexDataAddress, std::vector<TString>>& blobs) const {
         return DoCheck(blobs);
     }
 

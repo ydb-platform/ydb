@@ -48,7 +48,9 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <ydb/library/formats/arrow/size_calcer.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
+#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
@@ -271,6 +273,9 @@ struct TParquetFileInfo {
 
 class TS3ReadCoroImpl : public TActorCoroImpl {
     friend class TS3StreamReadActor;
+
+    static constexpr double BLOCK_MIN_FILL_RATIO = 0.9;  // Blocks will be shrinked to fit only if size <= (min fill ratio) * capacity
+    static constexpr ui64 BLOCK_ROW_METADATA_SIZE = sizeof(ui64);
 
 public:
 
@@ -631,6 +636,22 @@ public:
         return arrow::Buffer::FromString(data);
     }
 
+    void SendRecordBatchEvent(std::shared_ptr<arrow::RecordBatch> batch, std::vector<TColumnConverter>& columnConverters, ui64& decodedBytes, ui64& numRows) {
+        auto convertedBatch = ConvertArrowColumns(batch, columnConverters);
+        auto ev = std::make_unique<TEvS3Provider::TEvNextRecordBatch>(PathIndex, TakeIngressDelta(), TakeCpuTimeDelta());
+        ArrowBlockSplitter.SplitRecordBatch(convertedBatch, numRows, ev->SplittedBatch);
+
+        ui64 size = 0;
+        for (const auto& batch : ev->SplittedBatch) {
+            size += NKikimr::NArrow::GetBatchDataSize(batch);
+        }
+        decodedBytes += size;
+        Paused = SourceContext->Add(size, SelfActorId, Paused);
+
+        Send(ParentActorId, ev.release());
+        numRows += batch->num_rows();
+    }
+
     void RunCoroBlockArrowParserOverHttp() {
 
         LOG_CORO_D("RunCoroBlockArrowParserOverHttp");
@@ -761,14 +782,7 @@ public:
                 bool isCancelled = false;
                 ui64 numRows = 0;
                 while (status = reader->ReadNext(&batch), status.ok() && batch) {
-                    auto convertedBatch = ConvertArrowColumns(batch, columnConverters);
-                    auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
-                    decodedBytes += size;
-                    Paused = SourceContext->Add(size, SelfActorId, Paused);
-                    Send(ParentActorId, new TEvS3Provider::TEvNextRecordBatch(
-                        convertedBatch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()
-                    ));
-                    numRows += convertedBatch->num_rows();
+                    SendRecordBatchEvent(batch, columnConverters, decodedBytes, numRows);
                 }
                 if (StopIfConsumedEnough(numRows)) {
                     isCancelled = true;
@@ -826,7 +840,6 @@ public:
         BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, ReadSpec->RowSpec, ReadSpec->Settings);
 
         for (int group = 0; group < fileReader->num_row_groups(); group++) {
-
             if (Paused) {
                 CpuTime += GetCpuTimeDelta();
                 LOG_CORO_D("RunCoroBlockArrowParserOverFile - PAUSED " << SourceContext->GetValue());
@@ -848,14 +861,7 @@ public:
             bool isCancelled = false;
             ui64 numRows = 0;
             while (status = reader->ReadNext(&batch), status.ok() && batch) {
-                auto convertedBatch = ConvertArrowColumns(batch, columnConverters);
-                auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
-                decodedBytes += size;
-                Paused = SourceContext->Add(size, SelfActorId, Paused);
-                Send(ParentActorId, new TEvS3Provider::TEvNextRecordBatch(
-                    convertedBatch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()
-                ));
-                numRows += batch->num_rows();
+                SendRecordBatchEvent(batch, columnConverters, decodedBytes, numRows);
             }
             if (StopIfConsumedEnough(numRows)) {
                 isCancelled = true;
@@ -1052,7 +1058,7 @@ public:
     TS3ReadCoroImpl(ui64 inputIndex, const TTxId& txId, const NActors::TActorId& computeActorId,
         const TRetryStuff::TPtr& retryStuff, const TReadSpec::TPtr& readSpec, size_t pathIndex,
         const TString& path, const TString& url, std::optional<ui64> maxRows,
-        const TS3ReadActorFactoryConfig& readActorFactoryCfg,
+        const TS3ReadActorFactoryConfig& readActorFactoryCfg, ui32 channelBufferSize,
         TSourceContext::TPtr queueBufferCounter,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& deferredQueueSize,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& httpInflightSize,
@@ -1062,8 +1068,8 @@ public:
         : TActorCoroImpl(256_KB), ReadActorFactoryCfg(readActorFactoryCfg), InputIndex(inputIndex),
         TxId(txId), RetryStuff(retryStuff), ReadSpec(readSpec), ComputeActorId(computeActorId),
         PathIndex(pathIndex), Path(path), Url(url), RowsRemained(maxRows),
-        SourceContext(queueBufferCounter),
-        DeferredQueueSize(deferredQueueSize), HttpInflightSize(httpInflightSize),
+        ArrowBlockSplitter(BLOCK_MIN_FILL_RATIO * channelBufferSize, BLOCK_ROW_METADATA_SIZE),
+        SourceContext(queueBufferCounter), DeferredQueueSize(deferredQueueSize), HttpInflightSize(httpInflightSize),
         HttpDataRps(httpDataRps), RawInflightSize(rawInflightSize), AsyncDecompressing(asyncDecompressing) {
     }
 
@@ -1187,10 +1193,11 @@ private:
         CpuTime += GetCpuTimeDelta();
 
         auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << Path, std::move(Issues));
-        if (issues)
+        if (issues) {
             Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(issues), FatalCode));
-        else
+        } else {
             Send(ParentActorId, new TEvS3Provider::TEvFileFinished(PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), RetryStuff->SizeLimit));
+        }
     }
 
     void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) {
@@ -1260,6 +1267,7 @@ private:
     TString InputBuffer;
     std::optional<ui64> RowsRemained;
     bool Paused = false;
+    NS3Util::TArrowBlockSplitter ArrowBlockSplitter;
     std::queue<THolder<TEvS3Provider::TEvDownloadData>> DeferredDataParts;
     std::queue<THolder<TEvS3Provider::TEvDecompressDataResult>> DeferredDecompressedDataParts;
     TSourceContext::TPtr SourceContext;
@@ -1299,6 +1307,7 @@ public:
         const NActors::TActorId& computeActorId,
         const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         const TS3ReadActorFactoryConfig& readActorFactoryCfg,
+        const TDqTaskRunnerMemoryLimits& memoryLimits,
         ::NMonitoring::TDynamicCounterPtr counters,
         ::NMonitoring::TDynamicCounterPtr taskCounters,
         ui64 fileSizeLimit,
@@ -1316,6 +1325,7 @@ public:
     )   : ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
+        , ChannelBufferSize(memoryLimits.ChannelBufferSize)
         , InputIndex(inputIndex)
         , TxId(txId)
         , ComputeActorId(computeActorId)
@@ -1494,6 +1504,7 @@ public:
             Url,
             RowsRemained,
             ReadActorFactoryCfg,
+            ChannelBufferSize,
             SourceContext,
             DeferredQueueSize,
             HttpInflightSize,
@@ -1558,7 +1569,7 @@ private:
     class TReadyBlock {
     public:
         TReadyBlock(TEvS3Provider::TEvNextBlock::TPtr& event) : PathInd(event->Get()->PathIndex) { Block.swap(event->Get()->Block); }
-        TReadyBlock(TEvS3Provider::TEvNextRecordBatch::TPtr& event) : Batch(event->Get()->Batch), PathInd(event->Get()->PathIndex) {}
+        TReadyBlock(std::shared_ptr<arrow::RecordBatch> batch, size_t pathInd) : Batch(std::move(batch)), PathInd(pathInd) {}
         NDB::Block Block;
         std::shared_ptr<arrow::RecordBatch> Batch;
         size_t PathInd;
@@ -1581,7 +1592,7 @@ private:
     }
 
     ui64 GetBlockSize(const TReadyBlock& block) const {
-        return ReadSpec->Arrow ? NUdf::GetSizeOfArrowBatchInBytes(*block.Batch) : block.Block.bytes();
+        return ReadSpec->Arrow ? NKikimr::NArrow::GetBatchDataSize(block.Batch) : block.Block.bytes();
     }
 
     i64 GetAsyncInputData(TUnboxedValueBatch& output, TMaybe<TInstant>&, bool& finished, i64 free) final {
@@ -1592,7 +1603,6 @@ private:
             NUdf::TUnboxedValue value;
             if (ReadSpec->Arrow) {
                 const auto& batch = *Blocks.front().Batch;
-// Cerr << "ASYNC batch with COLS=" << batch.num_columns() << " and ROWS=" << batch.num_rows() << Endl;
                 NUdf::TUnboxedValue* structItems = nullptr;
                 auto structObj = ArrowRowContainerCache.NewArray(HolderFactory, 1 + batch.num_columns(), structItems);
                 for (int i = 0; i < batch.num_columns(); ++i) {
@@ -1759,17 +1769,20 @@ private:
 
     void HandleNextRecordBatch(TEvS3Provider::TEvNextRecordBatch::TPtr& next) {
         YQL_ENSURE(ReadSpec->Arrow);
-        auto rows = next->Get()->Batch->num_rows();
+        ui64 rows = 0;
+        for (const auto& batch : next->Get()->SplittedBatch) {
+            rows += batch->num_rows();
+            IngressStats.Chunks++;
+            if (Counters) {
+                QueueBlockCount->Inc();
+            }
+            Blocks.emplace_back(batch, next->Get()->PathIndex);
+        }
         IngressStats.Bytes += next->Get()->IngressDelta;
         IngressStats.Rows += rows;
-        IngressStats.Chunks++;
         IngressStats.Resume();
         CpuTime += next->Get()->CpuTimeDelta;
-        if (Counters) {
-            QueueBlockCount->Inc();
-        }
         StopLoadsIfEnough(rows);
-        Blocks.emplace_back(next);
         Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
     }
 
@@ -1866,6 +1879,7 @@ private:
     const TS3ReadActorFactoryConfig ReadActorFactoryCfg;
     const IHTTPGateway::TPtr Gateway;
     const THolderFactory& HolderFactory;
+    const ui32 ChannelBufferSize;
     TPlainContainerCache ContainerCache;
     TPlainContainerCache ArrowTupleContainerCache;
     TPlainContainerCache ArrowRowContainerCache;
@@ -2079,6 +2093,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
     const TVector<TString>& readRanges,
+    const TDqTaskRunnerMemoryLimits& memoryLimits,
     const NActors::TActorId& computeActorId,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
@@ -2282,7 +2297,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
         const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), credentials, pathPattern, pathPatternVariant,
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
-                                                  cfg, counters, taskCounters, fileSizeLimit, sizeLimit, rowsLimitHint, memoryQuotaManager,
+                                                  cfg, memoryLimits, counters, taskCounters, fileSizeLimit, sizeLimit, rowsLimitHint, memoryQuotaManager,
                                                   params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta,
                                                   params.GetAsyncDecoding(), params.GetAsyncDecompressing(), allowLocalFiles);
 

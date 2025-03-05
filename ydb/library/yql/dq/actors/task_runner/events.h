@@ -179,6 +179,7 @@ struct TEvTaskRunnerCreateFinished
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         THashMap<ui64, std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>>&& inputTransforms,
+        const TDqTaskRunnerMemoryLimits& memoryLimits,
         const TTaskRunnerActorSensors& sensors = {}
     )
         : Sensors(sensors)
@@ -189,6 +190,7 @@ struct TEvTaskRunnerCreateFinished
         , HolderFactory(holderFactory)
         , Alloc(alloc)
         , InputTransforms(std::move(inputTransforms))
+        , MemoryLimits(memoryLimits)
     { 
         Y_ABORT_UNLESS(inputTransforms.empty() || Alloc);
     }
@@ -210,6 +212,7 @@ struct TEvTaskRunnerCreateFinished
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     THashMap<ui64, std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> InputTransforms; //can'not be const, because we need to explicitly clear it in destructor
+    const TDqTaskRunnerMemoryLimits MemoryLimits;
 };
 
 struct TEvTaskRunFinished

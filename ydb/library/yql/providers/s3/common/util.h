@@ -1,5 +1,6 @@
 #pragma once
 
+#include <arrow/record_batch.h>
 #include <util/string/builder.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -31,6 +32,21 @@ public:
 private:
     std::vector<TParam> Params;
     TString MainUri;
+};
+
+class TArrowBlockSplitter {
+public:
+    TArrowBlockSplitter(ui32 chunkSizeLimit, ui32 rowMetaSize);
+
+    void SplitRecordBatch(std::shared_ptr<arrow::RecordBatch> batch, ui64 firstRowId, std::vector<std::shared_ptr<arrow::RecordBatch>>& result);
+
+private:
+    bool CheckBatchSize(const std::shared_ptr<arrow::RecordBatch>& batch) const;
+
+private:
+    const ui32 ChunkSizeLimit;
+    const ui32 RowMetaSize;
+    std::vector<std::shared_ptr<arrow::RecordBatch>> SplitStack;
 };
 
 }

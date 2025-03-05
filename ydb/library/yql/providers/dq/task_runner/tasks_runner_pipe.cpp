@@ -1367,7 +1367,7 @@ public:
     }
 
     NYql::NDqProto::TPrepareResponse Prepare(const NDq::TDqTaskRunnerMemoryLimits& limits) override {
-        ChannelBufferSize = limits.ChannelBufferSize;
+        MemoryLimits = limits;
         NDqProto::TCommandHeader header;
         header.SetVersion(1);
         header.SetCommand(NDqProto::TCommandHeader::PREPARE);
@@ -1460,6 +1460,10 @@ public:
 
     const TVector<TString>& GetReadRanges() const override {
         return ReadRanges;
+    }
+
+    const TDqTaskRunnerMemoryLimits& GetMemoryLimits() const override {
+        return MemoryLimits;
     }
 
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit) override {
@@ -1596,11 +1600,11 @@ private:
         for (ui32 i = 0; i < Task.InputsSize(); ++i) {
             auto& inputDesc = Task.GetInputs(i);
             if (inputDesc.HasSource()) {
-                Sources[i] = new TDqSource(Task.GetId(), i, InputTypes.at(i), ChannelBufferSize, this);
+                Sources[i] = new TDqSource(Task.GetId(), i, InputTypes.at(i), MemoryLimits.ChannelBufferSize, this);
             } else {
                 for (auto& inputChannelDesc : inputDesc.GetChannels()) {
                     ui64 channelId = inputChannelDesc.GetId();
-                    InputChannels[channelId] = new TInputChannel(this, Task.GetId(), channelId, Input, Output, ChannelBufferSize);
+                    InputChannels[channelId] = new TInputChannel(this, Task.GetId(), channelId, Input, Output, MemoryLimits.ChannelBufferSize);
                 }
             }
         }
@@ -1615,7 +1619,7 @@ private:
     TVector<TString> ReadRanges;
     THashMap<ui64, TIntrusivePtr<TInputChannel>> InputChannels;
     THashMap<ui64, TIntrusivePtr<TDqSource>> Sources;
-    i64 ChannelBufferSize = 0;
+    TDqTaskRunnerMemoryLimits MemoryLimits;
 
     std::shared_ptr <NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
@@ -1769,6 +1773,10 @@ public:
 
     const TVector<TString>& GetReadRanges() const override {
         return Delegate->GetReadRanges();
+    }
+
+    const TDqTaskRunnerMemoryLimits& GetMemoryLimits() const override {
+        return Delegate->GetMemoryLimits();
     }
 
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit) override {

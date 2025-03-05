@@ -539,6 +539,7 @@ public:
     void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
         const IDqTaskRunnerExecutionContext& execCtx) override
     {
+        MemoryLimits = memoryLimits;
         TaskId = task.GetId();
         auto entry = BuildTask(task);
 
@@ -901,6 +902,10 @@ public:
         return Stats.get();
     }
 
+    const TDqTaskRunnerMemoryLimits& GetMemoryLimits() const override {
+        return MemoryLimits;
+    }
+
     TString Save() const override {
         return AllocatedHolder->ProgramParsed.CompGraph->SaveGraphState();
     }
@@ -998,6 +1003,7 @@ private:
     ui64 TaskId = 0;
     TDqTaskRunnerContext Context;
     TDqTaskRunnerSettings Settings;
+    TDqTaskRunnerMemoryLimits MemoryLimits;
     TLogFunc LogFunc;
     std::unique_ptr<NUdf::ISecureParamsProvider> SecureParamsProvider;
     TDqTaskCountersProvider CountersProvider;

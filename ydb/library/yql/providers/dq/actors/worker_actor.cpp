@@ -300,6 +300,7 @@ private:
             const auto& readRanges = ev->Get()->ReadRanges;
             const auto& typeEnv = ev->Get()->TypeEnv;
             const auto& holderFactory = ev->Get()->HolderFactory;
+            const auto& memoryLimits = ev->Get()->MemoryLimits;
 
             Stat.Measure<void>("PrepareChannels", [&](){
                 auto& inputs = Task.GetInputs();
@@ -323,7 +324,8 @@ private:
                                 .TypeEnv = typeEnv,
                                 .HolderFactory = holderFactory,
                                 .ProgramBuilder = *source.ProgramBuilder,
-                                .MemoryQuotaManager = MemoryQuotaManager
+                                .MemoryQuotaManager = MemoryQuotaManager,
+                                .MemoryLimits = memoryLimits
                             });
                         RegisterLocalChild(source.Actor);
                     } else {

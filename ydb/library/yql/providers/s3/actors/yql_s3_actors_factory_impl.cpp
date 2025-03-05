@@ -73,7 +73,7 @@ namespace NYql::NDq {
                     [credentialsFactory, gateway, retryPolicy, cfg, counters, allowLocalFiles](NS3::TSource&& settings, IDqAsyncIoFactory::TSourceArguments&& args) {
                         return CreateS3ReadActor(args.TypeEnv, args.HolderFactory, gateway,
                             std::move(settings), args.InputIndex, args.StatsLevel, args.TxId, args.SecureParams,
-                            args.TaskParams, args.ReadRanges, args.ComputeActorId, credentialsFactory, retryPolicy, cfg,
+                            args.TaskParams, args.ReadRanges, args.MemoryLimits, args.ComputeActorId, credentialsFactory, retryPolicy, cfg,
                             counters, args.TaskCounters, args.MemoryQuotaManager, allowLocalFiles);
                     });
             #else

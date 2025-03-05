@@ -6,4 +6,4 @@
     <tmp_path>/program.sql:<main>: Error: Fatal Error
 
     
-        <tmp_path>/program.sql:<main>: Error: Error while sending request to monitoring api: 404 Not Found, response: Project invalid does not exist (appeared 1 time at ISOTIME)
+        <tmp_path>/program.sql:<main>: Error: Error while sending data request to monitoring api: Project invalid does not exist (appeared 1 time at ISOTIME)

@@ -77,7 +77,7 @@ public:
         , BatchCountLimit(batchCountLimit)
         , ReadParams(std::move(readParams))
         , CredentialsProvider(credentialsProvider)
-        , SolomonClient(NSo::ISolomonAccessorClient::Make(readParams.Source, credentialsProvider))
+        , SolomonClient(NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider))
     {}
 
     void Bootstrap() {
@@ -201,7 +201,7 @@ private:
     }
 
     void PassAway() override {
-        LOG_D("TDqSolomonMetricsQueueActor", "PassAway");
+        LOG_I("TDqSolomonMetricsQueueActor", "PassAway, processed " << ProcessedMetrics << " metrics");
         TBase::PassAway();
     }
 
@@ -288,6 +288,7 @@ private:
         bool handledRequest = true;
         while (HasPendingRequests && handledRequest) {
             handledRequest = false;
+            HasPendingRequests = false;
 
             for (auto& [consumer, requests] : PendingRequests) {
                 if (!CanSendToConsumer(consumer) || (earlyStop && !HasEnoughToSend())) {
@@ -350,10 +351,15 @@ private:
         while (!Metrics.empty() && result.size() < BatchCountLimit) {
             result.push_back(Metrics.back());
             Metrics.pop_back();
+            ProcessedMetrics++;
         }
 
         LOG_D("TDqSolomonMetricsQueueActor", "SendMetrics Sending " << result.size() << " metrics to consumer with id " << consumer);
         Send(consumer, new TEvSolomonProvider::TEvMetricsBatch(std::move(result), HasNoMoreItems(), transportMeta));
+
+        if (HasNoMoreItems()) {
+            TryFinish(consumer, transportMeta.GetSeqNo());
+        }
 
         if (!RoundRobinStageFinished) {
             if (StartedConsumers.empty()) {
@@ -384,6 +390,7 @@ private:
 
 private:
     ui64 CurrentPage;
+    ui64 ProcessedMetrics = 0;
     ui64 ConsumersCount;
     bool HasMoreMetrics = true;
     bool IsRoundRobinFinishScheduled = false;

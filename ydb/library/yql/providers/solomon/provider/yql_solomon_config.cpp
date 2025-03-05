@@ -12,6 +12,7 @@ TSolomonConfiguration::TSolomonConfiguration()
     REGISTER_SETTING(*this, MetricsQueueBatchCountLimit);
     REGISTER_SETTING(*this, SolomonClientDefaultReplica);
     REGISTER_SETTING(*this, MaxInflightDataRequests);
+    REGISTER_SETTING(*this, ComputeActorBatchSize);
 }
 
 TSolomonSettings::TConstPtr TSolomonConfiguration::Snapshot() const {

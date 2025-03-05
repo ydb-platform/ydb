@@ -51,9 +51,12 @@ struct TEvSolomonProvider {
     };
 
     struct TEvNewDataBatch: public NActors::TEventLocal<TEvNewDataBatch, EvNewDataBatch> {
+        ui64 SelectorsCount;
         NSo::ISolomonAccessorClient::TGetDataResult Result;
-        TEvNewDataBatch(NSo::ISolomonAccessorClient::TGetDataResult result)
-            : Result(std::move(result)) {}
+        TEvNewDataBatch(ui64 selectorsCount, NSo::ISolomonAccessorClient::TGetDataResult result)
+            : SelectorsCount(selectorsCount)
+            , Result(std::move(result))
+        {}
     };
 };
 

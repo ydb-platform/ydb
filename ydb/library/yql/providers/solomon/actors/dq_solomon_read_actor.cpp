@@ -100,6 +100,7 @@ public:
         NKikimr::NMiniKQL::TProgramBuilder& programBuilder,
         TDqSolomonReadParams&& readParams,
         ui64 maxInflightDataRequests,
+        ui64 computeActorBatchSize,
         NActors::TActorId metricsQueueActor,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider
@@ -112,9 +113,10 @@ public:
         , LogPrefix(TStringBuilder() << "TxId: " << TxId << ", TDqSolomonReadActor: ")
         , ReadParams(std::move(readParams))
         , MaxInflightDataRequests(maxInflightDataRequests)
+        , ComputeActorBatchSize(computeActorBatchSize)
         , MetricsQueueActor(metricsQueueActor)
         , CredentialsProvider(credentialsProvider)
-        , SolomonClient(NSo::ISolomonAccessorClient::Make(readParams.Source, credentialsProvider))
+        , SolomonClient(NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider))
     {
         Y_UNUSED(counters);
         SOURCE_LOG_D("Init");
@@ -206,21 +208,24 @@ public:
     }
 
     void HandleNewDataBatch(TEvSolomonProvider::TEvNewDataBatch::TPtr& newDataBatch) {
-        auto& batch = newDataBatch->Get()->Result;
+        auto& batch = *newDataBatch->Get();
         InflightDataRequests--;
 
-        if (!batch.Success) {
-            TIssues issues { TIssue(batch.ErrorMsg) };
+        if (!batch.Result.Success) {
+            TIssues issues { TIssue(batch.Result.ErrorMsg) };
             SOURCE_LOG_W("Got " << "error response[" << newDataBatch->Cookie << "] from solomon: " << issues.ToOneLineString());
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
             return;
         }
 
-        SOURCE_LOG_D("HandleNewDataBatch new data batch");
-        MetricsData.insert(MetricsData.end(), batch.Result.begin(), batch.Result.end());
-        CompletedMetrics += batch.Result.size();
+        MetricsData.insert(MetricsData.end(), batch.Result.Result.begin(), batch.Result.Result.end());
+        CompletedMetrics += batch.SelectorsCount;
 
-        NotifyComputeActorWithData();
+        if (!Metrics.empty()) {
+            while (TryRequestData()) {}
+        } else if (MetricsData.size() >= ComputeActorBatchSize || LastMetricReceived()) {
+            NotifyComputeActorWithData();
+        }
     }
 
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {
@@ -249,7 +254,7 @@ public:
     i64 GetAsyncInputData(TUnboxedValueBatch& buffer, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         Y_UNUSED(freeSpace);
         YQL_ENSURE(!buffer.IsWide(), "Wide stream is not supported");
-        SOURCE_LOG_D("GetAsyncInputData sending data");
+        SOURCE_LOG_D("GetAsyncInputData sending " << MetricsData.size() << " metrics");
 
         for (const auto& data : MetricsData) {
             auto& labels = data.Labels;
@@ -320,7 +325,7 @@ public:
 private:
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
-        SOURCE_LOG_D("PassAway");
+        SOURCE_LOG_I("PassAway, processed " << CompletedMetrics << " metrics.");
         TActor<TDqSolomonReadActor>::PassAway();
     }
 
@@ -328,19 +333,28 @@ private:
     TSourceState BuildState() { return {}; }
 
     void NotifyComputeActorWithData() const {
+        SOURCE_LOG_D("NotifyComputeActorWithData");
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+    }
+
+    bool LastMetricReceived() const {
+        if (UseMetricsQueue) {
+            return IsConfirmedMetricsQueueFinish && CompletedMetrics == ListedMetrics;
+        } else {
+            return CompletedMetrics == 1;
+        }
     }
 
     bool LastMetricProcessed() const {
         if (UseMetricsQueue) {
-            return IsConfirmedMetricsQueueFinish && MetricsData.empty() && CompletedMetrics == ListedMetrics;
+            return IsConfirmedMetricsQueueFinish && CompletedMetrics == ListedMetrics;
         } else {
             return MetricsData.empty() && CompletedMetrics == 1;
         }
     }
 
     void TryRequestMetrics() {
-        if (Metrics.size() < MetricsPerDataQuery * 5 && !IsMetricsQueueEmpty && !IsWaitingMetricsQueueResponse) {
+        if (Metrics.size() < MetricsPerDataQuery * MaxInflightDataRequests && !IsMetricsQueueEmpty && !IsWaitingMetricsQueueResponse) {
             RequestMetrics();
         }
     }
@@ -379,10 +393,10 @@ private:
         InflightDataRequests++;
 
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
-        getDataFuture.Subscribe([actorSystem, selfId = SelfId()](
+        getDataFuture.Subscribe([actorSystem, selectorsCount = dataSelectors.size(), selfId = SelfId()](
             const NThreading::TFuture<NSo::ISolomonAccessorClient::TGetDataResult>& result) -> void
         {
-            actorSystem->Send(selfId, new TEvSolomonProvider::TEvNewDataBatch(result.GetValue()));
+            actorSystem->Send(selfId, new TEvSolomonProvider::TEvNewDataBatch(selectorsCount, result.GetValue()));
         });
     }
 
@@ -413,6 +427,7 @@ private:
     const TString LogPrefix;
     const TDqSolomonReadParams ReadParams;
     const ui64 MaxInflightDataRequests;
+    const ui64 ComputeActorBatchSize;
 
     bool UseMetricsQueue;
     TRetryEventsQueue MetricsQueueEvents;
@@ -425,7 +440,7 @@ private:
     size_t InflightDataRequests = 0;
     size_t ListedMetrics = 0;
     size_t CompletedMetrics = 0;
-    const ui64 MetricsPerDataQuery = 25;
+    const ui64 MetricsPerDataQuery = 15;
 
     TString SourceId;
     std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
@@ -472,6 +487,11 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
         maxInflightDataRequests = FromString<ui64>(it->second);
     }
 
+    ui64 computeActorBatchSize = 1;
+    if (auto it = settings.find("computeActorBatchSize"); it != settings.end()) {
+        computeActorBatchSize = FromString<ui64>(it->second);
+    }
+
     auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
     auto credentialsProvider = credentialsProviderFactory->CreateProvider();
 
@@ -484,6 +504,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
         programBuilder,
         std::move(params),
         maxInflightDataRequests,
+        computeActorBatchSize,
         metricsQueueActor,
         counters,
         credentialsProvider);

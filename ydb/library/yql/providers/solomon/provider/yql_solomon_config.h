@@ -16,6 +16,7 @@ struct TSolomonSettings {
     NCommon::TConfSetting<ui64, false> MetricsQueueBatchCountLimit;
     NCommon::TConfSetting<TString, false> SolomonClientDefaultReplica;
     NCommon::TConfSetting<ui64, false> MaxInflightDataRequests;
+    NCommon::TConfSetting<ui64, false> ComputeActorBatchSize;
 };
 
 struct TSolomonConfiguration
@@ -38,12 +39,6 @@ struct TSolomonConfiguration
             const TString authToken = typeCtx->Credentials->FindCredentialContent("cluster:default_" + cluster.GetName(), "default_solomon", cluster.GetToken());
             Tokens[cluster.GetName()] = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
         }
-
-        MetricsQueuePageSize = 2000;
-        MetricsQueuePrefetchSize = 2000;
-        MetricsQueueBatchCountLimit = 1000;
-        SolomonClientDefaultReplica = "sas";
-        MaxInflightDataRequests = 100;
 
         this->SetValidClusters(clusters);
 

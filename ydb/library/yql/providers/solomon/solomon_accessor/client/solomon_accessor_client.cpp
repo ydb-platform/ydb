@@ -73,11 +73,13 @@ class TSolomonAccessorClient : public ISolomonAccessorClient, public std::enable
 public:
     TSolomonAccessorClient(
         const TString& defaultReplica,
+        const ui64 defaultGrpcPort,
         const NYql::NSo::NProto::TDqSolomonSource& settings,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider
         )
         : DefaultReplica(defaultReplica)
-        , Settings(std::move(settings))
+        , DefaultGrpcPort(defaultGrpcPort)
+        , Settings(settings)
         , CredentialsProvider(credentialsProvider)
         , HttpGateway(IHTTPGateway::Make())
         , GrpcClient(std::make_shared<NYdbGrpc::TGRpcClientLow>())
@@ -92,7 +94,9 @@ public:
         const auto request = BuildListMetricsRequest(selectors, pageSize, page);
 
         IHTTPGateway::THeaders headers;
-        headers.Fields.emplace_back(TStringBuilder{} << "Authorization: " << GetAuthInfo());
+        if (auto authInfo = GetAuthInfo()) {
+            headers.Fields.emplace_back(TStringBuilder{} << "Authorization: " << *authInfo);
+        }
 
         auto resultPromise = NThreading::NewPromise<TListMetricsResult>();
         
@@ -123,7 +127,9 @@ public:
         const auto request = BuildGetDataRequest(selectors);
 
         NYdbGrpc::TCallMeta callMeta;
-        callMeta.Aux.emplace_back("authorization", GetAuthInfo());
+        if (auto authInfo = GetAuthInfo()) {
+            callMeta.Aux.emplace_back("authorization", *authInfo);
+        }
 
         auto resultPromise = NThreading::NewPromise<TGetDataResult>();
 
@@ -160,8 +166,12 @@ public:
     }
 
 private:
-    TString GetAuthInfo() const
+    TMaybe<TString> GetAuthInfo() const
     {
+        if (!Settings.GetUseSsl()) {
+            return {};
+        }
+
         const TString authToken = CredentialsProvider->GetAuthInfo();
 
         switch (Settings.GetClusterType()) {
@@ -181,7 +191,7 @@ private:
 
     TString GetGrpcSolomonEndpoint() const
     {
-        return Settings.GetEndpoint() + ":443";
+        return TStringBuilder() << Settings.GetEndpoint() << ":" << DefaultGrpcPort;
     }
 
     TString BuildListMetricsRequest(const TString& selectors, int pageSize, int page) const
@@ -295,6 +305,7 @@ private:
 
 private:
     const TString DefaultReplica;
+    const ui64 DefaultGrpcPort;
     const size_t ListSizeLimit = 1ull << 20;
     const NYql::NSo::NProto::TDqSolomonSource& Settings;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
@@ -372,7 +383,12 @@ ISolomonAccessorClient::Make(
         defaultReplica = it->second;
     }
 
-    return std::make_shared<TSolomonAccessorClient>(defaultReplica, source, credentialsProvider);
+    ui64 defaultGrpcPort = 443;
+    if (auto it = settings.find("grpcPort"); it != settings.end()) {
+        defaultGrpcPort = FromString<ui64>(it->second);
+    }
+
+    return std::make_shared<TSolomonAccessorClient>(defaultReplica, defaultGrpcPort, source, credentialsProvider);
 }
 
 } // namespace NYql::NSo

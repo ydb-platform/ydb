@@ -840,6 +840,11 @@ class StaticConfigGenerator(object):
                 if drive.expected_slot_count is not None:
                     drive_pb.PDiskConfig.ExpectedSlotCount = drive.expected_slot_count
 
+                # Full support of `pdisk_config`, not just copying selected fields manually
+                # from other non-typed locations
+                if drive.pdisk_config is not None:
+                    utils.wrap_parse_dict(drive.pdisk_config, drive_pb.PDiskConfig)
+
                 assert drive_pb.Guid not in all_guids, "All Guids must be unique!"
                 all_guids.add(drive_pb.Guid)
 

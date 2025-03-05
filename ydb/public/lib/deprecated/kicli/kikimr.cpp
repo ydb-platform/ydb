@@ -243,8 +243,6 @@ public:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusSchemeInitRoot>(&NGRpcProxy::TGRpcClient::SchemeInitRoot, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusBlobStorageConfigRequest>(&NGRpcProxy::TGRpcClient::BlobStorageConfig, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_BLOB_STORAGE_DESCRIBE_REQUEST:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusBlobStorageDescribeRequest, NMsgBusProxy::TBusBlobStorageDescribeResponse>(&NGRpcProxy::TGRpcClient::BlobStorageDescribe, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_HIVE_CREATE_TABLET:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusHiveCreateTablet>(&NGRpcProxy::TGRpcClient::HiveCreateTablet, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS:

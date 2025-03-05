@@ -1,4 +1,5 @@
 import ydb.apps.dstool.lib.common as common
+import ydb.public.api.protos.draft.ydb_bscontroller_pb2 as bsc_protos
 
 description = 'Describe blobstorage components'
 
@@ -12,17 +13,16 @@ def create_request(args):
     vslots = common.get_vslots_by_vdisk_ids(base_config, args.vdisk_ids)
 
     vslot_ids = {common.get_vslot_id(vslot.VSlotId) for vslot in vslots if common.get_pdisk_id(vslot.VSlotId)}
-
-    request = common.create_bsc_describe_request()
+    request = bsc_protos.DescribeRequest()
     for vslot in base_config.VSlot:
         if common.get_vslot_id(vslot.VSlotId) not in vslot_ids:
             continue
-        vdisk_target = request.Targets.add().VDiskId
-        vdisk_target.GroupID = vslot.GroupId
-        vdisk_target.GroupGeneration = vslot.GroupGeneration
-        vdisk_target.Ring = vslot.FailRealmIdx
-        vdisk_target.Domain = vslot.FailDomainIdx
-        vdisk_target.VDisk = vslot.VDiskIdx
+        vdisk_target = request.targets.add().vdisk_id
+        vdisk_target.group_id = vslot.GroupId
+        vdisk_target.group_generation = vslot.GroupGeneration
+        vdisk_target.ring = vslot.FailRealmIdx
+        vdisk_target.domain = vslot.FailDomainIdx
+        vdisk_target.vdisk = vslot.VDiskIdx
 
     return request
 
@@ -39,9 +39,9 @@ def do(args):
     request = create_request(args)
     response = perform_request(request)
 
-    for result in response.Results:
+    for result in response.results:
         match result.WhichOneof('Response'):
-            case 'VDiskResponse':
-                print(result.VDiskResponse.Result)
+            case 'vdisk_response':
+                print(result.vdisk_response.result)
             case _:
                 return "Error"

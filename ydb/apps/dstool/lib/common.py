@@ -19,10 +19,11 @@ from operator import attrgetter, itemgetter
 from collections import defaultdict
 from itertools import cycle, islice
 import ydb.core.protos.grpc_pb2_grpc as kikimr_grpc
+import ydb.public.api.grpc.draft.ydb_bscontroller_v1_pb2_grpc as bsc_grpc
+import ydb.public.api.protos.ydb_status_codes_pb2 as public_api_status
 import ydb.core.protos.msgbus_pb2 as kikimr_msgbus
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
 import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
-import ydb.core.protos.blobstorage_pb2 as kikimr_bsc
 import ydb.core.protos.cms_pb2 as kikimr_cms
 from ydb.apps.dstool.lib.arg_parser import print_error_with_usage
 import typing
@@ -532,36 +533,54 @@ def invoke_bsc_request(request, explicit_host=None, endpoint=None):
         return invoke_grpc_bsc_request(request, endpoint=endpoint)
 
 
-def invoke_grpc_bsc_describe_request(request, endpoint=None):
-    bs_request = kikimr_msgbus.TBlobStorageDescribeRequest(Domain=connection_params.domain, Request=request)
-    if connection_params.token is not None:
-        bs_request.SecurityToken = connection_params.token
-    bs_response = invoke_grpc('BlobStorageDescribe', bs_request, endpoint=endpoint)
-    if bs_response.Status != 1:
-        # remove security token from error message
-        bs_request.SecurityToken = ''
-        request_s = text_format.MessageToString(bs_request, as_one_line=True)
-        response_s = text_format.MessageToString(bs_response, as_one_line=True)
+@query_random_host_with_retry(request_type='grpc')
+def invoke_bsc_public_api(func, *params, explicit_host=None, endpoint=None):
+    options = [
+        ('grpc.max_receive_message_length', 256 << 20),  # 256 MiB
+    ]
+    if connection_params.debug:
+        p = ', '.join('<<< %s >>>' % text_format.MessageToString(param, as_one_line=True) for param in params)
+        print('INFO: issuing %s(%s) @%s:%d protocol %s' % (func, p, endpoint.host, endpoint.grpc_port,
+              endpoint.protocol), file=sys.stderr)
+
+    def work(channel):
+        try:
+            stub = bsc_grpc.BsControllerServiceStub(channel)
+            res = getattr(stub, func)(*params)
+            if connection_params.debug:
+                print('INFO: result <<< %s >>>' % text_format.MessageToString(res, as_one_line=True), file=sys.stderr)
+            return res
+        except Exception as e:
+            if connection_params.debug:
+                print('ERROR: exception %s' % e, file=sys.stderr)
+            raise ConnectionError("Can't connect to specified addresses by gRPC protocol")
+
+    hostport = endpoint.host_with_grpc_port
+    retval = None
+    if endpoint.protocol == 'grpcs':
+        creds = grpc.ssl_channel_credentials(connection_params.get_cafile_data())
+        with grpc.secure_channel(hostport, creds, options) as channel:
+            retval = work(channel)
+    else:
+        with grpc.insecure_channel(hostport, options) as channel:
+            retval = work(channel)
+    
+    if retval.status != public_api_status.StatusIds.SUCCESS:
+        request_s = ''
+        for param in params:
+            request_s += text_format.MessageToString(param, as_one_line=True) + ', '
+        response_s = text_format.MessageToString(retval, as_one_line=True)
         raise QueryError('Failed to gRPC-query blob storage controller; request: %s; response: %s' % (request_s, response_s))
-    return bs_response.Response
-
-
-def invoke_http_bsc_describe_request(request, endpoint=None):
-    tablet_id = 72057594037932033
-    data = request.SerializeToString()
-    res = fetch('tablets/app', params=dict(TabletID=tablet_id, exec=2), fmt='raw', cache=False, method='POST',
-                data=data, content_type='application/x-protobuf', accept='application/x-protobuf', endpoint=endpoint)
-    m = kikimr_bsc.TDescribeResponse()
-    m.MergeFromString(res)
-    return m
+    
+    return retval
 
 
 @query_random_host_with_retry(request_type=None)
 def invoke_bsc_describe_request(request, explicit_host=None, endpoint=None):
     if endpoint.protocol in ('http', 'https'):
-        return invoke_http_bsc_describe_request(request, endpoint=endpoint)
+        return None
     else:
-        return invoke_grpc_bsc_describe_request(request, endpoint=endpoint)
+        return invoke_bsc_public_api('Describe', request, endpoint=endpoint)
 
 
 def cms_host_restart_request(user, host, reason, duration_usec, max_avail):
@@ -600,11 +619,6 @@ def create_bsc_request(args):
     if hasattr(args, 'move_only_to_operational_pdisks') and args.move_only_to_operational_pdisks:
         request.SettleOnlyOnOperationalDisks = True
 
-    return request
-
-
-def create_bsc_describe_request():
-    request = kikimr_bsc.TDescribeRequest()
     return request
 
 

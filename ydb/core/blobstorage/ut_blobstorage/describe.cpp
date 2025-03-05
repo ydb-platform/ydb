@@ -6,7 +6,7 @@ Y_UNIT_TEST_SUITE(BSCDescribe) {
 
     NKikimrBlobStorage::TEvControllerDescribeResponse Describe(TEnvironmentSetup& env, TVDiskID& vdId) {
         NKikimrBlobStorage::TEvControllerDescribeRequest request;
-        auto* vdiskId = request.MutableRequest()->AddTargets()->MutableVDiskId();
+        auto* vdiskId = request.AddTargets()->MutableVDiskId();
         VDiskIDFromVDiskID(vdId, vdiskId);
 
         const TActorId self = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
@@ -36,21 +36,22 @@ Y_UNIT_TEST_SUITE(BSCDescribe) {
 
     TString ResponseText(NKikimrBlobStorage::TEvControllerDescribeResponse& resp) {
         TStringStream result;
-        for (auto& res : resp.GetResponse().GetResults()) {
+        for (auto& res : resp.GetResults()) {
             switch (res.GetResponseCase()) {
-                case NKikimrBlobStorage::TDescribeResponse_TResponse::kVDiskResponse:
+                case NKikimrBlobStorage::TEvControllerDescribeResponse_TResponse::kVDiskResponse:
                     result << res.GetVDiskResponse().GetResult() << Endl;
                     break;
-                case NKikimrBlobStorage::TDescribeResponse_TResponse::kPDiskResponse:
+                case NKikimrBlobStorage::TEvControllerDescribeResponse_TResponse::kPDiskResponse:
                     result << res.GetPDiskResponse().GetResult() << Endl;
                     break;
-                case NKikimrBlobStorage::TDescribeResponse_TResponse::kGroupResponse:
+                case NKikimrBlobStorage::TEvControllerDescribeResponse_TResponse::kGroupResponse:
                     result << res.GetGroupResponse().GetResult() << Endl;
                     break;
                 default:
                     break;
             }
-        }
+        } 
+
         return result.Str();
     }
 

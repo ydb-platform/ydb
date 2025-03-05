@@ -121,7 +121,6 @@ public:
             MTYPE(TBusOldFlatDescribeRequest)
             MTYPE(TBusOldFlatDescribeResponse)
             MTYPE(TBusBlobStorageConfigRequest)
-            MTYPE(TBusBlobStorageDescribeRequest)
             MTYPE(TBusNodeRegistrationRequest)
             MTYPE(TBusCmsRequest)
             MTYPE(TBusChooseProxy)
@@ -171,7 +170,6 @@ public:
             REPLY_OPTION(TBusResponse)
             REPLY_OPTION(TBusNodeRegistrationResponse)
             REPLY_OPTION(TBusCmsResponse)
-            REPLY_OPTION(TBusBlobStorageDescribeResponse)
             REPLY_OPTION(TBusSqsResponse)
             REPLY_OPTION(TBusConsoleResponse)
 
@@ -539,8 +537,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientProxyRequest<TEvBusProxy::TEvFlatDescribeRequest>(msg);
     case MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST:
         return ClientActorRequest(CreateMessageBusBlobStorageConfig, msg);
-    case MTYPE_CLIENT_BLOB_STORAGE_DESCRIBE_REQUEST:
-        return ClientActorRequest(CreateMessageBusBlobStorageDescribe, msg);
     case MTYPE_CLIENT_DRAIN_NODE:
         return ClientActorRequest(CreateMessageBusDrainNode, msg);
     case MTYPE_CLIENT_FILL_NODE:

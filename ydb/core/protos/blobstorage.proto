@@ -1320,7 +1320,7 @@ message TEvRequestBSControllerInfo {
     optional uint32 GroupId = 1;
 }
 
-message TDescribeRequest {
+message TEvControllerDescribeRequest {
     message TTarget {
         oneof Target {
             NKikimrBlobStorage.TVDiskID VDiskId = 1;
@@ -1332,7 +1332,7 @@ message TDescribeRequest {
     repeated TTarget Targets = 1;
 }
 
-message TDescribeResponse {
+message TEvControllerDescribeResponse {
     message TVDiskResponse {
         optional string Result = 1;
     }
@@ -1351,14 +1351,6 @@ message TDescribeResponse {
     }
 
     repeated TResponse Results = 1;
-}
-
-message TEvControllerDescribeRequest {
-    optional TDescribeRequest Request = 1;
-}
-
-message TEvControllerDescribeResponse {
-    optional TDescribeResponse Response = 1;
 }
 
 message TEvResponseBSControllerInfo {

@@ -23,16 +23,16 @@ namespace NKikimr::NBsController {
         }
 
         bool Execute(TTransactionContext&, const TActorContext&) override {
-            for (auto& target : Request.GetRequest().GetTargets()) {
+            for (auto& target : Request.GetTargets()) {
                 switch (target.GetTargetCase()) {
-                    case NKikimrBlobStorage::TDescribeRequest_TTarget::kVDiskId: {
+                    case NKikimrBlobStorage::TEvControllerDescribeRequest_TTarget::kVDiskId: {
                         const auto vdiskId = VDiskIDFromVDiskID(target.GetVDiskId());
 
                         HandleDescribeVDisk(vdiskId);
                         
                         break;
                     }
-                    case NKikimrBlobStorage::TDescribeRequest_TTarget::kPDiskId: {
+                    case NKikimrBlobStorage::TEvControllerDescribeRequest_TTarget::kPDiskId: {
                         auto& id = target.GetPDiskId();
                         TPDiskId pdiskId (id.GetNodeId(), id.GetPDiskId());
 
@@ -40,7 +40,7 @@ namespace NKikimr::NBsController {
 
                         break;
                     }
-                    case NKikimrBlobStorage::TDescribeRequest_TTarget::kGroupId: {
+                    case NKikimrBlobStorage::TEvControllerDescribeRequest_TTarget::kGroupId: {
                         const auto groupId = target.GetGroupId();
 
                         HandleDescribeGroup(groupId);
@@ -71,7 +71,7 @@ namespace NKikimr::NBsController {
             TStringStream ss;
 
             TFinalizer finalizer([&] {
-                auto* vdiskResponse = Response->Record.MutableResponse()->AddResults()->MutableVDiskResponse();
+                auto* vdiskResponse = Response->Record.AddResults()->MutableVDiskResponse();
                 vdiskResponse->SetResult(ss.Str());
             });
 
@@ -274,7 +274,7 @@ namespace NKikimr::NBsController {
             TStringStream ss;
 
             TFinalizer finalizer([&] {
-                auto* groupResponse = Response->Record.MutableResponse()->AddResults()->MutableGroupResponse();
+                auto* groupResponse = Response->Record.AddResults()->MutableGroupResponse();
                 groupResponse->SetResult(ss.Str());
             });
 
@@ -291,7 +291,7 @@ namespace NKikimr::NBsController {
             TStringStream ss;
 
             TFinalizer finalizer([&] {
-                auto* pdiskResponse = Response->Record.MutableResponse()->AddResults()->MutablePDiskResponse();
+                auto* pdiskResponse = Response->Record.AddResults()->MutablePDiskResponse();
                 pdiskResponse->SetResult(ss.Str());
             });
 

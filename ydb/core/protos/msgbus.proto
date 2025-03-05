@@ -463,17 +463,6 @@ message TBlobStorageConfigRequest {
     optional string SecurityToken = 3;
 }
 
-message TBlobStorageDescribeRequest {
-    optional uint32 Domain = 1;
-    optional NKikimrBlobStorage.TDescribeRequest Request = 2;
-    optional string SecurityToken = 3;
-}
-
-message TBlobStorageDescribeResponse {
-    optional NKikimrBlobStorage.TDescribeResponse Response = 1;
-    optional uint32 Status = 2; // EResponseStatus from ydb/core/client/base/msgbus.h
-}
-
 message TDrainNodeRequest {
     optional uint32 NodeID = 1;
     optional string SecurityToken = 5;

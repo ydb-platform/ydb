@@ -11,13 +11,14 @@ namespace {
     using namespace NYql::NDq;
 
     THashSet<TString> PgInequalityPreds = {
-        "<", "<=", ">", ">="};
+        "<", "<=", ">", ">=", "="};
 
     THashMap<TString, EInequalityPredicateType> StringToInequalityPredicateMap{
         {"<", EInequalityPredicateType::Less},
         {"<=", EInequalityPredicateType::LessOrEqual},
         {">", EInequalityPredicateType::Greater},
-        {">=", EInequalityPredicateType::GreaterOrEqual}};
+        {">=", EInequalityPredicateType::GreaterOrEqual},
+        {"=", EInequalityPredicateType::Equal}};
 
     /**
      * Check if a callable is an attribute of some table
@@ -76,6 +77,8 @@ namespace {
           return estimator->EstimateGreater<T>(val);
         case EInequalityPredicateType::GreaterOrEqual:
           return estimator->EstimateGreaterOrEqual<T>(val);
+        case EInequalityPredicateType::Equal:
+          return estimator->EstimateEqual<T>(val);
       }
       return std::nullopt;
     }
@@ -91,6 +94,8 @@ namespace {
           return EInequalityPredicateType::GreaterOrEqual;
         case EInequalityPredicateType::GreaterOrEqual:
           return EInequalityPredicateType::LessOrEqual;
+        default:
+          Y_ABORT();
       }
     }
 
@@ -136,7 +141,7 @@ namespace {
       return std::nullopt;
     }
 
-    std::optional<ui32> EstimateCountMin(NYql::NNodes::TExprBase maybeLiteral, TString columnType,
+    [[maybe_unused]] std::optional<ui32> EstimateCountMin(NYql::NNodes::TExprBase maybeLiteral, TString columnType,
                                          const std::shared_ptr<NKikimr::TCountMinSketch>& countMinSketch) {
       if (auto maybeJust = maybeLiteral.Maybe<NYql::NNodes::TCoJust>()) {
         maybeLiteral = maybeJust.Cast().Input();
@@ -287,14 +292,14 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(cons
         return DefaultSelectivity(Stats, attributeName);
       }
 
-      if (auto countMinSketch = Stats->ColumnStatistics->Data[attributeName].CountMinSketch;
-          countMinSketch != nullptr) {
-        auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
-        std::optional<ui32> countMinEstimation = EstimateCountMin(right, columnType, countMinSketch);
-        if (!countMinEstimation.has_value()) {
+      if (auto histogramEstimator = Stats->ColumnStatistics->Data[attributeName].EqWidthHistogramEstimator) {
+        const auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
+        std::optional<ui64> estimation =
+            EstimateInequalityPredicateByHistogram(right, columnType, histogramEstimator, EInequalityPredicateType::Equal);
+        if (!estimation.has_value()) {
           return DefaultSelectivity(Stats, attributeName);
         }
-        return countMinEstimation.value() / Stats->Nrows;
+        return estimation.value() / Stats->Nrows;
       }
 
       return DefaultSelectivity(Stats, attributeName);

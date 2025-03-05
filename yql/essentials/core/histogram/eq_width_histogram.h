@@ -133,6 +133,27 @@ class TEqWidthHistogram {
 
   // Returns a number of buckets in a histogram.
   ui32 GetNumBuckets() const { return buckets.size(); }
+
+  template <typename T>
+  ui32 GetBucketWidth() const {
+    Y_ASSERT(GetNumBuckets());
+    if (GetNumBuckets() == 1) {
+      return std::max(static_cast<ui32>(LoadFrom<T>(buckets.front().start)), 1U);
+    } else {
+      return std::max(static_cast<ui32>(LoadFrom<T>(buckets[1].start) - LoadFrom<T>(buckets[0].start)), 1U);
+    }
+  }
+
+  template <>
+  ui32 GetBucketWidth<TStringPrefix>() const {
+    return 26;
+  }
+
+  template <>
+  ui32 GetBucketWidth<double>() const {
+    return 1;
+  }
+
   // Returns histogram type.
   EHistogramValueType GetType() const { return valueType; }
   // Returns a number of elements in a bucket by the given `index`.
@@ -223,6 +244,13 @@ class TEqWidthHistogramEstimator {
   template <typename T>
   ui64 EstimateGreater(T val) const {
     return EstimateNotEqual<T>(val, suffixSum);
+  }
+
+  template <typename T>
+  ui64 EstimateEqual(T val) const {
+    const auto index = histogram->FindBucketIndex(val);
+    // Assuming uniform distribution.
+    return std::max(1U, static_cast<ui32>(histogram->GetNumElementsInBucket(index) / histogram->template GetBucketWidth<T>()));
   }
 
   // Returns the total number elements in histogram.

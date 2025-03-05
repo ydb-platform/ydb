@@ -3,6 +3,8 @@ import contextlib
 import logging
 import os
 
+import six
+
 import pytest
 
 from ydb import Driver, DriverConfig, SessionPool
@@ -105,15 +107,35 @@ def ydb_database_ctx(ydb_cluster, database_path, node_count=1, timeout_seconds=2
     logger.debug("destroy database %s: database down", database_path)
 
 
-@pytest.fixture(scope='function')
-def ydb_database(ydb_cluster, ydb_root, ydb_safe_test_name):
-    database = os.path.join(ydb_root, ydb_safe_test_name)
+def _ydb_database(cluster, database_path_base, unique_name):
+    database = os.path.join(database_path_base, unique_name)
 
-    with ydb_database_ctx(ydb_cluster, database):
+    with ydb_database_ctx(cluster, database):
         yield database
 
-
 @pytest.fixture(scope='function')
+def ydb_database(ydb_cluster, ydb_root, ydb_safe_test_name):
+    if six.PY3:
+        yield from _ydb_database(ydb_cluster, ydb_root, ydb_safe_test_name)
+    else:  # PY2
+        gen = _ydb_database(ydb_cluster, ydb_root, ydb_safe_test_name)
+        for i in next(gen):
+            yield i
+
+
+@pytest.fixture(scope='module')
+def ydb_database_module_scope(ydb_cluster, ydb_root, request):
+    # make unique database name from the test module name, ensuring that
+    # it does not contains the dots
+    unique_name = request.module.__name__.split('.')[-1]
+    if six.PY3:
+        yield from _ydb_database(ydb_cluster, ydb_root, unique_name)
+    else:  # PY2
+        for i in _ydb_database(ydb_cluster, ydb_root, unique_name):
+            yield i
+
+
+@pytest.fixture(scope='module')
 def ydb_endpoint(ydb_cluster):
     return "%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port)
 

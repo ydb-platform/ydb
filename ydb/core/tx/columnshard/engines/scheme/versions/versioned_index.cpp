@@ -6,6 +6,15 @@
 
 namespace NKikimr::NOlap {
 
+void TVersionedIndex::RemoveVersion(const ui64 version) {
+    auto itVersion = SnapshotByVersion.find(version);
+    AFL_VERIFY(itVersion != SnapshotByVersion.end());
+    auto itSnap = Snapshots.find(itVersion->second->GetSnapshot());
+    AFL_VERIFY(itSnap != Snapshots.end());
+    SnapshotByVersion.erase(itVersion);
+    Snapshots.erase(itSnap);
+}
+
 const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo) {
     if (Snapshots.empty()) {
         PrimaryKey = indexInfo->GetPrimaryKey();
@@ -26,7 +35,14 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCa
     }
     auto itSnap = Snapshots.emplace(snapshot, itVersion.first->second);
     Y_ABORT_UNLESS(itSnap.second);
+    ui64 oldLastVersion = LastSchemaVersion;
     LastSchemaVersion = std::max(newVersion, LastSchemaVersion);
+    if (LastSchemaVersion != oldLastVersion) {
+        if (oldLastVersion != 0) {
+            VersionCounters->VersionRemoveRef(oldLastVersion, "last");
+        }
+        VersionCounters->VersionAddRef(LastSchemaVersion, "last");
+    }
     return &itSnap.first->second->GetIndexInfo();
 }
 

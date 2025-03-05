@@ -1030,7 +1030,9 @@ private:
         TTxn::TKeysSet keys;
         Txn.GetKeys(keys);
         size_t resultsCounter = 0U, paramsCounter = 0U;
-        if (keys.size() < 2U) {
+        if (keys.empty()) {
+            return Txn.MakeQueryWithParams(sql, {}, {}, params, &resultsCounter, &paramsCounter);
+        } else if (1U == keys.size()) {
             std::ostringstream where;
             where << " where ";
             const auto& keyParamName = MakeSimplePredicate(keys.cbegin()->first, keys.cbegin()->second, where, params);
@@ -1113,7 +1115,7 @@ private:
         if (rec.id())
             return "requested id isn't supported";
 
-        Lease = Stuff->Lease.fetch_sub(1LL) - 1LL;
+        Lease = Stuff->Lease.fetch_add(1LL) + 1LL;
         return {};
     }
 
@@ -1318,6 +1320,9 @@ template std::string AddParam<i64>(const std::string_view& name, NYdb::TParamsBu
 template std::string AddParam<ui64>(const std::string_view& name, NYdb::TParamsBuilder& params, const ui64& value, size_t* counter);
 
 std::string MakeSimplePredicate(const std::string_view& key, const std::string_view& rangeEnd, std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter) {
+    if (key.empty())
+        return {};
+
     const auto& keyParamName = AddParam("Key", params, key, paramsCounter);
     if (rangeEnd.empty())
         sql << keyParamName << " = `key`";

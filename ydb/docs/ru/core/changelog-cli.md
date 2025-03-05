@@ -8,7 +8,7 @@
 
 ### Функциональность
 
-* Добавлена поддержка [топиков](./concepts/datamodel/topic.md) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и `{{ ydb-cli }} tools restore`.
+* Добавлена поддержка [топиков](./concepts/topic.md) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и `{{ ydb-cli }} tools restore`.
 * Добавлена поддержка [узлов координации](./concepts/datamodel/coordination-node.md) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и `{{ ydb-cli }} tools restore`.
 * Добавлена новая команда `{{ ydb-cli }} workload log import generator`.
 * Добавлены новые глобальные опции для пользовательских сертификатов при соединении через SSL/TLS:

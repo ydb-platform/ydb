@@ -6,7 +6,7 @@ Released on March 5, 2025. To update to version **2.20.0**, select the [Download
 
 ### Features
 
-* Added [topics](./concepts/datamodel/topic.md) support in `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md). In this release, only the settings of the topics are retained; messages are not included in the backup.
+* Added [topics](./concepts/topic.md) support in `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md). In this release, only the settings of the topics are retained; messages are not included in the backup.
 * Added [coordination nodes](./concepts/datamodel/coordination-node.md)  support in `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md).
 * Added `{{ ydb-cli }} workload log import generator` command.
 * Added new global options for client certificates in SSL/TLS connections:

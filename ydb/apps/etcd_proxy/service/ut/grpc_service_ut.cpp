@@ -75,7 +75,7 @@ public:
         const auto driver = NYdb::TDriver(config);
         stuff->Client = std::make_unique<NYdb::NQuery::TQueryClient>(driver);
         stuff->Revision.store(1LL);
-        stuff->Lease.store(1LL);
+        stuff->Lease.store(-1LL);
     }
 
     ui16 GetPort() {

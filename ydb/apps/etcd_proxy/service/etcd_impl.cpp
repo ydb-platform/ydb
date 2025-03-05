@@ -1089,7 +1089,7 @@ private:
         if (rec.id())
             return "requested id isn't supported";
 
-        Lease = Stuff->Lease.fetch_add(1LL) + 1LL;
+        Lease = Stuff->Lease.fetch_sub(1LL) - 1LL;
         return {};
     }
 

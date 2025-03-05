@@ -1,6 +1,7 @@
 #include "ut_helpers/ut_backup_restore_common.h"
 
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 
@@ -9,21 +10,17 @@
 
 #include <library/cpp/testing/hook/hook.h>
 
-#include <aws/core/Aws.h>
-
 using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NWrappers::NTestHelpers;
 
 namespace {
 
-Aws::SDKOptions Options;
-
 Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
-    Aws::InitAPI(Options);
+    NKikimr::InitAwsAPI();
 }
 
 Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
-    Aws::ShutdownAPI(Options);
+    NKikimr::ShutdownAwsAPI();
 }
 
 }

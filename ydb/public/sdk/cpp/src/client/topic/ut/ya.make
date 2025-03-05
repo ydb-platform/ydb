@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
+REQUIREMENTS(ram:32)
+
 INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)

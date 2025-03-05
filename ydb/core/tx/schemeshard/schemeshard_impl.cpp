@@ -63,6 +63,7 @@ bool ResolvePoolNames(
 
         result.emplace_back();
         result.back().SetStoragePoolName(poolIt->GetName());
+        result.back().SetStoragePoolKind(poolIt->GetKind());
     }
 
     channelsBinding.swap(result);
@@ -533,8 +534,8 @@ bool TSchemeShard::ApplyStorageConfig(
         return pools.cend();
     };
 
-    auto allocateChannel = [&] (const TString& poolName, bool reuseExisting = true) -> ui32 {
-        auto it = reverseBinding.find(poolName);
+    auto allocateChannel = [&] (const TStoragePool& pool, bool reuseExisting = true) -> ui32 {
+        auto it = reverseBinding.find(pool.GetName());
         if (it != reverseBinding.end()) {
             if (reuseExisting) {
                 return it->second[0];
@@ -543,8 +544,9 @@ bool TSchemeShard::ApplyStorageConfig(
 
         ui32 channel = channelsBinding.size();
         channelsBinding.emplace_back();
-        channelsBinding.back().SetStoragePoolName(poolName);
-        reverseBinding[poolName].emplace_back(channel);
+        channelsBinding.back().SetStoragePoolName(pool.GetName());
+        channelsBinding.back().SetStoragePoolKind(pool.GetKind());
+        reverseBinding[pool.GetName()].emplace_back(channel);
         return channel;
     };
 
@@ -561,6 +563,7 @@ bool TSchemeShard::ApplyStorageConfig(
 
         channelsBinding.emplace_back();
         channelsBinding.back().SetStoragePoolName(sysLogPool->GetName());
+        channelsBinding.back().SetStoragePoolKind(sysLogPool->GetKind());
     }
 
     if (channelsBinding.size() < 2) {
@@ -568,7 +571,7 @@ bool TSchemeShard::ApplyStorageConfig(
         auto logPool = resolve(storagePools, storageConfig.GetLog());
         LOCAL_CHECK(logPool != storagePools.end(), "unable determine pool for log storage");
 
-        ui32 channel = allocateChannel(logPool->GetName());
+        ui32 channel = allocateChannel(*logPool);
         Y_ABORT_UNLESS(channel == 1, "Expected to allocate log channel, not %" PRIu32, channel);
     }
 
@@ -582,7 +585,7 @@ bool TSchemeShard::ApplyStorageConfig(
         auto dataPool = resolve(storagePools, storageConfig.GetData());
         LOCAL_CHECK(dataPool != storagePools.end(), "definition of data storage present but unable determine pool for it");
 
-        ui32 channel = allocateChannel(dataPool->GetName());
+        ui32 channel = allocateChannel(*dataPool);
         room.AssignChannel(NKikimrStorageSettings::TChannelPurpose::Data, channel);
     }
 
@@ -595,7 +598,7 @@ bool TSchemeShard::ApplyStorageConfig(
         LOCAL_CHECK(externalChannelsCount < Max<ui8>(), "more than 255 external channels requested");
         for (ui32 i = 0; i < externalChannelsCount; ++i) {
             // In case if we have 1 external channel, leave old behavior untouched and reuse channel by pool's name
-            ui32 channel = allocateChannel(externalPool->GetName(), externalChannelsCount == 1 ? true : false);
+            ui32 channel = allocateChannel(*externalPool, externalChannelsCount == 1 ? true : false);
             room.AssignChannel(NKikimrStorageSettings::TChannelPurpose::External, channel);
         }
     }
@@ -2254,7 +2257,7 @@ void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pa
         }
 
         if (DataErasureManager->Remove(pathId)) {
-            db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::WaitingDataErasureTenants::Status>(static_cast<ui32>(TDataErasureManager::EStatus::COMPLETED));
+            db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::WaitingDataErasureTenants::Status>(EDataErasureStatus::COMPLETED);
         }
 
         db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Delete();
@@ -7091,7 +7094,9 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
                 UpdateShardMetrics(p.ShardIdx, it->second);
                 dataErasureShards.push_back(p.ShardIdx);
             }
-            Execute(CreateTxAddEntryToDataErasure(dataErasureShards), this->ActorContext());
+            if (DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
+                Execute(CreateTxAddEntryToDataErasure(dataErasureShards), this->ActorContext());
+            }
         }
 
         std::vector<TShardIdx> cancelDataErasureShards;
@@ -7101,7 +7106,9 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
                 OnShardRemoved(p.ShardIdx);
                 cancelDataErasureShards.push_back(p.ShardIdx);
             }
-            Execute(CreateTxCancelDataErasureShards(cancelDataErasureShards), this->ActorContext());
+            if (DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
+                Execute(CreateTxCancelDataErasureShards(cancelDataErasureShards), this->ActorContext());
+            }
         }
     }
 
@@ -7614,20 +7621,20 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvDataErasureInfoRequest::TPtr& ev, c
     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
         "Handle TEvDataErasureInfoRequest, at schemeshard: " << TabletID());
 
-    TEvSchemeShard::TEvDataErasureInfoResponse::EStatus status = TEvSchemeShard::TEvDataErasureInfoResponse::EStatus::UNSPECIFIED;
+    NKikimrScheme::TEvDataErasureInfoResponse::EStatus status = NKikimrScheme::TEvDataErasureInfoResponse::UNSPECIFIED;
 
     switch (DataErasureManager->GetStatus()) {
-    case TDataErasureManager::EStatus::UNSPECIFIED:
-        status = TEvSchemeShard::TEvDataErasureInfoResponse::EStatus::UNSPECIFIED;
+    case EDataErasureStatus::UNSPECIFIED:
+        status = NKikimrScheme::TEvDataErasureInfoResponse::UNSPECIFIED;
         break;
-    case TDataErasureManager::EStatus::COMPLETED:
-        status = TEvSchemeShard::TEvDataErasureInfoResponse::EStatus::COMPLETED;
+    case EDataErasureStatus::COMPLETED:
+        status = NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED;
         break;
-    case TDataErasureManager::EStatus::IN_PROGRESS:
-        status = TEvSchemeShard::TEvDataErasureInfoResponse::EStatus::IN_PROGRESS_TENANT;
+    case EDataErasureStatus::IN_PROGRESS:
+        status = NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS_TENANT;
         break;
-    case TDataErasureManager::EStatus::IN_PROGRESS_BSC:
-        status = TEvSchemeShard::TEvDataErasureInfoResponse::EStatus::IN_PROGRESS_BSC;
+    case EDataErasureStatus::IN_PROGRESS_BSC:
+        status = NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS_BSC;
         break;
     }
     ctx.Send(ev->Sender, new TEvSchemeShard::TEvDataErasureInfoResponse(DataErasureManager->GetGeneration(), status));

@@ -37,7 +37,7 @@ When escaping special characters in a regular expression, be sure to use the sec
 
 You can enable the case-insensitive mode by specifying, at the beginning of the regular expression, the flag `(?i)`.
 
-### Examples
+#### Examples
 
 ```yql
 $value = "xaaxaaxaa";
@@ -82,7 +82,7 @@ Use the MultiGrep/MultiMatch functions to optimize the query execution speed. Be
 
 When you call MultiGrep/MultiMatch, regular expressions are passed one per line using [multiline string literals](../../syntax/expressions.md#multiline-string-literals):
 
-### Examples
+#### Examples
 
 ```yql
 $multi_match = Pire::MultiMatch(@@a.*

@@ -6,11 +6,11 @@ TDataErasureManager::TDataErasureManager(TSchemeShard* const schemeShard)
     : SchemeShard(schemeShard)
 {}
 
-TDataErasureManager::EStatus TDataErasureManager::GetStatus() const {
+EDataErasureStatus TDataErasureManager::GetStatus() const {
     return Status;
 }
 
-void TDataErasureManager::SetStatus(const EStatus& status) {
+void TDataErasureManager::SetStatus(const EDataErasureStatus& status) {
     Status = status;
 }
 

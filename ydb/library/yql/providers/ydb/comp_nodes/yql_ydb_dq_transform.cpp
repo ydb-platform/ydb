@@ -51,8 +51,8 @@ private:
 };
 
 TTaskTransformFactory CreateYdbDqTaskTransformFactory() {
-    return [] (const THashMap<TString, TString>& taskParams, const IFunctionRegistry* funcRegistry) -> TCallableVisitFuncProvider {
-        return TYdbDqTaskTransform(taskParams, *funcRegistry);
+    return [] (const TTaskTransformArguments& args, const IFunctionRegistry* funcRegistry) -> TCallableVisitFuncProvider {
+        return TYdbDqTaskTransform(args.TaskParams, *funcRegistry);
     };
 }
 

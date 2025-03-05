@@ -6,6 +6,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/auditlog_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
@@ -17,8 +18,6 @@
 
 #include <library/cpp/testing/hook/hook.h>
 
-#include <aws/core/Aws.h>
-
 using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NWrappers::NTestHelpers;
 
@@ -26,14 +25,12 @@ using TTablesWithAttrs = TVector<std::pair<TString, TMap<TString, TString>>>;
 
 namespace {
 
-    Aws::SDKOptions Options;
-
     Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
-        Aws::InitAPI(Options);
+        NKikimr::InitAwsAPI();
     }
 
     Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
-        Aws::ShutdownAPI(Options);
+        NKikimr::ShutdownAwsAPI();
     }
 
     void Run(TTestBasicRuntime& runtime, TTestEnv& env, const std::variant<TVector<TString>, TTablesWithAttrs>& tablesVar, const TString& request,
@@ -2354,7 +2351,7 @@ partitioning_settings {
 
     Y_UNIT_TEST(Checksums) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnablePermissionsExport(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnablePermissionsExport(true).EnableChecksumsExport(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -2405,7 +2402,7 @@ partitioning_settings {
 
     Y_UNIT_TEST(EnableChecksumsPersistance) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(true));
         ui64 txId = 100;
     
         // Create test table
@@ -2474,7 +2471,7 @@ partitioning_settings {
 
     Y_UNIT_TEST(ChecksumsWithCompression) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -2634,7 +2631,7 @@ attributes {
             }
         )", port);
 
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(true));
         Run(runtime, env, TVector<TString>{
             R"(
                 Name: "Table"

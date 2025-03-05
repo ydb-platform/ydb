@@ -198,6 +198,7 @@ public:
             if (data.GetData().template Is<NKikimrTxDataShard::TEvKqpInputActorResultInfo>()) {
                 NKikimrTxDataShard::TEvKqpInputActorResultInfo info;
                 YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
+                NDataIntegrity::LogIntegrityTrails("InputActorResult", Request.UserTraceId, TxId, info, TlsActivationContext->AsActorContext());
                 for (auto& lock : info.GetLocks()) {
                     if (!TxManager) {
                         Locks.push_back(lock);
@@ -216,6 +217,7 @@ public:
             } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
                 NKikimrKqp::TEvKqpOutputActorResultInfo info;
                 YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
+                NDataIntegrity::LogIntegrityTrails("OutputActorResult", Request.UserTraceId, TxId, info, TlsActivationContext->AsActorContext());
                 for (auto& lock : info.GetLocks()) {
                     if (!TxManager) {
                         Locks.push_back(lock);
@@ -298,7 +300,7 @@ public:
     STATEFN(FinalizeState) {
         try {
             switch(ev->GetTypeRewrite()) {
-                hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(TEvKqp::TEvAbortExecution, HandleFinalize);
                 hFunc(TEvKqpBuffer::TEvResult, HandleFinalize);
                 hFunc(TEvents::TEvUndelivered, HandleFinalize);
 
@@ -323,6 +325,14 @@ public:
             InternalError(e.what());
         }
         ReportEventElapsedTime();
+    }
+
+    void HandleFinalize(TEvKqp::TEvAbortExecution::TPtr& ev) {
+        if (IsCancelAfterAllowed(ev)) {
+            TBase::HandleAbortExecution(ev);
+        } else {
+            LOG_D("Got TEvAbortExecution from : " << ev->Sender << " but cancelation is not alowed");
+        }
     }
 
     void HandleFinalize(TEvKqpBuffer::TEvResult::TPtr& ev) {
@@ -498,6 +508,7 @@ private:
         TShardState* shardState = ShardStates.FindPtr(shardId);
         YQL_ENSURE(shardState, "Unexpected propose result from unknown tabletId " << shardId);
 
+        NDataIntegrity::LogIntegrityTrails("Prepare", Request.UserTraceId, ev, TlsActivationContext->AsActorContext());
         LOG_D("Got propose result, shard: " << shardId << ", status: "
             << NKikimrTxDataShard::TEvProposeTransactionResult_EStatus_Name(res->GetStatus())
             << ", error: " << res->GetError());
@@ -567,6 +578,7 @@ private:
         NYql::TIssues issues;
         NYql::IssuesFromMessage(res->Record.GetIssues(), issues);
 
+        NDataIntegrity::LogIntegrityTrails("Prepare", Request.UserTraceId, ev, TlsActivationContext->AsActorContext());
         LOG_D("Recv EvWriteResult (prepare) from ShardID=" << shardId
             << ", Status=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
             << ", TxId=" << ev->Get()->Record.GetTxId()
@@ -1097,7 +1109,7 @@ private:
             transaction.SetFlags(TEvTxProxy::TEvProposeTransaction::FlagVolatile);
         }
 
-        NDataIntegrity::LogIntegrityTrails("PlannedTx", Request.UserTraceId, TxId, {}, TlsActivationContext->AsActorContext());
+        NDataIntegrity::LogIntegrityTrails("PlannedTx", "", Request.UserTraceId, TxId, {}, TlsActivationContext->AsActorContext());
 
         LOG_D("Execute planned transaction, coordinator: " << TxCoordinator << " for " << affectedSet.size() << "shards");
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ev.Release(), TxCoordinator, /* subscribe */ true));
@@ -1238,6 +1250,7 @@ private:
         NYql::TIssues issues;
         NYql::IssuesFromMessage(res->Record.GetIssues(), issues);
 
+        NDataIntegrity::LogIntegrityTrails("Execute", Request.UserTraceId, ev, TlsActivationContext->AsActorContext());
         LOG_D("Recv EvWriteResult (execute) from ShardID=" << shardId
             << ", Status=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
             << ", TxId=" << ev->Get()->Record.GetTxId()
@@ -1309,6 +1322,7 @@ private:
         TShardState* shardState = ShardStates.FindPtr(shardId);
         YQL_ENSURE(shardState);
 
+        NDataIntegrity::LogIntegrityTrails("Execute", Request.UserTraceId, ev, TlsActivationContext->AsActorContext());
         LOG_D("Got propose result, shard: " << shardId << ", status: "
             << NKikimrTxDataShard::TEvProposeTransactionResult_EStatus_Name(res->GetStatus())
             << ", error: " << res->GetError());
@@ -1712,7 +1726,7 @@ private:
 
     void ExecuteDatashardTransaction(ui64 shardId, NKikimrTxDataShard::TKqpTransaction& kqpTx, const bool isOlap)
     {
-        YQL_ENSURE(!TxManager);
+        YQL_ENSURE(ReadOnlyTx || !TxManager);
         TShardState shardState;
         shardState.State = ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
         shardState.DatashardState.ConstructInPlace();
@@ -1799,7 +1813,8 @@ private:
                     flags));
             }
 
-            NDataIntegrity::LogIntegrityTrails("DatashardTx", Request.UserTraceId, TxId, shardId, TlsActivationContext->AsActorContext());
+            NDataIntegrity::LogIntegrityTrails("DatashardTx", dataTransaction.GetKqpTransaction().GetLocks().ShortDebugString(), 
+                Request.UserTraceId, TxId, shardId, TlsActivationContext->AsActorContext());
 
             ResponseEv->Orbit.Fork(evData->Orbit);
             ev = std::move(evData);
@@ -1835,7 +1850,8 @@ private:
 
         auto traceId = ExecuterSpan.GetTraceId();
 
-        NDataIntegrity::LogIntegrityTrails("EvWriteTx", Request.UserTraceId, TxId, shardId, TlsActivationContext->AsActorContext());
+        NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWriteTransaction->Record.GetLocks().ShortDebugString(), 
+            Request.UserTraceId, TxId, shardId, TlsActivationContext->AsActorContext());
 
         auto shardsToString = [](const auto& shards) {
             TStringBuilder builder;
@@ -2027,7 +2043,7 @@ private:
                             YQL_ENSURE(false, "unknown source type");
                     }
                 } else if ((AllowOlapDataQuery || StreamResult) && stageInfo.Meta.IsOlap() && stage.SinksSize() == 0) {
-                    BuildScanTasksFromShards(stageInfo);
+                    BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination());
                 } else if (stageInfo.Meta.IsSysView()) {
                     BuildSysViewScanTasks(stageInfo);
                 } else if (stageInfo.Meta.ShardOperations.empty() || stage.SinksSize() > 0) {
@@ -2041,7 +2057,7 @@ private:
                 }
 
                 TasksGraph.GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
-                BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ TasksGraph.GetMeta().AllowWithSpilling);
+                BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ TasksGraph.GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
             }
 
             ResponseEv->InitTxResult(tx.Body);
@@ -2769,13 +2785,14 @@ private:
 
         // error
         LOG_T("Updating channels after the creation of compute actors");
+        Y_ENSURE(Planner);
         THashMap<TActorId, THashSet<ui64>> updates;
         for (ui64 taskId : ComputeTasks) {
             auto& task = TasksGraph.GetTask(taskId);
             if (task.ComputeActorId)
-                CollectTaskChannelsUpdates(task, updates);
+                Planner->CollectTaskChannelsUpdates(task, updates);
         }
-        PropagateChannelsUpdates(updates);
+        Planner->PropagateChannelsUpdates(updates);
     }
 
     void ExecuteTopicTabletTransactions(TTopicTabletTxs& topicTxs) {

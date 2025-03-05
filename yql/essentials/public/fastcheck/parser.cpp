@@ -1,4 +1,5 @@
 #include "check_runner.h"
+#include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>

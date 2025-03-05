@@ -22,6 +22,7 @@ message TStartOperationRequest {
     string SessionId = 3;
     optional string IdempotencyKey = 4;
     uint32 NumRetries = 5;
+    TClusterConnection ClusterConnection = 6;
 }
 
 message TStartOperationResponse {

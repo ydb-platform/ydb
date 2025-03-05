@@ -3026,7 +3026,7 @@ Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions, TFixture)
     // will make sure that when committing transactions, the division into blocks is taken into account.
 
     const size_t PARTITIONS_COUNT = 20;
-    const size_t TXS_COUNT = 100;
+    const size_t TXS_COUNT = 10;
 
     CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
 

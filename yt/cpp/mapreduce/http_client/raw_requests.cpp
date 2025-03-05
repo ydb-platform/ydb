@@ -43,7 +43,7 @@ TOperationAttributes ParseOperationAttributes(const TNode& node)
     if (auto typeNode = mapNode.FindPtr("type")) {
         result.Type = FromString<EOperationType>(typeNode->AsString());
     } else if (auto operationTypeNode = mapNode.FindPtr("operation_type")) {
-        // COMPAT(levysotsky): "operation_type" is a deprecated synonym for "type".
+        // COMPAT(levysotsky): (YT-24340) "operation_type" is a deprecated synonym for "type".
         // This branch should be removed when all clusters are updated.
         result.Type = FromString<EOperationType>(operationTypeNode->AsString());
     }

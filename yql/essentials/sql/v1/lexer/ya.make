@@ -3,10 +3,6 @@ LIBRARY()
 PEERDIR(
     yql/essentials/core/issue/protos
     yql/essentials/sql/settings
-    yql/essentials/sql/v1/lexer/antlr3
-    yql/essentials/sql/v1/lexer/antlr3_ansi
-    yql/essentials/sql/v1/lexer/antlr4
-    yql/essentials/sql/v1/lexer/antlr4_ansi
 )
 
 SRCS(

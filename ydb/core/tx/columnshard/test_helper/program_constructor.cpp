@@ -13,7 +13,8 @@ ui32 TProgramProtoBuilder::AddConstant(const TString& bytes) {
     return CurrentGenericColumnId;
 }
 
-ui32 TProgramProtoBuilder::AddOperation(const NKikimrSSA::TProgram::TAssignment::EFunction op, const std::vector<ui32>& arguments) {
+ui32 TProgramProtoBuilder::AddOperation(
+    const NKikimrSSA::TProgram::TAssignment::EFunction op, const std::vector<ui32>& arguments) {
     auto* command = Proto.AddCommand();
     auto* functionProto = command->MutableAssign()->MutableFunction();
     for (auto&& i : arguments) {
@@ -39,6 +40,18 @@ ui32 TProgramProtoBuilder::AddOperation(const NYql::TKernelRequestBuilder::EBina
     for (auto&& i : arguments) {
         functionProto->AddArguments()->SetId(i);
     }
+    command->MutableAssign()->MutableColumn()->SetId(++CurrentGenericColumnId);
+    return CurrentGenericColumnId;
+}
+
+ui32 TProgramProtoBuilder::AddOperation(const TString& kernelName, const std::vector<ui32>& arguments) {
+    auto* command = Proto.AddCommand();
+    auto* functionProto = command->MutableAssign()->MutableFunction();
+    for (auto&& i : arguments) {
+        functionProto->AddArguments()->SetId(i);
+    }
+    functionProto->SetId(NKikimrSSA::TProgram::TAssignment::FUNC_CMP_GREATER_EQUAL);
+    functionProto->SetKernelName(kernelName);
     command->MutableAssign()->MutableColumn()->SetId(++CurrentGenericColumnId);
     return CurrentGenericColumnId;
 }

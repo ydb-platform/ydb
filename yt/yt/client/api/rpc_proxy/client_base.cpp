@@ -137,9 +137,7 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
 
     req->set_type(static_cast<NProto::ETransactionType>(type));
     req->set_timeout(ToProto(timeout));
-    if (options.Deadline) {
-        req->set_deadline(ToProto(*options.Deadline));
-    }
+    YT_OPTIONAL_SET_PROTO(req, deadline, options.Deadline);
     if (options.Id) {
         ToProto(req->mutable_id(), options.Id);
     }
@@ -251,9 +249,7 @@ TFuture<TYsonString> TClientBase::GetNode(
         req->mutable_legacy_attributes()->set_all(true);
     }
 
-    if (options.MaxSize) {
-        req->set_max_size(*options.MaxSize);
-    }
+    YT_OPTIONAL_SET_PROTO(req, max_size, options.MaxSize);
 
     ToProto(req->mutable_complexity_limits(), options.ComplexityLimits);
 
@@ -289,9 +285,7 @@ TFuture<TYsonString> TClientBase::ListNode(
         req->mutable_legacy_attributes()->set_all(true);
     }
 
-    if (options.MaxSize) {
-        req->set_max_size(*options.MaxSize);
-    }
+    YT_OPTIONAL_SET_PROTO(req, max_size, options.MaxSize);
 
     ToProto(req->mutable_complexity_limits(), options.ComplexityLimits);
 
@@ -423,12 +417,8 @@ TFuture<TLockNodeResult> TClientBase::LockNode(
     req->set_mode(ToProto(mode));
 
     req->set_waitable(options.Waitable);
-    if (options.ChildKey) {
-        req->set_child_key(*options.ChildKey);
-    }
-    if (options.AttributeKey) {
-        req->set_attribute_key(*options.AttributeKey);
-    }
+    YT_OPTIONAL_TO_PROTO(req, child_key, options.ChildKey);
+    YT_OPTIONAL_TO_PROTO(req, attribute_key, options.AttributeKey);
 
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
@@ -642,12 +632,8 @@ TFuture<IFileReaderPtr> TClientBase::CreateFileReader(
     InitStreamingRequest(*req);
 
     req->set_path(path);
-    if (options.Offset) {
-        req->set_offset(*options.Offset);
-    }
-    if (options.Length) {
-        req->set_length(*options.Length);
-    }
+    YT_OPTIONAL_SET_PROTO(req, offset, options.Offset);
+    YT_OPTIONAL_SET_PROTO(req, length, options.Length);
     if (options.Config) {
         req->set_config(ConvertToYsonString(*options.Config).ToString());
     }
@@ -691,12 +677,8 @@ IJournalReaderPtr TClientBase::CreateJournalReader(
 
     req->set_path(path);
 
-    if (options.FirstRowIndex) {
-        req->set_first_row_index(*options.FirstRowIndex);
-    }
-    if (options.RowCount) {
-        req->set_row_count(*options.RowCount);
-    }
+    YT_OPTIONAL_SET_PROTO(req, first_row_index, options.FirstRowIndex);
+    YT_OPTIONAL_SET_PROTO(req, row_count, options.RowCount);
     if (options.Config) {
         req->set_config(ConvertToYsonString(*options.Config).ToString());
     }
@@ -868,9 +850,7 @@ TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
     req->set_keep_missing_rows(options.KeepMissingRows);
     req->set_enable_partial_result(options.EnablePartialResult);
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
-    if (options.UseLookupCache) {
-        req->set_use_lookup_cache(*options.UseLookupCache);
-    }
+    YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
 
     req->SetMultiplexingBand(options.MultiplexingBand);
     req->set_multiplexing_band(static_cast<NProto::EMultiplexingBand>(options.MultiplexingBand));
@@ -920,9 +900,7 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
     req->set_keep_missing_rows(options.KeepMissingRows);
     req->set_enable_partial_result(options.EnablePartialResult);
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
-    if (options.UseLookupCache) {
-        req->set_use_lookup_cache(*options.UseLookupCache);
-    }
+    YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
 
     req->SetMultiplexingBand(options.MultiplexingBand);
     req->set_multiplexing_band(static_cast<NProto::EMultiplexingBand>(options.MultiplexingBand));
@@ -969,9 +947,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
         }
         protoSubrequest->set_keep_missing_rows(subrequestOptions.KeepMissingRows);
         protoSubrequest->set_enable_partial_result(subrequestOptions.EnablePartialResult);
-        if (subrequestOptions.UseLookupCache) {
-            protoSubrequest->set_use_lookup_cache(*subrequestOptions.UseLookupCache);
-        }
+        YT_OPTIONAL_SET_PROTO(protoSubrequest, use_lookup_cache, subrequestOptions.UseLookupCache);
 
         auto rowset = SerializeRowset(
             subrequest.NameTable,
@@ -1079,30 +1055,22 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     // TODO(lukyan): Move to FillRequestBySelectRowsOptionsBase
     req->SetTimeout(options.Timeout.value_or(config->DefaultSelectRowsTimeout));
 
-    if (options.InputRowLimit) {
-        req->set_input_row_limit(*options.InputRowLimit);
-    }
-    if (options.OutputRowLimit) {
-        req->set_output_row_limit(*options.OutputRowLimit);
-    }
+    YT_OPTIONAL_SET_PROTO(req, input_row_limit, options.InputRowLimit);
+    YT_OPTIONAL_SET_PROTO(req, output_row_limit, options.OutputRowLimit);
     req->set_range_expansion_limit(options.RangeExpansionLimit);
     req->set_max_subqueries(options.MaxSubqueries);
     req->set_min_row_count_per_subquery(options.MinRowCountPerSubquery);
     req->set_allow_full_scan(options.AllowFullScan);
     req->set_allow_join_without_index(options.AllowJoinWithoutIndex);
 
-    if (options.ExecutionPool) {
-        req->set_execution_pool(*options.ExecutionPool);
-    }
+    YT_OPTIONAL_TO_PROTO(req, execution_pool, options.ExecutionPool);
     if (options.PlaceholderValues) {
         req->set_placeholder_values(options.PlaceholderValues.ToString());
     }
     req->set_fail_on_incomplete_result(options.FailOnIncompleteResult);
     req->set_verbose_logging(options.VerboseLogging);
     req->set_new_range_inference(options.NewRangeInference);
-    if (options.ExecutionBackend) {
-        req->set_execution_backend(ToProto(*options.ExecutionBackend));
-    }
+    YT_OPTIONAL_SET_PROTO(req, execution_backend, options.ExecutionBackend);
     req->set_enable_code_cache(options.EnableCodeCache);
     req->set_memory_limit_per_node(options.MemoryLimitPerNode);
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
@@ -1110,9 +1078,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_use_canonical_null_relations(options.UseCanonicalNullRelations);
     req->set_merge_versioned_rows(options.MergeVersionedRows);
     ToProto(req->mutable_versioned_read_options(), options.VersionedReadOptions);
-    if (options.UseLookupCache) {
-        req->set_use_lookup_cache(*options.UseLookupCache);
-    }
+    YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {
         TSelectRowsResult result;

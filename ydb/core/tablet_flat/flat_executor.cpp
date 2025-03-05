@@ -28,7 +28,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -1352,8 +1352,8 @@ void TExecutor::AdvancePendingPartSwitches() {
         PlanTransactionActivation();
         MaybeRelaxRejectProbability();
 
-        // followers haven't DataCleanupLogic
-        if (DataCleanupLogic && DataCleanupLogic->NeedLogSnaphot()) {
+        // Note: followers don't have DataCleanupLogic
+        if (NeedFollowerSnapshot || DataCleanupLogic && DataCleanupLogic->NeedLogSnaphot()) {
             MakeLogSnapshot();
         }
     }

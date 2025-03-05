@@ -994,7 +994,7 @@ private:
 
         if (outGroup != inputColGroupSpec) {
             ctx.AddError(TIssue(ctx.GetPosition(copy.Output().Item(0).Settings().Pos()), TStringBuilder() << TYtCopy::CallableName()
-                << "has input/output tables with different " << EYtSettingType::ColumnGroups << " values"));
+                << " has input/output tables with different " << EYtSettingType::ColumnGroups << " values"));
             return TStatus::Error;
         }
 

@@ -16,7 +16,6 @@ IF (PY2)
         fetch_from_archive.py
         fetch_from_mds.py
         fetch_from_sandbox.py
-        fetch_resource.py
         gen_java_codenav_entry.py
         gen_py3_reg.py
         go_tool.py

@@ -1008,6 +1008,8 @@ TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
             if (mit != meta.end()) {
                 res.ConsumedRuFromHeader = std::stol(mit->second);
             }
+            UNIT_ASSERT_EQUAL_C(res.ConsumedRuFromHeader, streamPart.GetConsumedRu(),
+                "Request unit values from headers and TStatus are differ");
             break;
         }
 
@@ -1471,12 +1473,22 @@ void WaitForZeroReadIterators(Tests::TServer& server, const TString& path) {
 }
 
 NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& params) {
+    const auto& [_, nodeType] = *opt.GetMapSafe().find("Node Type");
+    bool isShuffle = nodeType.GetStringSafe().find("HashShuffle") != TString::npos;
+
+    if (isShuffle) {
+        NJson::TJsonValue op;
+        op["Name"] = "HashShuffle";
+        opt["Operators"].AppendValue(std::move(op));
+    }
+
     if (auto ops = opt.GetMapSafe().find("Operators"); ops != opt.GetMapSafe().end()) {
         auto opName = ops->second.GetArraySafe()[0].GetMapSafe().at("Name").GetStringSafe();
         if (
             opName.find("Join") != TString::npos || 
             opName.find("Union") != TString::npos ||
-            (opName.find("Filter") != TString::npos && params.IncludeFilters)
+            (opName.find("Filter") != TString::npos && params.IncludeFilters) ||
+            (opName.find("HashShuffle") != TString::npos && params.IncludeShuffles) 
         ) {
             NJson::TJsonValue newChildren;
 

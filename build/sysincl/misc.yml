@@ -462,7 +462,3 @@
 - source_filter: "^contrib/libs/svt-av1"
   includes:
     - filter.h: contrib/libs/svt-av1/Source/Lib/Codec/filter.h
-
-- source_filter: "^sdg/sdc"
-  includes:
-    - uuid/uuid.h: sdg/sdc/contrib/uuid/uuid/uuid.h

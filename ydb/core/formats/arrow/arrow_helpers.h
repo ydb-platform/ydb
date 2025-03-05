@@ -70,7 +70,11 @@ void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
                        const std::shared_ptr<arrow::Schema>& sortingKey,
                        std::vector<std::shared_ptr<arrow::RecordBatch>>& out);
 
-std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original);
-std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table>& original, arrow::MemoryPool* pool = arrow::default_memory_pool());
+[[nodiscard]] std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original);
+[[nodiscard]] std::shared_ptr<arrow::Table> ReallocateBatch(
+    const std::shared_ptr<arrow::Table>& original, arrow::MemoryPool* pool = arrow::default_memory_pool());
+[[nodiscard]] std::shared_ptr<arrow::ChunkedArray> ReallocateArray(
+    const std::shared_ptr<arrow::ChunkedArray>& original, arrow::MemoryPool* pool = arrow::default_memory_pool());
+[[nodiscard]] std::shared_ptr<arrow::Array> ReallocateArray(const std::shared_ptr<arrow::Array>& arr, arrow::MemoryPool* pool = arrow::default_memory_pool());
 
 }

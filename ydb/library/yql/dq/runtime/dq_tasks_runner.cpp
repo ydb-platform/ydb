@@ -187,7 +187,14 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
             GetColumnsInfo(type, outputDesc.GetHashPartition().GetKeyColumns(), keyColumns);
             YQL_ENSURE(!keyColumns.empty());
             YQL_ENSURE(outputDesc.GetHashPartition().GetPartitionsCount() == outputDesc.ChannelsSize());
-            return CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), type, holderFactory, minFillPercentage, pgBuilder);
+            return CreateOutputHashPartitionConsumer(
+                std::move(outputs), 
+                std::move(keyColumns), 
+                type, holderFactory, 
+                minFillPercentage,
+                outputDesc.GetHashPartition(),
+                pgBuilder
+            );
         }
 
         case NDqProto::TTaskOutput::kBroadcast: {

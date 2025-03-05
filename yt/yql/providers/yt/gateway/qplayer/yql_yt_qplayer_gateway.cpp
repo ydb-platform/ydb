@@ -247,7 +247,7 @@ public:
                         }
                     }
                 }
-                data.WriteLock = options.ReadOnly() ? false : valueNode["WriteLock"].AsBool();
+                data.WriteLock = valueNode["WriteLock"].AsBool();
                 res.Data.push_back(data);
             }
 
@@ -959,6 +959,10 @@ public:
 
     void AddCluster(const TYtClusterConfig& cluster) final {
         return Inner_->AddCluster(cluster);
+    }
+
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) override {
+        return Inner_->GetClusterConnection(std::move(options));
     }
 
 private:

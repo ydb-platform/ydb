@@ -109,7 +109,7 @@ namespace NKikimr {
         void PassAway() override {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_GET, SelfId() << " finished query");
             Send(ParentId, new TEvents::TEvGone);
-            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, Result.release(), Cookie, VCtx);
+            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, Result.release(), Cookie, VCtx, Query->Record.GetHandleClass());
             TActorBootstrapped::PassAway();
         }
 

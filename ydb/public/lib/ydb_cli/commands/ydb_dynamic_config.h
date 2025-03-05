@@ -101,7 +101,7 @@ public:
     int Run(TConfig& config) override;
 
 private:
-    ui64 Version;
+    ui64 Version = 0;
     TString Cluster;
     THashSet<ui64> Ids;
     TString Dir;

@@ -17,7 +17,7 @@ PEERDIR(
     yql/essentials/providers/result/provider
     yql/essentials/public/udf/service/stub
     yql/essentials/sql
-    yql/essentials/minikql/invoke_builtins/llvm14
+    yql/essentials/minikql/invoke_builtins/llvm16
     yql/essentials/sql/pg_dummy
 )
 

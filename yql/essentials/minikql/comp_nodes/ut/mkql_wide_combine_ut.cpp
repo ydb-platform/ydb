@@ -155,7 +155,6 @@ void CheckIfStreamHasExpectedStringValues(const NUdf::TUnboxedValue& streamValue
 
 } // unnamed
 
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 18u
 Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerTest) {
     Y_UNIT_TEST_LLVM(TestLongStringsRefCounting) {
         TSetup<LLVM> setup;
@@ -1065,7 +1064,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerPerfTest) {
         Cerr << "Runtime is " << t2 - t1 << " vs C++ " << cppTime << Endl;
     }
 }
-#endif
+
 #if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 29u
 Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
     Y_UNIT_TEST_LLVM_SPILLING(TestLongStringsRefCounting) {

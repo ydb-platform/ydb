@@ -429,41 +429,13 @@ void ToProto(NProto::TColumnSchema* protoSchema, const TColumnSchema& schema)
         protoSchema->clear_required();
     }
     ToProto(protoSchema->mutable_logical_type(), schema.LogicalType());
-    if (schema.Lock()) {
-        protoSchema->set_lock(ToProto(*schema.Lock()));
-    } else {
-        protoSchema->clear_lock();
-    }
-    if (schema.Expression()) {
-        protoSchema->set_expression(*schema.Expression());
-    } else {
-        protoSchema->clear_expression();
-    }
-    if (schema.Materialized()) {
-        protoSchema->set_materialized(*schema.Materialized());
-    } else {
-        protoSchema->clear_materialized();
-    }
-    if (schema.Aggregate()) {
-        protoSchema->set_aggregate(ToProto(*schema.Aggregate()));
-    } else {
-        protoSchema->clear_aggregate();
-    }
-    if (schema.SortOrder()) {
-        protoSchema->set_sort_order(ToProto(*schema.SortOrder()));
-    } else {
-        protoSchema->clear_sort_order();
-    }
-    if (schema.Group()) {
-        protoSchema->set_group(ToProto(*schema.Group()));
-    } else {
-        protoSchema->clear_group();
-    }
-    if (schema.MaxInlineHunkSize()) {
-        protoSchema->set_max_inline_hunk_size(*schema.MaxInlineHunkSize());
-    } else {
-        protoSchema->clear_max_inline_hunk_size();
-    }
+    YT_OPTIONAL_SET_PROTO(protoSchema, lock, schema.Lock());
+    YT_OPTIONAL_TO_PROTO(protoSchema, expression, schema.Expression());
+    YT_OPTIONAL_SET_PROTO(protoSchema, materialized, schema.Materialized());
+    YT_OPTIONAL_SET_PROTO(protoSchema, aggregate, schema.Aggregate());
+    YT_OPTIONAL_SET_PROTO(protoSchema, sort_order, schema.SortOrder());
+    YT_OPTIONAL_SET_PROTO(protoSchema, group, schema.Group());
+    YT_OPTIONAL_SET_PROTO(protoSchema, max_inline_hunk_size, schema.MaxInlineHunkSize());
 }
 
 void ToProto(NProto::TDeletedColumn* protoSchema, const TDeletedColumn& schema)
@@ -492,13 +464,13 @@ void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema)
         schema->SetLogicalType(MakeLogicalType(GetLogicalType(physicalType), protoSchema.required()));
     }
 
-    schema->SetLock(YT_PROTO_OPTIONAL(protoSchema, lock));
-    schema->SetExpression(YT_PROTO_OPTIONAL(protoSchema, expression));
-    schema->SetMaterialized(YT_PROTO_OPTIONAL(protoSchema, materialized));
-    schema->SetAggregate(YT_PROTO_OPTIONAL(protoSchema, aggregate));
+    schema->SetLock(YT_OPTIONAL_FROM_PROTO(protoSchema, lock));
+    schema->SetExpression(YT_OPTIONAL_FROM_PROTO(protoSchema, expression));
+    schema->SetMaterialized(YT_OPTIONAL_FROM_PROTO(protoSchema, materialized));
+    schema->SetAggregate(YT_OPTIONAL_FROM_PROTO(protoSchema, aggregate));
     schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, FromProto<ESortOrder>));
-    schema->SetGroup(YT_PROTO_OPTIONAL(protoSchema, group));
-    schema->SetMaxInlineHunkSize(YT_PROTO_OPTIONAL(protoSchema, max_inline_hunk_size));
+    schema->SetGroup(YT_OPTIONAL_FROM_PROTO(protoSchema, group));
+    schema->SetMaxInlineHunkSize(YT_OPTIONAL_FROM_PROTO(protoSchema, max_inline_hunk_size));
 }
 
 void FromProto(TDeletedColumn* schema, const NProto::TDeletedColumn& protoSchema)

@@ -10,7 +10,7 @@
 
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/feature_flags.h>
@@ -2846,6 +2846,11 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
             Subscribed,
         };
 
+        enum class EChangefeedState: ui8 {
+            CreateChangefeed = 0,
+            CreateConsumers,
+        };
+
         TString DstPathName;
         TPathId DstPathId;
         Ydb::Table::CreateTableRequest Scheme;
@@ -2857,6 +2862,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;
+        EChangefeedState ChangefeedState = EChangefeedState::CreateChangefeed;
         TTxId WaitTxId = InvalidTxId;
         TActorId SchemeGetter;
         TActorId SchemeQueryExecutor;
@@ -2864,6 +2870,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         int NextChangefeedIdx = 0;
         TString Issue;
         int ViewCreationRetries = 0;
+        TPathId StreamImplPathId;
 
         TItem() = default;
 

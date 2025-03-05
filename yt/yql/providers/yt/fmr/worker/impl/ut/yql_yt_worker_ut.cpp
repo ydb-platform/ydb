@@ -11,12 +11,17 @@
 namespace NYql::NFmr {
 
 TDownloadTaskParams downloadTaskParams{
-    .Input = TYtTableRef{"Path","Cluster","TransactionId"},
+    .Input = TYtTableRef{"Path","Cluster"},
     .Output = TFmrTableRef{"TableId"}
 };
 
 TStartOperationRequest CreateOperationRequest(ETaskType taskType = ETaskType::Download, TTaskParams taskParams = downloadTaskParams) {
-    return TStartOperationRequest{.TaskType = taskType, .TaskParams = taskParams, .IdempotencyKey = "IdempotencyKey"};
+    return TStartOperationRequest{
+        .TaskType = taskType,
+        .TaskParams = taskParams,
+        .IdempotencyKey = "IdempotencyKey",
+        .ClusterConnection = TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}
+    };
 }
 
 Y_UNIT_TEST_SUITE(FmrWorkerTests) {

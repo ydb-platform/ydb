@@ -44,46 +44,6 @@ const TTypeAnnotationNode* GetDqOutputType(const TDqOutput& output, TExprContext
     return outputType;
 }
 
-const TTypeAnnotationNode* GetDqConnectionType(const TDqConnection& node, TExprContext& ctx) {
-    return GetDqOutputType(node.Output(), ctx);
-}
-
-const TTypeAnnotationNode* GetColumnType(const TDqConnection& node, const TStructExprType& structType, TStringBuf name, TPositionHandle pos, TExprContext& ctx) {
-    TDqStageSettings settings = TDqStageSettings::Parse(node.Output().Stage());
-    if (settings.WideChannels) {
-        auto multiType = node.Output().Stage().Program().Ref().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
-        ui32 idx;
-        if (!TryFromString(name, idx)) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos),
-                TStringBuilder() << "Expecting integer as column name, but got '" << name << "'"));
-            return nullptr;
-        }
-        const bool isBlock = AnyOf(multiType->GetItems(), [](const TTypeAnnotationNode* item) { return item->IsBlockOrScalar(); });
-        const ui32 width = isBlock ? (multiType->GetSize() - 1) : multiType->GetSize();
-        if (idx >= width) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos),
-                TStringBuilder() << "Column index too big: " << name << " >= " << width));
-            return nullptr;
-        }
-
-        auto itemType = multiType->GetItems()[idx];
-        if (isBlock) {
-            itemType = itemType->IsBlock() ? itemType->Cast<TBlockExprType>()->GetItemType() :
-                                             itemType->Cast<TScalarExprType>()->GetItemType();
-        }
-        return itemType;
-    }
-
-    auto result = structType.FindItemType(name);
-    if (!result) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos),
-            TStringBuilder() << "Missing column '" << name << "'"));
-        return nullptr;
-    }
-
-    return result;
-}
-
 template <typename TType>
 bool EnsureConvertibleTo(const TExprNode& value, const TStringBuf name, TExprContext& ctx) {
     auto&& stringValue = value.Content();
@@ -437,7 +397,7 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
 
 template <bool IsMapJoin>
 const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool stream, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 8, 11, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 8, 13, ctx)) {
         return nullptr;
     }
 
@@ -556,6 +516,46 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
 }
 
 } // unnamed
+
+const TTypeAnnotationNode* GetDqConnectionType(const TDqConnection& node, TExprContext& ctx) {
+    return GetDqOutputType(node.Output(), ctx);
+}
+
+const TTypeAnnotationNode* GetColumnType(const TDqConnection& node, const TStructExprType& structType, TStringBuf name, TPositionHandle pos, TExprContext& ctx) {
+    TDqStageSettings settings = TDqStageSettings::Parse(node.Output().Stage());
+    if (settings.WideChannels) {
+        auto multiType = node.Output().Stage().Program().Ref().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
+        ui32 idx;
+        if (!TryFromString(name, idx)) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                TStringBuilder() << "Expecting integer as column name, but got '" << name << "'"));
+            return nullptr;
+        }
+        const bool isBlock = AnyOf(multiType->GetItems(), [](const TTypeAnnotationNode* item) { return item->IsBlockOrScalar(); });
+        const ui32 width = isBlock ? (multiType->GetSize() - 1) : multiType->GetSize();
+        if (idx >= width) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                TStringBuilder() << "Column index too big: " << name << " >= " << width));
+            return nullptr;
+        }
+
+        auto itemType = multiType->GetItems()[idx];
+        if (isBlock) {
+            itemType = itemType->IsBlock() ? itemType->Cast<TBlockExprType>()->GetItemType() :
+                                             itemType->Cast<TScalarExprType>()->GetItemType();
+        }
+        return itemType;
+    }
+
+    auto result = structType.FindItemType(name);
+    if (!result) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos),
+            TStringBuilder() << "Missing column '" << name << "'"));
+        return nullptr;
+    }
+
+    return result;
+}
 
 TStatus AnnotateDqStage(const TExprNode::TPtr& input, TExprContext& ctx) {
     return AnnotateStage<TDqStage>(input, ctx);

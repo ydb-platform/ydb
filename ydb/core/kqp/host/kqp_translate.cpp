@@ -301,9 +301,20 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         settings.AutoParamBuilderFactory = &autoParamBuilderFactory;
         NYql::TStmtParseInfo stmtParseInfo;
 
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
+        lexers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiLexerFactory();
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+        lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+        NSQLTranslationV1::TParsers parsers;
+        parsers.Antlr3 = NSQLTranslationV1::MakeAntlr3ParserFactory();
+        parsers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiParserFactory();
+        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+        parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+
         NSQLTranslation::TTranslators translators(
             NSQLTranslationV0::MakeTranslator(),
-            NSQLTranslationV1::MakeTranslator(),
+            NSQLTranslationV1::MakeTranslator(lexers, parsers),
             NSQLTranslationPG::MakeTranslator()
         );
 

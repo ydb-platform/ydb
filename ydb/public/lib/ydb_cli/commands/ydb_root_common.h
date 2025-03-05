@@ -52,11 +52,19 @@ private:
     void ParseDatabase(TConfig& config);
     void ParseIamEndpoint(TConfig& config);
     void ParseCaCerts(TConfig& config) override;
+    void ParseClientCert(TConfig& config) override;
     void GetAddressFromString(TConfig& config, TString* result = nullptr);
     bool ParseProtocolNoConfig(TString& message);
     void GetCaCerts(TConfig& config);
-    bool TryGetParamFromProfile(const TString& name, std::shared_ptr<IProfile> profile, bool explicitOption,
+    void GetClientCert(TConfig& config);
+    bool TryGetParamFromProfile(const TString& name, const std::shared_ptr<IProfile>& profile, bool explicitOption,
                                 std::function<bool(const TString&, const TString&, bool)> callback);
+
+    // Gets more than one params from one profile source.
+    // Returns true if at least one of the params are found in profile.
+    bool TryGetParamsPackFromProfile(const std::shared_ptr<IProfile>& profile, bool explicitOption,
+                                     std::function<bool(const TString& /*source*/, bool /*explicit*/, const std::vector<TString>& /*values*/)> callback,
+                                     const std::initializer_list<TString>& names);
 
     TString Database;
 
@@ -88,6 +96,7 @@ private:
     bool IsDatabaseSet = false;
     bool IsIamEndpointSet = false;
     bool IsCaCertsFileSet = false;
+    bool IsClientCertFileSet = false;
     bool IsAuthSet = false;
 };
 

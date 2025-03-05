@@ -16,6 +16,8 @@ Ydb::StatusIds::StatusCode DqStatusToYdbStatus(NYql::NDqProto::StatusIds::Status
         return Ydb::StatusIds::ABORTED;
     case NYql::NDqProto::StatusIds::UNAVAILABLE:
         return Ydb::StatusIds::UNAVAILABLE;
+    case NYql::NDqProto::StatusIds::UNDETERMINED:
+        return Ydb::StatusIds::UNDETERMINED;
     case NYql::NDqProto::StatusIds::BAD_REQUEST:
         return Ydb::StatusIds::BAD_REQUEST;
     case NYql::NDqProto::StatusIds::PRECONDITION_FAILED:
@@ -32,13 +34,15 @@ Ydb::StatusIds::StatusCode DqStatusToYdbStatus(NYql::NDqProto::StatusIds::Status
         return Ydb::StatusIds::SCHEME_ERROR;
     case NYql::NDqProto::StatusIds::UNSUPPORTED:
         return Ydb::StatusIds::UNSUPPORTED;
+    case NYql::NDqProto::StatusIds::UNAUTHORIZED:
+        return Ydb::StatusIds::UNAUTHORIZED;
     case NYql::NDqProto::StatusIds::GENERIC_ERROR:
     default:
         return Ydb::StatusIds::GENERIC_ERROR;
     }
 }
 
-NYql::NDqProto::StatusIds::StatusCode YdbStatusToDqStatus(Ydb::StatusIds::StatusCode statusCode) {
+NYql::NDqProto::StatusIds::StatusCode YdbStatusToDqStatus(Ydb::StatusIds::StatusCode statusCode, EStatusCompatibilityLevel compatibility) {
     switch(statusCode) {
     case Ydb::StatusIds::STATUS_CODE_UNSPECIFIED:
         return NYql::NDqProto::StatusIds::UNSPECIFIED;
@@ -47,12 +51,17 @@ NYql::NDqProto::StatusIds::StatusCode YdbStatusToDqStatus(Ydb::StatusIds::Status
     case Ydb::StatusIds::BAD_REQUEST:
         return NYql::NDqProto::StatusIds::BAD_REQUEST;
     case Ydb::StatusIds::UNAUTHORIZED:
+        return compatibility >= EStatusCompatibilityLevel::WithUnauthorized
+            ? NYql::NDqProto::StatusIds::UNAUTHORIZED
+            : NYql::NDqProto::StatusIds::INTERNAL_ERROR;
     case Ydb::StatusIds::INTERNAL_ERROR:
         return NYql::NDqProto::StatusIds::INTERNAL_ERROR;
     case Ydb::StatusIds::ABORTED:
         return NYql::NDqProto::StatusIds::ABORTED;
     case Ydb::StatusIds::UNAVAILABLE:
         return NYql::NDqProto::StatusIds::UNAVAILABLE;
+    case Ydb::StatusIds::UNDETERMINED:
+        return NYql::NDqProto::StatusIds::UNDETERMINED;
     case Ydb::StatusIds::OVERLOADED:
         return NYql::NDqProto::StatusIds::OVERLOADED;
     case Ydb::StatusIds::TIMEOUT:

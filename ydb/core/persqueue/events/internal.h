@@ -1086,6 +1086,8 @@ struct TEvPQ {
         }
 
         ui32 Cookie; // InternalPartitionId
+        TActorId SupportivePartition;
+
         NPQ::TSourceIdMap SrcIdInfo;
         std::deque<NPQ::TDataKey> BodyKeys;
         TVector<NPQ::TClientBlob> BlobsFromHead;
@@ -1102,6 +1104,7 @@ struct TEvPQ {
     struct TEvGetWriteInfoError : public TEventLocal<TEvGetWriteInfoError, EvGetWriteInfoError> {
         ui32 Cookie; // InternalPartitionId
         TString Message;
+        TActorId SupportivePartition;
 
         TEvGetWriteInfoError(ui32 cookie, TString message) :
             Cookie(cookie),

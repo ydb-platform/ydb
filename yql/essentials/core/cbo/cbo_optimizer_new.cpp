@@ -296,6 +296,10 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     double cost = ComputeJoinCost(leftStats, rightStats, newCard, newByteSize, joinAlgo)
         + leftStats.Cost + rightStats.Cost;
 
+    if (joinKind == EJoinKind::Cross /* in case of cross join we broadcast the right part to the left */) {
+        cost += rightStats.Nrows;
+    }
+
     auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, cost,
         leftKeyColumns ? leftStats.KeyColumns : ( rightKeyColumns ? rightStats.KeyColumns : TIntrusivePtr<TOptimizerStatistics::TKeyColumns>()));
     result.Selectivity = selectivity;

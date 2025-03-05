@@ -154,6 +154,10 @@ namespace NSchemeShard {
 
 class TFormatFactory;
 
+namespace NYamlConfig {
+    class IConfigSwissKnife;
+}
+
 struct TAppData {
     static const ui32 MagicTag = 0x2991AAF8;
     const ui32 Magic;
@@ -173,6 +177,7 @@ struct TAppData {
     const TFormatFactory* FormatFactory = nullptr;
     const NSQS::IEventsWriterFactory* SqsEventsWriterFactory = nullptr;
     const NSchemeShard::IOperationFactory *SchemeOperationFactory = nullptr;
+    const NYamlConfig::IConfigSwissKnife *ConfigSwissKnife = nullptr;
 
     NSQS::IAuthFactory* SqsAuthFactory = nullptr;
 
@@ -245,10 +250,13 @@ struct TAppData {
     bool EnableMvccSnapshotWithLegacyDomainRoot = false;
     bool UsePartitionStatsCollectorForTests = false;
     bool DisableCdcAutoSwitchingToReadyStateForTests = false;
+
     TVector<TString> AdministrationAllowedSIDs; // use IsAdministrator method to check whether a user or a group is allowed to perform administrative tasks
+    TVector<TString> RegisterDynamicNodeAllowedSIDs;
+    TVector<TString> BootstrapAllowedSIDs;
     TVector<TString> DefaultUserSIDs;
     TString AllAuthenticatedUsers = "all-users@well-known";
-    TVector<TString> RegisterDynamicNodeAllowedSIDs;
+
     TString TenantName;
     TString NodeName;
 

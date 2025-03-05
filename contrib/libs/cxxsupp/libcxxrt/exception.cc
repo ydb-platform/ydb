@@ -215,7 +215,7 @@ static_assert(offsetof(__cxa_dependent_exception, unwindHeader) ==
 
 namespace std
 {
-	void unexpected();
+	[[noreturn]] void unexpected();
 	class exception
 	{
 		public:
@@ -287,44 +287,74 @@ namespace std
 
 using namespace ABI_NAMESPACE;
 
-static void bt_terminate_handler() {
-    __cxa_eh_globals* globals = __cxa_get_globals();
-    __cxa_exception* thrown_exception = globals->caughtExceptions;
+#ifdef LIBCXXRT_NO_DEFAULT_TERMINATE_DIAGNOSTICS
+/** The global termination handler. */
+static atomic<terminate_handler> terminateHandler = abort;
+#else
+/**
+ * Callback function used with _Unwind_Backtrace().
+ *
+ * Prints a stack trace.  Used only for debugging help.
+ *
+ * Note: As of FreeBSD 8.1, dladdr() still doesn't work properly, so this only
+ * correctly prints function names from public, relocatable, symbols.
+ */
+static _Unwind_Reason_Code trace(struct _Unwind_Context *context, void *c)
+{
+	Dl_info myinfo;
+	int mylookup =
+		dladdr(reinterpret_cast<void *>(__cxa_current_exception_type), &myinfo);
+	void *ip = reinterpret_cast<void*>(_Unwind_GetIP(context));
+	Dl_info info;
+	if (dladdr(ip, &info) != 0)
+	{
+		if (mylookup == 0 || strcmp(info.dli_fname, myinfo.dli_fname) != 0)
+		{
+			printf("%p:%s() in %s\n", ip, info.dli_sname, info.dli_fname);
+		}
+	}
+	return _URC_CONTINUE_UNWIND;
+}
 
-    if (!thrown_exception) {
-        abort();
-    }
+static void terminate_with_diagnostics() {
+	__cxa_eh_globals *globals = __cxa_get_globals();
+	__cxa_exception *ex = globals->caughtExceptions;
 
-    fprintf(stderr, "uncaught exception:\n    address -> %p\n", (void*)thrown_exception);
-    thrown_exception = realExceptionFromException(thrown_exception);
+	if (ex != nullptr) {
+		fprintf(stderr, "Terminating due to uncaught exception %p", static_cast<void*>(ex));
+		ex = realExceptionFromException(ex);
+		const __class_type_info *e_ti =
+			static_cast<const __class_type_info*>(&typeid(std::exception));
+		const __class_type_info *throw_ti =
+			dynamic_cast<const __class_type_info*>(ex->exceptionType);
+		if (throw_ti) {
+			void* ptr = ex + 1;
+			if (throw_ti->__do_upcast(e_ti, &ptr)) {
+				std::exception* e = static_cast<std::exception*>(ptr);
+				if (e) {
+					fprintf(stderr, "    what() -> \"%s\"\n", e->what());
+				}
+			}
+		}
 
-    const __class_type_info *e_ti = static_cast<const __class_type_info*>(&typeid(std::exception));
-    const __class_type_info *throw_ti = dynamic_cast<const __class_type_info*>(thrown_exception->exceptionType);
+		size_t bufferSize = 128;
+		char *demangled = static_cast<char*>(malloc(bufferSize));
+		const char *mangled = ex->exceptionType->name();
+		int status;
+		demangled = __cxa_demangle(mangled, demangled, &bufferSize, &status);
+		fprintf(stderr, " of type %s\n", status == 0 ? demangled : mangled);
+		if (status == 0) { free(demangled); }
 
-    if (throw_ti) {
-        void* ptr = thrown_exception + 1;
+		_Unwind_Backtrace(trace, 0);
+	}
 
-        if (throw_ti->__do_upcast(e_ti, &ptr)) {
-            std::exception* e = static_cast<std::exception*>(ptr);
-
-            if (e) {
-                fprintf(stderr, "    what() -> \"%s\"\n", e->what());
-            }
-        }
-    }
-
-    size_t bufferSize = 128;
-    char *demangled = static_cast<char*>(malloc(bufferSize));
-    const char *mangled = thrown_exception->exceptionType->name();
-    int status;
-    demangled = __cxa_demangle(mangled, demangled, &bufferSize, &status);
-    fprintf(stderr, "    type -> %s\n", status == 0 ? demangled : mangled);
-    if (status == 0) { free(demangled); }
-    abort();
+	abort();
 }
 
 /** The global termination handler. */
-static atomic<terminate_handler> terminateHandler = bt_terminate_handler;
+static atomic<terminate_handler> terminateHandler = terminate_with_diagnostics;
+#endif
+
 /** The global unexpected exception handler. */
 static atomic<unexpected_handler> unexpectedHandler = std::terminate;
 
@@ -760,35 +790,11 @@ void __cxa_free_dependent_exception(void *thrown_exception)
 }
 
 /**
- * Callback function used with _Unwind_Backtrace().
- *
- * Prints a stack trace.  Used only for debugging help.
- *
- * Note: As of FreeBSD 8.1, dladd() still doesn't work properly, so this only
- * correctly prints function names from public, relocatable, symbols.
- */
-static _Unwind_Reason_Code trace(struct _Unwind_Context *context, void *c)
-{
-	Dl_info myinfo;
-	int mylookup =
-		dladdr(reinterpret_cast<void *>(__cxa_current_exception_type), &myinfo);
-	void *ip = reinterpret_cast<void*>(_Unwind_GetIP(context));
-	Dl_info info;
-	if (dladdr(ip, &info) != 0)
-	{
-		if (mylookup == 0 || strcmp(info.dli_fname, myinfo.dli_fname) != 0)
-		{
-			printf("%p:%s() in %s\n", ip, info.dli_sname, info.dli_fname);
-		}
-	}
-	return _URC_CONTINUE_UNWIND;
-}
-
-/**
  * Report a failure that occurred when attempting to throw an exception.
  *
  * If the failure happened by falling off the end of the stack without finding
- * a handler, prints a back trace before aborting.
+ * a handler, catch the exception before calling terminate. The default
+ * terminate handler will print a backtrace before aborting.
  */
 #if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 4)
 extern "C" void *__cxa_begin_catch(void *e) _LIBCXXRT_NOEXCEPT;
@@ -810,39 +816,6 @@ static void report_failure(_Unwind_Reason_Code err, __cxa_exception *thrown_exce
 #endif
 		case _URC_END_OF_STACK:
 			__cxa_begin_catch (&(thrown_exception->unwindHeader));
- 			std::terminate();
-			fprintf(stderr, "Terminating due to uncaught exception %p", 
-					static_cast<void*>(thrown_exception));
-			thrown_exception = realExceptionFromException(thrown_exception);
-			static const __class_type_info *e_ti =
-				static_cast<const __class_type_info*>(&typeid(std::exception));
-			const __class_type_info *throw_ti =
-				dynamic_cast<const __class_type_info*>(thrown_exception->exceptionType);
-			if (throw_ti)
-			{
-				std::exception *e =
-					static_cast<std::exception*>(e_ti->cast_to(static_cast<void*>(thrown_exception+1),
-							throw_ti));
-				if (e)
-				{
-					fprintf(stderr, " '%s'", e->what());
-				}
-			}
-
-			size_t bufferSize = 128;
-			char *demangled = static_cast<char*>(malloc(bufferSize));
-			const char *mangled = thrown_exception->exceptionType->name();
-			int status;
-			demangled = __cxa_demangle(mangled, demangled, &bufferSize, &status);
-			fprintf(stderr, " of type %s\n", 
-				status == 0 ? demangled : mangled);
-			if (status == 0) { free(demangled); }
-			// Print a back trace if no handler is found.
-			// TODO: Make this optional
-			_Unwind_Backtrace(trace, 0);
-
-			// Just abort. No need to call std::terminate for the second time
-			abort();
 			break;
 	}
 	std::terminate();
@@ -1642,28 +1615,34 @@ namespace std
 		if (0 != info && 0 != info->terminateHandler)
 		{
 			info->terminateHandler();
-			// Should not be reached - a terminate handler is not expected to
-			// return.
-			abort();
 		}
-		terminateHandler.load()();
+		else
+		{
+			terminateHandler.load()();
+		}
+		// Should not be reached - a terminate handler is not expected
+		// to return.
+		abort();
 	}
 	/**
 	 * Called when an unexpected exception is encountered (i.e. an exception
 	 * violates an exception specification).  This calls abort() unless a
 	 * custom handler has been set..
 	 */
-	void unexpected()
+	[[noreturn]] void unexpected()
 	{
 		static __cxa_thread_info *info = thread_info();
 		if (0 != info && 0 != info->unexpectedHandler)
 		{
 			info->unexpectedHandler();
-			// Should not be reached - a terminate handler is not expected to
-			// return.
-			abort();
 		}
-		unexpectedHandler.load()();
+		else
+		{
+			unexpectedHandler.load()();
+		}
+		// Should not be reached - a unexpected handler is not expected
+		// to return.
+		abort();
 	}
 	/**
 	 * Returns whether there are any exceptions currently being thrown that

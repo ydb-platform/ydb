@@ -1,32 +1,35 @@
 #include "line_reader.h"
+
 #include "yql_highlight.h"
+
+#include <ydb/public/lib/ydb_cli/commands/interactive/complete/sql_complete.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/complete/string_util.h>
 
 #include <util/generic/string.h>
 #include <util/system/file.h>
 
 #include <contrib/restricted/patched/replxx/include/replxx.hxx>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
-namespace
-{
+namespace {
 
-class FileHandlerLockGuard
-{
+class FileHandlerLockGuard {
 public:
-    FileHandlerLockGuard(TFileHandle * handle)
+    FileHandlerLockGuard(TFileHandle* handle)
         : Handle(handle)
-    {}
+    {
+    }
 
     ~FileHandlerLockGuard() {
         Handle->Flock(LOCK_UN);
     }
+
 private:
-    TFileHandle * Handle = nullptr;
+    TFileHandle* Handle = nullptr;
 };
 
-std::optional<FileHandlerLockGuard> LockFile(TFileHandle & fileHandle) {
+std::optional<FileHandlerLockGuard> LockFile(TFileHandle& fileHandle) {
     if (fileHandle.Flock(LOCK_EX) != 0) {
         return {};
     }
@@ -34,63 +37,48 @@ std::optional<FileHandlerLockGuard> LockFile(TFileHandle & fileHandle) {
     return FileHandlerLockGuard(&fileHandle);
 }
 
-class TLineReader : public ILineReader
-{
+replxx::Replxx::Color ReplxxColorOf(NSQLComplete::ECandidateKind /* kind */) {
+    return replxx::Replxx::Color::DEFAULT;
+}
+
+class TLineReader: public ILineReader {
 public:
-    TLineReader(std::string prompt, std::string historyFilePath, Suggest suggestions = {});
+    TLineReader(std::string prompt, std::string historyFilePath);
 
     std::optional<std::string> ReadLine() override;
 
 private:
-    void AddToHistory(const std::string & line);
-
-    static constexpr std::string_view WordBreakCharacters = " \t\v\f\a\b\r\n`~!@#$%^&*-=+[](){}\\|;:'\".,<>/?";
+    void AddToHistory(const std::string& line);
 
     std::string Prompt;
     std::string HistoryFilePath;
     TFileHandle HistoryFileHandle;
-    Suggest Suggestions;
+    NSQLComplete::ISqlCompletionEngine::TPtr CompletionEngine;
     replxx::Replxx Rx;
 };
 
-TLineReader::TLineReader(std::string prompt, std::string historyFilePath, Suggest suggestions)
+TLineReader::TLineReader(std::string prompt, std::string historyFilePath)
     : Prompt(std::move(prompt))
     , HistoryFilePath(std::move(historyFilePath))
     , HistoryFileHandle(HistoryFilePath.c_str(), EOpenModeFlag::OpenAlways | EOpenModeFlag::RdWr | EOpenModeFlag::AW | EOpenModeFlag::ARUser | EOpenModeFlag::ARGroup)
-    , Suggestions(std::move(suggestions))
+    , CompletionEngine(NSQLComplete::MakeSqlCompletionEngine())
 {
     Rx.install_window_change_handler();
 
-    auto completion_callback = [this](const std::string & prefix, size_t) {
-        std::string lastToken;
-        for (i64 i = static_cast<i64>(prefix.size()) - 1; i >= 0; --i) {
-            if (std::isspace(prefix[i])) {
-                break;
-            }
+    auto completion_callback = [this](const std::string& prefix, size_t contextLen) {
+        auto completion = CompletionEngine->Complete({
+            .Text = prefix,
+            .CursorPosition = prefix.length(),
+        });
 
-            lastToken.push_back(prefix[i]);
+        contextLen = completion.CompletedToken.SourcePosition;
+
+        replxx::Replxx::completions_t entries;
+        for (auto& candidate : completion.Candidates) {
+            candidate.Content += ' ';
+            entries.emplace_back(std::move(candidate.Content), ReplxxColorOf(candidate.Kind));
         }
-
-        std::reverse(lastToken.begin(), lastToken.end());
-
-        replxx::Replxx::completions_t completions;
-        if (lastToken.empty()) {
-            return completions;
-        }
-
-        for (auto & Word : Suggestions.Words) {
-            if (Word.size() < lastToken.size()) {
-                continue;
-            }
-
-            if (Word.compare(0, lastToken.size(), lastToken) != 0) {
-                continue;
-            }
-
-            completions.push_back(Word);
-        }
-
-        return completions;
+        return entries;
     };
 
     auto highlighter_callback = [](const auto& text, auto& colors) {
@@ -101,8 +89,8 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, Sugges
     Rx.set_highlighter_callback(highlighter_callback);
     Rx.enable_bracketed_paste();
     Rx.set_unique_history(true);
-    Rx.set_complete_on_empty(false);
-    Rx.set_word_break_characters(WordBreakCharacters.data());
+    Rx.set_complete_on_empty(true);
+    Rx.set_word_break_characters(NSQLComplete::WordBreakCharacters);
     Rx.bind_key(replxx::Replxx::KEY::control('N'), [&](char32_t code) { return Rx.invoke(replxx::Replxx::ACTION::HISTORY_NEXT, code); });
     Rx.bind_key(replxx::Replxx::KEY::control('P'), [&](char32_t code) { return Rx.invoke(replxx::Replxx::ACTION::HISTORY_PREVIOUS, code); });
     Rx.bind_key(replxx::Replxx::KEY::control('D'), [](char32_t) { return replxx::Replxx::ACTION_RESULT::BAIL; });
@@ -124,18 +112,20 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, Sugges
 
 std::optional<std::string> TLineReader::ReadLine() {
     while (true) {
-        const auto * status = Rx.input(Prompt.c_str());
+        const auto* status = Rx.input(Prompt.c_str());
 
         if (status == nullptr) {
-            if (errno == EAGAIN)
+            if (errno == EAGAIN) {
                 continue;
+            }
 
             return {};
         }
 
         std::string line = status;
-        while (!line.empty() && std::isspace(line.back()))
+        while (!line.empty() && std::isspace(line.back())) {
             line.pop_back();
+        }
 
         AddToHistory(line);
 
@@ -143,7 +133,7 @@ std::optional<std::string> TLineReader::ReadLine() {
     }
 }
 
-void TLineReader::AddToHistory(const std::string & line) {
+void TLineReader::AddToHistory(const std::string& line) {
     Rx.history_add(line);
 
     auto fileLockGuard = LockFile(HistoryFileHandle);
@@ -157,11 +147,10 @@ void TLineReader::AddToHistory(const std::string & line) {
     }
 }
 
+} // namespace
+
+std::unique_ptr<ILineReader> CreateLineReader(std::string prompt, std::string historyFilePath) {
+    return std::make_unique<TLineReader>(std::move(prompt), std::move(historyFilePath));
 }
 
-std::unique_ptr<ILineReader> CreateLineReader(std::string prompt, std::string historyFilePath, Suggest suggestions) {
-    return std::make_unique<TLineReader>(std::move(prompt), std::move(historyFilePath), std::move(suggestions));
-}
-
-}
-}
+} // namespace NYdb::NConsoleClient

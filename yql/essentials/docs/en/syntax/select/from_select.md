@@ -2,7 +2,7 @@
 
 An inverted format, first specifying the data source and then the operation.
 
-### Examples
+#### Examples
 
 ```yql
 FROM my_table SELECT key, value;

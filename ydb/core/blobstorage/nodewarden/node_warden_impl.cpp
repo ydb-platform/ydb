@@ -13,6 +13,7 @@
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_broker.h>
 #include <ydb/library/pdisk_io/file_params.h>
+#include <ydb/core/control/lib/static_control_board_impl.h>
 #include <ydb/core/mind/bscontroller/yaml_config_helpers.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/protos/key.pb.h>
@@ -365,6 +366,7 @@ void TNodeWarden::Bootstrap() {
 
     if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
         const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
+        const TIntrusivePtr<NKikimr::TStaticControlBoard>& scb = actorSystem->AppData<TAppData>()->StaticControlBoard;
 
         icb->RegisterLocalControl(EnablePutBatching, "BlobStorage_EnablePutBatching");
         icb->RegisterLocalControl(EnableVPatch, "BlobStorage_EnableVPatch");
@@ -395,8 +397,8 @@ void TNodeWarden::Bootstrap() {
 
         icb->RegisterSharedControl(MaxInProgressSyncCount, "VDiskControls.MaxInProgressSyncCount");
 
-        icb->RegisterSharedControl(MaxCommonLogChunksHDD, "PDiskControls.MaxCommonLogChunksHDD");
-        icb->RegisterSharedControl(MaxCommonLogChunksSSD, "PDiskControls.MaxCommonLogChunksSSD");
+        scb->RegisterSharedControl(MaxCommonLogChunksHDD, EStaticControlType::PDiskControlsMaxCommonLogChunksHDD);
+        scb->RegisterSharedControl(MaxCommonLogChunksSSD, EStaticControlType::PDiskControlsMaxCommonLogChunksSSD);
 
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].BurstThresholdNs,
                 "VDiskControls.BurstThresholdNsHDD");

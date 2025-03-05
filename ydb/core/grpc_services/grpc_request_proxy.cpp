@@ -160,7 +160,7 @@ private:
             Handle(event, ctx);
             return;
         }
-
+        Cerr << "Event: " << event->Get()->GetRequestName() << " grpc_request_proxy: 163" << Endl; 
         auto state = requestBaseCtx->GetAuthState();
 
         if (state.State == NYdbGrpc::TAuthState::AS_FAIL) {
@@ -185,9 +185,10 @@ private:
         // do not check connect rights for the deprecated requests without database
         // remove this along with AllowYdbRequestsWithoutDatabase flag
         bool skipCheckConnectRigths = false;
-
+        Cerr << "Event: " << event->Get()->GetRequestName() << " grpc_request_proxy: 188" << Endl; 
         if (state.State == NYdbGrpc::TAuthState::AS_NOT_PERFORMED) {
             const auto& maybeDatabaseName = requestBaseCtx->GetDatabaseName();
+            Cerr << "Event: " << event->Get()->GetRequestName() << " grpc_request_proxy: 191" << Endl; 
             if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
                 databaseName = CanonizePath(maybeDatabaseName.GetRef());
             } else {
@@ -201,6 +202,7 @@ private:
                     skipCheckConnectRigths = true;
                 }
             }
+            Cerr << "Event: " << event->Get()->GetRequestName() << " grpc_request_proxy: 205" << Endl; 
             if (databaseName.empty()) {
                 Counters->IncDatabaseUnavailableCounter();
                 requestBaseCtx->ReplyUnauthenticated("Empty database name");
@@ -208,11 +210,14 @@ private:
                 return;
             }
             auto it = Databases.find(databaseName);
+            Cerr << "Event: " << event->Get()->GetRequestName() << " grpc_request_proxy: 213" << Endl; 
             if (it != Databases.end() && it->second.IsDatabaseReady()) {
                 database = &it->second;
             } else {
+                Cerr << "Event: " << event->Get()->GetRequestName() << " grpc_request_proxy: 217" << Endl; 
                 // No given database found, start update if possible
                 if (!DeferAndStartUpdate(databaseName, event, requestBaseCtx)) {
+                    Cerr << "grpc_request_proxy: 220" << Endl; 
                     Counters->IncDatabaseUnavailableCounter();
                     const TString error = "Grpc proxy is not ready to accept request, database unknown";
                     LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, "Limit for deferred events per database %s reached", databaseName.c_str());
@@ -221,11 +226,11 @@ private:
                     requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
                     requestBaseCtx->FinishSpan();
                     return;
-                }
+                } 
                 return;
             }
         }
-
+        Cerr << "Event: " << event->Get()->GetRequestName() << "grpc_request_proxy: 228" << Endl; 
         if (database) {
             if (database->SchemeBoardResult) {
                 const auto& domain = database->SchemeBoardResult->DescribeSchemeResult.GetPathDescription().GetDomainDescription();
@@ -265,7 +270,7 @@ private:
                 requestBaseCtx->FinishSpan();
                 return;
             }
-
+            Cerr << "Event: " << event->Get()->GetRequestName() << " grpc_request_proxy: 268" << Endl; 
             Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(),
                 database->SchemeBoardResult->DescribeSchemeResult,
                 database->SecurityObject,
@@ -281,6 +286,7 @@ private:
         requestBaseCtx->RaiseIssue(issue);
         requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
         requestBaseCtx->FinishSpan();
+        Cerr << "Event: " << event->Get()->GetRequestName() << " grpc_request_proxy: 284" << Endl; 
         return;
     }
 

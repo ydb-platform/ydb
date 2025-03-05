@@ -159,7 +159,9 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST(InsertNotNullPkPg) {
+    Y_UNIT_TEST_TWIN(InsertNotNullPkPg, useSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -609,10 +611,13 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST(InsertNotNullPg) {
+    Y_UNIT_TEST_TWIN(InsertNotNullPg, useSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableNotNullDataColumns(true);
+            .SetEnableNotNullDataColumns(true)
+            .SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
@@ -648,8 +653,13 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(!result.IsSuccess());
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE), result.GetIssues().ToString());
-            UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Execution, code: 1060\n"
-            "    <main>: Error: Tried to insert NULL value into NOT NULL column: Value, code: 2031\n");
+            if (useSink) {
+                UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(),
+                    "<main>: Error: Tried to insert NULL value into NOT NULL column: Value, code: 2031\n");
+            } else {
+                UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Execution, code: 1060\n"
+                    "    <main>: Error: Tried to insert NULL value into NOT NULL column: Value, code: 2031\n");
+            }
         }
     }
 

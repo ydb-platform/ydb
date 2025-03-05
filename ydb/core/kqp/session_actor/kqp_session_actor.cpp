@@ -1259,6 +1259,7 @@ public:
             return true;
         }
 
+        YQL_ENSURE(tx || commit);
         if (tx) {
             switch (tx->GetType()) {
                 case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
@@ -1285,15 +1286,16 @@ public:
 
                 QueryState->QueryData->AddUVParam(paramDesc.GetName(), paramType, value);
             }
+        }
 
-            try {
-                QueryState->QueryData->PrepareParameters(tx, QueryState->PreparedQuery, txCtx.TxAlloc->TypeEnv);
-            } catch (const yexception& ex) {
-                ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
-            }
+        try {
+            QueryState->QueryData->PrepareParameters(tx, QueryState->PreparedQuery, txCtx.TxAlloc->TypeEnv);
+        } catch (const yexception& ex) {
+            ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
+        }
+
+        if (tx) {
             request.Transactions.emplace_back(tx, QueryState->QueryData);
-        } else {
-            YQL_ENSURE(commit);
         }
 
         QueryState->TxCtx->OnNewExecutor(literal);
@@ -1468,7 +1470,7 @@ public:
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
-            (!Settings.TableService.GetEnableOltpSink() && QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
+            (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
                 ? GUCSettings : nullptr,
             txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId);
 

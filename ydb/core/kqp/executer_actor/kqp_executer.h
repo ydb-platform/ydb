@@ -36,7 +36,7 @@ struct TEvKqpExecuter {
 
         THashSet<ui32> ParticipantNodes;
 
-        TSerializedCellVec BatchMaxCells;
+        TVector<TSerializedCellVec> BatchEndRows;
         TVector<ui32> BatchKeyIds;
 
         enum class EExecutionType {

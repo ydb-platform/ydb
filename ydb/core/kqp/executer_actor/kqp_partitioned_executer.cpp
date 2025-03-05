@@ -169,10 +169,13 @@ public:
             ptr->PartitionIdx = i;
             ptr->IsFirstQuery = (i == 0);
             ptr->IsLastQuery = (i + 1 == partitioning->size());
-            ptr->LimitSize = 1000;
+            ptr->LimitSize = MaxLimitSize;
 
             if (i > 0) {
                 ptr->BeginRange = partitioning->at(i - 1).Range;
+                if (ptr->BeginRange) {
+                    ptr->BeginRange->IsInclusive = !ptr->BeginRange->IsInclusive;
+                }
             }
 
             Partitions.push_back(std::move(ptr));
@@ -296,8 +299,8 @@ public:
         auto partInfo = ExecuterPartition[ev->Sender];
         switch (response->GetStatus()) {
             case Ydb::StatusIds::SUCCESS:
-                if (partInfo->LimitSize < 1000) {
-                    partInfo->LimitSize = 1000;
+                if (partInfo->LimitSize < MaxLimitSize) {
+                    partInfo->LimitSize = MaxLimitSize;
                 }
 
                 OnSuccessResponse(ev->Sender, ev->Get());
@@ -306,7 +309,7 @@ public:
             case Ydb::StatusIds::ABORTED:
             case Ydb::StatusIds::UNAVAILABLE:
             case Ydb::StatusIds::OVERLOADED:
-                if (partInfo->LimitSize <= 1) {
+                if (partInfo->LimitSize <= MinLimitSize) {
                     partInfo->Response = EExecuterResponse::ERROR;
                     RuntimeError(
                     Ydb::StatusIds::INTERNAL_ERROR,
@@ -333,17 +336,20 @@ public:
         PE_LOG_I("Got success response from ExId = " << exId);
 
         auto partInfo = ExecuterPartition[exId];
-        auto maxRow = ev->BatchMaxCells;
-        auto maxRowKeyIds = ev->BatchKeyIds;
-
-        YQL_ENSURE(KeyColumnInfo.size() == maxRowKeyIds.size());
+        auto endRows = ev->BatchEndRows;
+        auto endKeyIds = ev->BatchKeyIds;
 
         if (NeedReordering.Empty()) {
             NeedReordering = false;
-            for (size_t i = 0; i < KeyColumnInfo.size(); ++i) {
-                if (KeyColumnInfo[i].Id != maxRowKeyIds[i]) {
-                    NeedReordering = true;
-                    break;
+
+            if (!endKeyIds.empty()) {
+                YQL_ENSURE(KeyColumnInfo.size() == endKeyIds.size());
+
+                for (size_t i = 0; i < KeyColumnInfo.size(); ++i) {
+                    if (KeyColumnInfo[i].Id != endKeyIds[i]) {
+                        NeedReordering = true;
+                        break;
+                    }
                 }
             }
 
@@ -351,21 +357,40 @@ public:
                 for (auto& curPart : Partitions) {
                     auto& beginRow = curPart->BeginRange;
                     if (!beginRow.Empty()) {
-                        beginRow->EndKeyPrefix = ReorderRowKeyColumns(beginRow->EndKeyPrefix, maxRowKeyIds);
+                        beginRow->EndKeyPrefix = ReorderRowKeyColumns(beginRow->EndKeyPrefix, endKeyIds);
                     }
 
                     auto& endRow = curPart->EndRange;
                     if (!endRow.Empty()) {
-                        endRow->EndKeyPrefix = ReorderRowKeyColumns(endRow->EndKeyPrefix, maxRowKeyIds);
+                        endRow->EndKeyPrefix = ReorderRowKeyColumns(endRow->EndKeyPrefix, endKeyIds);
                     }
                 }
-                ReorderKeyColumnInfo(maxRowKeyIds);
+                ReorderKeyColumnInfo(endKeyIds);
+            }
+        }
+
+        TSerializedCellVec maxRow;
+        if (!endRows.empty()) {
+            maxRow = endRows.front();
+            YQL_ENSURE(maxRow.GetCells().size() == KeyColumnInfo.size());
+        }
+
+        for (size_t i = 1; i < endRows.size(); ++i) {
+            auto row = endRows[i];
+            YQL_ENSURE(row.GetCells().size() == maxRow.GetCells().size());
+
+            for (size_t j = 0; j < row.GetCells().size(); ++j) {
+                NScheme::TTypeInfoOrder typeOrder(KeyColumnInfo[j].Type, NScheme::EOrder::Ascending);
+                if (CompareTypedCells(maxRow.GetCells()[j], row.GetCells()[j], typeOrder) < 0) {
+                    maxRow = row;
+                    break;
+                }
             }
         }
 
         if (!maxRow.GetCells().empty()) {
             partInfo->BeginRange = TKeyDesc::TPartitionRangeInfo(maxRow,
-                /* IsInclusive */ true,
+                /* IsInclusive */ false,
                 /* IsPoint */ false
             );
             partInfo->IsFirstQuery = false;
@@ -591,15 +616,8 @@ private:
 
     void FillRequestRange(TQueryData::TPtr queryData, const TMaybe<TKeyDesc::TPartitionRangeInfo>& range, bool isBegin) {
         YQL_ENSURE(FillParamValue(queryData,
-            (isBegin)
-                ? NBatchParams::IsInclusiveLeft
-                : NBatchParams::IsInclusiveRight,
-            (range)
-                ? ((isBegin)
-                    ? !range->IsInclusive
-                    : range->IsInclusive)
-                : false)
-        );
+            (isBegin) ? NBatchParams::IsInclusiveLeft : NBatchParams::IsInclusiveRight,
+            (range) ? range->IsInclusive : false));
 
         for (size_t i = 0; i < KeyColumnInfo.size(); ++i) {
             auto paramName = ((isBegin) ? NBatchParams::Begin : NBatchParams::End) + ToString(i + 1);

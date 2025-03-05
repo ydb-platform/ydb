@@ -246,10 +246,13 @@ public:
                 }
 
                 if (info.HasBatchMaxKey()) {
-                    ResponseEv->BatchMaxCells = TSerializedCellVec(info.GetBatchMaxKey());
-                    for (auto keyId : info.GetBatchKeyIds()) {
-                        ResponseEv->BatchKeyIds.push_back(keyId);
+                    if (ResponseEv->BatchEndRows.empty()) {
+                        for (auto keyId : info.GetBatchKeyIds()) {
+                            ResponseEv->BatchKeyIds.push_back(keyId);
+                        }
                     }
+
+                    ResponseEv->BatchEndRows.emplace_back(info.GetBatchMaxKey());
                 }
             } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
                 NKikimrKqp::TEvKqpOutputActorResultInfo info;

@@ -396,11 +396,7 @@ public:
         p->SetPDiskId(Impl.PDiskId);
         p->SetAvailableSize((Impl.TotalChunks - usedChunks) * Impl.ChunkSize);
         p->SetTotalSize(Impl.TotalChunks * Impl.ChunkSize);
-        if (Impl.StateErrorReason) {
-            p->SetState(NKikimrBlobStorage::TPDiskState::DeviceIoError);
-        } else {
-            p->SetState(NKikimrBlobStorage::TPDiskState::Normal);
-        }
+        p->SetState(NKikimrBlobStorage::TPDiskState::Normal);
         Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
 
         Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup);

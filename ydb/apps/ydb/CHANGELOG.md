@@ -1,4 +1,4 @@
-* Add support for dual configuration mode in the `ydb admin cluster config fetch` command.
+* Added support for dual configuration mode in the `ydb admin cluster config fetch` command, allowing it to handle separate cluster and storage config sections.
 * Add options for client certificates in SSL/TLS connections.
 * Add `ydb admin node config init` command to initialize directory with node config files.
 * Add `ydb admin cluster config generate` command to generate dynamic config from static config on cluster.

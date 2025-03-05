@@ -1722,6 +1722,9 @@ namespace NActors {
         if (!actor) {
             actor = mailbox->FindAlias(localId);
         }
+        if (!actor && node->LocalServicesActors.contains(actorId)) {
+            actor = node->LocalServicesActors[actorId];
+        }
         return actor;
     }
 

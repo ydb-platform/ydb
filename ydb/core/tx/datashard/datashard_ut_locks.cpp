@@ -200,7 +200,7 @@ namespace NTest {
         }
 
         TVector<TSysLocks::TLock> ApplyTxLocks() {
-            auto locks = Locks.ApplyLocks();
+            auto [locks, _] = Locks.ApplyLocks();
             Locks.ResetUpdate();
             return locks;
         }

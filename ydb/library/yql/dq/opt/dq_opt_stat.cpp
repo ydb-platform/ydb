@@ -392,8 +392,7 @@ void InferStatisticsForDqJoin(const TExprNode::TPtr& input, TTypeAnnotationConte
     }
 
     auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
-    auto joinKind = FromString<EJoinKind>(join.JoinType().StringValue());
-    if (joinAlgo == EJoinAlgoType::Undefined && joinKind != EJoinKind::Cross /* we don't set any join algo to cross join */) {
+    if (joinAlgo == EJoinAlgoType::Undefined && join.JoinType().StringValue() != "Cross" /* we don't set any join algo to cross join */) {
         return;
     }
 

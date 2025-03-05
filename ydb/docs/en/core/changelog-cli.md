@@ -10,9 +10,9 @@ Released on March 5, 2025. To update to version **2.20.0**, select the [Download
 * Added [coordination nodes](./concepts/datamodel/coordination-node.md)  support in the `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md).
 * Added new `{{ ydb-cli }} workload log import generator` command.
 * Added new global options for client certificates in SSL/TLS connections:
-  * `--client-cert-file`: File containing client certificate for SSL/TLS connections (PKCS#12 or PEM-encoded).
-  * `--client-cert-key-file`: File containing PEM encoded client certificate private key for SSL/TLS connections.
-  * `--client-cert-key-password-file`: File containing password for client certificate private key (if key is encrypted).
+  * `--client-cert-file`: File containing a client certificate for SSL/TLS connections (PKCS#12 or PEM-encoded).
+  * `--client-cert-key-file`: File containing a PEM-encoded private key to the client certificate for SSL/TLS connections.
+  * `--client-cert-key-password-file`: File containing a password for the private key (if the key is encrypted).
 * Queries in the `{{ ydb-cli }} workload run` command are now executed in random order.
 * **_(Requires server v25.1+)_** Added [external data sources](./concepts/datamodel/external_data_source.md) and [external tables](./concepts/datamodel/external_table.md) support in the `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md).
 * **_(Experimental)_** Added the `{{ ydb-cli }} admin node config init` command to initialize directory with node config files.

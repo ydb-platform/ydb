@@ -153,13 +153,9 @@ void TColumnShardScan::HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/) {
                 << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
 
     if (TMonotonic::Now() >= GetDeadline()) {
-        CheckHanging();
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("HAS_ACK", !!AckReceivedInstant)("fi", FinishInstant)("si", !!ScanIterator)(
-            "has_more", ChunksLimiter.HasMore())("in_waiting", ScanCountersPool.InWaiting())
-            ("counters_waiting", ScanCountersPool.DebugString())("scan_actor_id", ScanActorId)(
-            "tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)("debug", ScanIterator ? ScanIterator->DebugString() : Default<TString>());
-//        SendScanError("ColumnShard scanner timeout: HAS_ACK=" + ::ToString(!!AckReceivedInstant));
-//        Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
+        CheckHanging(true);
+        //        SendScanError("ColumnShard scanner timeout: HAS_ACK=" + ::ToString(!!AckReceivedInstant));
+        //        Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
     } else {
         ScheduleWakeup(GetDeadline());
     }
@@ -293,6 +289,10 @@ void TColumnShardScan::ContinueProcessing() {
 }
 
 void TColumnShardScan::CheckHanging() const {
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("HAS_ACK", AckReceivedInstant)("fi", FinishInstant)("si", !!ScanIterator)(
+        "has_more", ChunksLimiter.HasMore())("in_waiting", ScanCountersPool.InWaiting())("counters_waiting", ScanCountersPool.DebugString())(
+        "scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)(
+        "debug", ScanIterator ? ScanIterator->DebugString() : Default<TString>())("last", LastResultInstant);
     AFL_VERIFY(!!FinishInstant || !ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting())("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)(
                                              "gen", ScanGen)("tablet", TabletId)("debug", ScanIterator->DebugString())(
                                              "counters", ScanCountersPool.DebugString());

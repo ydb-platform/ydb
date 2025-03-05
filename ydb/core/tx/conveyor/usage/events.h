@@ -12,6 +12,9 @@ struct TEvExecution {
         EvNewTask = EventSpaceBegin(TKikimrEvents::ES_CONVEYOR),
         EvRegisterProcess,
         EvUnregisterProcess,
+        EvRegisterActor,
+        EvRegisterActorResponse,
+        EvActorFinished,
         EvEnd
     };
 
@@ -46,6 +49,45 @@ struct TEvExecution {
             : ProcessId(processId) {
         }
 
+    };
+
+    class TEvRegisterActor: public NActors::TEventLocal<TEvRegisterActor, EvRegisterActor> {
+    private:
+        std::unique_ptr<NActors::IActor> Actor;
+        YDB_READONLY_DEF(TActorId, Recipient);
+        YDB_READONLY_DEF(TString, Type);
+        YDB_READONLY_DEF(TString, DetailedInfo);
+        YDB_READONLY(ui64, Cookie, 0);
+    public:
+        TEvRegisterActor() = default;
+
+        std::unique_ptr<NActors::IActor> ExtractActor() {
+            return std::move(Actor);
+        }
+
+        explicit TEvRegisterActor(const TActorId& recipient, std::unique_ptr<NActors::IActor>&& actor, const TString& type, const TString& detailedInfo, ui64 cookie);
+    };
+
+    class TEvRegisterActorResponse: public NActors::TEventLocal<TEvRegisterActorResponse, EvRegisterActorResponse> {
+    private:
+        YDB_READONLY_DEF(TActorId, ActorId);
+        YDB_READONLY_DEF(TString, Type);
+        YDB_READONLY_DEF(TString, DetailedInfo);
+        YDB_READONLY(ui64, Cookie, 0);
+        
+    public:
+        TEvRegisterActorResponse() = default;
+
+        explicit TEvRegisterActorResponse(const TActorId& actorId, const TString& type, const TString& detailedInfo, ui64 cookie);
+    };
+
+    class TEvActorFinished: public NActors::TEventLocal<TEvActorFinished, EvActorFinished> {
+    private:
+        YDB_READONLY_DEF(TActorId, ActorId);
+    public:
+        TEvActorFinished() = default;
+
+        explicit TEvActorFinished(TActorId actorId);
     };
 };
 

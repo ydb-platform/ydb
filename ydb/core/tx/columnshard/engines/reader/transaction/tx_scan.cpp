@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/policy.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
 
 namespace NKikimr::NOlap::NReader {
 
@@ -154,12 +155,18 @@ void TTxScan::Complete(const TActorContext& ctx) {
     TComputeShardingPolicy shardingPolicy;
     AFL_VERIFY(shardingPolicy.DeserializeFromProto(request.GetComputeShardingPolicy()));
 
-    auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
+    if (AppDataVerified().FeatureFlags.GetEnableActorConveyor()) {
+        NKikimr::NConveyor::TActorServiceOperator::Register(Self->SelfId(), std::unique_ptr<IActor>(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
+        Self->DataAccessorsManager.GetObjectPtrVerified(), shardingPolicy, scanId,
+        txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat, Self->Counters.GetScanCounters())), "TTxScan", detailedInfo, requestCookie);
+    } else {
+        auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
         Self->DataAccessorsManager.GetObjectPtrVerified(), shardingPolicy, scanId,
         txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat, Self->Counters.GetScanCounters()));
-    Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
+        Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);
+    }
 }
 
 }   // namespace NKikimr::NOlap::NReader

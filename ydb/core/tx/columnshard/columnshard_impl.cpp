@@ -1629,4 +1629,9 @@ const NKikimr::NColumnShard::NTiers::TManager* TColumnShard::GetTierManagerPoint
     return Tiers->GetManagerOptional(tierId);
 }
 
+void TColumnShard::Handle(NKikimr::NConveyor::TEvExecution::TEvRegisterActorResponse::TPtr& ev, const TActorContext&) {
+    InFlightReadsTracker.AddScanActorId(ev->Get()->GetCookie(), ev->Get()->GetActorId());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", TStringBuilder{} << ev->Get()->GetType() << " started")("actor_id", ev->Get()->GetActorId())("trace_detailed", ev->Get()->GetDetailedInfo());
+}
+
 } // namespace NKikimr::NColumnShard

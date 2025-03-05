@@ -123,7 +123,8 @@
 #include <ydb/services/ext_index/common/config.h>
 #include <ydb/services/ext_index/common/service.h>
 #include <ydb/services/ext_index/service/executor.h>
-#include <ydb/core/tx/conveyor/service/service.h>
+#include <ydb/core/tx/conveyor/service/actor_distributor_service.h>
+#include <ydb/core/tx/conveyor/service/task_distributor_service.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
@@ -1137,6 +1138,11 @@ namespace Tests {
             auto* actor = NConveyor::TInsertServiceOperator::CreateService(NConveyor::TConfig(), new ::NMonitoring::TDynamicCounters());
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConveyor::TInsertServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+        }
+        {
+            auto* actor = NConveyor::TActorServiceOperator::CreateService(NConveyor::TConfig(), new ::NMonitoring::TDynamicCounters());
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NConveyor::TActorServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 

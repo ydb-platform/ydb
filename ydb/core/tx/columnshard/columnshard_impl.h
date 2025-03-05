@@ -35,6 +35,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/conveyor/usage/events.h>
 #include <ydb/core/tx/locks/locks.h>
 #include <ydb/core/tx/tiering/common.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
@@ -296,6 +297,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishToSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(NKikimr::NConveyor::TEvExecution::TEvRegisterActorResponse::TPtr& ev, const TActorContext& ctx);
+
     void Handle(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& ctx);
 
     void HandleInit(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
@@ -463,6 +466,8 @@ protected:
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishToSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator, Handle);
             HFunc(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors, Handle);
+
+            HFunc(NKikimr::NConveyor::TEvExecution::TEvRegisterActorResponse, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {

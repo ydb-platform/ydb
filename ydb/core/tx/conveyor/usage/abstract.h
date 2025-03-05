@@ -10,7 +10,7 @@
 
 namespace NKikimr::NConveyor {
 
-class TTaskSignals: public NColumnShard::TCommonCountersOwner {
+class TTaskCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
 public:
@@ -19,7 +19,7 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr Success;
     NMonitoring::TDynamicCounters::TCounterPtr SuccessDuration;
 
-    TTaskSignals(const TString& moduleId, const TString& taskClassIdentifier, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals = nullptr)
+    TTaskCounters(const TString& moduleId, const TString& taskClassIdentifier, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals = nullptr)
         : TBase(moduleId, baseSignals) {
         DeepSubGroup("task_class", taskClassIdentifier);
         Fails = TBase::GetDeriviative("Fails");
@@ -76,7 +76,7 @@ public:
     void OnCannotExecute(const TString& reason) {
         return DoOnCannotExecute(reason);
     }
-    TConclusionStatus Execute(std::shared_ptr<TTaskSignals> signals, const std::shared_ptr<ITask>& taskPtr);
+    TConclusionStatus Execute(std::shared_ptr<TTaskCounters> counters, const std::shared_ptr<ITask>& taskPtr);
 };
 
 }

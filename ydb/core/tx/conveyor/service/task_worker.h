@@ -15,7 +15,7 @@ class TWorkerTask {
 private:
     YDB_READONLY_DEF(ITask::TPtr, Task);
     YDB_READONLY(TMonotonic, CreateInstant, TMonotonic::Now());
-    YDB_READONLY_DEF(std::shared_ptr<TTaskSignals>, TaskSignals);
+    YDB_READONLY_DEF(std::shared_ptr<TTaskCounters>, TaskSignals);
     std::optional<TMonotonic> StartInstant;
     YDB_READONLY(ui64, ProcessId, 0);
 public:
@@ -28,7 +28,7 @@ public:
         return *StartInstant;
     }
 
-    TWorkerTask(const ITask::TPtr& task, const std::shared_ptr<TTaskSignals>& taskSignals, const ui64 processId)
+    TWorkerTask(const ITask::TPtr& task, const std::shared_ptr<TTaskCounters>& taskSignals, const ui64 processId)
         : Task(task)
         , TaskSignals(taskSignals)
         , ProcessId(processId)
@@ -81,9 +81,9 @@ struct TEvInternal {
     };
 };
 
-class TWorker: public NActors::TActorBootstrapped<TWorker> {
+class TTaskWorker: public NActors::TActorBootstrapped<TTaskWorker> {
 private:
-    using TBase = NActors::TActorBootstrapped<TWorker>;
+    using TBase = NActors::TActorBootstrapped<TTaskWorker>;
     const double CPUUsage = 1;
     bool WaitWakeUp = false;
     const NActors::TActorId DistributorId;
@@ -104,10 +104,10 @@ public:
     }
 
     void Bootstrap() {
-        Become(&TWorker::StateMain);
+        Become(&TTaskWorker::StateMain);
     }
 
-    TWorker(const TString& conveyorName, const double cpuUsage, const NActors::TActorId& distributorId)
+    TTaskWorker(const TString& conveyorName, const double cpuUsage, const NActors::TActorId& distributorId)
         : TBase("CONVEYOR::" + conveyorName + "::WORKER")
         , CPUUsage(cpuUsage)
         , DistributorId(distributorId)

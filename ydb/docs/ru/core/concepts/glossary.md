@@ -319,7 +319,7 @@
 
 **Список уровня доступа** или **список разрешений** — список [SID](#access-sid)'ов [субъектов доступа](#access-subject), которым разрешён определённый [уровень доступа](#access-level).
 
-{{ ydb-short-name }} имеет несколько [списков уровней доступа](../reference/configuration/index.md#security-access-levels), совместно определяющих набор [уровней доступа](#access-level) в системе.
+{{ ydb-short-name }} имеет несколько [списков уровней доступа](../reference/configuration/security.md#security-access-levels), совместно определяющих набор [уровней доступа](#access-level) в системе.
 
 ### Владелец {#access-owner}
 

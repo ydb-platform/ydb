@@ -115,15 +115,16 @@ public:
 
 class TFetchingScript {
 private:
-    YDB_ACCESSOR(TString, BranchName, "UNDEFINED");
+    YDB_READONLY_DEF(TString, BranchName);
     std::vector<std::shared_ptr<IFetchingStep>> Steps;
     TAtomic StartInstant;
     TAtomic FinishInstant;
 
 public:
-    TFetchingScript(const TSpecialReadContext& context);
-
-    void Allocation(const std::set<ui32>& entityIds, const EStageFeaturesIndexes stage, const EMemType mType);
+    TFetchingScript(const TString& branchName, std::vector<std::shared_ptr<IFetchingStep>>&& steps)
+        : BranchName(branchName)
+        , Steps(std::move(steps)) {
+    }
 
     void AddStepDataSize(const ui32 index, const ui64 size) {
         GetStep(index)->AddDataSize(size);
@@ -138,31 +139,11 @@ public:
         AtomicCas(&StartInstant, TMonotonic::Now().MicroSeconds(), 0);
     }
 
-    TString DebugString() const;
+    TString DebugString(const bool onlyLongSteps = true) const;
 
     const std::shared_ptr<IFetchingStep>& GetStep(const ui32 index) const {
         AFL_VERIFY(index < Steps.size());
         return Steps[index];
-    }
-
-    template <class T, typename... Args>
-    std::shared_ptr<T> AddStep(Args... args) {
-        auto result = std::make_shared<T>(args...);
-        Steps.emplace_back(result);
-        return result;
-    }
-
-    template <class T, typename... Args>
-    std::shared_ptr<T> InsertStep(const ui32 index, Args... args) {
-        AFL_VERIFY(index <= Steps.size())("index", index)("size", Steps.size());
-        auto result = std::make_shared<T>(args...);
-        Steps.insert(Steps.begin() + index, result);
-        return result;
-    }
-
-    void AddStep(const std::shared_ptr<IFetchingStep>& step) {
-        AFL_VERIFY(step);
-        Steps.emplace_back(step);
     }
 
     bool IsFinished(const ui32 currentStepIdx) const {
@@ -231,26 +212,50 @@ public:
     }
 };
 
-class TColumnsAccumulator {
+class TFetchingScriptBuilder {
 private:
-    TColumnsSetIds FetchingReadyColumns;
-    TColumnsSetIds AssemblerReadyColumns;
-    ISnapshotSchema::TPtr FullSchema;
     std::shared_ptr<TColumnsSetIds> GuaranteeNotOptional;
+    ISnapshotSchema::TPtr FullSchema;
+
+    YDB_ACCESSOR(TString, BranchName, "UNDEFINED");
+    std::vector<std::shared_ptr<IFetchingStep>> Steps;
+    YDB_READONLY_DEF(TColumnsSetIds, AddedFetchingColumns);
+    YDB_READONLY_DEF(TColumnsSetIds, AddedAssembleColumns);
+
+    TFetchingScriptBuilder(const ISnapshotSchema::TPtr& schema, const std::shared_ptr<TColumnsSetIds>& guaranteeNotOptional)
+        : GuaranteeNotOptional(guaranteeNotOptional)
+        , FullSchema(schema) {
+    }
+
+private:
+    void AddAllocation(const std::set<ui32>& entityIds, const EStageFeaturesIndexes stage, const EMemType mType);
+
+    template <class T, typename... Args>
+    std::shared_ptr<T> InsertStep(const ui32 index, Args... args) {
+        AFL_VERIFY(index <= Steps.size())("index", index)("size", Steps.size());
+        auto result = std::make_shared<T>(args...);
+        Steps.insert(Steps.begin() + index, result);
+        return result;
+    }
 
 public:
-    TColumnsAccumulator(const std::shared_ptr<TColumnsSetIds>& guaranteeNotOptional, const ISnapshotSchema::TPtr& fullSchema)
-        : FullSchema(fullSchema)
-        , GuaranteeNotOptional(guaranteeNotOptional) {
+    TFetchingScriptBuilder(const TSpecialReadContext& context);
+
+    std::shared_ptr<TFetchingScript> Build()&& {
+        return std::make_shared<TFetchingScript>(BranchName, std::move(Steps));
     }
 
-    TColumnsSetIds GetNotFetchedAlready(const TColumnsSetIds& columns) const {
-        return columns - FetchingReadyColumns;
+    void AddStep(const std::shared_ptr<IFetchingStep>& step) {
+        AFL_VERIFY(step);
+        Steps.emplace_back(step);
     }
 
-    bool AddFetchingStep(TFetchingScript& script, const TColumnsSetIds& columns, const EStageFeaturesIndexes stage);
-    bool AddAssembleStep(TFetchingScript& script, const TColumnsSetIds& columns, const TString& purposeId, const EStageFeaturesIndexes stage,
-        const bool sequential);
+    void AddFetchingStep(const TColumnsSetIds& columns, const EStageFeaturesIndexes stage);
+    void AddAssembleStep(const TColumnsSetIds& columns, const TString& purposeId, const EStageFeaturesIndexes stage, const bool sequential);
+
+    static TFetchingScriptBuilder MakeForTests(ISnapshotSchema::TPtr schema, std::shared_ptr<TColumnsSetIds> guaranteeNotOptional = nullptr) {
+        return TFetchingScriptBuilder(schema, guaranteeNotOptional ? guaranteeNotOptional : std::make_shared<TColumnsSetIds>());
+    }
 };
 
 class TFetchingScriptCursor {

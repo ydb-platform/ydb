@@ -42,6 +42,13 @@ TConclusionStatus TReadMetadata::Init(
     return TConclusionStatus::Success();
 }
 
+TReadMetadata::TReadMetadata(const std::shared_ptr<TVersionedIndex>& schemaIndex, const TReadDescription& read)
+    : TBase(schemaIndex, read.PKRangesFilter->IsReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC,
+          read.GetProgram(), schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(), read.GetScanCursorOptional())
+    , PathId(read.PathId)
+    , ReadStats(std::make_shared<TReadStats>()) {
+}
+
 std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds() const {
     auto& indexInfo = ResultIndexSchema->GetIndexInfo();
     const auto& ids = GetProgram().GetEarlyFilterColumns();

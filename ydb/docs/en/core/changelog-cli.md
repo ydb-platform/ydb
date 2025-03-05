@@ -6,26 +6,26 @@ Released on March 5, 2025. To update to version **2.20.0**, select the [Download
 
 ### Features
 
-* Added [topics](./concepts/topic.md) support in `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md). In this release, only the settings of the topics are retained; messages are not included in the backup.
-* Added [coordination nodes](./concepts/datamodel/coordination-node.md)  support in `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md).
-* Added `{{ ydb-cli }} workload log import generator` command.
+* Added [topics](./concepts/topic.md) support in the `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md). In this release, only topic settings are retained; messages are not included in the backup.
+* Added [coordination nodes](./concepts/datamodel/coordination-node.md)  support in the `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md).
+* Added new `{{ ydb-cli }} workload log import generator` command.
 * Added new global options for client certificates in SSL/TLS connections:
   * `--client-cert-file`: File containing client certificate for SSL/TLS connections (PKCS#12 or PEM-encoded).
   * `--client-cert-key-file`: File containing PEM encoded client certificate private key for SSL/TLS connections.
   * `--client-cert-key-password-file`: File containing password for client certificate private key (if key is encrypted).
-* Queries in `{{ ydb-cli }} workload run` command are now executed in random order.
-* **_(Requires server v25.1+)_** Added [external data sources](./concepts/datamodel/external_data_source.md) and [external tables](./concepts/datamodel/external_table.md) support in `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md).
-* **_(Experimental)_** Add `{{ ydb-cli }} admin node config init` command to initialize directory with node config files.
-* **_(Requires server v25.1+)_** **_(Experimental)_** Add `{{ ydb-cli }} admin cluster config generate` command to generate dynamic config file from cluster static config file.
-* **_(Requires server v25.1+)_** **_(Experimental)_** Added `{{ ydb-cli }} admin cluster dump` and `{{ ydb-cli }} admin cluster restore` commands for dumping all cluster-level data. Such dumps contain database list with metadata, users and groups, but does not contain scheme objects.
-* **_(Requires server v25.1+)_** **_(Experimental)_** Added `{{ ydb-cli }} admin database dump` and `{{ ydb-cli }} admin database restore` commands for dumping all database-level data. Such dumps contain database metadata, scheme objects, their data, users and groups.
+* Queries in the `{{ ydb-cli }} workload run` command are now executed in random order.
+* **_(Requires server v25.1+)_** Added [external data sources](./concepts/datamodel/external_data_source.md) and [external tables](./concepts/datamodel/external_table.md) support in the `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md).
+* **_(Experimental)_** Added the `{{ ydb-cli }} admin node config init` command to initialize directory with node config files.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin cluster config generate` command to generate dynamic config file from cluster static config file.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin cluster dump` and `{{ ydb-cli }} admin cluster restore` commands for dumping all cluster-level data. Such dumps contain database list with metadata, users and groups, but does not contain scheme objects.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin database dump` and `{{ ydb-cli }} admin database restore` commands for dumping all database-level data. Such dumps contain database metadata, scheme objects, their data, users and groups.
 
 ### Bug fixes
 
-* Fixed a bug where `{{ ydb-cli }} auth get-token` command tried to authenticate twice: while listing endpoints and while executing the actual token request.
-* Fixed a bug where `{{ ydb-cli }} import file csv` command was saving progress even if a batch upload had been failed.
-* Fixed a bug where some errors could be ignored when restoring from a local backup.
-* Fixed a memory leak in data generator for ``.
+* Fixed a bug where the `{{ ydb-cli }} auth get-token` command tried to authenticate twice: while listing endpoints and while executing the actual token request.
+* Fixed a bug where the `{{ ydb-cli }} import file csv` command was saving progress even if a batch upload had failed.
+* Fixed a bug where some errors could be ignored when restoring from a local backup with the `ydb tools restore` command.
+* Fixed a memory leak in the data generator for `{{ ydb-cli }} workload tpcds` benchmark.
 
 ## Version 2.19.0 {#2-19-0}
 
@@ -33,12 +33,12 @@ Released on February 5, 2025. To update to version **2.19.0**, select the [Downl
 
 ### Features
 
-* Added [changefeeds](./concepts/cdc.md) support in `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md).
-* Added `CREATE TABLE` text suggestion on schema error during `{{ ydb-cli }} import file csv` [command](./reference/ydb-cli/export-import/import-file.md).
+* Added [changefeeds](./concepts/cdc.md) support in the `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md).
+* Added `CREATE TABLE` text suggestion on schema error during the `{{ ydb-cli }} import file csv` [command](./reference/ydb-cli/export-import/import-file.md).
 * Added statistics output on the current progress of the query in the `{{ ydb-cli }} workload` [command](./reference/ydb-cli/commands/workload/index.md).
 * Added query text to the error message if a query fails in the `{{ ydb-cli }} workload run` [command](./reference/ydb-cli/commands/workload/index.md).
 * Added a message if the global timeout expired in the `{{ ydb-cli }} workload run` [command](./reference/ydb-cli/commands/workload/index.md).
-* **_(Requires server v25.1+)_** Added [views](./concepts/datamodel/view.md) support in `{{ ydb-cli }} export s3` and `{{ ydb-cli }} import s3`. Views are exported as `CREATE VIEW` YQL statements, which are executed on import.
+* **_(Requires server v25.1+)_** Added [views](./concepts/datamodel/view.md) support in the `{{ ydb-cli }} export s3` and `{{ ydb-cli }} import s3`. Views are exported as `CREATE VIEW` YQL statements, which are executed on import.
 * **_(Requires server v25.1+)_** Added the `--skip-checksum-validation` option to the `{{ ydb-cli }} import s3` [command](./reference/ydb-cli/export-import/import-s3.md) to skip server-side checksum validation.
 * **_(Requires server v25.1+)_** **_(Experimental)_** Added new options for the `{{ ydb-cli }} debug ping` command: `--chain-length`, `--chain-work-duration`, `--no-tail-chain`.
 * **_(Requires server v25.1+)_** **_(Experimental)_** Added new options for the `{{ ydb-cli }} admin storage fetch` command: `--dedicated-storage-section` and `--dedicated-cluster-section`.
@@ -62,17 +62,17 @@ Released on December 24, 2024. To update to version **2.18.0**, select the [Down
 * Made the `--consumer` flag in the `{{ ydb-cli }} topic read` [command](./reference/ydb-cli/topic-read) optional. In the non-subscriber reading mode, the partition IDs must be specified with the `--partition-ids` option. In this case, the read is performed without saving the offset commit.
 * The `{{ ydb-cli }} import file csv` [command](./reference/ydb-cli/export-import/import-file.md) now saves the import progress. Relaunching the import command will resume the process from the row where it was interrupted.
 * In the `{{ ydb-cli }} workload kv` and `{{ ydb-cli }} workload stock` commands, the default value of the `--executer` option has been changed to `generic`, which makes them no longer rely on the legacy query execution infrastructure.
-* Replaced the CSV format with Parquet for filling tables in `{{ ydb-cli }} workload` benchmarks.
+* Replaced the CSV format with Parquet for filling tables in the `{{ ydb-cli }} workload` benchmarks.
 * **_(Requires server v25.1+)_** **_(Experimental)_** Added new `{{ ydb-cli }} admin storage` command with `fetch` and `replace` subcommands to manage server storage configuration.
 
 ### Backward incompatible changes
 
-* Replaced the `--query-settings` option with `--query-prefix` in `{{ ydb-cli }} workload * run`.
+* Replaced the `--query-settings` option with `--query-prefix` in the `{{ ydb-cli }} workload * run` command.
 
 ### Bug fixes
 
 * Fixed a bug where the `{{ ydb-cli }} workload * run` command could crash in `--dry-run` mode.
-* Fixed a bug in `{{ ydb-cli }} import file csv` where multiple columns with escaped quotes in the same row were parsed incorrectly.
+* Fixed a bug in the `{{ ydb-cli }} import file csv` where multiple columns with escaped quotes in the same row were parsed incorrectly.
 
 
 ## Version 2.17.0 {#2-17-0}
@@ -81,7 +81,7 @@ Released on December 4, 2024. To update to version **2.17.0**, select the [Downl
 
 ### Features
 
-* **_(Requires server v25.1+)_** **_(Experimental)_** Added `{{ ydb-cli }} debug ping` command for performance and connectivity debugging.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} debug ping` command for performance and connectivity debugging.
 
 ### Performance
 
@@ -100,7 +100,7 @@ Released on November 26, 2024. To update to version **2.16.0**, select the [Down
 
 * Improved throughput of the `{{ ydb-cli }} import file csv` command by up to 3 times.
 * Added support for running the [stock benchmark](./reference/ydb-cli/commands/workload/stock.md) with [column-oriented tables](./concepts/datamodel/table.md#column-oriented-tables).
-* Added support for [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601)–formatted timestamps in `{{ ydb-cli }} topic` commands.
+* Added support for [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601)–formatted timestamps in the `{{ ydb-cli }} topic` commands.
 * Added the `--explain-ast` option to the `{{ ydb-cli }} sql` command, which prints the query AST.
 * Added ANSI SQL syntax highlighting in interactive mode.
 * Added support for [PostgreSQL syntax](./postgresql/intro.md) in the `{{ ydb-cli }} workload tpch` and `{{ ydb-cli }} workload tpcds` benchmarks.
@@ -124,7 +124,7 @@ Released on June 24, 2024. To update to version **2.10.0**, select the [Download
 ### Features
 
 * Added the `{{ ydb-cli }} sql` command that runs over QueryService and can execute any DML/DDL command.
-* Added `notx` support for the `--tx-mode` option in `{{ ydb-cli }} table query execute`.
+* Added `notx` support for the `--tx-mode` option in the `{{ ydb-cli }} table query execute` command.
 * Added start and end times for long-running operation descriptions (export, import).
 * Added replication description support in the `{{ ydb-cli }} scheme describe` and `{{ ydb-cli }} scheme ls` commands.
 * Added big datetime types support: `Date32`, `Datetime64`, `Timestamp64`, `Interval64`.
@@ -152,11 +152,11 @@ Released on April 25, 2024. To update to version **2.9.0**, select the [Download
 ### Features
 
 * Improved query logical plan tables: added colors, more information, fixed some bugs.
-* The verbose option `-v` is supported for `{{ ydb-cli }} workload` commands to provide debug information.
-* Added an option to run `{{ ydb-cli }} workload tpch` with an S3 source to measure [federated queries](concepts/federated_query/index.md) performance.
+* The verbose option `-v` is supported for the `{{ ydb-cli }} workload` commands to provide debug information.
+* Added an option to run the `{{ ydb-cli }} workload tpch` command with an S3 source to measure [federated queries](concepts/federated_query/index.md) performance.
 * Added the `--rate` option for `{{ ydb-cli }} workload` commands to control the transactions (or requests) per second limit.
 * Added the `--use-virtual-addressing` option for S3 import/export, allowing the switch to [virtual hosting of buckets](https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html) for the S3 path layout.
-* Improved `{{ ydb-cli }} scheme ls` performance due to listing directories in parallel.
+* Improved the `{{ ydb-cli }} scheme ls` command performance due to listing directories in parallel.
 
 ### Bug fixes
 
@@ -172,7 +172,7 @@ Released on January 12, 2024. To update to version **2.8.0**, select the [Downlo
 
 ### Features
 
-* Added configuration management commands for the cluster `{{ ydb-cli }} admin config` and `{{ ydb-cli }} admin volatile-config`.
+* Added new `{{ ydb-cli }} admin config` and `{{ ydb-cli }} admin volatile-config` commands for cluster configuration management.
 * Added support for loading PostgreSQL-compatible data types by [ydb import file csv|tsv|json](reference/ydb-cli/export-import/import-file.md) command. Only for row-oriented tables.
 * Added support for directory load from an S3-compatible storage in the [ydb import s3](reference/ydb-cli/export-import/import-s3.md) command. Currently only available on Linux and Mac OS.
 * Added support for outputting the results of [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb yql](reference/ydb-cli/yql.md) and [ydb scripting yql](reference/ydb-cli/scripting-yql.md) commands in the [Apache Parquet](https://parquet.apache.org/docs/) format.
@@ -195,7 +195,7 @@ Released on October 23, 2023. To update to version **2.7.0**, select the [Downlo
 
 * Added the [ydb tools pg-convert](postgresql/import.md#pg-convert) command, which prepares a dump obtained by the [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility for loading into the YDB postgres-compatible layer.
 * Added the `{{ ydb-cli }} workload query` load testing command, which loads the database with [script execution queries](reference/ydb-cli/yql.md) in multiple threads.
-* Added a command `{{ ydb-cli }} scheme permissions list` to list permissions.
+* Added new `{{ ydb-cli }} scheme permissions list` command to list permissions.
 * In the commands [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb table query explain](reference/ydb-cli/commands/explain-plan.md), [ydb yql](reference/ydb-cli/yql.md), and [ydb scripting yql](reference/ydb-cli/scripting-yql.md), the `--flame-graph` option has been added, specifying the path to the file in which you need to save the visualization of query execution statistics.
 * [Special commands](reference/ydb-cli/interactive-cli.md#spec-commands) in the interactive query execution mode are now case-insensitive.
 * Added validation for [special commands](reference/ydb-cli/interactive-cli.md#spec-commands) and their [parameters](reference/ydb-cli/interactive-cli.md#internal-vars).

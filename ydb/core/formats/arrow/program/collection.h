@@ -53,10 +53,6 @@ public:
         return Accessors.size();
     }
 
-    void ResetFilter() {
-        Filter = std::make_shared<TColumnFilter>(TColumnFilter::BuildAllowFilter());
-    }
-
     std::optional<ui32> GetRecordsCountActualOptional() const {
         return RecordsCountActual;
     }

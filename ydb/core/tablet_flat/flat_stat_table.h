@@ -128,7 +128,6 @@ struct TStats {
             << "RowCount: " << RowCount
             << " DataSize: " << DataSize.Size
             << " IndexSize: " << IndexSize.Size
-            << " ByKeyFilterSize: " << ByKeyFilterSize
             << " RowCountHistogram: " << RowCountHistogram.size()
             << " DataSizeHistogram: " << DataSizeHistogram.size();
     }

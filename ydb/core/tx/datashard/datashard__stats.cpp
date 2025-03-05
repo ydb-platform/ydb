@@ -360,16 +360,15 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
     Actors.erase(ev->Sender);
 
     ui64 tableId = ev->Get()->TableId;
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "BuildStats result received at datashard " << TabletID() << ", for tableId " << tableId);
+    LOG_INFO_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Result received at datashard " << TabletID() << ", for tableId " << tableId
+        << ": " << ev->Get()->Stats.ToString());
 
     i64 dataSize = 0;
     if (TableInfos.contains(tableId)) {
         const TUserTable& tableInfo = *TableInfos[tableId];
 
-        if (!tableInfo.StatsUpdateInProgress) {
-            // How can this happen?
-            LOG_ERROR(ctx, NKikimrServices::TX_DATASHARD,
-                      "Unexpected async stats update at datashard %" PRIu64, TabletID());
+        if (!tableInfo.StatsUpdateInProgress) { // How can this happen?
+            LOG_ERROR_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Unexpected async stats update at datashard " << TabletID() << ", for tableId " << tableId);
         }
         tableInfo.Stats.Update(std::move(ev->Get()->Stats), ev->Get()->IndexSize,
             std::move(ev->Get()->PartOwners), ev->Get()->PartCount,
@@ -387,8 +386,8 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
         SendPeriodicTableStats(ctx);
 
     } else {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Drop stats at datashard " << TabletID()
-                    << ", built for tableId " << tableId << ", but table is gone (moved ot dropped)");
+        LOG_INFO_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Result dropped at datashard " << TabletID() << ", for tableId " << tableId
+            << ", but table is gone (moved ot dropped)");
     }
 
     if (dataSize > HighDataSizeReportThresholdBytes) {

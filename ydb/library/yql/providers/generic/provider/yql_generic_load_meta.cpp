@@ -455,6 +455,29 @@ namespace NYql {
             }
         }
 
+        void SetMongoDBOptions(NYql::TMongoDbDataSourceOptions& options, const TGenericClusterConfig& clusterConfig) {
+            auto it = clusterConfig.GetDataSourceOptions().find("reading_mode");
+            if (it != clusterConfig.GetDataSourceOptions().end()) {
+                TMongoDbDataSourceOptions_EReadingMode value;
+                TMongoDbDataSourceOptions_EReadingMode_Parse(it->second, &value);
+                options.set_reading_mode(value);
+            }
+
+            it = clusterConfig.GetDataSourceOptions().find("unexpected_type_display_mode");
+            if (it != clusterConfig.GetDataSourceOptions().end()) {
+                TMongoDbDataSourceOptions_EUnexpectedTypeDisplayMode value;
+                TMongoDbDataSourceOptions_EUnexpectedTypeDisplayMode_Parse(it->second, &value);
+                options.set_unexpected_type_display_mode(value);
+            }
+
+            it = clusterConfig.GetDataSourceOptions().find("unsupported_type_display_mode");
+            if (it != clusterConfig.GetDataSourceOptions().end()) {
+                TMongoDbDataSourceOptions_EUnsupportedTypeDisplayMode value;
+                TMongoDbDataSourceOptions_EUnsupportedTypeDisplayMode_Parse(it->second, &value);
+                options.set_unsupported_type_display_mode(value);
+            }
+        }
+
         void FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request,
                                    const TGenericClusterConfig& clusterConfig) {
             const auto dataSourceKind = clusterConfig.GetKind();
@@ -482,6 +505,10 @@ namespace NYql {
                 case NYql::EGenericDataSourceKind::LOGGING: {
                     auto* options = request.mutable_data_source_instance()->mutable_logging_options();
                     SetLoggingFolderId(*options, clusterConfig);
+                } break;
+                case NYql::EGenericDataSourceKind::MONGO_DB: {
+                    auto* options = request.mutable_data_source_instance()->mutable_mongodb_options();
+                    SetMongoDBOptions(*options, clusterConfig);
                 } break;
                 default:
                     throw yexception() << "Unexpected data source kind: '"

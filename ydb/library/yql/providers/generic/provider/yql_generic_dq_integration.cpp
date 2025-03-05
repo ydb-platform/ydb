@@ -38,6 +38,8 @@ namespace NYql {
                     return "OracleGeneric";
                 case NYql::EGenericDataSourceKind::LOGGING:
                     return "LoggingGeneric";
+                case NYql::EGenericDataSourceKind::MONGO_DB:
+                    return "MongoDBGeneric";
                 default:
                     throw yexception() << "Data source kind is unknown or not specified";
             }
@@ -276,6 +278,9 @@ namespace NYql {
                             break;
                         case NYql::EGenericDataSourceKind::LOGGING:
                             properties["SourceType"] = "Logging";
+                            break;
+                        case NYql::EGenericDataSourceKind::MONGO_DB:
+                            properties["SourceType"] = "MongoDB";
                             break;
                         case NYql::EGenericDataSourceKind::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;

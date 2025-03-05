@@ -20,7 +20,8 @@ enum class EDatabaseType {
     MsSQLServer,
     Oracle,
     Logging,
-    Solomon
+    Solomon,
+    MongoDB
 };
 
 inline EDatabaseType DatabaseTypeFromDataSourceKind(NYql::EGenericDataSourceKind dataSourceKind) {
@@ -41,6 +42,8 @@ inline EDatabaseType DatabaseTypeFromDataSourceKind(NYql::EGenericDataSourceKind
           return EDatabaseType::Oracle;
         case NYql::EGenericDataSourceKind::LOGGING:
           return EDatabaseType::Logging;
+        case NYql::EGenericDataSourceKind::MONGO_DB:
+          return EDatabaseType::MongoDB;
         default:
             ythrow yexception() << "Unknown data source kind: " << NYql::EGenericDataSourceKind_Name(dataSourceKind);
     }
@@ -64,6 +67,8 @@ inline NYql::EGenericDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseType d
             return NYql::EGenericDataSourceKind::ORACLE;
         case EDatabaseType::Logging:
             return NYql::EGenericDataSourceKind::LOGGING;
+        case EDatabaseType::MongoDB:
+            return NYql::EGenericDataSourceKind::MONGO_DB;
         default:
             ythrow yexception() << "Unknown database type: " << ToString(databaseType);
     }

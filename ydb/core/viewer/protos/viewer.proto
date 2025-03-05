@@ -561,6 +561,12 @@ message TNodeInfo {
     repeated NKikimrWhiteboard.TNodeStateInfo ReversePeers = 55;
 }
 
+message TNodeBatch {
+    repeated uint32 NodesToAskFor = 1;
+    repeated uint32 NodesToAskAbout = 2;
+    optional bool HasStaticNodes = 3;
+}
+
 message TNodesInfo {
     uint32 Version = 1;
     optional uint64 TotalNodes = 2;
@@ -578,6 +584,7 @@ message TNodesInfo {
     optional uint64 MaximumSlotsPerDisk = 51;
     optional bool NoDC = 60;
     optional bool NoRack = 61;
+    repeated TNodeBatch OriginalNodeBatches = 62;
 }
 
 enum ENodeType {

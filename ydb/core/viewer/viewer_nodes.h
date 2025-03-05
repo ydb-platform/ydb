@@ -181,6 +181,7 @@ class TJsonNodes : public TViewerPipeClient {
     ui32 SpaceUsageProblem = 90; // %
     bool OffloadMerge = true;
     size_t OffloadMergeAttempts = 2;
+    size_t OffloadMergeBatchSize = 200;
 
     using TGroupSortKey = std::variant<TString, ui64, float, int>;
 
@@ -748,6 +749,8 @@ class TJsonNodes : public TViewerPipeClient {
     std::vector<TNodeGroup> NodeGroups;
     std::unordered_map<TNodeId, TNode*> NodesByNodeId;
     std::unordered_map<TNodeId, TNodeBatch> NodeBatches;
+    std::vector<TNodeBatch> OriginalNodeBatches;
+    bool DumpOriginalNodeBatches = false;
 
     TFieldsType FieldsRequired;
     TFieldsType FieldsAvailable;
@@ -953,8 +956,10 @@ public:
             }
         }
 
-        OffloadMerge = FromStringWithDefault<bool>(params.Get("offload_merge"), OffloadMerge);
-        OffloadMergeAttempts = FromStringWithDefault<bool>(params.Get("offload_merge_attempts"), OffloadMergeAttempts);
+        OffloadMerge = FromStringWithDefault(params.Get("offload_merge"), OffloadMerge);
+        OffloadMergeAttempts = FromStringWithDefault(params.Get("offload_merge_attempts"), OffloadMergeAttempts);
+        OffloadMergeBatchSize = FromStringWithDefault(params.Get("offload_merge_batch_size"), OffloadMergeBatchSize);
+        DumpOriginalNodeBatches = FromStringWithDefault(params.Get("dump_original_node_batches"), DumpOriginalNodeBatches);
         Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
         TString filterStoragePool = params.Get("pool");
         if (filterStoragePool.empty()) {
@@ -1077,6 +1082,9 @@ public:
             auto request = std::make_unique<TEvWhiteboard::TEvNodeStateRequest>();
             request->Record.AddFieldsRequired(-1);
             NodeStateResponse = MakeWhiteboardRequest(TActivationContext::ActorSystem()->NodeId, request.release());
+        }
+        if (!FilterDatabase && OffloadMerge && FieldsNeeded(FieldsSystemState)) {
+            FieldsRequired.set(+ENodeFields::SubDomainKey);
         }
         if (!FilterStoragePools.empty() || !FilterGroupIds.empty()) {
             FilterDatabase = false; // we disable database filter if we're filtering by pool or group
@@ -1571,8 +1579,6 @@ public:
         ApplyLimit();
     }
 
-    static constexpr size_t BATCH_SIZE = 200;
-
     void BuildCandidates(TNodeBatch& batch, std::vector<TNode*>& candidates) {
         auto itCandidate = candidates.begin();
         for (; itCandidate != candidates.end() && batch.NodesToAskFor.size() < OffloadMergeAttempts; ++itCandidate) {
@@ -1591,9 +1597,9 @@ public:
         std::sort(candidates.begin(), candidates.end(), [](TNode* a, TNode* b) {
             return a->GetCandidateScore() > b->GetCandidateScore();
         });
-        while (nodeBatch.NodesToAskAbout.size() > BATCH_SIZE) {
+        while (nodeBatch.NodesToAskAbout.size() > OffloadMergeBatchSize) {
             TNodeBatch newBatch;
-            size_t splitSize = std::min(BATCH_SIZE, nodeBatch.NodesToAskAbout.size() / 2);
+            size_t splitSize = std::min(OffloadMergeBatchSize, nodeBatch.NodesToAskAbout.size() / 2);
             newBatch.NodesToAskAbout.reserve(splitSize);
             for (size_t i = 0; i < splitSize; ++i) {
                 newBatch.NodesToAskAbout.push_back(nodeBatch.NodesToAskAbout.back());
@@ -2105,6 +2111,9 @@ public:
                 FieldsRequired.set(+ENodeFields::SystemState);
             }
             std::vector<TNodeBatch> batches = BatchNodes(NodeView);
+            if (DumpOriginalNodeBatches) {
+                OriginalNodeBatches = batches;
+            }
             if (FilterPeerRole == EPeerRole::Static || FilterPeerRole == EPeerRole::Other) {
                 for (TNodeBatch& batch : batches) {
                     batch.FieldsRequested.set(+ENodeFields::Peers);
@@ -3101,6 +3110,16 @@ public:
         AddEvent("ReplyAndPassAway");
         ApplyEverything();
         NKikimrViewer::TNodesInfo json;
+        for (const auto& batch : OriginalNodeBatches) {
+            auto* jsonBatch = json.AddOriginalNodeBatches();
+            for (const auto& node : batch.NodesToAskFor) {
+                jsonBatch->AddNodesToAskFor(node->GetNodeId());
+            }
+            for (const auto& node : batch.NodesToAskAbout) {
+                jsonBatch->AddNodesToAskAbout(node->GetNodeId());
+            }
+            jsonBatch->SetHasStaticNodes(batch.HasStaticNodes);
+        }
         json.SetVersion(Viewer->GetCapabilityVersion("/viewer/nodes"));
         json.SetFieldsAvailable(FieldsAvailable.to_string());
         json.SetFieldsRequired(FieldsRequired.to_string());

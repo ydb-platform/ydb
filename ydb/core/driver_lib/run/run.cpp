@@ -1205,6 +1205,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->ReplicationConfig = runConfig.AppConfig.GetReplicationConfig();
     }
 
+    if (runConfig.AppConfig.HasHealthCheckConfig()) {
+        AppData->HealthCheckConfig = runConfig.AppConfig.GetHealthCheckConfig();
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())

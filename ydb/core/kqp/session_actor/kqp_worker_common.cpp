@@ -181,9 +181,15 @@ bool CanCacheQuery(const NKqpProto::TKqpPhyQuery& query) {
 
         for (const auto& stage : tx.GetStages()) {
             for (const auto& source : stage.GetSources()) {
-                // S3 provider stores S3 paths to read in AST, so we can't cache such queries
-                if (source.HasExternalSource() && source.GetExternalSource().GetType() == "S3Source") {
-                    return false;
+                if (source.HasExternalSource()) {
+                    const auto& type = source.GetExternalSource().GetType();
+                    // S3 provider stores S3 paths to read in AST, so we can't cache such queries
+                    if (type == "S3Source") {
+                        return false;
+                    }
+                    if (type == "SolomonSource") {
+                        return false;
+                    }
                 }
             }
         }

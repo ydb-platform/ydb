@@ -167,6 +167,10 @@ class StaticConfigGenerator(object):
         return self.__proto_config("feature_flags.txt", feature_flags_pb2.TFeatureFlags, self.__cluster_details.get_service("features"))
 
     @property
+    def feature_flags_new_txt(self):
+        return self.__proto_config("feature_flags_new.txt", feature_flags_pb2.TFeatureFlags, self.__cluster_details.get_service("feature_flags"))
+
+    @property
     def failure_injection_txt(self):
         return self.__proto_config(
             "failure_injection.txt",
@@ -651,8 +655,14 @@ class StaticConfigGenerator(object):
         app_config.BlobStorageConfig.CopyFrom(self.bs_txt)
         app_config.ChannelProfileConfig.CopyFrom(self.channels_txt)
         app_config.DomainsConfig.CopyFrom(self.domains_txt)
+
+        # Old template style:
         if self.feature_flags_txt.ByteSize() > 0:
             app_config.FeatureFlags.CopyFrom(self.feature_flags_txt)
+        # New config.yaml style:
+        if self.feature_flags_new_txt.ByteSize() > 0:
+            app_config.FeatureFlags.CopyFrom(self.feature_flags_new_txt)
+
         app_config.LogConfig.CopyFrom(self.log_txt)
         if self.auth_txt.ByteSize() > 0:
             app_config.AuthConfig.CopyFrom(self.auth_txt)

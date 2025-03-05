@@ -253,7 +253,7 @@ class TRandomLogGenerator {
     }
 
     TInstant RandomInstant() const {
-        auto result = TInstant::Now();
+        auto result = TInstant::Now() - TDuration::Seconds(Params.TimestampSubtract);
         i64 millisecondsDiff = 60 * 1000 * NormalRandom<double>(0., Params.TimestampStandardDeviationMinutes);
         if (millisecondsDiff >= 0) { // TDuration::MilliSeconds can't be negative for some reason...
             result += TDuration::MilliSeconds(millisecondsDiff);
@@ -420,6 +420,8 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
                 .DefaultValue(RowsCnt).StoreResult(&RowsCnt);
             opts.AddLongOption("timestamp_deviation", "Standard deviation. For each timestamp, a random variable with a specified standard deviation in minutes is added.")
                 .DefaultValue(TimestampStandardDeviationMinutes).StoreResult(&TimestampStandardDeviationMinutes);
+            opts.AddLongOption("timestamp_subtract", "Value to subtract from timestamp. For each timestamp, this value is subtracted")
+                .DefaultValue(0).StoreResult(&TimestampSubtract);
             opts.AddLongOption("null-percent", "Percent of nulls in generated data")
                 .DefaultValue(NullPercent).StoreResult(&NullPercent);
             break;

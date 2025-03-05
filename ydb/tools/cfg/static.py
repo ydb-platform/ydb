@@ -577,6 +577,9 @@ class StaticConfigGenerator(object):
         if self._yaml_config_enabled:
             normalized_config['yaml_config_enabled'] = True
 
+        if self.__cluster_details.storage_config_generation is not None:
+            normalized_config["storage_config_generation"] = int(self.__cluster_details.storage_config_generation)
+
         return normalized_config
 
     def get_yaml_format_config(self, normalized_config):

@@ -130,24 +130,24 @@ namespace TEvColumnShard {
         TEvProposeTransaction() = default;
 
         TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, const TActorId& source,
-                ui64 txId, TString txBody, const ui32 flags, ui64 subDomainPathId)
+                ui64 txId, TString txBody, const ui32 flags = 0)
         {
             Record.SetTxKind(txKind);
             ActorIdToProto(source, Record.MutableSource());
             Record.SetTxId(txId);
             Record.SetTxBody(std::move(txBody));
             Record.SetFlags(flags);
-            if (subDomainPathId != 0) {
-                Record.SetSubDomainPathId(subDomainPathId);
-            }
         }
 
         TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, ui64 ssId, const TActorId& source,
                 ui64 txId, TString txBody, const ui32 flags, ui64 subDomainPathId)
-            : TEvProposeTransaction(txKind, source, txId, std::move(txBody), flags, subDomainPathId)
+            : TEvProposeTransaction(txKind, source, txId, std::move(txBody), flags)
         {
 //            Y_ABORT_UNLESS(txKind == NKikimrTxColumnShard::TX_KIND_SCHEMA);
             Record.SetSchemeShardId(ssId);
+            if (subDomainPathId != 0) {
+                Record.SetSubDomainPathId(subDomainPathId);
+            }
         }
 
         TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, ui64 ssId, const TActorId& source,

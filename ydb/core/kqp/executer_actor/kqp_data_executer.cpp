@@ -1771,8 +1771,7 @@ private:
                 SelfId(),
                 TxId,
                 dataTransaction.SerializeAsString(),
-                flags,
-                0));
+                flags));
         } else {
             const ui32 flags =
                 (ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0) |

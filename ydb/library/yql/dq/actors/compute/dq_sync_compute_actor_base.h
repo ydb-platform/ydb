@@ -46,6 +46,9 @@ protected:
         TBase::ProcessOutputsImpl(status);
 
         if (lastPollResult && (*lastPollResult != EResumeSource::CAPollAsyncNoSpace || status == ERunStatus::PendingInput)) {
+            // If only reason for continuing was lack on space on all sources,
+            // only continue execution when input was consumed;
+            // otherwise this may result in busy-poll
             TBase::ContinueExecute(*lastPollResult);
         }
     }

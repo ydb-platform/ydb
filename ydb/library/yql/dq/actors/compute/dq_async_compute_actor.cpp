@@ -699,6 +699,14 @@ private:
         LastPollResult = PollAsyncInput();
 
         if (LastPollResult && *LastPollResult != EResumeSource::CAPollAsyncNoSpace) {
+            // When (some) source buffers was not full, and (some) was successfully polled,
+            // initiate next DoExecute run immediately;
+            // If only reason for continuing was lack on space on all source
+            // buffers, only continue execution after run completed,
+            // (some) sources was consumed and compute waits for input
+            // (Otherwise we enter busy-poll, and there are especially bad scenario
+            // when compute is delayed by rate-limiter, we enter busy-poll here,
+            // this spends cpu, ratelimiter delays compute execution even more))
             ContinueExecute(*std::exchange(LastPollResult, {}));
         }
 

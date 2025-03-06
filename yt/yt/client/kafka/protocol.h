@@ -81,9 +81,12 @@ struct IKafkaProtocolWriter
     virtual void WriteBytes(const TString& value) = 0;
     virtual void WriteCompactBytes(const TString& value) = 0;
     virtual void WriteData(const TString& value) = 0;
+    virtual void WriteData(const TSharedRef& value) = 0;
 
     virtual void StartBytes() = 0;
     virtual void FinishBytes() = 0;
+
+    virtual i64 GetSize() const = 0;
 
     virtual TSharedRef Finish() = 0;
 };

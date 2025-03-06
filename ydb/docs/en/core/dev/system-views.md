@@ -335,7 +335,6 @@ Table Structure:
 | Column | Description |
 |--------|-------------|
 | `Sid` | SID of the group.<br />Type: `Utf8`.<br />Key: `0`. |
-| `CreatedAt` | Timestamp when the group was created.<br />Type: `Timestamp`. |
 
 ### Auth group members
 

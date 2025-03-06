@@ -221,7 +221,7 @@ class ComputeUnit(object):
 
 
 class Tenant(object):
-    def __init__(self, name, storage_units, compute_units=None, overridden_configs=None, shared=False, plan_resolution=None):
+    def __init__(self, name, storage_units, compute_units=None, overridden_configs=None, shared=False, plan_resolution=None, coordinators=None, mediators=None):
         self.name = name
         self.overridden_configs = overridden_configs
         self.storage_units = tuple(StorageUnit(**storage_unit_template) for storage_unit_template in storage_units)
@@ -230,6 +230,8 @@ class Tenant(object):
             self.compute_units = tuple(ComputeUnit(**compute_unit_template) for compute_unit_template in compute_units)
         self.shared = shared
         self.plan_resolution = plan_resolution
+        self.coordinators = coordinators
+        self.mediators = mediators
 
 
 class HostConfig(object):

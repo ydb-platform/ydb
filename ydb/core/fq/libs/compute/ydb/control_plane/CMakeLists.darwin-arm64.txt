@@ -35,6 +35,7 @@ target_link_libraries(compute-ydb-control_plane PUBLIC
   yql-utils-actors
   api-grpc
   api-grpc-draft
+  src-client-resources
   library-operation_id-protos
   essentials-public-issue
   yql-essentials-utils

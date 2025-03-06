@@ -58,6 +58,7 @@ target_sources(ydb-core-tx-columnshard-engines-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut/ut_insert_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut/ut_logs_engine.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut/ut_program.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut/ut_script.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut/helper.cpp
 )
 

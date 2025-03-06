@@ -26,6 +26,7 @@ target_link_libraries(reader-common_reader-iterator PUBLIC
   contrib-libs-cxxsupp
   yutil
   columnshard-engines-scheme
+  yql-essentials-minikql
   tools-enum_parser-enum_serialization_runtime
 )
 
@@ -55,6 +56,7 @@ target_link_libraries(reader-common_reader-iterator.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   columnshard-engines-scheme
+  yql-essentials-minikql
   tools-enum_parser-enum_serialization_runtime
 )
 

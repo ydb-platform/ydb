@@ -21,6 +21,7 @@ struct TTestEnvSettings {
     ui32 PqTabletsN = 0;
     bool EnableSVP = false;
     bool EnableForceFollowers = false;
+    NKikimrProto::TAuthConfig AuthConfig;
 };
 
 class TTestEnv {

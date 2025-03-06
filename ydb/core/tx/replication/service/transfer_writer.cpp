@@ -402,7 +402,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
 
-            hFunc(TEvWorker::TEvHandshake, HoldHandle);
+            hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, HoldHandle);
             sFunc(TEvents::TEvWakeup, GetTableScheme);
             sFunc(TEvents::TEvPoison, PassAway);
@@ -501,7 +501,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(NFq::TEvRowDispatcher::TEvPurecalcCompileResponse, Handle);
 
-            hFunc(TEvWorker::TEvHandshake, HoldHandle);
+            hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, HoldHandle);
             //sFunc(TEvents::TEvWakeup, SendS3Request);
             sFunc(TEvents::TEvPoison, PassAway);
@@ -545,11 +545,6 @@ private:
     void StartWork() {
         Become(&TThis::StateWork);
 
-        if (PendingWorker) {
-            ProcessWorker(*PendingWorker);
-            PendingWorker.reset();
-        }
-
         if (PendingRecords) {
             ProcessData(PendingPartitionId, *PendingRecords);
             PendingRecords.reset();
@@ -565,21 +560,16 @@ private:
         }
     }
 
-    void HoldHandle(TEvWorker::TEvHandshake::TPtr& ev) {
-        Y_ABORT_UNLESS(!PendingWorker);
-        PendingWorker = ev->Sender;
-    }
-
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
-        ProcessWorker(ev->Sender);
-    }
-
-    void ProcessWorker(const TActorId& worker) {
-        Worker = worker;
+        Worker = ev->Sender;
         LOG_D("Handshake"
             << ": worker# " << Worker);
 
-        Send(Worker, new TEvWorker::TEvHandshake());
+        if (ProcessingError) {
+            Leave(ProcessingErrorStatus, *ProcessingError);
+        } else {
+            Send(Worker, new TEvWorker::TEvHandshake());
+        }
     }
 
     void HoldHandle(TEvWorker::TEvData::TPtr& ev) {
@@ -632,7 +622,7 @@ private:
     STFUNC(StateWrite) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvCompleted, Handle);
-            hFunc(TEvWorker::TEvHandshake, HoldHandle);
+            hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, HoldHandle);
 
             sFunc(TEvents::TEvPoison, PassAway);
@@ -688,12 +678,16 @@ private:
         this->Schedule(Delay + random, new TEvents::TEvWakeup());
     }
 
-    template <typename... Args>
-    void Leave(Args&&... args) {
+    void Leave(TEvWorker::TEvGone::EStatus status, const TString& message) {
         LOG_I("Leave");
 
-        Send(Worker, new TEvWorker::TEvGone(std::forward<Args>(args)...));
-        PassAway();
+        if (Worker) {
+            Send(Worker, new TEvWorker::TEvGone(status, message));
+            PassAway();
+        } else {
+            ProcessingErrorStatus = status;
+            ProcessingError = message;
+        }
     }
 
     void PassAway() override {
@@ -726,9 +720,10 @@ private:
     TProgramHolder::TPtr ProgramHolder;
 
     mutable TMaybe<TString> LogPrefix;
+
+    mutable TEvWorker::TEvGone::EStatus ProcessingErrorStatus;
     mutable TMaybe<TString> ProcessingError;
 
-    std::optional<TActorId> PendingWorker;
     ui32 PendingPartitionId = 0;
     std::optional<TVector<TTopicMessage>> PendingRecords;
 

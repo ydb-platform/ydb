@@ -156,6 +156,13 @@ namespace NKikimr {
         BlobDepotLogFlushDelayOverrideUsec                      /* "BlobDepot_LogFlushDelayOverrideUsec" */,
         StatisticsAggregatorLogFlushDelayOverrideUsec           /* "StatisticsAggregator_LogFlushDelayOverrideUsec" */,
         GraphShardLogFlushDelayOverrideUsec                     /* "GraphShard_LogFlushDelayOverrideUsec" */,
-        BackupControllerLogFlushDelayOverrideUsec               /* "BackupController_LogFlushDelayOverrideUsec" */
+        BackupControllerLogFlushDelayOverrideUsec               /* "BackupController_LogFlushDelayOverrideUsec" */,
+        CoordinationServiceSessionMaxInFlight                   /* "CoordinationService_Session_MaxInFlight" */,
+        ClickhouseInternalScanMaxInFlight                       /* "ClickhouseInternal_Scan_MaxInFlight" */,
+        ClickhouseInternalGetShardLocationsMaxInFlight          /* "ClickhouseInternal_GetShardLocations_MaxInFlight" */,
+        ClickhouseInternalDescribeTableMaxInFlight              /* "ClickhouseInternal_DescribeTable_MaxInFlight" */,
+        ClickhouseInternalCreateSnapshotMaxInFlight             /* "ClickhouseInternal_CreateSnapshot_MaxInFlight" */,
+        ClickhouseInternalRefreshSnapshotMaxInFlight            /* "ClickhouseInternal_RefreshSnapshot_MaxInFlight" */,
+        ClickhouseInternalDiscardSnapshotMaxInFlight            /* "ClickhouseInternal_DiscardSnapshot_MaxInFlight" */
     };
 } // NKikimr

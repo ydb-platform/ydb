@@ -20,35 +20,27 @@
 
 ### Диаграмма алгоритма очистки
 
-@startuml
-participant "Root Schemeshard" as RootSchemeshard
-participant "Tenant Schemeshard" as TenantSchemeshard
-participant Datashard
-participant "Blob Storage Controller" as BSC
+```mermaid
+sequenceDiagram
+    participant RootSchemeshard as Корневой Scheme Shard
+    participant TenantSchemeshard as Тенантный Scheme Shard
+    participant Datashard as Data Shard
+    participant BSC as Blob Storage Controller
 
-RootSchemeshard->RootSchemeshard:Pending cleanup tenants
-loop for every tenants
-activate RootSchemeshard
-RootSchemeshard->TenantSchemeshard:TEvTenantDataErasureRequest
-
-TenantSchemeshard->TenantSchemeshard:Pending cleanup in DataShard
-loop for every datashard
-activate TenantSchemeshard
-TenantSchemeshard->Datashard:TEvForceDataCleanup
-TenantSchemeshard<--Datashard:TEvForceDataCleanupResult
-end loop
-deactivate TenantSchemeshard
-RootSchemeshard<--TenantSchemeshard:TEvTenantDataErasureResponse
-
-end loop
-deactivate RootSchemeshard
-
-RootSchemeshard->RootSchemeshard:Pending cleanup in BSC
-activate RootSchemeshard
-RootSchemeshard->BSC:TEvControllerShredRequest
-RootSchemeshard<--BSC:TEvControllerShredResponse
-deactivate RootSchemeshard
-@enduml
+    RootSchemeshard->>RootSchemeshard:Ждем очистки во всех тенантах
+    loop для всех тенантов
+        RootSchemeshard->>TenantSchemeshard:Запрос на очистку данных в тенанте
+        TenantSchemeshard->>TenantSchemeshard:Ждем очистки во всех таблетках Data Shard
+        loop для всех таблеток Data Shard
+            TenantSchemeshard->>Datashard:Запрос на очистку данных в таблетке Data Shard
+            Datashard-->>TenantSchemeshard:Ответ после очистки в таблетке Data Shard
+        end
+        TenantSchemeshard-->>RootSchemeshard:Ответ после очистки данных в тенанте
+    end
+    RootSchemeshard->>RootSchemeshard:Ждем очистки в BS Controller
+    RootSchemeshard->>BSC:Запрос на удаление данных в BSC
+    BSC-->>RootSchemeshard:Ответ от BSC с текущим прогрессом очистки
+```
 
 ## Конфигурация {#configuration}
 

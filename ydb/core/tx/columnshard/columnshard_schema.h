@@ -185,9 +185,10 @@ struct Schema : NIceDb::Schema {
         struct DropStep : Column<2, NScheme::NTypeIds::Uint64> {};
         struct DropTxId : Column<3, NScheme::NTypeIds::Uint64> {};
         struct TieringUsage: Column<4, NScheme::NTypeIds::String> {};
+        struct MovedTo : Column<5, NScheme::NTypeIds::Uint64> {}; //New PathId when a table is moved at DropStep, DropTx
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, DropStep, DropTxId, TieringUsage>;
+        using TColumns = TableColumns<PathId, DropStep, DropTxId, TieringUsage, MovedTo>;
     };
 
     struct TableVersionInfo : Table<(ui32)ECommonTables::TableVersionInfo> {
@@ -804,6 +805,15 @@ struct Schema : NIceDb::Schema {
         db.Table<TableInfo>().Key(pathId).Update(
             NIceDb::TUpdate<TableInfo::DropStep>(dropStep),
             NIceDb::TUpdate<TableInfo::DropTxId>(dropTxId));
+    }
+    static void SaveTableMoveVersion(
+            NIceDb::TNiceDb& db, ui64 pathId, ui64 dropStep, ui64 dropTxId, ui64 movedTo)
+    {
+        db.Table<TableInfo>().Key(pathId).Update(
+            NIceDb::TUpdate<TableInfo::DropStep>(dropStep),
+            NIceDb::TUpdate<TableInfo::DropTxId>(dropTxId),
+            NIceDb::TUpdate<TableInfo::MovedTo>(movedTo)
+        );
     }
 
     static void EraseTableVersionInfo(NIceDb::TNiceDb& db, ui64 pathId, const NOlap::TSnapshot& version) {

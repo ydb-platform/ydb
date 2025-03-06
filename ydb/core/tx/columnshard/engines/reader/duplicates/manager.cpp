@@ -2,16 +2,16 @@
 
 namespace NKikimr::NOlap::NReader {
 
-void TRangeIndex::AddRange(const ui32 l, const ui32 r, const ui32 id) {
+void TRangeIndex::AddRange(const ui32 l, const ui32 r, const ui64 id) {
     AFL_VERIFY(Intervals.emplace(id, std::pair<ui32, ui32>({l, r})).second);
 }
 
-void TRangeIndex::RemoveRange(const ui32 id) {
+void TRangeIndex::RemoveRange(const ui64 id) {
     AFL_VERIFY(Intervals.erase(id));
 }
 
-std::vector<ui32> TRangeIndex::FindIntersections(const ui32 p) const {
-    std::vector<ui32> result;
+std::vector<ui64> TRangeIndex::FindIntersections(const ui64 p) const {
+    std::vector<ui64> result;
     for (const auto& [id, interval] : Intervals) {
         if (interval.first <= p && interval.second >= p) {
             result.emplace_back(id);
@@ -70,26 +70,26 @@ void TDuplicateFilterConstructor::TSourceFilterConstructor::Finish() && {
     Subscriber->OnFilterReady(result);
 }
 
-TDuplicateFilterConstructor::TSourceIntervals::TSourceIntervals(const std::vector<std::shared_ptr<NCommon::IDataSource>>& sources) {
+TDuplicateFilterConstructor::TSourceIntervals::TSourceIntervals(const std::vector<std::shared_ptr<TPortionInfo>>& portions) {
     class TBorderView {
     private:
         using TReplaceKeyView = const NArrow::TReplaceKey*;
         YDB_READONLY_DEF(bool, IsLast);
         YDB_READONLY_DEF(TReplaceKeyView, PK);
-        YDB_READONLY_DEF(ui32, SourceIdx);
+        YDB_READONLY_DEF(ui64, PortionId);
 
-        TBorderView(const bool isLast, const NArrow::TReplaceKey* const pk, const ui32 sourceIdx)
+        TBorderView(const bool isLast, const NArrow::TReplaceKey* const pk, const ui64 portionId)
             : IsLast(isLast)
             , PK(pk)
-            , SourceIdx(sourceIdx) {
+            , PortionId(portionId) {
         }
 
     public:
-        static TBorderView First(const std::shared_ptr<NCommon::IDataSource>& source) {
-            return TBorderView(false, &source->GetMinPK(), source->GetSourceIdx());
+        static TBorderView First(const std::shared_ptr<TPortionInfo>& portion) {
+            return TBorderView(false, &portion->IndexKeyStart(), portion->GetPortionId());
         }
-        static TBorderView Last(const std::shared_ptr<NCommon::IDataSource>& source) {
-            return TBorderView(true, &source->GetMaxPK(), source->GetSourceIdx());
+        static TBorderView Last(const std::shared_ptr<TPortionInfo>& portion) {
+            return TBorderView(true, &portion->IndexKeyEnd(), portion->GetPortionId());
         }
 
         std::partial_ordering operator<=>(const TBorderView& other) const {
@@ -99,26 +99,26 @@ TDuplicateFilterConstructor::TSourceIntervals::TSourceIntervals(const std::vecto
     };
 
     std::vector<TBorderView> borders;
-    for (const auto& source : sources) {
-        borders.emplace_back(TBorderView::First(source));
-        borders.emplace_back(TBorderView::Last(source));
+    for (const auto& portion : portions) {
+        borders.emplace_back(TBorderView::First(portion));
+        borders.emplace_back(TBorderView::Last(portion));
     }
     std::sort(borders.begin(), borders.end());
 
-    THashMap<ui32, ui32> firstBySource;
+    THashMap<ui64, ui32> firstByPortionId;
     for (const auto& border : borders) {
         if (border.GetIsLast()) {
             if (IntervalBorders.empty() || IntervalBorders.back() != *border.GetPK()) {
                 IntervalBorders.emplace_back(*border.GetPK());
             }
             const TIntervalsRange sourceRange(
-                *TValidator::CheckNotNull(firstBySource.FindPtr(border.GetSourceIdx())), IntervalBorders.size() - 1);
-            AFL_VERIFY(SourceRanges.emplace(border.GetSourceIdx(), sourceRange).second);
+                *TValidator::CheckNotNull(firstByPortionId.FindPtr(border.GetPortionId())), IntervalBorders.size() - 1);
+            AFL_VERIFY(SourceRanges.emplace(border.GetPortionId(), sourceRange).second);
         } else {
-            AFL_VERIFY(firstBySource.emplace(border.GetSourceIdx(), IntervalBorders.size()).second);
+            AFL_VERIFY(firstByPortionId.emplace(border.GetPortionId(), IntervalBorders.size()).second);
         }
     }
-    AFL_VERIFY(SourceRanges.size() == sources.size());
+    AFL_VERIFY(SourceRanges.size() == portions.size());
 }
 
 void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
@@ -131,6 +131,7 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
 
     for (const ui32 intervalIdx : readyIntervals) {
         // Not implemented (merge; save result to constructor; finish if ready)
+        Y_UNUSED(intervalIdx);
     }
 
     if (AwaitedSourcesCount.IsAllZeros()) {
@@ -138,8 +139,8 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
     }
 }
 
-TDuplicateFilterConstructor::TDuplicateFilterConstructor(const std::vector<std::shared_ptr<NCommon::IDataSource>>& sources)
-    : Intervals(sources)
+TDuplicateFilterConstructor::TDuplicateFilterConstructor(const std::vector<std::shared_ptr<TPortionInfo>>& portions)
+    : Intervals(portions)
     , AwaitedSourcesCount([this]() {
         std::vector<std::pair<ui32, ui32>> intervals;
         for (const auto& [_, interval] : Intervals.GetSourceRanges()) {

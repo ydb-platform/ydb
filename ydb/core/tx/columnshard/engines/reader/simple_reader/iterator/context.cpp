@@ -2,7 +2,7 @@
 #include "source.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
-#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/manager.h>
+#include <ydb/core/tx/columnshard/engines/reader/duplicates/manager.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
@@ -104,18 +104,10 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
     return std::move(acc).Build();
 }
 
-void TSpecialReadContext::RegisterActors() {
-    AFL_VERIFY(!DuplicatesManager);
-    if (GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::PREVENT_DUPLICATES) {
-        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this));
-    }
-}
-
-void TSpecialReadContext::UnregisterActors() {
-    if (DuplicatesManager) {
-        NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new NActors::TEvents::TEvPoison);
-        DuplicatesManager = TActorId();
-    }
+TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
+    : TBase(commonContext)
+    , DuplicatesManager(NActors::TActivationContext::Register(
+          new TDuplicateFilterConstructor(commonContext->GetReadMetadataPtrVerifiedAs<TReadMetadata>()->SelectInfo->Portions))) {
 }
 
 TString TSpecialReadContext::ProfileDebugString() const {

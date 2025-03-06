@@ -110,7 +110,7 @@ public:
         , Signals(TFetchingStepsSignalsCollection::GetSignals(name)) {
     }
 
-    TString DebugString() const;
+    TString DebugString(const bool stats = false) const;
 };
 
 class TFetchingScript {
@@ -139,7 +139,8 @@ public:
         AtomicCas(&StartInstant, TMonotonic::Now().MicroSeconds(), 0);
     }
 
-    TString DebugString(const bool onlyLongSteps = true) const;
+    TString DebugString() const;
+    TString ProfileDebugString() const;
 
     const std::shared_ptr<IFetchingStep>& GetStep(const ui32 index) const {
         AFL_VERIFY(index < Steps.size());
@@ -170,9 +171,9 @@ public:
         return Script;
     }
 
-    TString DebugString() const {
+    TString ProfileDebugString() const {
         if (Script) {
-            return TStringBuilder() << Script->DebugString() << Endl;
+            return TStringBuilder() << Script->ProfileDebugString() << Endl;
         } else {
             return TStringBuilder() << "NO_SCRIPT" << Endl;
         }

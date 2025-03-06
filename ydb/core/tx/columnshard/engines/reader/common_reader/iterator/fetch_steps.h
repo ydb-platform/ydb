@@ -43,7 +43,13 @@ protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
     virtual TString DoDebugString() const override {
-        return TStringBuilder() << "stage=" << StageIndex << ";";
+        std::vector<TString> columns;
+        for (const auto& pack : Packs) {
+            for (const ui32 columnId : pack.GetColumns().GetColumnIds()) {
+                columns.emplace_back(TStringBuilder() << pack.GetMemType() << ':' << columnId);
+            }
+        }
+        return TStringBuilder() << "stage=" << StageIndex << ";column_ids=[" << JoinSeq(',', columns) << "];";
     }
 
 public:

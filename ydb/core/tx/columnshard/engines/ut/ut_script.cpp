@@ -38,16 +38,16 @@ Y_UNIT_TEST_SUITE(TestScript) {
         acc.AddFetchingStep(std::vector<ui32>({ 0 }), NCommon::EStageFeaturesIndexes::Merge);
 
         auto script = std::move(acc).Build();
-        UNIT_ASSERT_STRINGS_EQUAL(script->DebugString(false),
+        UNIT_ASSERT_STRINGS_EQUAL(script->DebugString(),
             "{branch:UNDEFINED;steps_10Ms:["
-            "{name=ALLOCATE_MEMORY::Filter;duration=0.000000s;size=0;details={stage=Filter;};};"
-            "{name=FETCHING_COLUMNS;duration=0.000000s;size=0;details={columns=0;};};"
-            "{name=ASSEMBLER;duration=0.000000s;size=0;details={columns=(column_ids=0;column_names=c0;);;};};"
-            "{name=DELETION;duration=0.000000s;size=0;details={};};"
-            "{name=ALLOCATE_MEMORY::Filter;duration=0.000000s;size=0;details={stage=Filter;};};"
-            "{name=ALLOCATE_MEMORY::Fetching;duration=0.000000s;size=0;details={stage=Fetching;};};"
-            "{name=FETCHING_COLUMNS;duration=0.000000s;size=0;details={columns=1,2;};};"
-            "{name=ASSEMBLER;duration=0.000000s;size=0;details={columns=(column_ids=1,2;column_names=c1,c2;);;};};"
-            "{name=DELETION;duration=0.000000s;size=0;details={};};]}");
+            "{name=ALLOCATE_MEMORY::Filter;details={stage=Filter;column_ids=[Blob:0,Raw:0];};};"
+            "{name=FETCHING_COLUMNS;details={columns=0;};};"
+            "{name=ASSEMBLER;details={columns=(column_ids=0;column_names=c0;);;};};"
+            "{name=DELETION;details={};};"
+            "{name=ALLOCATE_MEMORY::Filter;details={stage=Filter;column_ids=[Blob:1];};};"
+            "{name=ALLOCATE_MEMORY::Fetching;details={stage=Fetching;column_ids=[Blob:2,Raw:1,Raw:2];};};"
+            "{name=FETCHING_COLUMNS;details={columns=1,2;};};"
+            "{name=ASSEMBLER;details={columns=(column_ids=1,2;column_names=c1,c2;);;};};"
+            "{name=DELETION;details={};};]}");
     }
 }

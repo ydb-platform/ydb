@@ -205,7 +205,7 @@ TString TSpecialReadContext::ProfileDebugString() const {
     for (ui32 i = 0; i < (1 << 6); ++i) {
         auto& script = CacheFetchingScripts[GetBit(i, 0)][GetBit(i, 1)][GetBit(i, 2)][GetBit(i, 3)][GetBit(i, 4)][GetBit(i, 5)];
         if (script.HasScript()) {
-            sb << script.DebugString() << ";";
+            sb << script.ProfileDebugString() << ";";
         }
     }
     return sb;

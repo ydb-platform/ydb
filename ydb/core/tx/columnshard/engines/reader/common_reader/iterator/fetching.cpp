@@ -72,12 +72,25 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
     return true;
 }
 
-TString TFetchingScript::DebugString(const bool onlyLongSteps) const {
+TString TFetchingScript::DebugString() const {
     TStringBuilder sb;
     TStringBuilder sbBranch;
     for (auto&& i : Steps) {
-        if (!onlyLongSteps || i->GetSumDuration() > TDuration::MilliSeconds(10)) {
-            sbBranch << "{" << i->DebugString() << "};";
+        sbBranch << "{" << i->DebugString() << "};";
+    }
+    if (!sbBranch) {
+        return "";
+    }
+    sb << "{branch:" << BranchName << ";steps:[" << sbBranch << "]}";
+    return sb;
+}
+
+TString TFetchingScript::ProfileDebugString() const {
+    TStringBuilder sb;
+    TStringBuilder sbBranch;
+    for (auto&& i : Steps) {
+        if (i->GetSumDuration() > TDuration::MilliSeconds(10)) {
+            sbBranch << "{" << i->DebugString(true) << "};";
         }
     }
     if (!sbBranch) {
@@ -120,10 +133,14 @@ void TFetchingScriptBuilder::AddAllocation(const std::set<ui32>& entityIds, cons
     }
 }
 
-TString IFetchingStep::DebugString() const {
+TString IFetchingStep::DebugString(const bool stats) const {
     TStringBuilder sb;
-    sb << "name=" << Name << ";duration=" << GetSumDuration() << ";"
-       << "size=" << 1e-9 * GetSumSize() << ";details={" << DoDebugString() << "};";
+    sb << "name=" << Name;
+    if (stats) {
+        sb << ";duration=" << GetSumDuration() << ";"
+           << "size=" << 1e-9 * GetSumSize();
+    }
+    sb << ";details={" << DoDebugString() << "};";
     return sb;
 }
 

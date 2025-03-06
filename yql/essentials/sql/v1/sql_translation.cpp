@@ -17,6 +17,7 @@
 
 namespace {
 
+using NSQLTranslation::ESqlMode;
 using namespace NSQLTranslationV1;
 
 template <typename Callback>
@@ -54,68 +55,36 @@ TString CollectTokens(const TRule_select_stmt& selectStatement) {
     return tokenCollector.Tokens;
 }
 
-bool RecreateContext(
-    TContext& ctx, const NSQLTranslation::TTranslationSettings& settings, const TString& recreationQuery
-) {
-    if (!recreationQuery) {
-        return true;
+class TModeGuard {
+    ESqlMode& Mode;
+    ESqlMode OriginalMode;
+
+public:
+    TModeGuard(ESqlMode& mode, ESqlMode newMode)
+        : Mode(mode)
+        , OriginalMode(std::exchange(mode, newMode))
+    {}
+
+    ~TModeGuard() {
+        Mode = OriginalMode;
     }
-    const TString queryName = "context recreation query";
+};
 
-    const auto* ast = NSQLTranslationV1::SqlAST(
-        ctx.Parsers,
-        recreationQuery, queryName, ctx.Issues,
-        settings.MaxErrors, settings.AnsiLexer,  settings.Antlr4Parser, settings.Arena
-    );
-    if (!ast) {
-        return false;
-    }
-
-    TSqlQuery queryTranslator(ctx, ctx.Settings.Mode, true);
-    auto node = queryTranslator.Build(static_cast<const TSQLv1ParserAST&>(*ast));
-
-    return node && node->Init(ctx, nullptr) && node->Translate(ctx);
-}
-
-TNodePtr BuildViewSelect(
-    const TRule_select_stmt& selectStatement,
-    TContext& parentContext,
-    const TString& contextRecreationQuery
-) {
-    TIssues issues;
-    TContext context(parentContext.Lexers, parentContext.Parsers, parentContext.Settings, {}, issues, parentContext.Query);
-    if (!RecreateContext(context, context.Settings, contextRecreationQuery)) {
-        parentContext.Issues.AddIssues(issues);
-        return nullptr;
-    }
-    issues.Clear();
-
-    // Holds (among other things) subquery references.
-    // These references need to be passed to the parent context
-    // to be able to compile view queries with subqueries.
-    context.PushCurrentBlocks(&parentContext.GetCurrentBlocks());
-
-    context.Settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
-
+TNodePtr BuildViewSelect(const TRule_select_stmt& selectStatement, TContext& context) {
+    TModeGuard guard(context.Settings.Mode, ESqlMode::LIMITED_VIEW);
     TSqlSelect selectTranslator(context, context.Settings.Mode);
-    TPosition pos = parentContext.Pos();
-    auto source = selectTranslator.Build(selectStatement, pos);
+    auto position = context.Pos();
+    auto source = selectTranslator.Build(selectStatement, position);
     if (!source) {
-        parentContext.Issues.AddIssues(issues);
         return nullptr;
     }
-    auto node = BuildSelectResult(
-        pos,
-        std::move(source),
-        false,
-        false,
+    return BuildSelectResult(
+        position,
+        source,
+        false, /* write result */
+        false, /* in subquery */
         context.Scoped
     );
-    if (!node) {
-        parentContext.Issues.AddIssues(issues);
-        return nullptr;
-    }
-    return node;
 }
 
 }
@@ -5126,6 +5095,7 @@ bool TSqlTranslation::ValidateExternalTable(const TCreateTableParameters& params
 
 bool TSqlTranslation::ParseViewQuery(
     std::map<TString, TDeferredAtom>& features,
+    TNodePtr& queryAst,
     const TRule_select_stmt& query
 ) {
     TString queryText = CollectTokens(query);
@@ -5148,12 +5118,11 @@ bool TSqlTranslation::ParseViewQuery(
     features["query_text"] = { Ctx.Pos(), contextRecreationQuery + queryText };
 
     // AST is needed for ready-made validation of CREATE VIEW statement.
-    // Query is stored as plain text, not AST.
-    const auto viewSelect = BuildViewSelect(query, Ctx, contextRecreationQuery);
-    if (!viewSelect) {
+    // The final storage format for the query is a plain text, not an AST.
+    queryAst = BuildViewSelect(query, Ctx);
+    if (!queryAst) {
         return false;
     }
-    features["query_ast"] = {viewSelect, Ctx};
 
     return true;
 }

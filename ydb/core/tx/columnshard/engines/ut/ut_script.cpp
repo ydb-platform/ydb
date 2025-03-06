@@ -2,6 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <reader/common_reader/iterator/fetching.h>
+#include <reader/simple_reader/iterator/fetching.h>
 #include <scheme/versions/snapshot_scheme.h>
 
 using namespace NKikimr;
@@ -28,20 +29,25 @@ Y_UNIT_TEST_SUITE(TestScript) {
         acc.AddFetchingStep(std::vector<ui32>({ 0 }), NCommon::EStageFeaturesIndexes::Filter);
         acc.AddFetchingStep(std::vector<ui32>({ 0 }), NCommon::EStageFeaturesIndexes::Filter);
         acc.AddAssembleStep(std::vector<ui32>({ 0 }), "", NCommon::EStageFeaturesIndexes::Filter, false);
+        acc.AddStep(std::make_shared<NSimple::TDeletionFilter>());
         acc.AddFetchingStep(std::vector<ui32>({ 0, 1 }), NCommon::EStageFeaturesIndexes::Filter);
         acc.AddFetchingStep(std::vector<ui32>({ 1, 2 }), NCommon::EStageFeaturesIndexes::Fetching);
         acc.AddFetchingStep(std::vector<ui32>({ 0 }), NCommon::EStageFeaturesIndexes::Fetching);
         acc.AddAssembleStep(std::vector<ui32>({ 0, 1, 2 }), "", NCommon::EStageFeaturesIndexes::Fetching, false);
+        acc.AddStep(std::make_shared<NSimple::TDeletionFilter>());
         acc.AddFetchingStep(std::vector<ui32>({ 0 }), NCommon::EStageFeaturesIndexes::Merge);
 
         auto script = std::move(acc).Build();
         UNIT_ASSERT_STRINGS_EQUAL(script->DebugString(false),
             "{branch:UNDEFINED;steps_10Ms:["
             "{name=ALLOCATE_MEMORY::Filter;duration=0.000000s;size=0;details={stage=Filter;};};"
-            "{name=ALLOCATE_MEMORY::Fetching;duration=0.000000s;size=0;details={stage=Fetching;};};"
             "{name=FETCHING_COLUMNS;duration=0.000000s;size=0;details={columns=0;};};"
             "{name=ASSEMBLER;duration=0.000000s;size=0;details={columns=(column_ids=0;column_names=c0;);;};};"
+            "{name=DELETION;duration=0.000000s;size=0;details={};};"
+            "{name=ALLOCATE_MEMORY::Filter;duration=0.000000s;size=0;details={stage=Filter;};};"
+            "{name=ALLOCATE_MEMORY::Fetching;duration=0.000000s;size=0;details={stage=Fetching;};};"
             "{name=FETCHING_COLUMNS;duration=0.000000s;size=0;details={columns=1,2;};};"
-            "{name=ASSEMBLER;duration=0.000000s;size=0;details={columns=(column_ids=1,2;column_names=c1,c2;);;};};]}");
+            "{name=ASSEMBLER;duration=0.000000s;size=0;details={columns=(column_ids=1,2;column_names=c1,c2;);;};};"
+            "{name=DELETION;duration=0.000000s;size=0;details={};};]}");
     }
 }

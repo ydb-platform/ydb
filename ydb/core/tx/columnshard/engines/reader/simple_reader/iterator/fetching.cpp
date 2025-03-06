@@ -3,6 +3,7 @@
 #include "source.h"
 
 #include <ydb/core/tx/columnshard/engines/filter.h>
+#include <ydb/core/tx/columnshard/engines/reader/duplicates/events.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
@@ -201,6 +202,17 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
     } else {
         return true;
     }
+}
+
+void TDuplicateFilter::TFilterSubscriber::OnFilterReady(const NArrow::TColumnFilter& filter) {
+    NActors::TActivationContext::AsActorContext().Send(
+        OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplyFilterAction>(filter)));
+}
+
+TConclusion<bool> TDuplicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+    NActors::TActivationContext::AsActorContext().Send(source->GetContextAsVerified<TSpecialReadContext>()->GetDuplicatesManager(),
+        new TEvRequestFilter(source, std::make_shared<TFilterSubscriber>()));
+    return false;
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

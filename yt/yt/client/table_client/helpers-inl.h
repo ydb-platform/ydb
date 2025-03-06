@@ -202,6 +202,9 @@ void FromUnversionedValue(
         case EValueType::Int64:
             *value = static_cast<T>(CheckedIntegralCast<std::underlying_type_t<T>>(unversionedValue.Data.Int64));
             break;
+        case EValueType::Uint64:
+            *value = static_cast<T>(CheckedIntegralCast<std::underlying_type_t<T>>(unversionedValue.Data.Uint64));
+            break;
         default:
             THROW_ERROR_EXCEPTION("Cannot parse enum value from %Qlv",
                 unversionedValue.Type);

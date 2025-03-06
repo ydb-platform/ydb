@@ -87,6 +87,7 @@ public:
             TBase::OnMemoryLimitExceptionHandler();
         } catch (const yexception& e) {
             InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, NYql::TIssuesIds::DEFAULT_ERROR, e.what());
+            FreeComputeCtxData();
         }
 
         TBase::ReportEventElapsedTime();
@@ -128,6 +129,11 @@ public:
     void PollSources(ui64 prevFreeSpace);
 
     void DoTerminateImpl() override {
+        FreeComputeCtxData();
+        TBase::DoTerminateImpl();
+    }
+
+    void FreeComputeCtxData() {
         if (TaskRunner) {
             if (TaskRunner->IsAllocatorAttached()) {
                 ComputeCtx.Clear();
@@ -137,8 +143,6 @@ public:
             }
             ScanData = nullptr;
         }
-
-        TBase::DoTerminateImpl();
     }
 
     void TerminateSources(const NYql::TIssues& issues, bool success) override {

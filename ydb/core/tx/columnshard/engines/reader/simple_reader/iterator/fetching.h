@@ -217,26 +217,18 @@ class TDuplicateFilter: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
 
-    class TApplyFilterAction: public IApplyAction {
-    private:
-        NArrow::TColumnFilter Filter;
-
-        virtual bool DoApply(IDataReader& indexedDataRead) const override {
-            // Not implemented
-            // indexedDataRead.Fil
-            return true;
-        }
-
-    public:
-        TApplyFilterAction(const NArrow::TColumnFilter& filter)
-            : Filter(filter) {
-        }
-    };
-
     class TFilterSubscriber: public IFilterSubscriber {
     private:
-        TActorId OwnerId;
+        std::shared_ptr<IDataSource> Source;
+        TFetchingScriptCursor Step;
+
         virtual void OnFilterReady(const NArrow::TColumnFilter& filter) override;
+
+    public:
+        TFilterSubscriber(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)
+            : Source(source)
+            , Step(step) {
+        }
     };
 
 public:

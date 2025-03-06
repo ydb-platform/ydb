@@ -205,13 +205,16 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
 }
 
 void TDuplicateFilter::TFilterSubscriber::OnFilterReady(const NArrow::TColumnFilter& filter) {
-    NActors::TActivationContext::AsActorContext().Send(
-        OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplyFilterAction>(filter)));
+    // TODO: Consider abort scenario (should TDuplicateFilterConstructor return error to subscribers?)
+    Source->MutableStageData().AddFilter(filter);
+    Step.Next();
+    auto task = std::make_shared<TStepAction>(Source, std::move(Step), Source->GetContext()->GetCommonContext()->GetScanActorId());
+    NConveyor::TScanServiceOperator::SendTaskToExecute(task, Source->GetContext()->GetCommonContext()->GetConveyorProcessId());
 }
 
 TConclusion<bool> TDuplicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     NActors::TActivationContext::AsActorContext().Send(source->GetContextAsVerified<TSpecialReadContext>()->GetDuplicatesManager(),
-        new TEvRequestFilter(source, std::make_shared<TFilterSubscriber>()));
+        new TEvRequestFilter(source, std::make_shared<TFilterSubscriber>(source, step)));
     return false;
 }
 

@@ -164,6 +164,19 @@ class YQv2Extension(ExtensionPoint):
         return self.yq_version == 'v2'
 
     def apply_to_kikimr(self, request, kikimr):
+        kikimr.compute_plane.qs_config['available_external_data_sources'] = []
+        kikimr.compute_plane.qs_config['available_external_data_sources'].append("ObjectStorage")
+        kikimr.compute_plane.qs_config['available_external_data_sources'].append("ClickHouse")
+        kikimr.compute_plane.qs_config['available_external_data_sources'].append("PostgreSQL")
+        kikimr.compute_plane.qs_config['available_external_data_sources'].append("MySQL")
+        kikimr.compute_plane.qs_config['available_external_data_sources'].append("Ydb")
+        kikimr.compute_plane.qs_config['available_external_data_sources'].append("YT")
+        kikimr.compute_plane.qs_config['available_external_data_sources'].append("Greenplum")
+        kikimr.compute_plane.qs_config['available_external_data_sources'].append("MsSQLServer")
+        kikimr.compute_plane.qs_config['available_external_data_sources'].append("Oracle")
+        kikimr.compute_plane.qs_config['available_external_data_sources'].append("Logging")
+        kikimr.compute_plane.qs_config['available_external_data_sources'].append("Solomon")
+
         kikimr.control_plane.fq_config['control_plane_storage']['enabled'] = True
         kikimr.control_plane.fq_config['compute'] = {
             'default_compute': 'IN_PLACE',

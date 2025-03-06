@@ -1164,13 +1164,14 @@ public:
         }
 
         if (FederatedQuerySetup) {
+            const auto& availableExternalDataSources = QueryServiceConfig.GetAvailableExternalDataSources();
             ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory({},
                                                                                  ActorSystem,
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetGeneratorPathsLimit(),
                                                                                  FederatedQuerySetup ? FederatedQuerySetup->CredentialsFactory : nullptr,
                                                                                  Config->FeatureFlags.GetEnableExternalSourceSchemaInference(),
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles(),
-                                                                                 {});
+                                                                                 std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend()));
         }
     }
 

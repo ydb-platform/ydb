@@ -2,7 +2,7 @@
 #include "defs.h"
 #include "grpc_mon.h"
 
-#include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/static_control_board_impl.h>
 #include <ydb/core/grpc_services/counters/counters.h>
 
 #include <ydb/library/grpc/server/grpc_request.h>
@@ -12,16 +12,16 @@ namespace NGRpcService {
 
 class TInFlightLimiterRegistry : public TThrRefBase {
 private:
-    TIntrusivePtr<NKikimr::TControlBoard> Icb;
+    TIntrusivePtr<NKikimr::TStaticControlBoard> StaticControlBoard;
     TMutex Lock;
-    THashMap<TString, NYdbGrpc::IGRpcRequestLimiterPtr> PerTypeLimiters;
+    THashMap<EStaticControlType, NYdbGrpc::IGRpcRequestLimiterPtr> PerTypeLimiters;
 
 public:
-    explicit TInFlightLimiterRegistry(TIntrusivePtr<NKikimr::TControlBoard> icb)
-        : Icb(icb)
+    explicit TInFlightLimiterRegistry(TIntrusivePtr<NKikimr::TStaticControlBoard> scb)
+        : StaticControlBoard(scb)
     {}
 
-    NYdbGrpc::IGRpcRequestLimiterPtr RegisterRequestType(TString name, i64 limit);
+    NYdbGrpc::IGRpcRequestLimiterPtr RegisterRequestType(EStaticControlType controlType, i64 limit);
 };
 
 class TCreateLimiterCB {
@@ -30,7 +30,7 @@ public:
         : LimiterRegistry(limiterRegistry)
     {}
 
-    NYdbGrpc::IGRpcRequestLimiterPtr operator()(const char* serviceName, const char* requestName, i64 limit) const;
+    NYdbGrpc::IGRpcRequestLimiterPtr operator()(EStaticControlType controlType, i64 limit) const;
 
 private:
     TIntrusivePtr<TInFlightLimiterRegistry> LimiterRegistry;

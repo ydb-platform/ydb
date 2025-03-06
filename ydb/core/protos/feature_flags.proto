@@ -156,7 +156,7 @@ message TFeatureFlags {
     optional bool EnableSingleCompositeActionGroup = 131 [default = false];
     optional bool EnableResourcePoolsOnServerless = 132 [default = false];
     optional bool EnableVectorIndex = 133 [default = false];
-    optional bool EnableChangefeedsOnIndexTables = 134 [default = false];
+    optional bool EnableChangefeedsOnIndexTables = 134 [default = true];
     optional bool EnableResourcePoolsCounters = 135 [default = false];
     optional bool EnableOptionalColumnsInColumnShard = 136 [default = false];
     optional bool EnableGranularTimecast = 137 [default = true];

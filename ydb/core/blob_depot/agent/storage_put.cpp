@@ -18,6 +18,7 @@ namespace NKikimr::NBlobDepot {
             TBlobSeqId BlobSeqId;
             std::optional<TS3Locator> LocatorInFlight;
             TActorId WriterActorId;
+            ui64 ConnectionInstanceOnStart;
 
             struct TLifetimeToken {};
             std::shared_ptr<TLifetimeToken> LifetimeToken;
@@ -410,6 +411,8 @@ namespace NKikimr::NBlobDepot {
                             .AddMetadata("key", Request.Id.ToString()),
                         Request.Buffer.ExtractUnderlyingContainerOrCopy<TString>()),
                     IEventHandle::FlagTrackDelivery));
+
+                ConnectionInstanceOnStart = Agent.ConnectionInstance;
             }
 
             void OnPutS3ObjectResponse(std::optional<TString>&& error) {
@@ -417,6 +420,11 @@ namespace NKikimr::NBlobDepot {
                     (AgentId, Agent.LogId), (QueryId, GetQueryId()), (Error, error));
 
                 WriterActorId = {};
+
+                if (ConnectionInstanceOnStart != Agent.ConnectionInstance) {
+                    error = "BlobDepot tablet disconnected";
+                    LocatorInFlight.reset(); // prevent discarding this locator
+                }
 
                 if (error) {
                     ++*Agent.S3PutsError;

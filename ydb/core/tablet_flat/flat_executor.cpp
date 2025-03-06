@@ -224,10 +224,10 @@ void TExecutor::RecreatePageCollectionsCache() noexcept
 
     if (TransactionWaitPads) {
         for (auto &xpair : TransactionWaitPads) {
+            xpair.second->WaitingSpan.EndOk();
             TSeat* seat = xpair.second->Seat;
             Y_ABORT_UNLESS(seat->State == ESeatState::Waiting);
             seat->State = ESeatState::None;
-            xpair.second->WaitingSpan.EndOk();
 
             if (seat->Cancelled) {
                 FinishCancellation(seat, false);
@@ -627,11 +627,11 @@ void TExecutor::ActivateWaitingTransactions(TPrivatePageCache::TPage::TWaitQueue
         bool cancelled = false;
         while (TPrivatePageCacheWaitPad *waitPad = waitPadsQueue->Pop()) {
             if (auto it = TransactionWaitPads.find(waitPad); it != TransactionWaitPads.end()) {
+                it->second->WaitingSpan.EndOk();
                 TSeat* seat = it->second->Seat;
                 Y_ABORT_UNLESS(seat->State == ESeatState::Waiting);
                 seat->State = ESeatState::None;
-                seat->WaitingSpan.EndOk();
-                TransactionWaitPads.erase(waitPad);
+                TransactionWaitPads.erase(it);
                 if (seat->Cancelled) {
                     FinishCancellation(seat, false);
                     cancelled = true;

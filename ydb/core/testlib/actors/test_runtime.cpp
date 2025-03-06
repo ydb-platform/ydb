@@ -215,7 +215,10 @@ namespace NActors {
             nodeAppData->TransferWriterFactory = std::make_shared<NKikimr::Tests::MockTransferWriterFactory>();
             if (nodeIndex < egg.Icb.size()) {
                 nodeAppData->Icb = std::move(egg.Icb[nodeIndex]);
-                nodeAppData->InFlightLimiterRegistry.Reset(new NKikimr::NGRpcService::TInFlightLimiterRegistry(nodeAppData->Icb));
+            }
+            if (nodeIndex < egg.StaticControlBoard.size()) {
+                nodeAppData->StaticControlBoard = std::move(egg.StaticControlBoard[nodeIndex]);
+                nodeAppData->InFlightLimiterRegistry.Reset(new NKikimr::NGRpcService::TInFlightLimiterRegistry(nodeAppData->StaticControlBoard));
             }
             if (KeyConfigGenerator) {
                 nodeAppData->KeyConfig = KeyConfigGenerator(nodeIndex);

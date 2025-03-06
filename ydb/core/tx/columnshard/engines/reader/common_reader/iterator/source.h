@@ -381,6 +381,13 @@ public:
         AFL_VERIFY(!!StageResult);
         return *StageResult;
     }
+
+    template <typename T>
+    std::shared_ptr<T> GetContextAsVerified() const {
+        auto context = std::dynamic_pointer_cast<T>(Context);
+        AFL_VERIFY(context);
+        return context;
+    }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

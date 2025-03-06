@@ -20,7 +20,7 @@ using TFetchingScript = NCommon::TFetchingScript;
 class TSpecialReadContext: public NCommon::TSpecialReadContext, TNonCopyable {
 private:
     using TBase = NCommon::TSpecialReadContext;
-    TActorId DuplicatesManager = TActorId();
+    YDB_READONLY_DEF(TActorId, DuplicatesManager);
 
 private:
     std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
@@ -34,20 +34,10 @@ private:
 public:
     virtual TString ProfileDebugString() const override;
 
-    void RegisterActors();
-    void UnregisterActors();
-
-    const TActorId& GetDuplicatesManagerVerified() const {
-        AFL_VERIFY(DuplicatesManager);
-        return DuplicatesManager;
-    }
-
-    TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
-        : TBase(commonContext) {
-    }
+    TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext);
 
     ~TSpecialReadContext() {
-        AFL_VERIFY(!DuplicatesManager);
+        NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new NActors::TEvents::TEvPoison());
     }
 };
 

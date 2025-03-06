@@ -556,47 +556,28 @@ void TViewerPipeClient::RequestBSControllerPDiskUpdateStatus(const NKikimrBlobSt
 }
 
 THolder<NSchemeCache::TSchemeCacheNavigate> TViewerPipeClient::SchemeCacheNavigateRequestBuilder (
-        std::function<void (NSchemeCache::TSchemeCacheNavigate::TEntry&)> fillRequestEntryFunc
+        NSchemeCache::TSchemeCacheNavigate::TEntry&& entry
 ) {
     THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-    NSchemeCache::TSchemeCacheNavigate::TEntry entry;
     entry.RedirectRequired = false;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
-    fillRequestEntryFunc(entry);
-    request->ResultSet.emplace_back(entry);
+    request->ResultSet.emplace_back(std::move(entry));
     return request;
 }
 
-void TViewerPipeClient::RequestSchemeCacheNavigateWithParams(const TString& path, ui32 access, bool showPrivate) {
-    auto request = SchemeCacheNavigateRequestBuilder(
-        [&](auto& entry) {
-            entry.Path = SplitPath(path);
-            entry.Access = access;
-            entry.ShowPrivatePath = showPrivate;
-        }
-    );
-    if (!Event->Get()->UserToken.empty())
-        request->UserToken = new NACLib::TUserToken(Event->Get()->UserToken);
-
-    SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
-}
-
 void TViewerPipeClient::RequestSchemeCacheNavigate(const TString& path) {
-    auto request = SchemeCacheNavigateRequestBuilder(
-        [&](auto& entry) {
-            entry.Path = SplitPath(path);
-        }
-    );
+    NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+    entry.Path = SplitPath(path);
+
+    auto request = SchemeCacheNavigateRequestBuilder(std::move(entry));
     SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
 }
 
 void TViewerPipeClient::RequestSchemeCacheNavigate(const TPathId& pathId) {
-    auto request = SchemeCacheNavigateRequestBuilder(
-        [&](auto& entry) {
-            entry.TableId.PathId = pathId;
-            entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
-        }
-    );
+    NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+    entry.TableId.PathId = pathId;
+    entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+    auto request = SchemeCacheNavigateRequestBuilder(std::move(entry));
     SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
 }
 
@@ -639,6 +620,25 @@ TViewerPipeClient::TRequestResponse<NSchemeShard::TEvSchemeShard::TEvDescribeSch
     if (response.Span) {
         response.Span.Attribute("path", path);
     }
+    return response;
+}
+
+TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> TViewerPipeClient::MakeRequestSchemeCacheNavigateWithToken(
+        const TString& path, bool showPrivate, ui32 access, ui64 cookie
+) {
+    NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+    entry.Path = SplitPath(path);
+    entry.ShowPrivatePath = showPrivate;
+    entry.Access = access;
+    auto request = SchemeCacheNavigateRequestBuilder(std::move(entry));
+
+    if (!Event->Get()->UserToken.empty())
+         request->UserToken = new NACLib::TUserToken(Event->Get()->UserToken);
+
+    auto response = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
+            MakeSchemeCacheID(),
+            new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0 /*flags*/, cookie
+    );
     return response;
 }
 

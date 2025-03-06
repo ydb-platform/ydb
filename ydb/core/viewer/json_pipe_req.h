@@ -281,16 +281,17 @@ protected:
     TRequestResponse<NSysView::TEvSysView::TEvGetStorageStatsResponse> RequestBSControllerStorageStats();
     void RequestBSControllerPDiskUpdateStatus(const NKikimrBlobStorage::TUpdateDriveStatus& driveStatus, bool force = false);
 
-    THolder<NSchemeCache::TSchemeCacheNavigate> SchemeCacheNavigateRequestBuilder(
-                std::function<void (NSchemeCache::TSchemeCacheNavigate::TEntry&)> fillRequestEntryFunc);
+    THolder<NSchemeCache::TSchemeCacheNavigate> SchemeCacheNavigateRequestBuilder(NSchemeCache::TSchemeCacheNavigate::TEntry&& entry);
 
     void RequestSchemeCacheNavigate(const TString& path);
     void RequestSchemeCacheNavigate(const TPathId& pathId);
-    void RequestSchemeCacheNavigateWithParams(const TString& path, ui32 access = NACLib::DescribeSchema, bool showPrivate = false);
 
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(const TString& path, ui64 cookie = 0);
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(TPathId pathId, ui64 cookie = 0);
     TRequestResponse<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> MakeRequestSchemeShardDescribe(TTabletId schemeShardId, const TString& path, const NKikimrSchemeOp::TDescribeOptions& options = {}, ui64 cookie = 0);
+    TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigateWithToken(
+        const TString& path, bool showPrivate, ui32 access, ui64 cookie = 0);
+
     TRequestResponse<TEvViewer::TEvViewerResponse> MakeRequestViewer(TNodeId nodeId, TEvViewer::TEvViewerRequest* request, ui32 flags = 0);
     void RequestTxProxyDescribe(const TString& path);
     void RequestStateStorageEndpointsLookup(const TString& path);

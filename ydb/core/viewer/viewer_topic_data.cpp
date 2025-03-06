@@ -1,133 +1,26 @@
 #include "viewer_topic_data.h"
+#include <library/cpp/protobuf/json/proto2json.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
+#include <ydb/services/lib/auth/auth_helpers.h>
 
 namespace NKikimr::NViewer {
 
-
-class TUnpackDataToJsonActor : public TActorBootstrapped<TUnpackDataToJsonActor> {
-public:
-    TUnpackDataToJsonActor(THolder<TEvPersQueue::TEvResponse>&& readResponse, const TActorId& recipient,
-                     ui64 maxSingleMessageSize = 1_MB, ui64 maxTotalSize = 10_MB)
-        : ReadResponse(std::move(readResponse))
-        , Recipient(recipient)
-        , MaxMessageSize(maxSingleMessageSize)
-        , MaxTotalSize(maxTotalSize)
-    {}
-
-    void Bootstrap() {
-        DoWork();
-    }
-
-private:
-    void DoWork() {
-        ui64 totalSize = 0;
-        const auto& response = ReadResponse->Record.GetPartitionResponse();
-        Y_ABORT_UNLESS (response.HasCmdReadResult());
-        const auto& cmdRead = response.GetCmdReadResult();
-
-        NJson::TJsonValue fullJsonResponse{NJson::EJsonValueType::JSON_MAP};
-        NJson::TJsonValue jsonMessages{NJson::EJsonValueType::JSON_ARRAY};
-
-        auto setData = [&](NJson::TJsonValue& jsonRecord, TString&& data) {
-            jsonRecord.InsertValue("OriginalSize", data.size());
-            if (data.size() > MaxMessageSize) {
-                data.resize(MaxMessageSize);
-            }
-            totalSize += data.size();
-            jsonRecord.InsertValue("Message", std::move(data));
-        };
-        fullJsonResponse.InsertValue("StartOffset", cmdRead.GetStartOffset());
-        fullJsonResponse.InsertValue("EndOffset", cmdRead.GetEndOffset());
-
-
-        for (auto& r : cmdRead.GetResult()) {
-            if (totalSize >= MaxTotalSize) {
-                break;
-            }
-            auto dataChunk = (NKikimr::GetDeserializedData(r.GetData()));
-            NJson::TJsonValue jsonRecord{NJson::EJsonValueType::JSON_MAP};
-            jsonRecord.InsertValue("Offset", r.GetOffset());
-            jsonRecord.InsertValue("CreateTimestamp", r.GetCreateTimestampMS());
-            jsonRecord.InsertValue("WriteTimestamp", r.GetWriteTimestampMS());
-            i64 diff = r.GetWriteTimestampMS() - r.GetCreateTimestampMS();
-            if (diff < 0) {
-                diff = 0;
-            }
-            jsonRecord.InsertValue("TimestampDiff", diff);
-            jsonRecord.InsertValue("Size", dataChunk.GetData().size());
-
-            if (dataChunk.HasCodec() && dataChunk.GetCodec() != NPersQueueCommon::RAW) {
-                const NYdb::NTopic::ICodec* codec = GetCodec(static_cast<NPersQueueCommon::ECodec>(dataChunk.GetCodec()));
-                if (codec == nullptr) {
-                    Send(Recipient, new TEvViewerTopicData::TEvTopicDataUnpacked(false, NJson::TJsonValue()));
-                    Die(ActorContext());
-                    return;
-                }
-                setData(jsonRecord, std::move(codec->Decompress(dataChunk.GetData())));
-            } else {
-                setData(jsonRecord, std::move(*dataChunk.MutableData()));
-            }
-            jsonRecord.InsertValue("Codec", dataChunk.GetCodec());
-            jsonRecord.InsertValue("ProducerId", r.GetSourceId());
-            jsonRecord.InsertValue("SeqNo", r.GetSeqNo());
-
-            if (dataChunk.MessageMetaSize() > 0) {
-                auto jsonMetadata = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-                for (const auto& metadata : dataChunk.GetMessageMeta()) {
-                    auto jsonMetadataItem = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
-                    jsonMetadataItem.InsertValue("Key", metadata.key());
-                    jsonMetadataItem.InsertValue("Value", metadata.value());
-                    jsonMetadata.AppendValue(std::move(jsonMetadataItem));
-                }
-                jsonRecord.InsertValue("Metadata", std::move(jsonMetadata));
-            }
-            jsonMessages.AppendValue(std::move(jsonRecord));
-        }
-        fullJsonResponse.InsertValue("Messages", std::move(jsonMessages));
-
-        Send(Recipient, new TEvViewerTopicData::TEvTopicDataUnpacked(true, std::move(fullJsonResponse)));
-        Die(ActorContext());
-    }
-
-    NYdb::NTopic::ICodec* GetCodec(NPersQueueCommon::ECodec codec) {
-        ui32 codecId = static_cast<ui32>(codec);
-        auto iter = Codecs.find(codecId);
-        if (iter != Codecs.end()) {
-            return iter->second.Get();
-        }
-        switch (codec) {
-            case NPersQueueCommon::GZIP: {
-                auto [iterator, ins] = Codecs.emplace(codecId, MakeHolder<NYdb::NTopic::TGzipCodec>());
-                Y_ABORT_UNLESS(ins);
-                return iterator->second.Get();
-                break;
-            }
-            case NPersQueueCommon::ZSTD: {
-                auto [iterator, ins] = Codecs.emplace(codecId, MakeHolder<NYdb::NTopic::TZstdCodec>());
-                Y_ABORT_UNLESS(ins);
-                return iterator->second.Get();
-            }
-            default:
-                return nullptr;
-        }
-    }
-
-    TMap<ui32, THolder<NYdb::NTopic::ICodec>> Codecs;
-    THolder<TEvPersQueue::TEvResponse> ReadResponse;
-    TActorId Recipient;
-    ui64 MaxMessageSize;
-    ui64 MaxTotalSize;
-};
-
-
 void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    auto ev_ = std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(ev->Release().Release());
-    const auto& result = ev_->Request;
-
-    if (!TBase::IsSuccess(ev_)) {
+    if (ev->Cookie != 1) {
+        return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Internal actor state got corrupted while trying to describe topic"));
+    }
+    NavigateResponse->Set(std::move(ev));
+    if (NavigateResponse->IsError()) {
+        return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", NavigateResponse->GetError()));
+    }
+    Y_ABORT_UNLESS(NavigateResponse->Get());
+    Y_ABORT_UNLESS(NavigateResponse->Get()->Request);
+    const auto& request = *NavigateResponse->Get()->Request;
+    if (!NavigateResponse->IsOk()) {
         TStringBuilder error;
-        if (result->ResultSet.size() != 0) {
-            switch (result->ResultSet[0].Status) {
+
+        if (request.ResultSet.size() != 0) {
+            switch (request.ResultSet[0].Status) {
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
                     break; // Unexpected but just in case
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
@@ -153,24 +46,25 @@ void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
 
             }
         }
-        error << "While trying to find topic: '" << TopicPath << "' got error '" << TBase::GetError(ev_) << "'";
+        error << "While trying to find topic: '" << TopicPath << "' got error '" << NavigateResponse->GetError() << "'";
         return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", error));
     }
-    const auto response = result->ResultSet.front();
+    const auto& response = request.ResultSet.front();
     if (response.Self->Info.GetPathType() != NKikimrSchemeOp::EPathTypePersQueueGroup) {
         auto error = TStringBuilder() << "No such topic '" << TopicPath << "";
         return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", error));
     }
-    if (Event->Get()->UserToken.empty()) {
-        if (AppData(ActorContext())->EnforceUserTokenRequirement || AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
-            return ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Unauthenticated access is forbidden, please provide credentials"));
-        }
-    } else {
-        NACLib::TUserToken token(Event->Get()->UserToken);
-        if (!response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, token)) {
-            TStringBuilder error;
-            error << "Access to topic " << TopicPath << " is denied for subject " << token.GetUserSID();
-            return ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", error));
+
+    {
+        TString authError;
+        auto pathWithName = TStringBuilder() << "topic " << TopicPath;
+        auto authResult = NKikimr::NTopicHelpers::CheckAccess(*AppData(ActorContext()), response, Event->Get()->UserToken, pathWithName, authError);
+        switch (authResult) {
+            case NKikimr::NTopicHelpers::EAuthResult::AuthOk:
+                break;
+            case NKikimr::NTopicHelpers::EAuthResult::AccessDenied:
+            case NKikimr::NTopicHelpers::EAuthResult::TokenRequired:
+                return ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", authError));
         }
     }
     const auto& partitions = response.PQGroupInfo->Description.GetPartitions();
@@ -178,14 +72,15 @@ void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
         auto partitionId = partition.GetPartitionId();
         if (partitionId == PartitionId) {
             TabletId = partition.GetTabletId();
-            return SendPQReadRequest();
+            SendPQReadRequest();
+            RequestDone();
+            return;
         }
     }
     ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "No such partition in topic"));
 }
 
 void TTopicData::SendPQReadRequest() {
-    const auto& ctx = ActorContext();
     auto pipeClient = ConnectTabletPipe(TabletId);
 
     NKikimrClient::TPersQueueRequest request;
@@ -200,9 +95,9 @@ void TTopicData::SendPQReadRequest() {
     cmdRead->SetTimeoutMs(READ_TIMEOUT_MS);
     cmdRead->SetExternalOperation(true);
 
-    TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+    auto req = MakeHolder<TEvPersQueue::TEvRequest>();
     req->Record.Swap(&request);
-    NTabletPipe::SendData(ctx, pipeClient, req.Release());
+    SendRequestToPipe(pipeClient, req.Release());
 }
 
 void TTopicData::HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev) {
@@ -230,23 +125,103 @@ void TTopicData::HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev) {
     } else {
         return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "No data received from topic"));
     }
-    Register(new TUnpackDataToJsonActor(std::move(ReadResponse), SelfId()),
-                TMailboxType::HTSwap, AppData()->BatchPoolId);
+    FillProtoResponse();
+    RequestDone();
 }
 
-void TTopicData::HandleDataUnpacked(TEvViewerTopicData::TEvTopicDataUnpacked::TPtr& ev) {
-    if (!ev->Get()->Status) {
-        return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Messages decompression failed"));
+void TTopicData::FillProtoResponse(ui64 maxSingleMessageSize, ui64 maxTotalSize) {
+    ui64 totalSize = 0;
+    const auto& response = ReadResponse->Record.GetPartitionResponse();
+    if(!response.HasCmdReadResult()) {
+        return;
     }
-    Response = std::move(ev->Get()->Data);
-    RequestDone();
+    const auto& cmdRead = response.GetCmdReadResult();
+
+    auto setData = [&](NKikimrViewer::TTopicDataResponse::TMessage& protoMessage, TString&& data) {
+        protoMessage.SetOriginalSize(data.size());
+        if (data.size() > maxSingleMessageSize) {
+            data.resize(maxSingleMessageSize);
+        }
+        totalSize += data.size();
+        protoMessage.SetMessage(std::move(data));
+    };
+    ProtoResponse.SetStartOffset(cmdRead.GetStartOffset());
+    ProtoResponse.SetEndOffset(cmdRead.GetEndOffset());
+
+    for (auto& r : cmdRead.GetResult()) {
+        if (totalSize >= maxTotalSize) {
+            break;
+        }
+        auto dataChunk = (NKikimr::GetDeserializedData(r.GetData()));
+        auto* messageProto = ProtoResponse.AddMessages();
+        messageProto->SetOffset(r.GetOffset());
+        messageProto->SetCreateTimestamp(r.GetCreateTimestampMS());
+        messageProto->SetWriteTimestamp(r.GetWriteTimestampMS());
+        i64 diff = r.GetWriteTimestampMS() - r.GetCreateTimestampMS();
+        if (diff < 0) {
+            diff = 0;
+        }
+        messageProto->SetTimestampDiff(diff);
+        messageProto->SetSize(dataChunk.GetData().size());
+
+        if (dataChunk.HasCodec() && dataChunk.GetCodec() != NPersQueueCommon::RAW) {
+            const NYdb::NTopic::ICodec* codec = GetCodec(static_cast<NPersQueueCommon::ECodec>(dataChunk.GetCodec()));
+            if (codec == nullptr) {
+                return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Message decompression failed"));
+            }
+            setData(*messageProto, std::move(codec->Decompress(dataChunk.GetData())));
+        } else {
+            setData(*messageProto, std::move(*dataChunk.MutableData()));
+        }
+        messageProto->SetCodec(dataChunk.GetCodec());
+        messageProto->SetProducerId(r.GetSourceId());
+        messageProto->SetSeqNo(r.GetSeqNo());
+
+        if (dataChunk.MessageMetaSize() > 0) {
+            for (const auto& metadata : dataChunk.GetMessageMeta()) {
+                auto* metadataProto = messageProto->AddMessageMetadata();
+                auto jsonMetadataItem = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
+                metadataProto->SetKey(metadata.key());
+                metadataProto->SetValue(metadata.value());
+            }
+        }
+    }
+}
+
+void TTopicData::ReplyAndPassAway() {
+    NProtobufJson::TProto2JsonConfig config;
+    //config.SetAddMissingFields(true);
+    config.SetMissingSingleKeyMode(NProtobufJson::TProto2JsonConfig::MissingKeyDefault);
+    TStringStream json;
+    NProtobufJson::Proto2Json(ProtoResponse, json, config);
+    ReplyAndPassAway(GetHTTPOKJSON(json.Str()));
+}
+
+NYdb::NTopic::ICodec* TTopicData::GetCodec(NPersQueueCommon::ECodec codec) {
+    ui32 codecId = static_cast<ui32>(codec);
+    auto iter = Codecs.find(codecId);
+    if (iter != Codecs.end()) {
+        return iter->second.Get();
+    }
+    switch (codec) {
+        case NPersQueueCommon::GZIP: {
+            auto [iterator, ins] = Codecs.emplace(codecId, MakeHolder<NYdb::NTopic::TGzipCodec>());
+            return iterator->second.Get();
+            break;
+        }
+        case NPersQueueCommon::ZSTD: {
+            auto [iterator, ins] = Codecs.emplace(codecId, MakeHolder<NYdb::NTopic::TZstdCodec>());
+            return iterator->second.Get();
+        }
+        default:
+            return nullptr;
+    }
 }
 
 void TTopicData::StateRequestedDescribe(TAutoPtr<::NActors::IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleDescribe);
         hFunc(TEvPersQueue::TEvResponse, HandlePQResponse);
-        hFunc(TEvViewerTopicData::TEvTopicDataUnpacked, HandleDataUnpacked);
         cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
     }
 }
@@ -269,12 +244,11 @@ bool TTopicData::GetIntegerParam(const TString& name, i64& value) {
 }
 
 void TTopicData::Bootstrap() {
-    if (NeedToRedirect()) {
+    if (!Database.empty() && TBase::NeedToRedirect()) {
         return;
     }
     const auto& params(Event->Get()->Request.GetParams());
-    Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-    Timeout = std::min(Timeout, 30000u);
+    Timeout = TDuration::Seconds(std::min((ui32)Timeout.Seconds(), 30u));
 
 
     if (!GetIntegerParam("partition", PartitionId))
@@ -287,21 +261,14 @@ void TTopicData::Bootstrap() {
         return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Too many messages requested"));
     }
 
-    if (params.Has("topic_path")) {
-        TopicPath = params.Get("topic_path");
-        RequestSchemeCacheNavigateWithParams(params.Get("topic_path"), NACLib::DescribeSchema, true);
+    TopicPath = params.Get("path");
+
+    if (!TopicPath.empty()) {
+        NavigateResponse = MakeRequestSchemeCacheNavigateWithToken(TopicPath, true, NACLib::DescribeSchema, 1);
     } else {
-        return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'topic_path' is required"));
+        return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'path' is required and should not be empty"));
     }
-    Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
-
-}
-
-void TTopicData::ReplyAndPassAway() {
-    if (!Response.IsDefined()) {
-        return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Could not get topic data"));
-    }
-    ReplyAndPassAway(GetHTTPOKJSON(std::move(Response)));
+    Become(&TThis::StateRequestedDescribe, Timeout, new TEvents::TEvWakeup());
 }
 
 

@@ -9,6 +9,7 @@ SRCS(
     collection.cpp
     header.cpp
     fetcher.cpp
+    abstract.cpp
     meta.cpp
     checker.cpp
     GLOBAL composite.cpp

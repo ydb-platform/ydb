@@ -14,7 +14,7 @@
 namespace NKikimr::NOlap {
 
 namespace NIndexes {
-class IIndexMeta;
+class TIndexMetaContainer;
 }
 
 struct TIndexInfo;
@@ -33,8 +33,8 @@ public:
     std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoaderVerified(const ui32 columnId) const;
     std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoaderOptional(const std::string& columnName) const;
     std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoaderVerified(const std::string& columnName) const;
-    std::shared_ptr<NIndexes::IIndexMeta> GetIndexVerified(const ui32 indexId) const;
-    std::shared_ptr<NIndexes::IIndexMeta> GetIndexOptional(const ui32 indexId) const;
+    NIndexes::TIndexMetaContainer GetIndexVerified(const ui32 indexId) const;
+    NIndexes::TIndexMetaContainer GetIndexOptional(const ui32 indexId) const;
 
     bool IsSpecialColumnId(const ui32 columnId) const;
     virtual TColumnIdsView GetColumnIds() const = 0;

@@ -63,7 +63,7 @@ THashMap<ui64, ui32> TDefaultDataExtractor::DoGetIndexHitsCount(const std::share
         }
         {
             auto& stats = subColumns->GetOthersData().GetStats();
-            for (ui32 i = 0; i < stats.GetOthersData(); ++i) {
+            for (ui32 i = 0; i < stats.GetColumnsCount(); ++i) {
                 result[NRequest::TOriginalDataAddress::CalcSubColumnHash(stats.GetColumnName(i))] += stats.GetColumnRecordsCount(i);
             }
         }

@@ -366,11 +366,11 @@ ui32 ISnapshotSchema::GetIndexesCount() const {
     return GetIndexInfo().GetIndexes().size();
 }
 
-std::shared_ptr<NIndexes::IIndexMeta> ISnapshotSchema::GetIndexVerified(const ui32 indexId) const {
+NIndexes::TIndexMetaContainer ISnapshotSchema::GetIndexVerified(const ui32 indexId) const {
     return GetIndexInfo().GetIndexVerified(indexId);
 }
 
-std::shared_ptr<NIndexes::IIndexMeta> ISnapshotSchema::GetIndexOptional(const ui32 indexId) const {
+NIndexes::TIndexMetaContainer ISnapshotSchema::GetIndexOptional(const ui32 indexId) const {
     return GetIndexInfo().GetIndexOptional(indexId);
 }
 

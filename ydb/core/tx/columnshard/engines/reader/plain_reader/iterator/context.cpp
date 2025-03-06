@@ -48,7 +48,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
                 return false;
         }
     }();
-    const bool useIndexes = (IndexChecker ? source->HasIndexes(IndexChecker->GetIndexIds()) : false);
+    const bool useIndexes = (IndexChecker ? source->HasIndexes(NIndexes::TIndexDataAddress::ExtractIndexIds(IndexChecker->GetIndexIds())) : false);
     const bool isWholeExclusiveSource = source->GetExclusiveIntervalOnly() && source->IsSourceInMemory();
     const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < source->GetRecordSnapshotMax() || !isWholeExclusiveSource;
     const bool hasDeletions = source->GetHasDeletions();

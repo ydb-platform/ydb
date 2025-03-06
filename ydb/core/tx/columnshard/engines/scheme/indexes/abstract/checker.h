@@ -16,6 +16,15 @@ private:
     YDB_READONLY_DEF(std::optional<ui64>, Category);
 
 public:
+    template <class TContainer>
+    static std::set<ui32> ExtractIndexIds(const TContainer& addresses) {
+        std::set<ui32> result;
+        for (auto&& i : addresses) {
+            result.emplace(i.GetIndexId());
+        }
+        return result;
+    }
+
     TIndexDataAddress() = default;
 
     explicit TIndexDataAddress(const ui32 indexId)

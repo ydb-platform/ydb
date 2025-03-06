@@ -201,12 +201,23 @@ private:
 
 using TBuildStatsYieldHandler = std::function<void()>;
 
+#ifndef NDEBUG
 #define LOG_BUILD_STATS(stream) \
-    if (auto actorContext = NActors::TlsActivationContext; actorContext) { \
-        LOG_TRACE_S(*actorContext, NKikimrServices::TABLET_STATS_BUILDER, logPrefix << stream); \
-    } else { \
-        Cerr << logPrefix << stream << Endl; \
-    }
+    do { \
+        if (auto actorContext = NActors::TlsActivationContext; actorContext) { \
+            LOG_TRACE_S(*actorContext, NKikimrServices::TABLET_STATS_BUILDER, logPrefix << stream); \
+        } else { \
+            Cerr << logPrefix << stream << Endl; \
+        } \
+    } while (0)
+#else
+#define LOG_BUILD_STATS(stream) \
+    do { \
+        if (auto actorContext = NActors::TlsActivationContext; actorContext) { \
+            LOG_TRACE_S(*actorContext, NKikimrServices::TABLET_STATS_BUILDER, logPrefix << stream); \
+        } \
+    } while (0)
+#endif
 
 bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, ui32 histogramBucketsCount, IPages* env, 
     TBuildStatsYieldHandler yieldHandler, const TString& logPrefix = {});

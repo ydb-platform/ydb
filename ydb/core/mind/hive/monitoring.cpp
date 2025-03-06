@@ -2015,6 +2015,40 @@ function clearAlert() {
     $('#alert-placeholder').removeClass('glyphicon-refresh');
 }
 
+
+function showConfirmationModal(message, onConfirm, onDismiss) {
+    var modal = $('<div class="modal fade" tabindex="-1" role="dialog" data-backdrop="static">'
+        + '<div class="modal-dialog" role="document">'
+        + '<div class="modal-content">'
+        + '<div class="modal-header">'
+        + '<button type="button" class="close" data-dismiss="modal">&times;</button>'
+        + '<h4 class="modal-title">Confirmation</h4>'
+        + '</div>'
+        + '<div class="modal-body">' + message + '</div>'
+        + '<div class="modal-footer">'
+        + '<button type="button" class="btn btn-default cancel-btn" data-dismiss="modal">Cancel</button>'
+        + '<button type="button" class="btn btn-danger confirm-btn">OK</button>'
+        + '</div>'
+        + '</div>'
+        + '</div>'
+        + '</div>');
+
+    $('.modal').remove();
+    $('body').append(modal);
+    modal.modal('show');
+
+    modal.find('.confirm-btn').click(function () {
+        if (onConfirm) onConfirm();
+        modal.modal('hide').remove();
+    });
+
+    modal.on('hidden.bs.modal', function () {
+        if (onDismiss) onDismiss();
+        modal.remove();
+    });
+}
+
+
 function enableType(element, node, type) {
     $(element).css('color', 'gray');
     $.ajax({url:'?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&resettype=' + type});
@@ -2025,14 +2059,33 @@ function disableType(element, node, type) {
     $.ajax({url:'?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&maxcount=0&changetype=' + type});
 }
 
-function applySetting(button, name, val) {
-    $(button).css('color', 'gray');
-    if (name == "DefaultTabletLimit") {
-        should_refresh_types = true;
+function changeDefaultTabletLimit(button, val, tabletTypeName) {
+    let text = '';
+    if (val.split(':')[1] == '0') {
+        text = 'Prohibit starting tablets of type <b>' + tabletTypeName + '</b> on every node';
+    } else {
+        text = 'Allow starting tablets of type <b>' + tabletTypeName + '</b> on every node';
     }
-    $.ajax({
-        url: document.URL + '&page=Settings&' + name + '=' + val,
-    });
+    applySetting(button, 'DefaultTabletLimit', val, text);
+}
+
+function applySetting(button, name, val, text) {
+    $(button).css('color', 'gray');
+
+    showConfirmationModal(
+        'Are you sure you want to proceed? ' + text,
+        function () {
+            if (name == "DefaultTabletLimit") {
+                should_refresh_types = true;
+            }
+            $.ajax({
+                url: document.URL + '&page=Settings&' + name + '=' + val,
+            });
+        },
+        function () {
+            $(button).css('color', '');
+        }
+    );
 }
 
 var Empty = true;

@@ -32,14 +32,9 @@ private:
     }
 
     virtual TConclusion<bool> DoExecuteInplace(
-        const std::shared_ptr<NCommon::IDataSource>& sourceExt, const TFetchingScriptCursor& step) const override final {
-        const auto source = std::static_pointer_cast<IDataSource>(sourceExt);
-        return DoExecuteInplace(source, step);
-    }
+        const std::shared_ptr<NCommon::IDataSource>& sourceExt, const TFetchingScriptCursor& step) const override final;
 
-    virtual ui64 GetProcessingDataSize(const std::shared_ptr<NCommon::IDataSource>& source) const override final {
-        return GetProcessingDataSize(std::static_pointer_cast<IDataSource>(source));
-    }
+    virtual ui64 GetProcessingDataSize(const std::shared_ptr<NCommon::IDataSource>& source) const override final;
 
 public:
     using TBase::TBase;

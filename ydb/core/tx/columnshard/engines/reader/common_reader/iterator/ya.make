@@ -15,6 +15,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/tx/columnshard/engines/scheme
+    yql/essentials/minikql
 )
 
 GENERATE_ENUM_SERIALIZATION(columns_set.h)

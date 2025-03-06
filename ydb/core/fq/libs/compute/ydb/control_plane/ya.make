@@ -25,6 +25,7 @@ PEERDIR(
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/lib/operation_id/protos
+    ydb/public/sdk/cpp/client/resources
     yql/essentials/public/issue
     yql/essentials/utils
 )

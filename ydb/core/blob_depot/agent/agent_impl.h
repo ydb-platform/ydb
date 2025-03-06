@@ -194,6 +194,7 @@ namespace NKikimr::NBlobDepot {
         TActorId PipeId;
         TActorId PipeServerId;
         bool IsConnected = false;
+        ui64 ConnectionInstance = 0;
 
         NMonitoring::TDynamicCounterPtr AgentCounters;
 

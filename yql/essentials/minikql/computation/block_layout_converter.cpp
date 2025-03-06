@@ -436,15 +436,17 @@ public:
 
         auto& packedTuples = packed.PackedTuples;
         auto& overflow = packed.Overflow;
+        auto& nTuples = packed.NTuples;
 
-        auto nTuples = columns.front().array()->length;
-        packed.NTuples = nTuples;
-        auto currentSize = packedTuples.size();
-        auto bytes = (TupleLayout_->TotalRowSize) * nTuples;
-        packedTuples.resize(currentSize + bytes + 64);
+        auto currentSize = (TupleLayout_->TotalRowSize) * nTuples;
+        auto tuplesToPack = columns.front().array()->length;
+        nTuples += tuplesToPack;
+        auto newSize = (TupleLayout_->TotalRowSize) * nTuples;
+        packedTuples.resize(newSize + 64);
 
         TupleLayout_->Pack(
-            columnsData.data(), columnsNullBitmap.data(), packedTuples.data(), overflow, 0, nTuples);
+            columnsData.data(), columnsNullBitmap.data(),
+            packedTuples.data() + currentSize, overflow, 0, tuplesToPack);
     }
     
     void Unpack(const PackResult& packed, TVector<arrow::Datum>& columns) override {
@@ -471,7 +473,8 @@ public:
         }
 
         TupleLayout_->Unpack(
-            columnsData.data(), columnsNullBitmap.data(), packed.PackedTuples.data(), packed.Overflow, 0, packed.NTuples);
+            columnsData.data(), columnsNullBitmap.data(),
+            packed.PackedTuples.data(), packed.Overflow, 0, packed.NTuples);
     }
 
     const NPackedTuple::TTupleLayout* GetTupleLayout() const override {

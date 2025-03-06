@@ -23,6 +23,7 @@ SET(ORIG_SOURCES
     mkql_block_just.cpp
     mkql_block_logical.cpp
     mkql_block_map_join.cpp
+    mkql_block_garce_join.cpp
     mkql_block_compress.cpp
     mkql_block_func.cpp
     mkql_block_skiptake.cpp
@@ -167,6 +168,7 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/utils
     yql/essentials/public/issue/protos
+    ydb/library/yql/minikql/comp_nodes/packed_tuple
 )
 
 IF (ARCH_X86_64)

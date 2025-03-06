@@ -17,12 +17,18 @@ public:
         ui32 NTuples;
     };
 
+    using TPackedTuple = std::vector<ui8, TMKQLAllocator<ui8>>;
+    using TOverflow = std::vector<ui8, TMKQLAllocator<ui8>>;
+
 public:
     using TPtr = std::unique_ptr<IBlockLayoutConverter>;
 
+public:
     virtual ~IBlockLayoutConverter() = default;
 
+    // Can be called multiple times to accumulate packed data in one storage
     virtual void Pack(const TVector<arrow::Datum>& columns, PackResult& packed) = 0;
+    // Can not be called multiple times due to immutability of arrow arrays
     virtual void Unpack(const PackResult& packed, TVector<arrow::Datum>& columns) = 0;
     virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
 };

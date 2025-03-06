@@ -317,12 +317,12 @@ Table Structure:
 |--------|-------------|
 | `Sid` | SID of the user.<br />Type: `Utf8`.<br />Key: `0`. |
 | `IsEnabled` | Indicates if login is allowed; used for explicit administrator block. Independent of `IsLockedOut`.<br />Type: `Bool`. |
-| `IsLockedOut` | Indicates if login is automatically locked out due to exceeding failed login attempts. Independent of `IsEnabled`.<br />Type: `Bool`. |
+| `IsLockedOut` | Automatically locked out due to exceeding failed login attempts. Independent of `IsEnabled`.<br />Type: `Bool`. |
 | `CreatedAt` | Timestamp of user creation.<br />Type: `Timestamp`. |
 | `LastSuccessfulAttemptAt` | Timestamp of the last successful login attempt.<br />Type: `Timestamp`. |
 | `LastFailedAttemptAt` | Timestamp of the last failed login attempt.<br />Type: `Timestamp`. |
 | `FailedAttemptCount` | Number of failed login attempts.<br />Type: `Uint32`. |
-| `PasswordHash` | JSON string containing the password hash, salt, and hash algorithm.<br />Type: `Utf8`. |
+| `PasswordHash` | JSON string containing password hash, salt, and hash algorithm.<br />Type: `Utf8`. |
 
 ### Auth groups
 

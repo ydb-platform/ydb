@@ -303,61 +303,75 @@ ORDER BY IntervalEnd desc, CPUCores desc
 
 ## Access control entities {#auth}
 
-The following system views store data for analyzing various access control entities.
+The following system views store data for analyzing various access control entities:
 
-* `auth_group_members`: Membership details for users within access groups.
-* `auth_permissions`: Details of assigned [access rights](../concepts/glossary.md#access-right).
-* `auth_effective_permissions`: Effective [access rights](../concepts/glossary.md#access-right) considering inheritance.
-* `auth_owners`: [Ownership](../concepts/glossary.md#access-owner) details of [access objects](#access-object).
 
-### Auth Users
+### Auth users
 
-The `auth_users` view lists internal {{ ydb-short-name }} [users](../concepts/glossary.md#access-user) but does not include users authenticated through external systems such as LDAP.
+The `auth_users` view lists internal {{ ydb-short-name }} [users](../concepts/glossary.md#access-user). It does not include users authenticated through external systems such as LDAP.
 
-This view can be fully accessed by the database administrators. Regular user can only view their own details.
+This view can be fully accessed by database administrators, while regular users can only view their own details.
 
 Table Structure:
 
 | Field | Description |
---- | ---
-| `Sid` | SID of the user.<br/>Type: `Utf8`.<br/>Key: `0`. |
+|-------|-------------|
+| `Sid` | SID of the user.<br />Type: `Utf8`.<br />Key: `0`. |
 
-### Auth Groups
+### Auth groups
 
-The `auth_groups` view lists {{ ydb-short-name }} [access groups](../concepts/glossary.md#access-group).
+The `auth_groups` view lists [access groups](../concepts/glossary.md#access-group).
 
-This view can be only accessed by the database administrators.
+This view can be accessed only by database administrators.
 
 Table Structure:
 
+| Field | Description |
+|-------|-------------|
+| `Sid` | SID of the group.<br />Type: `Utf8`. |
+| `CreatedAt` | Timestamp when the group was created.<br />Type: `Timestamp`. |
 
-### Auth Group Members
+### Auth group members
 
 The `auth_group_members` view lists [users](../concepts/glossary.md#access-user) membership details within [access groups](../concepts/glossary.md#access-group).
 
-This view can be only accessed by the database administrators.
+This view can be accessed only by database administrators.
 
 Table Structure:
 
+| Field | Description |
+|-------|-------------|
+| `GroupSid` | Name of the group.<br />Type: `Utf8`.<br />Key: `0`. |
+| `MemberSid` | SID of the group member (user or group in `login@domain`).<br />Type: `Utf8`.<br />Key: `1`. |
 
-### Auth Permissions
+### Auth permissions
 
-The auth permissions views lists assigned [access rights](../concepts/glossary.md#access-right).
+The auth permissions views list assigned [access rights](../concepts/glossary.md#access-right).
 
-Auth permission contains two views:
+Contains two views:
 
-* `auth_permissions`: Contains directly assigned access rights
-* `auth_effective_permissions`: Contains effective access rights, accounting for inheritance.
+* `auth_permissions`: Directly assigned access rights.
+* `auth_effective_permissions`: Effective access rights, accounting for inheritance.
 
-A user can view an [access object](#access-object) if they have `ydb.granular.describe_schema` permission on it.
+A user can view an [access object](#access-object) if they have the `ydb.granular.describe_schema` permission on it.
 
 Table Structure:
 
+| Field | Description |
+|-------|-------------|
+| `Path` | Path to the object.<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | SID of the access entity (user or group).<br />Type: `Utf8`.<br />Key: `1`. |
+| `Permission` | Name of the access right in YDB format.<br />Type: `Utf8`.<br />Key: `2`. |
 
-### Auth Owners
+### Auth owners
 
 The `auth_owners` view lists details of [access objects](#access-object) ownership.
 
-A user can view an [access object](#access-object) if they have `ydb.granular.describe_schema` permission on it.
+A user can view an [access object](#access-object) if they have the `ydb.granular.describe_schema` permission on it.
 
 Table Structure:
+
+| Field | Description |
+|-------|-------------|
+| `Path` | Path to the object.<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | Owner SID (user or group).<br />Type: `Utf8`.<br />Key: `1`. |

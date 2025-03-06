@@ -353,7 +353,7 @@ Contains two views:
 * `auth_permissions`: Directly assigned access rights.
 * `auth_effective_permissions`: Effective access rights, accounting for inheritance.
 
-A user can view an [access object](#access-object) if they have the `ydb.granular.describe_schema` permission on it.
+A user can view an [access object](../concepts/glossary.md#access-object) if they have the `ydb.granular.describe_schema` permission on it.
 
 Table Structure:
 
@@ -365,9 +365,9 @@ Table Structure:
 
 ### Auth owners
 
-The `auth_owners` view lists details of [access objects](#access-object) ownership.
+The `auth_owners` view lists details of [access objects](../concepts/glossary.md#access-object) ownership.
 
-A user can view an [access object](#access-object) if they have the `ydb.granular.describe_schema` permission on it.
+A user can view an [access object](../concepts/glossary.md#access-object) if they have the `ydb.granular.describe_schema` permission on it.
 
 Table Structure:
 

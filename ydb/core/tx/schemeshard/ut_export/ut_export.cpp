@@ -2611,6 +2611,7 @@ attributes {
 
     Y_UNIT_TEST(Changefeeds) {
         TTestBasicRuntime runtime;
+        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();

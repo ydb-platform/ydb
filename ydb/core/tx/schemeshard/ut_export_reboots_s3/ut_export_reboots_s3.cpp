@@ -512,24 +512,23 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
 
     class TestData {
     public:
-    static const TTypedScheme& Table() {
-        return TableScheme;
-    } 
+        static const TTypedScheme& Table() {
+            return TableScheme;
+        } 
 
-    static const TTypedScheme& Changefeed() {
-        return ChangefeedScheme;
-    }
+        static const TTypedScheme& Changefeed() {
+            return ChangefeedScheme;
+        }
 
-    static const TString& Request() {
-        return RequestString;
-    }
+        static const TString& Request() {
+            return RequestString;
+        }
 
     private:
-    static const char* TableName;
-    static const TTypedScheme TableScheme;
-    static const TTypedScheme ChangefeedScheme;
-    static const TString RequestString;
-
+        static const char* TableName;
+        static const TTypedScheme TableScheme;
+        static const TTypedScheme ChangefeedScheme;
+        static const TString RequestString;
     };
 
     const char* TestData::TableName = "Table";
@@ -537,24 +536,24 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     const TTypedScheme TestData::TableScheme = TTypedScheme {
         EPathTypeTable,
         Sprintf(R"(
-                    Name: "%s"
-                    Columns { Name: "key" Type: "Utf8" }
-                    Columns { Name: "value" Type: "Utf8" }
-                    KeyColumnNames: ["key"]
-                )", TableName)
+            Name: "%s"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )", TableName)
     };
 
     const TTypedScheme TestData::ChangefeedScheme = TTypedScheme {
         EPathTypeCdcStream,
         Sprintf(R"(
-                    TableName: "%s"
-                    StreamDescription {
-                        Name: "update_feed"
-                        Mode: ECdcStreamModeUpdate
-                        Format: ECdcStreamFormatJson
-                        State: ECdcStreamStateReady
-                    }
-                )", TableName)
+            TableName: "%s"
+            StreamDescription {
+                Name: "update_feed"
+                Mode: ECdcStreamModeUpdate
+                Format: ECdcStreamFormatJson
+                State: ECdcStreamStateReady
+            }
+        )", TableName)
     };
 
     const TString TestData::RequestString = R"(
@@ -562,8 +561,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             endpoint: "localhost:%d"
             scheme: HTTP
             items {
-            source_path: "/MyRoot/Table"
-            destination_prefix: ""
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
             }
         }
     )";

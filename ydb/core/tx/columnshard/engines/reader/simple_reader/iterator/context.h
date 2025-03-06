@@ -16,9 +16,12 @@ using TColumnsSetIds = NCommon::TColumnsSetIds;
 using EMemType = NCommon::EMemType;
 using TFetchingScript = NCommon::TFetchingScript;
 
-class TSpecialReadContext: public NCommon::TSpecialReadContext {
+class TSpecialReadContext: public NCommon::TSpecialReadContext, TNonCopyable {
 private:
     using TBase = NCommon::TSpecialReadContext;
+    YDB_READONLY_DEF(TActorId, DuplicatesManager);
+
+private:
     std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
         const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion) const;
     TMutex Mutex;
@@ -31,6 +34,10 @@ public:
     virtual TString ProfileDebugString() const override;
 
     TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext);
+
+    ~TSpecialReadContext() {
+        NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new NActors::TEvents::TEvPoison());
+    }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

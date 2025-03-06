@@ -1053,6 +1053,7 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
         return EProcessResult::Blocked;
     }
     auto inflightMaxSeqNo = TxInflightMaxSeqNoPerSourceId.find(p.Msg.SourceId);
+
     if (!inflightMaxSeqNo.IsEnd()) {
         if (p.Msg.SeqNo <= inflightMaxSeqNo->second) {
             return EProcessResult::Blocked;

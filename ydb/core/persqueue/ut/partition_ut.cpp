@@ -2860,6 +2860,58 @@ Y_UNIT_TEST_F(ConflictingTxProceedAfterRollback, TPartitionTxTestHelper) {
     WaitImmediateTxComplete(immTx, true);
 }
 
+Y_UNIT_TEST_F(ConflictingSrcIdTxInDifferentBatches, TPartitionTxTestHelper) {
+    Init();
+
+    auto tx1 = MakeAndSendWriteTx({{"src1", {1, 3}}, {"src2", {5, 10}}});
+    auto immTx = MakeAndSendImmediateTx({{"src2", {11, 12}}});
+    auto tx2 = MakeAndSendWriteTx({{"src1", {2, 2}}});
+
+    WaitWriteInfoRequest(tx1, true);
+    WaitWriteInfoRequest(immTx, true);
+    WaitWriteInfoRequest(tx2, true);
+    WaitTxPredicateReply(tx1);
+
+    WaitBatchCompletion(1);
+
+    SendTxCommit(tx1);
+    ExpectNoKvRequest();
+    WaitTxPredicateFailure(tx2);
+    WaitBatchCompletion(2); // Immediate Tx.
+
+
+    WaitKvRequest();
+    SendKvResponse();
+    WaitCommitDone(tx1);
+    WaitImmediateTxComplete(immTx, true);
+    ExpectNoCommitDone();
+}
+
+Y_UNIT_TEST_F(ConflictingSrcIdWriteInDifferentBatches, TPartitionTxTestHelper) {
+    TTxBatchingTestParams params {.WriterSessions{"src1"}};
+    Init(std::move(params));
+
+    auto tx1 = MakeAndSendWriteTx({{"src1", {1, 5}}, {"src2", {5, 10}}});
+    auto immTx = MakeAndSendImmediateTx({{"src2", {11, 12}}});
+    AddAndSendNormalWrite("src1", 2, 3);
+
+    WaitWriteInfoRequest(tx1, true);
+    WaitWriteInfoRequest(immTx, true);
+    WaitTxPredicateReply(tx1);
+
+    WaitBatchCompletion(1);
+
+    SendTxCommit(tx1);
+    WaitBatchCompletion(1); // Immediate Tx.
+
+    WaitKvRequest();
+    ExpectNoBatchCompletion();
+    SendKvResponse();
+    WaitCommitDone(tx1);
+    WaitBatchCompletion(2);
+    ExpectNoKvRequest();
+}
+
 class TBatchingConditionsTest {
     TPartitionTxTestHelper* TxHelper;
     ui64 SeqNo = 1;
@@ -2886,12 +2938,14 @@ public:
     }
 
     ui64 AddTx() {
-        return TxHelper->MakeAndSendWriteTx({{SrcId, {SeqNo, SeqNo}}});
+        auto ret = TxHelper->MakeAndSendWriteTx({{SrcId, {SeqNo, SeqNo}}});
         SeqNo++;
+        return ret;
     }
     ui64 AddImmediateTx() {
-        return TxHelper->MakeAndSendImmediateTx({{SrcId, {SeqNo, SeqNo}}});
+        auto ret = TxHelper->MakeAndSendImmediateTx({{SrcId, {SeqNo, SeqNo}}});
         SeqNo++;
+        return ret;
     }
     void AddNormalWrite() {
         TxHelper->AddAndSendNormalWrite(SrcId, SeqNo, SeqNo);
@@ -2988,6 +3042,7 @@ Y_UNIT_TEST_F(DifferentWriteTxBatchingOptions, TPartitionTxTestHelper) {
     WaitCommitDone(tx);
     WaitImmediateTxComplete(immTx, true);
     }
+
 }
 Y_UNIT_TEST_F(FailedTxsDontBlock, TPartitionTxTestHelper) {
     Init({.WriterSessions={"src1", "src2"}, .EndOffset = 1});

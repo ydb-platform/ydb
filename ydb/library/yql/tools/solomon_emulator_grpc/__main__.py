@@ -1,10 +1,8 @@
 import os
 import logging
-from typing import Final
 
 from concurrent import futures
 
-import yatest.common as yat
 from library.python.testing.recipe import declare_recipe, set_env
 from library.recipes.common import find_free_ports
 
@@ -18,9 +16,10 @@ PID_FILENAME = "solomon_recipe.pid"
 logger = logging.getLogger('solomon_emulator_grpc.recipe')
 logging.basicConfig(level=logging.DEBUG)
 
+
 def _dict_to_labels(request: ReadRequest):
     result = dict()
-    
+
     result["from"] = str(request.from_time)
     result["to"] = str(request.to_time)
     result["program"] = f"program length {len(str(request.queries[0].value))}"
@@ -34,6 +33,7 @@ def _dict_to_labels(request: ReadRequest):
 
     return result
 
+
 class DataService(DataServiceServicer):
     def Read(self, request: ReadRequest, context) -> ReadResponse:
         logger.debug('ReadRequest: %s', request)
@@ -44,7 +44,7 @@ class DataService(DataServiceServicer):
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(f"Project {project} does not exist")
             return ReadResponse()
-        
+
         labels = _dict_to_labels(request)
         labels["project"] = project
 
@@ -63,6 +63,7 @@ class DataService(DataServiceServicer):
         timeseries.double_values.values.extend([100, 200, 300])
 
         return response
+
 
 def serve(port: int) -> None:
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))

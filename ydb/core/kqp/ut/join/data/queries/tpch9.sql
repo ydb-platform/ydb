@@ -1,4 +1,4 @@
-PRAGMA ydb.OptShuffleElimination = 'false';
+PRAGMA ydb.OptShuffleElimination = 'true';
 PRAGMA ydb.OptShuffleEliminationWithMap = 'true';
 
 $r = (

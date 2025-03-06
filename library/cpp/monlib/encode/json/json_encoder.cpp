@@ -274,6 +274,14 @@ namespace NMonitoring {
                 WriteMetricType(type);
             }
 
+            void OnMemOnly(bool isMemOnly) override {
+                State_.Expect(TEncoderState::EState::METRIC);
+                if (isMemOnly) {
+                    Buf_.WriteKey("memOnly");
+                    Buf_.WriteBool(isMemOnly);
+                }
+            }
+
             void OnMetricEnd() override {
                 State_.Switch(TEncoderState::EState::METRIC, TEncoderState::EState::ROOT);
                 if (!Buf_.KeyExpected()) {
@@ -493,6 +501,7 @@ namespace NMonitoring {
                 Buf_.WriteKey(TStringBuf("labels"));
                 WriteLabels(metric.Labels, false);
 
+                WriteFlags(metric);
                 metric.TimeSeries.SortByTs();
                 if (metric.TimeSeries.Size() == 1) {
                     const auto& point = metric.TimeSeries[0];
@@ -529,6 +538,13 @@ namespace NMonitoring {
 
                 if (!isCommon) {
                     WriteName();
+                }
+            }
+
+            void WriteFlags(const TMetric& metric) {
+                if (metric.IsMemOnly) {
+                    Buf_.WriteKey("memOnly");
+                    Buf_.WriteBool(true);
                 }
             }
 

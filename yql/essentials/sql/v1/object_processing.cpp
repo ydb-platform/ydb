@@ -25,7 +25,7 @@ bool TObjectProcessorImpl::DoInit(TContext& ctx, ISource* src) {
     Y_UNUSED(src);
     Scoped->UseCluster(ServiceId, Cluster);
     auto options = FillFeatures(BuildOptions());
-    AddNamedChildren(options);
+    AddNodeFeatures(options);
     auto keys = BuildKeys();
 
     Add("block", Q(Y(
@@ -61,17 +61,17 @@ INode::TPtr TCreateObject::FillFeatures(INode::TPtr options) const {
 namespace {
 
 bool InitFeatures(TContext& ctx, ISource* src, std::map<TString, TDeferredAtom>& features) {
-    for (auto& [name, deferred] : features) {
-        if (deferred.HasNode() && !deferred.Build()->Init(ctx, src)) {
+    for (auto& [name, feature] : features) {
+        if (feature.HasNode() && !feature.Build()->Init(ctx, src)) {
             return false;
         }
     }
     return true;
 }
 
-bool InitNamedChildren(TContext& ctx, ISource* src, std::map<TString, TNodePtr>& namedChildren) {
-    for (auto& [name, child] : namedChildren) {
-        if (!child->Init(ctx, src)) {
+bool InitNodeFeatures(TContext& ctx, ISource* src, std::map<TString, TNodePtr>& nodeFeatures) {
+    for (auto& [name, nodeFeature] : nodeFeatures) {
+        if (!nodeFeature->Init(ctx, src)) {
             return false;
         }
     }
@@ -84,24 +84,24 @@ bool TCreateObject::DoInit(TContext& ctx, ISource* src) {
     if (!InitFeatures(ctx, src, Features)) {
         return false;
     }
-    if (!InitNamedChildren(ctx, src, NamedChildren)) {
+    if (!InitNodeFeatures(ctx, src, NodeFeatures)) {
         return false;
     }
     return TObjectProcessorImpl::DoInit(ctx, src);
 }
 
-void TCreateObject::AddNamedChildren(TNodePtr options) const {
-    if (!NamedChildren.empty()) {
-        auto namedChildren = Y();
-        for (const auto& [name, node] : NamedChildren) {
-            namedChildren->Add(Q(Y(BuildQuotedAtom(Pos, name), node)));
+void TCreateObject::AddNodeFeatures(TNodePtr options) const {
+    if (!NodeFeatures.empty()) {
+        auto nodeFeatures = Y();
+        for (const auto& [name, node] : NodeFeatures) {
+            nodeFeatures->Add(Q(Y(BuildQuotedAtom(Pos, name), node)));
         }
-        options->Add(Q(Y(Q("namedChildren"), Q(namedChildren))));
+        options->Add(Q(Y(Q("nodeFeatures"), Q(nodeFeatures))));
     }
 }
 
-void TCreateObject::AddNamedChild(TStringBuf name, TNodePtr node) {
-    NamedChildren.emplace(name, node);
+void TCreateObject::AddNodeFeature(TStringBuf name, TNodePtr node) {
+    NodeFeatures.emplace(name, node);
 }
 
 TObjectOperatorContext::TObjectOperatorContext(TScopedStatePtr scoped)

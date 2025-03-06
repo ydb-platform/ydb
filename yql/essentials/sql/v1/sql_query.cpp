@@ -1373,7 +1373,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     context
                 )
             );
-            dynamic_cast<TCreateObject*>(blocks.back().get())->AddNamedChild("query_ast", queryAst);
+            dynamic_cast<TCreateObject*>(blocks.back().get())->AddNodeFeature("query_ast", queryAst);
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore43: {

@@ -108,9 +108,14 @@ message LockAction {
     google.protobuf.Duration duration = 2;
 }
 
+message DrainAction {
+    ActionScope scope = 1;
+}
+
 message Action {
     oneof action {
         LockAction lock_action = 1;
+        DrainAction drain_action = 2;
     }
 }
 

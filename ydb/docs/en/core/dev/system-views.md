@@ -10,6 +10,7 @@ DB system views contain:
 * [Top queries by certain characteristics](#top-queries).
 * [Query details](#query-metrics).
 * [History of overloaded partitions](#top-overload-partitions).
+* [Access control entities](#auth).
 
 {% note info %}
 
@@ -299,3 +300,64 @@ ORDER BY IntervalEnd desc, CPUCores desc
 ```
 
 * `"YYYY-MM-DDTHH:MM:SS.UUUUUUZ"`: Time in the UTC 0 zone (`YYYY` stands for year, `MM`, for month, `DD`, for date, `hh`, for hours, `mm`, for minutes, `ss`, for seconds, and `uuuuuu`, for microseconds). For example, `"2023-01-26T13:00:00.000000Z"`.
+
+## Access control entities {#auth}
+
+The following system views store data for analyzing various access control entities.
+
+* `auth_group_members`: Membership details for users within access groups.
+* `auth_permissions`: Details of assigned [access rights](../concepts/glossary.md#access-right).
+* `auth_effective_permissions`: Effective [access rights](../concepts/glossary.md#access-right) considering inheritance.
+* `auth_owners`: [Ownership](../concepts/glossary.md#access-owner) details of [access objects](#access-object).
+
+### Auth Users
+
+The `auth_users` view lists internal {{ ydb-short-name }} [users](../concepts/glossary.md#access-user) but does not include users authenticated through external systems such as LDAP.
+
+This view can be fully accessed by the database administrators. Regular user can only view their own details.
+
+Table Structure:
+
+| Field | Description |
+--- | ---
+| `Sid` | SID of the user.<br/>Type: `Utf8`.<br/>Key: `0`. |
+
+### Auth Groups
+
+The `auth_groups` view lists {{ ydb-short-name }} [access groups](../concepts/glossary.md#access-group).
+
+This view can be only accessed by the database administrators.
+
+Table Structure:
+
+
+### Auth Group Members
+
+The `auth_group_members` view lists [users](../concepts/glossary.md#access-user) membership details within [access groups](../concepts/glossary.md#access-group).
+
+This view can be only accessed by the database administrators.
+
+Table Structure:
+
+
+### Auth Permissions
+
+The auth permissions views lists assigned [access rights](../concepts/glossary.md#access-right).
+
+Auth permission contains two views:
+
+* `auth_permissions`: Contains directly assigned access rights
+* `auth_effective_permissions`: Contains effective access rights, accounting for inheritance.
+
+A user can view an [access object](#access-object) if they have `ydb.granular.describe_schema` permission on it.
+
+Table Structure:
+
+
+### Auth Owners
+
+The `auth_owners` view lists details of [access objects](#access-object) ownership.
+
+A user can view an [access object](#access-object) if they have `ydb.granular.describe_schema` permission on it.
+
+Table Structure:

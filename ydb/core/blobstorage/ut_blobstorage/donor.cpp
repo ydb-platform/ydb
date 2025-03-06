@@ -99,8 +99,8 @@ Y_UNIT_TEST_SUITE(Donor) {
         const ui32 groupId = env.GetGroups().front();
 
         const TActorId edge = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
-        for (ui32 i = 0; i < 100; ++i) {
-            const TString buffer = TStringBuilder() << "blob number " << i;
+        const TString buffer = TStringBuilder() << "blob";
+        for (ui32 i = 0; i < 10000; ++i) {
             TLogoBlobID id(1, 1, 1, 0, buffer.size(), 0);
             runtime->WrapInActorContext(edge, [&] {
                 SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, buffer, TInstant::Max()));
@@ -139,33 +139,31 @@ Y_UNIT_TEST_SUITE(Donor) {
         ui32 nodeId, pdiskId;
         std::tie(nodeId, pdiskId, std::ignore) = DecomposeVDiskServiceId(vdiskActorId);
 
-        {
-            NKikimrBlobStorage::TConfigRequest request;
-            auto* dropDonor = request.AddCommand()->MutableDropDonorDisk();
-            auto* slot = dropDonor->MutableVSlotId();
-            slot->SetNodeId(nodeId);
-            slot->SetPDiskId(pdiskId);
-            slot->SetVSlotId(1000);
-            VDiskIDFromVDiskID(vdiskId, dropDonor->MutableVDiskId());
-            auto response = env.Invoke(request);
-            UNIT_ASSERT(response.GetSuccess());
-        }
-
-        {
-            const TActorId sender = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
-            env.Runtime->WrapInActorContext(sender, [&] () {
-                TActorId bspdid = MakeBlobStoragePDiskID(nodeId, pdiskId);
-                env.Runtime->Send(new IEventHandle(EvBecomeError, 0, bspdid, sender, nullptr, 0));
-            });
-        }
-
         env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvBlobStorage::EvVGet) {
                 Y_UNUSED(nodeId);
                 auto* msg = ev->Get<TEvBlobStorage::TEvVGet>();
+
+                // if (msg->Record.ExtremeQueriesSize()) {
+                //     for (auto& q : msg->Record.GetExtremeQueries()) {
+                //         auto& logoblob = q.GetId();
+                //         auto lb = LogoBlobIDFromLogoBlobID(logoblob);
+                //         auto* raw = lb.GetRaw();
+                //         if (raw[0] == 1
+                //             && raw[1] == 16777216
+                //             && (raw[2] == 72057594037928144 || raw[2] == 72057594037928160)
+                //         ) {
+                //             Cout << "Found" << Endl;
+                //         }
+                //     }
+                // }
+
                 TVDiskID vdid = VDiskIDFromVDiskID(msg->Record.GetVDiskID());
                 if (vdid == vdiskId) {
-                    UNIT_FAIL("TEvVGet for dropped donor");
+                    auto reply = std::make_unique<TEvBlobStorage::TEvVGetResult>();
+                    reply->MakeError(NKikimrProto::NOTREADY, "BS_QUEUE is not ready", msg->Record);
+                    env.Runtime->Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), reply.release(), 0, ev->Cookie), ev->Sender.NodeId());
+                    return false;
                 }
             }
             return true;

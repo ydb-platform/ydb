@@ -341,10 +341,12 @@ namespace NKikimr {
 
         void HandleDetectedPhantomBlobCommitted() {
             bool dropDonor = true;
+            bool remoteNotReady = true;
             for (const auto& proxy : DiskProxySet) {
                 dropDonor = dropDonor && proxy && proxy->NoTransientErrors();
+                remoteNotReady = remoteNotReady && proxy && proxy->IsRemoteNotReady();
             }
-            ReplInfo->Finish(LastKey, Eof, Donor && dropDonor, std::move(UnreplicatedBlobRecords), std::move(MilestoneQueue));
+            ReplInfo->Finish(LastKey, Eof, Donor && dropDonor, Donor && remoteNotReady, std::move(UnreplicatedBlobRecords), std::move(MilestoneQueue));
 
             TProxyStat stat;
             for (const TVDiskProxyPtr& p : DiskProxySet) {

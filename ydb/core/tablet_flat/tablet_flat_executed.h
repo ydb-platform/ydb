@@ -26,7 +26,9 @@ protected:
 
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx);
     void Execute(TAutoPtr<ITransaction> transaction);
-    void EnqueueExecute(TAutoPtr<ITransaction> transaction);
+    ui64 Enqueue(TAutoPtr<ITransaction> transaction);
+    ui64 EnqueueExecute(TAutoPtr<ITransaction> transaction);
+    ui64 EnqueueLowPriority(TAutoPtr<ITransaction> transaction);
 
     const NTable::TScheme& Scheme() const noexcept;
 

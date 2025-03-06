@@ -35,6 +35,7 @@ target_link_libraries(tx-replication-ydb_proxy PUBLIC
 )
 
 target_sources(tx-replication-ydb_proxy PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy/topic_message.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy/ydb_proxy.cpp
 )
 

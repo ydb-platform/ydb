@@ -183,7 +183,8 @@ int TProxy::ImportDatabase() {
 
     NYdb::TValueBuilder valueBuilder(type);
     valueBuilder.BeginList();
-    for (const auto& kv : rangeResponse.kvs()) {
+    auto count = 0U;
+    for (const auto& kv : rangeResponse.kvs()) if (!kv.lease()) {
         valueBuilder.AddListItem()
             .BeginStruct()
                 .AddMember("key").String(kv.key())
@@ -193,6 +194,7 @@ int TProxy::ImportDatabase() {
                 .AddMember("value").String(kv.value())
                 .AddMember("lease").Int64(kv.lease())
             .EndStruct();
+        ++count;
     }
 
     auto value = valueBuilder.EndList().Build();
@@ -219,7 +221,7 @@ int TProxy::ImportDatabase() {
         return 1;
     }
 
-    std::cout << rangeResponse.count() << " keys imported successfully." << std::endl;
+    std::cout << count << " of " << rangeResponse.count() << " keys imported successfully." << std::endl;
     return 0;
 }
 

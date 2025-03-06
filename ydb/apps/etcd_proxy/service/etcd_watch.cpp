@@ -582,9 +582,9 @@ private:
         NYdb::TParamsBuilder params;
         const auto& revName = AddParam("Revision", params, Revision);
 
-        sql << "$Expired = select `id` from `leases` where unwrap(interval('PT1S') * `ttl` + `updated`) < CurrentUtcDatetime();" << std::endl;
-        sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `huidig` as h" << std::endl;
-        sql << '\t' << "left semi join $Expired as l on h.`lease` = l.`id`;" << std::endl;
+        sql << "$Leases = select 0L as `lease` union all select `id` as `lease` from `leases` where unwrap(interval('PT1S') * `ttl` + `updated`) > CurrentUtcDatetime();" << std::endl;
+        sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `huidig` as h left only join $Leases as l using(`lease`);" << std::endl;
+
         sql << "insert into `verhaal`" << std::endl;
         sql << "select `key`, `created`, " << revName << " as `modified`, 0L as `version`, `value`, `lease` from $Victims;" << std::endl;
 
@@ -595,7 +595,7 @@ private:
         }
 
         sql << "delete from `huidig` on select `key` from $Victims;" << std::endl;
-        sql << "delete from `leases` on select `id` from $Expired;" << std::endl;
+        sql << "delete from `leases` where `id` not in $Leases;" << std::endl;
 
         const auto my = this->SelfId();
         const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
@@ -627,16 +627,17 @@ private:
             }
         }
 
-
-        if (!deleted) {
+        if (deleted) {
+            std::cout << deleted <<  " leases expired." << std::endl;
+        } else {
             Stuff->Revision.compare_exchange_weak(Revision, Revision - 1LL);
         }
 
-        ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
+        ctx.Schedule(TDuration::Seconds(3), new TEvents::TEvWakeup);
     }
 
     void Handle(TEvQueryError::TPtr &ev, const TActorContext& ctx) {
-        std::cout << "Watch error received " << ev->Get()->Issues.ToString() << std::endl;
+        std::cout << "Check leases SQL error received " << ev->Get()->Issues.ToString() << std::endl;
         ctx.Schedule(TDuration::Seconds(7), new TEvents::TEvWakeup);
     }
 

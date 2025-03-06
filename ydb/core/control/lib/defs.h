@@ -158,6 +158,13 @@ namespace NKikimr {
         BlobDepotLogFlushDelayOverrideUsec                      /* "BlobDepot_LogFlushDelayOverrideUsec" */,
         StatisticsAggregatorLogFlushDelayOverrideUsec           /* "StatisticsAggregator_LogFlushDelayOverrideUsec" */,
         GraphShardLogFlushDelayOverrideUsec                     /* "GraphShard_LogFlushDelayOverrideUsec" */,
-        BackupControllerLogFlushDelayOverrideUsec               /* "BackupController_LogFlushDelayOverrideUsec" */
+        BackupControllerLogFlushDelayOverrideUsec               /* "BackupController_LogFlushDelayOverrideUsec" */,
+        GRpcControlsRequestConfigsCoordinationServiceSessionMaxInFlight                   /* "GRpcControls.RequestConfigs.CoordinationService_Session_MaxInFlight" */,
+        GRpcControlsRequestConfigsClickhouseInternalScanMaxInFlight                       /* "GRpcControls.RequestConfigs.ClickhouseInternal_Scan_MaxInFlight" */,
+        GRpcControlsRequestConfigsClickhouseInternalGetShardLocationsMaxInFlight          /* "GRpcControls.RequestConfigs.ClickhouseInternal_GetShardLocations_MaxInFlight" */,
+        GRpcControlsRequestConfigsClickhouseInternalDescribeTableMaxInFlight              /* "GRpcControls.RequestConfigs.ClickhouseInternal_DescribeTable_MaxInFlight" */,
+        GRpcControlsRequestConfigsClickhouseInternalCreateSnapshotMaxInFlight             /* "GRpcControls.RequestConfigs.ClickhouseInternal_CreateSnapshot_MaxInFlight" */,
+        GRpcControlsRequestConfigsClickhouseInternalRefreshSnapshotMaxInFlight            /* "GRpcControls.RequestConfigs.ClickhouseInternal_RefreshSnapshot_MaxInFlight" */,
+        GRpcControlsRequestConfigsClickhouseInternalDiscardSnapshotMaxInFlight            /* "GRpcControls.RequestConfigs.ClickhouseInternal_DiscardSnapshot_MaxInFlight" */
     };
 } // NKikimr

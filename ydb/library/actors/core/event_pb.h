@@ -3,6 +3,8 @@
 #include "event.h"
 #include "event_load.h"
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
+
 #include <google/protobuf/io/zero_copy_stream.h>
 #include <google/protobuf/arena.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -152,6 +154,7 @@ namespace NActors {
     bool SerializeToArcadiaStreamImpl(TChunkSerializer* chunker, const TVector<TRope> &payload);
     ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, ssize_t recordSize);
     TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, ssize_t recordSize);
+    TString DumpRopeStreamData(TRopeStream* stream);
 
     template <typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType, typename TRecHolder>
     class TEventPBBase: public TEventBase<TEv, TEventType> , public TRecHolder {
@@ -217,7 +220,7 @@ namespace NActors {
                 // parse the protobuf
                 TRopeStream stream(iter, size);
                 if (!ev->Record.ParseFromZeroCopyStream(&stream)) {
-                    Y_ABORT("Failed to parse protobuf event type %" PRIu32 " class %s", TEventType, TypeName(ev->Record).data());
+                    Y_FAIL_S("Failed to parse protobuf event type " << TEventType << " class " << TypeName(ev->Record).data() << " with data: \n" << DumpRopeStreamData(&stream));
                 }
             }
             ev->CachedByteSize = input->GetSize();

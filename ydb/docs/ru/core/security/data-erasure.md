@@ -19,6 +19,7 @@
 7. Корневой Scheme Shard дожидается завершения очистки в BS controller и после этого планирует время новой очистки.
 
 ### Диаграмма алгоритма очистки
+
 @startuml
 participant "Root Schemeshard" as RootSchemeshard
 participant "Tenant Schemeshard" as TenantSchemeshard

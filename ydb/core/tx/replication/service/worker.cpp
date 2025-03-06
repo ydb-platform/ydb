@@ -3,6 +3,7 @@
 #include "worker.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
@@ -13,46 +14,18 @@
 
 namespace NKikimr::NReplication::NService {
 
-TEvWorker::TEvData::TRecord::TRecord(ui64 offset, const TString& data, TInstant createTime, const TString& messageGroupId, const TString& producerId, ui64 seqNo)
-    : Offset(offset)
-    , Data(data)
-    , CreateTime(createTime)
-    , MessageGroupId(messageGroupId)
-    , ProducerId(producerId)
-    , SeqNo(seqNo)
-{
-}
-
-TEvWorker::TEvData::TRecord::TRecord(ui64 offset, TString&& data, TInstant createTime, TString&& messageGroupId, TString&& producerId, ui64 seqNo)
-    : Offset(offset)
-    , Data(std::move(data))
-    , CreateTime(createTime)
-    , MessageGroupId(std::move(messageGroupId))
-    , ProducerId(std::move(producerId))
-    , SeqNo(seqNo)
-{
-}
-
-TEvWorker::TEvData::TEvData(ui32 partitionId, const TString& source, const TVector<TRecord>& records)
+TEvWorker::TEvData::TEvData(ui32 partitionId, const TString& source, const TVector<TTopicMessage>& records)
     : PartitionId(partitionId)
     , Source(source)
     , Records(records)
 {
 }
 
-TEvWorker::TEvData::TEvData(ui32 partitionId, const TString& source, TVector<TRecord>&& records)
+TEvWorker::TEvData::TEvData(ui32 partitionId, const TString& source, TVector<TTopicMessage>&& records)
     : PartitionId(partitionId)
     , Source(source)
     , Records(std::move(records))
 {
-}
-
-void TEvWorker::TEvData::TRecord::Out(IOutputStream& out) const {
-    out << "{"
-        << " Offset: " << Offset
-        << " Data: " << Data.size() << "b"
-        << " CreateTime: " << CreateTime.ToStringUpToSeconds()
-    << " }";
 }
 
 TString TEvWorker::TEvData::ToString() const {
@@ -189,11 +162,11 @@ class TWorker: public TActorBootstrapped<TWorker> {
         if (InFlightData) {
             const auto& records = InFlightData->Records;
             auto it = MinElementBy(records, [](const auto& record) {
-                return record.CreateTime;
+                return record.GetCreateTime();
             });
 
             if (it != records.end()) {
-                Lag = TlsActivationContext->Now() - it->CreateTime;
+                Lag = TlsActivationContext->Now() - it->GetCreateTime();
             }
         }
 

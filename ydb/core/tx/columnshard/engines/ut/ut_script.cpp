@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(TestScript) {
 
         auto script = std::move(acc).Build();
         UNIT_ASSERT_STRINGS_EQUAL(script->DebugString(),
-            "{branch:UNDEFINED;steps_10Ms:["
+            "{branch:UNDEFINED;steps:["
             "{name=ALLOCATE_MEMORY::Filter;details={stage=Filter;column_ids=[Blob:0,Raw:0];};};"
             "{name=FETCHING_COLUMNS;details={columns=0;};};"
             "{name=ASSEMBLER;details={columns=(column_ids=0;column_names=c0;);;};};"

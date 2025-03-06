@@ -12,6 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+find_package(Python3 REQUIRED)
+
 add_library(providers-ytflow-expr_nodes)
 
 
@@ -38,9 +40,10 @@ add_custom_command(
   DEPENDS
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/ytflow/expr_nodes/yql_ytflow_expr_nodes.json
-  ${PROJECT_BINARY_DIR}/yql/essentials/core/expr_nodes_gen/gen/gen
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/expr_nodes_gen/gen/__main__.py
   COMMAND
-  ${PROJECT_BINARY_DIR}/yql/essentials/core/expr_nodes_gen/gen/gen
+  Python3::Interpreter
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/expr_nodes_gen/gen/__main__.py
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/ytflow/expr_nodes/yql_ytflow_expr_nodes.json
   ${PROJECT_BINARY_DIR}/yt/yql/providers/ytflow/expr_nodes/yql_ytflow_expr_nodes.gen.h

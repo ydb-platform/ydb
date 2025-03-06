@@ -333,12 +333,6 @@ namespace NKikimr::NStorage {
             // -- check that configuration did not change
         }
 
-        auto donors = record.Config.GetDonors();
-        THashSet<TVDiskID> donorIds;
-        for (const auto& donor : donors) {
-            donorIds.emplace(VDiskIDFromVDiskID(donor.GetVDiskId()));
-        }
-
         record.Config.CopyFrom(vdisk);
 
         if (vdisk.GetDoDestroy() || vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
@@ -356,21 +350,9 @@ namespace NKikimr::NStorage {
             Slay(record);
         } else if (!record.RuntimeData) {
             StartLocalVDiskActor(record);
-        } else {
-            auto newDonors = record.Config.GetDonors();
-            THashSet<TVDiskID> newDonorIds;
-            for (const auto& donor : newDonors) {
-                newDonorIds.emplace(VDiskIDFromVDiskID(donor.GetVDiskId()));
-            }
-
-            bool becameDonor = record.RuntimeData->DonorMode < record.Config.HasDonorMode();
-            bool becameReadOnly = record.RuntimeData->ReadOnly != record.Config.GetReadOnly();
-            bool donorsChanged = donorIds != newDonorIds;
-
-            if (becameDonor || becameReadOnly || donorsChanged) {
-                PoisonLocalVDisk(record);
-                StartLocalVDiskActor(record);
-            }
+        } else if (record.RuntimeData->DonorMode < record.Config.HasDonorMode() || record.RuntimeData->ReadOnly != record.Config.GetReadOnly()) {
+            PoisonLocalVDisk(record);
+            StartLocalVDiskActor(record);
         }
     }
 

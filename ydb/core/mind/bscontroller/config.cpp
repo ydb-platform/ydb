@@ -223,9 +223,6 @@ namespace NKikimr::NBsController {
                 } else if (prev.GroupGeneration != cur.GroupGeneration) {
                     // the slot generation has changed
                     AddVSlotToProtobuf(vslotId, cur, TMood::Normal);
-                } else if (prev.Donors != cur.Donors) {
-                    // Donors have changed
-                    AddVSlotToProtobuf(vslotId, cur, TMood::Normal);
                 }
             }
 

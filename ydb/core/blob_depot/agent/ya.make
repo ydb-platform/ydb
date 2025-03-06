@@ -37,6 +37,7 @@ LIBRARY()
         ydb/core/blobstorage/vdisk/common
         ydb/core/blob_depot
         ydb/core/protos
+        ydb/core/wrappers
     )
 
 END()

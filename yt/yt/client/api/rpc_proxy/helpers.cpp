@@ -505,8 +505,8 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
 void ToProto(NProto::TTableSchema* protoSchema, const NTableClient::TTableSchema& schema)
 {
     ToProto(protoSchema->mutable_columns(), schema.Columns());
-    protoSchema->set_strict(schema.GetStrict());
-    protoSchema->set_unique_keys(schema.GetUniqueKeys());
+    protoSchema->set_strict(schema.IsStrict());
+    protoSchema->set_unique_keys(schema.IsUniqueKeys());
 }
 
 void FromProto(NTableClient::TTableSchema* schema, const NProto::TTableSchema& protoSchema)

@@ -125,13 +125,18 @@ private:
     }
 
     bool GetExecutionIdFromRequest() {
-        TMaybe<TString> executionId = NKqp::ScriptExecutionIdFromOperation(GetProtoRequest()->operation_id());
-        if (!executionId) {
-            Reply(Ydb::StatusIds::BAD_REQUEST, "Invalid operation id");
+        try {
+            TMaybe<TString> executionId = NKqp::ScriptExecutionIdFromOperation(GetProtoRequest()->operation_id());
+            if (!executionId) {
+                Reply(Ydb::StatusIds::BAD_REQUEST, "Invalid operation id");
+                return false;
+            }
+            ExecutionId = *executionId;
+            return true;
+        } catch (const std::exception& ex) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Invalid operation id: " << ex.what());
             return false;
         }
-        ExecutionId = *executionId;
-        return true;
     }
 
 private:

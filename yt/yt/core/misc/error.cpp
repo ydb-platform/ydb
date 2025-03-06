@@ -328,6 +328,20 @@ void SerializeInnerErrors(TFluentMap fluent, const TError& error, int depth)
 ////////////////////////////////////////////////////////////////////////////////
 
 void Serialize(
+    const TErrorCode& errorCode,
+    IYsonConsumer* consumer)
+{
+    consumer->OnInt64Scalar(static_cast<int>(errorCode));
+}
+
+void Deserialize(
+    TErrorCode& errorCode,
+    const NYTree::INodePtr& node)
+{
+    errorCode = TErrorCode(node->GetValue<int>());
+}
+
+void Serialize(
     const TError& error,
     IYsonConsumer* consumer,
     const std::function<void(IYsonConsumer*)>* valueProducer,

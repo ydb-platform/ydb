@@ -258,7 +258,8 @@ private:
     TStringStream& Stream;
 };
 
-TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tablePath, const TTableDescription& tableDesc, bool temporary) {
+TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tablePath,
+        const TTableDescription& tableDesc, bool temporary) {
     Stream.Clear();
 
     TStringStreamWrapper wrapper(Stream);
@@ -323,17 +324,20 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
             return TResult(Ydb::StatusIds::UNSUPPORTED, e.what());
         }
     }
+    Stream << ",\n";
 
+    bool isFamilyPrinted = false;
     if (tableDesc.HasPartitionConfig()) {
         const auto partitionConfig = tableDesc.GetPartitionConfig();
 
         if (!partitionConfig.GetColumnFamilies().empty()) {
             try {
-                Stream << ",\n";
-                Format(partitionConfig.GetColumnFamilies(0));
+                isFamilyPrinted = Format(partitionConfig.GetColumnFamilies(0));
                 for (int i = 1; i < partitionConfig.GetColumnFamilies().size(); i++) {
-                    Stream << ",\n";
-                    Format(partitionConfig.GetColumnFamilies(i));
+                    if (isFamilyPrinted) {
+                        Stream << ",\n";
+                    }
+                    isFamilyPrinted = Format(partitionConfig.GetColumnFamilies(i));
                 }
             } catch (const TFormatFail& ex) {
                 return TResult(ex.Status, ex.Error);
@@ -344,7 +348,10 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
     }
 
     Y_ENSURE(!tableDesc.GetKeyColumnIds().empty());
-    Stream << ",\n\tPRIMARY KEY (";
+    if (isFamilyPrinted) {
+        Stream << ",\n";
+    }
+    Stream << "\tPRIMARY KEY (";
     EscapeName(columns[tableDesc.GetKeyColumnIds(0)]->GetName());
     for (int i = 1; i < tableDesc.GetKeyColumnIds().size(); i++) {
         Stream << ", ";
@@ -359,13 +366,13 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
     if (tableDesc.HasPartitionConfig()) {
         if (tableDesc.GetPartitionConfig().HasPartitioningPolicy()) {
             ui32 shardsToCreate = NSchemeShard::TTableInfo::ShardsToCreate(tableDesc);
-            printed = Format(tableDesc.GetPartitionConfig().GetPartitioningPolicy(), shardsToCreate, del, !printed);
+            printed |= Format(tableDesc.GetPartitionConfig().GetPartitioningPolicy(), shardsToCreate, del, !printed);
         }
     }
 
     if (createRequest.partitions_case() == Ydb::Table::CreateTableRequest::kPartitionAtKeys) {
         try {
-            printed = Format(createRequest.partition_at_keys(), del, !printed);
+            printed |= Format(createRequest.partition_at_keys(), del, !printed);
         } catch (const TFormatFail& ex) {
             return TResult(ex.Status, ex.Error);
         } catch (const yexception& e) {
@@ -376,7 +383,7 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
     FillReadReplicasSettings(createRequest, tableDesc);
 
     if (createRequest.has_read_replicas_settings()) {
-        printed = Format(createRequest.read_replicas_settings(), del, !printed);
+        printed |= Format(createRequest.read_replicas_settings(), del, !printed);
     }
 
     FillKeyBloomFilter(createRequest, tableDesc);
@@ -399,7 +406,7 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
 
     if (createRequest.has_ttl_settings()) {
         try {
-            printed = Format(createRequest.ttl_settings(), del, !printed);
+            printed |= Format(createRequest.ttl_settings(), del, !printed);
         } catch (const TFormatFail& ex) {
             return TResult(ex.Status, ex.Error);
         } catch (const yexception& e) {
@@ -578,46 +585,70 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
     }
 }
 
-void TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
-    Stream << "\tFAMILY ";
+bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
+    TString familyName;
     if (familyDesc.HasName() && !familyDesc.GetName().empty()) {
-        EscapeName(familyDesc.GetName());
+        familyName = familyDesc.GetName();
     } else if (familyDesc.HasId() && familyDesc.GetId() != 0) {
         ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Family by id is not supported");
     } else {
-        Stream << "default";
+        familyName = "default";
     }
-    Stream << " (";
 
-    TString del;
+    TString dataName;
     if (familyDesc.HasStorageConfig() && familyDesc.GetStorageConfig().HasData()) {
         const auto& data = familyDesc.GetStorageConfig().GetData();
         if (!data.GetAllowOtherKinds()) {
             if (!data.GetPreferredPoolKind().empty()) {
-                Stream << "DATA = " << "\"" << data.GetPreferredPoolKind() << "\"";
-                del = ", ";
+                dataName = data.GetPreferredPoolKind();
             }
         }
     }
 
+    TString compression;
     if (familyDesc.HasColumnCodec()) {
         switch (familyDesc.GetColumnCodec()) {
             case NKikimrSchemeOp::ColumnCodecPlain:
-                Stream << del << "COMPRESSION = " << "\"off\"";
+                compression = "off";
                 break;
             case NKikimrSchemeOp::ColumnCodecLZ4:
-                Stream << del << "COMPRESSION = " << "\"lz4\"";
+                compression  = "lz4";
                 break;
             case NKikimrSchemeOp::ColumnCodecZSTD:
                 ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "ZSTD COMPRESSION codec is not supported");
         }
-    } else if (familyDesc.GetCodec() == 1) {
-        Stream << del << "COMPRESSION = " << "\"lz4\"";
-    } else {
-        Stream << del << "COMPRESSION = " << "\"off\"";
+    } else if (familyDesc.HasCodec()) {
+        if (familyDesc.GetCodec() == 1) {
+            compression  = "lz4";
+        } else {
+            compression = "off";
+        }
+    }
+
+    if (familyName == "default") {
+        if (!dataName && !compression) {
+            return false;
+        }
+    }
+
+    Y_ENSURE(familyName);
+
+    Stream << "\tFAMILY ";
+    EscapeName(familyName);
+    Stream << " (";
+
+    TString del = "";
+    if (dataName) {
+        Stream << "DATA = " << "\"" << dataName << "\"";
+        del = ", ";
+    }
+
+    if (dataName) {
+        Stream << del << "COMPRESSION = " << "\"" << compression << "\"";
     }
 
     Stream << ")";
+    return true;
 }
 
 bool TCreateTableFormatter::Format(const NKikimrSchemeOp::TPartitioningPolicy& policy, ui32 shardsToCreate, TString& del, bool needWith) {
@@ -630,7 +661,7 @@ bool TCreateTableFormatter::Format(const NKikimrSchemeOp::TPartitioningPolicy& p
         if (policy.GetSizeToSplit()) {
             Stream << del << "\tAUTO_PARTITIONING_BY_SIZE = ENABLED,\n";
             auto partitionBySize = policy.GetSizeToSplit() / (1 << 20);
-            Stream << del << "\tAUTO_PARTITIONING_PARTITION_SIZE_MB = " << partitionBySize;
+            Stream << "\tAUTO_PARTITIONING_PARTITION_SIZE_MB = " << partitionBySize;
         } else {
             Stream << del << "\tAUTO_PARTITIONING_BY_SIZE = DISABLED";
         }

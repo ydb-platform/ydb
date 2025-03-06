@@ -590,7 +590,6 @@ Y_UNIT_TEST_SUITE(SystemView) {
 R"(CREATE TABLE `test_show_create` (
     `Key` Uint32,
     `Value` Bool DEFAULT TRUE,
-    FAMILY default (COMPRESSION = 'off'),
     PRIMARY KEY (`Key`)
 );
 )"
@@ -631,7 +630,6 @@ R"(CREATE TABLE `test_show_create` (
 R"(CREATE TABLE `test_show_create` (
     `Key` Uint32,
     `Value` Float DEFAULT 4,
-    FAMILY default (COMPRESSION = 'off'),
     PRIMARY KEY (`Key`)
 );
 )"
@@ -833,6 +831,9 @@ R"(CREATE TABLE `test_show_create` (
                 Uint64Value Uint64,
                 StringValue String,
                 Utf8Value Utf8,
+                Value1 Int32 Family family1,
+                Value2 Int64 Family family1,
+                FAMILY family1 (),
                 PRIMARY KEY (BoolValue, Int32Value, Uint32Value, Int64Value, Uint64Value, StringValue, Utf8Value)
             ) WITH (
                 PARTITION_AT_KEYS = ((false), (false, 1, 2), (true, 1, 1, 1, 1, "str"), (true, 1, 1, 100, 0, "str", "utf"))
@@ -846,7 +847,9 @@ R"(CREATE TABLE `test_show_create` (
     `Uint64Value` Uint64,
     `StringValue` String,
     `Utf8Value` Utf8,
-    FAMILY default (COMPRESSION = 'off'),
+    `Value1` Int32 FAMILY `family1`,
+    `Value2` Int64 FAMILY `family1`,
+    FAMILY `family1` (),
     PRIMARY KEY (`BoolValue`, `Int32Value`, `Uint32Value`, `Int64Value`, `Uint64Value`, `StringValue`, `Utf8Value`)
 )
 WITH (PARTITION_AT_KEYS = ((FALSE), (FALSE, 1, 2), (TRUE, 1, 1, 1, 1, 'str'), (TRUE, 1, 1, 100, 0, 'str', 'utf')));
@@ -912,7 +915,6 @@ WITH (PARTITION_AT_KEYS = ((FALSE), (FALSE, 1, 2), (TRUE, 1, 1, 1, 1, 'str'), (T
 R"(CREATE TABLE `test_show_create` (
     `Key` Uint64 NOT NULL,
     `Value` String NOT NULL,
-    FAMILY default (COMPRESSION = 'off'),
     PRIMARY KEY (`Key`)
 )
 WITH (READ_REPLICAS_SETTINGS = 'ANY_AZ:3');
@@ -954,7 +956,6 @@ WITH (READ_REPLICAS_SETTINGS = 'ANY_AZ:3');
 R"(CREATE TABLE `test_show_create` (
     `Key` Uint64 NOT NULL,
     `Value` String NOT NULL,
-    FAMILY default (COMPRESSION = 'off'),
     PRIMARY KEY (`Key`)
 )
 WITH (KEY_BLOOM_FILTER = DISABLED);
@@ -995,7 +996,6 @@ WITH (KEY_BLOOM_FILTER = DISABLED);
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
     `Key` Uint32 NOT NULL,
-    FAMILY default (COMPRESSION = 'off'),
     PRIMARY KEY (`Key`)
 )
 WITH (TTL = INTERVAL('PT1H') DELETE ON Key AS SECONDS);
@@ -1023,7 +1023,6 @@ WITH (TTL = INTERVAL('PT1H') DELETE ON Key AS SECONDS);
 R"(CREATE TEMPORARY TABLE `test_show_create` (
     `Key` Int32 NOT NULL,
     `Value` String,
-    FAMILY default (COMPRESSION = 'off'),
     PRIMARY KEY (`Key`)
 );
 )"
@@ -1132,7 +1131,6 @@ R"(CREATE TABLE `test_show_create` (
     INDEX `Index1` GLOBAL USING vector_kmeans_tree ON (`Value3`) WITH (distance = cosine, vector_type = 'uint8', vector_dimension = 2, clusters = 2, levels = 1),
     INDEX `Index2` GLOBAL ASYNC ON (`Key2`, `Value1`, `Value2`),
     INDEX `Index3` GLOBAL ASYNC ON (`Key3`, `Value2`) COVER (`Value1`, `Value3`),
-    FAMILY default (COMPRESSION = 'off'),
     FAMILY `Family1` (DATA = 'test0', COMPRESSION = 'off'),
     FAMILY `Family2` (DATA = 'test1', COMPRESSION = 'lz4'),
     PRIMARY KEY (`Key1`, `Key2`, `Key3`)
@@ -1175,7 +1173,6 @@ R"(CREATE TABLE `test_show_create` (
     `Value5` String,
     INDEX `Index1` GLOBAL ASYNC ON (`Key2`, `Value1`, `Value2`) COVER (`Value5`, `Value3`),
     INDEX `Index2` GLOBAL USING vector_kmeans_tree ON (`Value5`) COVER (`Value1`, `Value3`) WITH (distance = manhattan, vector_type = 'float', vector_dimension = 2, clusters = 2, levels = 1),
-    FAMILY default (COMPRESSION = 'off'),
     PRIMARY KEY (`Key1`, `Key2`, `Key3`)
 )
 WITH (

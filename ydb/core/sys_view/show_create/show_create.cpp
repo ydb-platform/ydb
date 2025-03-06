@@ -50,7 +50,7 @@ public:
 private:
     void StartScan() {
         if (!AppData()->FeatureFlags.GetEnableShowCreate()) {
-            ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, 
+            ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
                 TStringBuilder() << "Sys view is not supported: " << ShowCreateName);
         }
 
@@ -89,8 +89,6 @@ private:
         record->MutableOptions()->SetShowPrivateTable(false);
 
         Send(MakeTxProxyID(), navigateRequest.release());
-
-        Become(&TShowCreate::StateWork);
     }
 
     void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr&) {

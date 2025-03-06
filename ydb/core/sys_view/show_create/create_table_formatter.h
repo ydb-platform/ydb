@@ -78,7 +78,7 @@ public:
 private:
 
     void Format(const NKikimrSchemeOp::TColumnDescription& columnDesc);
-    void Format(const NKikimrSchemeOp::TFamilyDescription& familyDesc);
+    bool Format(const NKikimrSchemeOp::TFamilyDescription& familyDesc);
     bool Format(const NKikimrSchemeOp::TPartitioningPolicy& policy, ui32 shardsToCreate, TString& del, bool needWith);
 
     void Format(const Ydb::Table::TableIndex& index);

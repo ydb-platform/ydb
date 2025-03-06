@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
     TString GetRequestUrl(TString topic, ui32 partition, ui64 offset = 0, ui32 limit = 10) {
         TStringBuilder url;
         CGIUnescape(topic);
-        url << "/viewer/topic_data" << "?topic_path=" << topic << "&partition=" << partition << "&offset=" << offset << "&limit=" << limit;
+        url << "/viewer/topic_data" << "?path=" << topic << "&partition=" << partition << "&offset=" << offset << "&limit=" << limit;
         return url;
     }
 
@@ -50,7 +50,6 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
 
         NJson::TJsonReaderConfig jsonCfg;
         NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
-        Cerr << "Data: " << json.GetString() << Endl;
         UNIT_ASSERT(json.GetType() == EJsonValueType::JSON_MAP);
         const auto& map_ = json.GetMap();
         UNIT_ASSERT(map_.find("Messages") != map_.end());
@@ -98,7 +97,6 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
             wsSettings.MessageGroupId(producerId);
             wsSettings.Codec(codec);
 
-            Cerr << "Write data\n";
             auto writer = TPersQueueClient(ydbDriver).CreateSimpleBlockingWriteSession(TWriteSessionSettings(wsSettings).ClusterDiscoveryMode(EClusterDiscoveryMode::Off));
             TString dataFiller{size, 'a'};
 
@@ -106,7 +104,6 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
                 writer->Write(TStringBuilder() << "Message " << i << " : " << dataFiller);
             }
             writer->Close();
-            Cerr << "Write data - done\n";
         };
 
         writeData(ECodec::GZIP, 20, "producer1");

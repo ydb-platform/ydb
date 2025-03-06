@@ -596,6 +596,7 @@ PEERDIR(
     ydb/public/api/grpc
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/types
+    ydb/services/lib/auth
     contrib/libs/yaml-cpp
 )
 

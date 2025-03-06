@@ -39,8 +39,8 @@ private:
     void HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void SendPQReadRequest();
     void HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev);
-    void HandleDataUnpacked(TEvViewerTopicData::TEvTopicDataUnpacked::TPtr& ev);
-
+    void FillProtoResponse(ui64 maxSingleMessageSize = 1_MB, ui64 maxTotalSize = 10_MB);
+    NYdb::NTopic::ICodec* GetCodec(NPersQueueCommon::ECodec codec);
     bool GetIntegerParam(const TString& name, i64& value);
 
     STATEFN(StateRequestedDescribe);
@@ -60,10 +60,11 @@ private:
     i64 PartitionId;
     i64 Offset;
     i64 Limit;
-    ui32 Timeout = 0;
+    TMap<ui32, THolder<NYdb::NTopic::ICodec>> Codecs;
+    std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateResponse;
 
     TAutoPtr<TEvPersQueue::TEvResponse> ReadResponse;
-    NJson::TJsonValue Response;
+    NKikimrViewer::TTopicDataResponse ProtoResponse;
 
     static constexpr ui32 READ_TIMEOUT_MS = 1000;
     static constexpr ui32 MAX_MESSAGES_LIMIT = 1000;
@@ -74,15 +75,15 @@ public:
         get:
             tags:
               - viewer
-            summary: ACL information
-            description: Returns information about ACL of an object
+            summary: Read topic data
+            description: Reads and returns data from topic (if any)
             parameters:
               - name: database
                 in: query
                 description: database name
                 type: string
                 required: false
-              - name: topic_path
+              - name: path
                 in: query
                 description: path of topic
                 required: true
@@ -162,6 +163,7 @@ public:
                 504:
                     description: Gateway Timeout
                 )___");
+        node["get"]["responses"]["200"]["content"]["application/json"]["schema"] = TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TTopicDataResponse>();
 
         return node;
     }

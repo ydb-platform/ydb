@@ -930,5 +930,44 @@ Y_UNIT_TEST_SUITE(Transfer)
         }
     }
 
+    Y_UNIT_TEST(DescribeError_OnWriteToShard)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+        
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:null,
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )");
+        
+        testCase.Write({"message-1"});
+
+        for (size_t i = 20; i--;) {
+            auto result = testCase.DescribeTransfer().GetReplicationDescription();
+            if (TReplicationDescription::EState::Error == result.GetState()) {
+                Cerr << ">>>>> " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
+                UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains("Cannot write data into shard"));
+                break;
+            }
+
+            UNIT_ASSERT_C(i, "Unable to wait transfer error");
+            Sleep(TDuration::Seconds(1));
+        }
+    }
 }
 

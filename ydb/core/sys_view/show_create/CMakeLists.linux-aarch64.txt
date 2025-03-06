@@ -12,53 +12,36 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(service)
-add_subdirectory(common)
-add_subdirectory(partition_stats)
-add_subdirectory(processor)
-add_subdirectory(auth)
-add_subdirectory(nodes)
-add_subdirectory(pg_tables)
-add_subdirectory(query_stats)
-add_subdirectory(resource_pool_classifiers)
-add_subdirectory(sessions)
-add_subdirectory(show_create)
-add_subdirectory(storage)
-add_subdirectory(tablets)
-add_subdirectory(ut)
-add_subdirectory(ut_large)
-
-add_library(ydb-core-sys_view)
+add_library(core-sys_view-show_create)
 
 
-target_compile_options(ydb-core-sys_view PRIVATE
+target_compile_options(core-sys_view-show_create PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
-target_link_libraries(ydb-core-sys_view PUBLIC
+target_link_libraries(core-sys_view-show_create PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   ydb-core-base
   core-kqp-runtime
-  core-sys_view-auth
+  ydb-core-protos
   core-sys_view-common
-  core-sys_view-nodes
-  core-sys_view-partition_stats
-  core-sys_view-pg_tables
-  core-sys_view-query_stats
-  core-sys_view-resource_pool_classifiers
-  core-sys_view-service
-  core-sys_view-sessions
-  core-sys_view-show_create
-  core-sys_view-storage
-  core-sys_view-tablets
   core-tx-schemeshard
   core-tx-tx_proxy
+  ydb-core-ydb_convert
+  library-actors-core
+  api-protos
+  public-lib-json_value
+  ydb_cli-dump-util
+  src-client-types
+  yql-essentials-ast
 )
 
-target_sources(ydb-core-sys_view PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/scan.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/scan.h
+target_sources(core-sys_view-show_create PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/show_create/create_table_formatter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/show_create/show_create.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/show_create/create_table_formatter.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/show_create/show_create.h
 )
 

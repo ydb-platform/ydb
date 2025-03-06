@@ -22,6 +22,7 @@ add_subdirectory(pg_tables)
 add_subdirectory(query_stats)
 add_subdirectory(resource_pool_classifiers)
 add_subdirectory(sessions)
+add_subdirectory(show_create)
 add_subdirectory(storage)
 add_subdirectory(tablets)
 add_subdirectory(ut)
@@ -49,8 +50,11 @@ target_link_libraries(ydb-core-sys_view PUBLIC
   core-sys_view-resource_pool_classifiers
   core-sys_view-service
   core-sys_view-sessions
+  core-sys_view-show_create
   core-sys_view-storage
   core-sys_view-tablets
+  core-tx-schemeshard
+  core-tx-tx_proxy
 )
 
 target_sources(ydb-core-sys_view PRIVATE

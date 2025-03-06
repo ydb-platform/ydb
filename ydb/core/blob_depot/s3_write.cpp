@@ -53,7 +53,7 @@ namespace NKikimr::NBlobDepot {
                     locator.ToProto(responseItem->MutableS3Locator());
 
                     // we put it here until operation is completed; if tablet restarts and operation fails, then this
-                    // key will be deleted
+                    // key will be deleted; we also rewrite spoiled locator because Len is different
                     db.Table<Schema::TrashS3>().Key(locator.Generation, locator.KeyId).Update<Schema::TrashS3::Len>(locator.Len);
 
                     const bool inserted = agent.S3WritesInFlight.insert(locator).second;
@@ -98,6 +98,14 @@ namespace NKikimr::NBlobDepot {
     };
 
     TS3Locator TS3Manager::AllocateS3Locator(ui32 len) {
+        if (!DeleteQueue.empty()) {
+            TS3Locator res = DeleteQueue.front();
+            DeleteQueue.pop_front();
+            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_S3_TRASH_OBJECTS] = --TotalS3TrashObjects;
+            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_S3_TRASH_SIZE] = TotalS3TrashSize -= res.Len;
+            res.Len = len;
+            return res;
+        }
         return {
             .Len = len,
             .Generation = Self->Executor()->Generation(),

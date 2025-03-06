@@ -75,13 +75,8 @@ namespace NKikimr::NBlobDepot {
                         if (item.HasS3Locator()) {
                             const auto& locator = TS3Locator::FromProto(item.GetS3Locator());
                             const size_t numErased = agent.S3WritesInFlight.erase(locator);
-                            if (locator.Generation < generation) {
-                                Y_ABORT_UNLESS(!numErased);
-                                Self->Data->AddToS3Trash(locator, txc, this);
-                            } else {
-                                Y_ABORT_UNLESS(numErased == 1);
-                                Self->S3Manager->AddTrashToCollect(locator);
-                            }
+                            Y_ABORT_UNLESS(numErased);
+                            Self->S3Manager->AddTrashToCollect(locator);
                         }
                     };
 
@@ -244,11 +239,10 @@ namespace NKikimr::NBlobDepot {
         }
 
         for (const auto& item : record.GetS3Locators()) {
-            if (const auto& locator = TS3Locator::FromProto(item); locator.Generation == generation) {
-                const size_t numErased = agent.S3WritesInFlight.erase(locator);
-                Y_ABORT_UNLESS(numErased == 1);
-                S3Manager->AddTrashToCollect(locator);
-            }
+            const auto& locator = TS3Locator::FromProto(item);
+            const size_t numErased = agent.S3WritesInFlight.erase(locator);
+            Y_ABORT_UNLESS(numErased == 1);
+            S3Manager->AddTrashToCollect(locator);
         }
     }
 

@@ -155,6 +155,8 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::OnDisconnect() {
+        ++ConnectionInstance;
+
         while (!TabletRequestInFlight.empty()) {
             auto node = TabletRequestInFlight.extract(TabletRequestInFlight.begin());
             auto& requestInFlight = node.value();

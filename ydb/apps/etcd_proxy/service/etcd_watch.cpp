@@ -197,7 +197,7 @@ private:
                 buff.second.pop();
 
             if ((EWatchKind::OnChanges == Kind || (data.Version ? EWatchKind::OnUpdates : EWatchKind::OnDeletions) == Kind)
-                && data.Modified >= FromRevision && (!WithPrevious || buff.first))
+                && data.Modified >= FromRevision && (!WithPrevious || buff.first || data.Created == data.Modified))
                 changes.emplace_back(std::move(key), WithPrevious && buff.first ? std::move(*buff.first) : TData(), TData(data));
 
             buff.first = std::move(data);

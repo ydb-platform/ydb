@@ -62,7 +62,7 @@ message TKqpPhyColumnId {
 
 message TKqpPhyColumnTypeParam {
     oneof TypeParam {
-        string PgTypeName = 1;    
+        string PgTypeName = 1;
         Ydb.DecimalType Decimal = 2;
     }
 }

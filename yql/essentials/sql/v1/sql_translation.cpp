@@ -74,7 +74,17 @@ TNodePtr BuildViewSelect(const TRule_select_stmt& selectStatement, TContext& con
     TModeGuard guard(context.Settings.Mode, ESqlMode::LIMITED_VIEW);
     TSqlSelect selectTranslator(context, context.Settings.Mode);
     auto position = context.Pos();
-    return selectTranslator.Build(selectStatement, position);
+    auto source = selectTranslator.Build(selectStatement, position);
+    if (!source) {
+        return nullptr;
+    }
+    return BuildSelectResult(
+        position,
+        source,
+        false, /* write result */
+        false, /* in subquery */
+        context.Scoped
+    );
 }
 
 }
@@ -5108,7 +5118,7 @@ bool TSqlTranslation::ParseViewQuery(
     features["query_text"] = { Ctx.Pos(), contextRecreationQuery + queryText };
 
     // AST is needed for ready-made validation of CREATE VIEW statement.
-    // Query is stored as plain text, not AST.
+    // The final storage format for the query is a plain text, not an AST.
     queryAst = BuildViewSelect(query, Ctx);
     if (!queryAst) {
         return false;

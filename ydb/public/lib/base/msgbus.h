@@ -103,12 +103,6 @@ struct TBusTypesResponse : TBusMessage<TBusTypesResponse, NKikimrClient::TTypeMe
 struct TBusHiveCreateTablet : TBusMessage<TBusHiveCreateTablet, NKikimrClient::THiveCreateTablet, MTYPE_CLIENT_HIVE_CREATE_TABLET> {};
 struct TBusOldHiveCreateTablet : TBusMessage<TBusOldHiveCreateTablet, NKikimrClient::THiveCreateTablet, MTYPE_CLIENT_OLD_HIVE_CREATE_TABLET> {};
 struct TBusHiveCreateTabletResult : TBusMessage<TBusHiveCreateTabletResult, NKikimrClient::THiveCreateTabletResult, MTYPE_CLIENT_HIVE_CREATE_TABLET_RESULT> {};
-struct TBusLocalEnumerateTablets : TBusMessage<TBusLocalEnumerateTablets, NKikimrClient::TLocalEnumerateTablets, MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS> {};
-struct TBusOldLocalEnumerateTablets : TBusMessage<TBusOldLocalEnumerateTablets, NKikimrClient::TLocalEnumerateTablets, MTYPE_CLIENT_OLD_LOCAL_ENUMERATE_TABLETS> {};
-struct TBusLocalEnumerateTabletsResult : TBusMessage<TBusLocalEnumerateTabletsResult, NKikimrClient::TLocalEnumerateTabletsResult, MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS_RESULT> {};
-struct TBusKeyValue : TBusMessage<TBusKeyValue, NKikimrClient::TKeyValueRequest, MTYPE_CLIENT_KEYVALUE> {};
-struct TBusOldKeyValue : TBusMessage<TBusOldKeyValue, NKikimrClient::TKeyValueRequest, MTYPE_CLIENT_OLD_KEYVALUE> {};
-struct TBusKeyValueResponse : TBusMessage<TBusKeyValueResponse, NKikimrClient::TKeyValueResponse, MTYPE_CLIENT_KEYVALUE_RESPONSE> {};
 struct TBusPersQueue : TBusMessage<TBusPersQueue, NKikimrClient::TPersQueueRequest, MTYPE_CLIENT_PERSQUEUE> {};
 struct TBusTabletKillRequest : TBusMessage<TBusTabletKillRequest, NKikimrClient::TTabletKillRequest, MTYPE_CLIENT_TABLET_KILL_REQUEST> {};
 struct TBusTabletStateRequest : TBusMessage<TBusTabletStateRequest, NKikimrClient::TTabletStateRequest, MTYPE_CLIENT_TABLET_STATE_REQUEST> {};
@@ -184,12 +178,6 @@ public:
         RegisterType(new TBusTypesRequest);
         RegisterType(new TBusTypesResponse);
         RegisterType(new TBusHiveCreateTablet);
-        RegisterType(new TBusLocalEnumerateTablets);
-        RegisterType(new TBusOldLocalEnumerateTablets);
-        RegisterType(new TBusLocalEnumerateTabletsResult);
-        RegisterType(new TBusKeyValue);
-        RegisterType(new TBusOldKeyValue);
-        RegisterType(new TBusKeyValueResponse);
         RegisterType(new TBusOldHiveCreateTablet);
         RegisterType(new TBusHiveCreateTabletResult);
         RegisterType(new TBusPersQueue);

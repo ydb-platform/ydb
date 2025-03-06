@@ -178,8 +178,10 @@ public:
         return result;
     }
 
-    void ApplyConfig(const NKikimrConfig::TMetadataCacheConfig& config, const NKikimrConfig::TFeatureFlags& flags) {
-        RefreshPeriod = TDuration::MilliSeconds(config.GetRefreshPeriodMs());
+    void ApplyConfig(const NKikimrConfig::TMetadataCacheConfig& mcConfig,
+                     const NKikimrConfig::TFeatureFlags& flags) {
+        RefreshPeriod = TDuration::MilliSeconds(mcConfig.GetRefreshPeriodMs());
+
         bool enabled = flags.GetEnableDbMetadataCache();
         if (!Enabled && enabled) {
             TInstant now = TActivationContext::Now();

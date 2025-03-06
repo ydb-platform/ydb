@@ -28,13 +28,6 @@ std::string GetParamName(const std::string_view& name, size_t* counter = nullptr
     return param;
 }
 
-void FillHeader(i64 revision, etcdserverpb::ResponseHeader& header) {
-    header.set_revision(revision);
-    header.set_cluster_id(0ULL);
-    header.set_member_id(0ULL);
-    header.set_raft_term(0ULL);
-}
-
 struct TOperation {
     size_t ResultIndex = 0ULL;
 };
@@ -184,7 +177,7 @@ struct TRange : public TOperation {
 
     etcdserverpb::RangeResponse MakeResponse(i64 revision, const NYdb::TResultSets& results) const {
         etcdserverpb::RangeResponse response;
-        FillHeader(revision, *response.mutable_header());
+        response.mutable_header()->set_revision(revision);
 
         ui64 count = 0ULL;
         if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow()) {
@@ -313,7 +306,7 @@ struct TPut : public TOperation {
     std::variant<etcdserverpb::PutResponse, TGrpcError>
     MakeResponse(i64 revision, const NYdb::TResultSets& results, const TNotifier& notifier) const {
         etcdserverpb::PutResponse response;
-        FillHeader(revision, *response.mutable_header());
+        response.mutable_header()->set_revision(revision);
 
         if (GetPrevious || IgnoreValue || IgnoreValue) {
             if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow() && 5ULL == parser.ColumnsCount()) {
@@ -422,7 +415,7 @@ struct TDeleteRange : public TOperation {
             response.set_deleted(deleted);
         }
 
-        FillHeader(deleted ? revision : revision - 1LL, *response.mutable_header());
+        response.mutable_header()->set_revision(deleted ? revision : revision - 1LL);
 
         if (GetPrevious) {
             for (auto parser = NYdb::TResultSetParser(results[ResultIndex + 1U]); parser.TryNextRow();) {
@@ -759,7 +752,7 @@ struct TTxn : public TOperation {
     std::variant<etcdserverpb::TxnResponse, TGrpcError>
     MakeResponse(i64 revision, const NYdb::TResultSets& results, const TNotifier& notifier) const {
         etcdserverpb::TxnResponse response;
-        FillHeader(revision, *response.mutable_header());
+        response.mutable_header()->set_revision(revision);
 
         if (auto parser = NYdb::TResultSetParser(results[ResultIndex]); parser.TryNextRow()) {
             const bool succeeded = NYdb::TValueParser(parser.GetValue(0)).GetBool();
@@ -835,7 +828,7 @@ private:
         sql << "-- " << GetRequestName() << " >>>>" << std::endl;
         this->MakeQueryWithParams(sql, params);
         sql << "-- " << GetRequestName() << " <<<<" << std::endl;
-        std::cout << std::endl << sql.view() << std::endl;
+//      std::cout << std::endl << sql.view() << std::endl;
         const auto my = this->SelfId();
         const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
         Stuff->Client->ExecuteQuery(sql.str(), NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my, ass](const auto& future) {
@@ -1089,7 +1082,7 @@ private:
 
     void ReplyWith(const NYdb::TResultSets&, const TActorContext& ctx) final {
         etcdserverpb::CompactionResponse response;
-        FillHeader(Revision, *response.mutable_header());
+        response.mutable_header()->set_revision(Revision);
         Dump(std::cout) << std::endl;
         return Reply(response, ctx);
     }
@@ -1126,7 +1119,7 @@ private:
 
     void ReplyWith(const NYdb::TResultSets&, const TActorContext& ctx) final {
         etcdserverpb::LeaseGrantResponse response;
-        FillHeader(Revision, *response.mutable_header());
+        response.mutable_header()->set_revision(Revision);
         response.set_id(Lease);
         response.set_ttl(TTL);
         Dump(std::cout) << '=' << response.id() << ',' << response.ttl() << std::endl;
@@ -1201,7 +1194,7 @@ private:
         }
 
         etcdserverpb::LeaseRevokeResponse response;
-        FillHeader(Revision, *response.mutable_header());
+        response.mutable_header()->set_revision(Revision);
         Dump(std::cout) << std::endl;
         return Reply(response, ctx);
     }
@@ -1241,7 +1234,7 @@ private:
 
     void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
         etcdserverpb::LeaseTimeToLiveResponse response;
-        FillHeader(Revision, *response.mutable_header());
+        response.mutable_header()->set_revision(Revision);
 
         response.set_id(Lease);
         auto parser = NYdb::TResultSetParser(results.front());
@@ -1284,7 +1277,7 @@ private:
 
     void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
         etcdserverpb::LeaseLeasesResponse response;
-        FillHeader(Revision, *response.mutable_header());
+        response.mutable_header()->set_revision(Revision);
 
         for (auto parser = NYdb::TResultSetParser(results.back()); parser.TryNextRow();) {
             response.add_leases()->set_id(NYdb::TValueParser(parser.GetValue(0)).GetInt64());

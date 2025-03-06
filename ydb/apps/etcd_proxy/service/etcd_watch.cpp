@@ -47,9 +47,6 @@ private:
 
             const auto header = response.mutable_header();
             header->set_revision(Stuff->Revision.load());
-            header->set_cluster_id(0ULL);
-            header->set_member_id(0ULL);
-            header->set_raft_term(0ULL);
 
             if (!Ctx->Write(std::move(response)))
                 return Die(ctx);
@@ -169,7 +166,7 @@ private:
         sql << "union all" << std::endl;
         sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from `verhaal` where " << revName << " <= `modified` and " << where.view() << std::endl;
         sql << "order by `modified` asc;" << std::endl;
-        std::cout << std::endl << sql.view() << std::endl;
+//      std::cout << std::endl << sql.view() << std::endl;
 
         const auto my = this->SelfId();
         const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
@@ -371,9 +368,6 @@ private:
         etcdserverpb::WatchResponse response;
         const auto header = response.mutable_header();
         header->set_revision(Stuff->Revision.load());
-        header->set_cluster_id(0ULL);
-        header->set_member_id(0ULL);
-        header->set_raft_term(0ULL);
 
         switch (const auto& req = ev->Get()->Record; req.request_union_case()) {
             case etcdserverpb::WatchRequest::RequestUnionCase::kCreateRequest:
@@ -404,9 +398,6 @@ private:
         etcdserverpb::WatchResponse response;
         const auto header = response.mutable_header();
         header->set_revision(Stuff->Revision.load());
-        header->set_cluster_id(0ULL);
-        header->set_member_id(0ULL);
-        header->set_raft_term(0ULL);
 
         for (const auto& change : ev->Get()->Changes) {
             const auto event = response.add_events();

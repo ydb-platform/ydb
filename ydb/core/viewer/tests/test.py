@@ -40,7 +40,6 @@ def call_viewer_api(url):
 
 
 def get_result(result):
-
     if result.status_code == 200 and result.headers.get("Content-Type") == "application/json":
         return result.json()
     return {"status_code": result.status_code, "text": result.text}
@@ -562,6 +561,7 @@ def test_pqrb_tablet():
                                           'SchemeShard'
                                           ])
 
+
 def test_viewer_nodes_issue_14992():
     response_group_by = get_viewer_normalized("/viewer/nodes", {
         'group': 'Uptime'
@@ -576,13 +576,16 @@ def test_viewer_nodes_issue_14992():
     }
     return result
 
+
 def test_topic_data():
-    response_create_topic = call_viewer("/viewer/query", {
+    grpc_port = cluster.nodes[1].grpc_port
+
+    call_viewer("/viewer/query", {
         'database': dedicated_db,
         'query': 'CREATE TOPIC topic1',
         'schema': 'multi'
     })
-    grpc_port = port = cluster.nodes[1].grpc_port
+
     endpoint = "localhost:{}".format(grpc_port)
     driver = ydb.Driver(endpoint=endpoint, database=dedicated_db, oauth=None)
     driver.wait(10, fail_fast=True)
@@ -605,7 +608,7 @@ def test_topic_data():
     writer_compressed = driver.topic_client.writer('topic2', producer_id="12345", codec=2)
     write(writer_compressed, "compressed-message")
 
-    response=call_viewer("/viewer/topic_data", {
+    response = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
         'path': '{}/topic2'.format(dedicated_db),
         'partition': '0',
@@ -613,14 +616,14 @@ def test_topic_data():
         'limit': '5'
     })
 
-    response_w_meta=call_viewer("/viewer/topic_data", {
+    response_w_meta = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
         'path': '{}/topic2'.format(dedicated_db),
         'partition': '0',
         'offset': '10',
         'limit': '1'
     })
-    response_compressed=call_viewer("/viewer/topic_data", {
+    response_compressed = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
         'path': '{}/topic2'.format(dedicated_db),
         'partition': '0',

@@ -1364,13 +1364,16 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString objectId = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
             constexpr const char* TypeId = "VIEW";
             AddStatementToBlocks(blocks,
-                                 BuildCreateObjectOperation(Ctx.Pos(),
-                                                            BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
-                                                            TypeId,
-                                                            existingOk,
-                                                            false,
-                                                            std::move(features),
-                                                            context));
+                BuildCreateObjectOperation(Ctx.Pos(),
+                    BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                    TypeId,
+                    existingOk,
+                    false,
+                    std::move(features),
+                    context
+                )
+            );
+            dynamic_cast<TCreateObject*>(blocks.back().get())->AddNamedChild("query_ast", queryAst);
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore43: {

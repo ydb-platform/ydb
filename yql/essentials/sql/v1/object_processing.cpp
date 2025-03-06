@@ -69,10 +69,22 @@ bool InitFeatures(TContext& ctx, ISource* src, std::map<TString, TDeferredAtom>&
     return true;
 }
 
+bool InitNamedChildren(TContext& ctx, ISource* src, std::map<TString, TNodePtr>& namedChildren) {
+    for (auto& [name, child] : namedChildren) {
+        if (!child->Init(ctx, src)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 }
 
 bool TCreateObject::DoInit(TContext& ctx, ISource* src) {
     if (!InitFeatures(ctx, src, Features)) {
+        return false;
+    }
+    if (!InitNamedChildren(ctx, src, NamedChildren)) {
         return false;
     }
     return TObjectProcessorImpl::DoInit(ctx, src);

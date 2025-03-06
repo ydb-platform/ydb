@@ -1052,6 +1052,12 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
     if (TxAffectedSourcesIds.contains(p.Msg.SourceId)) {
         return EProcessResult::Blocked;
     }
+    auto inflightMaxSeqNo = TxInflightMaxSeqNoPerSourceId.find(p.Msg.SourceId);
+    if (!inflightMaxSeqNo.IsEnd()) {
+        if (p.Msg.SeqNo <= inflightMaxSeqNo->second) {
+            return EProcessResult::Blocked;
+        }
+    }
     WriteAffectedSourcesIds.insert(p.Msg.SourceId);
     return EProcessResult::Continue;
 }

@@ -1262,7 +1262,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
 
     EProcessResult ret = EProcessResult::Continue;
     const auto& knownSourceIds = SourceIdStorage.GetInMemorySourceIds();
-    THashMap<TString, ui64> txSourceIds;
+    THashSet<TString> txSourceIds;
     for (auto& s : srcIdInfo) {
         if (TxAffectedSourcesIds.contains(s.first)) {
             ret = EProcessResult::Blocked;
@@ -1275,12 +1275,11 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
                 ret = EProcessResult::Blocked;
                 break;
             }
-            txSourceIds.insert(std::make_pair(s.first, s.second.SeqNo));
+            txSourceIds.insert(s.first);
         }
         auto inFlightIter = TxInflightMaxSeqNoPerSourceId.find(s.first);
         if (!inFlightIter.IsEnd()) {
-            Y_ABORT_UNLESS(!inFlightIter->second.empty());
-            if (s.second.MinSeqNo <= *inFlightIter->second.rbegin()) {
+            if (s.second.MinSeqNo <= inFlightIter->second) {
                 tx.Predicate = false;
                 tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
                 tx.WriteInfoApplied = true;
@@ -1300,8 +1299,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
     }
     if (ret == EProcessResult::Continue && tx.Predicate.GetOrElse(true)) {
         for (const auto& s : txSourceIds) {
-            TxAffectedSourcesIds.insert(s.first);
-            TxInflightMaxSeqNoPerSourceId[s.first].insert(s.second);
+            TxAffectedSourcesIds.insert(s);
         }
 
         tx.WriteInfoApplied = true;
@@ -2399,6 +2397,13 @@ void TPartition::CommitWriteOperations(TTransaction& t)
     if (!t.WriteInfo) {
         return;
     }
+    for (const auto& s : t.WriteInfo->SrcIdInfo) {
+        auto [iter, ins] = TxInflightMaxSeqNoPerSourceId.insert(std::make_pair(s.first, s.second.SeqNo));
+        if (!ins) {
+            Y_ABORT_UNLESS(iter->second < s.second.SeqNo);
+            iter->second = s.second.SeqNo;
+        }
+    }
     const auto& ctx = ActorContext();
 
     if (!HaveWriteMsg) {
@@ -2413,6 +2418,8 @@ void TPartition::CommitWriteOperations(TTransaction& t)
     PQ_LOG_D("t.WriteInfo->BodyKeys.size=" << t.WriteInfo->BodyKeys.size() <<
              ", t.WriteInfo->BlobsFromHead.size=" << t.WriteInfo->BlobsFromHead.size());
     PQ_LOG_D("Head=" << Head << ", NewHead=" << NewHead);
+
+    auto oldHeadOffset = NewHead.Offset;
 
     if (!t.WriteInfo->BodyKeys.empty()) {
         bool needCompactHead =
@@ -2508,7 +2515,13 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             info.Offset = NewHead.Offset;
         }
     }
+    for (const auto& [srcId, info] : t.WriteInfo->SrcIdInfo) {
 
+        auto& sourceIdBatch = Parameters->SourceIdBatch;
+        auto sourceId = sourceIdBatch.GetSource(srcId);
+        sourceId.Update(info.SeqNo, info.Offset + oldHeadOffset, CurrentTimestamp);
+
+    }
     Parameters->FirstCommitWriteOperations = false;
 
     WriteInfosApplied.emplace_back(std::move(t.WriteInfo));
@@ -2553,19 +2566,6 @@ void TPartition::RollbackTransaction(TSimpleSharedPtr<TTransaction>& t)
 
     if (t->Tx) {
         Y_ABORT_UNLESS(t->Predicate.Defined());
-        if (t->WriteInfo && t->WriteInfoApplied) {
-            for (const auto& [srcId, info] : t->WriteInfo->SrcIdInfo) {
-                auto iter = TxInflightMaxSeqNoPerSourceId.find(srcId);
-                if (!iter.IsEnd()) {
-                    iter->second.erase(info.SeqNo);
-                    if (iter->second.empty()) {
-                        TxInflightMaxSeqNoPerSourceId.erase(iter);
-                    }
-                }
-
-            }
-
-        }
         ChangePlanStepAndTxId(t->Tx->Step, t->Tx->TxId);
     } else if (t->ProposeConfig) {
         Y_ABORT_UNLESS(t->Predicate.Defined());

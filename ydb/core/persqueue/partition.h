@@ -663,7 +663,7 @@ private:
     THashSet<TString> TxAffectedConsumers;
     THashSet<TString> SetOffsetAffectedConsumers;
     THashMap<TString, TSourceIdPostPersistInfo> TxSourceIdForPostPersist;
-    THashMap<TString, TSet<ui64>> TxInflightMaxSeqNoPerSourceId;
+    THashMap<TString, ui64> TxInflightMaxSeqNoPerSourceId;
 
 
     ui32 MaxBlobSize;

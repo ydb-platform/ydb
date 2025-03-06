@@ -30,8 +30,8 @@ Cumulative fields (`RowReads`, `RowUpdates`, and so on) store the accumulated va
 
 Table structure:
 
-| Field | Description |
---- | ---
+| Column | Description |
+|--------|-------------|
 | `OwnerId` | ID of the SchemeShard serving the table.<br/>Type: `Uint64`.<br/>Key: `0`. |
 | `PathId` | ID of the SchemeShard path.<br/>Type: `Uint64`.<br/>Key: `1`. |
 | `PartIdx` | Partition sequence number.<br/>Type: `Uint64`.<br/>Key: `2`. |
@@ -100,10 +100,10 @@ Fields that provide information about the used CPU time (...`CPUTime`) are expre
 
 Query text limit is 4 KB.
 
-All tables have the same set of fields:
+All tables have the same structure:
 
-| Field | Description |
---- | ---
+| Column | Description |
+|--------|-------------|
 | `IntervalEnd` | The end of a one-minute or one-hour interval.<br/>Type: `Timestamp`.<br/>Key: `0`. |
 | `Rank` | Rank of a top query.<br/>Type: `Uint32`.<br/>Key: `1`. |
 | `QueryText` | Query text.<br/>Type: `Utf8`. |
@@ -181,8 +181,8 @@ Restrictions:
 
 Table structure:
 
-| Field | Description |
----|---
+| Column | Description |
+|--------|-------------|
 | `IntervalEnd` | The end of a one-minute interval.<br/>Type: `Timestamp`.<br/>Key: `0`. |
 | `Rank` | Query rank within an interval (by the SumCPUTime field).<br/>Type: `Uint32`.<br/>Key: `1`. |
 | `QueryText` | Query text.<br/>Type: `Utf8`. |
@@ -249,10 +249,10 @@ The following system views (tables) store the history of points in time when the
 
 These tables contain partitions with peak loads of more than 70% (`CPUCores` > 0.7). Partitions within a single interval are ranked by peak load value.
 
-Both tables have the same set of fields:
+All tables have the same structure:
 
-| Field | Description |
---- | ---
+| Column | Description |
+|--------|-------------|
 | `IntervalEnd` | The end of a one-minute or one-hour interval.<br/>Type: `Timestamp`.<br/>Key: `0`. |
 | `Rank` | Partition rank within an interval (by CPUCores).<br/>Type: `Uint32`.<br/>Key: `1`. |
 | `TabletId` | ID of the tablet serving the partition.<br/>Type: `Uint64`. |
@@ -303,8 +303,7 @@ ORDER BY IntervalEnd desc, CPUCores desc
 
 ## Access control entities {#auth}
 
-The following system views store data for analyzing various access control entities.
-
+The following system views store data for analyzing various [access control entities](../security/authorization.md).
 
 ### Auth users
 
@@ -314,9 +313,16 @@ This view can be fully accessed by database administrators, while regular users 
 
 Table Structure:
 
-| Field | Description |
-|-------|-------------|
+| Column | Description |
+|--------|-------------|
 | `Sid` | SID of the user.<br />Type: `Utf8`.<br />Key: `0`. |
+| `IsEnabled` | Indicates if login is allowed; used for explicit administrator block. Independent of `IsLockedOut`.<br />Type: `Bool`. |
+| `IsLockedOut` | Indicates if login is automatically locked out due to exceeding failed login attempts. Independent of `IsEnabled`.<br />Type: `Bool`. |
+| `CreatedAt` | Timestamp of user creation.<br />Type: `Timestamp`. |
+| `LastSuccessfulAttemptAt` | Timestamp of the last successful login attempt.<br />Type: `Timestamp`. |
+| `LastFailedAttemptAt` | Timestamp of the last failed login attempt.<br />Type: `Timestamp`. |
+| `FailedAttemptCount` | Number of failed login attempts.<br />Type: `Uint32`. |
+| `PasswordHash` | JSON string containing the password hash, salt, and hash algorithm.<br />Type: `Utf8`. |
 
 ### Auth groups
 
@@ -326,23 +332,23 @@ This view can be accessed only by database administrators.
 
 Table Structure:
 
-| Field | Description |
-|-------|-------------|
-| `Sid` | SID of the group.<br />Type: `Utf8`. |
+| Column | Description |
+|--------|-------------|
+| `Sid` | SID of the group.<br />Type: `Utf8`.<br />Key: `0`. |
 | `CreatedAt` | Timestamp when the group was created.<br />Type: `Timestamp`. |
 
 ### Auth group members
 
-The `auth_group_members` view lists [users](../concepts/glossary.md#access-user) membership details within [access groups](../concepts/glossary.md#access-group).
+The `auth_group_members` view lists membership details within [access groups](../concepts/glossary.md#access-group).
 
 This view can be accessed only by database administrators.
 
 Table Structure:
 
-| Field | Description |
-|-------|-------------|
-| `GroupSid` | Name of the group.<br />Type: `Utf8`.<br />Key: `0`. |
-| `MemberSid` | SID of the group member (user or group in `login@domain`).<br />Type: `Utf8`.<br />Key: `1`. |
+| Column | Description |
+|--------|-------------|
+| `GroupSid` | SID of the group.<br />Type: `Utf8`.<br />Key: `0`. |
+| `MemberSid` | SID of the group member.<br />Type: `Utf8`.<br />Key: `1`. |
 
 ### Auth permissions
 
@@ -357,11 +363,11 @@ A user can view an [access object](../concepts/glossary.md#access-object) in the
 
 Table Structure:
 
-| Field | Description |
-|-------|-------------|
-| `Path` | Path to the object.<br />Type: `Utf8`.<br />Key: `0`. |
-| `Sid` | SID of the access entity (user or group).<br />Type: `Utf8`.<br />Key: `1`. |
-| `Permission` | Name of the access right in YDB format.<br />Type: `Utf8`.<br />Key: `2`. |
+| Column | Description |
+|--------|-------------|
+| `Path` | Path to the access object.<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | SID of the [access subject](../concepts/glossary.md#access-subject).<br />Type: `Utf8`.<br />Key: `1`. |
+| `Permission` | Name of the {{ ydb-short-name }} [access right](../yql/reference/syntax/grant.md#permissions-list).<br />Type: `Utf8`.<br />Key: `2`. |
 
 ### Auth owners
 
@@ -371,7 +377,7 @@ A user can view an [access object](../concepts/glossary.md#access-object) in the
 
 Table Structure:
 
-| Field | Description |
-|-------|-------------|
-| `Path` | Path to the object.<br />Type: `Utf8`.<br />Key: `0`. |
-| `Sid` | Owner SID (user or group).<br />Type: `Utf8`.<br />Key: `1`. |
+| Column | Description |
+|--------|-------------|
+| `Path` | Path to the access object.<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | SID of the access object owner.<br />Type: `Utf8`. |

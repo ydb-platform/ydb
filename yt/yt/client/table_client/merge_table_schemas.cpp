@@ -80,7 +80,7 @@ TTableSchemaPtr MergeTableSchemas(
                     << ex;
             }
 
-        } else if (!firstSchema->GetStrict()) {
+        } else if (!firstSchema->IsStrict()) {
             THROW_ERROR_EXCEPTION("Column %v is present in second schema and is missing in non-strict first schema",
                 secondSchemaColumn.GetDiagnosticNameString());
         } else {
@@ -90,7 +90,7 @@ TTableSchemaPtr MergeTableSchemas(
 
     for (const auto& firstSchemaColumn : firstSchema->Columns()) {
         if (!secondSchema->FindColumn(firstSchemaColumn.Name())) {
-            if (!secondSchema->GetStrict()) {
+            if (!secondSchema->IsStrict()) {
                 THROW_ERROR_EXCEPTION("Column %v is present in first schema and is missing in non-strict second schema",
                     firstSchemaColumn.GetDiagnosticNameString());
             }
@@ -114,8 +114,8 @@ TTableSchemaPtr MergeTableSchemas(
         return {
             New<TTableSchema>(
                 resultColumns,
-                /*strict*/ firstSchema->GetStrict() && secondSchema->GetStrict(),
-                firstSchema->GetUniqueKeys() && secondSchema->GetUniqueKeys(),
+                firstSchema->IsStrict() && secondSchema->IsStrict(),
+                firstSchema->IsUniqueKeys() && secondSchema->IsUniqueKeys(),
                 ETableSchemaModification::None,
                 firstSchema->DeletedColumns())
         };
@@ -123,8 +123,8 @@ TTableSchemaPtr MergeTableSchemas(
         return {
             New<TTableSchema>(
                 resultColumns,
-                /*strict*/ firstSchema->GetStrict() && secondSchema->GetStrict(),
-                firstSchema->GetUniqueKeys() && secondSchema->GetUniqueKeys())
+                firstSchema->IsStrict() && secondSchema->IsStrict(),
+                firstSchema->IsUniqueKeys() && secondSchema->IsUniqueKeys())
         };
     }
 }

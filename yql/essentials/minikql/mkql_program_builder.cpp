@@ -20,7 +20,7 @@ using namespace std::string_view_literals;
 namespace NKikimr {
 namespace NMiniKQL {
 
-static_assert(RuntimeVersion >= 20);
+static_assert(RuntimeVersion >= 30);
 
 namespace {
 
@@ -668,7 +668,6 @@ TRuntimeNode TProgramBuilder::Condense(TRuntimeNode flow, TRuntimeNode state,
     callableBuilder.Add(outSwitch);
     callableBuilder.Add(newState);
     if (useCtx) {
-        MKQL_ENSURE(RuntimeVersion >= 30U, "Too old runtime version");
         callableBuilder.Add(NewDataLiteral<bool>(useCtx));
     }
 
@@ -707,7 +706,6 @@ TRuntimeNode TProgramBuilder::Condense1(TRuntimeNode flow, const TUnaryLambda& i
     callableBuilder.Add(outSwitch);
     callableBuilder.Add(newState);
     if (useCtx) {
-        MKQL_ENSURE(RuntimeVersion >= 30U, "Too old runtime version");
         callableBuilder.Add(NewDataLiteral<bool>(useCtx));
     }
 
@@ -1130,8 +1128,8 @@ TRuntimeNode TProgramBuilder::BuildSort(const std::string_view& callableName, TR
     const TUnaryLambda& keyExtractor)
 {
     if (const auto flowType = flow.GetStaticType(); flowType->IsFlow() || flowType->IsStream()) {
-        const bool newVersion = RuntimeVersion >= 25U && flowType->IsFlow();
-        const auto condense = newVersion ?
+        const bool isFlow = flowType->IsFlow();
+        const auto condense = isFlow ?
             SqueezeToList(Map(flow, [&](TRuntimeNode item) { return Pickle(item); }), NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id)) :
             Condense1(flow,
                 [this](TRuntimeNode item) { return AsList(item); },
@@ -1139,15 +1137,14 @@ TRuntimeNode TProgramBuilder::BuildSort(const std::string_view& callableName, TR
                 [this](TRuntimeNode item, TRuntimeNode state) { return Append(state, item); }
             );
 
-        const auto finalKeyExtractor = newVersion ? [&](TRuntimeNode item) {
+        const auto finalKeyExtractor = isFlow ? [&](TRuntimeNode item) {
                 auto itemType = AS_TYPE(TFlowType, flowType)->GetItemType();
                 return keyExtractor(Unpickle(itemType, item));
             } : keyExtractor;
 
         return FlatMap(condense, [&](TRuntimeNode list) {
-            auto stealed = RuntimeVersion >= 27U ? Steal(list) : list;
-            auto sorted = BuildSort(RuntimeVersion >= 26U ? "UnstableSort" : callableName, stealed, ascending, finalKeyExtractor);
-            return newVersion ? Map(LazyList(sorted), [&](TRuntimeNode item) {
+            auto sorted = BuildSort("UnstableSort", Steal(list), ascending, finalKeyExtractor);
+            return isFlow ? Map(LazyList(sorted), [&](TRuntimeNode item) {
                 auto itemType = AS_TYPE(TFlowType, flowType)->GetItemType();
                 return Unpickle(itemType, item);
             }) : sorted;
@@ -1449,10 +1446,6 @@ TRuntimeNode TProgramBuilder::FromFlow(TRuntimeNode flow) {
 }
 
 TRuntimeNode TProgramBuilder::Steal(TRuntimeNode input) {
-    if constexpr (RuntimeVersion < 27U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     TCallableBuilder callableBuilder(Env, __func__, input.GetStaticType(), true);
     callableBuilder.Add(input);
     return TRuntimeNode(callableBuilder.Build(), false);
@@ -1790,21 +1783,16 @@ TRuntimeNode TProgramBuilder::BlockDecimalMul(TRuntimeNode first, TRuntimeNode s
 TRuntimeNode TProgramBuilder::ListFromRange(TRuntimeNode start, TRuntimeNode end, TRuntimeNode step) {
     MKQL_ENSURE(start.GetStaticType()->IsData(), "Expected data");
     MKQL_ENSURE(end.GetStaticType()->IsSameType(*start.GetStaticType()), "Mismatch type");
+    MKQL_ENSURE(IsNumericType(AS_TYPE(TDataType, start)->GetSchemeType()) ||
+                IsDateType(AS_TYPE(TDataType, start)->GetSchemeType()) ||
+                IsTzDateType(AS_TYPE(TDataType, start)->GetSchemeType()) ||
+                IsIntervalType(AS_TYPE(TDataType, start)->GetSchemeType()),
+                "Expected numeric, date or tzdate");
 
-    if constexpr (RuntimeVersion < 24U) {
-        MKQL_ENSURE(IsNumericType(AS_TYPE(TDataType, start)->GetSchemeType()), "Expected numeric");
+    if (IsNumericType(AS_TYPE(TDataType, start)->GetSchemeType())) {
+        MKQL_ENSURE(IsNumericType(AS_TYPE(TDataType, step)->GetSchemeType()), "Expected numeric");
     } else {
-        MKQL_ENSURE(IsNumericType(AS_TYPE(TDataType, start)->GetSchemeType()) ||
-            IsDateType(AS_TYPE(TDataType, start)->GetSchemeType()) ||
-            IsTzDateType(AS_TYPE(TDataType, start)->GetSchemeType()) ||
-            IsIntervalType(AS_TYPE(TDataType, start)->GetSchemeType()),
-            "Expected numeric, date or tzdate");
-
-        if (IsNumericType(AS_TYPE(TDataType, start)->GetSchemeType())) {
-            MKQL_ENSURE(IsNumericType(AS_TYPE(TDataType, step)->GetSchemeType()), "Expected numeric");
-        } else {
-            MKQL_ENSURE(IsIntervalType(AS_TYPE(TDataType, step)->GetSchemeType()), "Expected interval");
-        }
+        MKQL_ENSURE(IsIntervalType(AS_TYPE(TDataType, step)->GetSchemeType()), "Expected interval");
     }
 
     TCallableBuilder callableBuilder(Env, __func__, TListType::Create(start.GetStaticType(), Env));
@@ -1968,10 +1956,7 @@ TRuntimeNode TProgramBuilder::TopSort(TRuntimeNode flow, TRuntimeNode count, TRu
         );
     }
 
-    if constexpr (RuntimeVersion >= 25U)
-        return BuildListNth(__func__, flow, count, ascending, keyExtractor);
-    else
-        return BuildListSort("Sort", BuildListNth("Top", flow, count, ascending, keyExtractor), ascending, keyExtractor);
+    return BuildListNth(__func__, flow, count, ascending, keyExtractor);
 }
 
 TRuntimeNode TProgramBuilder::KeepTop(TRuntimeNode count, TRuntimeNode list, TRuntimeNode item, TRuntimeNode ascending, const TUnaryLambda& keyExtractor) {
@@ -2016,9 +2001,8 @@ TRuntimeNode TProgramBuilder::KeepTop(TRuntimeNode count, TRuntimeNode list, TRu
 }
 
 TRuntimeNode TProgramBuilder::Contains(TRuntimeNode dict, TRuntimeNode key) {
-    if constexpr (RuntimeVersion >= 25U)
-        if (!dict.GetStaticType()->IsDict())
-            return DataCompare(__func__, dict, key);
+    if (!dict.GetStaticType()->IsDict())
+        return DataCompare(__func__, dict, key);
 
     const auto keyType = AS_TYPE(TDictType, dict.GetStaticType())->GetKeyType();
     MKQL_ENSURE(keyType->IsSameType(*key.GetStaticType()), "Key type mismatch. Requred: " << *keyType << ", but got: " << *key.GetStaticType());
@@ -2205,10 +2189,6 @@ TRuntimeNode TProgramBuilder::NarrowSqueezeToHashedDict(TRuntimeNode stream, boo
 }
 
 TRuntimeNode TProgramBuilder::SqueezeToList(TRuntimeNode flow, TRuntimeNode limit) {
-    if constexpr (RuntimeVersion < 25U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     const auto itemType = AS_TYPE(TFlowType, flow.GetStaticType())->GetItemType();
     TCallableBuilder callableBuilder(Env, __func__, NewFlowType(NewListType(itemType)));
     callableBuilder.Add(flow);
@@ -3558,10 +3538,6 @@ TRuntimeNode TProgramBuilder::ToDict(TRuntimeNode list, bool multi, const TUnary
 TRuntimeNode TProgramBuilder::SqueezeToDict(TRuntimeNode stream, bool multi, const TUnaryLambda& keySelector,
     const TUnaryLambda& payloadSelector, std::string_view callableName, bool isCompact, ui64 itemsCountHint)
 {
-    if constexpr (RuntimeVersion < 21U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     const auto type = stream.GetStaticType();
     MKQL_ENSURE(type->IsStream() || type->IsFlow(), "Expected stream or flow.");
 
@@ -3596,10 +3572,6 @@ TRuntimeNode TProgramBuilder::SqueezeToDict(TRuntimeNode stream, bool multi, con
 TRuntimeNode TProgramBuilder::NarrowSqueezeToDict(TRuntimeNode flow, bool multi, const TNarrowLambda& keySelector,
     const TNarrowLambda& payloadSelector, std::string_view callableName, bool isCompact, ui64 itemsCountHint)
 {
-    if constexpr (RuntimeVersion < 23U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
 
     TRuntimeNode::TList itemArgs;
@@ -3766,10 +3738,6 @@ TRuntimeNode TProgramBuilder::WideMap(TRuntimeNode flow, const TWideLambda& hand
 }
 
 TRuntimeNode TProgramBuilder::WideChain1Map(TRuntimeNode flow, const TWideLambda& init, const TBinaryWideLambda& update) {
-    if constexpr (RuntimeVersion < 23U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
 
     TRuntimeNode::TList inputArgs;
@@ -4808,10 +4776,6 @@ TRuntimeNode TProgramBuilder::WideLastCombinerCommon(const TStringBuf& funcName,
 }
 
 TRuntimeNode TProgramBuilder::WideLastCombiner(TRuntimeNode flow, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish) {
-    if constexpr (RuntimeVersion < 29U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     return WideLastCombinerCommon(__func__, flow, extractor, init, update, finish);
 }
 
@@ -4855,7 +4819,6 @@ TRuntimeNode TProgramBuilder::WideCondense1(TRuntimeNode flow, const TWideLambda
     callableBuilder.Add(chop);
     std::for_each(next.cbegin(), next.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     if (useCtx) {
-        MKQL_ENSURE(RuntimeVersion >= 30U, "Too old runtime version");
         callableBuilder.Add(NewDataLiteral<bool>(useCtx));
     }
 
@@ -5102,10 +5065,6 @@ TRuntimeNode TProgramBuilder::MultiHoppingCore(TRuntimeNode list,
     TRuntimeNode hop, TRuntimeNode interval, TRuntimeNode delay,
     TRuntimeNode dataWatermarks, TRuntimeNode watermarksMode)
 {
-    if constexpr (RuntimeVersion < 22U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     auto streamType = AS_TYPE(TStreamType, list);
     auto itemType = AS_TYPE(TStructType, streamType->GetItemType());
     auto timestampType = TOptionalType::Create(TDataType::Create(NUdf::TDataType<NUdf::TTimestamp>::Id, Env), Env);
@@ -5439,10 +5398,6 @@ TRuntimeNode TProgramBuilder::Replicate(TRuntimeNode item, TRuntimeNode count, c
 }
 
 TRuntimeNode TProgramBuilder::PgConst(TPgType* pgType, const std::string_view& value, TRuntimeNode typeMod) {
-    if constexpr (RuntimeVersion < 30U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     TCallableBuilder callableBuilder(Env, __func__, pgType);
     callableBuilder.Add(NewDataLiteral(pgType->GetTypeId()));
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(value));
@@ -5473,10 +5428,6 @@ TRuntimeNode TProgramBuilder::PgResolvedCall(bool useContext, const std::string_
 
 TRuntimeNode TProgramBuilder::BlockPgResolvedCall(const std::string_view& name, ui32 id,
     const TArrayRef<const TRuntimeNode>& args, TType* returnType) {
-    if constexpr (RuntimeVersion < 30U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(name));
     callableBuilder.Add(NewDataLiteral(id));
@@ -5487,10 +5438,6 @@ TRuntimeNode TProgramBuilder::BlockPgResolvedCall(const std::string_view& name, 
 }
 
 TRuntimeNode TProgramBuilder::PgArray(const TArrayRef<const TRuntimeNode>& args, TType* returnType) {
-    if constexpr (RuntimeVersion < 30U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     for (const auto& arg : args) {
         callableBuilder.Add(arg);
@@ -5539,10 +5486,6 @@ TRuntimeNode TProgramBuilder::PgToRecord(TRuntimeNode input, const TArrayRef<std
 }
 
 TRuntimeNode TProgramBuilder::PgCast(TRuntimeNode input, TType* returnType, TRuntimeNode typeMod) {
-    if constexpr (RuntimeVersion < 30U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(input);
     if (typeMod) {
@@ -5553,20 +5496,12 @@ TRuntimeNode TProgramBuilder::PgCast(TRuntimeNode input, TType* returnType, TRun
 }
 
 TRuntimeNode TProgramBuilder::FromPg(TRuntimeNode input, TType* returnType) {
-    if constexpr (RuntimeVersion < 30U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(input);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
 TRuntimeNode TProgramBuilder::ToPg(TRuntimeNode input, TType* returnType) {
-    if constexpr (RuntimeVersion < 30U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(input);
     return TRuntimeNode(callableBuilder.Build(), false);
@@ -5587,10 +5522,6 @@ TRuntimeNode TProgramBuilder::PgClone(TRuntimeNode input, const TArrayRef<const 
 }
 
 TRuntimeNode TProgramBuilder::WithContext(TRuntimeNode input, const std::string_view& contextType) {
-    if constexpr (RuntimeVersion < 30U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     TCallableBuilder callableBuilder(Env, __func__, input.GetStaticType());
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(contextType));
     callableBuilder.Add(input);

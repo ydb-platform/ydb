@@ -204,7 +204,7 @@ struct TRange : public TOperation {
     }
 };
 
-using TNotifier = std::function<void(std::string&&, NEtcd::TData&&, NEtcd::TData&&)>;
+using TNotifier = std::function<void(std::string&&, i64, NEtcd::TData&&, NEtcd::TData&&)>;
 using TGrpcError = std::pair<grpc::StatusCode, std::string>;
 
 struct TPut : public TOperation {
@@ -338,7 +338,7 @@ struct TPut : public TOperation {
                 newData.Modified = NYdb::TValueParser(parser.GetValue("modified")).GetInt64();
                 newData.Version = NYdb::TValueParser(parser.GetValue("version")).GetInt64();
                 newData.Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64();
-                notifier(std::string(Key), std::move(oldData), std::move(newData));
+                notifier(std::string(Key), revision, std::move(oldData), std::move(newData));
             }
         }
         return response;
@@ -439,7 +439,7 @@ struct TDeleteRange : public TOperation {
                     .Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64()
                 };
                 auto key = NYdb::TValueParser(parser.GetValue("key")).GetString();
-                notifier(std::move(key), std::move(oldData), {});
+                notifier(std::move(key), revision, std::move(oldData), {});
             }
         }
         return response;
@@ -942,8 +942,8 @@ private:
 
     void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
         const auto watcher = Stuff->Watchtower;
-        const auto notifier = [&watcher, &ctx](std::string&& key, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
-            ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData), std::move(newData)));
+        const auto notifier = [&watcher, &ctx](std::string&& key, i64 revision, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
+            ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), revision, std::move(oldData), std::move(newData)));
         };
 
         auto response = Put.MakeResponse(Revision, results, notifier);
@@ -985,8 +985,8 @@ private:
 
     void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
         const auto watcher = Stuff->Watchtower;
-        const auto notifier = [&watcher, &ctx](std::string&& key, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
-            ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData), std::move(newData)));
+        const auto notifier = [&watcher, &ctx](std::string&& key, i64 revision, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
+            ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), revision, std::move(oldData), std::move(newData)));
         };
 
         auto response = DeleteRange.MakeResponse(Revision, results, notifier);
@@ -1037,8 +1037,8 @@ private:
 
     void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
         const auto watcher = Stuff->Watchtower;
-        const auto notifier = [&watcher, &ctx](std::string&& key, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
-            ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData), std::move(newData)));
+        const auto notifier = [&watcher, &ctx](std::string&& key, i64 revision, NEtcd::TData&& oldData, NEtcd::TData&& newData) {
+            ctx.Send(watcher, std::make_unique<NEtcd::TEvChange>(std::move(key), revision, std::move(oldData), std::move(newData)));
         };
 
         auto response = Txn.MakeResponse(Revision, results, notifier);
@@ -1186,7 +1186,7 @@ private:
                 oldData.Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64();
                 auto key = NYdb::TValueParser(parser.GetValue("key")).GetString();
 
-                ctx.Send(Stuff->Watchtower, std::make_unique<NEtcd::TEvChange>(std::move(key), std::move(oldData)));
+                ctx.Send(Stuff->Watchtower, std::make_unique<NEtcd::TEvChange>(std::move(key), Revision, std::move(oldData)));
             }
 
             if (!deleted)

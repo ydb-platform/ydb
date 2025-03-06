@@ -193,22 +193,25 @@ private:
 
             auto& buff = Buffer[key];
 
-            while (!buff.second.empty() && buff.second.front().NewData.Modified <= data.Modified)
+            while (!buff.second.empty() && buff.second.top().NewData.Modified <= data.Modified)
                 buff.second.pop();
 
             if ((EWatchKind::OnChanges == Kind || (data.Version ? EWatchKind::OnUpdates : EWatchKind::OnDeletions) == Kind)
                 && data.Modified >= FromRevision && (!WithPrevious || buff.first || data.Created == data.Modified))
-                changes.emplace_back(std::move(key), WithPrevious && buff.first ? std::move(*buff.first) : TData(), TData(data));
+                changes.emplace_back(std::move(key), data.Modified, WithPrevious && buff.first ? std::move(*buff.first) : TData(), data.Version > 0LL ? TData(data) : TData());
 
-            buff.first = std::move(data);
+            if (data.Version > 0LL)
+                buff.first.emplace(std::move(data));
+            else
+                buff.first.reset();
         }
 
         changes.reserve(changes.size() + Buffer.size());
         for (auto& [_, buff] : Buffer)
             for (; !buff.second.empty(); buff.second.pop())
-                changes.emplace_back(std::move(buff.second.front()));
+                changes.emplace_back(std::move(buff.second.top()));
 
-        std::sort(changes.begin(), changes.end(), [](const TChange& lhs, const TChange& rhs) { return lhs.NewData.Modified < rhs.NewData.Modified; });
+        std::sort(changes.begin(), changes.end(), TChange::TOrder());
 
         if (!changes.empty() || SendProgress) {
             ctx.Send(Watchman, new TEvChanges(std::move(changes)));
@@ -229,7 +232,7 @@ private:
             if (AwaitHistory)
                 Buffer[ev->Get()->Key].second.emplace(std::move(*ev->Get()));
             else
-                ctx.Send(Watchman, new TEvChanges({TChange(std::move(ev->Get()->Key), WithPrevious && ev->Get()->OldData.Version ? std::move(ev->Get()->OldData) : TData(), std::move(ev->Get()->NewData))}));
+                ctx.Send(Watchman, new TEvChanges({TChange(std::move(ev->Get()->Key), ev->Get()->Revision, WithPrevious && ev->Get()->OldData.Version ? std::move(ev->Get()->OldData) : TData(), std::move(ev->Get()->NewData))}));
         }
     }
 
@@ -251,7 +254,7 @@ private:
     TMonotonic TimeOfLastSent;
 
     bool AwaitHistory;
-    std::unordered_map<std::string, std::pair<std::optional<TData>, std::queue<TChange>>> Buffer;
+    std::unordered_map<std::string, std::pair<std::optional<TData>, std::priority_queue<TChange, std::vector<TChange>, TChange::TOrder>>> Buffer;
 };
 
 class TWatchman : public TActorBootstrapped<TWatchman> {
@@ -408,7 +411,7 @@ private:
             const auto event = response.add_events();
             event->set_type(change.NewData.Version ? mvccpb::Event_EventType_PUT : mvccpb::Event_EventType_DELETE);
 
-            if (change.OldData.Version) {
+            if (change.OldData.Version > 0LL) {
                 const auto kv = event->mutable_prev_kv();
                 kv->set_key(change.Key);
                 kv->set_value(change.OldData.Value);
@@ -420,15 +423,16 @@ private:
 
             const auto kv = event->mutable_kv();
             kv->set_key(change.Key);
-            if (change.NewData.Version) {
+            if (change.NewData.Version > 0LL) {
                 kv->set_value(change.NewData.Value);
                 kv->set_version(change.NewData.Version);
                 kv->set_lease(change.NewData.Lease);
                 kv->set_mod_revision(change.NewData.Modified);
                 kv->set_create_revision(change.NewData.Created);
-            }
+            } else
+                kv->set_mod_revision(change.Revision);
 
-            std::cout << (change.NewData.Version ? "Updated" : "Erased") << '(' << change.Key;
+            std::cout << (change.NewData.Version ? change.OldData.Version ? "Created" : "Updated" : "Deleted") << '(' << change.Key;
             if (change.OldData.Version) {
                 std::cout << ", old " << change.OldData.Version << ',' << change.OldData.Created << ',' << change.OldData.Modified << ',' << change.OldData.Value.size() << ',' << change.OldData.Lease;
             }
@@ -615,7 +619,7 @@ private:
                 oldData.Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64();
                 auto key = NYdb::TValueParser(parser.GetValue("key")).GetString();
 
-                ctx.Send(ctx.SelfID, std::make_unique<TEvChange>(std::move(key), std::move(oldData)));
+                ctx.Send(ctx.SelfID, std::make_unique<TEvChange>(std::move(key), Revision, std::move(oldData)));
             }
         } else {
             if (auto parser = NYdb::TResultSetParser(ev->Get()->Results.front()); parser.TryNextRow()) {

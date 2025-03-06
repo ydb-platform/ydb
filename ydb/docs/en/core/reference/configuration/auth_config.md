@@ -2,32 +2,34 @@
 
 {{ ydb-short-name }} supports various user authentication methods. The configuration for authentication providers is specified in the `auth_config` section.
 
-## Configuring native {{ ydb-short-name }} user authentication {#local-auth-config}
+## Configuring internal {{ ydb-short-name }} user authentication {#local-auth-config}
 
-Native {{ ydb-short-name }} users are added directly to a {{ ydb-short-name }} database without using third-party directory services. For more information about this authentication method, see [{#T}](../../security/authentication.md#static-credentials). To configure authentication by user name and password, define the following parameters in the `auth_config` section.
+Internal {{ ydb-short-name }} users are added directly to a {{ ydb-short-name }} database without using third-party directory services. For more information about this authentication method, see [{#T}](../../security/authentication.md#static-credentials). To configure authentication by user name and password, define the following parameters in the `auth_config` section.
 
 #|
 || Parameter | Description ||
 || UseLoginProvider
-| A flag indicating whether to allow native user authentication with a user name and password.
+| Indicates whether to allow authentication of internal users with an auth-token that is received after entering a user name and password.
 
 Default value: `true`
     ||
 || EnableLoginAuthentication
-|
+| Indicates whether to allow adding internal users to {{ ydb-short-name }} databases and generating auth-tokens after an internal user enters a user name and password.
+
+Default value: `true`
     ||
 || DomainLoginOnly
-| A flag that determines the databases, to which native users are added.
+| Determines the databases, to which internal users are added.
 
 Valid values:
 
-- `true` – native users are added only to the root database.
-- `false` – native users are added to the root and to tenant databases.
+- `true` – internal users are added only to the root database.
+- `false` – internal users are added to the root and to tenant databases.
 
 Default value: `true`
     ||
 || LoginTokenExpireTime
-| Expiration time of the authentication token that is created when a native user logs in to {{ ydb-short-name }}.
+| Specifies the expiration time of the authentication token that is created when an internal user logs in to {{ ydb-short-name }}.
 
 Default value: `12h`
     ||

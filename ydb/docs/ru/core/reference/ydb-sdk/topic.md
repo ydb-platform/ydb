@@ -389,7 +389,7 @@
 - C#
  
   ```C#
-  await topicClient.DropTopic(new DropTopicSettings { Path = topicName });
+  await topicClient.DropTopic(topicName);
   ```
 
 {% endlist %}

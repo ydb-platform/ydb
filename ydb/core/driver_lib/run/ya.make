@@ -1,15 +1,5 @@
 LIBRARY(run)
 
-IF (OS_WINDOWS)
-    CFLAGS(
-        -DKIKIMR_DISABLE_S3_OPS
-    )
-ELSE()
-    PEERDIR(
-        contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
-    )
-ENDIF()
-
 SRCS(
     auto_config_initializer.cpp
     config.cpp

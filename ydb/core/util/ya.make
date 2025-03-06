@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     activeactors.h
     address_classifier.cpp
+    aws.cpp
     backoff.cpp
     cache.cpp
     cache.h
@@ -80,6 +81,17 @@ PEERDIR(
     library/cpp/deprecated/atomic
     ydb/library/yverify_stream
 )
+
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DKIKIMR_DISABLE_S3_OPS
+    )
+ELSE()
+    PEERDIR(
+        contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
+        contrib/libs/curl
+    )
+ENDIF()
 
 END()
 

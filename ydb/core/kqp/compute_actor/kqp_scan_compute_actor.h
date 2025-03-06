@@ -127,7 +127,7 @@ public:
 
     void PollSources(ui64 prevFreeSpace);
 
-    void PassAway() override {
+    void DoTerminateImpl() override {
         if (TaskRunner) {
             if (TaskRunner->IsAllocatorAttached()) {
                 ComputeCtx.Clear();
@@ -135,9 +135,10 @@ public:
                 auto guard = TaskRunner->BindAllocator(TBase::GetMkqlMemoryLimit());
                 ComputeCtx.Clear();
             }
+            ScanData = nullptr;
         }
 
-        TBase::PassAway();
+        TBase::DoTerminateImpl();
     }
 
     void TerminateSources(const NYql::TIssues& issues, bool success) override {

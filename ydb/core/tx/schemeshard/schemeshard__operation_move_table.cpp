@@ -130,7 +130,8 @@ public:
             actorCtx.SelfID,
             ui64(operationId.GetTxId()),
             txBody, seqNo,
-            SS->SelectProcessingParams(targetPathId)
+            SS->SelectProcessingParams(targetPathId),
+            0, 0
         ).release();
     }
     TPath CopyTable(NIceDb::TNiceDb& db) override {

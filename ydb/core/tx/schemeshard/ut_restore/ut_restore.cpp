@@ -11,6 +11,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/ydb_convert/table_description.h>
@@ -22,7 +23,6 @@
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
-#include <aws/core/Aws.h>
 #include <contrib/libs/zstd/include/zstd.h>
 #include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/testing/hook/hook.h>
@@ -41,14 +41,12 @@ using namespace NKikimr::NWrappers::NTestHelpers;
 
 namespace {
 
-    Aws::SDKOptions Options;
-
     Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
-        Aws::InitAPI(Options);
+        NKikimr::InitAwsAPI();
     }
 
     Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
-        Aws::ShutdownAPI(Options);
+        NKikimr::ShutdownAwsAPI();
     }
 
     const TString EmptyYsonStr = R"([[[[];%false]]])";

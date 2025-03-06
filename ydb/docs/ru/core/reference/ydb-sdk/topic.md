@@ -387,8 +387,8 @@
   ```
   
 - C#
- 
-  ```C#
+
+  ```c#
   await topicClient.DropTopic(topicName);
   ```
 
@@ -946,6 +946,7 @@
           { Metadata = { new Metadata("meta-key", "meta-value"u8.ToArray()) } }
   );
   ```
+
 {% endlist %}
 
 ### Запись в транзакции {#write-tx}
@@ -1598,7 +1599,8 @@
   ```
   
 - C#
-  ```
+
+  ```c#
   try
   {
       while (!readerCts.IsCancellationRequested)
@@ -1703,7 +1705,8 @@
   ```
   
 - С#
-    ```c#
+
+  ```c#
   try
   {
       while (!readerCts.IsCancellationRequested)

@@ -10,7 +10,7 @@
 
 При доступе к базе данных {{ ydb-short-name }} [пользователи](../concepts/glossary.md#access-user) проходят [аутентификацию](./authentication.md) — процесс проверки пользователя, который подтверждает его личность при доступе к базе данных. На основе аутентификационных данных пользователь затем проходит [авторизацию](./authorization.md) — процесс предоставления определённых [прав доступа](../concepts/glossary.md#access-right) и [уровней доступа](../concepts/glossary.md#access-level) пользователю на использование объектов базы данных {{ ydb-short-name }}.
 
-{{ ydb-short-name }} позволяет работать как с локальными [пользователями](./authorization.md#user) так и с пользователями из разных каталогов и систем. После проведения [аутентификации](./authentication.md), пользователи идентифицируются в кластере {{ ydb-short-name }} с помощью [SID](./authorization.md#sid). SID — это строка, которая содержит имя пользователя и его источник (auth domain).
+{{ ydb-short-name }} позволяет работать как с внутренними [пользователями](./authorization.md#user) так и с пользователями из разных каталогов и систем. После проведения [аутентификации](./authentication.md), пользователи идентифицируются в кластере {{ ydb-short-name }} с помощью [SID](./authorization.md#sid). SID — это строка, которая содержит имя пользователя и его источник (auth domain).
 
 [Права доступа](./authorization.md#right) в {{ ydb-short-name }} привязываются к [объекту доступа](../concepts/glossary.md#access-object) с помощью [списков прав](../concepts/glossary.md#access-control-list). Формат списков прав описан в статье [{#T}](./short-access-control-notation.md).
 

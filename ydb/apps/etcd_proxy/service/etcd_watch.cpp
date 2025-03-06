@@ -284,6 +284,11 @@ private:
         auto key = req.key();
         auto rangeEnd = DecrementKey(req.range_end());
 
+        if (!rangeEnd.empty() && rangeEnd != key) {
+            DumpKeyRange(std::cout << "Watch(", key, rangeEnd) << ") isn't implemented." << std::endl;
+            return UnsubscribeAndDie(ctx);
+        }
+
         const auto watchId = req.watch_id();
         const auto revision = req.start_revision();
         const bool withPrevious = req.prev_kv();
@@ -423,7 +428,7 @@ private:
                 kv->set_create_revision(change.NewData.Created);
             }
 
-            std::cout << (change.NewData.Version ? "Update" : "Delete") << '(' << change.Key;
+            std::cout << (change.NewData.Version ? "Updated" : "Erased") << '(' << change.Key;
             if (change.OldData.Version) {
                 std::cout << ", old " << change.OldData.Version << ',' << change.OldData.Created << ',' << change.OldData.Modified << ',' << change.OldData.Value.size() << ',' << change.OldData.Lease;
             }

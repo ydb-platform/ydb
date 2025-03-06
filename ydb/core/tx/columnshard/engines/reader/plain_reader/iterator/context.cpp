@@ -87,7 +87,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 
     NCommon::TFetchingScriptBuilder acc(*this);
     if (!!IndexChecker && useIndexes && exclusiveSource) {
-        acc.AddStep(std::make_shared<TIndexBlobsFetchingStep>(std::make_shared<TIndexesSet>(IndexChecker->GetIndexIds())));
+        acc.AddStep(std::make_shared<TIndexBlobsFetchingStep>(
+            std::make_shared<TIndexesSet>(NIndexes::TIndexDataAddress::ExtractIndexIds(IndexChecker->GetIndexIds()))));
         acc.AddStep(std::make_shared<TApplyIndexStep>(IndexChecker));
     }
     bool hasFilterSharding = false;

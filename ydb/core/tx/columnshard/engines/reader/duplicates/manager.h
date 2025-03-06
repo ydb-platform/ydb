@@ -11,13 +11,13 @@ namespace NKikimr::NOlap::NReader {
 class TRangeIndex {
 private:
     // TODO: optimize implementation
-    THashMap<ui32, std::pair<ui32, ui32>> Intervals;
+    THashMap<ui64, std::pair<ui32, ui32>> Intervals;
 
 public:
-    void AddRange(const ui32 l, const ui32 r, const ui32 id);
-    void RemoveRange(const ui32 id);
+    void AddRange(const ui32 l, const ui32 r, const ui64 id);
+    void RemoveRange(const ui64 id);
 
-    std::vector<ui32> FindIntersections(const ui32 p) const;
+    std::vector<ui64> FindIntersections(const ui64 p) const;
 };
 
 class TIntervalCounter {
@@ -36,7 +36,7 @@ public:
     bool IsAllZeros() const;
 };
 
-class TDuplicateFilterConstructor: NActors::TActorBootstrapped<TDuplicateFilterConstructor> {
+class TDuplicateFilterConstructor: public NActors::TActorBootstrapped<TDuplicateFilterConstructor> {
 private:
     class TIntervalsRange {
     private:
@@ -57,12 +57,12 @@ private:
 
     class TSourceIntervals {
     private:
-        using TRangeBySourceIdx = THashMap<ui32, TIntervalsRange>;
-        YDB_READONLY_DEF(TRangeBySourceIdx, SourceRanges);
+        using TRangeByPortionId = THashMap<ui64, TIntervalsRange>;
+        YDB_READONLY_DEF(TRangeByPortionId, SourceRanges);
         std::vector<NArrow::TReplaceKey> IntervalBorders;
 
     public:
-        TSourceIntervals(const std::vector<std::shared_ptr<NCommon::IDataSource>>& sources);
+        TSourceIntervals(const std::vector<std::shared_ptr<TPortionInfo>>& portions);
 
         const NArrow::TReplaceKey& GetRightInclusiveBorder(const ui32 intervalIdx) const {
             return IntervalBorders[intervalIdx];
@@ -74,8 +74,8 @@ private:
             return IntervalBorders[intervalIdx - 1];
         }
 
-        TIntervalsRange GetRangeVerified(const ui32 sourceIdx) const {
-            return *TValidator::CheckNotNull(SourceRanges.FindPtr(sourceIdx));
+        TIntervalsRange GetRangeVerified(const ui64 portionId) const {
+            return *TValidator::CheckNotNull(SourceRanges.FindPtr(portionId));
         }
     };
 
@@ -117,7 +117,7 @@ private:
 public:
     void Handle(const TEvRequestFilter::TPtr&);
 
-    TDuplicateFilterConstructor(const std::vector<std::shared_ptr<NCommon::IDataSource>>& sources);
+    TDuplicateFilterConstructor(const std::vector<std::shared_ptr<TPortionInfo>>& portions);
 };
 
 }   // namespace NKikimr::NOlap::NReader

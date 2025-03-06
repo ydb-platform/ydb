@@ -12,8 +12,25 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(pg_catalog)
-add_subdirectory(pg_wrapper)
-add_subdirectory(proto_ast)
-add_subdirectory(lexer_common)
-add_subdirectory(antlr_ast)
+add_library(sql-v1-complete)
+
+
+target_link_libraries(sql-v1-complete PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-antlr4_cpp_runtime
+  contrib-libs-antlr4-c3
+  essentials-sql-settings
+  sql-v1-format
+  antlr_ast-gen-v1_ansi_antlr4
+  antlr_ast-gen-v1_antlr4
+)
+
+target_sources(sql-v1-complete PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/sql_antlr4.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/sql_complete.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/sql_context.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/sql_syntax.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/string_util.cpp
+)
+

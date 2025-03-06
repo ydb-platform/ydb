@@ -12,8 +12,5 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(pg_catalog)
-add_subdirectory(pg_wrapper)
-add_subdirectory(proto_ast)
-add_subdirectory(lexer_common)
-add_subdirectory(antlr_ast)
+add_subdirectory(v1_ansi_antlr4)
+add_subdirectory(v1_antlr4)

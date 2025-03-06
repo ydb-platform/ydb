@@ -22,6 +22,7 @@ get_built_tool_path(
 add_subdirectory(lexer)
 add_subdirectory(proto_parser)
 add_subdirectory(format)
+add_subdirectory(complete)
 
 add_library(essentials-sql-v1)
 

@@ -385,15 +385,7 @@ void TSearchEventsProcessor::SaveQueueEvent(
 
         if (!event.Labels.empty() && event.Labels != "{}") {
             writer.OpenMap("attributes");
-            {
-                NJson::TJsonMap labelsMap;
-                NJson::ReadJsonTree(event.Labels, &labelsMap);
-                writer.OpenMap("labels");
-                for (const auto& [key, value] : labelsMap.GetMap()) {
-                    writer.Write(key, value);
-                }
-                writer.CloseMap();
-            }
+            writer.UnsafeWrite("labels", event.Labels);
             writer.CloseMap();
         }
     }

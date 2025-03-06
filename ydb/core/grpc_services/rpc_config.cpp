@@ -157,7 +157,7 @@ public:
             }
         }
         if (!NKikimr::IsAdministrator(AppData(), Request_->GetSerializedToken())) {
-            self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a database administrator.",
+            self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a cluster administrator.",
                   NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
             return;
         }

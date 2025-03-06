@@ -678,7 +678,7 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             *ActorSystem_,
             "Coordination/Session",
             getCounterBlock("coordination", "Session", true),
-            getLimiter("CoordinationService", "Session", DEFAULT_MAX_SESSIONS_INFLIGHT));
+            getLimiter(EStaticControlType::GRpcControlsRequestConfigsCoordinationServiceSessionMaxInFlight, DEFAULT_MAX_SESSIONS_INFLIGHT));
     }
 }
 

@@ -84,7 +84,7 @@ void TKqpComputeActor::DoBootstrap() {
     try {
         PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, ArrayBufferMinFillPercentage, std::move(wakeupCallback), std::move(errorCallback)));
     } catch (const NMiniKQL::TKqpEnsureFail& e) {
-        InternalError((TIssuesIds::EIssueCode) e.GetCode(), e.GetMessage());
+        ErrorFromIssue((TIssuesIds::EIssueCode) e.GetCode(), e.GetMessage());
         return;
     }
 
@@ -120,7 +120,7 @@ void TKqpComputeActor::DoBootstrap() {
         auto scanActor = NSysView::CreateSystemViewScan(SelfId(), 0, ScanData->TableId, ScanData->TablePath, ranges, columns, UserToken, Database, reverse);
 
         if (!scanActor) {
-            InternalError(TIssuesIds::DEFAULT_ERROR, TStringBuilder()
+            ErrorFromIssue(TIssuesIds::DEFAULT_ERROR, TStringBuilder()
                 << "Failed to create system view scan, table id: " << ScanData->TableId);
             return;
         }
@@ -148,9 +148,9 @@ STFUNC(TKqpComputeActor::StateFunc) {
     } catch (const TMemoryLimitExceededException& e) {
         TBase::OnMemoryLimitExceptionHandler();
     } catch (const NMiniKQL::TKqpEnsureFail& e) {
-        InternalError((TIssuesIds::EIssueCode) e.GetCode(), e.GetMessage());
+        ErrorFromIssue((TIssuesIds::EIssueCode) e.GetCode(), e.GetMessage());
     } catch (const yexception& e) {
-        InternalError(TIssuesIds::DEFAULT_ERROR, e.what());
+        ErrorFromIssue(TIssuesIds::DEFAULT_ERROR, e.what());
     }
 
     ReportEventElapsedTime();

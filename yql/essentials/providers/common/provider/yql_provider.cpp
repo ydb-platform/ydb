@@ -756,8 +756,9 @@ TWritePermissionSettings ParseWritePermissionsSettings(TExprList node, TExprCont
 
 TWriteObjectSettings ParseWriteObjectSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoAtom> mode;
-    TMaybe<TCoNameValueTupleList> kvFeatures;
+    TVector<TCoNameValueTuple> features;
     TMaybe<TCoAtomList> resetFeatures;
+
     for (auto child : node) {
         if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
             auto tuple = maybeTuple.Cast();
@@ -769,7 +770,15 @@ TWriteObjectSettings ParseWriteObjectSettings(TExprList node, TExprContext& ctx)
             } else if (name == "features") {
                 auto maybeFeatures = tuple.Value().Maybe<TCoNameValueTupleList>();
                 Y_ABORT_UNLESS(maybeFeatures);
-                kvFeatures = maybeFeatures.Cast();
+                for (const auto& feature : maybeFeatures.Cast()) {
+                    features.emplace_back(feature);
+                }
+            } else if (name == "nodeFeatures") {
+                auto maybeFeatures = tuple.Value().Maybe<TCoNameValueTupleList>();
+                Y_ABORT_UNLESS(maybeFeatures);
+                for (const auto& feature : maybeFeatures.Cast()) {
+                    features.emplace_back(feature);
+                }
             } else if (name == "resetFeatures") {
                 auto maybeFeatures = tuple.Value().Maybe<TCoAtomList>();
                 Y_ABORT_UNLESS(maybeFeatures);
@@ -777,13 +786,15 @@ TWriteObjectSettings ParseWriteObjectSettings(TExprList node, TExprContext& ctx)
             }
         }
     }
-    if (!kvFeatures) {
-        kvFeatures = Build<TCoNameValueTupleList>(ctx, node.Pos()).Done();
-    }
+
+    auto kvFeatures = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(features)
+        .Done();
+
     if (!resetFeatures) {
         resetFeatures = Build<TCoAtomList>(ctx, node.Pos()).Done();
     }
-    TWriteObjectSettings ret(std::move(mode), std::move(*kvFeatures), std::move(*resetFeatures));
+    TWriteObjectSettings ret(std::move(mode), std::move(kvFeatures), std::move(*resetFeatures));
     return ret;
 }
 

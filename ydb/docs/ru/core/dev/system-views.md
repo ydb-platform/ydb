@@ -340,8 +340,8 @@ WHERE Name = "default";
 Пример выдачи:
 
 \# | Name | ConcurrentQueryLimit | QueueSize | DatabaseLoadCpuThreshold | ResourceWeight | TotalCpuLimitPercentPerNode | QueryCpuLimitPercentPerNode |  QueryMemoryLimitPercentPerNode
---- | --- | --- | --- | --- | --- | --- | ---
-1 | default | -1 | -1 | -1 | -1 | -1 | -1 /code>
+--- | --- | --- | --- | --- | --- | --- | --- | ---
+1 | default | -1 | -1 | -1 | -1 | -1 | -1 | -1
 
 ## Информация о классификаторах пулов ресурсов {#resource_pools_classifiers}
 

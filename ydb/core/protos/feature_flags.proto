@@ -127,7 +127,7 @@ message TFeatureFlags {
     optional bool EnableTempTables = 102 [default = true];
     optional bool SuppressCompatibilityCheck = 103 [default = false, (RequireRestart) = true];
     optional bool EnableUniqConstraint = 104 [default = true];
-    optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = false];
+    optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = true];
     optional bool EnableStatistics = 106 [default = true];
     optional bool EnableUuidAsPrimaryKey = 107 [default = true];
     optional bool EnableTablePgTypes = 108 [default = false];

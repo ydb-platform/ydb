@@ -1278,6 +1278,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
             txSourceIds.insert(s.first);
         }
         auto inFlightIter = TxInflightMaxSeqNoPerSourceId.find(s.first);
+
         if (!inFlightIter.IsEnd()) {
             if (s.second.MinSeqNo <= inFlightIter->second) {
                 tx.Predicate = false;
@@ -1298,9 +1299,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
         }
     }
     if (ret == EProcessResult::Continue && tx.Predicate.GetOrElse(true)) {
-        for (const auto& s : txSourceIds) {
-            TxAffectedSourcesIds.insert(s);
-        }
+        TxAffectedSourcesIds.insert(txSourceIds.begin(), txSourceIds.end());
 
         tx.WriteInfoApplied = true;
         WriteKeysSizeEstimate += tx.WriteInfo->BodyKeys.size();

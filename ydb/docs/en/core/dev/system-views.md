@@ -369,6 +369,32 @@ Table Structure:
 | `Sid` | SID of the [access subject](../concepts/glossary.md#access-subject).<br />Type: `Utf8`.<br />Key: `1`. |
 | `Permission` | Name of the {{ ydb-short-name }} [access right](../yql/reference/syntax/grant.md#permissions-list).<br />Type: `Utf8`.<br />Key: `2`. |
 
+#### Example queries
+
+All the directly assigned permissions for the table located at the path `/Root/my_table`:
+
+```yql
+SELECT *
+    FROM `/Root/.sys/auth_permissions`
+    WHERE Path = "/Root/my_table"
+```
+
+All the effective permissions for the table located at the path `/Root/my_table`, including inherited permissions:
+
+```yql
+SELECT *
+    FROM `/Root/.sys/auth_effective_permissions`
+    WHERE Path = "/Root/my_table"
+```
+
+All permissions directly assigned to the user identified as `user3`:
+
+```yql
+SELECT *
+    FROM `/Root/.sys/auth_permissions`
+    WHERE Sid = "user3"
+```
+
 ### Auth owners
 
 The `auth_owners` view lists details of [access objects](../concepts/glossary.md#access-object) ownership.

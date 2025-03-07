@@ -93,9 +93,9 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             acc.AddAssembleStep(*GetSpecColumns(), "SPEC", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TSnapshotFilter>());
         }
-        if (preventDuplicates) {
-            acc.AddStep(std::make_shared<TDuplicateFilter>());
-        }
+        acc.AddFetchingStep(*GetMergeColumns(), EStageFeaturesIndexes::Filter);
+        acc.AddAssembleStep(*GetMergeColumns(), "DUPLICATE", EStageFeaturesIndexes::Filter, false);
+        acc.AddStep(std::make_shared<TDuplicateFilter>());
         const auto& chainProgram = GetReadMetadata()->GetProgram().GetChainVerified();
         acc.AddStep(std::make_shared<NCommon::TProgramStep>(chainProgram));
     }

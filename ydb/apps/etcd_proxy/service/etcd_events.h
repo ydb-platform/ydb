@@ -85,8 +85,9 @@ struct TEvChange : public TChange, public NActors::TEventLocal<TEvChange, Ev::Ch
 };
 
 struct TEvChanges : public NActors::TEventLocal<TEvChanges, Ev::Changes> {
-    TEvChanges(std::vector<TChange>&& changes = {}) : Changes(std::move(changes)) {}
+    TEvChanges(i64 id, std::vector<TChange>&& changes = {}) : Id(id), Changes(std::move(changes)) {}
 
+    const i64 Id = 0LL;
     std::vector<TChange> Changes;
 };
 

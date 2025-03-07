@@ -100,6 +100,7 @@ public:
     using IStreamCtx = NKikimr::NGRpcServer::IGRpcStreamingContext<etcdserverpb::WatchRequest, etcdserverpb::WatchResponse>;
 
     TWatch(
+        i64 id,
         TActorId watchtower,
         TActorId watchman,
         TSharedStuff::TPtr stuff,
@@ -110,7 +111,8 @@ public:
         bool withPrevious,
         bool makeFragmets,
         bool sendProgress
-    ) : Watchtower(std::move(watchtower)),
+    ) : Id(id),
+        Watchtower(std::move(watchtower)),
         Watchman(std::move(watchman)),
         Stuff(std::move(stuff)),
         Key(std::move(key)),
@@ -128,10 +130,11 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         Become(&TThis::StateFunc);
         TimeOfLastSent = TMonotonic::Now();
-        ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
         ctx.Send(Watchtower, new TEvSubscribe(Key, RangeEnd, Kind, WithPrevious));
         if (AwaitHistory)
             RequestHistory();
+        else
+            ctx.Schedule(TDuration::Seconds(3), new TEvents::TEvWakeup);
     }
 private:
     STFUNC(StateFunc) {
@@ -147,11 +150,11 @@ private:
     }
 
     void Wakeup(const TActorContext& ctx) {
-        if (SendProgress && TMonotonic::Now() - TimeOfLastSent > TDuration::Seconds(13)) {
-            ctx.Send(Watchman, new TEvChanges);
+        if (SendProgress && TMonotonic::Now() - TimeOfLastSent > TDuration::Seconds(11)) {
+            ctx.Send(Watchman, new TEvChanges(Id));
             TimeOfLastSent = TMonotonic::Now();
         }
-        ctx.Schedule(TDuration::Seconds(11), new TEvents::TEvWakeup);
+        ctx.Schedule(TDuration::Seconds(3), new TEvents::TEvWakeup);
     }
 
     void RequestHistory() {
@@ -162,10 +165,10 @@ private:
         MakeSimplePredicate(Key, RangeEnd, where, params);
 
         std::ostringstream sql;
-        sql << "select * from (select max_by(TableRow(), `modified`) from `verhaal` where " << revName << " > `modified` and " << where.view() << " group by `key`) flatten columns" << std::endl;
-        sql << "union all" << std::endl;
-        sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from `verhaal` where " << revName << " <= `modified` and " << where.view() << std::endl;
-        sql << "order by `modified` asc;" << std::endl;
+        if (WithPrevious) {
+            sql << "select * from (select max_by(TableRow(), `modified`) from `verhaal` where " << revName << " > `modified` and " << where.view() << " group by `key`) flatten columns union all" << std::endl;
+        }
+        sql << "select * from `verhaal` where " << revName << " <= `modified` and " << where.view() << " order by `modified` asc;" << std::endl;
 //      std::cout << std::endl << sql.view() << std::endl;
 
         const auto my = this->SelfId();
@@ -213,11 +216,12 @@ private:
 
         std::sort(changes.begin(), changes.end(), TChange::TOrder());
 
-        if (!changes.empty() || SendProgress) {
-            ctx.Send(Watchman, new TEvChanges(std::move(changes)));
+        if (!changes.empty()) {
+            ctx.Send(Watchman, new TEvChanges(Id, std::move(changes)));
             TimeOfLastSent = TMonotonic::Now();
         }
         AwaitHistory = false;
+        ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
     }
 
     void Handle(TEvQueryError::TPtr &ev, const TActorContext& ctx) {
@@ -231,8 +235,8 @@ private:
 
             if (AwaitHistory)
                 Buffer[ev->Get()->Key].second.emplace(std::move(*ev->Get()));
-            else
-                ctx.Send(Watchman, new TEvChanges({TChange(std::move(ev->Get()->Key), ev->Get()->Revision, WithPrevious && ev->Get()->OldData.Version ? std::move(ev->Get()->OldData) : TData(), std::move(ev->Get()->NewData))}));
+            else if (ev->Get()->Revision >= FromRevision)
+                ctx.Send(Watchman, new TEvChanges(Id, {TChange(std::move(ev->Get()->Key), ev->Get()->Revision, WithPrevious && ev->Get()->OldData.Version ? std::move(ev->Get()->OldData) : TData(), std::move(ev->Get()->NewData))}));
         }
     }
 
@@ -241,6 +245,7 @@ private:
         return Die(ctx);
     }
 
+    const i64 Id;
     const TActorId Watchtower, Watchman;
     const TSharedStuff::TPtr Stuff;
 
@@ -331,7 +336,7 @@ private:
                     ignoreUpdate && !ignoreDelete ?
                         EWatchKind::OnDeletions : EWatchKind::OnChanges;
 
-            Watches.emplace(watchId, ctx.RegisterWithSameMailbox(new TWatch(Watchtower, ctx.SelfID, Stuff, std::move(key), std::move(rangeEnd), kind, revision, withPrevious, makeFragmets, sendProgress)));
+            Watches.emplace(watchId, ctx.RegisterWithSameMailbox(new TWatch(watchId, Watchtower, ctx.SelfID, Stuff, std::move(key), std::move(rangeEnd), kind, revision, withPrevious, makeFragmets, sendProgress)));
         }
 
         res.set_created(true);
@@ -406,6 +411,8 @@ private:
         etcdserverpb::WatchResponse response;
         const auto header = response.mutable_header();
         header->set_revision(Stuff->Revision.load());
+        if (const auto watchId = ev->Get()->Id)
+            response.set_watch_id(watchId);
 
         for (const auto& change : ev->Get()->Changes) {
             const auto event = response.add_events();

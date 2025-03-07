@@ -1697,8 +1697,6 @@ protected:
                 }
 
             } else if (enableShuffleElimination /* save partitioning for shuffle elimination */) {
-                Y_ENSURE(stageInfo.Meta.ColumnTableInfoPtr != nullptr, "ColumnTableInfoPtr is nullptr, maybe information about shards haven't beed delivered yet.");
-                
                 std::size_t stageInternalTaskId = 0;
                 columnShardHashV1Params.TaskIdByHash = std::make_shared<TVector<ui64>>();
                 columnShardHashV1Params.TaskIdByHash->resize(columnShardHashV1Params.SourceShardCount);
@@ -1731,6 +1729,7 @@ protected:
                     // in runtime we calc hash, which will be in [0; shardcount]
                     // so we merge to mappings : hash -> shardID and shardID -> channelID for runtime
                     THashMap<ui64, ui64> hashByShardId;
+                    Y_ENSURE(stageInfo.Meta.ColumnTableInfoPtr != nullptr, "ColumnTableInfoPtr is nullptr, maybe information about shards haven't beed delivered yet.");
                     const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
                     const auto& sharding = tableDesc.GetSharding();
                     for (std::size_t i = 0; i < sharding.ColumnShardsSize(); ++i) {

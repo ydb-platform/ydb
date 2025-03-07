@@ -1,5 +1,8 @@
 #include "manager.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/duplicates/merge.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
+
 namespace NKikimr::NOlap::NReader {
 
 void TRangeIndex::AddRange(const ui32 l, const ui32 r, const ui64 id) {
@@ -123,19 +126,47 @@ TDuplicateFilterConstructor::TSourceIntervals::TSourceIntervals(const std::vecto
 
 void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
     const auto& source = ev->Get()->GetSource();
-    AFL_VERIFY(AvailableSources.emplace(source->GetSourceIdx(), TSourceFilterConstructor(source, ev->Get()->GetSubscriber(), Intervals)).second);
-    
+    Y_UNUSED(Intervals.GetRangeVerified(source->GetSourceId()));
+    AFL_VERIFY(AvailableSources.emplace(source->GetSourceId(), TSourceFilterConstructor(source, ev->Get()->GetSubscriber(), Intervals)).second);
+
     TIntervalsRange range = Intervals.GetRangeVerified(source->GetSourceIdx());
     AvailableSourcesCount.AddRange(range.GetFirstIdx(), range.GetLastIdx(), source->GetSourceIdx());
     std::vector<ui32> readyIntervals = AwaitedSourcesCount.DecAndGetZeros(range.GetFirstIdx(), range.GetLastIdx());
 
     for (const ui32 intervalIdx : readyIntervals) {
-        // Not implemented (merge; save result to constructor; finish if ready)
-        Y_UNUSED(intervalIdx);
+        std::vector<std::shared_ptr<NCommon::IDataSource>> sources;
+        for (const ui64 portionId : AvailableSourcesCount.FindIntersections(intervalIdx)) {
+            sources.emplace_back(TValidator::CheckNotNull(AvailableSources.FindPtr(portionId))->GetSource());
+        }
+        AFL_VERIFY(sources.size());
+        const std::shared_ptr<NCommon::TSpecialReadContext> readContext = sources.front()->GetContext();
+        const std::shared_ptr<TBuildDuplicateFilters> task = std::make_shared<TBuildDuplicateFilters>(
+            Intervals.GetLeftExlusiveBorder(intervalIdx), Intervals.GetRightInclusiveBorder(intervalIdx),
+            readContext->GetReadMetadata()->GetReplaceKey(), IIndexInfo::GetSnapshotColumnNames());
+        for (const auto& source : sources) {
+            task->AddSource(source, std::make_shared<TInternalFilterSubscriber>(intervalIdx, source->GetSourceId(), SelfId()));
+        }
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task, readContext->GetCommonContext()->GetConveyorProcessId());
     }
 
     if (AwaitedSourcesCount.IsAllZeros()) {
         PassAway();
+    }
+}
+
+void TDuplicateFilterConstructor::Handle(const TEvDuplicateFilterPartialResult::TPtr& ev) {
+    if (ev->Get()->GetResult().IsFail()) {
+        // TODO: abort
+        return;
+    }
+    TSourceFilterConstructor* constructor = AvailableSources.FindPtr(ev->Get()->GetPortionId());
+    AFL_VERIFY(constructor)("portion", ev->Get()->GetPortionId());
+    // TODO: avoid copying filters
+    constructor->SetFilter(ev->Get()->GetIntervalIdx(), ev->Get()->ExtractResult().DetachResult());
+    if (constructor->IsReady()) {
+        std::move(*constructor).Finish();
+        AFL_VERIFY(AvailableSources.erase(ev->Get()->GetPortionId()));
+        // TODO: if done, pass away
     }
 }
 

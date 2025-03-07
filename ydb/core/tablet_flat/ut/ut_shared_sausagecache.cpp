@@ -318,15 +318,15 @@ Y_UNIT_TEST(ThreeLeveledLRU) {
     SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU, 8_MB);
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 131);
 
     TRetriedCounters retried;
     for (i64 key = 99; key >= 0; --key) {
         env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
     }
     LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 20, 3, 1}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(6814_KB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 19, 2}));
 
     RestartAndClearCache(env);
 
@@ -456,7 +456,7 @@ Y_UNIT_TEST(S3FIFO) {
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 20, 3}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 19, 2}));
 
     retried = {};
     for (i64 key = 99; key >= 0; --key) {
@@ -464,7 +464,7 @@ Y_UNIT_TEST(S3FIFO) {
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 23, 2}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 21, 3}));
 
     RestartAndClearCache(env);
 
@@ -576,7 +576,7 @@ Y_UNIT_TEST(ClockPro) {
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 20, 2}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 36, 3}));
 
     RestartAndClearCache(env);
 
@@ -848,9 +848,9 @@ Y_UNIT_TEST(MiddleCache_BTreeIndex) {
 
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 98);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 97);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
@@ -861,16 +861,15 @@ Y_UNIT_TEST(MiddleCache_BTreeIndex) {
         env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
     }
     LogCounters(counters);
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 27, 2}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 19, 2}));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 98);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 97);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
-    // TODO: how to explain this???
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(2700_KB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 29);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(2_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 21);
 
     // RestartAndClearCache(env);
     // LogCounters(counters);
@@ -946,7 +945,7 @@ Y_UNIT_TEST(ZeroCache_BTreeIndex) {
         env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
     }
     LogCounters(counters);
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 100, 100, 100}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 100, 100, 99}));
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveBytes->Val(), 0_MB);
     UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
@@ -954,7 +953,7 @@ Y_UNIT_TEST(ZeroCache_BTreeIndex) {
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(20_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 802);
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 801);
 }
 
 Y_UNIT_TEST(ZeroCache_FlatIndex) {

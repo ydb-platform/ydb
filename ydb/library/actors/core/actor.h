@@ -383,6 +383,11 @@ namespace NActors {
 
     protected:
         TActorCallbackBehaviour CImpl;
+
+    private:
+        using TExceptionHandler = std::function<void (const std::exception&)>;
+        TExceptionHandler ExceptionHandler_;
+
     public:
         using TEventFlags = IEventHandle::TEventFlags;
         using TReceiveFunc = TActorCallbackBehaviour::TReceiveFunc;
@@ -467,6 +472,11 @@ namespace NActors {
             ActivityType = activityType;
         }
 
+    protected:
+        void SetExceptionHandler(TExceptionHandler handler) {
+            ExceptionHandler_ = std::move(handler);
+        }
+
     public:
         class TPassAwayGuard: TMoveOnly {
         private:
@@ -541,20 +551,7 @@ namespace NActors {
             return SelfActorId;
         }
 
-        void Receive(TAutoPtr<IEventHandle>& ev) {
-#ifndef NDEBUG
-            if (ev->Flags & IEventHandle::FlagDebugTrackReceive) {
-                YaDebugBreak();
-            }
-#endif
-            ++HandledEvents;
-            LastReceiveTimestamp = TActivationContext::Monotonic();
-            if (CImpl.Initialized()) {
-                CImpl.Receive(this, ev);
-            } else {
-                TActorVirtualBehaviour::Receive(this, std::unique_ptr<IEventHandle>(ev.Release()));
-            }
-        }
+        void Receive(TAutoPtr<IEventHandle>& ev);
 
         TActorContext ActorContext() const {
             return TActivationContext::ActorContextFor(SelfId());

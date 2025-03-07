@@ -3236,7 +3236,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             VALUES (2, 2), (12, 12);
             )");
 
-        runtime.WaitFor("prepare results", [&]{ return blockedPrepare.size() + blockedEvWrite.size() >= 2; });
+        runtime.WaitFor("prepare requests", [&]{ return blockedPrepare.size() + blockedEvWrite.size() >= 2; });
         UNIT_ASSERT_VALUES_EQUAL(blockedPrepare.size() + blockedEvWrite.size(), 2u);
 
         blockedPrepare.Stop();

@@ -77,15 +77,15 @@ YQL queries are executed within special objects called `query.Session`. Sessions
 The query service client provides an API for executing queries:
 
 * `db.Query().Do(ctx, op)` creates sessions in the background and automatically retries the provided `op func(ctx context.Context, s query.Session) error` operation if necessary. As soon as a session is ready, it is passed to the callback.
-* `db.Query().DoTx(ctx, op)` automatically handles transaction lifecycle. It provides a prepared transaction object `query.TxActor` to the user-defined function `op func(ctx context.Context, tx query.TxActor)` error. If the operation returns without error (nil), the transaction will commit automatically. If the operation returns any error, the transaction will rollback automatically.
-* `db.Query().Exec` is used to run a single query that returns **no result**, with automatic retry logic on failure. This method returns nil if the execution was successful, or an error otherwise.
-* `db.Query().Query` executes a single query containing one or more statements that return a result. It automatically handles retries. Upon successful execution, it returns a fully materialized result (`query.Result`). All result rows are loaded into memory and available for immediate iteration. For queries returning large datasets, this may lead to an [Out of memory](https://en.wikipedia.org/wiki/Out_of_memory) problem.
-* `db.Query().QueryResultSet` executes a query that contains exactly one statement returning results (it may contain other auxiliary statements that return no results, e.g. `UPSERT`). Like `db.Query().Query`, it automatically retries failed operations and returns a fully materialized result set (`query.ResultSet`). Queries that return large datasets may cause an [OOM](https://en.wikipedia.org/wiki/Out_of_memory) error.
+* `db.Query().DoTx(ctx, op)` automatically handles the transaction lifecycle. It provides a prepared transaction object, `query.TxActor`, to the user-defined function `op func(ctx context.Context, tx query.TxActor)` error. If the operation returns without an error (nil), the transaction commits automatically. If the operation returns an error, the transaction rolls back automatically.
+* `db.Query().Exec` runs a single query that returns **no result**, with automatic retry logic on failure. This method returns nil if the execution is successful or an error otherwise.
+* `db.Query().Query` executes a single query containing one or more statements that return a result. It automatically handles retries. Upon successful execution, it returns a fully materialized result (`query.Result`). All result rows are loaded into memory and available for immediate iteration. For queries returning large datasets, this may lead to an [out of memory](https://en.wikipedia.org/wiki/Out_of_memory) problem.
+* `db.Query().QueryResultSet` executes a query that contains exactly one statement returning results (it may contain other auxiliary statements that return no results, such as `UPSERT`). Like `db.Query().Query`, it automatically retries failed operations and returns a fully materialized result set (`query.ResultSet`). Queries that return large datasets may cause an [OOM](https://en.wikipedia.org/wiki/Out_of_memory) error.
 * `db.Query().QueryRow` runs queries expected to return exactly one row. It also automatically retries failed operations. On success, it returns a `query.Row` instance.
 
 {% include [steps/02_create_table.md](../_includes/steps/02_create_table.md) %}
 
-Example of table creation (a query with no returned result):
+Example of a query with no returned result (table creation):
 
 ```go
 import "github.com/ydb-platform/ydb-go-sdk/v3/query"
@@ -110,7 +110,7 @@ if err != nil {
 
 To execute YQL queries and fetch results, use `query.Session` methods: `query.Session.Query`, `query.Session.QueryResultSet`, or `query.Session.QueryRow`.
 
-The YDB SDK supports explicit transaction control via the `query.TxControl` structure:
+The {{ ydb-short-name }} SDK supports explicit transaction control via the `query.TxControl` structure:
 
 ```go
 readTx := query.TxControl(
@@ -141,9 +141,9 @@ if err != nil {
 
 You can extract row data (`query.Row`) using the following methods:
 
-* `query.Row.ScanStruct` — scans row data into a struct based on struct field tags matching column names.
-* `query.Row.ScanNamed` — scans data into variables via explicitly defined column-variable pairs.
-* `query.Row.Scan` — scans data directly by column order into provided variables.
+* `query.Row.ScanStruct` — scans row data into a struct based on struct field tags that match column names.
+* `query.Row.ScanNamed` — scans data into variables using explicitly defined column-variable pairs.
+* `query.Row.Scan` — scans data directly by column order into the provided variables.
 
 {% list tabs %}
 
@@ -189,9 +189,9 @@ You can extract row data (`query.Row`) using the following methods:
 
 {% note warning %}
 
-If the expected query result is very large, avoid loading all data into memory using helper methods like `query.Client.Query` or `query.Client.QueryResultSet`. These methods return completely materialized results, storing all rows from the server in local client memory. Large result sets can cause an [OOM](https://en.wikipedia.org/wiki/Out_of_memory) problem.
+If the expected query result is very large, avoid loading all data into memory using helper methods like `query.Client.Query` or `query.Client.QueryResultSet`. These methods return fully materialized results, storing all rows from the server in local client memory. Large result sets can cause an [OOM](https://en.wikipedia.org/wiki/Out_of_memory) problem.
 
-Instead, use `query.TxActor.Query/query.TxActor.QueryResultSet` methods on a transaction or session. These methods return iterators over results without fully materializing them upfront. The `query.Session` object is accessible via the `query.Client.Do` method, which handles automatic retries. Remember that the reading operation can be interrupted at any time, restarting the whole query process. Therefore, the user function passed to `Do` may run multiple times.
+Instead, use the `query.TxActor.Query` or `query.TxActor.QueryResultSet` methods on a transaction or session. These methods return iterators over results without fully materializing them upfront. The `query.Session` object is accessible via the `query.Client.Do` method, which handles automatic retries. Keep in mind that the read operation can be interrupted at any time, restarting the entire query process. Therefore, the user function passed to `Do` may run multiple times.
 
 {% endnote %}
 

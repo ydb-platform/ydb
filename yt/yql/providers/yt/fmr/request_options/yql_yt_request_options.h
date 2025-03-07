@@ -63,7 +63,7 @@ struct TFmrTableRef {
 struct TTableRange {
     TString PartId;
     ui64 MinChunk = 0;
-    ui64 MaxChunk = 0;
+    ui64 MaxChunk = 1;  // Пока такой дефолт
 };
 
 struct TFmrTableInputRef {

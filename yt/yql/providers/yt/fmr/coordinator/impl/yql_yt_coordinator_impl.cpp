@@ -62,6 +62,7 @@ public:
         }
 
         TString taskId = GenerateId();
+
         auto taskParams = MakeDefaultTaskParamsFromOperation(request.OperationParams);
         TTask::TPtr createdTask = MakeTask(request.TaskType, taskId, taskParams, request.SessionId, request.ClusterConnection);
 

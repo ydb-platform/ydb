@@ -165,11 +165,21 @@ namespace NActors {
     }
 
     TActorId TActivationContext::InterconnectProxy(ui32 destinationNodeId) {
-        return TlsActivationContext->ExecutorPool_->GetActorSystem()->InterconnectProxy(destinationNodeId);
+        return TlsActivationContext->ActorSystem()->InterconnectProxy(destinationNodeId);
     }
 
     TActorSystem* TActivationContext::ActorSystem() {
-        return TlsActivationContext->ExecutorPool_->GetActorSystem();
+        return TlsActivationContext->GetActorSystem();
+    }
+
+    TActorSystem* TActivationContext::GetActorSystem() {
+        if (ExecutorThread_) {
+            return ExecutorThread_->ActorSystem;
+        } else if (ExecutorPool_) {
+            return ExecutorPool_->GetActorSystem();
+        } else {
+            Y_ABORT();
+        }
     }
 
     i64 TActivationContext::GetCurrentEventTicks() {
@@ -225,23 +235,23 @@ namespace NActors {
     }
 
     TInstant TActivationContext::Now() {
-        return TlsActivationContext->ExecutorPool_->GetActorSystem()->Timestamp();
+        return TlsActivationContext->ActorSystem()->Timestamp();
     }
 
     TMonotonic TActivationContext::Monotonic() {
-        return TlsActivationContext->ExecutorPool_->GetActorSystem()->Monotonic();
+        return TlsActivationContext->ActorSystem()->Monotonic();
     }
 
     TInstant TActorContext::Now() const {
-        return ExecutorPool_->GetActorSystem()->Timestamp();
+        return ActorSystem()->Timestamp();
     }
 
     TMonotonic TActorContext::Monotonic() const {
-        return ExecutorPool_->GetActorSystem()->Monotonic();
+        return ActorSystem()->Monotonic();
     }
 
     NLog::TSettings* TActivationContext::LoggerSettings() const {
-        return ExecutorPool_->GetActorSystem()->LoggerSettings();
+        return ActorSystem()->LoggerSettings();
     }
 
     std::pair<ui32, ui32> TActorContext::CountMailboxEvents(ui32 maxTraverse) const {
@@ -387,7 +397,7 @@ namespace NActors {
 
     template <ESendingType SendingType>
     bool TActivationContext::Send(TAutoPtr<IEventHandle> ev) {
-        return TlsActivationContext->ExecutorPool_->Send(ev);
+        return TlsActivationContext->ActorSystem()->Send(ev);
     }
 
     template bool TActivationContext::Send<ESendingType::Common>(std::unique_ptr<IEventHandle> &&ev);
@@ -397,7 +407,7 @@ namespace NActors {
     template <ESendingType SendingType>
     bool TActivationContext::Send(std::unique_ptr<IEventHandle> &&ev) {
         TAutoPtr<IEventHandle> ev2(ev.release());
-        return TlsActivationContext->ExecutorPool_->Send(ev2);
+        return TlsActivationContext->ActorSystem()->Send(ev2);
     }
 
     template bool TActivationContext::Forward<ESendingType::Common>(TAutoPtr<IEventHandle>& ev, const TActorId& recipient);
@@ -433,7 +443,7 @@ namespace NActors {
 
     template <ESendingType SendingType>
     bool TActorContext::Send(TAutoPtr<IEventHandle> ev) const {
-        return ExecutorPool_->GetActorSystem()->Send(ev);
+        return ActorSystem()->Send(ev);
     }
 
     template bool TActorContext::Forward<ESendingType::Common>(TAutoPtr<IEventHandle>& ev, const TActorId& recipient) const;
@@ -443,7 +453,7 @@ namespace NActors {
     template <ESendingType SendingType>
     bool TActorContext::Forward(TAutoPtr<IEventHandle>& ev, const TActorId& recipient) const {
         TAutoPtr<IEventHandle> ev2(IEventHandle::Forward(ev, recipient));
-        return ExecutorPool_->GetActorSystem()->Send(ev2);
+        return ActorSystem()->Send(ev2);
     }
 
     template bool TActorContext::Forward<ESendingType::Common>(THolder<IEventHandle>& ev, const TActorId& recipient) const;
@@ -453,7 +463,7 @@ namespace NActors {
     template <ESendingType SendingType>
     bool TActorContext::Forward(THolder<IEventHandle>& ev, const TActorId& recipient) const {
         TAutoPtr<IEventHandle> ev2(IEventHandle::Forward(ev, recipient));
-        return ExecutorPool_->Send(ev2);
+        return Send(ev2);
     }
 
     template TActorId TActivationContext::Register<ESendingType::Common>(IActor* actor, TActorId parentId, TMailboxType::EType mailboxType, ui32 poolId);

@@ -158,6 +158,7 @@ struct TActorBenchmark {
         }
 
         void Bootstrap(const TActorContext &ctx) {
+            Y_ASSERT(TlsActivationContext);
             ACTORLIB_DEBUG(EDebugLevel::Test, "TSendReceiveActor::Bootstrap: ", this->SelfId());
             if (SharedCounters && IsLeader) {
                 ui32 count = --SharedCounters->NotStarted;

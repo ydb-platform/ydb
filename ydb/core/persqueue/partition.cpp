@@ -2397,7 +2397,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         return;
     }
     for (const auto& s : t.WriteInfo->SrcIdInfo) {
-        auto [iter, ins] = TxInflightMaxSeqNoPerSourceId.insert(std::make_pair(s.first, s.second.SeqNo));
+        auto [iter, ins] = TxInflightMaxSeqNoPerSourceId.emplace(s.first, s.second.SeqNo);
         if (!ins) {
             Y_ABORT_UNLESS(iter->second < s.second.SeqNo);
             iter->second = s.second.SeqNo;

@@ -768,27 +768,27 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ------
             READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"a.b.c\"") = "a1" ORDER BY Col1;
             EXPECTED: [[1u;["{\"a.b.c\":\"a1\"}"]]]
-            IDX_ND_SKIP_APPROVE: 0, 3, 1
+            IDX_ND_SKIP_APPROVE: 0, 4, 1
             ------
             READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"a.b.c\"") = "1a1" ORDER BY Col1;
             EXPECTED: [[11u;["{\"a.b.c\":\"1a1\"}"]]]
-            IDX_ND_SKIP_APPROVE: 0, 3, 1
+            IDX_ND_SKIP_APPROVE: 0, 4, 1
             ------
             READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") = "1b4" ORDER BY Col1;
             EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
-            IDX_ND_SKIP_APPROVE: 0, 3, 1
+            IDX_ND_SKIP_APPROVE: 0, 4, 1
             ------
             READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") = "1b5" ORDER BY Col1;
             EXPECTED: []
-            IDX_ND_SKIP_APPROVE: 0, 4, 0
+            IDX_ND_SKIP_APPROVE: 0, 5, 0
             ------
             READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") like "1b3" ORDER BY Col1;
             EXPECTED: [[13u;["{\"b.c.d\":\"1b3\"}"]]]
-            IDX_ND_SKIP_APPROVE: 0, 3, 1
+            IDX_ND_SKIP_APPROVE: 0, 4, 1
             ------
             READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") like "1b5" ORDER BY Col1;
             EXPECTED: []
-            IDX_ND_SKIP_APPROVE: 0, 4, 0
+            IDX_ND_SKIP_APPROVE: 0, 5, 0
             
         )";
         TScriptVariator(script).Execute();

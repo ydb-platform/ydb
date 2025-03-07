@@ -76,10 +76,10 @@ void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vecto
 
 class TSystemViewsCollector : public TActorBootstrapped<TSystemViewsCollector> {
     TControllerSystemViewsState State;
-    std::vector<std::pair<TPDiskId, const NKikimrSysView::TPDiskInfo*>> PDiskIndex;
-    std::vector<std::pair<TVSlotId, const NKikimrSysView::TVSlotInfo*>> VSlotIndex;
-    std::vector<std::pair<TGroupId, const NKikimrSysView::TGroupInfo*>> GroupIndex;
-    std::vector<std::pair<TBoxStoragePoolId, const NKikimrSysView::TStoragePoolInfo*>> StoragePoolIndex;
+    std::map<TPDiskId, const NKikimrSysView::TPDiskInfo*> PDiskIndex;
+    std::map<TVSlotId, const NKikimrSysView::TVSlotInfo*> VSlotIndex;
+    std::map<TGroupId, const NKikimrSysView::TGroupInfo*> GroupIndex;
+    std::map<TBoxStoragePoolId, const NKikimrSysView::TStoragePoolInfo*> StoragePoolIndex;
     TBlobStorageController::THostRecordMap HostRecords;
     ui32 GroupReserveMin = 0;
     ui32 GroupReservePart = 0;
@@ -143,38 +143,35 @@ public:
 
     template<typename TDest, typename TSrc, typename TDeleted, typename TIndex>
     void Merge(TDest& dest, TSrc& src, const TDeleted& deleted, TIndex& index) {
-        if (!src.empty() || !deleted.empty()) {
-            index.clear();
-        }
         for (const auto& key : deleted) {
             dest.erase(key);
+            index.erase(key);
         }
-        for (auto& [key, _] : src) {
+        for (auto& [key, value] : src) {
             dest.erase(key);
+            index[key] = &value;
         }
         dest.merge(std::move(src));
+
+#ifndef NDEBUG
+        for (const auto& [key, value] : dest) {
+            Y_DEBUG_ABORT_UNLESS(index.contains(key) && index[key] == &value);
+        }
+        Y_DEBUG_ABORT_UNLESS(index.size() == dest.size());
+#endif
     }
 
-    template <typename TResponse, typename TRequest, typename TMap, typename TIndex>
-    void Reply(TRequest& request, const TMap& entries, TIndex& index) {
+    template <typename TResponse, typename TRequest, typename TIndex>
+    void Reply(TRequest& request, TIndex& index) {
         const auto& record = request->Get()->Record;
         auto response = MakeHolder<TResponse>();
 
-        if (index.empty() && !entries.empty()) {
-            index.reserve(entries.size());
-            for (const auto& [key, value] : entries) {
-                index.emplace_back(key, &value);
-            }
-            std::sort(index.begin(), index.end());
-        }
-
         auto begin = index.begin();
         auto end = index.end();
-        auto comp = [](const auto& kv, const auto& key) { return kv.first < key; };
 
         if (record.HasFrom()) {
             auto from = TransformKey(record.GetFrom());
-            begin = std::lower_bound(index.begin(), index.end(), from, comp);
+            begin = index.lower_bound(from);
             if (begin != index.end() && begin->first == from && record.HasInclusiveFrom() && !record.GetInclusiveFrom()) {
                 ++begin;
             }
@@ -182,13 +179,13 @@ public:
 
         if (record.HasTo()) {
             auto to = TransformKey(record.GetTo());
-            end = std::lower_bound(index.begin(), index.end(), to, comp);
+            end = index.lower_bound(to);
             if (end != index.end() && end->first == to && record.GetInclusiveTo()) {
                 ++end;
             }
         }
 
-        for (; begin < end; ++begin) {
+        for (; begin != end; ++begin) {
             auto* entry = response->Record.AddEntries();
             FillKey(entry->MutableKey(), begin->first);
             entry->MutableInfo()->CopyFrom(*begin->second);
@@ -198,19 +195,19 @@ public:
     }
 
     void Handle(TEvSysView::TEvGetPDisksRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetPDisksResponse>(ev, State.PDisks, PDiskIndex);
+        Reply<TEvSysView::TEvGetPDisksResponse>(ev, PDiskIndex);
     }
 
     void Handle(TEvSysView::TEvGetVSlotsRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetVSlotsResponse>(ev, State.VSlots, VSlotIndex);
+        Reply<TEvSysView::TEvGetVSlotsResponse>(ev, VSlotIndex);
     }
 
     void Handle(TEvSysView::TEvGetGroupsRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetGroupsResponse>(ev, State.Groups, GroupIndex);
+        Reply<TEvSysView::TEvGetGroupsResponse>(ev, GroupIndex);
     }
 
     void Handle(TEvSysView::TEvGetStoragePoolsRequest::TPtr& ev) {
-        Reply<TEvSysView::TEvGetStoragePoolsResponse>(ev, State.StoragePools, StoragePoolIndex);
+        Reply<TEvSysView::TEvGetStoragePoolsResponse>(ev, StoragePoolIndex);
     }
 
     void Handle(TEvSysView::TEvGetStorageStatsRequest::TPtr& ev) {

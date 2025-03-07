@@ -4,8 +4,6 @@
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/policy.h>
 #include <ydb/core/tx/program/program.h>
 
-#include <yql/essentials/minikql/mkql_terminator.h>
-
 namespace NKikimr::NOlap::NReader {
 
 NKikimr::TConclusionStatus IScannerConstructor::ParseProgram(const TVersionedIndex* vIndex, const NKikimrSchemeOp::EOlapProgramType programType,

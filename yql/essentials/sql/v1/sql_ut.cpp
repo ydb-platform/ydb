@@ -5051,34 +5051,114 @@ select FormatType($f());
     }
 
     Y_UNIT_TEST(CreateAlterUserWithLoginNoLogin) {
-        auto reqCreateUser = SqlToYql(R"(
-            USE plato;
-            CREATE USER user1;
-        )");
+        {
+            auto reqCreateUser = SqlToYql(R"(
+                USE plato;
+                CREATE USER user1;
+            )");
 
-        UNIT_ASSERT(reqCreateUser.IsOk());
+            UNIT_ASSERT(reqCreateUser.IsOk());
 
-        auto reqAlterUser = SqlToYql(R"(
-            USE plato;
-            ALTER USER user1;
-        )");
+            TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+                Y_UNUSED(word);
+                UNIT_ASSERT(line.find("nullPassword") != TString::npos);
+            };
 
-        UNIT_ASSERT(!reqAlterUser.IsOk());
-        UNIT_ASSERT_STRING_CONTAINS(reqAlterUser.Issues.ToString(), "Error: Unexpected token ';' : cannot match to any predicted input...");
+            TWordCountHive elementStat = {{TString("createUser"), 0}};
+            VerifyProgram(reqCreateUser, elementStat, verifyLine);
 
-        auto reqPasswordAndLogin = SqlToYql(R"(
-            USE plato;
-            CREATE USER user1 PASSWORD '123' LOGIN;
-        )");
+            UNIT_ASSERT_VALUES_EQUAL(elementStat["createUser"], 1);
+        }
 
-        UNIT_ASSERT(reqPasswordAndLogin.IsOk());
+        {
+            auto reqAlterUser = SqlToYql(R"(
+                USE plato;
+                ALTER USER user1;
+            )");
 
-        auto reqPasswordAndNoLogin = SqlToYql(R"(
-            USE plato;
-            CREATE USER user1 PASSWORD '123' NOLOGIN;
-        )");
+            UNIT_ASSERT(!reqAlterUser.IsOk());
+            UNIT_ASSERT_STRING_CONTAINS(reqAlterUser.Issues.ToString(), "Error: Unexpected token ';' : cannot match to any predicted input...");
+        }
 
-        UNIT_ASSERT(reqPasswordAndNoLogin.IsOk());
+        {
+            auto reqCreateUserLogin = SqlToYql(R"(
+                USE plato;
+                CREATE USER user1 LOgin;
+            )");
+
+            UNIT_ASSERT(reqCreateUserLogin.IsOk());
+
+            TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+                if (word == "createUser") {
+                    UNIT_ASSERT(line.find("nullPassword") != TString::npos);
+                }
+            };
+
+            TWordCountHive elementStat = {{TString("alterUser"), 0}, {TString("createUser"), 0}};
+            VerifyProgram(reqCreateUserLogin, elementStat, verifyLine);
+
+            UNIT_ASSERT_VALUES_EQUAL(elementStat["createUser"], 1);
+            UNIT_ASSERT_VALUES_EQUAL(elementStat["alterUser"], 0);
+        }
+
+        {
+            auto reqAlterUserLogin = SqlToYql(R"(
+                USE plato;
+                ALTER USER user1 LOgin;
+            )");
+
+            UNIT_ASSERT(reqAlterUserLogin.IsOk());
+
+            TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+                if (word == "alterUser") {
+                    UNIT_ASSERT(line.find("nullPassword") == TString::npos);
+                }
+            };
+
+            TWordCountHive elementStat = {{TString("alterUser"), 0}, {TString("createUser"), 0}};
+            VerifyProgram(reqAlterUserLogin, elementStat, verifyLine);
+
+            UNIT_ASSERT_VALUES_EQUAL(elementStat["createUser"], 0);
+            UNIT_ASSERT_VALUES_EQUAL(elementStat["alterUser"], 1);
+        }
+
+        {
+            auto reqPasswordAndNoLogin = SqlToYql(R"(
+                USE plato;
+                CREATE USER user1 PASSWORD '123' NOLOGIN;
+            )");
+
+            UNIT_ASSERT(reqPasswordAndNoLogin.IsOk());
+
+            TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+                Y_UNUSED(word);
+                UNIT_ASSERT(line.find("nullPassword") == TString::npos);
+            };
+
+            TWordCountHive elementStat = {{TString("createUser"), 0}};
+            VerifyProgram(reqPasswordAndNoLogin, elementStat, verifyLine);
+
+            UNIT_ASSERT_VALUES_EQUAL(elementStat["createUser"], 1);
+        }
+
+        {
+            auto reqAlterUserNullPassword = SqlToYql(R"(
+                USE plato;
+                ALTER USER user1 PASSWORD NULL;
+            )");
+
+            UNIT_ASSERT(reqAlterUserNullPassword.IsOk());
+
+            TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+                Y_UNUSED(word);
+                UNIT_ASSERT(line.find("nullPassword") != TString::npos);
+            };
+
+            TWordCountHive elementStat = {{TString("alterUser"), 0}};
+            VerifyProgram(reqAlterUserNullPassword, elementStat, verifyLine);
+
+            UNIT_ASSERT_VALUES_EQUAL(elementStat["alterUser"], 1);
+        }
 
         auto reqLogin = SqlToYql(R"(
             USE plato;
@@ -5167,6 +5247,49 @@ select FormatType($f());
         )");
 
         UNIT_ASSERT(reqAlterUser.IsOk());
+    }
+
+    Y_UNIT_TEST(CreateUserQoutas) {
+        {
+            auto req = SqlToYql(R"(
+                use plato;
+                CREATE USER user1 PASSWORD passwd;
+            )");
+
+            TString error = "<main>:3:43: Error: Unexpected token 'passwd' : unexpected input : nothing is expected here\n\n";
+            UNIT_ASSERT_VALUES_EQUAL(Err2Str(req), error);
+            UNIT_ASSERT(!req.Root);
+        }
+
+        {
+            auto req = SqlToYql(R"(
+                use plato;
+                CREATE USER user2 PASSWORD NULL;
+            )");
+
+            UNIT_ASSERT(req.Root);
+        }
+
+        {
+            auto req = SqlToYql(R"(
+                use plato;
+                CREATE USER user3 PASSWORD '';
+            )");
+
+            UNIT_ASSERT(req.Root);
+        }
+
+
+        {
+            auto req = SqlToYql(R"(
+                use plato;
+                CREATE USER user1 PASSWORD 'password1';
+                CREATE USER user2 PASSWORD 'password2';
+                CREATE USER user3;
+            )");
+
+            UNIT_ASSERT(req.Root);
+        }
     }
 
     Y_UNIT_TEST(CreateAlterUserWithoutCluster) {

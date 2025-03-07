@@ -99,6 +99,8 @@ ENDIF()
 PEERDIR(
     contrib/libs/protobuf
     ydb/library/actors/util
+    ydb/library/actors/core
+    ydb/library/services
     library/cpp/containers/absl_flat_hash
     library/cpp/containers/intrusive_rb_tree
     library/cpp/containers/stack_vector

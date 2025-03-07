@@ -6,13 +6,14 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "google/rpc/status.proto";
 
-option go_package = "github.com/ydb-platform/ydb/ydb/library/yql/providers/common/solomon_accessor/grpc;solomon_accessor_pb";
+option go_package = "github.com/ydb-platform/ydb/ydb/library/yql/providers/solomon/solomon_accessor/grpc;solomon_accessor_pb";
 
 // A set of methods for reading metrics data.
 service DataService {
     // Retrieves metric data based on multi-query input.
     rpc Read(ReadRequest) returns (ReadResponse) {
     }
+
 }
 
 message Container {

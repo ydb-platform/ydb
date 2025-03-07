@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package NYql.NSo.MetricQueue;
+
+import "ydb/library/yql/dq/actors/protos/dq_events.proto";
+
+message TEvGetNextBatch {
+    optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
+}
+
+message TEvMetricsBatch {
+    bool NoMoreMetrics = 1;
+    repeated TMetricLabels Metrics = 2;
+
+    optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
+}
+
+message TEvMetricsReadError {
+    string Issues = 1;
+
+    optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
+}
+
+message TMetricLabels {
+    string Type = 1;
+    map<string, string> Labels = 2;
+}

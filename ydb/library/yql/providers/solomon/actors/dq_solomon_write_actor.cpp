@@ -1,5 +1,5 @@
 #include "dq_solomon_write_actor.h"
-#include "metrics_encoder.h"
+#include "dq_solomon_actors_util.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
@@ -27,7 +27,6 @@
 #include <util/generic/hash.h>
 #include <util/system/compiler.h>
 
-#include <algorithm>
 #include <queue>
 #include <variant>
 
@@ -87,34 +86,6 @@ struct TMetricsInflight {
     ui64 MetricsCount = 0;
     ui64 BodySize = 0;
 };
-
-} // namespace
-
-TString GetSolomonUrl(const TString& endpoint, bool useSsl, const TString& project, const TString& cluster, const TString& service, const ::NYql::NSo::NProto::ESolomonClusterType& type) {
-    TUrlBuilder builder((useSsl ? "https://" : "http://") + endpoint);
-
-    switch (type) {
-        case NSo::NProto::ESolomonClusterType::CT_SOLOMON: {
-            builder.AddPathComponent("api");
-            builder.AddPathComponent("v2");
-            builder.AddPathComponent("push");
-            builder.AddUrlParam("project", project);
-            builder.AddUrlParam("cluster", cluster);
-            builder.AddUrlParam("service", service);
-            break;
-        }
-        case NSo::NProto::ESolomonClusterType::CT_MONITORING: {
-            builder.AddPathComponent("monitoring/v2/data/write");
-            builder.AddUrlParam("folderId", cluster);
-            builder.AddUrlParam("service", service);
-            break;
-        }
-        default:
-            Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(type));
-    }
-
-    return builder.Build();
-}
 
 class TDqSolomonWriteActor : public NActors::TActor<TDqSolomonWriteActor>, public IDqComputeActorAsyncOutput {
 public:
@@ -502,6 +473,9 @@ private:
     ui64 Cookie = 0;
 };
 
+
+} // namespace
+
 std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolomonWriteActor(
     NYql::NSo::NProto::TDqSolomonShard&& settings,
     ui64 outputIndex,
@@ -553,6 +527,32 @@ void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, ISecuredServ
                 counters,
                 credentialsFactory);
         });
+}
+
+TString GetSolomonUrl(const TString& endpoint, bool useSsl, const TString& project, const TString& cluster, const TString& service, const ::NYql::NSo::NProto::ESolomonClusterType& type) {
+    TUrlBuilder builder((useSsl ? "https://" : "http://") + endpoint);
+
+    switch (type) {
+        case NSo::NProto::ESolomonClusterType::CT_SOLOMON: {
+            builder.AddPathComponent("api");
+            builder.AddPathComponent("v2");
+            builder.AddPathComponent("push");
+            builder.AddUrlParam("project", project);
+            builder.AddUrlParam("cluster", cluster);
+            builder.AddUrlParam("service", service);
+            break;
+        }
+        case NSo::NProto::ESolomonClusterType::CT_MONITORING: {
+            builder.AddPathComponent("monitoring/v2/data/write");
+            builder.AddUrlParam("folderId", cluster);
+            builder.AddUrlParam("service", service);
+            break;
+        }
+        default:
+            Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(type));
+    }
+
+    return builder.Build();
 }
 
 } // namespace NYql::NDq

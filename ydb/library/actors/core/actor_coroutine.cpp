@@ -46,7 +46,7 @@ namespace NActors {
     }
 
     bool TActorCoroImpl::Send(TAutoPtr<IEventHandle> ev) {
-        return GetActorContext().ExecutorPool_->Send(ev);
+        return GetActorContext().Send(ev);
     }
 
     THolder<IEventHandle> TActorCoroImpl::WaitForEvent(TMonotonic deadline) {
@@ -171,7 +171,7 @@ namespace NActors {
     }
 
     TActorSystem *TActorCoroImpl::GetActorSystem() const {
-        return GetActorContext().ExecutorPool_->GetActorSystem();
+        return GetActorContext().ActorSystem();
     }
 
     TActorCoro::~TActorCoro() {

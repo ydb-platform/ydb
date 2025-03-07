@@ -16,7 +16,7 @@
 namespace NActors {
     class TActorSystem;
     class TMailboxTable;
-    class TMailbox;
+    //class TMailbox;
 
     class TExecutorThread;
     class IActor;
@@ -387,6 +387,8 @@ namespace NActors {
         // actor aliases
         absl::flat_hash_set<ui64> Aliases;
         friend class TMailbox;
+        friend class TMailboxOld;
+        friend class TMailboxNew;
 
     private: // stuck actor monitoring
         TMonotonic LastReceiveTimestamp;

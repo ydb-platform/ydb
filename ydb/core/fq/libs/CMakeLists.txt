@@ -13,12 +13,12 @@
 # changes in this file.
 
 add_subdirectory(config)
+add_subdirectory(grpc)
+add_subdirectory(protos)
 add_subdirectory(db_id_async_resolver_impl)
 add_subdirectory(events)
 add_subdirectory(graph_params)
-add_subdirectory(protos)
 add_subdirectory(row_dispatcher)
-add_subdirectory(grpc)
 add_subdirectory(common)
 add_subdirectory(control_plane_storage)
 add_subdirectory(quota_manager)

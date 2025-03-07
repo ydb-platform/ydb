@@ -23,14 +23,16 @@ target_link_libraries(core-kqp-federated_query PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-base
-  fq-libs-db_id_async_resolver_impl
   fq-libs-grpc
+  fq-libs-db_id_async_resolver_impl
   library-db_pool-protos
   providers-common-http_gateway
   generic-connector-libcpp
   providers-solomon-gateway
+  core-dq_integration-transform
   yt-gateway-native
   yt-lib-yt_download
+  providers-yt-mkql_dq
 )
 
 target_sources(core-kqp-federated_query PRIVATE

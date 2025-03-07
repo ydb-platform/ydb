@@ -63,7 +63,7 @@ public:
         const bool deserialize = source->IsSourceInMemory();
         if (!!OthersBlobs) {
             source->GetContext()->GetCommonContext()->GetCounters().GetSubColumns()->GetOtherCounters().OnRead(OthersBlobs->size());
-            PartialArray->InitOthers(*OthersBlobs, ChunkExternalInfo, deserialize);
+            PartialArray->InitOthers(*OthersBlobs, ChunkExternalInfo, applyFilter, !!applyFilter || deserialize);
             OthersBlobs.reset();
         }
 
@@ -78,10 +78,9 @@ public:
                 i.second.GetBlobDataVerified().size());
             std::vector<NArrow::NAccessor::TDeserializeChunkedArray::TChunk> chunks = { NArrow::NAccessor::TDeserializeChunkedArray::TChunk(
                 GetRecordsCount(), i.second.GetBlobDataVerified()) };
-//            const ui32 filledRecordsCount = PartialArray->GetHeader().GetColumnStats().GetColumnRecordsCount(i.second.GetColumnIdx());
             const std::shared_ptr<NArrow::NAccessor::IChunkedArray> arrOriginal =
                 deserialize
-                    ? columnLoader->ApplyVerified(i.second.GetBlobDataVerified(), GetRecordsCount()/*, filledRecordsCount*/)
+                    ? columnLoader->ApplyVerified(i.second.GetBlobDataVerified(), GetRecordsCount())
                     : std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(GetRecordsCount(), columnLoader, std::move(chunks), true);
             if (applyFilter) {
                 PartialArray->AddColumn(i.first, applyFilter->Apply(arrOriginal));
@@ -122,8 +121,8 @@ public:
         AFL_VERIFY(!PartialArray);
         HeaderRange = std::nullopt;
         PartialArray = NArrow::NAccessor::NSubColumns::TConstructor::BuildPartialReader(blob, ChunkExternalInfo).DetachResult();
-//        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("columns", PartialArray->GetHeader().GetColumnStats().DebugJson().GetStringRobust())(
-//            "others", PartialArray->GetHeader().GetOtherStats().DebugJson().GetStringRobust());
+        //        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("columns", PartialArray->GetHeader().GetColumnStats().DebugJson().GetStringRobust())(
+        //            "others", PartialArray->GetHeader().GetOtherStats().DebugJson().GetStringRobust());
     }
 
     void InitPartialReader(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor) {
@@ -192,6 +191,7 @@ private:
         AFL_VERIFY(!!StorageId);
         TBlobsAction blobsAction(Source->GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
         auto reading = blobsAction.GetReading(*StorageId);
+        reading->SetIsBackgroundProcess(false);
         for (auto&& i : ColumnChunks) {
             if (!!i.GetHeaderRange()) {
                 const TString readBlob = blobs.Extract(*StorageId, *i.GetHeaderRange());

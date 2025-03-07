@@ -4,6 +4,7 @@
 #include "blocks.h"
 #include "space_monitor.h"
 #include "mon_main.h"
+#include "s3.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -199,14 +200,18 @@ namespace NKikimr::NBlobDepot {
                                 key.Output(Stream);
                             }
                             TABLED() {
-                                bool first = true;
-                                for (const auto& item : value.ValueChain) {
+                                for (bool first = true; const auto& item : value.ValueChain) {
                                     if (first) {
                                         first = false;
                                     } else {
                                         Stream << "<br/>";
                                     }
-                                    Stream << TBlobSeqId::FromProto(item.GetLocator().GetBlobSeqId()).ToString();
+                                    if (item.HasBlobLocator()) {
+                                        Stream << TBlobSeqId::FromProto(item.GetBlobLocator().GetBlobSeqId()).ToString();
+                                    }
+                                    if (item.HasS3Locator()) {
+                                        Stream << TS3Locator::FromProto(item.GetS3Locator()).ToString();
+                                    }
                                     if (item.HasSubrangeBegin() || item.HasSubrangeEnd()) {
                                         Stream << "[";
                                         if (item.HasSubrangeBegin()) {
@@ -242,9 +247,9 @@ namespace NKikimr::NBlobDepot {
                     TABLEH() { Stream << "blob id"; }
                     TABLEH() { Stream << "refcount"; }
                 } else {
-                    Self->Data->EnumerateRefCount([&](TLogoBlobID id, ui32 count) {
+                    Self->Data->EnumerateRefCount([&](const auto& id, ui32 count) {
                         TABLER() {
-                            TABLED() { Stream << id; }
+                            TABLED() { Stream << id.ToString(); }
                             TABLED() { Stream << count; }
                         }
                     });
@@ -320,13 +325,19 @@ namespace NKikimr::NBlobDepot {
                     auto *info = Self->Info();
                     std::map<ui32, std::tuple<ui64, ui64>> space;
 
-                    Self->Data->EnumerateRefCount([&](TLogoBlobID id, ui32 /*refCount*/) {
-                        const ui32 groupId = info->GroupFor(id.Channel(), id.Generation());
-                        auto& [current, total] = space[groupId];
-                        total += id.BlobSize();
-                        if (id.Generation() == generation) {
-                            current += id.BlobSize();
-                        }
+                    Self->Data->EnumerateRefCount([&](const auto& key, ui32) {
+                        TOverloaded callback{
+                            [&](TLogoBlobID id) {
+                                const ui32 groupId = info->GroupFor(id.Channel(), id.Generation());
+                                auto& [current, total] = space[groupId];
+                                total += id.BlobSize();
+                                if (id.Generation() == generation) {
+                                    current += id.BlobSize();
+                                }
+                            },
+                            [&](TS3Locator) {}
+                        };
+                        callback(key);
                     });
 
                     for (const auto& [groupId, _] : Self->SpaceMonitor->Groups) {
@@ -479,8 +490,12 @@ document.addEventListener("DOMContentLoaded", ready);
                         ui64 total = 0;
                         ui64 trashInFlight = 0;
                         ui64 trashPending = 0;
-                        Data->EnumerateRefCount([&](TLogoBlobID id, ui32 /*refCount*/) {
-                            total += id.BlobSize();
+                        Data->EnumerateRefCount([&](const auto& key, ui32) {
+                            TOverloaded callback{
+                                [&](TLogoBlobID id) { total += id.BlobSize(); },
+                                [&](TS3Locator) {}
+                            };
+                            callback(key);
                         });
                         Data->EnumerateTrash([&](ui32 /*groupId*/, TLogoBlobID id, bool inFlight) {
                             (inFlight ? trashInFlight : trashPending) += id.BlobSize();
@@ -567,8 +582,12 @@ document.addEventListener("DOMContentLoaded", ready);
         ui64 total = 0;
         ui64 trashInFlight = 0;
         ui64 trashPending = 0;
-        Data->EnumerateRefCount([&](TLogoBlobID id, ui32 /*refCount*/) {
-            total += id.BlobSize();
+        Data->EnumerateRefCount([&](const auto& key, ui32) {
+            TOverloaded callback{
+                [&](TLogoBlobID id) { total += id.BlobSize(); },
+                [&](TS3Locator) {}
+            };
+            callback(key);
         });
         Data->EnumerateTrash([&](ui32 /*groupId*/, TLogoBlobID id, bool inFlight) {
             (inFlight ? trashInFlight : trashPending) += id.BlobSize();

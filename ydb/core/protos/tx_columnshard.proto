@@ -162,6 +162,7 @@ message TEvProposeTransaction {
     optional NKikimrSubDomains.TProcessingParams ProcessingParams = 6;
     optional uint64 Flags = 7;
     optional NKikimrTx.TMessageSeqNo SeqNo = 8;
+    optional uint64 SubDomainPathId = 9;
 }
 
 message TEvCheckPlannedTransaction {

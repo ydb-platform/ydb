@@ -71,6 +71,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptShuffleElimination;
     NCommon::TConfSetting<bool, false> OptShuffleEliminationWithMap;
     NCommon::TConfSetting<ui32, false> CostBasedOptimizationLevel;
+    NCommon::TConfSetting<bool, false> UseBlockReader;
 
     NCommon::TConfSetting<ui32, false> MaxDPHypDPTableSize;
 

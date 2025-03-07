@@ -5703,8 +5703,10 @@ Y_UNIT_TEST_SUITE(TYqlDateTimeTests) {
 #endif
 
 Y_UNIT_TEST_SUITE(LocalityOperation) {
-Y_UNIT_TEST(LocksFromAnotherTenants) {
-    TKikimrWithGrpcAndRootSchema server;
+Y_UNIT_TEST_TWIN(LocksFromAnotherTenants, UseSink) {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+    TKikimrWithGrpcAndRootSchema server(appConfig);
     //server.Server_->SetupLogging(
 
     auto connection = NYdb::TDriver(

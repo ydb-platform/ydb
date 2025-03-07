@@ -509,6 +509,10 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void SetupClusterContext(
+    TClientContext& context,
+    const TString& serverName);
+
 TClientContext CreateClientContext(
     const TString& serverName,
     const TCreateClientOptions& options);

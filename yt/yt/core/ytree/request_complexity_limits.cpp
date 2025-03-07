@@ -41,8 +41,8 @@ void FromProto(
     TReadRequestComplexityOverrides* original,
     const NProto::TReadRequestComplexityLimits& serialized)
 {
-    original->NodeCount = YT_PROTO_OPTIONAL(serialized, node_count);
-    original->ResultSize = YT_PROTO_OPTIONAL(serialized, result_size);
+    original->NodeCount = YT_OPTIONAL_FROM_PROTO(serialized, node_count);
+    original->ResultSize = YT_OPTIONAL_FROM_PROTO(serialized, result_size);
 }
 
 void ToProto(

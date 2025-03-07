@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLToDictTest) {
             }
         }
     }
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 23u
+
     Y_UNIT_TEST_LLVM(TestNarrowSqueezeToDict) {
         auto test = [](bool hashed, bool multi, bool compact, bool withPayload) {
             Cerr << "TestNarrowSqueezeToDict [type: " << (hashed ? "hashed" : "sorted") << ", multi: " << multi
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLToDictTest) {
             }
         }
     }
-#endif
+
     template <bool LLVM>
     static void TestDictWithDataKeyImpl(bool optionalKey, bool multi, bool compact, bool withNull, bool withData) {
         TSetup<LLVM> setup;

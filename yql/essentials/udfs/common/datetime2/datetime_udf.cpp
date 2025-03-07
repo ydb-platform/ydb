@@ -13,6 +13,9 @@ using namespace NUdf;
 using namespace NYql::DateTime;
 
 extern const char SplitUDF[] = "Split";
+extern const char ToDaysUDF[] = "ToDays";
+extern const char ToHoursUDF[] = "ToHours";
+extern const char ToMinutesUDF[] = "ToMinutes";
 extern const char ToSecondsUDF[] = "ToSeconds";
 extern const char ToMillisecondsUDF[] = "ToMilliseconds";
 extern const char ToMicrosecondsUDF[] = "ToMicroseconds";
@@ -59,7 +62,7 @@ const auto UsecondsInMinute = 60000000ll;
 const auto UsecondsInSecond = 1000000ll;
 const auto UsecondsInMilliseconds = 1000ll;
 
-template <const char* TFuncName, typename TResult, ui32 ScaleAfterSeconds>
+template <const char* TFuncName, typename TResult, typename TWResult, ui32 ScaleAfterSeconds>
 class TToUnits {
 public:
     typedef bool TTypeAwareMarker;
@@ -67,6 +70,10 @@ public:
 
     static TResult DateCore(ui16 value) {
         return value * ui32(86400) * TResult(ScaleAfterSeconds);
+    }
+
+    static TWResult Date32Core(i32 value) {
+        return value * i64(86400) * TWResult(ScaleAfterSeconds);
     }
 
     template<typename TTzDate>
@@ -91,12 +98,24 @@ public:
         return value * TResult(ScaleAfterSeconds);
     }
 
+    static TWResult Datetime64Core(i64 value) {
+        return value * TWResult(ScaleAfterSeconds);
+    }
+
     static TResult TimestampCore(ui64 value) {
         return TResult(value / (1000000u / ScaleAfterSeconds));
     }
 
+    static TWResult Timestamp64Core(i64 value) {
+        return TWResult(value / (1000000u / ScaleAfterSeconds));
+    }
+
     static TSignedResult IntervalCore(i64 value) {
         return TSignedResult(value / (1000000u / ScaleAfterSeconds));
+    }
+
+    static TWResult Interval64Core(i64 value) {
+        return TWResult(value / (1000000u / ScaleAfterSeconds));
     }
 
     static const TStringRef& Name() {
@@ -120,125 +139,166 @@ public:
             return false;
         }
 
-        try {
-            auto typeInfoHelper = builder.TypeInfoHelper();
-            TTupleTypeInspector tuple(*typeInfoHelper, userType);
-            Y_ENSURE(tuple);
-            Y_ENSURE(tuple.GetElementsCount() > 0);
-            TTupleTypeInspector argsTuple(*typeInfoHelper, tuple.GetElementType(0));
-            Y_ENSURE(argsTuple);
-            if (argsTuple.GetElementsCount() != 1) {
-                builder.SetError("Expected one argument");
-                return true;
-            }
-
-
-            auto argType = argsTuple.GetElementType(0);
-            TVector<const TType*> argBlockTypes;
-            argBlockTypes.push_back(argType);
-
-            TBlockTypeInspector block(*typeInfoHelper, argType);
-            if (block) {
-                Y_ENSURE(!block.IsScalar());
-                argType = block.GetItemType();
-            }
-
-            bool isOptional = false;
-            if (auto opt = TOptionalTypeInspector(*typeInfoHelper, argType)) {
-                argType = opt.GetItemType();
-                isOptional = true;
-            }
-
-
-            TDataTypeInspector data(*typeInfoHelper, argType);
-            if (!data) {
-                builder.SetError("Expected data type");
-                return true;
-            }
-
-            auto typeId = data.GetTypeId();
-            if (!(typeId == TDataType<TDate>::Id || typeId == TDataType<TTzDate>::Id ||
-                typeId == TDataType<TDatetime>::Id || typeId == TDataType<TTzDatetime>::Id ||
-                typeId == TDataType<TTimestamp>::Id || typeId == TDataType<TTzTimestamp>::Id ||
-                typeId == TDataType<TInterval>::Id)) {
-                builder.SetError(TStringBuilder() << "Type " << GetDataTypeInfo(GetDataSlot(typeId)).Name << " is not supported");
-            }
-
-            builder.Args()->Add(argsTuple.GetElementType(0)).Done();
-            const TType* retType;
-            if (typeId != TDataType<TInterval>::Id) {
-                retType = builder.SimpleType<TResult>();
-            } else {
-                retType = builder.SimpleType<TSignedResult>();
-            }
-
-            if (isOptional) {
-                retType = builder.Optional()->Item(retType).Build();
-            }
-
-            auto outputType = retType;
-            if (block) {
-                retType = builder.Block(block.IsScalar())->Item(retType).Build();
-            }
-
-            builder.Returns(retType);
-            builder.SupportsBlocks();
-            builder.IsStrict();
-
-            builder.UserType(userType);
-            if (!typesOnly) {
-                if (typeId == TDataType<TDate>::Id || typeId == TDataType<TTzDate>::Id) {
-                    if (block) {
-                        const auto exec = (typeId == TDataType<TTzDate>::Id)
-                            ? MakeTzBlockExec<TTzDate, TResult>()
-                            : UnaryPreallocatedExecImpl<ui16, TResult, DateCore>;
-
-                        builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
-                            exec, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
-                    } else {
-                        builder.Implementation(new TUnaryOverOptionalImpl<ui16, TResult, DateCore>());
-                    }
-                }
-
-                if (typeId == TDataType<TDatetime>::Id || typeId == TDataType<TTzDatetime>::Id) {
-                    if (block) {
-                        const auto exec = (typeId == TDataType<TTzDatetime>::Id)
-                            ? MakeTzBlockExec<TTzDatetime, TResult>()
-                            : UnaryPreallocatedExecImpl<ui32, TResult, DatetimeCore>;
-
-                        builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
-                            exec, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
-                    } else {
-                        builder.Implementation(new TUnaryOverOptionalImpl<ui32, TResult, DatetimeCore>());
-                    }
-                }
-
-                if (typeId == TDataType<TTimestamp>::Id || typeId == TDataType<TTzTimestamp>::Id) {
-                    if (block) {
-                        const auto exec = (typeId == TDataType<TTzTimestamp>::Id)
-                            ? MakeTzBlockExec<TTzTimestamp, TResult>()
-                            : UnaryPreallocatedExecImpl<ui64, TResult, TimestampCore>;
-
-                        builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
-                            exec, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
-                    } else {
-                        builder.Implementation(new TUnaryOverOptionalImpl<ui64, TResult, TimestampCore>());
-                    }
-                }
-
-                if (typeId == TDataType<TInterval>::Id) {
-                    if (block) {
-                        builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
-                            UnaryPreallocatedExecImpl<i64, TSignedResult, IntervalCore>, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
-                    } else {
-                        builder.Implementation(new TUnaryOverOptionalImpl<i64, TSignedResult, IntervalCore>());
-                    }
-                }
-            }
-        } catch (const std::exception& e) {
-            builder.SetError(TStringBuf(e.what()));
+        if (!userType) {
+            builder.SetError("User type is missing");
+            return true;
         }
 
+        builder.UserType(userType);
+
+        const auto typeInfoHelper = builder.TypeInfoHelper();
+        TTupleTypeInspector tuple(*typeInfoHelper, userType);
+        Y_ENSURE(tuple, "Tuple with args and options tuples expected");
+        Y_ENSURE(tuple.GetElementsCount() > 0,
+                 "Tuple has to contain positional arguments");
+
+        TTupleTypeInspector argsTuple(*typeInfoHelper, tuple.GetElementType(0));
+        Y_ENSURE(argsTuple, "Tuple with args expected");
+        if (argsTuple.GetElementsCount() != 1) {
+            builder.SetError("Single argument expected");
+            return true;
+        }
+
+        auto argType = argsTuple.GetElementType(0);
+
+        TVector<const TType*> argBlockTypes;
+        argBlockTypes.push_back(argType);
+
+        TBlockTypeInspector block(*typeInfoHelper, argType);
+        if (block) {
+            Y_ENSURE(!block.IsScalar());
+            argType = block.GetItemType();
+        }
+
+        bool isOptional = false;
+        if (auto opt = TOptionalTypeInspector(*typeInfoHelper, argType)) {
+            argType = opt.GetItemType();
+            isOptional = true;
+        }
+
+
+        TDataTypeInspector data(*typeInfoHelper, argType);
+        if (!data) {
+            builder.SetError("Data type expected");
+            return true;
+        }
+
+        const auto typeId = data.GetTypeId();
+        const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(typeId)).Features;
+
+        if (!(features & (NUdf::DateType | NUdf::TzDateType | NUdf::TimeIntervalType))) {
+            builder.SetError(TStringBuilder()
+                             << "Type "
+                             << GetDataTypeInfo(GetDataSlot(typeId)).Name
+                             << " is not supported");
+            return true;
+        }
+
+        builder.Args()->Add(argsTuple.GetElementType(0));
+        const TType* retType;
+        if (features & NUdf::BigDateType) {
+            retType = builder.SimpleType<TWResult>();
+        } else if (features & NUdf::TimeIntervalType) {
+            retType = builder.SimpleType<TSignedResult>();
+        } else {
+            retType = builder.SimpleType<TResult>();
+        }
+
+        if (isOptional) {
+            retType = builder.Optional()->Item(retType).Build();
+        }
+
+        auto outputType = retType;
+        if (block) {
+            retType = builder.Block(block.IsScalar())->Item(retType).Build();
+        }
+
+        builder.Returns(retType);
+        if (!(features & NUdf::BigDateType)) {
+            // FIXME: Only non-wide overloads support block rewrite now.
+            builder.SupportsBlocks();
+        }
+        builder.IsStrict();
+
+        if (!typesOnly) {
+            if (typeId == TDataType<TDate>::Id || typeId == TDataType<TTzDate>::Id) {
+                if (block) {
+                    const auto exec = (typeId == TDataType<TTzDate>::Id)
+                        ? MakeTzBlockExec<TTzDate, TResult>()
+                        : UnaryPreallocatedExecImpl<ui16, TResult, DateCore>;
+
+                    builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
+                        exec, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
+                } else {
+                    builder.Implementation(new TUnaryOverOptionalImpl<ui16, TResult, DateCore>());
+                }
+                return true;
+            }
+
+            if (typeId == TDataType<TDatetime>::Id || typeId == TDataType<TTzDatetime>::Id) {
+                if (block) {
+                    const auto exec = (typeId == TDataType<TTzDatetime>::Id)
+                        ? MakeTzBlockExec<TTzDatetime, TResult>()
+                        : UnaryPreallocatedExecImpl<ui32, TResult, DatetimeCore>;
+
+                    builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
+                        exec, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
+                } else {
+                    builder.Implementation(new TUnaryOverOptionalImpl<ui32, TResult, DatetimeCore>());
+                }
+                return true;
+            }
+
+            if (typeId == TDataType<TTimestamp>::Id || typeId == TDataType<TTzTimestamp>::Id) {
+                if (block) {
+                    const auto exec = (typeId == TDataType<TTzTimestamp>::Id)
+                        ? MakeTzBlockExec<TTzTimestamp, TResult>()
+                        : UnaryPreallocatedExecImpl<ui64, TResult, TimestampCore>;
+
+                    builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
+                        exec, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
+                } else {
+                    builder.Implementation(new TUnaryOverOptionalImpl<ui64, TResult, TimestampCore>());
+                }
+                return true;
+            }
+
+            if (typeId == TDataType<TInterval>::Id) {
+                if (block) {
+                    builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, outputType, block.IsScalar(),
+                        UnaryPreallocatedExecImpl<i64, TSignedResult, IntervalCore>, builder, TString(name), arrow::compute::NullHandling::INTERSECTION));
+                } else {
+                    builder.Implementation(new TUnaryOverOptionalImpl<i64, TSignedResult, IntervalCore>());
+                }
+                return true;
+            }
+
+            if (typeId == TDataType<TDate32>::Id || typeId == TDataType<TTzDate32>::Id) {
+                Y_ABORT_IF(block, "Block overload is not supported");
+                builder.Implementation(new TUnaryOverOptionalImpl<i32, TWResult, Date32Core>());
+                return true;
+            }
+
+            if (typeId == TDataType<TDatetime64>::Id || typeId == TDataType<TTzDatetime64>::Id) {
+                Y_ABORT_IF(block, "Block overload is not supported");
+                builder.Implementation(new TUnaryOverOptionalImpl<i64, TWResult, Datetime64Core>());
+                return true;
+            }
+
+            if (typeId == TDataType<TTimestamp64>::Id || typeId == TDataType<TTzTimestamp64>::Id) {
+                Y_ABORT_IF(block, "Block overload is not supported");
+                builder.Implementation(new TUnaryOverOptionalImpl<i64, TWResult, Timestamp64Core>());
+                return true;
+            }
+
+            if (typeId == TDataType<TInterval64>::Id) {
+                Y_ABORT_IF(block, "Block overload is not supported");
+                builder.Implementation(new TUnaryOverOptionalImpl<i64, TWResult, Interval64Core>());
+                return true;
+            }
+
+            Y_UNREACHABLE();
+        }
         return true;
     }
 };
@@ -1770,29 +1830,106 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
 
     // To*
 
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TToDays, i32(TAutoMap<TInterval>)) {
-        Y_UNUSED(valueBuilder);
-        return TUnboxedValuePod(i32(args[0].Get<i64>() / UsecondsInDay));
+template<const char* TUdfName, typename TResult, typename TWResult, i64 ScaleSeconds>
+class TToConverter : public TBoxedValue {
+public:
+    typedef bool TTypeAwareMarker;
+    static const ::NYql::NUdf::TStringRef& Name() {
+        static auto name = TStringRef(TUdfName, std::strlen(TUdfName));
+        return name;
     }
-    END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TToDays,
-    (UnaryPreallocatedExecImpl<i64, i32, [] (i64 arg) { return i32(arg / UsecondsInDay); }>),
-    arrow::compute::NullHandling::INTERSECTION);
 
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TToHours, i32(TAutoMap<TInterval>)) {
-        Y_UNUSED(valueBuilder);
-        return TUnboxedValuePod(i32(args[0].Get<i64>() / UsecondsInHour));
-    }
-    END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TToHours,
-    (UnaryPreallocatedExecImpl<i64, i32, [] (i64 arg) { return i32(arg / UsecondsInHour); }>),
-    arrow::compute::NullHandling::INTERSECTION);
+    static bool DeclareSignature(
+        const TStringRef& name,
+        TType* userType,
+        IFunctionTypeInfoBuilder& builder,
+        bool typesOnly)
+    {
+        if (Name() != name) {
+            return false;
+        }
 
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TToMinutes, i32(TAutoMap<TInterval>)) {
-        Y_UNUSED(valueBuilder);
-        return TUnboxedValuePod(i32(args[0].Get<i64>() / UsecondsInMinute));
+        if (!userType) {
+            builder.SetError("User type is missing");
+            return true;
+        }
+
+        builder.UserType(userType);
+
+        const auto typeInfoHelper = builder.TypeInfoHelper();
+        TTupleTypeInspector tuple(*typeInfoHelper, userType);
+        Y_ENSURE(tuple, "Tuple with args and options tuples expected");
+        Y_ENSURE(tuple.GetElementsCount() > 0,
+                 "Tuple has to contain positional arguments");
+
+        TTupleTypeInspector argsTuple(*typeInfoHelper, tuple.GetElementType(0));
+        Y_ENSURE(argsTuple, "Tuple with args expected");
+        if (argsTuple.GetElementsCount() != 1) {
+            builder.SetError("Single argument expected");
+            return true;
+        }
+
+        auto argType = argsTuple.GetElementType(0);
+
+        if (const auto optType = TOptionalTypeInspector(*typeInfoHelper, argType)) {
+            argType = optType.GetItemType();
+        }
+
+        TDataTypeInspector data(*typeInfoHelper, argType);
+        if (!data) {
+            SetInvalidTypeError(builder, typeInfoHelper, argType);
+            return true;
+        }
+
+        const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(data.GetTypeId())).Features;
+        if (features & NUdf::TimeIntervalType) {
+            if (features & NUdf::BigDateType) {
+                BuildSignature<TInterval64, TWResult>(builder, typesOnly);
+            } else {
+                BuildSignature<TInterval, TResult>(builder, typesOnly);
+            }
+            return true;
+        }
+        SetInvalidTypeError(builder, typeInfoHelper, argType);
+        return true;
     }
-    END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TToMinutes,
-    (UnaryPreallocatedExecImpl<i64, i32, [] (i64 arg) { return i32(arg / UsecondsInMinute); }>),
-    arrow::compute::NullHandling::INTERSECTION);
+private:
+    class TImpl : public TBoxedValue {
+    public:
+        TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
+            try {
+                Y_UNUSED(valueBuilder);
+                return TUnboxedValuePod(i64(args[0].Get<i64>() / ScaleSeconds));
+            } catch (const std::exception& e) {
+                TStringBuilder sb;
+                sb << CurrentExceptionMessage();
+                sb << Endl << "[" << TStringBuf(Name()) << "]" ;
+                UdfTerminate(sb.c_str());
+            }
+        }
+
+    };
+
+    static void SetInvalidTypeError(NUdf::IFunctionTypeInfoBuilder& builder,
+        ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
+    {
+        ::TStringBuilder sb;
+        sb << "Invalid argument type: got ";
+        TTypePrinter(*typeInfoHelper, argType).Out(sb.Out);
+        sb << ", but Interval or Interval64 expected";
+        builder.SetError(sb);
+    }
+
+    template<typename TInput, typename TOutput>
+    static void BuildSignature(NUdf::IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+        builder.Returns<TOutput>();
+        builder.Args()->Add<TAutoMap<TInput>>();
+        builder.IsStrict();
+        if (!typesOnly) {
+            builder.Implementation(new TImpl());
+        }
+    }
+};
 
     // StartOf*
 
@@ -3298,9 +3435,9 @@ private:
         TInterval64FromMilliseconds,
         TInterval64FromMicroseconds,
 
-        TToDays,
-        TToHours,
-        TToMinutes,
+        TToConverter<ToDaysUDF, i32, i32, UsecondsInDay>,
+        TToConverter<ToHoursUDF, i32, i64, UsecondsInHour>,
+        TToConverter<ToMinutesUDF, i32, i64, UsecondsInMinute>,
 
         TBoundaryOf<StartOfYearUDF, SimpleDatetimeToDatetimeUdf<TMResourceName, StartOfYear<TTMStorage>>,
                                     SimpleDatetimeToDatetimeUdf<TM64ResourceName, StartOfYear<TTM64Storage>>>,
@@ -3333,9 +3470,9 @@ private:
         TBoundaryOfInterval<EndOfUDF, SimpleDatetimeToIntervalUdf<TMResourceName, EndOf<TTMStorage>>,
                                       SimpleDatetimeToIntervalUdf<TM64ResourceName, EndOf<TTM64Storage>>>,
 
-        TToUnits<ToSecondsUDF, ui32, 1>,
-        TToUnits<ToMillisecondsUDF, ui64, 1000>,
-        TToUnits<ToMicrosecondsUDF, ui64, 1000000>,
+        TToUnits<ToSecondsUDF, ui32, i64, 1>,
+        TToUnits<ToMillisecondsUDF, ui64, i64, 1000>,
+        TToUnits<ToMicrosecondsUDF, ui64, i64, 1000000>,
 
         TFormat,
         TParse<ParseUDF, TMResourceName>,

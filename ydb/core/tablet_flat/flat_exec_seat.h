@@ -4,6 +4,7 @@
 #include "tablet_flat_executor.h"
 #include "flat_sausagecache.h"
 
+#include <util/generic/intrlist.h>
 #include <util/generic/ptr.h>
 #include <util/system/hp_timer.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -12,7 +13,17 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-    struct TSeat {
+    enum class ESeatState {
+        None,
+        Pending,
+        Active,
+        ActiveLow,
+        Postponed,
+        Waiting,
+        Done,
+    };
+
+    struct TSeat : public TIntrusiveListItem<TSeat> {
         using TPinned = THashMap<TLogoBlobID, THashMap<ui32, TIntrusivePtr<TPrivatePageCachePinPad>>>;
 
         TSeat(const TSeat&) = delete;
@@ -30,9 +41,11 @@ namespace NTabletFlatExecutor {
             out << "}";
         }
 
-        void Complete(const TActorContext& ctx, bool isRW) noexcept;
+        bool IsTerminated() const {
+            return TerminationReason != ETerminationReason::None;
+        }
 
-        void Terminate(ETerminationReason reason, const TActorContext& ctx) noexcept;
+        void Complete(const TActorContext& ctx, bool isRW) noexcept;
 
         void StartEnqueuedSpan() noexcept {
             WaitingSpan = NWilson::TSpan(TWilsonTablet::TabletDetailed, Self->TxSpan.GetTraceId(), "Tablet.Transaction.Enqueued");
@@ -54,7 +67,7 @@ namespace NTabletFlatExecutor {
             return Self->TxSpan.GetTraceId();
         }
 
-        const ui64 UniqID = Max<ui64>();
+        const ui64 UniqID;
         const TAutoPtr<ITransaction> Self;
         NWilson::TSpan WaitingSpan;
         ui64 Retries = 0;
@@ -73,6 +86,10 @@ namespace NTabletFlatExecutor {
         ui64 CurrentMemoryLimit = 0;
         ui32 NotEnoughMemoryCount = 0;
         ui64 TaskId = 0;
+
+        ESeatState State = ESeatState::Done;
+        bool LowPriority = false;
+        bool Cancelled = false;
 
         TAutoPtr<TMemoryToken> AttachedMemory;
         TIntrusivePtr<TMemoryGCToken> CapturedMemory;

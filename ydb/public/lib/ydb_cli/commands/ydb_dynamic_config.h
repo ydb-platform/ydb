@@ -50,10 +50,11 @@ public:
     int Run(TConfig& config) override;
 
 private:
-    bool All = false;
     bool StripMetadata = false;
     TString OutDir;
     bool AllowEmptyDatabase = false;
+    bool DedicatedStorageSection = false;
+    bool DedicatedClusterSection = false;
 };
 
 class TCommandConfigResolve : public TYdbReadOnlyCommand {
@@ -101,7 +102,7 @@ public:
     int Run(TConfig& config) override;
 
 private:
-    ui64 Version;
+    ui64 Version = 0;
     TString Cluster;
     THashSet<ui64> Ids;
     TString Dir;

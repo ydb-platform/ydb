@@ -66,7 +66,8 @@ CH::AggFunctionId TWithKeysAggregationOption::GetHouseFunction(const EAggregate 
     return CH::AggFunctionId::AGG_UNSPECIFIED;
 }
 
-TConclusionStatus TWithKeysAggregationProcessor::DoExecute(const std::shared_ptr<TAccessorsCollection>& resources) const {
+TConclusionStatus TWithKeysAggregationProcessor::DoExecute(
+    const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& /*context*/) const {
     CH::GroupByOptions funcOpts;
     funcOpts.assigns.reserve(AggregationKeys.size() + Aggregations.size());
     funcOpts.has_nullable_key = false;
@@ -119,7 +120,6 @@ TConclusionStatus TWithKeysAggregationProcessor::DoExecute(const std::shared_ptr
     }
     auto gbBatch = (*gbRes).record_batch();
     resources->Remove(AggregationKeys);
-    resources->ResetFilter();
 
     for (auto& assign : funcOpts.assigns) {
         auto column = gbBatch->GetColumnByName(assign.result_column);
@@ -179,7 +179,6 @@ TConclusionStatus TWithKeysAggregationProcessor::TBuilder::AddGroupBy(
 
 TConclusion<arrow::Datum> TAggregateFunction::Call(
     const TExecFunctionContext& context, const std::shared_ptr<TAccessorsCollection>& resources) const {
-    resources->ResetFilter();
     if (context.GetColumns().size() == 0 && AggregationType == NAggregation::EAggregate::NumRows) {
         auto rc = resources->GetRecordsCountActualOptional();
         if (!rc) {

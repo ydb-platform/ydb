@@ -6,12 +6,14 @@
 #include <ydb-cpp-sdk/client/topic/client.h>
 #include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb-cpp-sdk/client/draft/ydb_replication.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
 using namespace NYdb;
 using namespace NYdb::NQuery;
 using namespace NYdb::NTopic;
+using namespace NYdb::NReplication;
 
 namespace {
 
@@ -145,13 +147,13 @@ struct MainTestCase {
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     }
 
-    void CreateTopic() {
+    void CreateTopic(size_t partitionCount = 10) {
         auto res = Session.ExecuteQuery(Sprintf(R"(
             CREATE TOPIC `%s`
             WITH (
-                min_active_partitions = 10
+                min_active_partitions = %d
             );
-        )", TopicName.data()), TTxControl::NoTx()).GetValueSync();
+        )", TopicName.data(), partitionCount), TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     }
 
@@ -177,6 +179,30 @@ struct MainTestCase {
             SET USING $l;
         )", lambda.data(), TransferName.data()), TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    }
+
+    void DropTransfer() {
+        auto res = Session.ExecuteQuery(Sprintf(R"(
+            DROP TRANSFER `%s`;
+        )", TransferName.data()), TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    }
+
+    auto DescribeTransfer() {
+        TReplicationClient client(Driver);
+
+        TDescribeReplicationSettings settings;
+        settings.IncludeStats(true);
+
+        return client.DescribeReplication(TString("/") + GetEnv("YDB_DATABASE") + "/" + TransferName, settings).ExtractValueSync();
+    }
+
+    auto DescribeTopic() {
+        TDescribeTopicSettings settings;
+        settings.IncludeLocation(true);
+        settings.IncludeStats(true);
+
+        return TopicClient.DescribeTopic(TopicName, settings);
     }
 
     void Write(const TMessage& message) {
@@ -238,7 +264,7 @@ struct MainTestCase {
                 break;
             }
 
-            UNIT_ASSERT_C(attempt, "Unable to wait replication result");
+            UNIT_ASSERT_C(attempt, "Unable to wait transfer result");
             Sleep(TDuration::Seconds(1));
         }
     }
@@ -768,5 +794,180 @@ Y_UNIT_TEST_SUITE(Transfer)
         });
     }
 
+    Y_UNIT_TEST(DropTransfer)
+    {
+        MainTestCase testCase;
+        testCase.Run({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )",
+
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )",
+
+            .Messages = {{"Message-1"}},
+
+            .Expectations = {{
+                _C("Key", ui64(0)),
+                _C("Message", TString("Message-1")),
+            }}
+        });
+
+        {
+            auto result = testCase.DescribeTransfer();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+        }
+
+        testCase.DropTransfer();
+
+        {
+            auto result = testCase.DescribeTransfer();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(EStatus::SCHEME_ERROR, result.GetStatus());
+        }
+    }
+
+    Y_UNIT_TEST(CreateAndDropConsumer)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+        
+        testCase.CreateTopic();
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )");
+
+        for (size_t i = 20; i--; ) {
+            auto result = testCase.DescribeTopic().ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+            auto& consumers = result.GetTopicDescription().GetConsumers();
+            if (1 == consumers.size()) {
+                UNIT_ASSERT_VALUES_EQUAL(1, consumers.size());
+                Cerr << "Consumer name is '" << consumers[0].GetConsumerName() << "'" << Endl << Flush;
+                UNIT_ASSERT_C("replicationConsumer" != consumers[0].GetConsumerName(), "Consumer name is random uuid");
+                break;
+            }
+
+            UNIT_ASSERT_C(i, "Unable to wait consumer has been created");
+            Sleep(TDuration::Seconds(1));
+        }
+
+        testCase.DropTransfer();
+
+        for (size_t i = 20; i--; ) {
+            auto result = testCase.DescribeTopic().ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+            auto& consumers = result.GetTopicDescription().GetConsumers();
+            if (0 == consumers.size()) {
+                UNIT_ASSERT_VALUES_EQUAL(0, consumers.size());
+                break;
+            }
+
+            UNIT_ASSERT_C(i, "Unable to wait consumer has been removed");
+            Sleep(TDuration::Seconds(1));
+        }
+    }
+
+    Y_UNIT_TEST(DescribeError_OnLambdaCompilation)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+        
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return $x._unknown_field_for_lambda_compilation_error;
+                };
+            )");
+
+        for (size_t i = 20; i--;) {
+            auto result = testCase.DescribeTransfer().GetReplicationDescription();
+            if (TReplicationDescription::EState::Error == result.GetState()) {
+                Cerr << ">>>>> " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
+                UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains("_unknown_field_for_lambda_compilation_error"));
+                break;
+            }
+
+            UNIT_ASSERT_C(i, "Unable to wait transfer error");
+            Sleep(TDuration::Seconds(1));
+        }
+    }
+
+    Y_UNIT_TEST(DescribeError_OnWriteToShard)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+        
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:null,
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )");
+        
+        testCase.Write({"message-1"});
+
+        for (size_t i = 20; i--;) {
+            auto result = testCase.DescribeTransfer().GetReplicationDescription();
+            if (TReplicationDescription::EState::Error == result.GetState()) {
+                Cerr << ">>>>> " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
+                UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains("Cannot write data into shard"));
+                break;
+            }
+
+            UNIT_ASSERT_C(i, "Unable to wait transfer error");
+            Sleep(TDuration::Seconds(1));
+        }
+    }
 }
 

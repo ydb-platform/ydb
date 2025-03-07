@@ -11,8 +11,13 @@
 
 namespace NYql::NDq {
 
+enum class EStatusCompatibilityLevel {
+    Basic,
+    WithUnauthorized
+};
+
 Ydb::StatusIds::StatusCode DqStatusToYdbStatus(NYql::NDqProto::StatusIds::StatusCode statusCode);
-NYql::NDqProto::StatusIds::StatusCode YdbStatusToDqStatus(Ydb::StatusIds::StatusCode statusCode);
+NYql::NDqProto::StatusIds::StatusCode YdbStatusToDqStatus(Ydb::StatusIds::StatusCode statusCode, EStatusCompatibilityLevel compatibility = EStatusCompatibilityLevel::Basic);
 
 struct TEvDq {
 

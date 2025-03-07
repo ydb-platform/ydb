@@ -20,7 +20,7 @@ private:
     }
     virtual TConclusion<arrow::Datum> Call(
         const TExecFunctionContext& context, const std::shared_ptr<TAccessorsCollection>& resources) const override;
-    
+
     TConclusion<arrow::Datum> PrepareResult(arrow::Datum&& datum) const override {
         if (!datum.is_scalar()) {
             return TConclusionStatus::Fail("Aggregate result is not a scalar.");
@@ -103,13 +103,14 @@ public:
         return "";
     }
 
-    virtual TConclusionStatus CheckIO(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& output) const override {
+    virtual TConclusionStatus CheckIO(
+        const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& output) const override {
         if (output.size() != 1) {
             return TConclusionStatus::Fail("output size != 1 (" + ::ToString(output.size()) + ")");
         }
-//        if (input.size() != 1) {
-//            return TConclusionStatus::Fail("input size != 1 (" + ::ToString(input.size()) + ")");
-//        }
+        //        if (input.size() != 1) {
+        //            return TConclusionStatus::Fail("input size != 1 (" + ::ToString(input.size()) + ")");
+        //        }
         return TConclusionStatus::Success();
     }
 };
@@ -149,7 +150,7 @@ private:
     std::vector<TColumnChainInfo> AggregationKeys;
     std::vector<TWithKeysAggregationOption> Aggregations;
 
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<TAccessorsCollection>& resources) const override;
+    virtual TConclusionStatus DoExecute(const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& context) const override;
 
     TWithKeysAggregationProcessor(std::vector<TColumnChainInfo>&& input, std::vector<TColumnChainInfo>&& output,
         std::vector<TColumnChainInfo>&& aggregationKeys, std::vector<TWithKeysAggregationOption>&& aggregations)

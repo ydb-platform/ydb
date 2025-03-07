@@ -10,7 +10,11 @@ namespace NKikimr::NArrow::NAccessor {
 class TTrivialArray: public IChunkedArray {
 private:
     using TBase = IChunkedArray;
-    const std::shared_ptr<arrow::Array> Array;
+    std::shared_ptr<arrow::Array> Array;
+
+    virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const override {
+        visitor(Array);
+    }
 
 protected:
     virtual std::optional<ui64> DoGetRawSize() const override;
@@ -32,6 +36,8 @@ protected:
     virtual ui32 DoGetValueRawBytes() const override;
 
 public:
+    virtual void Reallocate() override;
+
     virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const override {
         return std::make_shared<arrow::ChunkedArray>(Array);
     }
@@ -53,6 +59,9 @@ public:
         TStatusValidator::Validate(builder->AppendScalar(*scalar));
         return NArrow::FinishBuilder(std::move(builder));
     }
+
+    static std::shared_ptr<arrow::Array> BuildArrayFromOptionalScalar(
+        const std::shared_ptr<arrow::Scalar>& scalar, const std::shared_ptr<arrow::DataType>& type);
 
     TTrivialArray(const std::shared_ptr<arrow::Scalar>& scalar)
         : TBase(1, EType::Array, TValidator::CheckNotNull(scalar)->type)
@@ -101,6 +110,12 @@ class TTrivialChunkedArray: public IChunkedArray {
 private:
     using TBase = IChunkedArray;
     const std::shared_ptr<arrow::ChunkedArray> Array;
+
+    virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const override {
+        for (auto&& i : Array->chunks()) {
+            visitor(i);
+        }
+    }
 
 protected:
     virtual ui32 DoGetValueRawBytes() const override;

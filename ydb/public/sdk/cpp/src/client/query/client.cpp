@@ -67,15 +67,25 @@ public:
         , Settings_(settings)
         , SessionPool_(Settings_.SessionPoolSettings_.MaxActiveSessions_)
     {
+        SetStatCollector(DbDriverState_->StatCollector.GetClientStatCollector("Query"));
+        SessionPool_.SetStatCollector(DbDriverState_->StatCollector.GetSessionPoolStatCollector("Query"));
     }
 
     ~TImpl() {
         // TODO: Drain sessions.
     }
 
+    void SetStatCollector(const NSdkStats::TStatCollector::TClientStatCollector& collector) {
+        QuerySizeHistogram_.Set(collector.QuerySize);
+        ParamsSizeHistogram_.Set(collector.ParamsSize);
+        RetryOperationStatCollector_ = collector.RetryOperationStatCollector;
+    }
+
     TAsyncExecuteQueryIterator StreamExecuteQuery(const std::string& query, const TTxControl& txControl,
         const std::optional<TParams>& params, const TExecuteQuerySettings& settings, const std::optional<TSession>& session = {})
     {
+        CollectQuerySize(query);
+        CollectParamsSize(params ? &params->GetProtoMap() : nullptr);
         return TExecQueryImpl::StreamExecuteQuery(
             Connections_, DbDriverState_, query, txControl, params, settings, session);
     }
@@ -84,6 +94,8 @@ public:
         const std::optional<TParams>& params, const TExecuteQuerySettings& settings,
         const std::optional<TSession>& session = {})
     {
+        CollectQuerySize(query);
+        CollectParamsSize(params ? &params->GetProtoMap() : nullptr);
         return TExecQueryImpl::ExecuteQuery(
             Connections_, DbDriverState_, query, txControl, params, settings, session);
     }
@@ -500,14 +512,34 @@ public:
     }
 
     void CollectRetryStatAsync(EStatus status) {
-        Y_UNUSED(status);
+        RetryOperationStatCollector_.IncAsyncRetryOperation(status);
     }
 
     void CollectRetryStatSync(EStatus status) {
-        Y_UNUSED(status);
+        RetryOperationStatCollector_.IncSyncRetryOperation(status);
+    }
+
+    void CollectQuerySize(const std::string& query) {
+        if (QuerySizeHistogram_.IsCollecting()) {
+            QuerySizeHistogram_.Record(query.size());
+        }
+    }
+
+    void CollectParamsSize(const ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params) {
+        if (params && ParamsSizeHistogram_.IsCollecting()) {
+            size_t size = 0;
+            for (auto& keyvalue: *params) {
+                size += keyvalue.second.ByteSizeLong();
+            }
+            ParamsSizeHistogram_.Record(size);
+        }
     }
 
 private:
+    NSdkStats::TStatCollector::TClientRetryOperationStatCollector RetryOperationStatCollector_;
+    NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> QuerySizeHistogram_;
+    NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> ParamsSizeHistogram_;
+
     TClientSettings Settings_;
     NSessionPool::TSessionPool SessionPool_;
 };

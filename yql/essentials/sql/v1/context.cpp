@@ -100,6 +100,7 @@ TContext::TContext(const TLexers& lexers, const TParsers& parsers,
     , HasPendingErrors(false)
     , DqEngineEnable(Settings.DqDefaultAuto->Allow())
     , AnsiQuotedIdentifiers(settings.AnsiLexer)
+    , WarningPolicy(settings.IsReplay)
     , BlockEngineEnable(Settings.BlockDefaultAuto->Allow())
 {
     for (auto lib : settings.Libraries) {

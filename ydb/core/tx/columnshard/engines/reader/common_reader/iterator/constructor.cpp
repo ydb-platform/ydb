@@ -19,7 +19,7 @@ bool TBlobsFetcherTask::DoOnError(const TString& storageId, const TBlobRange& ra
         "storage_id", storageId);
     NActors::TActorContext::AsActorContext().Send(
         Context->GetCommonContext()->GetScanActorId(), std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
-                                                           TConclusionStatus::Fail("cannot read blob range " + range.ToString())));
+                                                           TConclusionStatus::Fail(TStringBuilder{} << "Error reading blob range for data: " << range.ToString() << ", error: " << status.GetErrorMessage() << ", status: " << NKikimrProto::EReplyStatus_Name(status.GetStatus()))));
     return false;
 }
 

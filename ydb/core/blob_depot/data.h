@@ -141,6 +141,18 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
+            TString MakeTextualKey() const {
+                if (Data.Type == BlobIdType) {
+                    return GetBlobId().ToString();
+                } else if (Data.Type <= MaxInlineStringLen || Data.Type == StringType) {
+                    return TString(GetStringBuf());
+                } else if (Data.Type == MinType) {
+                    return {};
+                } else {
+                    Y_ABORT();
+                }
+            }
+
             static TKey FromBinaryKey(const TString& key, const NKikimrBlobDepot::TBlobDepotConfig& config) {
                 if (config.HasVirtualGroupId()) {
                     return TKey(TLogoBlobID::FromBinary(key));
@@ -283,14 +295,8 @@ namespace NKikimr::NBlobDepot {
                 , UncertainWrite(uncertainWrite)
             {}
 
-            explicit TValue(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item)
-                : Meta(item.GetMeta())
-                , Public(false)
-                , UncertainWrite(item.GetUncertainWrite())
-            {
-                auto *chain = ValueChain.Add();
-                auto *locator = chain->MutableLocator();
-                locator->CopyFrom(item.GetBlobLocator());
+            explicit TValue(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item) {
+                UpdateFrom(item);
             }
 
             explicit TValue(EKeepState keepState)
@@ -298,6 +304,21 @@ namespace NKikimr::NBlobDepot {
                 , Public(false)
                 , UncertainWrite(false)
             {}
+
+            void UpdateFrom(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item) {
+                Meta = item.GetMeta();
+                Public = false;
+                UncertainWrite = item.GetUncertainWrite();
+
+                ValueChain.Clear();
+                auto *chain = ValueChain.Add();
+                if (item.HasBlobLocator()) {
+                    chain->MutableBlobLocator()->CopyFrom(item.GetBlobLocator());
+                }
+                if (item.HasS3Locator()) {
+                    chain->MutableS3Locator()->CopyFrom(item.GetS3Locator());
+                }
+            }
 
             bool IsWrittenUncertainly() const {
                 return UncertainWrite && !ValueChain.empty();
@@ -420,17 +441,20 @@ namespace NKikimr::NBlobDepot {
         bool Loaded = false;
         std::map<TKey, TValue> Data;
         TClosedIntervalSet<TKey> LoadedKeys; // keys that are already scanned and loaded in the local database
-        THashMap<TLogoBlobID, ui32> RefCount;
+        THashMap<TLogoBlobID, ui32> RefCountBlobs;
+        THashMap<TS3Locator, ui32> RefCountS3;
         THashMap<std::tuple<ui8, ui32>, TRecordsPerChannelGroup> RecordsPerChannelGroup;
         std::optional<TLogoBlobID> LastAssimilatedBlobId;
         THashSet<std::tuple<ui8, ui32>> AlreadyCutHistory;
         ui64 TotalStoredDataSize = 0;
         ui64 TotalStoredTrashSize = 0;
         ui64 InFlightTrashSize = 0;
+        ui64 TotalS3DataSize = 0;
 
         friend class TGroupAssimilator;
 
-        THashMultiMap<void*, TLogoBlobID> InFlightTrash; // being committed, but not yet confirmed
+        THashMultiMap<void*, TLogoBlobID> InFlightTrashBlobs; // being committed, but not yet confirmed
+        THashMultiMap<void*, TS3Locator> InFlightTrashS3; // being committed, but not yet confirmed
 
         class TTxIssueGC;
         class TTxConfirmGC;
@@ -635,6 +659,8 @@ namespace NKikimr::NBlobDepot {
         void BindToBlob(const TKey& key, TBlobSeqId blobSeqId, bool keep, bool doNotKeep,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
 
+        void AddToS3Trash(TS3Locator locator, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
+
         void MakeKeyCertain(const TKey& key);
         void HandleCommitCertainKeys();
 
@@ -662,6 +688,7 @@ namespace NKikimr::NBlobDepot {
         void TrimChannelHistory(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted);
 
         void AddFirstMentionedBlob(TLogoBlobID id);
+        void AddFirstMentionedBlob(TS3Locator locator);
         void AccountBlob(TLogoBlobID id, bool add);
 
         bool CanBeCollected(TBlobSeqId id) const;
@@ -670,7 +697,10 @@ namespace NKikimr::NBlobDepot {
 
         template<typename TCallback>
         void EnumerateRefCount(TCallback&& callback) {
-            for (const auto& [key, value] : RefCount) {
+            for (const auto& [key, value] : RefCountBlobs) {
+                callback(key, value);
+            }
+            for (const auto& [key, value] : RefCountS3) {
                 callback(key, value);
             }
         }
@@ -687,11 +717,19 @@ namespace NKikimr::NBlobDepot {
 
         void StartLoad();
         bool LoadTrash(NTabletFlatExecutor::TTransactionContext& txc, TString& from, bool& progress);
+        bool LoadTrashS3(NTabletFlatExecutor::TTransactionContext& txc, TS3Locator& from, bool& progress);
         void OnLoadComplete();
         bool IsLoaded() const { return Loaded; }
         bool IsKeyLoaded(const TKey& key) const { return Loaded || LoadedKeys[key]; }
 
         bool EnsureKeyLoaded(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc);
+
+        template<typename TRecord>
+        bool LoadMissingKeys(const TRecord& record, NTabletFlatExecutor::TTransactionContext& txc);
+
+        std::optional<TString> CheckKeyAgainstBarrier(const TKey& key);
+
+        bool IsUseful(const TS3Locator& locator) const;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

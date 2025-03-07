@@ -19,13 +19,10 @@ const char* FormatPragma(bool disableOpt) {
 const bool DisableOpt = true;
 const bool EnableOpt = false;
 
-TKikimrRunner GetKikimrRunner(bool enableKqpDataQueryStreamLookup = true) {
+TKikimrRunner GetKikimrRunner() {
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(enableKqpDataQueryStreamLookup);
-
     auto serverSettings = TKikimrSettings()
         .SetAppConfig(appConfig);
-
     return {serverSettings};
 }
 
@@ -540,7 +537,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                 [[1u];[100500u];["Just Jack"]];
                 [[4u];[77u];["Boss"]]]
             )");
-            
+
         AssertTableReads(result, "/Root/Test", 3);
     }
 
@@ -578,8 +575,8 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         AssertTableReads(result, "/Root/SecondaryKeys", 2);
     }
 
-    Y_UNIT_TEST_TWIN(SecondaryIndex_PgKey, EnableKqpDataQueryStreamLookup) {
-        TKikimrRunner kikimr = GetKikimrRunner(EnableKqpDataQueryStreamLookup);
+    Y_UNIT_TEST(SecondaryIndex_PgKey) {
+        TKikimrRunner kikimr = GetKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -915,7 +912,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             .EndList().Build().Build();
 
         auto result = ExecQueryAndTestResult(session, query, params, R"([[["Payload1"]];[["Payload2"]]])");
-            
+
         AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 2);
         AssertTableReads(result, "/Root/SecondaryComplexKeys", 2);
     }

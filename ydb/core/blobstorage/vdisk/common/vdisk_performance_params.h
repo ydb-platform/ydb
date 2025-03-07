@@ -5,7 +5,7 @@
 #include "defs.h"
 
 #include <ydb/library/pdisk_io/device_type.h>
-#include <ydb/core/control/immediate_control_board_wrapper.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 
 namespace NKikimr {
 

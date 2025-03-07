@@ -32,11 +32,11 @@ TString GetStatic(const TString& filePath) {
     TString fullPath = SRC_("data/" + filePath);
 
     std::ifstream file(fullPath);
-    
+
     if (!file.is_open()) {
         throw std::runtime_error("can't open + " + fullPath + " " + std::filesystem::current_path());
     }
-    
+
     std::stringstream buffer;
     buffer << file.rdbuf();
 
@@ -91,16 +91,16 @@ static void CreateSampleTable(NYdb::NQuery::TSession session, bool useColumnStor
 
     {
         CreateTables(session, "schema/different_join_predicate_key_types.sql", false /* olap params are already set in schema */);
-        const TString upsert = 
+        const TString upsert =
         R"(
             UPSERT INTO t1 (id1) VALUES (1);
             UPSERT INTO t2 (id2, t1_id1) VALUES (1, 1);
             UPSERT INTO t3 (id3) VALUES (1);
         )";
-        auto result = 
+        auto result =
             session.ExecuteQuery(
-                upsert, 
-                NYdb::NQuery::TTxControl::NoTx(), 
+                upsert,
+                NYdb::NQuery::TTxControl::NoTx(),
                 NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute)
             ).ExtractValueSync();
 
@@ -115,10 +115,6 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
     TVector<NKikimrKqp::TKqpSetting> settings;
 
     NKikimrKqp::TKqpSetting setting;
-
-    setting.SetName("EnableKqpDataQueryStreamLookup");
-    setting.SetValue("true");
-    settings.push_back(setting); 
 
     if (stats != "") {
         setting.SetName("OptOverrideStatistics");
@@ -232,7 +228,7 @@ private:
     TKikimrRunner Kikimr;
     NYdb::NTable::TTableClient TableClient;
     TSession Session;
-    size_t ChainSize; 
+    size_t ChainSize;
 };
 
 void ExplainJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true) {
@@ -246,11 +242,11 @@ void ExplainJoinOrderTestDataQueryWithStats(const TString& queryPath, const TStr
     /* join with parameters */
     {
         const TString query = GetStatic(queryPath);
-        
-        auto result = 
+
+        auto result =
             session.ExecuteQuery(
-                query, 
-                NYdb::NQuery::TTxControl::NoTx(), 
+                query,
+                NYdb::NQuery::TTxControl::NoTx(),
                 NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
             ).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
@@ -270,10 +266,10 @@ void TestOlapEstimationRowsCorrectness(const TString& queryPath, const TString& 
     const TString actualQuery = GetStatic(queryPath);
     TString actualPlan;
     {
-        auto result = 
+        auto result =
             session.ExecuteQuery(
-                actualQuery, 
-                NYdb::NQuery::TTxControl::NoTx(), 
+                actualQuery,
+                NYdb::NQuery::TTxControl::NoTx(),
                 NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
             ).ExtractValueSync();
 
@@ -288,8 +284,8 @@ void TestOlapEstimationRowsCorrectness(const TString& queryPath, const TString& 
     TString expectedPlan;
     {
         auto result = session.ExecuteQuery(
-                expectedQuery, 
-                NYdb::NQuery::TTxControl::NoTx(), 
+                expectedQuery,
+                NYdb::NQuery::TTxControl::NoTx(),
                 NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
             ).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -400,7 +396,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         /* join with parameters */
         {
             const TString query = GetStatic(queryPath);
-            
+
             auto explainRes = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
             explainRes.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(explainRes.GetStatus(), EStatus::SUCCESS);
@@ -425,10 +421,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         {
             const TString query = GetStatic(queryPath);
 
-            auto result = 
+            auto result =
                 session.ExecuteQuery(
-                    query, 
-                    NYdb::NQuery::TTxControl::NoTx(), 
+                    query,
+                    NYdb::NQuery::TTxControl::NoTx(),
                     NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
                 ).ExtractValueSync();
             PrintPlan(TString{*result.GetStats()->GetPlan()});
@@ -538,7 +534,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS16, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds16.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);       
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds16.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
     }
 
     /* tpcds23 has > 1 result sets */
@@ -573,11 +569,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS34, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds34.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);       
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds34.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS61, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds61.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);       
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds61.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS87, StreamLookupJoin, ColumnStore) {
@@ -585,27 +581,27 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS88, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds88.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore); 
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds88.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS90, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds90.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);  
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds90.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
     }
-    
+
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS92, StreamLookupJoin, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds92.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS94, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds94.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore); 
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds94.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS95, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds95.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore); 
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds95.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS96, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds96.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);     
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds96.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinHint1, StreamLookupJoin, ColumnStore) {
@@ -624,12 +620,12 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         )
             : Plan(
                 GetDetailedJoinOrder(
-                    fullPlan.GetStringRobust(), 
+                    fullPlan.GetStringRobust(),
                     TGetPlanParams{
-                        .IncludeFilters = false, 
-                        .IncludeOptimizerEstimation = false, 
+                        .IncludeFilters = false,
+                        .IncludeOptimizerEstimation = false,
                         .IncludeTables = true,
-                        .IncludeShuffles = true 
+                        .IncludeShuffles = true
                     }
                 )
             )
@@ -639,7 +635,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             TString Join;
             bool LhsShuffled;
             bool RhsShuffled;
-        }; 
+        };
 
         TJoin Find(const TVector<TString>& labels) {
             Labels = labels;
@@ -700,7 +696,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     Y_UNIT_TEST(ShuffleEliminationReuseShuffleTwoJoins) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/shuffle_elimination_reuse_shuffle_two_joins.sql", "stats/tpch1000s.json", false, true, true);
         auto joinFinder = TFindJoinWithLabels(plan);
-        
+
         {
             auto join = joinFinder.Find({"partsupp", "part"});
             UNIT_ASSERT_C(join.Join == "InnerJoin (Grace)", join.Join);
@@ -715,18 +711,18 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             UNIT_ASSERT(join.RhsShuffled);
         }
     }
-    
+
     Y_UNIT_TEST(ShuffleEliminationDifferentJoinPredicateKeyTypeCorrectness1) {
         auto [plan, resultSets] = ExecuteJoinOrderTestGenericQueryWithStats(
             "queries/shuffle_elimination_different_join_predicate_key_type_correctness1.sql", "stats/different_join_predicate_key_types.json", false, false, true
         );
-        
+
         auto joinFinder = TFindJoinWithLabels(plan);
         auto join = joinFinder.Find({"t1", "t2"});
         UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Grace)");
         UNIT_ASSERT(!join.LhsShuffled);
         UNIT_ASSERT(join.RhsShuffled);
-        
+
         UNIT_ASSERT(resultSets.size() == 1);
         auto resultSet = FormatResultSetYson(resultSets[0]);
         UNIT_ASSERT_EQUAL_C(resultSet, "[[1;1;1]]", resultSet);
@@ -736,7 +732,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto [plan, resultSets] = ExecuteJoinOrderTestGenericQueryWithStats(
             "queries/shuffle_elimination_different_join_predicate_key_type_correctness2.sql", "stats/different_join_predicate_key_types.json", false, false, true
         );
-        
+
         auto joinFinder = TFindJoinWithLabels(plan);
         {
             auto join = joinFinder.Find({"t1", "t2"});
@@ -751,7 +747,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             UNIT_ASSERT(join.LhsShuffled);
             UNIT_ASSERT(!join.RhsShuffled);
         }
-        
+
         UNIT_ASSERT(resultSets.size() == 1);
         auto resultSet = FormatResultSetYson(resultSets[0]);
         UNIT_ASSERT_EQUAL_C(resultSet, "[[1;1;1;1]]", resultSet);
@@ -761,7 +757,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto [plan, resultSets] = ExecuteJoinOrderTestGenericQueryWithStats(
             "queries/shuffle_elimination_many_keys_join_predicate.sql", "stats/tpch1000s.json", false, false, true
         );
-        
+
         auto joinFinder = TFindJoinWithLabels(plan);
         {
             auto join = joinFinder.Find({"partsupp", "lineitem"});
@@ -781,18 +777,18 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinOrderHintsSimple, StreamLookupJoin, ColumnStore) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/join_order_hints_simple.sql", "stats/basic.json", StreamLookupJoin, ColumnStore); 
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/join_order_hints_simple.sql", "stats/basic.json", StreamLookupJoin, ColumnStore);
         UNIT_ASSERT_VALUES_EQUAL(GetJoinOrder(plan).GetStringRobust(), R"(["T",["R","S"]])") ;
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinOrderHintsComplex, StreamLookupJoin, ColumnStore) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/join_order_hints_complex.sql", "stats/basic.json", StreamLookupJoin, ColumnStore); 
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/join_order_hints_complex.sql", "stats/basic.json", StreamLookupJoin, ColumnStore);
         auto joinOrder = GetJoinOrder(plan).GetStringRobust();
         UNIT_ASSERT_C(joinOrder.find(R"([["R","S"],["T","U"]])") != TString::npos, joinOrder);
     }
 
     // Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinOrderHintsManyHintTrees, StreamLookupJoin, ColumnStore) {
-    //     auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/join_order_hints_many_hint_trees.sql", "stats/basic.json", StreamLookupJoin, ColumnStore); 
+    //     auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/join_order_hints_many_hint_trees.sql", "stats/basic.json", StreamLookupJoin, ColumnStore);
     //     auto joinOrder = GetJoinOrder(plan).GetStringRobust();
     //     UNIT_ASSERT_C(joinOrder.find(R"(["R","S"])") != TString::npos, joinOrder);
     //     UNIT_ASSERT_C(joinOrder.find(R"(["T","U"])") != TString::npos, joinOrder);
@@ -810,11 +806,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         /* join with parameters */
         {
             const TString query = GetStatic(queryPath);
-        
-            auto result = 
+
+            auto result =
                 session.ExecuteQuery(
-                    query, 
-                    NYdb::NQuery::TTxControl::NoTx(), 
+                    query,
+                    NYdb::NQuery::TTxControl::NoTx(),
                     NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
                 ).ExtractValueSync();
 
@@ -827,7 +823,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             }
 
             if (useColumnStore) {
-                correctJoinOrderPath = correctJoinOrderPath.substr(0, correctJoinOrderPath.find(".json")) + "_column_store.json";      
+                correctJoinOrderPath = correctJoinOrderPath.substr(0, correctJoinOrderPath.find(".json")) + "_column_store.json";
             }
 
             auto currentJoinOrder = GetPrettyJSON(GetDetailedJoinOrder(TString{*result.GetStats()->GetPlan()}));
@@ -841,7 +837,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             }
 
             TString ref = GetStatic(correctJoinOrderPath);
-            Cout << "actual\n" << GetJoinOrder(TString{*result.GetStats()->GetPlan()}).GetStringRobust() << Endl; 
+            Cout << "actual\n" << GetJoinOrder(TString{*result.GetStats()->GetPlan()}).GetStringRobust() << Endl;
             Cout << "expected\n" << GetJoinOrderFromDetailedJoinOrder(ref).GetStringRobust() << Endl;
             UNIT_ASSERT(JoinOrderAndAlgosMatch(TString{*result.GetStats()->GetPlan()}, ref));
         }
@@ -870,7 +866,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             "queries/tpcds64_small.sql", "stats/tpcds1000s.json", "join_order/tpcds64_small_1000s.json", StreamLookupJoin, ColumnStore
         );
     }
-   
+
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(CanonizedJoinOrderTPCDS78, StreamLookupJoin, ColumnStore) {
         CanonizedJoinOrderTest(
             "queries/tpcds78.sql", "stats/tpcds1000s.json", "join_order/tpcds78_1000s.json", StreamLookupJoin, ColumnStore

@@ -164,6 +164,7 @@ def wrap_parse_dict(dictionary, proto):
             'Vdisk': 'VDisk',
             'NtoSelect': 'NToSelect',
             'Ssid': 'SSId',
+            'Sids': 'SIDs',
         }
         for k, v in abbreviations.items():
             camelCased = camelCased.replace(k, v)

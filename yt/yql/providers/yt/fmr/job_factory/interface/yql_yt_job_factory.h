@@ -12,7 +12,7 @@ public:
 
     virtual ~IFmrJobFactory() = default;
 
-    virtual NThreading::TFuture<TTaskResult::TPtr> StartJob(TTask::TPtr task, std::shared_ptr<std::atomic<bool>> cancelFlag) = 0;
+    virtual NThreading::TFuture<TTaskState::TPtr> StartJob(TTask::TPtr task, std::shared_ptr<std::atomic<bool>> cancelFlag) = 0;
 };
 
 } // namespace NYql::NFmr

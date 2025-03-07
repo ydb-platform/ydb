@@ -1,16 +1,18 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorsystem.h>
-
 #include <ydb/core/base/appdata.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/mdb_endpoint_generator.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
+#include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
+
+#include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+
 #include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
 
 namespace NKikimrConfig {
@@ -35,6 +37,7 @@ namespace NKikimr::NKqp {
         NYql::ISolomonGateway::TPtr SolomonGateway;
         NMiniKQL::TComputationNodeFactory ComputationFactory;
         NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
+        NYql::TTaskTransformFactory DqTaskTransformFactory;
     };
 
     struct IKqpFederatedQuerySetupFactory {
@@ -73,6 +76,7 @@ namespace NKikimr::NKqp {
         std::optional<NActors::TActorId> DatabaseResolverActorId;
         NYql::IMdbEndpointGenerator::TPtr MdbEndpointGenerator;
         NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
+        NYql::TTaskTransformFactory DqTaskTransformFactory;
     };
 
     struct TKqpFederatedQuerySetupFactoryMock: public IKqpFederatedQuerySetupFactory {
@@ -89,7 +93,9 @@ namespace NKikimr::NKqp {
             NYql::IYtGateway::TPtr ytGateway,
             const NYql::TSolomonGatewayConfig& solomonGatewayConfig,
             const NYql::ISolomonGateway::TPtr& solomonGateway,
-            NMiniKQL::TComputationNodeFactory computationFactories)
+            NMiniKQL::TComputationNodeFactory computationFactory,
+            const NYql::NDq::TS3ReadActorFactoryConfig& s3ReadActorFactoryConfig,
+            NYql::TTaskTransformFactory dqTaskTransformFactory)
             : HttpGateway(httpGateway)
             , ConnectorClient(connectorClient)
             , CredentialsFactory(credentialsFactory)
@@ -100,13 +106,19 @@ namespace NKikimr::NKqp {
             , YtGateway(ytGateway)
             , SolomonGatewayConfig(solomonGatewayConfig)
             , SolomonGateway(solomonGateway)
-            , ComputationFactories(computationFactories)
+            , ComputationFactory(computationFactory)
+            , S3ReadActorFactoryConfig(s3ReadActorFactoryConfig)
+            , DqTaskTransformFactory(dqTaskTransformFactory)
         {
         }
 
         std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem*) override {
             return TKqpFederatedQuerySetup{
-                HttpGateway, ConnectorClient, CredentialsFactory, DatabaseAsyncResolver, S3GatewayConfig, GenericGatewayConfig, YtGatewayConfig, YtGateway, SolomonGatewayConfig, SolomonGateway, ComputationFactories, S3ReadActorFactoryConfig};
+                HttpGateway, ConnectorClient, CredentialsFactory,
+                DatabaseAsyncResolver, S3GatewayConfig, GenericGatewayConfig,
+                YtGatewayConfig, YtGateway, SolomonGatewayConfig,
+                SolomonGateway, ComputationFactory, S3ReadActorFactoryConfig,
+                DqTaskTransformFactory};
         }
 
     private:
@@ -120,8 +132,9 @@ namespace NKikimr::NKqp {
         NYql::IYtGateway::TPtr YtGateway;
         NYql::TSolomonGatewayConfig SolomonGatewayConfig;
         NYql::ISolomonGateway::TPtr SolomonGateway;
-        NMiniKQL::TComputationNodeFactory ComputationFactories;
+        NMiniKQL::TComputationNodeFactory ComputationFactory;
         NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
+        NYql::TTaskTransformFactory DqTaskTransformFactory;
     };
 
     IKqpFederatedQuerySetupFactory::TPtr MakeKqpFederatedQuerySetupFactory(

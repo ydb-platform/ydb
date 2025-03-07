@@ -140,16 +140,19 @@ namespace TEvColumnShard {
         }
 
         TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, ui64 ssId, const TActorId& source,
-                ui64 txId, TString txBody, const ui32 flags = 0)
+                ui64 txId, TString txBody, const ui32 flags, ui64 subDomainPathId)
             : TEvProposeTransaction(txKind, source, txId, std::move(txBody), flags)
         {
 //            Y_ABORT_UNLESS(txKind == NKikimrTxColumnShard::TX_KIND_SCHEMA);
             Record.SetSchemeShardId(ssId);
+            if (subDomainPathId != 0) {
+                Record.SetSubDomainPathId(subDomainPathId);
+            }
         }
 
         TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, ui64 ssId, const TActorId& source,
-            ui64 txId, TString txBody, const TMessageSeqNo& seqNo, const NKikimrSubDomains::TProcessingParams& processingParams, const ui32 flags = 0)
-            : TEvProposeTransaction(txKind, ssId, source, txId, std::move(txBody), flags)
+            ui64 txId, TString txBody, const TMessageSeqNo& seqNo, const NKikimrSubDomains::TProcessingParams& processingParams, const ui32 flags, ui64 subDomainPathId)
+            : TEvProposeTransaction(txKind, ssId, source, txId, std::move(txBody), flags, subDomainPathId)
         {
             Record.MutableProcessingParams()->CopyFrom(processingParams);
             *Record.MutableSeqNo() = seqNo.SerializeToProto();

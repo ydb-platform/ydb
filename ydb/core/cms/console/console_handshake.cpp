@@ -33,6 +33,7 @@ public:
 
     void Bootstrap(const TActorId& consoleId) {
         auto executeRequest = [&](auto& request) {
+            request->Record.SetBypassAuth(true);
             request->Record.MutableRequest()->set_config(MainYamlConfig);
             request->Record.MutableRequest()->set_allow_unknown_fields(AllowUnknownFields);
             Send(consoleId, request.release());

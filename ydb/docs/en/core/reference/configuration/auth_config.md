@@ -8,17 +8,17 @@ Internal {{ ydb-short-name }} users are added directly to a {{ ydb-short-name }}
 
 #|
 || Parameter | Description ||
-|| UseLoginProvider
+|| use_login_provider
 | Indicates whether to allow authentication of internal users with an auth-token that is received after entering a user name and password.
 
 Default value: `true`
     ||
-|| EnableLoginAuthentication
+|| enable_login_authentication
 | Indicates whether to allow adding internal users to {{ ydb-short-name }} databases and generating auth-tokens after an internal user enters a user name and password.
 
 Default value: `true`
     ||
-|| DomainLoginOnly
+|| domain_login_only
 | Determines the databases, to which internal users are added.
 
 Valid values:
@@ -28,7 +28,7 @@ Valid values:
 
 Default value: `true`
     ||
-|| LoginTokenExpireTime
+|| login_token_expire_time
 | Specifies the expiration time of the authentication token that is created when an internal user logs in to {{ ydb-short-name }}.
 
 Default value: `12h`
@@ -37,48 +37,93 @@ Default value: `12h`
 
 ### Configuring user lockout
 
-You can configure {{ ydb-short-name }} to lock a user account out after the specified number of failed attempts to enter a valid password. To configure user lockout, define the `AccountLockout` section inside the `auth_config` section:
+You can configure {{ ydb-short-name }} to lock a user account out after the specified number of failed attempts to enter a correct password. To configure user lockout, define the `account_lockout` section inside the `auth_config` section.
+
+Example of the `account_lockout` section:
+
+```yaml
+auth_config:
+  ...
+  account_lockout:
+    attempt_threshold: 4
+    attempt_reset_duration: "1h"
+  ...
+```
 
 #|
 || Parameter | Description ||
-|| AttemptThreshold
-| Specifies the number of failed attempts to enter a valid password for a user account, after which the user account is temporarily blocked.
+|| attempt_threshold
+| Specifies the number of failed attempts to enter a correct password for a user account, after which the user account is blocked for a period of time specified in the `attempt_reset_duration` parameter.
+
+If `attempt_threshold = 0`, the number of attempts to enter a correct password is not limited.
 
 Default value: `4`
     ||
-|| AttemptResetDuration
-| Specifies the period of time that a locked-out account remains locked before automatically becoming unlocked.
+|| attempt_reset_duration
+| Specifies the period of time that a locked-out account remains locked before automatically becoming unlocked. This period starts after the last failed attempt. If this parameter is set to the equivalent of `0s`, user accounts will be locked for an indefinite period of time.
 
 Default value: `1h`
     ||
 |#
 
-### Configuring password complexity requirements
+### Configuring password complexity requirements {#password-complexity}
 
-To configure password complexity requirements, define the following parameters in the `PasswordComplexity` subsection inside the `auth_config` section.
+{{ ydb-short-name }} allows users authenticate by login and password. For more information, see [authentication by login and password](../../security/authentication.md#static-credentials). To enhance security in {{ ydb-short-name }}, configure complexity requirements for user passwords in the `password_complexity` subsection inside the `auth_config` section.
+
+Example of the `password_complexity` section:
+
+```yaml
+auth_config:
+  ...
+  password_complexity:
+    min_length: 8
+    min_lower_case_count: 1
+    min_upper_case_count: 1
+    min_numbers_count: 1
+    min_special_chars_count: 1
+    special_chars: "!@#$%^&*()_+{}|<>?="
+    can_contain_username: false
+  ...
+```
 
 #|
 || Parameter | Description ||
-|| MinLength
+|| min_length
 | Specifies the minimum password length
+
+Default value: 0 (no requirements)
     ||
-|| MinLowerCaseCount
-| Specifies the minimum number of lower case letters that a password must contain
+|| min_lower_case_count
+| Specifies the minimum number of lower case letters that a password must contain.
+
+Default value: 0 (no requirements)
     ||
-|| MinUpperCaseCount
-| Specifies the minimum number of upper case letters that a password must contain
+|| min_upper_case_count
+| Specifies the minimum number of upper case letters that a password must contain.
+
+Default value: 0 (no requirements)
     ||
-|| MinNumbersCount
-| Specifies the minimum number of digits that a password must contain
+|| min_numbers_count
+| Specifies the minimum number of digits that a password must contain.
+
+Default value: 0 (no requirements)
     ||
-|| MinSpecialCharsCount
-| Specifies the minimum number of special characters that a password must contain
+|| min_special_chars_count
+| Specifies the minimum number of special characters from the `special_chars` list that a password must contain.
+
+Default value: 0 (no requirements)
     ||
-|| SpecialChars
-| Specifies a list of special characters that are allowed in a password
+|| special_chars
+| Specifies a list of special characters that are allowed in a password.
+
+Valid values: `!@#$%^&*()_+{}\|<>?=`
+
+Default value: empty (any of the `!@#$%^&*()_+{}\|<>?=` characters are allowed)
     ||
-|| CanContainUsername
-| Indicates whether passwords can include a user name
+|| can_contain_username
+| Indicates whether passwords can include a user name.
+
+Default value: `false`
     ||
 |#
 
@@ -88,52 +133,52 @@ To configure password complexity requirements, define the following parameters i
 
 #|
 || Parameter | Description ||
-|| UseAccessService
+|| use_access_service
 | Indicates whether to allow IAM AccessService authentication.
 
 Default value: `false`
     ||
-|| AccessServiceEndpoint
+|| access_service_endpoint
 | Specifies an IAM AccessService address, to which {{ ydb-short-name }} sends requests.
 
 Default value: `as.private-api.cloud.yandex.net:4286`
     ||
-|| UserAccountServiceEndpoint
+|| user_account_service_endpoint
 | Specifies an IAM AccessService address, to which {{ ydb-short-name }} sends requests to access user accounts.
 
 Default value: `api-adapter.private-api.cloud.yandex.net:8443`
     ||
-|| ServiceAccountServiceEndpoint
+|| service_account_service_endpoint
 | Specifies an IAM AccessService address, to which {{ ydb-short-name }} sends requests to access service accounts.
 
 Default value: `api-adapter.private-api.cloud.yandex.net:8443`
     ||
-|| UseAccessServiceTLS
+|| use_access_service_tls
 | Indicates whether to use TLS connections between {{ ydb-short-name }} and IAM AccessService сервером.
 
 Default value: `true`
     ||
-|| AccessServiceDomain
+|| access_service_domain
 | Specifies an identifier appended to the username to distinguish AccessService directory users from those authenticated using other providers.
 
 Default value: `as`
     ||
-|| PathToRootCA
+|| path_to_root_ca
 | Specifies the path to the certification authority's certificate file.
 
 Default value: `/etc/ssl/certs/YandexInternalRootCA.pem`
     ||
-|| AccessServiceGrpcKeepAliveTimeMs
+|| access_service_grpc_keep_alive_time_ms
 | Specifies the period of time, in milliseconds, after which a keepalive ping is sent on the transport to IAM AccessService.
 
 Default value: `10000`
     ||
-|| AccessServiceGrpcKeepAliveTimeoutMs
+|| access_service_grpc_keep_alive_timeout_ms
 | Specifies the amount of time, in milliseconds, that {{ ydb-short-name }} waits for the acknowledgement of the keepalive ping from IAM AccessService. If {{ ydb-short-name }} does not receive an acknowledgment within this time, it will close the connection.
 
 Default value: `1000`
     ||
-|| UseAccessServiceApiKey
+|| use_access_service_api_key
 | Indicates whether to use API keys. The API key is a secret key only used for simplified authorization of service accounts with the Yandex Cloud API. Use API keys if requesting an IAM token automatically is not an option.
 
 Default value: `false`
@@ -196,32 +241,32 @@ auth_config:
 Parameters for configuring the token life cycle are applicable to all authentication methods.
 
 #|
-|| RefreshPeriod
+|| refresh_period
 | Specifies the time interval for detecting expired tokens
 
 Default value: `1s`
     ||
-|| RefreshTime
+|| refresh_time
 | Specifies the time interval for refreshing user information. The actual update will occur within the range from `refresh_time/2` to `refresh_time`.
 
 Default value: `1h`
     ||
-|| LifeTime
+|| life_time
 | Specifies the time interval for keeping a token in cache since its last use.
 
 Default value: `1h`
     ||
-|| ExpireTime
+|| expire_time
 | Specifies the time period, after which a token expires and is deleted from cache.
 
 Default value: `24h`
     ||
-|| MinErrorRefreshTime
+|| min_error_refresh_time
 | Specifies minimum period of time that must elapse since a failed attempt to refresh a token before retrying the attempt.
 
 Default value: `1s`
     ||
-|| MaxErrorRefreshTime
+|| max_error_refresh_time
 | Specifies the maximum time interval that can elapse since a failed attempt to refresh a token before retrying the attempt.
 
 Default value: `1m`

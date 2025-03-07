@@ -2,6 +2,9 @@ LIBRARY()
 
 SRCS(
     manager.cpp
+    events.cpp
+    merge.cpp
+    subscriber.cpp
 )
 
 PEERDIR(

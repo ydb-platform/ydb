@@ -221,6 +221,10 @@ TDuplicateFilter::TFilterSubscriber::TFilterSubscriber(const std::shared_ptr<IDa
     , TaskGuard(source->GetContext()->GetCommonContext()->GetCounters().GetFilterFetchingGuard()) {
 }
 
+void TDuplicateFilter::TFilterSubscriber::OnFailure(const TString& reason) {
+    Source->GetContext()->GetCommonContext()->AbortWithError("cannot build duplicate filter : " + reason);
+}
+
 TConclusion<bool> TDuplicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     NActors::TActivationContext::AsActorContext().Send(source->GetContextAsVerified<TSpecialReadContext>()->GetDuplicatesManager(),
         new TEvRequestFilter(source, std::make_shared<TFilterSubscriber>(source, step)));

@@ -1,8 +1,6 @@
 #pragma once
 #include "position.h"
-
 #include <ydb/core/formats/arrow/reader/merger.h>
-
 #include <ydb/library/accessor/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
@@ -12,7 +10,7 @@
 
 namespace NKikimr::NArrow::NMerger {
 
-class TRecordBatchBuilder {
+class TRecordBatchBuilder : public IMergeResultBuilder {
 private:
     std::vector<std::unique_ptr<arrow::ArrayBuilder>> Builders;
     YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::Field>>, Fields);
@@ -60,13 +58,13 @@ public:
 
     std::shared_ptr<arrow::RecordBatch> Finalize();
 
-    bool IsBufferExhausted() const {
+    virtual bool IsBufferExhausted() const override {
         return MemoryBufferLimit && *MemoryBufferLimit < CurrentBytesUsed;
     }
     void AddRecord(const TCursor& position);
     void AddRecord(const TRWSortableBatchPosition& position);
-    void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& schema) const;
-    void AddRecord(const TBatchIterator& cursor);
-    void SkipRecord(const TBatchIterator& cursor);
+    virtual void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& schema) const override;
+    virtual void AddRecord(const TBatchIterator& cursor) override;
+    virtual void SkipRecord(const TBatchIterator& cursor) override;
 };
 }

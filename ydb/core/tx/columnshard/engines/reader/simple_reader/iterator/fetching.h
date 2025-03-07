@@ -223,6 +223,7 @@ private:
         TFetchingScriptCursor Step;
 
         virtual void OnFilterReady(const NArrow::TColumnFilter& filter) override;
+        virtual void OnFailure(const TString& reason) override;
 
     public:
         TFilterSubscriber(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)

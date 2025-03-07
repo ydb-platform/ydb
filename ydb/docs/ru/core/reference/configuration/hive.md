@@ -1,6 +1,6 @@
 # Настройка Hive
 
-Поведение [Hive](../../concepts.md#hive) можно настроить с помощью следующих опций в секции `hive_config`.
+Поведение [Hive](../../concepts/glossary.md#hive) можно настроить с помощью следующих опций в секции `hive_config`.
 
 #|
 || Параметр | Формат | Описание ||
@@ -19,7 +19,7 @@
 || tablet_kick_cooldown_period | Целое число секунд | Минимальный период времени между перемещениями одной таблетки. ||
 || node_select_strategy | Перечисление | Стратегия выбора узла для запуска таблетки. Возможные варианты:
 
-- `HIVE_NODE_SELECT_STRATEGY_WEIGHTED_RANDOM` — взвешенно-случайный выбор на основе потребления; 
+- `HIVE_NODE_SELECT_STRATEGY_WEIGHTED_RANDOM` — взвешенно-случайный выбор на основе потребления;
 - `HIVE_NODE_SELECT_STRATEGY_EXACT_MIN` — выбор узла с минимальным потреблением;
 - `HIVE_NODE_SELECT_STRATEGY_RANDOM_MIN_7P` — выбор случайного узла среди 7% узлов с наименьшим потреблением;
 - `HIVE_NODE_SELECT_STRATEGY_RANDOM` — выбор случайного узла.

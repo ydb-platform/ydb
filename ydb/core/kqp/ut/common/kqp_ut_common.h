@@ -126,6 +126,10 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
             AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(enable);
             return *this;
     }
+    TKikimrSettings& SetColumnShardDoubleOutOfRangeHandling(const NKikimrConfig::TColumnShardConfig_EJsonDoubleOutOfRangeHandlingPolicy value) {
+        AppConfig.MutableColumnShardConfig()->SetDoubleOutOfRangeHandling(value);
+        return *this;
+    }
 };
 
 class TKikimrRunner {

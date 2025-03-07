@@ -1192,7 +1192,7 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
 }
 
 bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Value* vp, bool allowCastFromString,
-                                TCell& c, TString& err, TMemoryPool& valueDataPool)
+                                TCell& c, TString& err, TMemoryPool& valueDataPool, bool allowInfDouble)
 {
     if (vp->Hasnull_flag_value()) {
         c = TCell();
@@ -1256,7 +1256,7 @@ bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Val
             break;
         }
     case NScheme::NTypeIds::JsonDocument : {
-        const auto binaryJson = NBinaryJson::SerializeToBinaryJson(val.Gettext_value());
+        const auto binaryJson = NBinaryJson::SerializeToBinaryJson(val.Gettext_value(), allowInfDouble);
         if (std::holds_alternative<TString>(binaryJson)) {
             err = "Invalid JSON for JsonDocument provided: " + std::get<TString>(binaryJson);
             return false;

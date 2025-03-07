@@ -41,7 +41,12 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         if (!appConfig) {
             appConfig.emplace();
         }
-
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("ClickHouse");
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("MySQL");
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("Ydb");
+    
         auto settings = TKikimrSettings();
 
         NYql::IHTTPGateway::TPtr httpGateway;

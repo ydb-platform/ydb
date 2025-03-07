@@ -141,12 +141,15 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
     }
 
-    Y_UNIT_TEST(DistributedWriteShardRestartBeforePlan) {
+    Y_UNIT_TEST_TWIN(DistributedWriteShardRestartBeforePlan, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000);
+            .SetDomainPlanResolution(1000)
+            .SetAppConfig(appConfig);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -384,9 +387,10 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
     }
 
-    Y_UNIT_TEST(DistributedWriteLaterSnapshotBlockedThenCommit) {
+    Y_UNIT_TEST_TWIN(DistributedWriteLaterSnapshotBlockedThenCommit, UseSink) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)

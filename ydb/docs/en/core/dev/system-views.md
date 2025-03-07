@@ -396,7 +396,7 @@ SELECT *
 
 ### Auth owners
 
-The `auth_owners` view lists details of [access objects](../concepts/glossary.md#access-object) ownership.
+The `auth_owners` view lists details of [access objects](../concepts/glossary.md#access-object) [ownership](../concepts/glossary.md#access-owner).
 
 A user can view an [access object](../concepts/glossary.md#access-object) in the results if they have the `ydb.granular.describe_schema` permission on it.
 

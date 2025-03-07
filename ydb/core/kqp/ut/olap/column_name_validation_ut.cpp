@@ -17,8 +17,9 @@ Y_UNIT_TEST_SUITE(NamingValidation) {
         NYdb::TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         Tests::TClient annoyingClient(*server.ServerSettings);
 
-        TString tableName = "test";
-        TString tableDescr = R"(
+        TString allowedChars = "_-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+        TString tableDescr = Sprintf(R"(
             Name: "TestTable"
             Schema {
                 Columns {
@@ -27,12 +28,12 @@ Y_UNIT_TEST_SUITE(NamingValidation) {
                     NotNull: True
                 }
                 Columns {
-                    Name: "message"
+                    Name: "%s"
                     Type: "Utf8"
                 }
                 KeyColumnNames: ["Id"]
             }
-        )";
+        )", allowedChars.c_str());
 
         NMsgBusProxy::EResponseStatus status = annoyingClient.CreateColumnTable("/Root", tableDescr);
 
@@ -43,25 +44,29 @@ Y_UNIT_TEST_SUITE(NamingValidation) {
         NYdb::TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         Tests::TClient annoyingClient(*server.ServerSettings);
 
-        TString tableDescr = R"(
-            Name: "TestTable"
-            Schema {
-                Columns {
-                    Name: "Id"
-                    Type: "Int32"
-                    NotNull: True
-                }
-                Columns {
-                    Name: "mess age"
-                    Type: "Utf8"
-                }
-                KeyColumnNames: ["Id"]
-            }
-        )";
+        TVector<TString> notAllowedNames = {"mess age", "~!@#$%^&*()+=asdfa"};
 
-        NMsgBusProxy::EResponseStatus status = annoyingClient.CreateColumnTable("/Root", tableDescr);
-
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_ERROR);
+        for (const auto& colName: notAllowedNames) {
+            TString tableDescr = Sprintf(R"(
+                Name: "TestTable"
+                Schema {
+                    Columns {
+                        Name: "Id"
+                        Type: "Int32"
+                        NotNull: True
+                    }
+                    Columns {
+                        Name: "%s"
+                        Type: "Utf8"
+                    }
+                    KeyColumnNames: ["Id"]
+                }
+            )", colName.c_str());
+    
+            NMsgBusProxy::EResponseStatus status = annoyingClient.CreateColumnTable("/Root", tableDescr);
+    
+            UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_ERROR);
+        }
     }
 
     Y_UNIT_TEST(CreateColumnStoreOk) {
@@ -116,7 +121,6 @@ Y_UNIT_TEST_SUITE(NamingValidation) {
         NYdb::TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         Tests::TClient annoyingClient(*server.ServerSettings);
 
-        TString tableName = "test";
         TString tableDescr = R"(
             Name: "TestTable"
             Schema {
@@ -154,7 +158,6 @@ Y_UNIT_TEST_SUITE(NamingValidation) {
         NYdb::TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         Tests::TClient annoyingClient(*server.ServerSettings);
 
-        TString tableName = "test";
         TString tableDescr = R"(
             Name: "TestTable"
             Schema {

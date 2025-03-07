@@ -26,6 +26,7 @@ public:
 
 class TBatchIterator {
 private:
+    YDB_READONLY_DEF(ui64, SourceId);
     bool ControlPointFlag;
     TRWSortableBatchPosition KeyColumns;
     TRWSortableBatchPosition VersionColumns;

@@ -7,6 +7,7 @@ namespace NKikimr::NOlap::NReader {
 class IFilterSubscriber {
 public:
     virtual void OnFilterReady(const NArrow::TColumnFilter&) = 0;
+    virtual void OnFailure(const TString& reason) = 0;
     virtual ~IFilterSubscriber() = default;
 };
 

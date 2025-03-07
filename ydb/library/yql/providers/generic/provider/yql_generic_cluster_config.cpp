@@ -119,36 +119,6 @@ namespace NYql {
         clusterConfig.SetDatabaseName(it->second);
     }
 
-    void ParseSchema(const THashMap<TString, TString>& properties,
-                     NYql::TGenericClusterConfig& clusterConfig) {
-        auto it = properties.find("schema");
-        if (it == properties.cend()) {
-            // SCHEMA is optional field
-            return;
-        }
-
-        if (!it->second) {
-            // SCHEMA is optional field
-            return;
-        }
-
-        clusterConfig.mutable_datasourceoptions()->insert({TString("schema"), TString(it->second)});
-    }
-
-    void ParseServiceName(const THashMap<TString, TString>& properties,
-                          NYql::TGenericClusterConfig& clusterConfig) {
-        auto it = properties.find("service_name");
-        if (it == properties.cend()) {
-            return;
-        }
-
-        if (!it->second) {
-            return;
-        }
-
-        clusterConfig.mutable_datasourceoptions()->insert({TString("service_name"), TString(it->second)});
-    }
-
     void ParseMdbClusterId(const THashMap<TString, TString>& properties,
                            NYql::TGenericClusterConfig& clusterConfig) {
         auto it = properties.find("mdb_cluster_id");
@@ -213,6 +183,7 @@ namespace NYql {
                 EGenericDataSourceKind::MYSQL,
                 EGenericDataSourceKind::MS_SQL_SERVER,
                 EGenericDataSourceKind::ORACLE,
+                EGenericDataSourceKind::MONGO_DB,
                 }, 
                clusterConfig.GetKind()
             )) {
@@ -274,20 +245,18 @@ namespace NYql {
         clusterConfig.SetServiceAccountIdSignature(it->second);
     }
 
-    void ParseFolderId(const THashMap<TString, TString>& properties,
-                     NYql::TGenericClusterConfig& clusterConfig) {
-        auto it = properties.find("folder_id");
+    void ParseOptionalField(const THashMap<TString, TString>& properties,
+                     NYql::TGenericClusterConfig& clusterConfig, const TString& fieldName) {
+        auto it = properties.find(fieldName);
         if (it == properties.cend()) {
-            // FOLDER_ID is optional field
             return;
         }
 
         if (!it->second) {
-            // FOLDER_ID is optional field
             return;
         }
 
-        clusterConfig.mutable_datasourceoptions()->insert({"folder_id", TString(it->second)});
+        clusterConfig.mutable_datasourceoptions()->insert({fieldName, TString(it->second)});
     }
 
     using TProtoProperties = google::protobuf::Map<TProtoStringType, TProtoStringType>;
@@ -309,15 +278,18 @@ namespace NYql {
         ParseLocation(properties, clusterConfig);
         ParseUseTLS(properties, clusterConfig);
         ParseDatabaseName(properties, clusterConfig);
-        ParseSchema(properties, clusterConfig);
-        ParseServiceName(properties, clusterConfig);
         ParseMdbClusterId(properties, clusterConfig);
         ParseDatabaseId(properties, clusterConfig);
         ParseSourceType(properties, clusterConfig);
         ParseProtocol(properties, clusterConfig);
         ParseServiceAccountId(properties, clusterConfig);
         ParseServiceAccountIdSignature(properties, clusterConfig);
-        ParseFolderId(properties, clusterConfig);
+        ParseOptionalField(properties, clusterConfig, "schema");
+        ParseOptionalField(properties, clusterConfig, "folder_id");
+        ParseOptionalField(properties, clusterConfig, "reading_mode");
+        ParseOptionalField(properties, clusterConfig, "service_name");
+        ParseOptionalField(properties, clusterConfig, "unexpected_type_display_mode");
+        ParseOptionalField(properties, clusterConfig, "unsupported_type_display_mode");
 
         return clusterConfig;
     }

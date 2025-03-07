@@ -304,19 +304,19 @@ ORDER BY IntervalEnd desc, CPUCores desc
 
 ## Информация о пулах ресурсов {#resource_pools}
 
-`resource_pools` - таблица содержит информацию о [настройках](../yql/reference/syntax/create-resource-pool.md#parameters) [пулов ресурсов](../concepts/glossary.md#resource-pool).
+`resource_pools` — таблица содержит информацию о [настройках](../yql/reference/syntax/create-resource-pool.md#parameters) [пулов ресурсов](../concepts/glossary.md#resource-pool).
 
 Структура таблицы:
 
 Поле | Описание
 --- | ---
 `Name` | Имя пула ресурсов.<br/>Тип: `Utf8`.<br/>Ключ: `0`.
-`ConcurrentQueryLimit` | Максимальное количество параллельно выполняющихся запросов в пуле ресурсов.<br/>Тип: `Int32`.<br/>
-`QueueSize` | Максимальный размер очереди ожидания.<br/>Тип: `Int32`.<br/>
-`DatabaseLoadCpuThreshold` | Порог загрузки CPU всей базы данных, после которого запросы не отправляются на выполнение и остаются в очереди.<br/>Тип: `Double`.<br/>
-`ResourceWeight` | Веса для распределения ресурсов между пулами.<br/>Тип: `Double`.<br/>
-`TotalCpuLimitPercentPerNode` | Процент доступного CPU, который могут использовать все запросы на узле в данном пуле ресурсов.<br/>Тип: `Double`.<br/>
-`QueryCpuLimitPercentPerNode` | Процент доступного CPU на узле для одного запроса в пуле ресурсов.<br/>Тип: `Double`.<br/>
+`ConcurrentQueryLimit` | Максимальное количество параллельно выполняющихся запросов в пуле ресурсов.<br/>Тип: `Int32`.
+`QueueSize` | Максимальный размер очереди ожидания.<br/>Тип: `Int32`.
+`DatabaseLoadCpuThreshold` | Порог загрузки CPU всей базы данных, после которого запросы не отправляются на выполнение и остаются в очереди.<br/>Тип: `Double`.
+`ResourceWeight` | Веса для распределения ресурсов между пулами.<br/>Тип: `Double`.
+`TotalCpuLimitPercentPerNode` | Процент доступного CPU, который могут использовать все запросы на узле в данном пуле ресурсов.<br/>Тип: `Double`.
+`QueryCpuLimitPercentPerNode` | Процент доступного CPU на узле для одного запроса в пуле ресурсов.<br/>Тип: `Double`.
 `QueryMemoryLimitPercentPerNode` | Процент доступной памяти на узле, который может использовать запрос в данном пуле ресурсов.<br/>Тип: `Double`.
 
 ### Пример

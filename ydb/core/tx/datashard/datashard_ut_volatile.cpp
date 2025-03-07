@@ -3083,12 +3083,15 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         Cerr << "... split finished" << Endl;
     }
 
-    Y_UNIT_TEST(DistributedUpsertRestartBeforePrepare) {
+    Y_UNIT_TEST_TWIN(DistributedUpsertRestartBeforePrepare, UseSink) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true);
+            .SetEnableDataShardVolatileTransactions(true)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3120,6 +3123,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "<empty>");
 
         TBlockEvents<TEvDataShard::TEvProposeTransaction> blockedPrepare(runtime);
+        TBlockEvents<NKikimr::NEvents::TDataEvents::TEvWrite> blockedEvWrite(runtime);
 
         Cerr << "========= Starting upsert 1 =========" << Endl;
         auto upsertFuture1 = KqpSimpleSend(runtime, R"(
@@ -3127,10 +3131,11 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             VALUES (2, 2), (12, 12);
             )");
 
-        runtime.WaitFor("prepare requests", [&]{ return blockedPrepare.size() >= 2; });
-        UNIT_ASSERT_VALUES_EQUAL(blockedPrepare.size(), 2u);
+        runtime.WaitFor("prepare results", [&]{ return blockedPrepare.size() + blockedEvWrite.size() >= 2; });
+        UNIT_ASSERT_VALUES_EQUAL(blockedPrepare.size() + blockedEvWrite.size(), 2u);
 
         blockedPrepare.Stop();
+        blockedEvWrite.Stop();
 
         Cerr << "========= Restarting shard 1 =========" << Endl;
         GracefulRestartTablet(runtime, shards.at(0), sender);
@@ -3140,12 +3145,15 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "ERROR: UNAVAILABLE");
     }
 
-    Y_UNIT_TEST(DistributedUpsertRestartAfterPrepare) {
+    Y_UNIT_TEST_TWIN(DistributedUpsertRestartAfterPrepare, UseSink) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true);
+            .SetEnableDataShardVolatileTransactions(true)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3177,6 +3185,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "<empty>");
 
         TBlockEvents<TEvDataShard::TEvProposeTransactionResult> blockedPrepare(runtime);
+        TBlockEvents<NKikimr::NEvents::TDataEvents::TEvWriteResult> blockedEvWrite(runtime);
 
         Cerr << "========= Starting upsert 1 =========" << Endl;
         auto upsertFuture1 = KqpSimpleSend(runtime, R"(
@@ -3184,16 +3193,22 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             VALUES (2, 2), (12, 12);
             )");
 
-        runtime.WaitFor("prepare results", [&]{ return blockedPrepare.size() >= 2; });
-        UNIT_ASSERT_VALUES_EQUAL(blockedPrepare.size(), 2u);
+        runtime.WaitFor("prepare results", [&]{ return blockedPrepare.size() + blockedEvWrite.size() >= 2; });
+        UNIT_ASSERT_VALUES_EQUAL(blockedPrepare.size() + blockedEvWrite.size(), 2u);
 
         for (auto& ev : blockedPrepare) {
             auto* msg = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED);
         }
 
+        for (auto& ev : blockedEvWrite) {
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+        }
+
         // Unblock prepare results and restart the first shard
         blockedPrepare.Stop().Unblock();
+        blockedEvWrite.Stop().Unblock();
 
         Cerr << "========= Restarting shard 1 =========" << Endl;
         GracefulRestartTablet(runtime, shards.at(0), sender);

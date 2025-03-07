@@ -39,10 +39,12 @@ target_link_libraries(columnshard-engines-protos PUBLIC
 
 target_proto_messages(columnshard-engines-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/protos/portion_info.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/protos/index.proto
 )
 
 target_sources(columnshard-engines-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/engines/protos/portion_info.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/engines/protos/index.pb.h
 )
 
 

@@ -12,24 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(portions)
-add_subdirectory(bloom)
-add_subdirectory(categories_bloom)
-add_subdirectory(bloom_ngramm)
-add_subdirectory(max)
-add_subdirectory(count_min_sketch)
-
-add_library(engines-storage-indexes INTERFACE)
-
-
-target_link_libraries(engines-storage-indexes INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-  storage-indexes-portions
-  storage-indexes-bloom
-  storage-indexes-categories_bloom
-  storage-indexes-bloom_ngramm
-  storage-indexes-max
-  storage-indexes-count_min_sketch
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

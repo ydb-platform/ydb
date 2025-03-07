@@ -38,6 +38,10 @@ target_link_libraries(scheme-indexes-abstract PUBLIC
 
 target_sources(scheme-indexes-abstract PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/collection.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/header.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/fetcher.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/abstract.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/meta.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/checker.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/simple.cpp

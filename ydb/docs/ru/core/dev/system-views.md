@@ -345,14 +345,14 @@ WHERE Name = "default";
 
 ## Информация о классификаторах пулов ресурсов {#resource_pools_classifiers}
 
-`resource_pools_classifiers` - таблица содержит информацию о [настройках](../yql/reference/syntax/create-resource-pool-classifier.md#parameters) [классификаторов пулов ресурсов](../concepts/glossary.md#resource-pool-classifier).
+`resource_pools_classifiers` — таблица содержит информацию о [настройках](../yql/reference/syntax/create-resource-pool-classifier.md#parameters) [классификаторов пулов ресурсов](../concepts/glossary.md#resource-pool-classifier).
 
 Структура таблицы:
 
 Поле | Описание
 --- | ---
 `Name` | Имя классификатора пула ресурсов.<br/>Тип: `Utf8`.<br/>Ключ: `0`.
-`Rank` | Приоритет выбора классификатора пулов ресурсов.<br/>Тип: `Int64`.<br/>
+`Rank` | Приоритет выбора классификатора пулов ресурсов.<br/>Тип: `Int64`.
 `MemberName` | Пользователь или группа пользователей, которые будут отправлены в указанный пул ресурсов.<br/>Тип: `Utf8`.
 `ResourcePool` | Имя пула ресурсов, в который будут отправлены запросы.<br/>Тип: `Utf8`.
 

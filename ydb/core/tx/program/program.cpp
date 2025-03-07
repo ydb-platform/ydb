@@ -24,29 +24,36 @@ const THashSet<ui32>& TProgramContainer::GetEarlyFilterColumns() const {
     return Program->GetFilterColumns();
 }
 
-TConclusionStatus TProgramContainer::Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TProgram& programProto) {
-    ProgramProto = programProto;
-    if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
-        TString out;
-        ::google::protobuf::TextFormat::PrintToString(programProto, &out);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "parse_program")("program", out);
-    }
+TConclusionStatus TProgramContainer::Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TProgram& programProto) noexcept {
+    try {
+        ProgramProto = programProto;
+        if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
+            TString out;
+            ::google::protobuf::TextFormat::PrintToString(programProto, &out);
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "parse_program")("program", out);
+        }
 
-    if (programProto.HasKernels()) {
-        KernelsRegistry.Parse(programProto.GetKernels());
-    }
+        if (programProto.HasKernels()) {
+            if (!KernelsRegistry.Parse(programProto.GetKernels())) {
+                return TConclusionStatus::Fail("Can't parse kernels");
+            }
+        }
 
-    auto parseStatus = ParseProgram(columnResolver, programProto);
-    if (parseStatus.IsFail()) {
-        return parseStatus;
+        auto parseStatus = ParseProgram(columnResolver, programProto);
+        if (parseStatus.IsFail()) {
+            return parseStatus;
+        }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "program_parsed")("result", DebugString());
+    } catch (...) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "program_parsed_error")("result", CurrentExceptionMessage());
+        return TConclusionStatus::Fail(TStringBuilder() << "Can't initialize program, exception thrown: " << CurrentExceptionMessage());
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "program_parsed")("result", DebugString());
 
     return TConclusionStatus::Success();
 }
 
 TConclusionStatus TProgramContainer::Init(
-    const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TOlapProgram& olapProgramProto) {
+    const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TOlapProgram& olapProgramProto) noexcept {
     NKikimrSSA::TProgram programProto;
     if (!programProto.ParseFromString(olapProgramProto.GetProgram())) {
         return TConclusionStatus::Fail("Can't parse TProgram protobuf");
@@ -76,7 +83,7 @@ TConclusionStatus TProgramContainer::Init(
 }
 
 TConclusionStatus TProgramContainer::Init(
-    const NArrow::NSSA::IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram) {
+    const NArrow::NSSA::IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram) noexcept {
     Y_ABORT_UNLESS(serializedProgram);
     Y_ABORT_UNLESS(!OverrideProcessingColumnsVector);
 

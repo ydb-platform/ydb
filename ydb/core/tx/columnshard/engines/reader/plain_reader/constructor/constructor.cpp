@@ -12,7 +12,7 @@ NKikimr::TConclusionStatus TIndexScannerConstructor::ParseProgram(
     AFL_VERIFY(vIndex);
     auto& indexInfo = vIndex->GetSchemaVerified(Snapshot)->GetIndexInfo();
     NCommon::TIndexColumnResolver columnResolver(indexInfo);
-    return TBase::ParseProgram(vIndex, proto.GetOlapProgramType(), proto.GetOlapProgram(), read, columnResolver);
+     return TBase::ParseProgram(vIndex, proto.GetOlapProgramType(), proto.GetOlapProgram(), read, columnResolver);
 }
 
 std::vector<TNameTypeInfo> TIndexScannerConstructor::GetPrimaryKeyScheme(const NColumnShard::TColumnShard* self) const {

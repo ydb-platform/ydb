@@ -223,12 +223,15 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
     }
 
-    Y_UNIT_TEST(DistributedWriteShardRestartAfterExpectation) {
+    Y_UNIT_TEST_TWIN(DistributedWriteShardRestartAfterExpectation, UseSink) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000);
+            .SetDomainPlanResolution(1000)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2199,14 +2202,17 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 4 } items { uint32_value: 40 } }");
     }
 
-    Y_UNIT_TEST(TwoAppendsMustBeVolatile) {
+    Y_UNIT_TEST_TWIN(TwoAppendsMustBeVolatile, UseSink) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetNodeCount(2)
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(100)
-            .SetEnableDataShardVolatileTransactions(true);
+            .SetEnableDataShardVolatileTransactions(true)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2230,6 +2236,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         auto proposeObserver = runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](TEvDataShard::TEvProposeTransaction::TPtr& ev) {
             auto* msg = ev->Get();
             if (msg->Record.GetFlags() & TTxFlags::VolatilePrepare) {
+                ++volatileTxs;
+            }
+        });
+        auto proposeObserverEvWrite = runtime.AddObserver<NKikimr::NEvents::TDataEvents::TEvWrite>([&](NKikimr::NEvents::TDataEvents::TEvWrite::TPtr& ev) {
+            auto* msg = ev->Get();
+            if (msg->Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE) {
                 ++volatileTxs;
             }
         });
@@ -2269,13 +2281,16 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     }
 
     // Regression test for KIKIMR-21156
-    Y_UNIT_TEST(VolatileCommitOnBlobStorageFailure) {
+    Y_UNIT_TEST_TWIN(VolatileCommitOnBlobStorageFailure, UseSink) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(1000)
-            .SetEnableDataShardVolatileTransactions(true);
+            .SetEnableDataShardVolatileTransactions(true)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2513,10 +2528,15 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 [this](auto& ev) {
                     this->OnEvent(ev);
                 }))
+            , ObserverEvWrite(runtime.AddObserver<NKikimr::NEvents::TDataEvents::TEvWrite>(
+                [this](auto& ev) {
+                    this->OnEvent(ev);
+                }))
         {}
 
         void Remove() {
             Observer.Remove();
+            ObserverEvWrite.Remove();
         }
 
     private:
@@ -2581,12 +2601,45 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             ++Modified;
         }
 
+        void OnEvent(NKikimr::NEvents::TDataEvents::TEvWrite::TPtr& ev) {
+            auto* msg = ev->Get();
+
+            if (msg->Record.GetTxMode() != NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE) {
+                Cerr << "... skipping TEvWrite with TxMode=" << NKikimrDataEvents::TEvWrite_ETxMode_Name(msg->Record.GetTxMode())
+                    << "(expected " << NKikimrDataEvents::TEvWrite_ETxMode_Name(NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE) << ")"<< Endl;
+                return;
+            }
+
+            if (!msg->Record.HasLocks()) {
+                Cerr << "... skipping TEvWrite without locks" << Endl;
+                return;
+            }
+
+            auto* kqpLocks = msg->Record.MutableLocks();
+            const auto& sendingShards = kqpLocks->GetSendingShards();
+            const auto& receivingShards = kqpLocks->GetReceivingShards();
+
+            if (std::find(sendingShards.begin(), sendingShards.end(), ArbiterShard) == sendingShards.end()) {
+                Cerr << "... skipping TEvWrite without " << ArbiterShard << " in sending shards" << Endl;
+                return;
+            }
+
+            if (std::find(receivingShards.begin(), receivingShards.end(), ArbiterShard) == receivingShards.end()) {
+                Cerr << "... skipping TEvWrite without " << ArbiterShard << " in receiving shards" << Endl;
+                return;
+            }
+
+            kqpLocks->SetArbiterShard(ArbiterShard);
+            ++Modified;
+        }
+
     public:
         size_t Modified = 0;
 
     private:
         const ui64 ArbiterShard;
         TTestActorRuntime::TEventObserverHolder Observer;
+        TTestActorRuntime::TEventObserverHolder ObserverEvWrite;
     };
 
     class TForceBrokenLock {
@@ -2596,6 +2649,10 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             , Shard(shard)
             , ShardActor(ResolveTablet(runtime, shard))
             , Observer(runtime.AddObserver<TEvDataShard::TEvProposeTransaction>(
+                [this](auto& ev) {
+                    this->OnEvent(ev);
+                }))
+            , ObserverEvWrite(runtime.AddObserver<NKikimr::NEvents::TDataEvents::TEvWrite>(
                 [this](auto& ev) {
                     this->OnEvent(ev);
                 }))
@@ -2663,6 +2720,38 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             ++Modified;
         }
 
+        void OnEvent(NKikimr::NEvents::TDataEvents::TEvWrite::TPtr& ev) {
+            if (ev->GetRecipientRewrite() != ShardActor) {
+                return;
+            }
+
+            auto* msg = ev->Get();
+
+            if (msg->Record.GetTxMode() != NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE) {
+                Cerr << "... skipping TEvWrite with TxMode=" << NKikimrDataEvents::TEvWrite_ETxMode_Name(msg->Record.GetTxMode())
+                    << "(expected " << NKikimrDataEvents::TEvWrite_ETxMode_Name(NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE) << ")"<< Endl;
+                return;
+            }
+
+            if (!msg->Record.HasLocks()) {
+                Cerr << "... skipping TEvWrite without locks" << Endl;
+                return;
+            }
+
+            auto* kqpLocks = msg->Record.MutableLocks();
+
+            // We use a lock that should have never existed to simulate a broken lock
+            auto* kqpLock = kqpLocks->AddLocks();
+            kqpLock->SetLockId(msg->Record.GetTxId());
+            kqpLock->SetDataShard(Shard);
+            kqpLock->SetGeneration(1);
+            kqpLock->SetCounter(1);
+            kqpLock->SetSchemeShard(TableId.PathId.OwnerId);
+            kqpLock->SetPathId(TableId.PathId.LocalPathId);
+
+            ++Modified;
+        }
+
     public:
         size_t Modified = 0;
 
@@ -2671,6 +2760,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         const ui64 Shard;
         const TActorId ShardActor;
         TTestActorRuntime::TEventObserverHolder Observer;
+        TTestActorRuntime::TEventObserverHolder ObserverEvWrite;
     };
 
     class TBlockReadSets : public std::vector<TEvTxProcessing::TEvReadSet::TPtr> {
@@ -2727,12 +2817,15 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TTestActorRuntime::TEventObserverHolder Observer;
     };
 
-    Y_UNIT_TEST(UpsertNoLocksArbiter) {
+    Y_UNIT_TEST_TWIN(UpsertNoLocksArbiter, UseSink) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true);
+            .SetEnableDataShardVolatileTransactions(true)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2782,12 +2875,15 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { int32_value: 31 } items { int32_value: 311 } }");
     }
 
-    Y_UNIT_TEST(UpsertBrokenLockArbiter) {
+    Y_UNIT_TEST_TWIN(UpsertBrokenLockArbiter, UseSink) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true);
+            .SetEnableDataShardVolatileTransactions(true)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2848,12 +2944,15 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "");
     }
 
-    Y_UNIT_TEST(UpsertNoLocksArbiterRestart) {
+    Y_UNIT_TEST_TWIN(UpsertNoLocksArbiterRestart, UseSink) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true);
+            .SetEnableDataShardVolatileTransactions(true)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2920,12 +3019,15 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "ERROR: UNDETERMINED");
     }
 
-    Y_UNIT_TEST(UpsertBrokenLockArbiterRestart) {
+    Y_UNIT_TEST_TWIN(UpsertBrokenLockArbiterRestart, UseSink) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true);
+            .SetEnableDataShardVolatileTransactions(true)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2993,12 +3095,15 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "ERROR: ABORTED");
     }
 
-    Y_UNIT_TEST(UpsertDependenciesShardsRestart) {
+    Y_UNIT_TEST_TWIN(UpsertDependenciesShardsRestart, UseSink) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true);
+            .SetEnableDataShardVolatileTransactions(true)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3299,12 +3404,15 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     }
 
     // Regression test for KIKIMR-22506
-    Y_UNIT_TEST(NotCachingAbortingDeletes) {
+    Y_UNIT_TEST_TWIN(NotCachingAbortingDeletes, UseSink) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true);
+            .SetEnableDataShardVolatileTransactions(true)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3402,6 +3510,14 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 }
                 return true;
             });
+        TBlockEvents<NKikimr::NEvents::TDataEvents::TEvWriteResult> blockedEvWriteResults(runtime,
+            [&](const auto& ev) {
+                auto* msg = ev->Get();
+                if (msg->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED) {
+                    return false;
+                }
+                return true;
+            });
 
         size_t otherReadSets = 0;
         TBlockEvents<TEvTxProcessing::TEvReadSet> blockedReadSets(runtime,
@@ -3444,8 +3560,9 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         Cerr << "========= Unblocking commits and checking results =========" << Endl;
         blockedCommits.Stop().Unblock();
 
-        runtime.WaitFor("both results", [&]{ return blockedResults.size() >= 2; });
+        runtime.WaitFor("both results", [&]{ return blockedResults.size() + blockedEvWriteResults.size() >= 2; });
         blockedResults.Stop().Unblock();
+        blockedEvWriteResults.Stop().Unblock();
 
         UNIT_ASSERT_VALUES_EQUAL(
             FormatResult(runtime.WaitFuture(std::move(commitFuture))),

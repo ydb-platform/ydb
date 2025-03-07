@@ -110,6 +110,82 @@ Y_UNIT_TEST_SUITE(NamingValidation) {
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_ERROR);
     }
 
+    Y_UNIT_TEST(AlterColumnTableOk) {
+        NYdb::TKikimrWithGrpcAndRootSchema server(GetAppConfig());
+        Tests::TClient annoyingClient(*server.ServerSettings);
+
+        TString tableName = "test";
+        TString tableDescr = R"(
+            Name: "TestTable"
+            Schema {
+                Columns {
+                    Name: "Id"
+                    Type: "Int32"
+                    NotNull: True
+                }
+                Columns {
+                    Name: "message"
+                    Type: "Utf8"
+                }
+                KeyColumnNames: ["Id"]
+            }
+        )";
+
+        NMsgBusProxy::EResponseStatus status = annoyingClient.CreateColumnTable("/Root", tableDescr);
+
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+
+        TString alter = R"(
+            Name: "TestTable"
+            Columns {
+                Name: "NewColumn"
+                Type: "Int32"
+            }
+        )";
+
+        status = annoyingClient.AlterTable("/Root", alter);
+
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+    }
+
+    Y_UNIT_TEST(AlterColumnTableFailed) {
+        NYdb::TKikimrWithGrpcAndRootSchema server(GetAppConfig());
+        Tests::TClient annoyingClient(*server.ServerSettings);
+
+        TString tableName = "test";
+        TString tableDescr = R"(
+            Name: "TestTable"
+            Schema {
+                Columns {
+                    Name: "Id"
+                    Type: "Int32"
+                    NotNull: True
+                }
+                Columns {
+                    Name: "message"
+                    Type: "Utf8"
+                }
+                KeyColumnNames: ["Id"]
+            }
+        )";
+
+        NMsgBusProxy::EResponseStatus status = annoyingClient.CreateColumnTable("/Root", tableDescr);
+
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+
+        TString alter = R"(
+            Name: "TestTable"
+            Columns {
+                Name: "New Column"
+                Type: "Int32"
+            }
+        )";
+
+        status = annoyingClient.AlterTable("/Root", alter);
+
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_ERROR);
+    }
+    
 }
 
 }   // namespace NKikimr::NKqp

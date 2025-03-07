@@ -1822,6 +1822,11 @@ message TColumnShardConfig {
     }
     repeated TRepairInfo Repairs = 15;
 
+    enum EJsonDoubleOutOfRangeHandlingPolicy {
+        REJECT = 0;
+        CAST_TO_INFINITY = 1;
+    }
+
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
     optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
     optional uint32 GCIntervalMs = 19 [default = 30000];
@@ -1845,6 +1850,7 @@ message TColumnShardConfig {
     optional int32 DefaultCompressionLevel = 37;
     optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];
     optional bool AlterObjectEnabled = 39 [default = false];
+    optional EJsonDoubleOutOfRangeHandlingPolicy DoubleOutOfRangeHandling = 40 [default = REJECT];
 }
 
 message TSchemeShardConfig {

@@ -15,7 +15,7 @@ namespace NFake {
         virtual NFake::TEvExecute* OnFinished() = 0;
     };
 
-    class TDummy : public ::NActors::IActorCallback, public TExecuted {
+    class TDummy : public TActor<TDummy>, public TExecuted {
         enum EState {
             Boot    = 1,
             Work    = 2,
@@ -35,7 +35,7 @@ namespace NFake {
 
         TDummy(const TActorId &tablet, TInfo *info, const TActorId& owner,
                 ui32 flags = 0 /* ORed EFlg enum */)
-            : ::NActors::IActorCallback(static_cast<TReceiveFunc>(&TDummy::Inbox), NKikimrServices::TActivity::FAKE_ENV_A)
+            : TActor(&TDummy::Inbox, NKikimrServices::TActivity::FAKE_ENV_A)
             , TTabletExecutedFlat(info, tablet, nullptr)
             , Owner(owner)
             , Flags(flags)
@@ -75,7 +75,7 @@ namespace NFake {
                      */
 
                     auto ctx(this->ActorContext());
-                    Executor()->DetachTablet(ctx), Detach(ctx);
+                    Executor()->DetachTablet(), Detach(ctx);
                 }
             } else if (State == EState::Boot) {
                 TTabletExecutedFlat::StateInitImpl(eh, SelfId());

@@ -8,7 +8,6 @@ message THeartbeatRequest {
     uint32 WorkerId = 1;
     string VolatileId = 2;
     repeated TTaskState TaskStates = 3;
-    TStatistics Statistics = 4;
 }
 
 message THeartbeatResponse {
@@ -18,7 +17,7 @@ message THeartbeatResponse {
 
 message TStartOperationRequest {
     ETaskType TaskType = 1;
-    TTaskParams TaskParams = 2;
+    TOperationParams OperationParams = 2;
     string SessionId = 3;
     optional string IdempotencyKey = 4;
     uint32 NumRetries = 5;
@@ -37,4 +36,13 @@ message TGetOperationResponse {
 
 message TDeleteOperationResponse {
     EOperationStatus Status = 1;
+}
+
+message TGetFmrTableInfoRequest {
+    string TableId = 1;
+}
+
+message TGetFmrTableInfoResponse {
+    TTableStats TableStats = 1;
+    repeated TFmrError ErrorMessages = 2;
 }

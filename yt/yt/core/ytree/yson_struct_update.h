@@ -84,6 +84,74 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class T>
+concept CString = std::same_as<T, TString> || std::same_as<T, std::string>;
+
+template <class T>
+struct TUnwrapMapOfYsonStructs
+{ };
+
+template <CYsonStructDerived T, CString TStringKey>
+struct TUnwrapMapOfYsonStructs<THashMap<TStringKey, TIntrusivePtr<T>>>
+{
+    using TKey = TStringKey;
+    using TStruct = T;
+};
+
+// todo(coteeq): This field registrar is not oldStruct-agnostic:
+// It expects a serialized sequence of YsonStructs, which will be used to
+// (in case of successes) update via the configurator like this:
+// 1. Update(s1, s2);
+// 2. Update(s2, s3);
+// 3. Update(s3, s4);
+//
+// This is neither enforced by TSealedConfigurator's API, nor it is obvious
+// to the reader.
+template <class TMap>
+class TMapFieldConfigurator
+    // xxx(coteeq): Well, I honestly wanted to make this base protected to hide
+    // the |Updater|/|Validator| methods and friends, but it seems that
+    // the whole non-public inheritance thing is deranged, so here we are :(
+    : public TFieldConfigurator<TMap>
+{
+    using TKey = typename TUnwrapMapOfYsonStructs<TMap>::TKey;
+    using TStruct = typename TUnwrapMapOfYsonStructs<TMap>::TStruct;
+    using TStructPtr = TIntrusivePtr<TStruct>;
+
+public:
+    TMapFieldConfigurator();
+
+    //! (key, newStruct) -> newConfigurator
+    TMapFieldConfigurator& OnAdded(TCallback<TConfigurator<TStruct>(const TKey&, const TStructPtr&)> onAdded);
+    //! (key, oldStruct) -> void
+    TMapFieldConfigurator& OnRemoved(TCallback<void(const TKey&, const TStructPtr&)> onRemoved);
+
+    //! (key, newStruct) -> void
+    TMapFieldConfigurator& ValidateOnAdded(TCallback<void(const TKey&, const TStructPtr&)> onAdded);
+    //! (key, oldStruct) -> void
+    TMapFieldConfigurator& ValidateOnRemoved(TCallback<void(const TKey&, const TStructPtr&)> onRemoved);
+
+    TMapFieldConfigurator& ConfigureChild(const TKey& key, TConfigurator<TStruct> configurator);
+
+private:
+    void ValidateImpl(
+        const THashMap<TKey, TStructPtr>& oldMap,
+        const THashMap<TKey, TStructPtr>& newMap);
+    void UpdateImpl(
+        const THashMap<TKey, TStructPtr>& oldMap,
+        const THashMap<TKey, TStructPtr>& newMap);
+
+    THashMap<TKey, TSealedConfigurator<TStruct>> Configurators_;
+
+    TCallback<TConfigurator<TStruct>(const TKey&, const TIntrusivePtr<TStruct>&)> OnAdded_;
+    TCallback<void(const TKey&, const TIntrusivePtr<TStruct>&)> OnRemoved_;
+
+    TCallback<void(const TKey&, const TIntrusivePtr<TStruct>&)> ValidateOnAdded_;
+    TCallback<void(const TKey&, const TIntrusivePtr<TStruct>&)> ValidateOnRemoved_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -102,6 +170,11 @@ private:
 //!
 //! Currently, only methods related to dynamic update of YsonStruct are
 //! supported (see unittests/yson_struct_update_ut.cpp).
+//!
+//! Note that when you update/validate YsonStruct (via sealed configurator), you
+//! pass YsonStruct ptrs there. So the new YsonStruct is valid in the sense of
+//! YsonStruct's built-in validity checks (i.e. LessThan/NonEmpty/Postprocessor)
+//! by construction - you do not need to even think about it.
 template <CYsonStructDerived TStruct>
 class TConfigurator
 {
@@ -110,6 +183,9 @@ public:
 
     template <class TValue>
     NDetail::TFieldConfigurator<TValue>& Field(const std::string& name, TYsonStructField<TStruct, TValue> field);
+
+    template <class TValue>
+    NDetail::TMapFieldConfigurator<TValue>& MapField(const TString& name, TYsonStructField<TStruct, TValue> field);
 
     // Converts to a configurator of a base class
     template <class TAncestor>

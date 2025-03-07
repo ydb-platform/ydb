@@ -359,6 +359,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                         Repeat(
                             ExpectedSpan("Datashard.Read",
                                 ExpectedSpan("Tablet.Transaction",
+                                    ExpectedSpan("Tablet.Transaction.Enqueued"),
                                     ExpectedSpan("Tablet.Transaction.Execute",
                                         Repeat("Datashard.Unit", 3)),
                                     // No extra page fault with btree index (root is in meta)
@@ -443,6 +444,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                         Repeat(
                             ExpectedSpan("Datashard.Read",
                                 ExpectedSpan("Tablet.Transaction",
+                                    ExpectedSpan("Tablet.Transaction.Enqueued"),
                                     ExpectedSpan("Tablet.Transaction.Execute",
                                         Repeat("Datashard.Unit", 4)),
                                     "Tablet.Transaction.Complete"),

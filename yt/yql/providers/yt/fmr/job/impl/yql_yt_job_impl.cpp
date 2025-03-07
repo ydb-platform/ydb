@@ -93,9 +93,9 @@ public:
         return Nothing();
     }
 private:
-    std::variant<TString, TError> GetTableContent(const TTableRef& tableRef, const TClusterConnection& clusterConnection) {
+    std::variant<TString, TError> GetTableContent(const TTaskTableRef& tableRef, const TClusterConnection& clusterConnection) {
         auto ytTable = std::get_if<TYtTableRef>(&tableRef);
-        auto fmrTable = std::get_if<TFmrTableRef>(&tableRef);
+        auto fmrTable = std::get_if<TFmrTableInputRef>(&tableRef);
         if (ytTable) {
             return GetYtTableContent(*ytTable, clusterConnection);
         } else if (fmrTable) {
@@ -117,7 +117,7 @@ private:
         return tableContent;
     }
 
-    std::variant<TString, TError> GetFmrTableContent(const TFmrTableRef& fmrTable) {
+    std::variant<TString, TError> GetFmrTableContent(const TFmrTableInputRef& fmrTable) {
         auto res = TableDataService_->Get(fmrTable.TableId);
         return res.GetValueSync().GetRef();
     }
@@ -131,7 +131,7 @@ IFmrJob::TPtr MakeFmrJob(ITableDataService::TPtr tableDataService, IYtService::T
     return MakeIntrusive<TFmrJob>(tableDataService, ytService, cancelFlag);
 }
 
-ETaskStatus RunJob(
+TJobResult RunJob(
     TTask::TPtr task,
     ITableDataService::TPtr tableDataService,
     IYtService::TPtr ytService,
@@ -157,10 +157,10 @@ ETaskStatus RunJob(
 
     if (taskResult.Defined()) {
         YQL_CLOG(ERROR, FastMapReduce) << "Task failed: " << taskResult.GetRef();
-        return ETaskStatus::Failed;
+        return {ETaskStatus::Failed, TStatistics()};
     }
 
-    return ETaskStatus::Completed;
+    return {ETaskStatus::Completed, TStatistics()};
 };
 
 } // namespace NYql

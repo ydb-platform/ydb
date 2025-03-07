@@ -1,8 +1,10 @@
 LIBRARY()
 
 PEERDIR(
-    ydb/library/actors/core
+    ydb/core/base
     ydb/core/control/lib
+    ydb/core/mon
+    ydb/library/actors/core
     library/cpp/deprecated/atomic
 )
 

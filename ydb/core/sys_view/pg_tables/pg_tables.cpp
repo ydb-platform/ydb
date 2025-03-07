@@ -102,7 +102,7 @@ void TPgTablesScanBase::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeRe
     switch (status) {
         case NKikimrScheme::StatusSuccess: {
             const auto& pathDescription = record.GetPathDescription();
-            Y_ENSURE(pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeDir 
+            Y_ENSURE(pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeDir
                 || pathDescription.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeSubDomain);
             break;
         }

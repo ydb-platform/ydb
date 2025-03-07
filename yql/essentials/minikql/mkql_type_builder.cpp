@@ -2742,17 +2742,11 @@ TType* TTypeBuilder::NewArrayType(const TArrayRef<TType* const>& elements) const
 }
 
 TType* TTypeBuilder::NewEmptyMultiType() const {
-    if (RuntimeVersion > 35) {
-        return TMultiType::Create(0, nullptr, Env);
-    }
-    return Env.GetEmptyTupleLazy()->GetGenericType();
+    return TMultiType::Create(0, nullptr, Env);
 }
 
 TType* TTypeBuilder::NewMultiType(const TArrayRef<TType* const>& elements) const {
-    if (RuntimeVersion > 35) {
-        return TMultiType::Create(elements.size(), elements.data(), Env);
-    }
-    return TTupleType::Create(elements.size(), elements.data(), Env);
+    return TMultiType::Create(elements.size(), elements.data(), Env);
 }
 
 TType* TTypeBuilder::NewResourceType(const std::string_view& tag) const {

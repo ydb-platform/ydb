@@ -109,7 +109,7 @@ ITransaction* THive::CreateUnlockTabletExecution(ui64 tabletId, ui64 seqNo, NKik
 
 void THive::ScheduleUnlockTabletExecution(TNodeInfo& node, NKikimrHive::ELockLostReason reason) {
     // Unlock tablets that have been locked by this node
-    BLOG_NOTICE("ScheduleUnlockTabletExecution(" << node.Id << ")");
+    BLOG_NOTICE("ScheduleUnlockTabletExecution(" << node.Id << ", " << NKikimrHive::ELockLostReason_Name(reason) << ")");
     for (TLeaderTabletInfo* tablet : node.LockedTablets) {
         Y_ABORT_UNLESS(FindTabletEvenInDeleting(tablet->Id) == tablet);
         Y_ABORT_UNLESS(tablet->LockedToActor.NodeId() == node.Id);
@@ -129,7 +129,7 @@ void THive::ScheduleUnlockTabletExecution(TNodeInfo& node, NKikimrHive::ELockLos
 void THive::Handle(TEvPrivate::TEvUnlockTabletReconnectTimeout::TPtr& ev) {
     TTabletId tabletId = ev->Get()->TabletId;
     ui64 seqNo = ev->Get()->SeqNo;
-    BLOG_D("THive::Handle::TEvUnlockTabletReconnectTimeout TabletId=" << tabletId);
+    BLOG_NOTICE("THive::Handle::TEvUnlockTabletReconnectTimeout TabletId=" << tabletId << " Reason=" << NKikimrHive::ELockLostReason_Name(ev->Get()->Reason));
     TLeaderTabletInfo* tablet = FindTabletEvenInDeleting(tabletId);
     if (tablet != nullptr && tablet->IsLockedToActor() && tablet->PendingUnlockSeqNo == seqNo) {
         // We use sequence numbers to make sure unlock happens only if some

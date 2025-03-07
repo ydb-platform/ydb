@@ -37,8 +37,9 @@ protected:
         return result;
     }
 
+    template<typename TBuffer = NUdf::TResizeableBuffer>
     std::unique_ptr<arrow::ResizableBuffer> CreateResizableBuffer(size_t size) const {
-        auto buffer = NUdf::AllocateResizableBuffer(size, Pool_);
+        auto buffer = NUdf::AllocateResizableBuffer<TBuffer>(size, Pool_);
         ARROW_OK(buffer->Resize(size, false));
         return buffer;
     }
@@ -92,7 +93,7 @@ public:
         auto origData = array->GetValues<NUdf::TUnboxedValue>(1);
         auto dataSize = sizeof(NUdf::TUnboxedValue) * array->length;
 
-        auto trimmedBuffer = CreateResizableBuffer(dataSize);
+        auto trimmedBuffer = CreateResizableBuffer<NUdf::TResizableManagedBuffer<NUdf::TUnboxedValue>>(dataSize);
         auto trimmedBufferData = reinterpret_cast<NUdf::TUnboxedValue*>(trimmedBuffer->mutable_data());
 
         for (int64_t i = 0; i < array->length; i++) {

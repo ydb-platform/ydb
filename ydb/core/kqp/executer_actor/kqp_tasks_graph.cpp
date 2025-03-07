@@ -21,16 +21,6 @@ using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
 
-TString KeyTypesToString(const TVector<NScheme::TTypeInfo>& keyColumnTypes) {
-    TVector<TString> stringNames;
-    stringNames.reserve(keyColumnTypes.size());
-    for (const auto& keyColumnType: keyColumnTypes) {
-        stringNames.push_back(NYql::NProto::TypeIds_Name(keyColumnType.GetTypeId()));
-    }
-    return "[" + JoinSeq(",", stringNames) + "]";
-};
-
-
 void LogStage(const NActors::TActorContext& ctx, const TStageInfo& stageInfo) {
     LOG_DEBUG_S(ctx, NKikimrServices::KQP_EXECUTER, stageInfo.DebugString());
 }
@@ -508,6 +498,17 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
             auto& originStageInfo = tasksGraph.GetStageInfo(NYql::NDq::TStageId(stageInfo.Id.TxId, input.GetStageIndex()));
             ui32 outputIdx = input.GetOutputIndex();
             columnShardHashV1Params = originStageInfo.Meta.GetColumnShardHashV1Params(outputIdx);
+            if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kMap || inputIndex == stage.InputsSize() - 1) { // this branch is only for logging purposes
+                LOG_DEBUG_S(
+                    *TlsActivationContext,
+                    NKikimrServices::KQP_EXECUTER,
+                    "Chosed "
+                    << "[" << originStageInfo.Id.TxId << ":" << originStageInfo.Id.StageId << "]"
+                    << " outputIdx: " << outputIdx << " to propogate through inputs stages of the stage "
+                    << "[" << stageInfo.Id.TxId << ":" << stageInfo.Id.StageId << "]" << ": "
+                    << columnShardHashV1Params.KeyTypesToString();
+                );
+            }
             if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kMap) {
                 // We want to enforce sourceShardCount from map connection, cause it can be at most one map connection
                 // and ColumnShardHash in Shuffle will use this parameter to shuffle on this map (same with taskIdByHash mapping)
@@ -574,8 +575,9 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
                             *TlsActivationContext,
                             NKikimrServices::KQP_EXECUTER,
                             "Propogating columnhashv1 pararms to stage"
-                            << "[" << inputStageInfo.Id.TxId << ":" << inputStageInfo.Id.StageId << "]" << ": "
-                            << KeyTypesToString(*columnShardHashV1Params.SourceTableKeyColumnTypes) << " "
+                            << "[" << inputStageInfo.Id.TxId << ":" << inputStageInfo.Id.StageId << "]" << " which is input of stage "
+                            << "[" << stageInfo.Id.TxId << ":" << stageInfo.Id.StageId << "]" << ": "
+                            << columnShardHashV1Params.KeyTypesToString() << " "
                             << "[" << JoinSeq(",", input.GetHashShuffle().GetKeyColumns()) << "]";
                         );
 
@@ -583,7 +585,7 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
                             columnShardHashV1Params.SourceTableKeyColumnTypes->size() == input.GetHashShuffle().KeyColumnsSize(),
                             TStringBuilder{}
                                 << "Hashshuffle keycolumns and keytypes args count mismatch during executer stage, types: "
-                                << KeyTypesToString(*columnShardHashV1Params.SourceTableKeyColumnTypes) << " for the columns: "
+                                << columnShardHashV1Params.KeyTypesToString() << " for the columns: "
                                 << "[" << JoinSeq(",", input.GetHashShuffle().GetKeyColumns()) << "]"
                         );
 
@@ -1200,7 +1202,7 @@ void FillOutputDesc(
                         NKikimrServices::KQP_EXECUTER,
                         "Filling columnshardhashv1 params for sending it to runtime "
                         << "[" << stageInfo.Id.TxId << ":" << stageInfo.Id.StageId << "]"
-                        << ": " << KeyTypesToString(*columnShardHashV1Params.SourceTableKeyColumnTypes)
+                        << ": " << columnShardHashV1Params.KeyTypesToString()
                         << " for the columns: " << "[" << JoinSeq(",", output.KeyColumns) << "]"
                     );
                     Y_ENSURE(columnShardHashV1Params.SourceShardCount != 0, "ShardCount for ColumnShardHashV1 Shuffle can't be equal to 0");
@@ -1210,8 +1212,8 @@ void FillOutputDesc(
                     Y_ENSURE(
                         columnShardHashV1Params.SourceTableKeyColumnTypes->size() == output.KeyColumns.size(),
                         TStringBuilder{}
-                            << "Hashshuffle keycolumns and keytypes args count mismatch during executer stage, types: "
-                            << KeyTypesToString(*columnShardHashV1Params.SourceTableKeyColumnTypes) << " for the columns: "
+                            << "Hashshuffle keycolumns and keytypes args count mismatch during executer FillOutputDesc stage, types: "
+                            << columnShardHashV1Params.KeyTypesToString() << " for the columns: "
                             << "[" << JoinSeq(",", output.KeyColumns) << "]"
                     );
 

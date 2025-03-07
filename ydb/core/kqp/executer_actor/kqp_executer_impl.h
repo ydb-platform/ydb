@@ -1403,7 +1403,7 @@ protected:
                     partitionsCount = originStageInfo.Tasks.size();
                     UnknownAffectedShardCount = true;
                     break;
-                case NKqpProto::TKqpPhyConnection::kMap: 
+                case NKqpProto::TKqpPhyConnection::kMap:
                     partitionsCount = originStageInfo.Tasks.size();
                     forceMapTasks = true;
                     ++mapCnt;
@@ -1710,11 +1710,11 @@ protected:
                         for (std::size_t i = 0; i < shardsInfo.size(); ++i) {
                             auto&& shardInfo = shardsInfo[i];
                             MergeReadInfoToTaskMeta(
-                                metas[i % maxTasksPerNode], 
-                                shardInfo.ShardId, 
-                                shardInfo.KeyReadRanges, 
+                                metas[i % maxTasksPerNode],
+                                shardInfo.ShardId,
+                                shardInfo.KeyReadRanges,
                                 readSettings,
-                                columns, op, 
+                                columns, op,
                                 /*isPersistentScan*/ true
                             );
                         }
@@ -1728,13 +1728,13 @@ protected:
 
                     // in runtime we calc hash, which will be in [0; shardcount]
                     // so we merge to mappings : hash -> shardID and shardID -> channelID for runtime
-                    THashMap<ui64, ui64> hashByShardId; 
+                    THashMap<ui64, ui64> hashByShardId;
                     const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
                     const auto& sharding = tableDesc.GetSharding();
                     for (std::size_t i = 0; i < sharding.ColumnShardsSize(); ++i) {
                         hashByShardId.insert({sharding.GetColumnShards(i), i});
                     }
-                    
+
                     for (ui32 t = 0; t < maxTasksPerNode; ++t, ++stageInternalTaskId) {
                         auto& task = TasksGraph.AddTask(stageInfo);
                         task.Meta = metas[t];
@@ -1746,7 +1746,7 @@ protected:
                         task.SetMetaId(t);
                         FillSecureParamsFromStage(task.Meta.SecureParams, stage);
                         BuildSinks(stage, task);
-    
+
                         for (const auto& readInfo: *task.Meta.Reads) {
                             Y_ENSURE(hashByShardId.contains(readInfo.ShardId));
                             (*columnShardHashV1Params.TaskIdByHash)[hashByShardId[readInfo.ShardId]] = stageInternalTaskId;
@@ -1754,6 +1754,13 @@ protected:
 
                     }
                 }
+
+                LOG_DEBUG_S(
+                    *TlsActivationContext,
+                    NKikimrServices::KQP_EXECUTER,
+                    "Stage with scan " << "[" << stageInfo.Id.TxId << ":" << stageInfo.Id.StageId << "]" << " has keys: "
+                    << columnShardHashV1Params.KeyTypesToString();
+                );
             } else {
                 ui32 metaId = 0;
                 for (auto&& pair : nodeShards) {

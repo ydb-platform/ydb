@@ -587,21 +587,26 @@ void InferStatisticsForAggregateCombine(const TExprNode::TPtr& input, TTypeAnnot
         return;
     }
 
-    if (inputStats->ShuffledByColumns) {
+    auto aggrStats = std::make_shared<TOptimizerStatistics>(*inputStats);
+    if (aggrStats->ShuffledByColumns) {
         TString relName{};
-        if (!inputStats->ShuffledByColumns->Data.empty()) {
+        if (!aggrStats->ShuffledByColumns->Data.empty()) {
             relName = inputStats->ShuffledByColumns->Data.front().RelName;
         }
+
 
         TVector<NDq::TJoinColumn> shuffledBy;
         shuffledBy.reserve(agg.Keys().Size());
         for (const auto& key: agg.Keys()) {
             shuffledBy.push_back(TJoinColumn(relName, key.StringValue()));
         }
-        inputStats->ShuffledByColumns->Data = std::move(shuffledBy);
+        aggrStats->ShuffledByColumns =
+            TIntrusivePtr<TOptimizerStatistics::TShuffledByColumns>(
+                new TOptimizerStatistics::TShuffledByColumns(std::move(shuffledBy))
+            );
     }
 
-    typeCtx->SetStats( input.Get(), RemoveOrdering(inputStats));
+    typeCtx->SetStats( input.Get(), RemoveOrdering(aggrStats));
 }
 
 /**

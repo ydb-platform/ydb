@@ -33,6 +33,40 @@ struct TColumnShardHashV1Params {
     ui64 SourceShardCount = 0;
     std::shared_ptr<TVector<NScheme::TTypeInfo>> SourceTableKeyColumnTypes = nullptr;
     std::shared_ptr<TVector<ui64>> TaskIdByHash = nullptr; // hash belongs [0; ShardCount]
+
+    TColumnShardHashV1Params DeepCopy() const {
+        TColumnShardHashV1Params copy;
+        copy.SourceShardCount = SourceShardCount;
+
+        if (SourceTableKeyColumnTypes) {
+            copy.SourceTableKeyColumnTypes = std::make_shared<TVector<NScheme::TTypeInfo>>(*SourceTableKeyColumnTypes);
+        } else {
+            copy.SourceTableKeyColumnTypes = nullptr;
+        }
+
+        if (TaskIdByHash) {
+            copy.TaskIdByHash = std::make_shared<TVector<ui64>>(*TaskIdByHash);
+        } else {
+            copy.TaskIdByHash = nullptr;
+        }
+
+        return copy;
+    }
+
+    TString KeyTypesToString() const {
+        if (SourceTableKeyColumnTypes == nullptr) {
+            return "[ NULL ]";
+        }
+
+        const auto& keyColumnTypes = *SourceTableKeyColumnTypes;
+        TVector<TString> stringNames;
+        stringNames.reserve(keyColumnTypes.size());
+        for (const auto& keyColumnType: keyColumnTypes) {
+            stringNames.push_back(NYql::NProto::TypeIds_Name(keyColumnType.GetTypeId()));
+        }
+
+        return "[" + JoinSeq(",", stringNames) + "]";
+    }
 };
 
 struct TStageInfoMeta {
@@ -56,10 +90,10 @@ struct TStageInfoMeta {
     THashMap<ui32, TColumnShardHashV1Params> HashParamsByOutput;
 
     TColumnShardHashV1Params& GetColumnShardHashV1Params(ui32 outputIdx) {
-        if (HashParamsByOutput.contains(outputIdx)) {
-            return HashParamsByOutput[outputIdx];
+        if (!HashParamsByOutput.contains(outputIdx)) {
+            HashParamsByOutput[outputIdx] = ColumnShardHashV1Params.DeepCopy();
         }
-        return ColumnShardHashV1Params;
+        return HashParamsByOutput[outputIdx];
     }
 
     const TColumnShardHashV1Params& GetColumnShardHashV1Params(ui32 outputIdx) const {

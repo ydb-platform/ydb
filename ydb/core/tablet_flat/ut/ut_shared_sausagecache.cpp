@@ -151,10 +151,6 @@ void SetupSharedCache(TMyEnvBase& env, NKikimrSharedCache::TReplacementPolicy po
     }
 }
 
-struct TTestCase {
-
-};
-
 Y_UNIT_TEST(Limits) {
     TMyEnvBase env;
     env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);

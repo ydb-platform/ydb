@@ -271,10 +271,14 @@ void TPartitionActor::Handle(TEvPQProxy::TEvDirectReadAck::TPtr& ev, const TActo
     if (DirectReadRestoreStage != EDirectReadRestoreStage::None) {
         if (RestoredDirectReadId == ev->Get()->DirectReadId) {
             // This direct read is already being restored. Have to forget it later.
+            LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Got ack for direct read " << ev->Get()->DirectReadId
+                    << " while restoring, store it to forget further");
             DirectReadsToForget.insert(ev->Get()->DirectReadId);
             return;
         }
         if (DirectReadsToRestore.contains(ev->Get()->DirectReadId)) {
+            LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Got ack for direct read " << ev->Get()->DirectReadId
+                    << " while restoring, remove it from restore list");
             // This direct read is pending for restore. No need to foreget - not yet prepared, just erase it;
             DirectReadsToRestore.erase(ev->Get()->DirectReadId);
             DirectReadsToPublish.erase(ev->Get()->DirectReadId);
@@ -316,6 +320,7 @@ void TPartitionActor::Handle(const TEvPQProxy::TEvRestartPipe::TPtr&, const TAct
         DirectReadsToRestore = DirectReadResults;
         DirectReadsToPublish = PublishedDirectReads;
         Y_ABORT_UNLESS(!DirectReadsToPublish.contains(DirectReadId));
+        RestoredDirectReadId = 0;
         RestartDirectReadSession();
         return;
     }
@@ -634,6 +639,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
             break;
         case EDirectReadRestoreStage::Session:
             Y_ABORT_UNLESS(result.HasCmdRestoreDirectReadResult());
+            LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Direct read - session restarted for partition " << Partition);
             if (!SendNextRestorePrepareOrForget()) {
                 OnDirectReadsRestored();
             }
@@ -654,6 +660,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
             return;
         case EDirectReadRestoreStage::Publish:
             Y_ABORT_UNLESS(RestoredDirectReadId != 0);
+
             Y_ABORT_UNLESS(result.HasCmdPublishReadResult());
             Y_ABORT_UNLESS(*DirectReadsToPublish.begin() == result.GetCmdPublishReadResult().GetDirectReadId());
             DirectReadsToPublish.erase(DirectReadsToPublish.begin());
@@ -730,6 +737,8 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
         Y_ABORT_UNLESS(DirectRead);
         Y_ABORT_UNLESS(res.GetDirectReadId() == DirectReadId);
+        if (!PipeClient)
+            return; // Pipe was already destroyed, direct read session is being restored. Will resend this request afterwards;
 
         EndOffset = res.GetEndOffset();
         SizeLag = res.GetSizeLag();
@@ -1092,13 +1101,18 @@ bool TPartitionActor::SendNextRestorePrepareOrForget() {
     if (shouldForget) {
         // We have something to forget from what was already restored; Do NOT change RestoredDirectReadId
         DirectReadRestoreStage = EDirectReadRestoreStage::Forget;
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Restore direct read, forget id "
+                    << *DirectReadsToForget.begin() << " for partition " << Partition);
         SendForgetDirectRead(*DirectReadsToForget.begin(), ctx);
         return true;
     } else {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Resend prepare direct read id " << prepareId  << " for partition " << Partition);
-        Y_ABORT_UNLESS(prepareId != 0);
-        //Restore;
         auto& dr = DirectReadsToRestore.begin()->second;
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Resend prepare direct read id " << prepareId
+                    << " (internal id: " << dr.GetDirectReadId() << ") for partition " << Partition);
+        Y_ABORT_UNLESS(prepareId != 0);
+
+        //Restore;
+        Y_ABORT_UNLESS(prepareId == dr.GetDirectReadId());
 
         Y_ABORT_UNLESS(RestoredDirectReadId < dr.GetDirectReadId());
         RestoredDirectReadId = dr.GetDirectReadId();
@@ -1125,8 +1139,8 @@ bool TPartitionActor::SendNextRestorePublishRequest() {
         return false;
     }
     auto id = *DirectReadsToPublish.begin();
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                        << "Resend publish direct read on restore, id: " << id);
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << "Resend publish direct read on restore, id: "
+                << id << " for partition " << Partition);
 
     Y_ABORT_UNLESS(RestoredDirectReadId == id);
     DirectReadRestoreStage = EDirectReadRestoreStage::Publish;
@@ -1298,7 +1312,6 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
 
     Y_ABORT_UNLESS(ReadGuid.empty());
     Y_ABORT_UNLESS(!RequestInfly);
-    Y_ABORT_UNLESS(DirectReadRestoreStage == EDirectReadRestoreStage::None);
 
     ReadGuid = ev->Get()->Guid;
 
@@ -1310,6 +1323,12 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
     
     if (!PipeClient) //Pipe will be recreated soon
         return;
+
+    if (DirectReadRestoreStage != EDirectReadRestoreStage::None) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " READ FROM " << Partition
+                    << " store this request utill direct read is restored");
+        return;
+    }
 
     TAutoPtr<TEvPersQueue::TEvRequest> event(new TEvPersQueue::TEvRequest);
     event->Record.Swap(&request);

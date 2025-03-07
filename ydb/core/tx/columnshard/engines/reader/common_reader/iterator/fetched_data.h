@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/collection.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -28,6 +29,7 @@ private:
     TFetchers Fetchers;
     YDB_ACCESSOR_DEF(TBlobs, Blobs);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::NAccessor::TAccessorsCollection>, Table);
+    YDB_READONLY_DEF(std::shared_ptr<NIndexes::TIndexesCollection>, Indexes);
     YDB_READONLY(bool, Aborted, false);
 
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AccessorsGuard;
@@ -69,6 +71,7 @@ public:
     TFetchedData(const bool useFilter, const ui32 recordsCount) {
         Table = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(recordsCount);
         Table->SetFilterUsage(useFilter);
+        Indexes = std::make_shared<NIndexes::TIndexesCollection>();
     }
 
     void SetAccessorsGuard(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard) {
@@ -118,7 +121,8 @@ public:
         return result;
     }
 
-    void AddBatch(const std::shared_ptr<NArrow::TGeneralContainer>& container, const NArrow::NSSA::IColumnResolver& resolver, const bool withFilter) {
+    void AddBatch(
+        const std::shared_ptr<NArrow::TGeneralContainer>& container, const NArrow::NSSA::IColumnResolver& resolver, const bool withFilter) {
         Table->AddBatch(container, resolver, withFilter);
     }
 

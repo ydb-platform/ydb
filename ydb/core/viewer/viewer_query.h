@@ -603,7 +603,7 @@ private:
                 NJson::ReadJsonTree(progress.GetQueryPlan(), &(json["plan"]));
             }
             if (progress.HasQueryStats()) {
-                Proto2Json(progress.GetQueryStats(), json["stats"]);
+                NProtobufJson::Proto2Json(progress.GetQueryStats(), json["stats"]);
             }
             StreamJsonResponse(json);
         }
@@ -830,7 +830,7 @@ private:
                 NJson::ReadJsonTree(response.GetQueryPlan(), &(jsonResponse["plan"]));
             }
             if (response.HasQueryStats()) {
-                Proto2Json(response.GetQueryStats(), jsonResponse["stats"]);
+                NProtobufJson::Proto2Json(response.GetQueryStats(), jsonResponse["stats"]);
             }
         }
         catch (const std::exception& ex) {

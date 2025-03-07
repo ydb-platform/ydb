@@ -4,9 +4,11 @@
 #include "viewer.h"
 #include "viewer_helper.h"
 #include "viewer_tabletinfo.h"
+#include <library/cpp/protobuf/json/proto2json.h>
 
 namespace NKikimr::NViewer {
 
+using namespace NProtobufJson;
 using namespace NActors;
 using namespace NNodeWhiteboard;
 
@@ -847,7 +849,14 @@ private:
             worstNodes += nodes;
         }
         ClusterInfo.SetOverall(GetViewerFlag(worstState));
-        TBase::ReplyAndPassAway(GetHTTPOKJSON(ClusterInfo));
+        TStringStream out;
+        Proto2Json(ClusterInfo, out, {
+            .EnumMode = TProto2JsonConfig::EnumValueMode::EnumName,
+            .MapAsObject = true,
+            .StringifyNumbers = TProto2JsonConfig::EStringifyNumbersMode::StringifyInt64Always,
+            .WriteNanAsString = true,
+        });
+        TBase::ReplyAndPassAway(GetHTTPOKJSON(out.Str()));
     }
 
 public:

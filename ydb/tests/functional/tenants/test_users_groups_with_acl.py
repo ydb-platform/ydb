@@ -3,7 +3,7 @@
 import logging
 import pytest
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.ydb_fixtures import ydb_database_ctx
+from ydb.tests.library.fixtures import ydb_database_ctx
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 

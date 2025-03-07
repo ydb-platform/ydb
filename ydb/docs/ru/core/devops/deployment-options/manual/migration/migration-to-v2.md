@@ -108,14 +108,19 @@ ps aux | grep ydbd
     enabled: true
   ```
 
-3. Разложить обновленный конфигурационный файл `config.yaml` по всем нодам кластера по пути, указанном в аргументе `ydbd --yaml-config`.
+3. Загрузить обновленный конфигурационный файл на кластер:
+
+ ```bash
+  ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
+  ``` 
+
 4. Перезапустить все [узлы хранения](../../../../concepts/glossary.md#storage-node) кластера с помощью процедуры [rolling restart](../../../../reference/ydbops/rolling-restart-scenario.md).
 5. При наличии секции `config.domains_config.security_config` в файле `config.yaml`, вынести её на уровень выше, в секцию `config`.
 6. Удалить из файла `config.yaml` секции `config.blob_storage_config` и `config.domains_config`.
-7. Выполнить следующую команду с изменённым конфигурационным файлом:
+7. Загрузить обновленный конфигурационный файл на кластер:
 
-```bash
-ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
-```
+ ```bash
+  ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
+  ``` 
 
 В результате проделанных действий кластер будет переведён в режим автоматического управление конфигурацией [State Storage](../../../../reference/configuration/index.md#domains-state) и [статической группой](../../../../reference/configuration/index.md#blob_storage_config). Технически, оно осуществляется с помощью механизма [распределённой конфигурации](../../../../concepts/glossary.md#distributed-configuration).

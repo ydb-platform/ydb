@@ -629,7 +629,7 @@ Y_UNIT_TEST(ReplacementPolicySwitch) {
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
-    SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU, 20_MB, true);
+    SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU, 8_MB, true);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -653,7 +653,7 @@ Y_UNIT_TEST(ReplacementPolicySwitch) {
     UNIT_ASSERT_GT(counters->ReplacementPolicySize(NKikimrSharedCache::ThreeLeveledLRU)->Val(), 0);
     UNIT_ASSERT_VALUES_EQUAL(counters->ReplacementPolicySize(NKikimrSharedCache::S3FIFO)->Val(), 0);
 
-    SetupSharedCache(env, NKikimrSharedCache::S3FIFO, 20_MB);
+    SetupSharedCache(env, NKikimrSharedCache::S3FIFO, 8_MB);
 
     retried = {};
     for (i64 key = 0; key < 3; ++key) {

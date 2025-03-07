@@ -3165,6 +3165,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             }
             State = MultiLocal;
             NextLevel((1 + tableSize) * shards);
+            Parent = ParentEnd();
             return true;
         }
 

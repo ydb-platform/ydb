@@ -996,8 +996,8 @@ public:
 
             Schedule(reattachState.ReattachInfo.Delay, new TEvPrivate::TEvReattachToShard(ev->Get()->TabletId));
         } else {
-            TxManager->SetError(ev->Get()->TabletId);
             if (TxManager->GetState(ev->Get()->TabletId) == IKqpTransactionManager::EXECUTING) {
+                TxManager->SetError(ev->Get()->TabletId);
                 RuntimeError(
                     NYql::NDqProto::StatusIds::UNDETERMINED,
                     NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
@@ -1005,6 +1005,7 @@ public:
                         << "Error writing to table `" << TableId.PathId.ToString() << "`"
                         << ". Transaction state unknown for tablet " << ev->Get()->TabletId << ".");
             } else {
+                TxManager->SetError(ev->Get()->TabletId);
                 RuntimeError(
                     NYql::NDqProto::StatusIds::UNAVAILABLE,
                     NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,

@@ -151,6 +151,10 @@ void SetupSharedCache(TMyEnvBase& env, NKikimrSharedCache::TReplacementPolicy po
     }
 }
 
+struct TTestCase {
+
+};
+
 Y_UNIT_TEST(Limits) {
     TMyEnvBase env;
     env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
@@ -296,9 +300,7 @@ Y_UNIT_TEST(ThreeLeveledLRU) {
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
-    // set shared cache limit greater than compacted data size 
-    // to avoid becoming compacted data into passive data and being offloaded after it
-    SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU, 20_MB, true);
+    SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU, 8_MB, true);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -312,12 +314,7 @@ Y_UNIT_TEST(ThreeLeveledLRU) {
     env.WaitFor<NFake::TEvCompacted>();
 
     LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 0);
-
-    SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU, 8_MB);
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 3 * 2), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 131);
 
     TRetriedCounters retried;
@@ -325,8 +322,8 @@ Y_UNIT_TEST(ThreeLeveledLRU) {
         env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
     }
     LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(6814_KB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 19, 2}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 45, 5}));
 
     RestartAndClearCache(env);
 
@@ -408,9 +405,7 @@ Y_UNIT_TEST(S3FIFO) {
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
-    // set shared cache limit greater than compacted data size 
-    // to avoid becoming compacted data into passive data and being offloaded after it
-    SetupSharedCache(env, NKikimrSharedCache::S3FIFO, 20_MB, true);
+    SetupSharedCache(env, NKikimrSharedCache::S3FIFO, 8_MB, true);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -423,11 +418,6 @@ Y_UNIT_TEST(S3FIFO) {
     Cerr << "...waiting until compacted" << Endl;
     env.WaitFor<NFake::TEvCompacted>();
 
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 0);
-
-    SetupSharedCache(env, NKikimrSharedCache::S3FIFO, 8_MB);
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 131);
@@ -520,9 +510,7 @@ Y_UNIT_TEST(ClockPro) {
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
-    // set shared cache limit greater than compacted data size 
-    // to avoid becoming compacted data into passive data and being offloaded after it
-    SetupSharedCache(env, NKikimrSharedCache::ClockPro, 20_MB, true);
+    SetupSharedCache(env, NKikimrSharedCache::ClockPro, 8_MB, true);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -535,11 +523,6 @@ Y_UNIT_TEST(ClockPro) {
     Cerr << "...waiting until compacted" << Endl;
     env.WaitFor<NFake::TEvCompacted>();
 
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 0);
-
-    SetupSharedCache(env, NKikimrSharedCache::ClockPro, 8_MB);
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 0);

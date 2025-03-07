@@ -143,6 +143,7 @@ public:
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "RegisterTable")("path_id", pathId);
         return DoRegisterTable(pathId);
     }
+    virtual bool ProgressMoveTableData(const ui64 srcPathId, const ui64 dstPathId, NTable::TDatabase& db) = 0;
     virtual bool IsOverloadedByMetadata(const ui64 limit) const = 0;
     virtual std::shared_ptr<TSelectInfo> Select(
         ui64 pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withUncommitted) const = 0;

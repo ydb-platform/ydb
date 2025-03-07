@@ -296,4 +296,16 @@ void TDbWrapper::WriteColumns(const NOlap::TPortionInfo& portion, const NKikimrT
         .Update(NIceDb::TUpdate<IndexColumnsV2::Metadata>(proto.SerializeAsString()));
 }
 
+void TDbWrapper::CloneColumns(const NOlap::TPortionInfo& portion, const ui64 newPathId) {
+    NIceDb::TNiceDb db(Database);
+    using IndexColumnsV2 = NColumnShard::Schema::IndexColumnsV2;
+    auto rowset = db.Table<IndexColumnsV2>()
+        .Key(portion.GetPathId(), portion.GetPortionId()).Select();
+    AFL_VERIFY(rowset.IsReady()); //TODO fixme
+    AFL_VERIFY(!rowset.EndOfSet()); //TODO fixme
+    db.Table<IndexColumnsV2>()
+    .Key(newPathId, portion.GetPortionId())
+        .Update(NIceDb::TUpdate<IndexColumnsV2::Metadata>(rowset.GetValue<IndexColumnsV2::Metadata>()));
+}
+
 }   // namespace NKikimr::NOlap

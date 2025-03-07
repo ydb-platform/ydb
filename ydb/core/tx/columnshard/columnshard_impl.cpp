@@ -321,37 +321,40 @@ void TColumnShard::ProtectSchemaSeqNo(const NKikimrTxColumnShard::TSchemaSeqNo& 
     }
 }
 
-void TColumnShard::RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, const NOlap::TSnapshot& version,
-    NTabletFlatExecutor::TTransactionContext& txc) {
+bool TColumnShard::ProgressSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, const NOlap::TSnapshot& version,
+                               NTabletFlatExecutor::TTransactionContext& txc) {
     switch (body.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kInitShard: {
             RunInit(body.GetInitShard(), version, txc);
-            return;
+            return true;
         }
         case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables: {
             for (const auto& tableProto : body.GetEnsureTables().GetTables()) {
                 RunEnsureTable(tableProto, version, txc);
             }
-            return;
+            return true;
         }
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable: {
             RunAlterTable(body.GetAlterTable(), version, txc);
-            return;
+            return true;
         }
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable: {
             RunDropTable(body.GetDropTable(), version, txc);
-            return;
+            return true;
         }
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore: {
             RunAlterStore(body.GetAlterStore(), version, txc);
-            return;
+            return true;
+        }
+        case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable: {
+            return ProgressMoveTable(body.GetMoveTable(), version, txc);
         }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET: {
             break;
         }
     }
     Y_ABORT("Unsupported schema tx type");
-}
+    }
 
 void TColumnShard::RunInit(const NKikimrTxColumnShard::TInitShard& proto, const NOlap::TSnapshot& version,
     NTabletFlatExecutor::TTransactionContext& txc) {
@@ -508,6 +511,33 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
         }
         TablesManager.AddSchemaVersion(presetProto.GetId(), version, presetProto.GetSchema(), db);
     }
+}
+
+bool TColumnShard::ProgressMoveTable(const NKikimrTxColumnShard::TMoveTable& proto, const NOlap::TSnapshot& version,
+                                 NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+
+    const ui64 srcPathId = proto.GetSrcPathId();
+    const ui64 dstPathId = proto.GetDstPathId();
+    // todo(avevad):
+    //AFL_VERIFY(!InsertTable->HasCommittedByPathId(srcPathId));
+    if (!TablesManager.HasTable(dstPathId)) {
+
+        TablesManager.CloneTable(srcPathId, dstPathId, version, db, Tiers);
+    }
+    if (!TablesManager.GetPrimaryIndex()->ProgressMoveTableData(srcPathId, dstPathId, txc.DB)) {
+        return false;
+    }
+    TablesManager.DropTable(srcPathId, version, db);
+    TablesManager.FinishMovingTable();
+    TBlobGroupSelector dsGroupSelector(Info());
+    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
+
+    // todo(avevad):
+    // THashSet<TWriteId> writesToAbort = InsertTable->DropPath(dbTable, srcPathId);
+    // TryAbortWrites(db, dbTable, std::move(writesToAbort));
+
+    return true;
 }
 
 void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
@@ -831,7 +861,7 @@ void TColumnShard::SetupCompaction(const std::set<ui64>& pathIds) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_compaction")("reason", "disabled");
         return;
     }
-
+    //<--
     BackgroundController.CheckDeadlines();
     if (BackgroundController.GetCompactionsCount()) {
         return;
@@ -1092,7 +1122,7 @@ void TColumnShard::SetupCleanupTables() {
         pathIdsEmptyInInsertTable.emplace(i);
     }
 
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsEmptyInInsertTable);
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(TablesManager.GetPathsToDrop(GetMinReadSnapshot()));
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;
@@ -1448,7 +1478,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
         NIceDb::TNiceDb db(txc.DB);
-        
+
         TBlobGroupSelector selector(Self->Info());
         bool reask = false;
         NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("consumer", Consumer)("event", "TTxAskPortionChunks::Execute");

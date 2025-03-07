@@ -139,6 +139,15 @@ TExecutor::~TExecutor() {
 
 }
 
+bool TExecutor::OnUnhandledException(const std::exception& e) {
+    if (auto log = Logger->Log(ELnLev::Crit)) {
+        log << "Tablet " << TabletId() << " unhandled exception " << TypeName(e) << ": " << e.what()
+            << '\n' << TBackTrace::FromCurrentException().PrintToString();
+    }
+    Broken();
+    return true;
+}
+
 ui64 TExecutor::Stamp() const noexcept
 {
     return CommitManager ? CommitManager->Stamp() : TTxStamp{ Generation0, Step0 }.Raw;
@@ -884,7 +893,7 @@ void TExecutor::Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &
     return TranscriptBootOpResult(res, ctx);
 }
 
-void TExecutor::DetachTablet(const TActorContext &) {
+void TExecutor::DetachTablet() {
     TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
         Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
     return PassAway();

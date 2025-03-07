@@ -324,7 +324,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateIndexBuild());
         const auto& indexDesc = modifyScheme.GetInitiateIndexBuild().GetIndex();
         const auto& baseTableColumns = NTableIndex::ExtractInfo(tableInfo);
-        const auto& indexKeys = NTableIndex::ExtractInfo(indexDesc);
+        auto indexKeys = NTableIndex::ExtractInfo(indexDesc);
+        if (buildInfo.IsBuildPrefixedVectorIndex() && buildInfo.KMeans.Level != 1) {
+            Y_ASSERT(indexKeys.KeyColumns.size() >= 2);
+            indexKeys.KeyColumns.erase(indexKeys.KeyColumns.begin(), indexKeys.KeyColumns.end() - 1);
+        }
         implTableColumns = CalcTableImplDescription(buildInfo.IndexType, baseTableColumns, indexKeys);
         Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
         implTableColumns.Columns.emplace(indexKeys.KeyColumns.back());
@@ -660,7 +664,7 @@ private:
 
     void SendPrefixKMeansRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         Y_ASSERT(buildInfo.IsBuildPrefixedVectorIndex());
-        Y_ASSERT(buildInfo.KMeans.Parent == 0);
+        Y_ASSERT(buildInfo.KMeans.Parent == buildInfo.KMeans.ParentEnd());
         Y_ASSERT(buildInfo.KMeans.Level == 2);
 
         auto ev = MakeHolder<TEvDataShard::TEvPrefixKMeansRequest>();
@@ -937,9 +941,10 @@ private:
             if (!FillTable(buildInfo)) {
                 return false;
             }
+            const ui64 doneShards = buildInfo.DoneShards.size();
 
             ClearDoneShards(txc, buildInfo);
-            ++buildInfo.KMeans.Level;
+            Y_ABORT_UNLESS(buildInfo.KMeans.PrefixTableDone(TableSize, doneShards));
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
             Self->PersistBuildIndexUploadReset(db, buildInfo);
@@ -954,10 +959,12 @@ private:
             if (!FillPrefixKMeans(buildInfo)) {
                 return false;
             }
-            const ui64 doneShards = buildInfo.DoneShards.size();
 
             ClearDoneShards(txc, buildInfo);
-            const bool needsAnotherLevel = buildInfo.KMeans.PrefixTableDone(TableSize, doneShards);
+            Y_ASSERT(buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::MultiLocal);
+            const bool needsAnotherLevel = buildInfo.KMeans.NextLevel();
+            buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
+            buildInfo.KMeans.Parent = buildInfo.KMeans.ParentEnd();
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
             Self->PersistBuildIndexUploadReset(db, buildInfo);

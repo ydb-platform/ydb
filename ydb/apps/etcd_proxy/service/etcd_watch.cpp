@@ -65,8 +65,8 @@ private:
         const auto& leasePraramName = AddParam<i64>("Lease", params, ev->Get()->Record.id());
 
         std::ostringstream sql;
-        sql << "update `leases` set `updated` = CurrentUtcDatetime() where " << leasePraramName << " = `id`;" << std::endl;
-        sql << "select `id`, `ttl` - unwrap(cast(CurrentUtcDatetime() - `updated` as Int64) / 1000000L) as `granted` from `leases` where " << leasePraramName << " = `id`;" << std::endl;
+        sql << "update `leases` set `updated` = CurrentUtcDatetime(`id`) where " << leasePraramName << " = `id`;" << std::endl;
+        sql << "select `id`, `ttl` - unwrap(cast(CurrentUtcDatetime(`id`) - `updated` as Int64) / 1000000L) as `granted` from `leases` where " << leasePraramName << " = `id`;" << std::endl;
 
         const auto my = this->SelfId();
         const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
@@ -582,7 +582,7 @@ private:
         NYdb::TParamsBuilder params;
         const auto& revName = AddParam("Revision", params, Revision);
 
-        sql << "$Leases = select 0L as `lease` union all select `id` as `lease` from `leases` where unwrap(interval('PT1S') * `ttl` + `updated`) > CurrentUtcDatetime();" << std::endl;
+        sql << "$Leases = select 0L as `lease` union all select `id` as `lease` from `leases` where unwrap(interval('PT1S') * `ttl` + `updated`) > CurrentUtcDatetime(`id`);" << std::endl;
         sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `huidig` as h left only join $Leases as l using(`lease`);" << std::endl;
 
         sql << "insert into `verhaal`" << std::endl;

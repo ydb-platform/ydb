@@ -1226,7 +1226,7 @@ private:
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
         const auto& leaseParamName = AddParam("Lease", params, Lease);
 
-        sql << "select `ttl`, `ttl` - unwrap(cast(CurrentUtcDatetime() - `updated` as Int64) / 1000000L) as `granted` from `leases` where " << leaseParamName << " = `id`;" << std::endl;
+        sql << "select `ttl`, `ttl` - unwrap(cast(CurrentUtcDatetime(`id`) - `updated` as Int64) / 1000000L) as `granted` from `leases` where " << leaseParamName << " = `id`;" << std::endl;
         if (Keys) {
             sql << "select `key` from `huidig` where " << leaseParamName << " = `lease`;" << std::endl;
         }

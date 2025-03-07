@@ -19,7 +19,10 @@ TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui3
         AFL_VERIFY(reader.GetColumnsCount() == 1);
         for (auto&& i : reader) {
             dataOwners.emplace_back(i.GetCurrentChunk());
-            indexHitsCount += GetDataExtractor()->GetIndexHitsCount(dataOwners.back());
+            auto indexHitsCountLocal = GetDataExtractor()->GetIndexHitsCount(dataOwners.back());
+            for (auto&& hc : indexHitsCountLocal) {
+                indexHitsCount += hc.second;
+            }
         }
         reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
     }

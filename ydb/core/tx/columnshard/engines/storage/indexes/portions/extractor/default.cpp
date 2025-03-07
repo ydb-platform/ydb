@@ -49,13 +49,26 @@ bool TDefaultDataExtractor::DoCheckForIndex(const NRequest::TOriginalDataAddress
     return true;
 }
 
-ui32 TDefaultDataExtractor::DoGetIndexHitsCount(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray) const {
+THashMap<ui64, ui32> TDefaultDataExtractor::DoGetIndexHitsCount(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray) const {
+    THashMap<ui64, ui32> result;
     if (dataArray->GetType() != NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
-        return dataArray->GetRecordsCount();
+        result.emplace(0, dataArray->GetRecordsCount());
     } else {
         const auto subColumns = std::static_pointer_cast<NArrow::NAccessor::TSubColumnsArray>(dataArray);
-        return subColumns->GetColumnsData().GetStats().GetFilledValuesCount() + subColumns->GetOthersData().GetStats().GetFilledValuesCount();
+        {
+            auto& stats = subColumns->GetColumnsData().GetStats();
+            for (ui32 i = 0; i < stats.GetColumnsCount(); ++i) {
+                result[NRequest::TOriginalDataAddress::CalcSubColumnHash(stats.GetColumnName(i))] += stats.GetColumnRecordsCount(i);
+            }
+        }
+        {
+            auto& stats = subColumns->GetOthersData().GetStats();
+            for (ui32 i = 0; i < stats.GetColumnsCount(); ++i) {
+                result[NRequest::TOriginalDataAddress::CalcSubColumnHash(stats.GetColumnName(i))] += stats.GetColumnRecordsCount(i);
+            }
+        }
     }
+    return result;
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

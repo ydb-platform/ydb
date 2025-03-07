@@ -372,6 +372,17 @@ ui64 TPortionDataAccessor::GetIndexRawBytes(const bool validation /*= true*/) co
     return sum;
 }
 
+std::vector<const TIndexChunk*> TPortionDataAccessor::GetIndexChunksPointers(const ui32 indexId) const {
+    std::vector<const TIndexChunk*> result;
+    for (auto&& c : GetIndexesVerified()) {
+        if (c.GetIndexId() == indexId) {
+            AFL_VERIFY(c.GetChunkIdx() == result.size());
+            result.emplace_back(&c);
+        }
+    }
+    return result;
+}
+
 std::vector<const TColumnRecord*> TPortionDataAccessor::GetColumnChunksPointers(const ui32 columnId) const {
     std::vector<const TColumnRecord*> result;
     for (auto&& c : GetRecordsVerified()) {

@@ -1,16 +1,20 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/simple.h>
 
-namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
+#include <util/generic/bitmap.h>
 
-class TCountMinSketchChecker: public TSimpleIndexChecker {
+namespace NKikimr::NOlap::NIndexes::NCategoriesBloom {
+
+class TBloomFilterChecker: public TSimpleIndexChecker {
 public:
     static TString GetClassNameStatic() {
-        return "COUNT_MIN_SKETCH";
+        return "CATEGORY_BLOOM_FILTER";
     }
+
 private:
     using TBase = TSimpleIndexChecker;
-    static inline auto Registrator = TFactory::TRegistrator<TCountMinSketchChecker>(GetClassNameStatic());
+    std::set<ui64> HashValues;
+    static inline auto Registrator = TFactory::TRegistrator<TBloomFilterChecker>(GetClassNameStatic());
 
 protected:
     virtual bool DoDeserializeFromProtoImpl(const NKikimrSSA::TProgram::TOlapIndexChecker& proto) override;
@@ -19,11 +23,11 @@ protected:
     virtual bool DoCheckImpl(const std::vector<TString>& blobs) const override;
 
 public:
-    TCountMinSketchChecker() = default;
-    TCountMinSketchChecker(const ui32 indexId)
-        : TBase(TIndexDataAddress(indexId))
-    {}
-
+    TBloomFilterChecker() = default;
+    TBloomFilterChecker(const ui32 indexId, const ui64 categoryHash, std::set<ui64>&& hashes)
+        : TBase(TIndexDataAddress(indexId, categoryHash))
+        , HashValues(std::move(hashes)) {
+    }
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }

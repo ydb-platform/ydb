@@ -128,7 +128,7 @@ protected:
 public:
     TBloomFilterChecker() = default;
     TBloomFilterChecker(const ui32 indexId, std::set<ui64>&& hashes)
-        : TBase(indexId)
+        : TBase(TIndexDataAddress(indexId))
         , HashValues(std::move(hashes)) {
     }
     virtual TString GetClassName() const override {

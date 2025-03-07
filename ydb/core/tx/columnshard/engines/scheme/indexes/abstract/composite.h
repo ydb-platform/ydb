@@ -20,8 +20,8 @@ protected:
             i.SerializeToProto(*proto.MutableComposite()->AddChildrenCheckers());
         }
     }
-    virtual std::set<ui32> DoGetIndexIds() const override {
-        std::set<ui32> result;
+    virtual std::set<TIndexDataAddress> DoGetIndexIds() const override {
+        std::set<TIndexDataAddress> result;
         for (auto&& i : Checkers) {
             auto ids = i->GetIndexIds();
             result.insert(ids.begin(), ids.end());
@@ -51,7 +51,7 @@ public:
 private:
     static inline auto Registrator = TFactory::TRegistrator<TAndIndexChecker>(GetClassNameStatic());
 protected:
-    virtual bool DoCheck(const THashMap<ui32, std::vector<TString>>& blobsByIndexId) const override {
+    virtual bool DoCheck(const THashMap<TIndexDataAddress, std::vector<TString>>& blobsByIndexId) const override {
         for (auto&& i : Checkers) {
             if (!i->Check(blobsByIndexId)) {
                 return false;
@@ -77,7 +77,7 @@ public:
 private:
     static inline auto Registrator = TFactory::TRegistrator<TOrIndexChecker>(GetClassNameStatic());
 protected:
-    virtual bool DoCheck(const THashMap<ui32, std::vector<TString>>& blobsByIndexId) const override {
+    virtual bool DoCheck(const THashMap<TIndexDataAddress, std::vector<TString>>& blobsByIndexId) const override {
 //        ui32 idx = 0;
         for (auto&& i : Checkers) {
 //            NActors::TLogContextGuard gLog = NActors::TLogContextBuilder::Build()("branch", idx++);

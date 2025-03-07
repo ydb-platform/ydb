@@ -58,6 +58,7 @@ ps aux | grep ydbd
     sudo chown -R ydb:ydb /opt/ydb/cfg
     ydb admin node config init --config-dir /opt/ydb/config-dir --from-config /opt/ydb/cfg/config.yaml
     ```
+
     В дальнейшнем система самостоятельно будет сохранять обновления конфигурации в указанную директорию.
 
 4. Перезапустить все узлы кластера с помощью процедуры [rolling-restart](../../../../maintenance/manual/node_restarting.md), добавив опцию `ydbd --config-dir` при запуске узла с указанием пути до директории.

@@ -2,12 +2,19 @@
 
 namespace NKikimr::NTabletFlatExecutor {
 
-TDataCleanupLogic::TDataCleanupLogic(IOps* ops, IExecutor* executor, ITablet* owner, NUtil::ILogger* logger, TExecutorGCLogic* gcLogic)
+TDataCleanupLogic::TDataCleanupLogic(
+    IOps* ops,
+    IExecutor* executor,
+    ITablet* owner,
+    NUtil::ILogger* logger,
+    TExecutorGCLogic* gcLogic,
+    TExecutorBorrowLogic* borrowLogic)
     : Ops(ops)
     , Executor(executor)
     , Owner(owner)
     , Logger(logger)
     , GcLogic(gcLogic)
+    , BorrowLogic(borrowLogic)
 {}
 
 bool TDataCleanupLogic::TryStartCleanup(ui64 dataCleanupGeneration, const TActorContext& ctx) {
@@ -66,6 +73,8 @@ void TDataCleanupLogic::WaitCompaction() {
 
 void TDataCleanupLogic::OnCompleteCompaction(
     ui32 tableId,
+    ui32 generation,
+    ui32 step,
     const TFinishedCompactionInfo& finishedCompactionInfo)
 {
     if (State != EDataCleanupState::WaitCompaction) {
@@ -75,10 +84,16 @@ void TDataCleanupLogic::OnCompleteCompaction(
     if (auto it = CompactingTables.find(tableId); it != CompactingTables.end()) {
         if (finishedCompactionInfo.Edge >= it->second.CompactionId) {
             CompactingTables.erase(it);
+            auto compactionTime = TGCTime(generation, step);
+            LastCompactionTime = Max(LastCompactionTime, compactionTime);
         }
     }
     if (CompactingTables.empty()) {
-        State = EDataCleanupState::PendingFirstSnapshot;
+        if (BorrowLogic->HasLoanedBlobsBefore(LastCompactionTime.Generation, LastCompactionTime.Step)) {
+            State = EDataCleanupState::WaitBorrowed;
+        } else {
+            State = EDataCleanupState::PendingFirstSnapshot;
+        }
     }
 }
 
@@ -107,6 +122,15 @@ void TDataCleanupLogic::OnMakeLogSnapshot(ui32 generation, ui32 step) {
         default: {
             break;
         }
+    }
+}
+
+void TDataCleanupLogic::OnLogCommited() {
+    if (State != EDataCleanupState::WaitBorrowed) {
+        return;
+    }
+    if (!BorrowLogic->HasLoanedBlobsBefore(LastCompactionTime.Generation, LastCompactionTime.Step)) {
+        State = EDataCleanupState::PendingFirstSnapshot;
     }
 }
 

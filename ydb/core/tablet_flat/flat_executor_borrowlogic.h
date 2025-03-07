@@ -171,6 +171,8 @@ public:
 
     // i.e. parts we own, but loaned to others
     bool HasLoanedParts() const;
+
+    bool HasLoanedBlobsBefore(ui32 generation, ui32 step) const;
 };
 
 }}

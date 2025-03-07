@@ -3,6 +3,7 @@
 #include <ydb/core/grpc_services/table_settings.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/tx/schemeshard/olap/column_family/column_family.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -394,12 +395,11 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         }
         auto familyDescription = schema.AddColumnFamilies();
         familyDescription->SetName(family.Name);
-        if (familyDescription->GetName() == "default") {
-            familyDescription->SetId(0);
-        } else {
-            familyDescription->SetId(columnFamilyId++);
+        ui32 id = 0;
+        if (familyDescription->GetName() != "default") {
+            id = columnFamilyId++;
         }
-        Y_ENSURE(columnFamiliesByName.emplace(familyDescription->GetName(), familyDescription->GetId()).second);
+        familyDescription->SetId(id);
         if (family.Compression.Defined()) {
             NKikimrSchemeOp::EColumnCodec codec;
             auto codecName = to_lower(family.Compression.GetRef());
@@ -431,6 +431,7 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
             }
             familyDescription->SetColumnCodecLevel(family.CompressionLevel.GetRef());
         }
+        Y_ENSURE(columnFamiliesByName.emplace(familyDescription->GetName(), familyDescription->GetId()).second);
     }
 
     schema.SetNextColumnFamilyId(columnFamilyId);

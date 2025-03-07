@@ -10619,8 +10619,15 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper::TColumnFamily defaultFromScheme;
         UNIT_ASSERT(defaultFromScheme.DeserializeFromProto(schema.GetColumnFamilies(0)));
         {
-            TString errorMessage;
-            UNIT_ASSERT_C(defaultFromScheme.IsEqual(defaultFamily, errorMessage), errorMessage);
+            TConclusionStatus result = defaultFromScheme.IsEqual(defaultFamily);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
+        }
+        auto columns = schema.GetColumns();
+        for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+            auto column = columns[i];
+            UNIT_ASSERT(!column.HasSerializer());
+            UNIT_ASSERT_EQUAL_C(
+                column.GetColumnFamilyId(), 0, TStringBuilder() << "family for column " << column.GetName() << " is not default");
         }
     }
 
@@ -10742,8 +10749,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper::TColumnFamily defaultFromScheme;
         UNIT_ASSERT(defaultFromScheme.DeserializeFromProto(schema.GetColumnFamilies(0)));
         {
-            TString errorMessage;
-            UNIT_ASSERT_C(defaultFromScheme.IsEqual(families[0], errorMessage), errorMessage);
+            TConclusionStatus result = defaultFromScheme.IsEqual(families[0]);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
         }
 
         for (const auto& column : schema.GetColumns()) {
@@ -10752,8 +10759,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                 column.GetColumnFamilyId(), 0, TStringBuilder() << "family for column " << column.GetName() << " is not default");
             TTestHelper::TCompression compression;
             UNIT_ASSERT(compression.DeserializeFromProto(column.GetSerializer()));
-            TString errorMessage;
-            UNIT_ASSERT_C(compression.IsEqual(families[0].GetCompression(), errorMessage), errorMessage);
+            TConclusionStatus result = compression.IsEqual(families[0].GetCompression());
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
         }
     }
 
@@ -10868,8 +10875,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         for (ui32 i = 0; i < families.size(); i++) {
             TTestHelper::TColumnFamily familyFromScheme;
             UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
-            TString errorMessage;
-            UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+            TConclusionStatus result = familyFromScheme.IsEqual(families[i]);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
         }
 
         auto columns = schema.GetColumns();
@@ -10879,8 +10886,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                 TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[i].GetFamilyName() << "`");
             TTestHelper::TCompression compression;
             UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
-            TString errorMessage;
-            UNIT_ASSERT_C(compression.IsEqual(families[i].GetCompression(), errorMessage), errorMessage);
+            TConclusionStatus result = compression.IsEqual(families[i].GetCompression());
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
         }
     }
 
@@ -10926,8 +10933,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper::TColumnFamily defaultFromScheme;
         UNIT_ASSERT(defaultFromScheme.DeserializeFromProto(schema.GetColumnFamilies(0)));
         {
-            TString errorMessage;
-            UNIT_ASSERT_C(defaultFromScheme.IsEqual(families[0], errorMessage), errorMessage);
+            TConclusionStatus result = defaultFromScheme.IsEqual(families[0]);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
         }
 
         for (const auto& column : schema.GetColumns()) {
@@ -10936,8 +10943,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                 column.GetColumnFamilyId(), 0, TStringBuilder() << "family for column " << column.GetName() << " is not default");
             TTestHelper::TCompression compression;
             UNIT_ASSERT(compression.DeserializeFromProto(column.GetSerializer()));
-            TString errorMessage;
-            UNIT_ASSERT_C(compression.IsEqual(families[0].GetCompression(), errorMessage), errorMessage);
+            TConclusionStatus result = compression.IsEqual(families[0].GetCompression());
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
         }
     }
 
@@ -11021,8 +11028,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         for (ui32 i = 0; i < families.size(); i++) {
             TTestHelper::TColumnFamily familyFromScheme;
             UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
-            TString errorMessage;
-            UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+            TConclusionStatus result = familyFromScheme.IsEqual(families[i]);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
         }
 
         auto columns = schema.GetColumns();
@@ -11032,8 +11039,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                 TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[i].GetFamilyName() << "`");
             TTestHelper::TCompression compression;
             UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
-            TString errorMessage;
-            UNIT_ASSERT_C(compression.IsEqual(families[i].GetCompression(), errorMessage), errorMessage);
+            TConclusionStatus result = compression.IsEqual(families[i].GetCompression());
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
         }
     }
 
@@ -11083,8 +11090,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             for (ui32 i = 0; i < families.size(); i++) {
                 TTestHelper::TColumnFamily familyFromScheme;
                 UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
-                TString errorMessage;
-                UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+                TConclusionStatus result = familyFromScheme.IsEqual(families[i]);
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
             }
         }
 
@@ -11105,8 +11112,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             for (ui32 i = 0; i < families.size(); i++) {
                 TTestHelper::TColumnFamily familyFromScheme;
                 UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
-                TString errorMessage;
-                UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+                TConclusionStatus result = familyFromScheme.IsEqual(families[i]);
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
             }
         }
     }
@@ -11153,23 +11160,21 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             for (ui32 i = 0; i < families.size(); i++) {
                 TTestHelper::TColumnFamily familyFromScheme;
                 UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
-                TString errorMessage;
-                UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+                TConclusionStatus result = familyFromScheme.IsEqual(families[i]);
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
             }
 
             auto columns = schema.GetColumns();
             for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
                 UNIT_ASSERT(columns[i].HasSerializer());
                 UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), 0,
-                    TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[0].GetFamilyName()
-                                     << "`");
+                    TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[0].GetFamilyName() << "`");
                 TTestHelper::TCompression compression;
                 UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
-                TString errorMessage;
-                UNIT_ASSERT_C(compression.IsEqual(families[0].GetCompression(), errorMessage), errorMessage);
+                TConclusionStatus result = compression.IsEqual(families[0].GetCompression());
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
             }
         }
-
     }
 
     Y_UNIT_TEST(AddColumnWithColumnFamily) {
@@ -11225,8 +11230,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             for (ui32 i = 0; i < families.size(); i++) {
                 TTestHelper::TColumnFamily familyFromScheme;
                 UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
-                TString errorMessage;
-                UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+                TConclusionStatus result = familyFromScheme.IsEqual(families[i]);
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
             }
 
             auto columns = schema.GetColumns();
@@ -11241,8 +11246,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                                      << "`");
                 TTestHelper::TCompression compression;
                 UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
-                TString errorMessage;
-                UNIT_ASSERT_C(compression.IsEqual(families[indexFamily].GetCompression(), errorMessage), errorMessage);
+                TConclusionStatus result = compression.IsEqual(families[indexFamily].GetCompression());
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
             }
         }
 
@@ -11262,8 +11267,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             for (ui32 i = 0; i < families.size(); i++) {
                 TTestHelper::TColumnFamily familyFromScheme;
                 UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
-                TString errorMessage;
-                UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+                TConclusionStatus result = familyFromScheme.IsEqual(families[i]);
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
             }
 
             auto columns = schema.GetColumns();
@@ -11280,8 +11285,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                                      << "`");
                 TTestHelper::TCompression compression;
                 UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
-                TString errorMessage;
-                UNIT_ASSERT_C(compression.IsEqual(families[indexFamily].GetCompression(), errorMessage), errorMessage);
+                TConclusionStatus result = compression.IsEqual(families[indexFamily].GetCompression());
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
             }
         }
     }
@@ -11342,8 +11347,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                                      << "`");
                 TTestHelper::TCompression compression;
                 UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
-                TString errorMessage;
-                UNIT_ASSERT_C(compression.IsEqual(families[indexFamily].GetCompression(), errorMessage), errorMessage);
+                TConclusionStatus result = compression.IsEqual(families[indexFamily].GetCompression());
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
             }
         }
 
@@ -11362,8 +11367,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             for (ui32 i = 0; i < families.size(); i++) {
                 TTestHelper::TColumnFamily familyFromScheme;
                 UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
-                TString errorMessage;
-                UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+                TConclusionStatus result = familyFromScheme.IsEqual(families[i]);
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
             }
 
             auto columns = schema.GetColumns();
@@ -11381,8 +11386,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                                      << "`");
                 TTestHelper::TCompression compression;
                 UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
-                TString errorMessage;
-                UNIT_ASSERT_C(compression.IsEqual(families[indexFamily].GetCompression(), errorMessage), errorMessage);
+                TConclusionStatus result = compression.IsEqual(families[indexFamily].GetCompression());
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
             }
         }
     }
@@ -11433,8 +11438,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             if (familyFromScheme.GetFamilyName() == "default") {
                 familyIndex = 1;
             }
-            TString errorMessage;
-            UNIT_ASSERT_C(familyFromScheme.IsEqual(families[familyIndex], errorMessage), errorMessage);
+            TConclusionStatus result = familyFromScheme.IsEqual(families[familyIndex]);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
         }
     }
 
@@ -11509,8 +11514,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         for (ui32 i = 0; i < families.size(); i++) {
             TTestHelper::TColumnFamily familyFromScheme;
             UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
-            TString errorMessage;
-            UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+            TConclusionStatus result = familyFromScheme.IsEqual(families[i]);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
         }
 
         auto columns = schema.GetColumns();
@@ -11520,8 +11525,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                 TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[1].GetFamilyName() << "`");
             TTestHelper::TCompression compression;
             UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
-            TString errorMessage;
-            UNIT_ASSERT_C(compression.IsEqual(families[1].GetCompression(), errorMessage), errorMessage);
+            TConclusionStatus result = compression.IsEqual(families[1].GetCompression());
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
         }
     }
 
@@ -11576,8 +11581,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         for (ui32 i = 0; i < families.size(); i++) {
             TTestHelper::TColumnFamily familyFromScheme;
             UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
-            TString errorMessage;
-            UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+            TConclusionStatus result = familyFromScheme.IsEqual(families[i]);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
         }
 
         auto columns = schema.GetColumns();
@@ -11587,8 +11592,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                 TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[1].GetFamilyName() << "`");
             TTestHelper::TCompression compression;
             UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
-            TString errorMessage;
-            UNIT_ASSERT_C(compression.IsEqual(families[1].GetCompression(), errorMessage), errorMessage);
+            TConclusionStatus result = compression.IsEqual(families[1].GetCompression());
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
         }
     }
 
@@ -11787,11 +11792,11 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper::TColumnFamily defaultFamily = TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default");
 
         UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), 1);
-        TTestHelper::TColumnFamily defaultFromScheme;
-        UNIT_ASSERT(defaultFromScheme.DeserializeFromProto(schema.GetColumnFamilies(0)));
         {
-            TString errorMessage;
-            UNIT_ASSERT_C(defaultFromScheme.IsEqual(defaultFamily, errorMessage), errorMessage);
+            TTestHelper::TColumnFamily defaultFromScheme;
+            UNIT_ASSERT(defaultFromScheme.DeserializeFromProto(schema.GetColumnFamilies(0)));
+            TConclusionStatus result = defaultFromScheme.IsEqual(defaultFamily);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
         }
     }
 

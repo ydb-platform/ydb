@@ -173,6 +173,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         for (TS3ReadItem& item : s3items) {
+#ifndef KIKIMR_DISABLE_S3_OPS
             class TGetActor : public TActor<TGetActor> {
                 size_t OutputOffset;
                 std::shared_ptr<TReadContext> ReadContext;
@@ -267,6 +268,9 @@ namespace NKikimr::NBlobDepot {
             );
             TActivationContext::Send(new IEventHandle(Agent.S3WrapperId, actorId, request.release(), IEventHandle::FlagTrackDelivery));
             ++context->NumPartsPending;
+#else
+            Y_ABORT("S3 is not supported");
+#endif
         }
 
         Y_ABORT_UNLESS(context->NumPartsPending);

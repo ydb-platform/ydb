@@ -1,5 +1,8 @@
 #include "s3.h"
+
+#ifndef KIKIMR_DISABLE_S3_OPS
 #include <ydb/core/wrappers/s3_wrapper.h>
+#endif
 
 namespace NKikimr::NBlobDepot {
 
@@ -14,6 +17,7 @@ namespace NKikimr::NBlobDepot {
     void TS3Manager::Init(const NKikimrBlobDepot::TS3BackendSettings *settings) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS05, "Init", (Settings, settings));
         if (settings) {
+#ifndef KIKIMR_DISABLE_S3_OPS
             ExternalStorageConfig = NWrappers::IExternalStorageConfig::Construct(settings->GetSettings());
             WrapperId = Self->Register(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
             BasePath = TStringBuilder() << settings->GetSettings().GetObjectKeyPattern() << '/' << Self->Config.GetName();
@@ -21,6 +25,9 @@ namespace NKikimr::NBlobDepot {
             SyncMode = settings->HasSyncMode();
             AsyncMode = settings->HasAsyncMode();
             RunScannerActor();
+#else
+            Y_ABORT("S3 is not supported");
+#endif
         } else {
             SyncMode = false;
             AsyncMode = false;

@@ -4,15 +4,21 @@
 #include "blob_depot_tablet.h"
 #include "data.h"
 
+#ifndef KIKIMR_DISABLE_S3_OPS
 #include <ydb/core/wrappers/abstract.h>
+#endif
 
 namespace NKikimr::NBlobDepot {
 
     class TBlobDepot::TS3Manager {
+#ifndef KIKIMR_DISABLE_S3_OPS
         using TEvExternalStorage = NWrappers::TEvExternalStorage;
+#endif
 
         TBlobDepot* const Self;
+#ifndef KIKIMR_DISABLE_S3_OPS
         NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
+#endif
         TActorId WrapperId;
         TActorId UploaderId;
         TString BasePath;

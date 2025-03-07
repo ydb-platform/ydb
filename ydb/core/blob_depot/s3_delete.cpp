@@ -4,6 +4,8 @@ namespace NKikimr::NBlobDepot {
 
     using TS3Manager = TBlobDepot::TS3Manager;
 
+#ifndef KIKIMR_DISABLE_S3_OPS
+
     struct TS3Manager::TEvDeleteResult : TEventLocal<TEvDeleteResult, TEvPrivate::EvDeleteResult> {
         std::vector<TS3Locator> LocatorsOk;
         std::vector<TS3Locator> LocatorsError;
@@ -149,6 +151,8 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
+#endif
+
     void TS3Manager::AddTrashToCollect(TS3Locator locator) {
         STLOG(PRI_INFO, BLOB_DEPOT, BDTS06, "AddTrashToCollect", (Id, Self->GetLogId()), (Locator, locator));
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_S3_TRASH_OBJECTS] = ++TotalS3TrashObjects;
@@ -159,6 +163,7 @@ namespace NKikimr::NBlobDepot {
 
     void TS3Manager::RunDeletersIfNeeded() {
         while (!DeleteQueue.empty() && NumDeleteTxInFlight + ActiveDeleters.size() < MaxDeletesInFlight) {
+#ifndef KIKIMR_DISABLE_S3_OPS
             THashMap<TString, TS3Locator> locators;
 
             while (!DeleteQueue.empty() && locators.size() < MaxObjectsToDeleteAtOnce) {
@@ -189,10 +194,14 @@ namespace NKikimr::NBlobDepot {
                     new TEvExternalStorage::TEvDeleteObjectsRequest(Aws::S3::Model::DeleteObjectsRequest()
                         .WithBucket(Bucket).WithDelete(std::move(del))), IEventHandle::FlagTrackDelivery));
             }
+#else
+            Y_ABORT("S3 is not supported");
+#endif
         }
     }
 
     void TS3Manager::HandleDeleter(TAutoPtr<IEventHandle> ev) {
+#ifndef KIKIMR_DISABLE_S3_OPS
         STRICT_STFUNC_BODY(
             hFunc(TEvDeleteResult, [&](TEvDeleteResult::TPtr ev) {
                 const size_t numErased = ActiveDeleters.erase(ev->Sender);
@@ -220,6 +229,9 @@ namespace NKikimr::NBlobDepot {
                 }
             })
         )
+#else
+        Y_ABORT("S3 is not supported");
+#endif
     }
 
 } // NKikimr::NBlobDepot

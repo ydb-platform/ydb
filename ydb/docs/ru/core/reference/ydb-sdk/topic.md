@@ -25,6 +25,7 @@
   [Примеры на GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/main/examples/topic)
 
 - C#
+  
   [Примеры на GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/Topic)
 
 
@@ -117,8 +118,7 @@
   );
   ```
   
-  В этом примере используется анонимная аутентификация.
-  Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
+  В этом примере используется анонимная аутентификация. Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
 
   Фрагмент кода приложения для создания различных клиентов к топикам:
 
@@ -651,6 +651,14 @@
   }
   ```
 
+- C#
+
+  Асинхронная запись сообщения в топик.
+
+  ```c#
+  var asyncWriteTask = writer.WriteAsync("Hello Example YDB Topics!"); // Task<WriteResult>
+  ```
+
 {% endlist %}
 
 ### Запись сообщений с подтверждением о сохранении на сервере
@@ -764,9 +772,20 @@
   ```
   
 - С#
-  
+
+  Асинхронная запись сообщения в топик. В случае переполнения внутреннего буфера будет ожидать, когда буфер освободится для повторной отправки.
+
   ```c#
   await writer.WriteAsync("Hello Example YDB Topics!");
+  ```
+
+  В случае не доступности сервера, сообщения могут копиться в ожидании на отправку. В этом случае можно передать токен отмены (`CancellationToken`), чтобы контролировать ожидание, но в таком случае пользователь может отменить записанное сообщение.
+
+  ```c#
+  var writeCts = new CancellationTokenSource();
+  writeCts.CancelAfter(TimeSpan.FromSeconds(3));
+  
+  await writer.WriteAsync("Hello Example YDB Topics!", writeCts.Token);
   ```
 
 {% endlist %}
@@ -940,7 +959,7 @@
 
 - C#
 
-  ```с#
+  ```c#
   await writer.WriteAsync(
       new Ydb.Sdk.Services.Topic.Writer.Message<string>("Hello Example YDB Topics!")
           { Metadata = { new Metadata("meta-key", "meta-value"u8.ToArray()) } }

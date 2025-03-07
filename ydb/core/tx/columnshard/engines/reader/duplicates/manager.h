@@ -108,14 +108,58 @@ private:
         void Finish() &&;
     };
 
+    class TEvDuplicateFilterPartialResult
+        : public NActors::TEventLocal<TEvDuplicateFilterPartialResult, NColumnShard::TEvPrivate::EvDuplicateFilterPartialResult> {
+    private:
+        YDB_READONLY(TConclusion<NArrow::TColumnFilter>, Result, NArrow::TColumnFilter::BuildAllowFilter());
+        YDB_READONLY_DEF(ui32, IntervalIdx);
+        YDB_READONLY_DEF(ui64, PortionId);
+
+    public:
+        TEvDuplicateFilterPartialResult(TConclusion<NArrow::TColumnFilter>&& result, const ui32 intervalIdx, const ui64 portionId)
+            : Result(std::move(result))
+            , IntervalIdx(intervalIdx)
+            , PortionId(portionId) {
+        }
+
+        TConclusion<NArrow::TColumnFilter>&& ExtractResult() {
+            return std::move(Result);
+        }
+    };
+
+    class TInternalFilterSubscriber: public IFilterSubscriber {
+    private:
+        ui32 IntervalIdx;
+        ui32 PortionId;
+        TActorId Owner;
+
+        virtual void OnFilterReady(const NArrow::TColumnFilter& result) override {
+            TActorContext::AsActorContext().Send(
+                Owner, new TDuplicateFilterConstructor::TEvDuplicateFilterPartialResult(result, IntervalIdx, PortionId));
+        }
+
+        virtual void OnFailure(const TString& reason) override {
+            TActorContext::AsActorContext().Send(Owner,
+                new TDuplicateFilterConstructor::TEvDuplicateFilterPartialResult(TConclusionStatus::Fail(reason), IntervalIdx, PortionId));
+        }
+
+    public:
+        TInternalFilterSubscriber(const ui32 intervalIdx, const ui64 portionId, const TActorId& owner)
+            : IntervalIdx(intervalIdx)
+            , PortionId(portionId)
+            , Owner(owner) {
+        }
+    };
+
 private:
     TSourceIntervals Intervals;
-    THashMap<ui32, TSourceFilterConstructor> AvailableSources;
+    THashMap<ui64, TSourceFilterConstructor> AvailableSources;
     TRangeIndex AvailableSourcesCount;
     TIntervalCounter AwaitedSourcesCount;
 
 public:
     void Handle(const TEvRequestFilter::TPtr&);
+    void Handle(const TEvDuplicateFilterPartialResult::TPtr&);
 
     TDuplicateFilterConstructor(const std::vector<std::shared_ptr<TPortionInfo>>& portions);
 };

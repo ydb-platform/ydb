@@ -1,3 +1,5 @@
+#include <ut/common/kqp_ut_common.h>
+#include <ut/olap/helpers/local.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 
@@ -186,6 +188,39 @@ Y_UNIT_TEST_SUITE(NamingValidation) {
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_ERROR);
     }
     
+    Y_UNIT_TEST(AlterColumnStoreOk) {
+        auto settings = TKikimrSettings();
+        TKikimrRunner kikimr(settings);
+        TLocalHelper testHelper(kikimr);
+
+        testHelper.CreateTestOlapTable("TestTable");
+        auto tableClient = kikimr.GetTableClient();
+
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLESTORE `/Root/olapStore` ADD COLUMN new_column1 Uint64;";
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(AlterColumnStoreFailed) {
+        auto settings = TKikimrSettings();
+        TKikimrRunner kikimr(settings);
+        TLocalHelper testHelper(kikimr);
+
+        testHelper.CreateTestOlapTable("TestTable");
+        auto tableClient = kikimr.GetTableClient();
+
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLESTORE `/Root/olapStore` ADD COLUMN `new column1` Uint64;";
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SCHEME_ERROR, alterResult.GetIssues().ToString());
+        }
+    }
 }
 
 }   // namespace NKikimr::NKqp

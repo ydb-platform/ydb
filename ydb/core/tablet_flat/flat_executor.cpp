@@ -452,7 +452,7 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(MemTableMemoryConsumersCollection.Get(), Logger.Get(), Broker.Get(), this, loadedState->Comp,
                                                                      Sprintf("tablet-%" PRIu64, Owner->TabletID())));
-    DataCleanupLogic = MakeHolder<TDataCleanupLogic>(static_cast<NActors::IActorOps*>(this), this, Owner, Logger.Get(), GcLogic.Get());
+    DataCleanupLogic = MakeHolder<TDataCleanupLogic>(static_cast<NActors::IActorOps*>(this), this, Owner, Logger.Get(), GcLogic.Get(), BorrowLogic.Get());
     LogicRedo->InstallCounters(Counters.Get(), nullptr);
 
     ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), 0, Launcher);
@@ -3103,6 +3103,11 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
                     CheckCollectionBarrier(x);
                 InFlySnapCollectionBarriers.erase(snapCollectionIt);
             }
+
+            DataCleanupLogic->OnLogCommited();
+            if (DataCleanupLogic->NeedLogSnaphot()) {
+                MakeLogSnapshot();
+            }
         }
         break;
     case ECommit::Snap:
@@ -3663,7 +3668,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     Y_ABORT_UNLESS(InFlyCompactionGcBarriers.emplace(commit->Step, ops->Barrier).second);
 
-    DataCleanupLogic->OnCompleteCompaction(tableId, CompactionLogic->GetFinishedCompactionInfo(tableId));
+    DataCleanupLogic->OnCompleteCompaction(tableId, Generation(), commit->Step, CompactionLogic->GetFinishedCompactionInfo(tableId));
 
     AttachLeaseCommit(commit.Get());
     CommitManager->Commit(commit);

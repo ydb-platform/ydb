@@ -1,7 +1,8 @@
 #pragma once
 
-#include "tablet_flat_executor.h"
+#include "flat_executor_borrowlogic.h"
 #include "flat_executor_gclogic.h"
+#include "tablet_flat_executor.h"
 #include "util_fmt_logger.h"
 
 namespace NKikimr::NTabletFlatExecutor {
@@ -11,6 +12,7 @@ class TDataCleanupLogic {
         Idle,
         PendingCompaction,
         WaitCompaction,
+        WaitBorrowed,
         PendingFirstSnapshot,
         WaitFirstSnapshot,
         PendingSecondSnapshot,
@@ -31,14 +33,21 @@ public:
     using ITablet = NFlatExecutorSetup::ITablet;
     using ELnLev = NUtil::ELnLev;
 
-    TDataCleanupLogic(IOps* ops, IExecutor* executor, ITablet* owner, NUtil::ILogger* logger, TExecutorGCLogic* gcLogic);
+    TDataCleanupLogic(
+        IOps* ops,
+        IExecutor* executor,
+        ITablet* owner,
+        NUtil::ILogger* logger,
+        TExecutorGCLogic* gcLogic,
+        TExecutorBorrowLogic* borrowLogic);
 
     bool TryStartCleanup(ui64 dataCleanupGeneration, const TActorContext& ctx);
     void OnCompactionPrepared(ui32 tableId, ui64 compactionId);
     void WaitCompaction();
-    void OnCompleteCompaction(ui32 tableId, const TFinishedCompactionInfo& finishedCompactionInfo);
+    void OnCompleteCompaction(ui32 tableId, ui32 generation, ui32 step, const TFinishedCompactionInfo& finishedCompactionInfo);
     bool NeedLogSnaphot();
     void OnMakeLogSnapshot(ui32 generation, ui32 step);
+    void OnLogCommited();
     void OnSnapshotCommited(ui32 generation, ui32 step);
     void OnCollectedGarbage(const TActorContext& ctx);
     void OnGcForStepAckResponse(ui32 generation, ui32 step, const TActorContext& ctx);
@@ -53,12 +62,14 @@ private:
     ITablet* Owner;
     NUtil::ILogger* const Logger;
     TExecutorGCLogic* const GcLogic;
+    TExecutorBorrowLogic* const BorrowLogic;
 
     ui64 CurrentDataCleanupGeneration = 0;
     ui64 NextDataCleanupGeneration = 0;
     EDataCleanupState State = EDataCleanupState::Idle;
     THashMap<ui32, TCleanupTableInfo> CompactingTables; // tracks statuses of compaction
 
+    TGCTime LastCompactionTime;
     // two subsequent are snapshots required to force GC
     TGCTime FirstLogSnaphotStep;
     TGCTime SecondLogSnaphotStep;

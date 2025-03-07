@@ -432,7 +432,7 @@ private:
             } else
                 kv->set_mod_revision(change.Revision);
 
-            std::cout << (change.NewData.Version ? change.OldData.Version ? "Created" : "Updated" : "Deleted") << '(' << change.Key;
+            std::cout << (change.NewData.Version ? change.OldData.Version ? "Updated" : "Created" : "Deleted") << '(' << change.Key;
             if (change.OldData.Version) {
                 std::cout << ", old " << change.OldData.Version << ',' << change.OldData.Created << ',' << change.OldData.Modified << ',' << change.OldData.Value.size() << ',' << change.OldData.Lease;
             }

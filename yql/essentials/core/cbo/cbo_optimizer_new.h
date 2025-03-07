@@ -365,6 +365,7 @@ public:
 
     struct TNativeSettings {
         ui32 MaxDPhypDPTableSize = 100000;
+        bool StripColumnAliases = true;
     };
     virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerNative(IProviderContext& pctx, TExprContext& ctx, const TNativeSettings& settings) const = 0;
 

@@ -282,9 +282,10 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
 
 class TOptimizerNativeNew: public IOptimizerNew {
 public:
-    TOptimizerNativeNew(IProviderContext& ctx, ui32 maxDPhypDPTableSize, TExprContext& exprCtx, bool enableShuffleElimination)
+    TOptimizerNativeNew(IProviderContext& ctx, ui32 maxDPhypDPTableSize, bool stripColumnAliases, TExprContext& exprCtx, bool enableShuffleElimination)
         : IOptimizerNew(ctx)
         , MaxDPHypTableSize_(maxDPhypDPTableSize)
+        , StripColumnAliases_(stripColumnAliases)
         , ExprCtx(exprCtx)
         , EnableShuffleElimination(enableShuffleElimination)
     {}
@@ -323,7 +324,7 @@ private:
         bool postEnumerationShuffleElimination /* we eliminate shuffles during enum algo only in case of TDPHypSolverShuffleElimination */,
         const TOptimizerHints& hints = {}
     ) {
-        TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints);
+        TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, StripColumnAliases_, hints);
         TFDStorage fdStorage;
         auto orderingsFSM = TOrderingsStateMachineConstructor(hypergraph).Construct(fdStorage);
 
@@ -433,12 +434,13 @@ private:
 
 private:
     ui32 MaxDPHypTableSize_;
+    bool StripColumnAliases_;
     TExprContext& ExprCtx;
     bool EnableShuffleElimination;
 };
 
-IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& pctx, const ui32 maxDPhypDPTableSize, TExprContext& ectx, bool enableShuffleElimination) {
-    return new TOptimizerNativeNew(pctx, maxDPhypDPTableSize, ectx, enableShuffleElimination);
+IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& pctx, const ui32 maxDPhypDPTableSize, bool stripColumnAliases, TExprContext& ectx, bool enableShuffleElimination) {
+    return new TOptimizerNativeNew(pctx, maxDPhypDPTableSize, stripColumnAliases, ectx, enableShuffleElimination);
 }
 
 TExprBase DqOptimizeEquiJoinWithCosts(

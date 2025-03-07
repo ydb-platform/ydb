@@ -53,7 +53,7 @@ std::shared_ptr<IBaseOptimizerNode> Enumerate(const std::shared_ptr<IBaseOptimiz
     auto ctx = TProviderContext();
     TExprContext dummyCtx;
     auto optimizer =
-        std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(ctx, std::numeric_limits<ui32>::max(), dummyCtx, false));
+        std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(ctx, std::numeric_limits<ui32>::max(), true, dummyCtx, false));
 
     Y_ENSURE(root->Kind == EOptimizerNodeKind::JoinNodeType);
     auto res = optimizer->JoinSearch(std::static_pointer_cast<TJoinOptimizerNode>(root), hints);

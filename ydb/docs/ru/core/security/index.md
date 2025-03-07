@@ -8,12 +8,13 @@
 - [{#T}](authorization.md)
 - [{#T}](builtin-security.md)
 - [{#T}](audit-log.md)
+- [{#T}](access-rights.md)
+- [{#T}](short-access-control-notation.md)
 - Шифрование:
 
   - [{#T}](encryption/data-at-rest.md)
   - [{#T}](encryption/data-in-transit.md)
 
-- [{#T}](short-access-control-notation.md)
 - Концепции:
 
   - [{#T}](../concepts/connect.md)

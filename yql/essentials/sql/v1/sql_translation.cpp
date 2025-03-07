@@ -3826,7 +3826,7 @@ bool TSqlTranslation::PasswordParameter(const TRule_password_option& passwordOpt
     TString stringValue(Ctx.Token(token));
 
     if (to_lower(stringValue) == "null") {
-        // result.Password = default value
+        result.IsPasswordNull = true;
     } else {
         auto password = StringContent(Ctx, Ctx.Pos(), stringValue);
 
@@ -3944,6 +3944,7 @@ bool TSqlTranslation::UserParameters(const std::vector<TRule_user_option>& optio
 
     if (isCreateUser) {
         result.CanLogin = true;
+        result.IsPasswordNull = true;
     }
 
     for (const auto& option : optionsList) {

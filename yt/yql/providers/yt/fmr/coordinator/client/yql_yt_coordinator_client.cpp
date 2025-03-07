@@ -68,6 +68,19 @@ public:
         return NThreading::MakeFuture(HeartbeatResponseFromProto(protoHeartbeatResponse));
     }
 
+    NThreading::TFuture<TGetFmrTableInfoResponse> GetFmrTableInfo(const TGetFmrTableInfoRequest& getFmrTableInfoRequest) override {
+        NProto::TGetFmrTableInfoRequest protoGetFmrTableInfoRequest = GetFmrTableInfoRequestToProto(getFmrTableInfoRequest);
+        TString sendHearbeatRequestUrl = "/fmr_table_info";
+        auto httpClient = TKeepAliveHttpClient(Host_, Port_);
+        TStringStream outputStream;
+
+        httpClient.DoGet(sendHearbeatRequestUrl, &outputStream, Headers_);
+        TString serializedResponse = outputStream.ReadAll();
+        NProto::TGetFmrTableInfoResponse protoGetFmrTableInfoResponse;
+        YQL_ENSURE(protoGetFmrTableInfoResponse.ParseFromString(serializedResponse));
+        return NThreading::MakeFuture(GetFmrTableInfoResponseFromProto(protoGetFmrTableInfoResponse));
+    }
+
 private:
     TString Host_;
     ui16 Port_;

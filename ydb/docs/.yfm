@@ -4,6 +4,7 @@ apply-presets: true
 allowCustomResources: true
 included: true
 singlePage: true
+
 resources:
   style:
     - _assets/tags.css   

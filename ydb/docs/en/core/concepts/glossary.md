@@ -278,7 +278,11 @@ An access subject can be a [user](#access-user) or a [group](#access-group).
 
 ### Access right {#access-right}
 
-An **[access right](../security/authorization.md#right)** is an entity that represents permission for an [access subject](#access-subject) to perform a specific set of operations in a cluster or database on a specific [access object](#access-object).
+An **access right** is an entity that represents permission for an [access subject](#access-subject) to perform a specific set of operations in a cluster or database on a specific [access object](#access-object).
+
+### Access right inheritance {#access-right-inheritance}
+
+**Access right inheritance** refers to the mechanism by which [access rights](#access-right) are automatically passed down from parent [access objects](#access-object) to child access objects within a database structure. This ensures that permissions granted at a higher level in the hierarchy are applied to all sub-levels beneath it, unless [explicitly overridden](../reference/ydb-cli/commands/scheme-permissions.md#clear-inheritance).
 
 ### Access control list {#access-control-list}
 
@@ -286,15 +290,15 @@ An **access control list** or **ACL** is a list of all [rights](#access-right) g
 
 ### Owner {#access-owner}
 
-An **[owner](../security/authorization.md#owner)** is an [access subject](#access-subject) ([user](#access-user) or [group](#access-group)) having full rights over a specific [access object](#access-object).
+An **owner** is an [access subject](#access-subject) ([user](#access-user) or [group](#access-group)) having full rights over a specific [access object](#access-object).
 
 ### User {#access-user}
 
-A **[user](../security/authorization.md#user)** is an individual utilizing {{ ydb-short-name }} to perform a specific function.
+A **user** is an individual utilizing {{ ydb-short-name }} to perform a specific function.
 
 ### Group {#access-group}
 
-A **[group](../security/authorization.md#group)** or **access group** is a named collection of [users](#access-user) with identical [access rights](#access-right) to certain [access objects](#access-object).
+A **group** or **access group** is a named collection of [users](#access-user) with identical [access rights](#access-right) to certain [access objects](#access-object).
 
 ### Role {#access-role}
 

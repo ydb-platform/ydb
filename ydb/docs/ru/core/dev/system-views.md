@@ -313,8 +313,8 @@ ORDER BY IntervalEnd desc, CPUCores desc
 `Name` | Имя пула ресурсов.<br/>Тип: `Utf8`.<br/>Ключ: `0`.
 `ConcurrentQueryLimit` | Максимальное количество параллельно выполняющихся запросов в пуле ресурсов.<br/>Тип: `Int32`.
 `QueueSize` | Максимальный размер очереди ожидания.<br/>Тип: `Int32`.
-`DatabaseLoadCpuThreshold` | Порог загрузки CPU всей базы данных, после которого запросы не отправляются на выполнение и остаются в очереди.<br/>Тип: `Double`.
-`ResourceWeight` | Веса для распределения ресурсов между пулами.<br/>Тип: `Double`.
+`DatabaseLoadCpuThreshold` | Процент загрузки CPU всей базы данных, после которого запросы не отправляются на выполнение и остаются в очереди.<br/>Тип: `Double`.
+`ResourceWeight` | [Веса](../dev/resource-consumption-management.md#resources_weight) для распределения ресурсов между пулами.<br/>Тип: `Double`.
 `TotalCpuLimitPercentPerNode` | Процент доступного CPU, который могут использовать все запросы на узле в данном пуле ресурсов.<br/>Тип: `Double`.
 `QueryCpuLimitPercentPerNode` | Процент доступного CPU на узле для одного запроса в пуле ресурсов.<br/>Тип: `Double`.
 `QueryMemoryLimitPercentPerNode` | Процент доступной памяти на узле, который может использовать запрос в данном пуле ресурсов.<br/>Тип: `Double`.

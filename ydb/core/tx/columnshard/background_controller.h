@@ -21,6 +21,7 @@ private:
     bool ActiveCleanupPortions = false;
     bool ActiveCleanupTables = false;
     bool ActiveCleanupInsertTable = false;
+    bool ActiveCleanupUnusedSchemaVersions = false;
     YDB_READONLY(TMonotonic, LastIndexationInstant, TMonotonic::Zero());
 public:
     TBackgroundController(std::shared_ptr<TBackgroundControllerCounters> counters)
@@ -100,6 +101,20 @@ public:
     }
     bool IsCleanupInsertTableActive() const {
         return ActiveCleanupInsertTable;
+    }
+
+    bool IsActiveCleanupUnusedSchemaVersions() const {
+        return ActiveCleanupUnusedSchemaVersions;
+    }
+
+    void StartActiveCleanupUnusedSchemaVersions() {
+        Y_ABORT_UNLESS(!ActiveCleanupUnusedSchemaVersions);
+        ActiveCleanupUnusedSchemaVersions = true;
+    }
+
+    void FinishActiveCleanupUnusedSchemaVersions() {
+        Y_ABORT_UNLESS(ActiveCleanupUnusedSchemaVersions);
+        ActiveCleanupUnusedSchemaVersions = false;
     }
 };
 

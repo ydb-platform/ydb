@@ -147,9 +147,13 @@ getTdefsByNumber(int nTable)
 }
 */
 
+int getStdefsMaxSize() {
+   return (int)(sizeof(s_tdefs) / sizeof(s_tdefs[0]));
+}
+
 void checkTdefsSize(int nTable) {
    // Prevent array overflow. Fixing coverity issue OVERRUN
-   if (nTable < 0 || nTable >= (int)(sizeof(s_tdefs) / sizeof(s_tdefs[0]))) {
+   if (nTable < 0 || nTable >= getStdefsMaxSize()) {
       INTERNAL("Array s_tdefs overflow");
       exit(EXIT_FAILURE);
    }
@@ -230,8 +234,8 @@ getTableFromColumn(int nColumn)
 {
     int i;
    tdef *pT;
-    
-    for (i=0; i <= MAX_TABLE; i++)
+
+    for (i=0; i < S_BRAND + getStdefsMaxSize(); i++)
     {
       pT = getSimpleTdefsByNumber(i);
       if ((nColumn >= pT->nFirstColumn) && (nColumn <= pT->nLastColumn))

@@ -107,8 +107,9 @@ public:
             if (Packer.PackedSizeEstimate()) {
                 TryPack(/* force */ true);
             }
-            for (auto&& data : BlockSplitter->SplitItem(values, width)) {
-                DoPushBlock(std::move(data));
+            auto splittedItem = BlockSplitter->SplitItem(values, width);
+            for (auto it = splittedItem.rbegin(); it != splittedItem.rend(); ++it) {
+                DoPushBlock(std::move(*it));
             }
         } else {
             DoPush(values, width);

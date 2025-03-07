@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/engines/reader/duplicates/subscriber.h>
 
@@ -8,7 +8,7 @@
 
 namespace NKikimr::NOlap::NReader {
 
-class TEvRequestFilter: public NActors::TEventLocal<TEvRequestFilter, TEvColumnShard::EvRequestFilter> {
+class TEvRequestFilter: public NActors::TEventLocal<TEvRequestFilter, NColumnShard::TEvPrivate::EvRequestFilter> {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NCommon::IDataSource>, Source);
     YDB_READONLY_DEF(std::shared_ptr<IFilterSubscriber>, Subscriber);

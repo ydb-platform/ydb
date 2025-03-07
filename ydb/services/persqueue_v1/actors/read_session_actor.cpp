@@ -809,7 +809,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
     }
 
     if (Request->GetSerializedToken().empty()) {
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ctx)->EnforceUserTokenRequirement) {
             return CloseSession(PersQueue::ErrorCode::ACCESS_DENIED,
                 "unauthenticated access is forbidden, please provide credentials", ctx);
         }
@@ -1421,6 +1421,9 @@ void TReadSessionActor<UseMigrationProtocol>::SendReleaseSignal(TPartitionActorI
         result.mutable_stop_partition_session_request()->set_committed_offset(partition.Offset);
         if (DirectRead) {
             result.mutable_stop_partition_session_request()->set_last_direct_read_id(partition.LastDirectReadId);
+            Send(NPQ::MakePQDReadCacheServiceActorId(),
+                 new TEvPQProxy::TEvDirectReadDestroyPartitionSession(Session, partition.Partition.AssignId));
+
         }
     }
 

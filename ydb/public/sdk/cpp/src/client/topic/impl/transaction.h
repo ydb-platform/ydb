@@ -2,13 +2,13 @@
 
 #include <ydb-cpp-sdk/client/types/status/status.h>
 
-namespace NYdb::inline V3::NTable {
+namespace NYdb::inline Dev::NTable {
 
 class TTransaction;
 
 }
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 struct TTransactionId {
     std::string SessionId;

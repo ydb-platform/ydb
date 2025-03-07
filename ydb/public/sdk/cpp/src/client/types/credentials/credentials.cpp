@@ -1,7 +1,7 @@
 #include <ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <util/string/cast.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class TInsecureCredentialsProvider : public ICredentialsProvider {
 public:

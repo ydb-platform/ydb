@@ -7,7 +7,7 @@
 #include <src/library/issue/yql_issue_message.h>
 #include <thread>
 
-namespace NYdb::inline V3::NQuery {
+namespace NYdb::inline Dev::NQuery {
 
 // Custom lock primitive to protect session from destroying
 // during async read execution.

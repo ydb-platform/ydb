@@ -3,7 +3,7 @@
 #include <ydb-cpp-sdk/client/types/status_codes.h>
 #include <ydb-cpp-sdk/client/types/status/status.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 using TPeriodicCb = std::function<bool(NYdb::NIssue::TIssues&&, EStatus)>;
 
 // !!!Experimental!!!

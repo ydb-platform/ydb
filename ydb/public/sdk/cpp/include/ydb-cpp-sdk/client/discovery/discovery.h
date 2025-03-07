@@ -12,7 +12,7 @@ namespace Discovery {
 } // namespace Discovery
 } // namespace Ydb
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NDiscovery {
 
 ////////////////////////////////////////////////////////////////////////////////

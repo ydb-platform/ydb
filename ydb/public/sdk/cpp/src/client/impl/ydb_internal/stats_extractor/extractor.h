@@ -8,7 +8,7 @@
 
 #include <library/cpp/monlib/metrics/metric_registry.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class TStatsExtractor: public NSdkStats::IStatApi {
 public:

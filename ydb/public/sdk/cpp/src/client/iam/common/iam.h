@@ -9,7 +9,7 @@
 #include <util/string/builder.h>
 #include <util/system/spinlock.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 constexpr TDuration BACKOFF_START = TDuration::MilliSeconds(50);
 constexpr TDuration BACKOFF_MAX = TDuration::Seconds(10);

@@ -4,7 +4,7 @@
 
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 bool TypesEqual(const Ydb::Type& t1, const Ydb::Type& t2);
 

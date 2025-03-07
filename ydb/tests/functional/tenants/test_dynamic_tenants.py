@@ -498,3 +498,33 @@ def test_check_access(ydb_cluster):
     for user in users.values():
         ydb_cluster.remove_database(user['path'])
         ydb_cluster.unregister_and_stop_slots(database_nodes[user['path']])
+
+
+def test_custom_coordinator_options(ydb_cluster):
+    database = '/Root/users/custom_options'
+    ydb_cluster.create_database(
+        database,
+        storage_pool_units_count={
+            'hdd': 1
+        },
+        options={
+            'coordinators': 4,
+            'mediators': 5,
+            'plan_resolution': 100,
+        },
+    )
+    database_nodes = ydb_cluster.register_and_start_slots(database, count=1)
+    ydb_cluster.wait_tenant_up(database)
+
+    description = ydb_cluster.client.describe(database, '')
+    params = description.PathDescription.DomainDescription.ProcessingParams
+    assert_that(
+        [
+            len(params.Coordinators),
+            len(params.Mediators),
+            params.PlanResolution,
+        ],
+        equal_to([4, 5, 100]))
+
+    ydb_cluster.remove_database(database)
+    ydb_cluster.unregister_and_stop_slots(database_nodes)

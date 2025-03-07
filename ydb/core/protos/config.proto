@@ -1779,6 +1779,14 @@ message THiveConfig {
     optional uint64 NodeRestartsForPenalty = 85 [default = 3];
 }
 
+message THealthCheckConfig {
+    optional uint32 NodeRestartsPerPeriodYellowThreshold = 1 [default = 10];
+    optional uint32 NodeRestartsPerPeriodOrangeThreshold = 2 [default = 30];
+    optional uint64 NodesTimeDifferenceUsYellowThreshold = 3 [default = 5000];
+    optional uint64 NodesTimeDifferenceUsOrangeThreshold = 4 [default = 25000];
+    optional uint32 TabletsRestartsPerPeriodOrangeThreshold = 5 [default = 30];
+}
+
 message TBlobCacheConfig {
     optional uint64 MaxSizeBytes = 1 [default = 1073741824];
 }
@@ -2270,6 +2278,7 @@ message TAppConfig {
     optional TSelfManagementConfig SelfManagementConfig = 86;
     optional NKikimrProto.TDataIntegrityTrailsConfig DataIntegrityTrailsConfig = 87;
     optional TDataErasureConfig DataErasureConfig = 88;
+    optional THealthCheckConfig HealthCheckConfig = 89;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

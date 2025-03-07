@@ -46,7 +46,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
         appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("MySQL");
         appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("Ydb");
-    
+
         auto settings = TKikimrSettings();
 
         NYql::IHTTPGateway::TPtr httpGateway;

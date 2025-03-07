@@ -22,9 +22,8 @@ namespace NKqp {
         }
         if (!kikimrSettings.FeatureFlags.HasEnableExternalDataSources()) {
             kikimrSettings.SetEnableExternalDataSources(true);
-            appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+            kikimrSettings.AppConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         }
-        kikimrSettings.SetAppConfig(appCfg);
         Kikimr = std::make_unique<TKikimrRunner>(kikimrSettings);
         TableClient =
             std::make_unique<NYdb::NTable::TTableClient>(Kikimr->GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin")));

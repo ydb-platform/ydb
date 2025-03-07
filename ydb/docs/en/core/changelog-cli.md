@@ -7,26 +7,26 @@ Released on March 5, 2025. To update to version **2.20.0**, select the [Download
 ### Features
 
 * Added [topics](./concepts/topic.md) support in the `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md). In this release, only topic settings are retained; messages are not included in the backup.
-* Added [coordination nodes](./concepts/datamodel/coordination-node.md)  support in the `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md).
-* Added new `{{ ydb-cli }} workload log import generator` command.
+* Added [coordination nodes](./concepts/datamodel/coordination-node.md) support in the `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md).
+* Added the new `{{ ydb-cli }} workload log import generator` command.
 * Added new global options for client certificates in SSL/TLS connections:
   * `--client-cert-file`: File containing a client certificate for SSL/TLS connections (PKCS#12 or PEM-encoded).
-  * `--client-cert-key-file`: File containing a PEM-encoded private key to the client certificate for SSL/TLS connections.
+  * `--client-cert-key-file`: File containing a PEM-encoded private key for the client certificate.
   * `--client-cert-key-password-file`: File containing a password for the private key (if the key is encrypted).
 * Queries in the `{{ ydb-cli }} workload run` command are now executed in random order.
-* **_(Requires server v25.1+)_** Added [external data sources](./concepts/datamodel/external_data_source.md) and [external tables](./concepts/datamodel/external_table.md) support in the `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md).
-* **_(Experimental)_** Added the `{{ ydb-cli }} admin node config init` command to initialize a directory with the node configuration files.
+* **_(Requires server v25.1+)_** Added support for [external data sources](./concepts/datamodel/external_data_source.md) and [external tables](./concepts/datamodel/external_table.md) in the `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md).
+* **_(Experimental)_** Added the `{{ ydb-cli }} admin node config init` command to initialize a directory with node configuration files.
 * **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin cluster config generate` command to generate a dynamic configuration file from a cluster static configuration file.
-* **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin cluster dump` and `{{ ydb-cli }} admin cluster restore` commands for dumping all cluster-level data. Such dumps contain a list of databases with metadata, users and groups, but do not contain scheme objects.
-* **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin database dump` and `{{ ydb-cli }} admin database restore` commands for dumping all database-level data. Such dumps contain database metadata, scheme objects, their data, users and groups.
-* **_(Requires server v25.1+)_** **_(Experimental)_** Added new options `--dedicated-storage-section` and `--dedicated-cluster-section` to the `ydb admin cluster config fetch` command, allowing to fetch cluster and storage config sections separately.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin cluster dump` and `{{ ydb-cli }} admin cluster restore` commands for dumping all cluster-level data. These dumps contain a list of databases with metadata, users, and groups but do not include schema objects.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin database dump` and `{{ ydb-cli }} admin database restore` commands for dumping all database-level data. These dumps contain database metadata, schema objects, their data, users, and groups.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Added the `--dedicated-storage-section` and `--dedicated-cluster-section` options to the `ydb admin cluster config fetch` command, allowing cluster and storage config sections to be fetched separately.
 
 ### Bug fixes
 
-* Fixed a bug where the `{{ ydb-cli }} auth get-token` command tried to authenticate twice: while listing endpoints and while executing the actual token request.
+* Fixed a bug where the `{{ ydb-cli }} auth get-token` command attempted to authenticate twice: once while listing endpoints and again while executing the actual token request.
 * Fixed a bug where the `{{ ydb-cli }} import file csv` command was saving progress even if a batch upload had failed.
 * Fixed a bug where some errors could be ignored when restoring from a local backup with the `ydb tools restore` command.
-* Fixed a memory leak in the data generator for `{{ ydb-cli }} workload tpcds` benchmark.
+* Fixed a memory leak in the data generator for the `{{ ydb-cli }} workload tpcds` benchmark.
 
 ## Version 2.19.0 {#2-19-0}
 

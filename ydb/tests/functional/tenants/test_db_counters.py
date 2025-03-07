@@ -15,7 +15,7 @@ from ydb.tests.library.common.protobuf_ss import AlterTableRequest
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.library.harness.ydb_fixtures import ydb_database_ctx
+from ydb.tests.library.fixtures import ydb_database_ctx
 from ydb.tests.library.matchers.response_matchers import ProtobufWithStatusMatcher
 from ydb.tests.oss.ydb_sdk_import import ydb
 

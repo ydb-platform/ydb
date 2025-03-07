@@ -4969,4 +4969,41 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorBatchMode) {
 
 }
 
+Y_UNIT_TEST_SUITE(DataShardReadIteratorFastCancel) {
+
+    Y_UNIT_TEST(ShouldProcessFastCancel) {
+        TTestHelper helper;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        AddRangeQuery<ui32>(*request1, { 1 }, true, { 1 }, true);
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+        CheckResult(helper.Tables.at("table-1").UserTable, *readResult1, {
+            {1, 1, 1, 100},
+        });
+        UNIT_ASSERT(readResult1->Record.GetFinished());
+
+        auto& runtime = *helper.Server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+        auto shardActor = ResolveTablet(runtime, helper.Tables.at("table-1").TabletId);
+
+        auto request2 = helper.GetBaseReadRequest("table-1", 2);
+        AddRangeQuery<ui32>(*request2, { 1 }, true, { 1 }, true);
+        auto request3 = helper.GetBaseReadRequest("table-1", 3);
+        AddRangeQuery<ui32>(*request3, { 1 }, true, { 1 }, true);
+        auto cancel2 = std::make_unique<TEvDataShard::TEvReadCancel>();
+        cancel2->Record.SetReadId(2);
+        auto cancel3 = std::make_unique<TEvDataShard::TEvReadCancel>();
+        cancel3->Record.SetReadId(3);
+
+        runtime.Send(new IEventHandle(shardActor, sender, request2.release()), 0, true);
+        runtime.Send(new IEventHandle(shardActor, sender, request3.release()), 0, true);
+        runtime.Send(new IEventHandle(shardActor, sender, cancel2.release()), 0, true);
+        runtime.Send(new IEventHandle(shardActor, sender, cancel3.release()), 0, true);
+
+        auto ev = runtime.GrabEdgeEvent<TEvDataShard::TEvReadResult>(sender, TDuration::Seconds(1));
+        UNIT_ASSERT_C(!ev, "Unexpected response received (should have been cancelled)");
+    }
+
+}
+
 } // namespace NKikimr

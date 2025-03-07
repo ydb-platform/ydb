@@ -151,6 +151,9 @@ bool IsWellKnownId(TObjectId id);
  */
 bool IsSequoiaId(TObjectId id);
 
+//! Returns |true| if a given #id corresponds to cypress transaction that is mirrored to Sequoia.
+bool IsCypressTransactionMirroredToSequoia(TTransactionId transactionId);
+
 //! Constructs the id for a regular object.
 TObjectId MakeRegularId(
     EObjectType type,

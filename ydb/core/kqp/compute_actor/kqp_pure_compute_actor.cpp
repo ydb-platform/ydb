@@ -149,7 +149,7 @@ STFUNC(TKqpComputeActor::StateFunc) {
         TBase::OnMemoryLimitExceptionHandler();
     } catch (const NMiniKQL::TKqpEnsureFail& e) {
         InternalError((TIssuesIds::EIssueCode) e.GetCode(), e.GetMessage());
-    } catch (const yexception& e) {
+    } catch (const std::exception& e) {
         InternalError(TIssuesIds::DEFAULT_ERROR, e.what());
     }
 

@@ -1253,7 +1253,9 @@ namespace Tests {
                     Settings->YtGateway ? Settings->YtGateway : NKqp::MakeYtGateway(GetFunctionRegistry(), queryServiceConfig),
                     queryServiceConfig.GetSolomon(),
                     Settings->SolomonGateway ? Settings->SolomonGateway : NYql::CreateSolomonGateway(queryServiceConfig.GetSolomon()),
-                    Settings->ComputationFactory
+                    Settings->ComputationFactory,
+                    NYql::NDq::CreateReadActorFactoryConfig(queryServiceConfig.GetS3()),
+                    Settings->DqTaskTransformFactory
                 );
             }
 

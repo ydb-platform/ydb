@@ -37,9 +37,9 @@ void TMergePartialStream::CheckSequenceInDebug(const TRWSortableBatchPosition& n
 #endif
 }
 
-bool TMergePartialStream::DrainToControlPoint(TRecordBatchBuilder& builder, const bool includeFinish, std::optional<TCursor>* lastResultPosition) {
+bool TMergePartialStream::DrainToControlPoint(
+    IMergeResultBuilder& builder, const bool includeFinish, std::optional<TCursor>* lastResultPosition) {
     AFL_VERIFY(ControlPoints == 1);
-    Y_ABORT_UNLESS((ui32)DataSchema->num_fields() == builder.GetBuildersCount());
     builder.ValidateDataSchema(DataSchema);
     bool cpReachedFlag = false;
     std::shared_ptr<TSortableScanData> resultScanData;
@@ -65,7 +65,8 @@ bool TMergePartialStream::DrainToControlPoint(TRecordBatchBuilder& builder, cons
     return cpReachedFlag;
 }
 
-bool TMergePartialStream::DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TCursor>* lastResultPosition) {
+bool TMergePartialStream::DrainCurrentTo(
+    IMergeResultBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TCursor>* lastResultPosition) {
     PutControlPoint(readTo, false);
     return DrainToControlPoint(builder, includeFinish, lastResultPosition);
 }
@@ -143,20 +144,21 @@ std::shared_ptr<arrow::Table> TMergePartialStream::SingleSourceDrain(const TSort
     return result;
 }
 
-void TMergePartialStream::DrainAll(TRecordBatchBuilder& builder) {
-    Y_ABORT_UNLESS((ui32)DataSchema->num_fields() == builder.GetBuildersCount());
+void TMergePartialStream::DrainAll(IMergeResultBuilder& builder) {
     while (SortHeap.Size()) {
         DrainCurrentPosition(&builder, nullptr, nullptr);
     }
 }
 
-void TMergePartialStream::DrainCurrentPosition(TRecordBatchBuilder* builder, std::shared_ptr<TSortableScanData>* resultScanData, ui64* resultPosition) {
+void TMergePartialStream::DrainCurrentPosition(
+    IMergeResultBuilder* builder, std::shared_ptr<TSortableScanData>* resultScanData, ui64* resultPosition) {
     Y_ABORT_UNLESS(SortHeap.Size());
     Y_ABORT_UNLESS(!SortHeap.Current().IsControlPoint());
+    // TODO: Why skip deleted by filter here?
     if (!SortHeap.Current().IsDeleted()) {
-//        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("key_add", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
+        // AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("key_add", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
         if (builder) {
-            builder->AddRecord(SortHeap.Current().GetKeyColumns());
+            builder->AddRecord(SortHeap.Current());
         }
         if (resultScanData && resultPosition) {
             *resultScanData = SortHeap.Current().GetKeyColumns().GetSorting();
@@ -172,6 +174,9 @@ void TMergePartialStream::DrainCurrentPosition(TRecordBatchBuilder* builder, std
     bool isFirst = true;
     while (SortHeap.Size() && (isFirst || SortHeap.Current().GetKeyColumns().Compare(*startSorting, startPosition) == std::partial_ordering::equivalent)) {
         if (!isFirst) {
+            if (builder && !SortHeap.Current().IsDeleted()) {
+                builder->SkipRecord(SortHeap.Current());
+            }
 //            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("key_skip1", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
             auto& anotherIterator = SortHeap.Current();
             if (PossibleSameVersionFlag) {

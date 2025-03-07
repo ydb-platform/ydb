@@ -62,6 +62,54 @@ Y_UNIT_TEST_SUITE(NamingValidation) {
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_ERROR);
     }
 
+    Y_UNIT_TEST(CreateColumnStoreOk) {
+        NYdb::TKikimrWithGrpcAndRootSchema server(GetAppConfig());
+        Tests::TClient annoyingClient(*server.ServerSettings);
+        
+        TString tableDescr = Sprintf(R"(
+            Name: "OlapStore"
+            ColumnShardCount: 4
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "message" Type: "Utf8" }
+                    Columns { Name: "id" Type: "Int32" NotNull: True }
+                    KeyColumnNames: ["id"]
+                }
+            }
+        )");
+
+        NMsgBusProxy::EResponseStatus status = annoyingClient.CreateOlapStore("/Root", tableDescr);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+
+        status = annoyingClient.CreateColumnTable("/Root/OlapStore", R"(
+            Name: "Test"
+            ColumnShardCount : 4
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+    }
+
+    Y_UNIT_TEST(CreateColumnStoreFailed) {
+        NYdb::TKikimrWithGrpcAndRootSchema server(GetAppConfig());
+        Tests::TClient annoyingClient(*server.ServerSettings);
+        
+        TString tableDescr = Sprintf(R"(
+            Name: "OlapStore"
+            ColumnShardCount: 4
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "mess age" Type: "Utf8" }
+                    Columns { Name: "id" Type: "Int32" NotNull: True }
+                    KeyColumnNames: ["id"]
+                }
+            }
+        )");
+
+        NMsgBusProxy::EResponseStatus status = annoyingClient.CreateOlapStore("/Root", tableDescr);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_ERROR);
+    }
+
 }
 
 }   // namespace NKikimr::NKqp

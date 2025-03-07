@@ -13,12 +13,77 @@ namespace NActors {
             ev->NextLinkPtr.store(reinterpret_cast<uintptr_t>(next), std::memory_order_relaxed);
         }
 
-        static inline void SetNextPtr(IEventHandle* ev, uintptr_t next) {
-            ev->NextLinkPtr.store(next, std::memory_order_relaxed);
+        //static inline void SetNextPtr(IEventHandle* ev, uintptr_t next) {
+        //    ev->NextLinkPtr.store(next, std::memory_order_relaxed);
+        //}
+    }
+
+    void TMailbox::Work() noexcept {
+        //Cerr << "Created new worker\n";
+        while (true) {
+            auto vec = SimpleQueue->PopAll();
+            for (auto evExt : vec) {
+                //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " Pop, mailbox# " << (void*)this << " event " << (evExt ? evExt->GetTypeName() : "nullptr") << " evPtr# " << (void*)evExt << Endl);
+                if (!evExt) {
+                    if (NextEventPtr.load() == 0) {
+                        continue;
+                    } else {
+                        //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " Pop, mailbox# " << (void*)this << " event# 0, return" << Endl);
+                        return;
+                    }
+                }
+                //std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
+
+                IActor* actor = nullptr;
+                TActorId recipient;
+                recipient = evExt->GetRecipientRewrite();
+                actor = this->FindActor(recipient.LocalId());
+                if (!actor) {
+                    actor = this->FindAlias(recipient.LocalId());
+                    if (actor) {
+                        // Work as if some alias actor rewrites events and delivers them to the real actor id
+                        evExt->Rewrite(evExt->GetTypeRewrite(), actor->SelfId());
+                        recipient = evExt->GetRecipientRewrite();
+                    }
+                }
+                //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << "after rewrite mailbox# " << (void*)this
+                //    << " actor# " << TypeName(actor) << " event " << (evExt ? evExt->GetTypeName() : "nullptr") << Endl);
+                NHPTimer::STime eventStart = 0;// = NHPTimer::HPNow();
+                TActorContext ctx(*this, *ExecutorPool, eventStart, recipient);
+                //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " 8" << Endl);
+                TlsActivationContext = &ctx; // ensure dtor (if any) is called within actor system
+                // move for destruct before ctx;
+                auto ev = std::move(evExt);
+
+                //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " receive mailbox# " << (void*)this
+                    //<< " actor# " << (void*)actor << " event " << (ev ? ev->GetTypeName() : "nullptr") << Endl);
+                if (actor) {
+                    Y_ASSERT(ev);
+                    TAutoPtr<IEventHandle> evHandle(ev);
+                    Y_ASSERT(actor);
+                    Y_ASSERT(evHandle);
+                    actor->OnEnqueueEvent(0);
+                    actor->Receive(evHandle);
+
+                    actor->OnDequeueEvent();
+                }
+            }
+            DyingActors.clear();
         }
     }
 
+    void TMailbox::UnregisterActor(ui64 localActorId) noexcept {
+        // Y_ASSERT(this == actor);
+
+        IActor* actor = DetachActor(localActorId);
+
+        //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__  << " actor# " << (void*)actor
+            //<< " mailbox " << (void*)this << Endl);
+        DyingActors.push_back(THolder(actor));
+    }
+
     IActor* TMailbox::FindActor(ui64 localActorId) noexcept {
+        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
         switch (ActorPack) {
             case EActorPack::Empty:
                 return nullptr;
@@ -51,6 +116,7 @@ namespace NActors {
     }
 
     IActor* TMailbox::FindAlias(ui64 localActorId) noexcept {
+        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
         switch (ActorPack) {
             case EActorPack::Empty:
             case EActorPack::Simple:
@@ -71,6 +137,7 @@ namespace NActors {
     }
 
     void TMailbox::AttachActor(ui64 localActorId, IActor* actor) noexcept {
+        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
         switch (ActorPack) {
             case EActorPack::Empty:
                 ActorsInfo.Simple = { actor, localActorId };
@@ -116,6 +183,7 @@ namespace NActors {
     }
 
     void TMailbox::AttachAlias(ui64 localActorId, IActor* actor) noexcept {
+        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
         // Note: we assume the specified actor is registered and the alias is correct
         EnsureActorMap();
         actor->Aliases.insert(localActorId);
@@ -123,6 +191,8 @@ namespace NActors {
     }
 
     IActor* TMailbox::DetachActor(ui64 localActorId) noexcept {
+        //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << Endl);
+        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
         switch (ActorPack) {
             case EActorPack::Empty:
                 Y_ABORT("DetachActor(%" PRIu64 ") called for an empty mailbox", localActorId);
@@ -185,6 +255,7 @@ namespace NActors {
     }
 
     IActor* TMailbox::DetachAlias(ui64 localActorId) noexcept {
+        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
         switch (ActorPack) {
             case EActorPack::Empty:
                 Y_ABORT("DetachAlias(%" PRIu64 ") called for an empty mailbox", localActorId);
@@ -210,6 +281,7 @@ namespace NActors {
     }
 
     void TMailbox::EnsureActorMap() {
+        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
         switch (ActorPack) {
             case EActorPack::Empty:
                 Y_ABORT("Expected a non-empty mailbox");
@@ -247,12 +319,14 @@ namespace NActors {
     }
 
     void TMailbox::AddElapsedCycles(ui64 cycles) {
+        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
         if (ActorPack == EActorPack::Map) {
             ActorsInfo.Map.ActorsMap->Stats.ElapsedCycles += cycles;
         }
     }
 
     std::optional<ui64> TMailbox::GetElapsedCycles() {
+        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
         if (ActorPack == EActorPack::Map) {
             return ActorsInfo.Map.ActorsMap->Stats.ElapsedCycles;
         }
@@ -269,6 +343,7 @@ namespace NActors {
     bool TMailbox::CleanupActors() noexcept {
         bool done = true;
 
+        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
         // Note: actor destructor might register more actors (including the same mailbox)
         for (int round = 0; round < 10; ++round) {
             switch (ActorPack) {
@@ -318,38 +393,51 @@ namespace NActors {
         return done;
     }
 
-    bool TMailbox::CleanupEvents() noexcept {
-        bool hadEvents = false;
+    size_t TMailbox::CleanupEvents() noexcept {
+        //bool hadEvents = false;
 
         // Note: new events cannot be added after this mailbox is marked free
-        uintptr_t current = NextEventPtr.exchange(MarkerFree, std::memory_order_acquire);
-        if (current && current != MarkerUnlocked && current != MarkerFree) {
-            IEventHandle* top = reinterpret_cast<IEventHandle*>(current);
-            do {
-                IEventHandle* ev = top;
-                top = GetNextPtr(ev);
-                hadEvents = true;
-                delete ev;
-            } while (top);
-        }
+        //uintptr_t current = NextEventPtr.exchange(MarkerFree, std::memory_order_acquire);
+        //if (current && current != MarkerUnlocked && current != MarkerFree) {
+        //    IEventHandle* top = reinterpret_cast<IEventHandle*>(current);
+        //    do {
+        //        IEventHandle* ev = top;
+        //        top = GetNextPtr(ev);
+        //        hadEvents = true;
+        //        delete ev;
+        //    } while (top);
+        //}
 
-        if (EventHead) {
-            do {
-                IEventHandle* ev = EventHead;
-                EventHead = GetNextPtr(ev);
-                hadEvents = true;
-                delete ev;
-            } while (EventHead);
-            EventTail = nullptr;
-        }
+        //if (EventHead) {
+        //    do {
+        //        IEventHandle* ev = EventHead;
+        //        EventHead = GetNextPtr(ev);
+        //        hadEvents = true;
+        //        delete ev;
+        //    } while (EventHead);
+        //    EventTail = nullptr;
+        //}
 
-        return !hadEvents;
+        return SimpleQueue->Cleanup(bool(Worker));
     }
 
     bool TMailbox::Cleanup() noexcept {
+        NextEventPtr.store(MarkerFree);
+        CleanupEvents();
+        if (Worker) {
+            //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__  << " mailbox# " << (void*)this << Endl);
+            Worker->join();
+            Worker.reset();
+        }
         bool doneActors = CleanupActors();
-        bool doneEvents = CleanupEvents();
-        return doneActors && doneEvents;
+        size_t eventsInQueue = CleanupEvents();
+        if (!(doneActors && eventsInQueue == 0)) {
+            //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " mailbox# " << (void*)this << " doneActors# " << doneActors << " eventsInQueue# " << eventsInQueue << Endl);
+        }
+        return doneActors && eventsInQueue == 0;
+    }
+
+    TMailbox::TMailbox() {
     }
 
     TMailbox::~TMailbox() noexcept {
@@ -396,92 +484,55 @@ namespace NActors {
     }
 
     EMailboxPush TMailbox::Push(TAutoPtr<IEventHandle>& evPtr) noexcept {
-        IEventHandle* ev = evPtr.Release();
         uintptr_t current = NextEventPtr.load(std::memory_order_relaxed);
+        IEventHandle* ev = evPtr.Release();
         for (;;) {
+            //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__  << " " << current << " event " << (void*)ev << Endl);
             if (current == MarkerFree) {
                 evPtr.Reset(ev);
                 return EMailboxPush::Free;
-            }
-            if (current == MarkerUnlocked) {
-                // Note: try to lock an unlocked mailbox
-                // The acquire memory order synchronizes with release in TryUnlock on success
-                if (NextEventPtr.compare_exchange_weak(current, 0, std::memory_order_acquire)) {
-                    // Success: add this event to the preprocessed events tail
-                    SetNextPtr(ev, uintptr_t(0));
-                    AppendPreProcessed(ev, ev);
-                    return EMailboxPush::Locked;
-                }
+            } else if (current == MarkerUnlocked) {
+                Y_ABORT();
             } else {
-                // Note: try to push event on top of the stack
-                // The release memory order synchronizes with acquire in Pop on success
-                SetNextPtr(ev, current);
-                if (NextEventPtr.compare_exchange_weak(current, reinterpret_cast<uintptr_t>(ev), std::memory_order_release)) {
-                    return EMailboxPush::Pushed;
-                }
+                SimpleQueue->Push(ev);
+                return EMailboxPush::Pushed; // do not schedule mailbox activation
             }
         }
+        return EMailboxPush::Free;
+
+//            uintptr_t current = NextEventPtr.load(std::memory_order_relaxed);
+//            for (;;) {
+//                if (current == MarkerFree) {
+//                    evPtr.Reset(ev);
+//                    return EMailboxPush::Free;
+//                }
+//                if (current == MarkerUnlocked) {
+//                    // Note: try to lock an unlocked mailbox
+//                    // The acquire memory order synchronizes with release in TryUnlock on success
+//                    if (NextEventPtr.compare_exchange_weak(current, 0, std::memory_order_acquire)) {
+//                        // Success: add this event to the preprocessed events tail
+//                        SetNextPtr(ev, uintptr_t(0));
+//                        AppendPreProcessed(ev, ev);
+//                        return EMailboxPush::Locked;
+//                    }
+//                } else {
+//                    // Note: try to push event on top of the stack
+//                    // The release memory order synchronizes with acquire in Pop on success
+//                    SetNextPtr(ev, current);
+//                    if (NextEventPtr.compare_exchange_weak(current, reinterpret_cast<uintptr_t>(ev), std::memory_order_release)) {
+//                        return EMailboxPush::Pushed;
+//                    }
+//                }
+//            }
     }
 
     IEventHandle* TMailbox::PreProcessEvents() noexcept {
-        uintptr_t current = NextEventPtr.load(std::memory_order_acquire);
-        while (current && current != MarkerFree) {
-            Y_DEBUG_ABORT_UNLESS(current != MarkerUnlocked);
-            IEventHandle* last = reinterpret_cast<IEventHandle*>(current);
-
-            // Eagerly move events to preprocessed on every iteration
-            // We avoid unnecessary races with the pusher over the top of the stack
-            if (IEventHandle* newTail = GetNextPtr(last)) {
-                SetNextPtr(last, nullptr);
-
-                // This inverts the list, forming the new [head, tail] list
-                IEventHandle* newHead = newTail;
-                IEventHandle* next = nullptr;
-                while (IEventHandle* prev = GetNextPtr(newHead)) {
-                    SetNextPtr(newHead, next);
-                    next = newHead;
-                    newHead = prev;
-                }
-                SetNextPtr(newHead, next);
-
-                // Append the new partial list to preprocessed events
-                AppendPreProcessed(newHead, newTail);
-
-                // Now we have at least one preprocessed event
-                return last;
-            }
-
-            if (EventHead) {
-                // We already have some preprocessed events
-                return last;
-            }
-
-            // We need to take a single item and replace it with nullptr
-            if (NextEventPtr.compare_exchange_strong(current, 0, std::memory_order_acquire)) {
-                AppendPreProcessed(last, last);
-                return nullptr;
-            }
-
-            // We have failed, but the next iteration will have more than one item
-        }
-
+        Y_ABORT();
         return nullptr;
     }
 
     TAutoPtr<IEventHandle> TMailbox::Pop() noexcept {
-        if (!EventHead || ActorLibCollectUsageStats) {
-            PreProcessEvents();
-        }
-
-        IEventHandle* ev = EventHead;
-        if (ev) {
-            EventHead = GetNextPtr(ev);
-            if (!EventHead) {
-                EventTail = nullptr;
-            }
-            SetNextPtr(ev, nullptr);
-        }
-        return ev;
+        return SimpleQueue->Pop();
     }
 
     std::pair<ui32, ui32> TMailbox::CountMailboxEvents(ui64 localActorId, ui32 maxTraverse) noexcept {
@@ -510,24 +561,27 @@ namespace NActors {
     }
 
     bool TMailbox::TryLock() noexcept {
-        uintptr_t expected = MarkerUnlocked;
-        return NextEventPtr.compare_exchange_strong(expected, 0, std::memory_order_acquire);
+        return true;
+        //uintptr_t expected = MarkerUnlocked;
+        //return NextEventPtr.compare_exchange_strong(expected, 0, std::memory_order_acquire);
     }
 
     bool TMailbox::TryUnlock() noexcept {
-        if (EventHead) {
-            return false;
-        }
+        return true;
+        //if (EventHead) {
+        //    return false;
+        //}
 
-        uintptr_t current = NextEventPtr.load(std::memory_order_relaxed);
-        if (current != 0) {
-            return false;
-        }
+        //uintptr_t current = NextEventPtr.load(std::memory_order_relaxed);
+        //if (current != 0) {
+        //    return false;
+        //}
 
-        return NextEventPtr.compare_exchange_strong(current, MarkerUnlocked, std::memory_order_release);
+        //return NextEventPtr.compare_exchange_strong(current, MarkerUnlocked, std::memory_order_release);
     }
 
     void TMailbox::PushFront(TAutoPtr<IEventHandle>& evPtr) noexcept {
+        Y_ABORT();
         IEventHandle* ev = evPtr.Release();
 
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
@@ -548,24 +602,30 @@ namespace NActors {
         if (current) {
             Y_DEBUG_ABORT_UNLESS(current != MarkerUnlocked, "LockToFree called on an unlocked mailbox");
             Y_DEBUG_ABORT_UNLESS(current != MarkerFree, "LockToFree called on a mailbox that is already free");
-            IEventHandle* newTail = reinterpret_cast<IEventHandle*>(current);
-            IEventHandle* newHead = newTail;
-            IEventHandle* next = nullptr;
-            while (IEventHandle* prev = GetNextPtr(newHead)) {
-                SetNextPtr(newHead, next);
-                next = newHead;
-                newHead = prev;
-            }
-            SetNextPtr(newHead, next);
-
-            if (EventTail) {
-                SetNextPtr(EventTail, newHead);
-                EventTail = newTail;
-            } else {
-                EventHead = newHead;
-                EventTail = newTail;
-            }
         }
+        //if (current) {
+        //    Y_DEBUG_ABORT_UNLESS(current != MarkerUnlocked, "LockToFree called on an unlocked mailbox");
+        //    Y_DEBUG_ABORT_UNLESS(current != MarkerFree, "LockToFree called on a mailbox that is already free");
+        //    IEventHandle* newTail = reinterpret_cast<IEventHandle*>(current);
+        //    IEventHandle* newHead = newTail;
+        //    IEventHandle* next = nullptr;
+        //    while (IEventHandle* prev = GetNextPtr(newHead)) {
+        //        SetNextPtr(newHead, next);
+        //        next = newHead;
+        //        newHead = prev;
+        //    }
+        //    SetNextPtr(newHead, next);
+
+        //    if (EventTail) {
+        //        SetNextPtr(EventTail, newHead);
+        //        EventTail = newTail;
+        //    } else {
+        //        EventHead = newHead;
+        //        EventTail = newTail;
+        //    }
+        //}
+        //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__  << Endl);
+        SimpleQueue->Notify();
     }
 
     void TMailbox::LockFromFree() noexcept {
@@ -573,13 +633,19 @@ namespace NActors {
         if (!NextEventPtr.compare_exchange_strong(current, 0, std::memory_order_relaxed)) {
             Y_ABORT("LockFromFree called on a mailbox that is not free");
         }
+        if (!Worker) {
+            //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " new worker" << Endl);
+            Worker = std::thread(std::bind(&TMailbox::Work, this));
+        } else {
+            //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " existing worker" << Endl);
+        }
     }
 
-    void TMailbox::Unlock(IExecutorPool* pool, NHPTimer::STime now, ui64& revolvingCounter) {
-        if (!TryUnlock()) {
-            ScheduleMoment = now;
-            pool->ScheduleActivationEx(this, ++revolvingCounter);
-        }
+    void TMailbox::Unlock(IExecutorPool* , NHPTimer::STime , ui64& ) {
+        //if (!TryUnlock()) {
+        //    ScheduleMoment = now;
+        //    pool->ScheduleActivationEx(this, ++revolvingCounter);
+        //}
     }
 
     TMailboxCache::TMailboxCache(TMailboxTable* table)

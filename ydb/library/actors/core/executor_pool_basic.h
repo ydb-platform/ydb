@@ -248,6 +248,7 @@ namespace NActors {
         ui16 GetLocalQueueSize() const;
         ui16 GetMaxLocalQueueSize() const;
         ui16 GetMinLocalQueueSize() const;
+        TActorSystem *GetActorSystem() const override { return ActorSystem; }
         void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) override;
         void Start() override;
         void PrepareStop() override;
@@ -292,6 +293,6 @@ namespace NActors {
 
         void WakeUpLoop(i16 currentThreadCount);
         bool WakeUpLoopShared();
-        
+
     };
 }

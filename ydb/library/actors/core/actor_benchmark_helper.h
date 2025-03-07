@@ -44,7 +44,7 @@ struct TTestEndDecorator : TDecorator {
 
 struct TActorBenchmarkSettings {
     static constexpr bool DefaultNoRealtime = true;
-    static constexpr ui32 DefaultSpinThreshold = 1'000'000;
+    static constexpr ui32 DefaultSpinThreshold = 1;
     static constexpr ui32 TotalEventsAmountPerThread = 1'000;
 
     static constexpr auto MailboxTypes = {

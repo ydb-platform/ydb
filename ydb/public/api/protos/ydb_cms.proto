@@ -63,6 +63,10 @@ message DatabaseOptions {
     bool disable_external_subdomain = 2;
     // Transaction plan resolution in milliseconds
     uint32 plan_resolution = 3;
+    // Number of coordinators (server default is used when zero)
+    uint32 coordinators = 4;
+    // Number of mediators (server default is used when zero)
+    uint32 mediators = 5;
 }
 
 // A set of quotas for schema operations

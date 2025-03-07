@@ -378,7 +378,6 @@ public:
 
     void UpdateSettings(const TDqOutputChannelSettings::TMutable& settings) override {
         MutableSettings = settings;
-        MutableSettings.IsLocalChannel = false;
     }
 
 private:

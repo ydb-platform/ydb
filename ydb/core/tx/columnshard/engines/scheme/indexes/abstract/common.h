@@ -34,6 +34,10 @@ public:
         , SubColumnName(subColumnName) {
     }
 
+    bool operator<(const TOriginalDataAddress& item) const {
+        return std::tie(ColumnId, SubColumnName) < std::tie(item.ColumnId, item.SubColumnName);
+    }
+
     bool operator==(const TOriginalDataAddress& item) const {
         return std::tie(ColumnId, SubColumnName) == std::tie(item.ColumnId, item.SubColumnName);
     }

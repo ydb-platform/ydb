@@ -11,20 +11,36 @@ using namespace NKikimrSchemeOp;
 namespace NSchemeShardUT_Private {
 namespace NExportReboots {
 
+using TCreateHandler = std::function<void(TTestActorRuntime&, ui64&, const TString&, const TString&)>;
+
+#define GEN_CREATE_HANDLER(func) \
+    TCreateHandler([](TTestActorRuntime& runtime, ui64& txId, const TString& parentPath, const TString& scheme) { \
+        func(runtime, txId, parentPath, scheme); \
+    })
+
+THashMap<NKikimrSchemeOp::EPathType, TCreateHandler> CreateHandlers = {
+    {EPathTypeTable, GEN_CREATE_HANDLER(TestCreateTable)},
+    {EPathTypeView, GEN_CREATE_HANDLER(TestCreateView)},
+    {EPathTypeCdcStream, GEN_CREATE_HANDLER(TestCreateCdcStream)},
+};
+
+void TestCreate(
+    TTestActorRuntime& runtime,
+    ui64& txId,
+    const TString& scheme,
+    NKikimrSchemeOp::EPathType pathType
+) {
+    if (CreateHandlers.contains(pathType)) {
+        CreateHandlers[pathType](runtime, txId, "/MyRoot", scheme);
+    } else {
+        UNIT_FAIL("export is not implemented for the scheme object type: " << pathType);
+    }
+}
+
 void CreateSchemeObjects(TTestWithReboots& t, TTestActorRuntime& runtime, const TVector<TTypedScheme>& schemeObjects) {
     TSet<ui64> toWait;
     for (const auto& [type, scheme, _] : schemeObjects) {
-        switch (type) {
-            case EPathTypeTable:
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot", scheme);
-                break;
-            case EPathTypeView:
-                TestCreateView(runtime, ++t.TxId, "/MyRoot", scheme);
-                break;
-            default:
-                UNIT_FAIL("export is not implemented for the scheme object type: " << type);
-                return;
-        }
+        TestCreate(runtime, ++t.TxId, scheme, type);
         toWait.insert(t.TxId);
     }
     t.TestEnv->TestWaitNotification(runtime, toWait);

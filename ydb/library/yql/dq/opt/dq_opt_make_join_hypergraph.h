@@ -157,13 +157,13 @@ TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
         }
     }
 
-    // TTransitiveClosureConstructor transitveClosure(graph);
-    // transitveClosure.Construct();
+    TTransitiveClosureConstructor transitveClosure(graph);
+    transitveClosure.Construct();
 
-    // if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
-    //     YQL_CLOG(TRACE, CoreDq) << "Hypergraph after transitive closure: ";
-    //     YQL_CLOG(TRACE, CoreDq) << graph.String();
-    // }
+    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
+        YQL_CLOG(TRACE, CoreDq) << "Hypergraph after transitive closure: ";
+        YQL_CLOG(TRACE, CoreDq) << graph.String();
+    }
 
     return graph;
 }

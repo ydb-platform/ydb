@@ -143,6 +143,8 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
     serverSettings.SetKqpSettings(settings);
     serverSettings.SetNodeCount(4);
 
+    serverSettings.WithSampleTables = false;
+
     return TKikimrRunner(serverSettings);
 }
 
@@ -160,6 +162,159 @@ void PrintPlan(const TString& plan) {
     joinOrder.erase(std::remove(joinOrder.begin(), joinOrder.end(), '\"'), joinOrder.end());
     Cout << "JoinOrder" << joinOrder << Endl;
 }
+
+class TFindJoinWithLabels {
+public:
+    TFindJoinWithLabels(
+        const NJson::TJsonValue& fullPlan
+    )
+        : Plan(
+            GetDetailedJoinOrder(
+                fullPlan.GetStringRobust(),
+                TGetPlanParams{
+                    .IncludeFilters = false,
+                    .IncludeOptimizerEstimation = false,
+                    .IncludeTables = true,
+                    .IncludeShuffles = true
+                }
+            )
+        )
+    {}
+
+    struct TJoin {
+        TString Join;
+        bool LhsShuffled;
+        bool RhsShuffled;
+    };
+
+    enum ESearchSettings : ui32 {
+        ExactMatch = 0, // We search join tree with full exact match of labels
+        PartialMatch = 1 // We search the first join tree, which labels overlap provided.
+    };
+
+    TJoin Find(const TVector<TString>& labels, ESearchSettings settings = ExactMatch) {
+        RequestedLabels = labels;
+        Settings = settings;
+
+        std::sort(RequestedLabels.begin(), RequestedLabels.end());
+        TVector<TString> dummy;
+        auto res = FindImpl(Plan, dummy);
+        UNIT_ASSERT_C(!res.Join.empty(), "Join wasn't found.");
+        return res;
+    }
+
+private:
+    TJoin FindImpl(const NJson::TJsonValue& plan, TVector<TString>& subtreeLabels) {
+        auto planMap = plan.GetMapSafe();
+        if (!planMap.contains("table")) {
+            TString opName = planMap.at("op_name").GetStringSafe();
+
+            auto inputs = planMap.at("args").GetArraySafe();
+            for (size_t i = 0; i < inputs.size(); ++i) {
+                TVector<TString> childLabels;
+                auto maybeJoin = FindImpl(inputs[i], childLabels);
+                if (!maybeJoin.Join.empty()) {
+                    return maybeJoin;
+                }
+                subtreeLabels.insert(subtreeLabels.end(), childLabels.begin(), childLabels.end());
+            }
+
+            if (AreRequestedLabels(subtreeLabels)) {
+                TString lhsInput = inputs[0].GetMapSafe()["op_name"].GetStringSafe();
+                TString rhsInput = inputs[1].GetMapSafe()["op_name"].GetStringSafe();
+                return {opName, lhsInput.find("HashShuffle") != TString::npos, rhsInput.find("HashShuffle") != TString::npos};
+            }
+
+            return TJoin{};
+        }
+
+        subtreeLabels = {planMap.at("table").GetStringSafe()};
+        return TJoin{};
+    }
+
+    bool AreRequestedLabels(TVector<TString> labels) {
+        switch (Settings) {
+            case ExactMatch: {
+                std::sort(labels.begin(), labels.end());
+                return RequestedLabels == labels;
+            }
+            case PartialMatch: {
+                if (labels.size() < RequestedLabels.size()) {
+                    return false;
+                }
+
+                for (const auto& requestedLabel: RequestedLabels) {
+                    if (std::find(labels.begin(), labels.end(), requestedLabel) == labels.end()) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            default: {
+                Y_ENSURE(false, "No such setting.");
+            }
+        }
+    }
+
+    ESearchSettings Settings;
+    NJson::TJsonValue Plan;
+    TVector<TString> RequestedLabels;
+};
+
+
+class TBenchMarkInvariantsChecker {
+public:
+    enum EBenchmark : std::uint32_t {
+        Undefined = 0,
+        TPCH = 1,
+    };
+
+    void Check(const TString& queryPath, const TString& fullPlan) {
+        EBenchmark bench = GetBenchmarkByQueryPath(queryPath);
+        switch (bench) {
+            case TPCH: {
+                CheckTPCH(fullPlan);
+            }
+            default: {
+                return;
+            }
+        }
+    }
+
+private:
+    EBenchmark GetBenchmarkByQueryPath(const TString& queryPath) {
+        if (queryPath.find("tpch") != TString::npos) {
+            return EBenchmark::TPCH;
+        }
+
+        return EBenchmark::Undefined;
+    }
+
+    void CheckTPCH(const TString& fullPlan) {
+        TFindJoinWithLabels joinFinder(fullPlan);
+
+        if (fullPlan.find("nation") != TString::npos) {
+            auto join = joinFinder.Find({"nation"}, TFindJoinWithLabels::PartialMatch);
+            AssertLookupOrMapJoin(join.Join);
+        }
+
+        if (fullPlan.find("region") != TString::npos) {
+            auto join = joinFinder.Find({"region"}, TFindJoinWithLabels::PartialMatch);
+            AssertLookupOrMapJoin(join.Join);
+        }
+    }
+
+    void AssertLookupOrMapJoin(const TString& join) {
+        std::string joinLower{join.begin(), join.end()};
+        std::transform(joinLower.begin(), joinLower.end(), joinLower.begin(), ::tolower);
+
+        bool containsLookupOrMap =
+            (joinLower.find("lookup") != std::string::npos) ||
+            (joinLower.find("map") != std::string::npos);
+
+        UNIT_ASSERT_C(containsLookupOrMap, TStringBuilder{} << joinLower << " isn't map or lookup join, but expected to be!");
+    }
+};
 
 class TChainTester {
 public:
@@ -411,12 +566,16 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
                 }
             }
             UNIT_ASSERT_VALUES_EQUAL(explainRes.GetStatus(), EStatus::SUCCESS);
-            PrintPlan(*explainRes.GetStats()->GetPlan());
+            TString plan = *explainRes.GetStats()->GetPlan();
+            PrintPlan(plan);
+
+            TBenchMarkInvariantsChecker().Check(queryPath, plan);
 
             auto execRes = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             execRes.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(execRes.GetStatus(), EStatus::SUCCESS);
-            return {*explainRes.GetStats()->GetPlan(), execRes.GetResultSets()};
+
+            return {plan, execRes.GetResultSets()};
         }
     }
 
@@ -552,6 +711,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds16.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
     }
 
+    Y_UNIT_TEST(TPCDS64kal) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds64.sql", "stats/tpcds1000s.json", false, true);
+    }
+
     /* tpcds23 has > 1 result sets */
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS23, StreamLookupJoin, ColumnStore) {
         ExplainJoinOrderTestDataQueryWithStats(
@@ -626,104 +789,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinHint2, StreamLookupJoin, ColumnStore) {
         CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (MapJoin)", 1, StreamLookupJoin, ColumnStore);
     }
-
-    class TFindJoinWithLabels {
-    public:
-        TFindJoinWithLabels(
-            const NJson::TJsonValue& fullPlan
-        )
-            : Plan(
-                GetDetailedJoinOrder(
-                    fullPlan.GetStringRobust(),
-                    TGetPlanParams{
-                        .IncludeFilters = false,
-                        .IncludeOptimizerEstimation = false,
-                        .IncludeTables = true,
-                        .IncludeShuffles = true
-                    }
-                )
-            )
-        {}
-
-        struct TJoin {
-            TString Join;
-            bool LhsShuffled;
-            bool RhsShuffled;
-        };
-
-        enum ESearchSettings : ui32 {
-            ExactMatch = 0, // We search join tree with full exact match of labels
-            PartialMatch = 1 // We search the first join tree, which labels overlap provided.
-        };
-
-        TJoin Find(const TVector<TString>& labels, ESearchSettings settings = ExactMatch) {
-            RequestedLabels = labels;
-            Settings = settings;
-
-            std::sort(RequestedLabels.begin(), RequestedLabels.end());
-            TVector<TString> dummy;
-            auto res = FindImpl(Plan, dummy);
-            UNIT_ASSERT_C(!res.Join.empty(), "Join wasn't found.");
-            return res;
-        }
-
-    private:
-        TJoin FindImpl(const NJson::TJsonValue& plan, TVector<TString>& subtreeLabels) {
-            auto planMap = plan.GetMapSafe();
-            if (!planMap.contains("table")) {
-                TString opName = planMap.at("op_name").GetStringSafe();
-
-                auto inputs = planMap.at("args").GetArraySafe();
-                for (size_t i = 0; i < inputs.size(); ++i) {
-                    TVector<TString> childLabels;
-                    auto maybeJoin = FindImpl(inputs[i], childLabels);
-                    if (!maybeJoin.Join.empty()) {
-                        return maybeJoin;
-                    }
-                    subtreeLabels.insert(subtreeLabels.end(), childLabels.begin(), childLabels.end());
-                }
-
-                if (AreRequestedLabels(subtreeLabels)) {
-                    TString lhsInput = inputs[0].GetMapSafe()["op_name"].GetStringSafe();
-                    TString rhsInput = inputs[1].GetMapSafe()["op_name"].GetStringSafe();
-                    return {opName, lhsInput.find("HashShuffle") != TString::npos, rhsInput.find("HashShuffle") != TString::npos};
-                }
-
-                return TJoin{};
-            }
-
-            subtreeLabels = {planMap.at("table").GetStringSafe()};
-            return TJoin{};
-        }
-
-        bool AreRequestedLabels(TVector<TString> labels) {
-            switch (Settings) {
-                case ExactMatch: {
-                    std::sort(labels.begin(), labels.end());
-                    return RequestedLabels == labels;
-                }
-                case PartialMatch: {
-                    if (labels.size() < RequestedLabels.size()) {
-                        return false;
-                    }
-
-                    for (const auto& requestedLabel: RequestedLabels) {
-                        if (std::find(labels.begin(), labels.end(), requestedLabel) == labels.end()) {
-                            return false;
-                        }
-                    }
-                    return true;
-                }
-                default: {
-                    Y_ENSURE(false, "No such setting.");
-                }
-            }
-        }
-
-        ESearchSettings Settings;
-        NJson::TJsonValue Plan;
-        TVector<TString> RequestedLabels;
-    };
 
     Y_UNIT_TEST(ShuffleEliminationOneJoin) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/shuffle_elimination_one_join.sql", "stats/tpch1000s.json", false, true, true);

@@ -127,7 +127,7 @@ message TFeatureFlags {
     optional bool EnableTempTables = 102 [default = true];
     optional bool SuppressCompatibilityCheck = 103 [default = false, (RequireRestart) = true];
     optional bool EnableUniqConstraint = 104 [default = true];
-    optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = false];
+    optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = true];
     optional bool EnableStatistics = 106 [default = true];
     optional bool EnableUuidAsPrimaryKey = 107 [default = true];
     optional bool EnableTablePgTypes = 108 [default = false];
@@ -156,7 +156,7 @@ message TFeatureFlags {
     optional bool EnableSingleCompositeActionGroup = 131 [default = false];
     optional bool EnableResourcePoolsOnServerless = 132 [default = false];
     optional bool EnableVectorIndex = 133 [default = false];
-    optional bool EnableChangefeedsOnIndexTables = 134 [default = false];
+    optional bool EnableChangefeedsOnIndexTables = 134 [default = true];
     optional bool EnableResourcePoolsCounters = 135 [default = false];
     optional bool EnableOptionalColumnsInColumnShard = 136 [default = false];
     optional bool EnableGranularTimecast = 137 [default = true];

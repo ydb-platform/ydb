@@ -164,6 +164,138 @@ void TFieldConfigurator<TValue>::VerifyEmptyUpdater() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class TMap>
+TMapFieldConfigurator<TMap>& TMapFieldConfigurator<TMap>::OnAdded(TCallback<TConfigurator<TStruct>(const TKey&, const TStructPtr&)> onAdded)
+{
+    OnAdded_ = std::move(onAdded);
+    return *this;
+}
+
+template <class TMap>
+TMapFieldConfigurator<TMap>& TMapFieldConfigurator<TMap>::OnRemoved(TCallback<void(const TKey&, const TStructPtr&)> onRemoved)
+{
+    OnRemoved_ = std::move(onRemoved);
+    return *this;
+}
+
+template <class TMap>
+TMapFieldConfigurator<TMap>& TMapFieldConfigurator<TMap>::ValidateOnAdded(TCallback<void(const TKey&, const TStructPtr&)> validateOnAdded)
+{
+    ValidateOnAdded_ = std::move(validateOnAdded);
+    return *this;
+}
+
+template <class TMap>
+TMapFieldConfigurator<TMap>& TMapFieldConfigurator<TMap>::ValidateOnRemoved(TCallback<void(const TKey&, const TStructPtr&)> validateOnRemoved)
+{
+    ValidateOnRemoved_ = std::move(validateOnRemoved);
+    return *this;
+}
+
+template <class TMap>
+TMapFieldConfigurator<TMap>& TMapFieldConfigurator<TMap>::ConfigureChild(const TKey& key, TConfigurator<TStruct> configurator)
+{
+    EmplaceOrCrash(Configurators_, key, std::move(configurator));
+    return *this;
+}
+
+template <class TMap>
+TMapFieldConfigurator<TMap>::TMapFieldConfigurator()
+{
+    OnAdded_ = BIND_NO_PROPAGATE([] (const TKey& key, const TStructPtr& /*newValue*/)
+        -> TConfigurator<TStruct> {
+        THROW_ERROR_EXCEPTION("Cannot create a new element in the map")
+            << TErrorAttribute("created_key", key);
+    });
+    OnRemoved_ = BIND_NO_PROPAGATE([] (const TKey& key, const TStructPtr& /*oldValue*/) {
+        THROW_ERROR_EXCEPTION("Cannot remove elements from the map")
+            << TErrorAttribute("removed_key", key);
+    });
+    ValidateOnAdded_ = BIND_NO_PROPAGATE([] (const TKey& key, const TStructPtr& /*newValue*/) {
+        THROW_ERROR_EXCEPTION("Cannot create a new element in the map")
+            << TErrorAttribute("created_key", key);
+    });
+    ValidateOnRemoved_ = BIND_NO_PROPAGATE([] (const TKey& key, const TStructPtr& /*oldValue*/) {
+        THROW_ERROR_EXCEPTION("Cannot remove elements from the map")
+            << TErrorAttribute("removed_key", key);
+    });
+
+    TFieldConfigurator<TMap>::Updater(
+        BIND_NO_PROPAGATE(ThrowOnDestroyed(&TMapFieldConfigurator::UpdateImpl), MakeWeak(this)));
+    TFieldConfigurator<TMap>::Validator(
+        BIND_NO_PROPAGATE(ThrowOnDestroyed(&TMapFieldConfigurator::ValidateImpl), MakeWeak(this)));
+}
+
+template <class TMap>
+void TMapFieldConfigurator<TMap>::ValidateImpl(
+    const THashMap<TKey, TStructPtr>& oldMap,
+    const THashMap<TKey, TStructPtr>& newMap)
+{
+    THashSet<TKey> commonKeys;
+
+    for (const auto& [key, oldValue] : oldMap) {
+        if (!newMap.contains(key)) {
+            ValidateOnRemoved_(key, oldValue);
+        } else {
+            EmplaceOrCrash(commonKeys, key);
+        }
+    }
+    for (const auto& [key, newValue] : newMap) {
+        if (!oldMap.contains(key)) {
+            ValidateOnAdded_(key, newValue);
+        } else {
+            YT_VERIFY(commonKeys.contains(key));
+        }
+    }
+    for (const auto& [key, configurator] : Configurators_) {
+        if (commonKeys.contains(key)) {
+            configurator.Validate(GetOrCrash(oldMap, key), GetOrCrash(newMap, key));
+            EraseOrCrash(commonKeys, key);
+        }
+    }
+
+    // Check that all keys were configured.
+    YT_VERIFY(commonKeys.empty());
+}
+
+template <class TMap>
+void TMapFieldConfigurator<TMap>::UpdateImpl(
+    const THashMap<TKey, TStructPtr>& oldMap,
+    const THashMap<TKey, TStructPtr>& newMap)
+{
+    THashSet<TKey> commonKeys;
+
+    for (const auto& [key, oldValue] : oldMap) {
+        if (!newMap.contains(key)) {
+            OnRemoved_(key, oldValue);
+            EraseOrCrash(Configurators_, key);
+        } else {
+            EmplaceOrCrash(commonKeys, key);
+        }
+    }
+    for (const auto& [key, newValue] : newMap) {
+        if (!oldMap.contains(key)) {
+            EmplaceOrCrash(
+                Configurators_,
+                key,
+                OnAdded_(key, newValue));
+        } else {
+            YT_VERIFY(commonKeys.contains(key));
+        }
+    }
+    for (const auto& [key, configurator] : Configurators_) {
+        if (commonKeys.contains(key)) {
+            configurator.Update(GetOrCrash(oldMap, key), GetOrCrash(newMap, key));
+            EraseOrCrash(commonKeys, key);
+        }
+    }
+
+    // Check that all keys were configured.
+    YT_VERIFY(commonKeys.empty());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -194,6 +326,24 @@ NDetail::TFieldConfigurator<TValue>& TConfigurator<TStruct>::Field(const std::st
 
     auto fieldConfigurator = New<NDetail::TFieldConfigurator<TValue>>();
     ConfiguredFields_->ParameterToFieldConfigurator.emplace(parameter, fieldConfigurator);
+    return *fieldConfigurator;
+}
+
+template <CYsonStructDerived TStruct>
+template <class TValue>
+NDetail::TMapFieldConfigurator<TValue>& TConfigurator<TStruct>::MapField(const TString& name, TYsonStructField<TStruct, TValue> field)
+{
+    IYsonStructParameterPtr parameter;
+
+    try {
+        parameter = ConfiguredFields_->Meta->GetParameter(name);
+    } catch (const std::exception& ex) {
+        YT_ABORT();
+    }
+    YT_VERIFY(parameter->HoldsField(CreateTypeErasedYsonStructField(field)));
+
+    auto fieldConfigurator = New<NDetail::TMapFieldConfigurator<TValue>>();
+    ConfiguredFields_->ParameterToFieldConfigurator.emplace(std::move(parameter), fieldConfigurator);
     return *fieldConfigurator;
 }
 

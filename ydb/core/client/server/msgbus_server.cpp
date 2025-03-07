@@ -103,12 +103,6 @@ public:
             MTYPE(TBusHiveCreateTablet)
             MTYPE(TBusOldHiveCreateTablet)
             MTYPE(TBusHiveCreateTabletResult)
-            MTYPE(TBusLocalEnumerateTablets)
-            MTYPE(TBusOldLocalEnumerateTablets)
-            MTYPE(TBusLocalEnumerateTabletsResult)
-            MTYPE(TBusKeyValue)
-            MTYPE(TBusOldKeyValue)
-            MTYPE(TBusKeyValueResponse)
             MTYPE(TBusPersQueue)
             MTYPE(TBusTabletKillRequest)
             MTYPE(TBusTabletStateRequest)
@@ -508,12 +502,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
     case MTYPE_CLIENT_HIVE_CREATE_TABLET:
     case MTYPE_CLIENT_OLD_HIVE_CREATE_TABLET:
         return ClientActorRequest(CreateMessageBusHiveCreateTablet, msg);
-    case MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS:
-    case MTYPE_CLIENT_OLD_LOCAL_ENUMERATE_TABLETS:
-        return ClientActorRequest(CreateMessageBusLocalEnumerateTablets, msg);
-    case MTYPE_CLIENT_KEYVALUE:
-    case MTYPE_CLIENT_OLD_KEYVALUE:
-        return ClientActorRequest(CreateMessageBusKeyValue, msg);
     case MTYPE_CLIENT_PERSQUEUE:
         return ClientProxyRequest<TEvBusProxy::TEvPersQueue>(msg);
     case MTYPE_CLIENT_CHOOSE_PROXY:

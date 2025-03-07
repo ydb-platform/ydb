@@ -1183,6 +1183,14 @@ class TestFiles:
         'maps/renderer/tools/mapcheck2/tests',
     )
 
+    # XXX: this is a workaround to support very specific linting settings.
+    # Do not use it as a general mechanism!
+    _MAPS_B2BGEO_PREFIX = 'maps/b2bgeo/mvrp_solver'
+    _MAPS_B2BGEO_INCLUDE_LINTER_TEST_PATHS = (
+        'maps/b2bgeo/mvrp_solver/backend',
+        'maps/b2bgeo/mvrp_solver/aws_docker',
+    )
+
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         data_re = re.compile(r"sbr:/?/?(\d+)=?.*")
@@ -1286,6 +1294,13 @@ class TestFiles:
 
         if upath.startswith(cls._MAPS_RENDERER_PREFIX):
             for path in cls._MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS:
+                if os.path.commonpath([upath, path]) == path:
+                    break
+            else:
+                raise DartValueError()
+
+        if upath.startswith(cls._MAPS_B2BGEO_PREFIX):
+            for path in cls._MAPS_B2BGEO_INCLUDE_LINTER_TEST_PATHS:
                 if os.path.commonpath([upath, path]) == path:
                     break
             else:

@@ -6,12 +6,8 @@ TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParam
     return MakeIntrusive<TTask>(taskType, taskId, taskParams, sessionId, clusterConnection);
 }
 
-TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& taskErrorMessage) {
-    return MakeIntrusive<TTaskState>(taskStatus, taskId, taskErrorMessage);
-}
-
-TTaskResult::TPtr MakeTaskResult(ETaskStatus taskStatus, const TMaybe<TFmrError>& taskErrorMessage) {
-    return MakeIntrusive<TTaskResult>(taskStatus, taskErrorMessage);
+TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& taskErrorMessage, const TStatistics& stats) {
+    return MakeIntrusive<TTaskState>(taskStatus, taskId, taskErrorMessage, stats);
 }
 
 } // namespace NYql::NFmr

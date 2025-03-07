@@ -1305,12 +1305,12 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
     const auto req = ev->Get();
 
     auto request = MakeReadRequest(ReadOffset, 0, req->MaxCount, req->MaxSize, req->MaxTimeLagMs, req->ReadTimestampMs, DirectReadId);
-
+    RequestInfly = true;
+    CurrentRequest = request;
+    
     if (!PipeClient) //Pipe will be recreated soon
         return;
 
-    RequestInfly = true;
-    CurrentRequest = request;
     TAutoPtr<TEvPersQueue::TEvRequest> event(new TEvPersQueue::TEvRequest);
     event->Record.Swap(&request);
 

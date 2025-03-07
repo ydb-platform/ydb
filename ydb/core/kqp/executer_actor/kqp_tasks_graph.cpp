@@ -99,14 +99,30 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
 
             TStageInfoMeta meta(tx);
 
-            for (auto& source : stage.GetSources()) {
-                if (source.HasReadRangesSource()) {
-                    YQL_ENSURE(source.GetInputIndex() == 0);
-                    YQL_ENSURE(stage.SourcesSize() == 1);
-                    meta.TableId = MakeTableId(source.GetReadRangesSource().GetTable());
-                    meta.TablePath = source.GetReadRangesSource().GetTable().GetPath();
-                    meta.ShardOperations.insert(TKeyDesc::ERowOperation::Read);
-                    meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
+            ui64 stageSourcesCount = 0;
+            for (const auto& source : stage.GetSources()) {
+                switch (source.GetTypeCase()) {
+                    case NKqpProto::TKqpSource::kReadRangesSource: {
+                        YQL_ENSURE(source.GetInputIndex() == 0);
+                        YQL_ENSURE(stage.SourcesSize() == 1);
+                        meta.TableId = MakeTableId(source.GetReadRangesSource().GetTable());
+                        meta.TablePath = source.GetReadRangesSource().GetTable().GetPath();
+                        meta.ShardOperations.insert(TKeyDesc::ERowOperation::Read);
+                        meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
+                        stageSourcesCount++;
+                        break;
+                    }
+
+                    case NKqpProto::TKqpSource::kExternalSource: {
+                        if (!source.GetExternalSource().GetEmbedded()) {
+                            stageSourcesCount++;
+                        }
+                        break;
+                    }
+
+                    default: {
+                        YQL_ENSURE(false, "unknown source type");
+                    }
                 }
             }
 
@@ -144,7 +160,7 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
             }
 
             bool stageAdded = tasksGraph.AddStageInfo(
-                TStageInfo(stageId, stage.InputsSize() + stage.SourcesSize(), stage.GetOutputsCount(), std::move(meta)));
+                TStageInfo(stageId, stage.InputsSize() + stageSourcesCount, stage.GetOutputsCount(), std::move(meta)));
             YQL_ENSURE(stageAdded);
 
             auto& stageInfo = tasksGraph.GetStageInfo(stageId);

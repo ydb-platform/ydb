@@ -55,7 +55,7 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
     }
     Name = columnSchema.GetName();
     if (!IsValidColumnName(Name, false)) {
-        errors.AddError(Sprintf("Invalud name for column '%s'", Name.data()));
+        errors.AddError(Sprintf("Invalid name for column '%s'", Name.data()));
         return false;
     }
     NotNullFlag = columnSchema.GetNotNull();

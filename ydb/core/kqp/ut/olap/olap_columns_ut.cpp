@@ -1,75 +1,67 @@
-#include "helpers/get_value.h"
-#include "helpers/local.h"
-#include "helpers/query_executor.h"
-#include "helpers/typed_local.h"
-#include "helpers/writer.h"
-
-#include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/kqp/ut/common/columnshard.h>
-#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
-#include <ydb/core/tx/columnshard/test_helper/controllers.h>
-#include <ydb/core/wrappers/fake_storage.h>
-
-#include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/testlib/test_client.h>
+#include <ydb/services/ydb/ydb_common_ut.h>
 
 namespace NKikimr::NKqp {
 
-Y_UNIT_TEST_SUITE(OlapTestt) {
-    Y_UNIT_TEST(RowTableNamingValidationFailure) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+NKikimrConfig::TAppConfig GetAppConfig() {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableFeatureFlags()->SetEnableColumnStore(true);
+    return appConfig;
+}
 
-        auto tableClient = kikimr.GetTableClient();
-        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+Y_UNIT_TEST_SUITE(NamingValidation) {
 
-        auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `/Root/test_table`
-            (
-                WatchID Int64 NOT NULL,
-                CounterID Int32 NOT NULL,
-                URL Text NOT NULL,
-                Age Int16 NOT NULL,
-                Sex Int16 NOT NULL,
-                PRIMARY KEY (CounterID, WatchID)
-            ))";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    Y_UNIT_TEST(CreateColumnTableOk) {
+        NYdb::TKikimrWithGrpcAndRootSchema server(GetAppConfig());
+        Tests::TClient annoyingClient(*server.ServerSettings);
 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.IsSuccess(), true, result.GetIssues().ToString());
+        TString tableName = "test";
+        TString tableDescr = R"(
+            Name: "TestTable"
+            Schema {
+                Columns {
+                    Name: "Id"
+                    Type: "Int32"
+                    NotNull: True
+                }
+                Columns {
+                    Name: "message"
+                    Type: "Utf8"
+                }
+                KeyColumnNames: ["Id"]
+            }
+        )";
+
+        NMsgBusProxy::EResponseStatus status = annoyingClient.CreateColumnTable("/Root", tableDescr);
+
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
-    Y_UNIT_TEST(RowTableNamingValidationFailure1) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+    Y_UNIT_TEST(CreateColumnTableFailed) {
+        NYdb::TKikimrWithGrpcAndRootSchema server(GetAppConfig());
+        Tests::TClient annoyingClient(*server.ServerSettings);
 
-        auto tableClient = kikimr.GetTableClient();
-        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        TString tableDescr = R"(
+            Name: "TestTable"
+            Schema {
+                Columns {
+                    Name: "Id"
+                    Type: "Int32"
+                    NotNull: True
+                }
+                Columns {
+                    Name: "mess age"
+                    Type: "Utf8"
+                }
+                KeyColumnNames: ["Id"]
+            }
+        )";
 
-        auto query = TStringBuilder() << R"(
-            --!syntax_v1
-            CREATE TABLE `/Root/test_table`
-            (
-                WatchID Int64 NOT NULL,
-                CounterID Int32 NOT NULL,
-                `URL LLL` Text NOT NULL,
-                Age Int16 NOT NULL,
-                Sex Int16 NOT NULL,
-                PRIMARY KEY (CounterID, WatchID)
-            ))";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        NMsgBusProxy::EResponseStatus status = annoyingClient.CreateColumnTable("/Root", tableDescr);
 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.IsSuccess(), true, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_ERROR);
     }
+
 }
 
 }   // namespace NKikimr::NKqp

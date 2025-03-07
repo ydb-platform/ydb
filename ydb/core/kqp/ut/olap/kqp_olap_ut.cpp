@@ -3206,6 +3206,54 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-}
+    Y_UNIT_TEST(DoubleOutOfRangeInJson) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardDoubleOutOfRangeHandling(
+            NKikimrConfig::TColumnShardConfig_EJsonDoubleOutOfRangeHandlingPolicy_CAST_TO_INFINITY);
+        TKikimrRunner kikimr(settings);
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
+        auto client = kikimr.GetTableClient();
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
+        {
+            auto result = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                CREATE TABLE olapTable (
+                    k Uint32 NOT NULL,
+                    v JsonDocument NOT NULL,
+                    PRIMARY KEY (k)
+                )
+                WITH (
+                    STORE = COLUMN,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4
+                )
+            )",
+                                  NQuery::TTxControl::NoTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+        }
+
+        {
+            TValueBuilder rowsBuilder;
+            rowsBuilder.BeginList();
+            for (ui32 i = 0; i < 10; ++i) {
+                rowsBuilder.AddListItem().BeginStruct().AddMember("k").Uint32(i * 4 + 0).AddMember("v").JsonDocument("-1.797693135e+308").EndStruct();
+                rowsBuilder.AddListItem().BeginStruct().AddMember("k").Uint32(i * 4 + 1).AddMember("v").JsonDocument("1.797693135e+308").EndStruct();
+                rowsBuilder.AddListItem().BeginStruct().AddMember("k").Uint32(i * 4 + 2).AddMember("v").JsonDocument("1e1000000000000").EndStruct();
+                rowsBuilder.AddListItem().BeginStruct().AddMember("k").Uint32(i * 4 + 3).AddMember("v").JsonDocument("-1e1000000000000").EndStruct();
+            }
+            rowsBuilder.EndList();
+            auto result = client.BulkUpsert("/Root/olapTable", rowsBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+        }
+
+        {
+            auto it = client.StreamExecuteScanQuery("SELECT * FROM olapTable WHERE k < 4 ORDER BY k").ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([[0u;"\"-inf\""];[1u;"\"inf\""];[2u;"\"inf\""];[3u;"\"-inf\""]])");
+        }
+    }
+}
 }

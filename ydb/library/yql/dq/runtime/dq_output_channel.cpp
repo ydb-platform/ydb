@@ -1,13 +1,12 @@
 #include "dq_output_channel.h"
-#include "dq_transport.h"
-
-#include <yql/essentials/utils/yql_panic.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
+#include "dq_arrow_helpers.h"
 
 #include <util/generic/buffer.h>
 #include <util/generic/size_literals.h>
 #include <util/stream/buffer.h>
 
+#include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql::NDq {
 
@@ -45,6 +44,8 @@ public:
         , MaxStoredBytes(settings.MaxStoredBytes)
         , MaxChunkBytes(settings.MaxChunkBytes)
         , ChunkSizeLimit(settings.ChunkSizeLimit)
+        , MutableSettings(settings.MutableSettings)
+        , BlockSplitter(NArrow::CreateBlockSplitter(OutputType, ChunkSizeLimit * 0.75))
         , LogFunc(logFunc)
     {
         PopStats.Level = settings.Level;
@@ -79,16 +80,17 @@ public:
 
     virtual void Push(NUdf::TUnboxedValue&& value) override {
         YQL_ENSURE(!OutputType->IsMulti());
-        DoPush(&value, 1);
+        DoPushSafe(&value, 1);
     }
 
     virtual void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {
         YQL_ENSURE(OutputType->IsMulti());
         YQL_ENSURE(Width == width);
-        DoPush(values, width);
+        DoPushSafe(values, width);
     }
 
-    void DoPush(NUdf::TUnboxedValue* values, ui32 width) {
+    // Try to split data before push to fulfill ChunkSizeLimit
+    void DoPushSafe(NUdf::TUnboxedValue* values, ui32 width) {
         YQL_ENSURE(!IsFull());
 
         if (Finished) {
@@ -101,6 +103,20 @@ public:
             PushStats.Resume();
         }
 
+        if (!MutableSettings.IsLocalChannel && BlockSplitter && BlockSplitter->ShouldSplitItem(values, width)) {
+            if (Packer.PackedSizeEstimate()) {
+                TryPack(/* force */ true);
+            }
+            for (auto&& data : BlockSplitter->SplitItem(values, width)) {
+                DoPushBlock(std::move(data));
+            }
+        } else {
+            DoPush(values, width);
+        }
+    }
+
+    // Push data as single chunk
+    void DoPush(NUdf::TUnboxedValue* values, ui32 width) {
         if (OutputType->IsMulti()) {
             Packer.AddWideItem(values, width);
         } else {
@@ -111,9 +127,25 @@ public:
         }
 
         PackerCurrentChunkCount++;
+        TryPack(/* force */ false);
+    }
 
+    void DoPushBlock(std::vector<arrow::Datum>&& data) {
+        NKikimr::NMiniKQL::TUnboxedValueVector outputValues;
+        outputValues.reserve(data.size());
+        for (auto& datum : data) {
+            outputValues.emplace_back(HolderFactory.CreateArrowBlock(std::move(datum)));
+        }
+        Packer.AddWideItem(outputValues.data(), outputValues.size());
+
+        PackerCurrentChunkCount++;
+        TryPack(/* force */ false);
+    }
+
+    // Pack and spill data batch if enough data (>= Max Chunk Bytes) or force = true
+    void TryPack(bool force) {
         size_t packerSize = Packer.PackedSizeEstimate();
-        if (packerSize >= MaxChunkBytes) {
+        if (packerSize >= MaxChunkBytes || force && packerSize) {
             Data.emplace_back();
             Data.back().Buffer = FinishPackAndCheckSize();
             if (PushStats.CollectBasic()) {
@@ -312,7 +344,7 @@ public:
 
     TChunkedBuffer FinishPackAndCheckSize() {
         TChunkedBuffer result = Packer.Finish();
-        if (result.Size() > ChunkSizeLimit) {
+        if (!MutableSettings.IsLocalChannel && result.Size() > ChunkSizeLimit) {
             // TODO: may relax requirement if OOB transport is enabled
             ythrow TDqOutputChannelChunkSizeLimitExceeded() << "Row data size is too big: "
                 << result.Size() << " bytes, exceeds limit of " << ChunkSizeLimit << " bytes";
@@ -344,6 +376,11 @@ public:
     void Terminate() override {
     }
 
+    void UpdateSettings(const TDqOutputChannelSettings::TMutable& settings) override {
+        MutableSettings = settings;
+        MutableSettings.IsLocalChannel = false;
+    }
+
 private:
     NKikimr::NMiniKQL::TType* OutputType;
     NKikimr::NMiniKQL::TValuePackerTransport<FastPack> Packer;
@@ -354,6 +391,8 @@ private:
     const ui64 MaxStoredBytes;
     const ui64 MaxChunkBytes;
     const ui64 ChunkSizeLimit;
+    TDqOutputChannelSettings::TMutable MutableSettings;
+    const NArrow::IBlockSplitter::TPtr BlockSplitter;
     TLogFunc LogFunc;
 
     struct TSerializedBatch {

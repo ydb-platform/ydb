@@ -207,10 +207,11 @@ protected:
         TDqTaskRunnerMemoryLimits limits;
         limits.ChannelBufferSize = this->MemoryLimits.ChannelBufferSize;
         limits.OutputChunkMaxSize = this->MemoryLimits.OutputChunkMaxSize;
+        limits.ChunkSizeLimit = this->MemoryLimits.ChunkSizeLimit;
 
         if (!limits.OutputChunkMaxSize) {
             limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
-	}
+        }
 
         if (this->Task.GetEnableSpilling()) {
             TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback(), execCtx.GetErrorCallback()));

@@ -86,6 +86,7 @@ class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     std::atomic<ui64> MkqlLightProgramMemoryLimit = 0;
     std::atomic<ui64> MkqlHeavyProgramMemoryLimit = 0;
     std::atomic<ui64> MinChannelBufferSize = 0;
+    std::atomic<ui64> ChannelChunkSizeLimit = 48_MB;
     std::atomic<ui64> MinMemAllocSize = 8_MB;
     std::atomic<ui64> MinMemFreeSize = 32_MB;
 
@@ -106,6 +107,7 @@ public:
         MkqlLightProgramMemoryLimit.store(config.GetMkqlLightProgramMemoryLimit());
         MkqlHeavyProgramMemoryLimit.store(config.GetMkqlHeavyProgramMemoryLimit());
         MinChannelBufferSize.store(config.GetMinChannelBufferSize());
+        ChannelChunkSizeLimit.store(config.GetChannelChunkSizeLimit());
         MinMemAllocSize.store(config.GetMinMemAllocSize());
         MinMemFreeSize.store(config.GetMinMemFreeSize());
     }
@@ -142,6 +144,7 @@ public:
 
             memoryLimits.ChannelBufferSize = std::max<ui32>(estimation.ChannelBufferMemoryLimit / std::max<ui32>(1, inputChannelsCount), MinChannelBufferSize.load());
             memoryLimits.OutputChunkMaxSize = args.OutputChunkMaxSize;
+            memoryLimits.ChunkSizeLimit = ChannelChunkSizeLimit.load();
             AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "channel_info")
                 ("ch_size", estimation.ChannelBufferMemoryLimit)
                 ("ch_count", estimation.ChannelBuffersCount)

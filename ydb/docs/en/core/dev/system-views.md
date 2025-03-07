@@ -356,7 +356,7 @@ The auth permissions views list assigned [access rights](../concepts/glossary.md
 Contains two views:
 
 * `auth_permissions`: Directly assigned access rights.
-* `auth_effective_permissions`: Effective access rights, accounting for inheritance.
+* `auth_effective_permissions`: Effective access rights, accounting for [inheritance](../concepts/glossary.md#access-right-inheritance).
 
 A user can view an [access object](../concepts/glossary.md#access-object) in the results if they have the `ydb.granular.describe_schema` permission on it.
 

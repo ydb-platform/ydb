@@ -69,6 +69,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, false> OptUseFinalizeByKey;
     NCommon::TConfSetting<ui32, false> CostBasedOptimizationLevel;
+    NCommon::TConfSetting<bool, false> UseBlockReader;
 
     NCommon::TConfSetting<ui32, false> MaxDPHypDPTableSize;
 

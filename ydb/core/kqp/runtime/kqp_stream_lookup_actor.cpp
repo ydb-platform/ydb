@@ -42,7 +42,7 @@ public:
         , LockMode(settings.HasLockMode() ? settings.GetLockMode() : TMaybe<NKikimrDataEvents::ELockMode>())
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , LookupStrategy(settings.GetLookupStrategy())
-        , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TypeEnv, args.HolderFactory, args.InputDesc))
+        , StreamLookupWorkers(CreateStreamLookupWorkers(std::move(settings), args.TypeEnv, args.HolderFactory, args.InputDesc))
         , Counters(counters)
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
     {
@@ -53,7 +53,10 @@ public:
         if (Alloc) {
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
             Input.Clear();
-            StreamLookupWorker.reset();
+
+            for (auto& worker : StreamLookupWorkers) {
+                worker.reset();
+            }
         }
     }
 
@@ -196,7 +199,11 @@ private:
         {
             auto alloc = BindAllocator();
             Input.Clear();
-            StreamLookupWorker.reset();
+
+            for (auto& worker : StreamLookupWorkers) {
+                worker.reset();
+            }
+
             for (auto& [id, state] : Reads) {
                 Counters->SentIteratorCancels->Inc();
                 auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
@@ -213,8 +220,9 @@ private:
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         YQL_ENSURE(!batch.IsWide(), "Wide stream is not supported");
+        YQL_ENSURE(!StreamLookupWorkers.empty());
 
-        auto replyResultStats = StreamLookupWorker->ReplyResult(batch, freeSpace);
+        auto replyResultStats = StreamLookupWorkers.back()->ReplyResult(batch, freeSpace);
         ReadRowsCount += replyResultStats.ReadRowsCount;
         ReadBytesCount += replyResultStats.ReadBytesCount;
 
@@ -226,7 +234,11 @@ private:
 
         const bool inputRowsFinished = status == NUdf::EFetchStatus::Finish;
         const bool allReadsFinished = AllReadsFinished();
-        const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed();
+
+        bool allRowsProcessed = true;
+        for (auto& worker : StreamLookupWorkers) {
+            allRowsProcessed = allRowsProcessed && worker->AllRowsProcessed();
+        }
 
         if (inputRowsFinished && allReadsFinished && !allRowsProcessed) {
             // all reads are completed, but we have unprocessed rows
@@ -277,10 +289,10 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        CA_LOG_D("TEvResolveKeySetResult was received for table: " << StreamLookupWorker->GetTablePath());
+        CA_LOG_D("TEvResolveKeySetResult was received for table: " << StreamLookupWorker->GetTablePath());  // TODO: use table from response
         if (ev->Get()->Request->ErrorCount > 0) {
             TString errorMsg = TStringBuilder() << "Failed to get partitioning for table: "
-                << StreamLookupWorker->GetTablePath();
+                << StreamLookupWorker->GetTablePath();  // TODO: use table from response
             LookupActorStateSpan.EndError(errorMsg);
 
             return RuntimeError(errorMsg, NYql::NDqProto::StatusIds::SCHEME_ERROR);
@@ -308,7 +320,7 @@ private:
         auto& read = readIt->second;
 
         CA_LOG_D("Recv TEvReadResult (stream lookup) from ShardID=" << read.ShardId
-            << ", Table = " << StreamLookupWorker->GetTablePath()
+            << ", Table = " << StreamLookupWorker->GetTablePath()  // TODO: use tables name from read state
             << ", ReadId=" << record.GetReadId()
             << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
             << ", Finished=" << record.GetFinished()
@@ -355,7 +367,7 @@ private:
             case Ydb::StatusIds::SUCCESS:
                 break;
             case Ydb::StatusIds::NOT_FOUND: {
-                StreamLookupWorker->ResetRowsProcessing(read.Id, read.FirstUnprocessedQuery, read.LastProcessedKey);
+                StreamLookupWorker->ResetRowsProcessing(read.Id, read.FirstUnprocessedQuery, read.LastProcessedKey); // TODO: use worker id from read state
                 read.SetFinished();
                 return ResolveTableShards();
             }
@@ -420,7 +432,7 @@ private:
         auto guard = BindAllocator();
         StreamLookupWorker->AddResult(TKqpStreamLookupWorker::TShardReadResult{
             read.ShardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())
-        });
+        }); // TODO: use worker id from read state
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
@@ -473,12 +485,13 @@ private:
     }
 
     NUdf::EFetchStatus FetchInputRows() {
+        YQL_ENSURE(!StreamLookupWorkers.empty());
         auto guard = BindAllocator();
 
         NUdf::EFetchStatus status;
         NUdf::TUnboxedValue row;
         while ((status = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
-            StreamLookupWorker->AddInputRow(std::move(row));
+            StreamLookupWorkers.front()->AddInputRow(std::move(row));
         }
 
         return status;
@@ -489,7 +502,7 @@ private:
 
         auto guard = BindAllocator();
 
-        auto requests = StreamLookupWorker->BuildRequests(Partitioning, ReadId);
+        auto requests = StreamLookupWorker->BuildRequests(ReadId);
         for (auto& [shardId, request] : requests) {
             StartTableRead(shardId, std::move(request));
         }
@@ -678,6 +691,7 @@ private:
     TVector<NKikimrDataEvents::TLock> BrokenLocks;
     NKqpProto::EStreamLookupStrategy LookupStrategy;
     std::unique_ptr<TKqpStreamLookupWorker> StreamLookupWorker;
+    std::vector<std::unique_ptr<TKqpStreamLookupWorker>> StreamLookupWorkers;
     ui64 ReadId = 0;
     size_t TotalRetryAttempts = 0;
     size_t TotalResolveShardsAttempts = 0;

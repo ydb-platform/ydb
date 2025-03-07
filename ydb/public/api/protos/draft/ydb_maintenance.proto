@@ -108,14 +108,16 @@ message LockAction {
     google.protobuf.Duration duration = 2;
 }
 
-message DrainAction {
+message TabletDrainAction {
     ActionScope scope = 1;
+    uint64 in_flight = 2;
 }
 
 message Action {
     oneof action {
         LockAction lock_action = 1;
-        DrainAction drain_action = 2;
+        TabletDrainAction drain_action = 2;
+        TabletDrainAction permanent_drain_action = 3;
     }
 }
 
@@ -148,6 +150,8 @@ message ActionState {
         ACTION_STATUS_PENDING = 1;
         // Action performed: e.g. lock is taken.
         ACTION_STATUS_PERFORMED = 2;
+        // Action is currently in progress
+        ACTION_STATUS_IN_PROGRESS = 3;
     }
 
     enum ActionReason {

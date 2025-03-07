@@ -66,7 +66,7 @@ TQueueAttributes TQueueAttributes::FromAttributesAndConfig(const THashMap<TStrin
         } else if (config.GetEnableDeadLetterQueues() && name == "RedrivePolicy") {
             result.RedrivePolicy = TRedrivePolicy::FromJson(value, config);
             if (result.RedrivePolicy.IsValid()) {
-                if (*result.RedrivePolicy.TargetQueueName && isFifoQueue != result.RedrivePolicy.TargetQueueName->EndsWith(".fifo")) {
+                if (*result.RedrivePolicy.TargetQueueName && isFifoQueue != AsciiHasSuffixIgnoreCase(result.RedrivePolicy.TargetQueueName, ".fifo")) {
                     result.ErrorText = "Target dead letter queue should have the same type as source queue.";
                 } else {
                     continue;

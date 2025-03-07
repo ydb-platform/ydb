@@ -38,17 +38,17 @@ namespace NPDisk {
 
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
-void CreatePDiskActor(TExecutorThread& executorThread,
+void CreatePDiskActor(TActorSystem* actorSystem,
         const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         const TIntrusivePtr<TPDiskConfig> &cfg,
         const NPDisk::TMainKey &mainKey,
         ui32 pDiskID, ui32 poolId, ui32 nodeId) {
-    TActorId actorId = executorThread.RegisterActor(CreatePDisk(cfg, mainKey, cfg->MetadataOnly
+    TActorId actorId = actorSystem->Register(CreatePDisk(cfg, mainKey, cfg->MetadataOnly
         ? MakeIntrusive<NMonitoring::TDynamicCounters>() : counters), TMailboxType::ReadAsFilled, poolId);
 
     TActorId pDiskServiceId = MakeBlobStoragePDiskID(nodeId, pDiskID);
 
-    executorThread.ActorSystem->RegisterLocalService(pDiskServiceId, actorId);
+    actorSystem->RegisterLocalService(pDiskServiceId, actorId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -668,7 +668,7 @@ public:
                     evSlay.VDiskId, evSlay.SlayOwnerRound, evSlay.PDiskId, evSlay.VSlotId, str.Str()));
         PDisk->Mon.YardSlay.CountResponse();
     }
-    
+
     void InitHandle(NPDisk::TEvShredPDisk::TPtr &ev) {
         const NPDisk::TEvShredPDisk &evShredPDisk = *ev->Get();
         InitQueue.emplace_back(ev->Sender, evShredPDisk.ShredGeneration, ev->Cookie);
@@ -1230,11 +1230,11 @@ public:
 
             auto& counters = AppData(actorCtx)->Counters;
 
-            TExecutorThread& executorThread = actorCtx.ExecutorThread;
+            TActorSystem* actorSystem = actorCtx.ActorSystem();
 
             PassAway();
 
-            CreatePDiskActor(executorThread, counters, actorCfg, newMainKey, pdiskId, poolId, nodeId);
+            CreatePDiskActor(actorSystem, counters, actorCfg, newMainKey, pdiskId, poolId, nodeId);
 
             Send(ev->Sender, new TEvBlobStorage::TEvNotifyWardenPDiskRestarted(pdiskId));
         }
@@ -1538,7 +1538,7 @@ IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainK
 
 void TRealPDiskServiceFactory::Create(const TActorContext &ctx, ui32 pDiskID,
         const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainKey &mainKey, ui32 poolId, ui32 nodeId) {
-    CreatePDiskActor(ctx.ExecutorThread, AppData(ctx)->Counters, cfg, mainKey, pDiskID, poolId, nodeId);
+    CreatePDiskActor(ctx.ActorSystem(), AppData(ctx)->Counters, cfg, mainKey, pDiskID, poolId, nodeId);
 }
 
 } // NKikimr

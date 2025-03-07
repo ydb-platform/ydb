@@ -527,7 +527,6 @@ namespace NActors {
     }
 
     IEventHandle* TMailbox::PreProcessEvents() noexcept {
-        Y_ABORT();
         return nullptr;
     }
 

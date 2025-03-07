@@ -90,6 +90,10 @@ public:
         Context->Schedule(delta, ev, cookie, NodeId);
     }
 
+    TActorSystem* GetActorSystem() const override {
+        return nullptr;
+    }
+
     bool Send(TAutoPtr<IEventHandle>& ev) override {
         if (TlsActivationContext) {
             const TActorContext& ctx = TActivationContext::AsActorContext();

@@ -137,6 +137,7 @@ namespace NActors {
 
         static TActorId InterconnectProxy(ui32 nodeid);
         static TActorSystem* ActorSystem();
+        TActorSystem* GetActorSystem();
 
         static i64 GetCurrentEventTicks();
         static double GetCurrentEventTicksAsSeconds();

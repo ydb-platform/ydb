@@ -8,7 +8,7 @@
 
 #include <optional>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 using TCertificateAndPrivateKey = std::pair<std::string, std::string>;
 

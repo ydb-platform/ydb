@@ -2,7 +2,7 @@
 
 #include <ydb-cpp-sdk/client/coordination/coordination.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 const Ydb::Coordination::DescribeNodeResult& TProtoAccessor::GetProto(const NCoordination::TNodeDescription& nodeDescription) {
     return nodeDescription.GetProto();

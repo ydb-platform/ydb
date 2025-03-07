@@ -11,7 +11,7 @@
 #include <unordered_map>
 #include <memory>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 enum class ECodec : uint32_t {
     RAW = 1,
@@ -93,4 +93,4 @@ private:
     TAdaptiveLock Lock;
 };
 
-} // namespace NYdb::V3::NTopic
+} // namespace NYdb::NTopic

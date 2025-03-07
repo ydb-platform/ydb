@@ -6,23 +6,22 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NYdb;
-using namespace NYdb::V3::NView;
 
 Y_UNIT_TEST_SUITE(ViewClient) {
     Y_UNIT_TEST(Basic) {
         TString addr = "localhost:2000";
-        TViewDummyService viewService;
+        NView::TViewDummyService viewService;
 
         auto server = StartGrpcServer(addr, viewService);
 
         auto config = TDriverConfig().SetEndpoint(addr);
         TDriver driver(config);
-        TViewClient client(driver);
+        NView::TViewClient client(driver);
 
         auto result = client.DescribeView("any").ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         auto queryText = result.GetViewDescription().GetQueryText();
-        UNIT_ASSERT_STRINGS_EQUAL(queryText, DummyQueryText);
+        UNIT_ASSERT_STRINGS_EQUAL(queryText, NView::DummyQueryText);
     }
 }

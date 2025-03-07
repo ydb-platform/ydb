@@ -8,7 +8,7 @@
 #include <util/generic/utility.h>
 #include <util/stream/buffer.h>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSession

@@ -6,7 +6,7 @@
 
 #include <deque>
 
-namespace NYdb::inline V3::NFederatedTopic {
+namespace NYdb::inline Dev::NFederatedTopic {
 
 std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseByHashImpl(
     NTopic::TFederatedWriteSessionSettings const& settings,
@@ -206,4 +206,4 @@ private:
     }
 };
 
-} // namespace NYdb::V3::NFederatedTopic
+} // namespace NYdb::NFederatedTopic

@@ -7,7 +7,7 @@
 #include <string>
 #include <src/client/impl/ydb_stats/stats.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 struct TEndpointRecord {
     std::string Endpoint;

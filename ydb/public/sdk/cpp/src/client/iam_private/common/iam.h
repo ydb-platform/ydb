@@ -2,7 +2,7 @@
 
 #include <src/client/iam/common/iam.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 template<typename TRequest, typename TResponse, typename TService>
 

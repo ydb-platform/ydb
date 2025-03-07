@@ -1,6 +1,6 @@
 #pragma once
 
-namespace NYdb::inline V3::NQuery {
+namespace NYdb::inline Dev::NQuery {
 
 struct TClientSettings;
 struct TSessionPoolSettings;

@@ -7,7 +7,7 @@
 
 using namespace yandex::cloud::priv::iam::v1;
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 TCredentialsProviderFactoryPtr CreateIamJwtCredentialsProviderFactoryImplPrivate(TIamJwtParams&& jwtParams) {
     return std::make_shared<TIamJwtCredentialsProviderFactory<

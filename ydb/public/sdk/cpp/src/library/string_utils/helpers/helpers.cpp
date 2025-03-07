@@ -4,6 +4,8 @@
 #include <cctype>
 #include <cstring>
 
+namespace NYdb {
+inline namespace Dev {
 namespace NUtils {
     namespace {
     void DoSplit(std::string_view src, std::string_view& l, std::string_view& r, size_t pos, size_t len) {
@@ -242,4 +244,6 @@ std::u32string FromAscii(const std::string_view& s) {
     return res;
 }
 
-} // namespace NUtils
+}
+}
+}

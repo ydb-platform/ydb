@@ -12,7 +12,7 @@ class ListEndpointsResult;
 }
 }
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class IExtensionApi {
 public:

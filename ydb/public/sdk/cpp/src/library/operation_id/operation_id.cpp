@@ -10,6 +10,7 @@
 #include <util/string/cast.h>
 
 namespace NKikimr {
+inline namespace Dev {
 namespace NOperationId {
 
 using namespace NUri;
@@ -305,5 +306,6 @@ TOperationId::EKind ParseKind(const std::string_view value) {
     return TOperationId::UNUSED;
 }
 
-} // namespace NOperationId
-} // namespace NKikimr
+}
+}
+}

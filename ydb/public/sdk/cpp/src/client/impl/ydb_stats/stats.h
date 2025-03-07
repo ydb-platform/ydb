@@ -9,7 +9,7 @@
 #include <atomic>
 #include <memory>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NSdkStats {
 
 // works only for case normal (foo_bar) underscore

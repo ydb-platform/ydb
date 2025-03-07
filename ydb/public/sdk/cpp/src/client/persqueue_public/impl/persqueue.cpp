@@ -8,7 +8,7 @@
 #include <util/string/cast.h>
 #include <util/string/subst.h>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 class TCommonCodecsProvider {
 public:

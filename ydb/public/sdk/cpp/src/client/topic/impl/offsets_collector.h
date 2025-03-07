@@ -14,7 +14,7 @@
 
 #include <memory>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 class TOffsetsCollector {
 public:

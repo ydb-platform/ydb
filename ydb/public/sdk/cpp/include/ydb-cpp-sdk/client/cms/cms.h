@@ -21,7 +21,7 @@ namespace Ydb::Cms {
     class ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy;
 } // namespace Ydb::Cms
 
-namespace NYdb::inline V3::NCms {
+namespace NYdb::inline Dev::NCms {
 
 struct TListDatabasesSettings : public TOperationRequestSettings<TListDatabasesSettings> {};
 
@@ -210,4 +210,4 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-} // namespace NYdb::inline V3::NCms
+} // namespace NYdb::inline Dev::NCms

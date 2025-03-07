@@ -2,7 +2,7 @@
 
 #include <ydb-cpp-sdk/client/iam/common/types.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 struct TIamServiceParams : TIamEndpoint {
     std::string ServiceId;

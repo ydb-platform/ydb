@@ -7,7 +7,7 @@
 
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 
 class TOperation::TImpl {

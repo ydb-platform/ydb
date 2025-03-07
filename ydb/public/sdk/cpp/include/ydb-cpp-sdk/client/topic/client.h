@@ -4,7 +4,7 @@
 #include "read_session.h"
 #include "write_session.h"
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 struct TTopicClientSettings : public TCommonClientSettingsBase<TTopicClientSettings> {
     using TSelf = TTopicClientSettings;
@@ -61,4 +61,4 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-} // namespace NYdb::V3::NTopic
+} // namespace NYdb::NTopic

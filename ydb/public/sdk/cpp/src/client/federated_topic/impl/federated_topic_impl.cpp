@@ -3,7 +3,7 @@
 #include "federated_read_session.h"
 #include "federated_write_session.h"
 
-namespace NYdb::inline V3::NFederatedTopic {
+namespace NYdb::inline Dev::NFederatedTopic {
 
 std::shared_ptr<IFederatedReadSession>
 TFederatedTopicClient::TImpl::CreateReadSession(const TFederatedReadSessionSettings& settings) {

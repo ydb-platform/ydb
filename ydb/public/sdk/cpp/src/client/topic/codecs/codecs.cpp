@@ -5,7 +5,7 @@
 #include <util/stream/buffer.h>
 #include <util/stream/zlib.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 namespace {
 

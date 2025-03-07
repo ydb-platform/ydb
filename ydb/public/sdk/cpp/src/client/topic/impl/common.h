@@ -10,7 +10,7 @@
 #include <queue>
 #include <condition_variable>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 ERetryErrorClass GetRetryErrorClass(EStatus status);
 ERetryErrorClass GetRetryErrorClassV2(EStatus status);

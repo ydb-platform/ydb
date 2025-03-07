@@ -4,7 +4,7 @@
 #include <src/client/topic/impl/read_session_impl.ipp>
 #include <src/client/persqueue_public/impl/aliases.h>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 TReadSessionEvent::TDataReceivedEvent::TMessageInformation::TMessageInformation(
     ui64 offset,

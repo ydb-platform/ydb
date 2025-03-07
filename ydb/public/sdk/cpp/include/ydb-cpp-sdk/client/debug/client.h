@@ -2,7 +2,7 @@
 
 #include <ydb-cpp-sdk/client/driver/driver.h>
 
-namespace NYdb::inline V3::NDebug {
+namespace NYdb::inline Dev::NDebug {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -96,4 +96,4 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-} // namespace NYdb::V3::NDebug
+} // namespace NYdb::NDebug

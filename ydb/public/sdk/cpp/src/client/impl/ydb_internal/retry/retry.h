@@ -13,11 +13,11 @@
 #include <functional>
 #include <memory>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 class IClientImplCommon;
 }
 
-namespace NYdb::inline V3::NRetry {
+namespace NYdb::inline Dev::NRetry {
 
 ui32 CalcBackoffTime(const TBackoffSettings& settings, ui32 retryNumber);
 void Backoff(const NRetry::TBackoffSettings& settings, ui32 retryNumber);

@@ -4,7 +4,7 @@
 
 #include <library/cpp/monlib/metrics/metric_registry.h>
 
-namespace NSolomonStatExtension::inline V3 {
+namespace NSolomonStatExtension::inline Dev {
 
 template <typename TMetricRegistryPtr>
 class TMetricRegistryConnector: public NYdb::IExtension {

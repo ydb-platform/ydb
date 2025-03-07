@@ -10,7 +10,7 @@ namespace Ydb {
     class ResultSet;
 }
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class TProtoAccessor;
 
@@ -32,7 +32,7 @@ bool operator!=(const TColumn& col1, const TColumn& col2);
 //! Collection of rows, represents result of query or part of the result in case of stream operations
 class TResultSet {
     friend class TResultSetParser;
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 public:
     TResultSet(const Ydb::ResultSet& proto);
     TResultSet(Ydb::ResultSet&& proto);

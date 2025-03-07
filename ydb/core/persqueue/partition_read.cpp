@@ -27,8 +27,6 @@
 
 namespace NKikimr::NPQ {
 
-static const ui32 MAX_USER_ACTS = 1000;
-
 TMaybe<TInstant> GetReadFrom(ui32 maxTimeLagMs, ui64 readTimestampMs, TInstant consumerReadFromTimestamp, const TActorContext& ctx) {
     if (!(maxTimeLagMs > 0 || readTimestampMs > 0 || consumerReadFromTimestamp > TInstant::MilliSeconds(1))) {
         return {};

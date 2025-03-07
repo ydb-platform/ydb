@@ -85,10 +85,11 @@ private:
     bool NeedAllNodes = false;
     bool HaveError = false;
     bool FallbackToIcDiscovery = false;
-    TMap<ui64, TAutoPtr<TEvLocationResponse>> PendingTopicResponses;
+    TMap<ui64, TSimpleSharedPtr<TEvLocationResponse>> PendingTopicResponses;
 
     THashMap<ui64, TNodeInfo> Nodes;
     THashMap<TString, TActorId> PartitionActors;
+    THashSet<ui64> HaveBrokers;
 
 };
 

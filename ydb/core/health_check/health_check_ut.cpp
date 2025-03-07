@@ -6,6 +6,7 @@
 #include <ydb/core/mind/hive/hive_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include "health_check.cpp"
 
@@ -1960,6 +1961,157 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         Cerr << result.ShortDebugString();
 
         UNIT_ASSERT(HasDeadTabletIssue(result));
+    }
+
+    void SendHealthCheckConfigUpdate(TTestActorRuntime &runtime, const TActorId& sender, const NKikimrConfig::THealthCheckConfig &cfg) {
+        auto *event = new NConsole::TEvConsole::TEvConfigureRequest;
+
+        event->Record.AddActions()->MutableRemoveConfigItems()->MutableCookieFilter()->AddCookies("cookie");
+
+        auto &item = *event->Record.AddActions()->MutableAddConfigItem()->MutableConfigItem();
+        item.MutableConfig()->MutableHealthCheckConfig()->CopyFrom(cfg);
+        item.SetCookie("cookie");
+
+        runtime.SendToPipe(MakeConsoleID(), sender, event, 0, GetPipeConfigWithRetries());
+
+        TAutoPtr<IEventHandle> handle;
+        auto record = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigureResponse>(handle)->Record;
+        UNIT_ASSERT_VALUES_EQUAL(record.MutableStatus()->GetCode(), Ydb::StatusIds::SUCCESS);
+    }
+
+    void ChangeNodeRestartsPerPeriod(TTestActorRuntime &runtime, const TActorId& sender, const ui32 restartsYellow, const ui32 restartsOrange) {
+        NKikimrConfig::TAppConfig ext;
+        auto &cfg = *ext.MutableHealthCheckConfig();
+        cfg.SetNodeRestartsPerPeriodYellowThreshold(restartsYellow);
+        cfg.SetNodeRestartsPerPeriodOrangeThreshold(restartsOrange);
+        SendHealthCheckConfigUpdate(runtime, sender, cfg);
+    }
+
+    void TestConfigUpdateNodeRestartsPerPeriod(TTestActorRuntime &runtime, const TActorId& sender, const ui32 restartsYellow, const ui32 restartsOrange, const ui32 nodeId, Ydb::Monitoring::StatusFlag::Status expectedStatus) {
+        ChangeNodeRestartsPerPeriod(runtime, sender, restartsYellow, restartsOrange);
+
+        TAutoPtr<IEventHandle> handle;
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        request->Request.set_return_verbose_status(true);
+        request->Database = "/Root/database";
+
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Ctest << result.ShortDebugString() << Endl;
+
+        const auto &database_status = result.database_status(0);
+        UNIT_ASSERT_VALUES_EQUAL(database_status.name(), "/Root/database");
+        UNIT_ASSERT_VALUES_EQUAL(database_status.compute().overall(), expectedStatus);
+        UNIT_ASSERT_VALUES_EQUAL(database_status.compute().nodes()[0].id(), ToString(nodeId));
+    }
+
+    Y_UNIT_TEST(HealthCheckConfigUpdate) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui32 nodeRestarts = 10;
+        const ui32 nodeId = runtime.GetNodeId(1);
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case NConsole::TEvConsole::EvGetTenantStatusResponse: {
+                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
+                    ChangeGetTenantStatusResponse(x, "/Root/database");
+                    break;
+                }
+                case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
+                    auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+                    TSchemeCacheNavigate::TEntry& entry((*x)->Get()->Request->ResultSet.front());
+                    const TString path = CanonizePath(entry.Path);
+                    if (path == "/Root/database" || entry.TableId.PathId == SUBDOMAIN_KEY) {
+                        entry.Status = TSchemeCacheNavigate::EStatus::Ok;
+                        entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
+                        entry.Path = {"Root", "database"};
+                        entry.DomainInfo = MakeIntrusive<TDomainInfo>(SUBDOMAIN_KEY, SUBDOMAIN_KEY);
+                        auto domains = runtime.GetAppData().DomainsInfo;
+                        ui64 hiveId = domains->GetHive();
+                        entry.DomainInfo->Params.SetHive(hiveId);
+                    }
+                    break;
+                }
+                case TEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                    auto &record = (*x)->Get()->Record;
+                    record.ClearNodeStats();
+                    auto *nodeStats = record.MutableNodeStats()->Add();
+                    nodeStats->SetNodeId(nodeId);
+                    nodeStats->SetRestartsPerPeriod(nodeRestarts);
+                    nodeStats->MutableNodeDomain()->SetSchemeShard(SUBDOMAIN_KEY.OwnerId);
+                    nodeStats->MutableNodeDomain()->SetPathId(SUBDOMAIN_KEY.LocalPathId);
+                    break;
+                }
+                case TEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                    auto record = (*x)->Get()->MutableRecord();
+                    if (record->path() == "/Root/database") {
+                        record->set_status(NKikimrScheme::StatusSuccess);
+                        // no pools
+                    }
+                    break;
+                }
+                case TEvBlobStorage::EvControllerConfigResponse: {
+                    auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
+                    AddGroupVSlotInControllerConfigResponseWithStaticGroup(x, NKikimrBlobStorage::TGroupStatus::FULL, TVDisks(1));
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                    AddVSlotsToSysViewResponse(x, 1, TVDisks(1));
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetGroupsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
+                    AddGroupsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
+                    AddStoragePoolsToSysViewResponse(x);
+                    break;
+                }
+                case TEvWhiteboard::EvSystemStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvSystemStateResponse::TPtr*>(&ev);
+                    ClearLoadAverage(x);
+                    break;
+                }
+                case TEvInterconnect::EvNodesInfo: {
+                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                    auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>((*x)->Get()->Nodes);
+                    if (!nodes->empty()) {
+                        nodes->erase(nodes->begin() + 1, nodes->end());
+                        nodes->begin()->NodeId = nodeId;
+                    }
+                    auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
+                        new IEventHandle((*x)->Recipient, (*x)->Sender, new TEvInterconnect::TEvNodesInfo(nodes))
+                    );
+                    x->Swap(newEv);
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        TestConfigUpdateNodeRestartsPerPeriod(runtime, sender, nodeRestarts + 5, nodeRestarts + 10, nodeId, Ydb::Monitoring::StatusFlag::GREEN);
+        TestConfigUpdateNodeRestartsPerPeriod(runtime, sender, nodeRestarts / 2, nodeRestarts + 5, nodeId, Ydb::Monitoring::StatusFlag::YELLOW);
+        TestConfigUpdateNodeRestartsPerPeriod(runtime, sender, nodeRestarts / 5, nodeRestarts / 2, nodeId, Ydb::Monitoring::StatusFlag::ORANGE);
     }
 }
 }

@@ -5,7 +5,7 @@ If authentication is enabled for the database, the [authentication mode](../../.
 Run the command as follows:
 
 ```bash
-( export <auth_mode_var>="<auth_mode_value>" && cd ydb-go-examples && \
+( export <auth_mode_var>="<auth_mode_value>" && cd ydb-go-sdk/examples && \
 go run ./basic -ydb="<endpoint>?database=<database>" )
 ```
 
@@ -19,6 +19,6 @@ where
 For example:
 
 ```bash
-( export YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." && cd ydb-go-examples && \
-go run ./basic -ydb="grpcs://ydb.example.com:2135?database=/somepath/somelocation" )
+( export YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." && cd ydb-go-sdk/examples && \
+go run ./basic -ydb="grpcs://ydb.example.com:2135/somepath/somelocation" )
 ```

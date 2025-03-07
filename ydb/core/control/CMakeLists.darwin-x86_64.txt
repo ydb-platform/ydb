@@ -21,8 +21,10 @@ add_library(ydb-core-control)
 target_link_libraries(ydb-core-control PUBLIC
   contrib-libs-cxxsupp
   yutil
-  library-actors-core
+  ydb-core-base
   core-control-lib
+  ydb-core-mon
+  library-actors-core
   cpp-deprecated-atomic
 )
 

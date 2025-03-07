@@ -27,6 +27,7 @@ target_link_libraries(ydb-core-mon_alloc PUBLIC
   monlib-service-pages
   ydb-core-base
   core-control-lib
+  ydb-core-mon
   library-actors-core
   library-actors-prof
   ydb-library-services

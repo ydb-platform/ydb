@@ -18,10 +18,9 @@ add_library(core-control-lib)
 target_link_libraries(core-control-lib PUBLIC
   contrib-libs-cxxsupp
   yutil
-  ydb-core-base
-  ydb-core-mon
-  ydb-core-node_whiteboard
   cpp-deprecated-atomic
+  cpp-containers-absl_flat_hash
+  monlib-service-pages
 )
 
 target_sources(core-control-lib PRIVATE

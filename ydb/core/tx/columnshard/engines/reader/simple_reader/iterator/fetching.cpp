@@ -212,6 +212,10 @@ void TDuplicateFilter::TFilterSubscriber::OnFilterReady(const NArrow::TColumnFil
     NConveyor::TScanServiceOperator::SendTaskToExecute(task, Source->GetContext()->GetCommonContext()->GetConveyorProcessId());
 }
 
+void TDuplicateFilter::TFilterSubscriber::OnFailure(const TString& reason) {
+    Source->GetContext()->GetCommonContext()->AbortWithError("cannot build duplicate filter : " + reason);
+}
+
 TConclusion<bool> TDuplicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     NActors::TActivationContext::AsActorContext().Send(source->GetContextAsVerified<TSpecialReadContext>()->GetDuplicatesManager(),
         new TEvRequestFilter(source, std::make_shared<TFilterSubscriber>(source, step)));

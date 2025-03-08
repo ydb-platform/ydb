@@ -25,30 +25,29 @@ const THashSet<ui32>& TProgramContainer::GetEarlyFilterColumns() const {
 }
 
 TConclusionStatus TProgramContainer::Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TProgram& programProto) noexcept {
-    try {
-        ProgramProto = programProto;
-        if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
-            TString out;
-            ::google::protobuf::TextFormat::PrintToString(programProto, &out);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "parse_program")("program", out);
-        }
+    ProgramProto = programProto;
+    if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
+        TString out;
+        ::google::protobuf::TextFormat::PrintToString(programProto, &out);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "parse_program")("program", out);
+    }
 
-        if (programProto.HasKernels()) {
+    if (programProto.HasKernels()) {
+        try {
             if (!KernelsRegistry.Parse(programProto.GetKernels())) {
                 return TConclusionStatus::Fail("Can't parse kernels");
             }
+        } catch (...) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "program_parsed_error")("result", CurrentExceptionMessage());
+            return TConclusionStatus::Fail(TStringBuilder() << "Can't initialize program, exception thrown: " << CurrentExceptionMessage());
         }
-
-        auto parseStatus = ParseProgram(columnResolver, programProto);
-        if (parseStatus.IsFail()) {
-            return parseStatus;
-        }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "program_parsed")("result", DebugString());
-    } catch (...) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "program_parsed_error")("result", CurrentExceptionMessage());
-        return TConclusionStatus::Fail(TStringBuilder() << "Can't initialize program, exception thrown: " << CurrentExceptionMessage());
     }
 
+    auto parseStatus = ParseProgram(columnResolver, programProto);
+    if (parseStatus.IsFail()) {
+        return parseStatus;
+    }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "program_parsed")("result", DebugString());
     return TConclusionStatus::Success();
 }
 

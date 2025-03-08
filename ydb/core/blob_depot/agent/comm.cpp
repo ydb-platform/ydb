@@ -1,7 +1,9 @@
 #include "agent_impl.h"
 #include "blocks.h"
 
+#ifndef KIKIMR_DISABLE_S3_OPS
 #include <ydb/core/wrappers/s3_wrapper.h>
+#endif
 
 namespace NKikimr::NBlobDepot {
 
@@ -99,6 +101,7 @@ namespace NKikimr::NBlobDepot {
             S3WrapperId = {};
         }
 
+#ifndef KIKIMR_DISABLE_S3_OPS
         if (S3BackendSettings) {
             auto& settings = S3BackendSettings->GetSettings();
             ExternalStorageConfig = NWrappers::IExternalStorageConfig::Construct(settings);
@@ -107,6 +110,7 @@ namespace NKikimr::NBlobDepot {
         } else {
             ExternalStorageConfig = {};
         }
+#endif
 
         OnConnect();
     }

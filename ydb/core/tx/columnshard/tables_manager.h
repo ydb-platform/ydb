@@ -92,8 +92,7 @@ public:
 };
 
 class TTableInfo {
-public:
-    ui64 PathId;
+    const ui64 PathId;
     std::optional<NOlap::TSnapshot> DropVersion;
     YDB_READONLY_DEF(TSet<NOlap::TSnapshot>, Versions);
 
@@ -130,20 +129,19 @@ public:
         return *DropVersion < *minReadSnapshot;
     }
 
-    TTableInfo() = default;
-
     TTableInfo(const ui64 pathId)
         : PathId(pathId) {
     }
 
     template <class TRow>
-    bool InitFromDB(const TRow& rowset) {
-        PathId = rowset.template GetValue<Schema::TableInfo::PathId>();
+    static TTableInfo InitFromDB(const TRow& rowset) {
+        const auto pathId = rowset.template GetValue<Schema::TableInfo::PathId>();
+        TTableInfo result(pathId);
         if (rowset.template HaveValue<Schema::TableInfo::DropStep>() && rowset.template HaveValue<Schema::TableInfo::DropTxId>()) {
-            DropVersion.emplace(
+            result.DropVersion.emplace(
                 rowset.template GetValue<Schema::TableInfo::DropStep>(), rowset.template GetValue<Schema::TableInfo::DropTxId>());
         }
-        return true;
+        return result;
     }
 };
 
@@ -249,8 +247,15 @@ public:
         return result;
     }
 
-    const THashMap<ui64, TTableInfo>& GetTables() const {
-        return Tables;
+    size_t GetTableCount() const {
+        return Tables.size();
+    }
+
+    template<typename F> 
+    void ForEachPathId(F&& f) const {
+        for (const auto& [pathId, _]: Tables) {
+            f(pathId);
+        }
     }
 
     const THashSet<ui32>& GetSchemaPresets() const {
@@ -308,7 +313,6 @@ public:
 
     bool InitFromDB(NIceDb::TNiceDb& db);
 
-    const TTableInfo& GetTable(const ui64 pathId) const;
     ui64 GetMemoryUsage() const;
 
     bool HasTable(const ui64 pathId, const bool withDeleted = false, const std::optional<NOlap::TSnapshot> minReadSnapshot = std::nullopt) const;

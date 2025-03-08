@@ -13,9 +13,11 @@ bool TInsertTableInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext
     TBlobGroupSelector dsGroupSelector(Self->Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
     auto localInsertTable = std::make_unique<NOlap::TInsertTable>();
-    for (auto&& i : Self->TablesManager.GetTables()) {
-        localInsertTable->RegisterPathInfo(i.first);
-    }
+    Self->TablesManager.ForEachPathId(
+        [&localInsertTable](const ui64 pathId) {
+            localInsertTable->RegisterPathInfo(pathId);
+        }
+    );
     if (!localInsertTable->Load(db, dbTable, TAppData::TimeProvider->Now())) {
         ACFL_ERROR("step", "TInsertTable::Load_Fails");
         return false;
@@ -213,7 +215,7 @@ bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
             return false;
         }
     }
-    Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, tablesManagerLocal.GetTables().size());
+    Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, tablesManagerLocal.GetTableCount());
     Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, tablesManagerLocal.GetSchemaPresets().size());
     Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, tablesManagerLocal.GetTtl().size());
 

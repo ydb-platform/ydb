@@ -97,6 +97,7 @@ target_sources(providers-yt-provider PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_block_io_filter.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_block_io_utils.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_block_output.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_cbo_helpers.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_datasink_constraints.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_datasink_exec.cpp
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/provider/yql_yt_datasink_finalize.cpp

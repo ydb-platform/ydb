@@ -163,7 +163,6 @@ target_sources(yt-yt-client PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/row_buffer.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/schema.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/schema_serialization_helpers.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/schemaless_buffered_dynamic_table_writer.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/schemaless_dynamic_table_writer.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/serialize.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/table_upload_options.cpp

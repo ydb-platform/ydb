@@ -93,9 +93,6 @@ namespace NKikimr {
             /////////////////////////////////////////////////////////////////////////////////////////////////
             // INTROSPECTION
             /////////////////////////////////////////////////////////////////////////////////////////////////
-            void LocalMKQL(const NKikimrClient::TLocalMKQL& request, TResponseCallback callback);
-            void LocalSchemeTx(const NKikimrClient::TLocalSchemeTx& request, TResponseCallback callback);
-            void TabletKillRequest(const NKikimrClient::TTabletKillRequest& request, TResponseCallback callback);
             void InterconnectDebug(const NKikimrClient::TInterconnectDebug& request, TResponseCallback callback);
 
             /////////////////////////////////////////////////////////////////////////////////////////////////

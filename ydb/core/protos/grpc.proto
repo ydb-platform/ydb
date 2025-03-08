@@ -73,9 +73,6 @@ service TGRpcServer {
     /////////////////////////////////////////////////////////////////////////////////////////////////
     // INTROSPECTION
     /////////////////////////////////////////////////////////////////////////////////////////////////
-    rpc LocalMKQL(TLocalMKQL) returns (TResponse);
-    rpc LocalSchemeTx(TLocalSchemeTx) returns (TResponse);
-    rpc TabletKillRequest(TTabletKillRequest) returns (TResponse);
     rpc InterconnectDebug(TInterconnectDebug) returns (TResponse);
 
     // [DEPRECATED]

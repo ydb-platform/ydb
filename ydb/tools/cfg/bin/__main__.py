@@ -10,7 +10,7 @@ import yaml
 from ydb.tools.cfg.configurator_setup import get_parser, parse_optional_arguments
 from ydb.tools.cfg.dynamic import DynamicConfigGenerator
 from ydb.tools.cfg.static import StaticConfigGenerator
-from ydb.tools.cfg.utils import write_to_file
+from ydb.tools.cfg.utils import write_to_file, backport
 from ydb.tools.cfg.walle import NopHostsInformationProvider, WalleHostsInformationProvider
 from ydb.tools.cfg.k8s_api import K8sApiHostsInformationProvider
 
@@ -75,6 +75,9 @@ def cfg_generate(args):
     all_configs = generator.get_all_configs()
     for cfg_name, cfg_value in all_configs.items():
         write_to_file(os.path.join(args.output_dir, cfg_name), cfg_value)
+
+    if args.backport_to_template:
+        backport(args.cluster_description, all_configs["config.yaml"], ["blob_storage_config"])
 
 
 def main():

@@ -191,47 +191,6 @@ bool HasNonTrivialAny(const TEquiJoinLinkSettings& linkSettings, const TMapJoinS
     return hints.contains("any") && !unique;
 }
 
-IGraphTransformer::TStatus TryEstimateDataSizeChecked(TVector<ui64>& result, TYtSection& inputSection, const TString& cluster,
-    const TVector<TYtPathInfo::TPtr>& paths, const TMaybe<TVector<TString>>& columns, const TYtState& state, TExprContext& ctx)
-{
-    if (GetJoinCollectColumnarStatisticsMode(*state.Configuration) == EJoinCollectColumnarStatisticsMode::Sync) {
-        auto syncResult = EstimateDataSize(cluster, paths, columns, state, ctx);
-        if (!syncResult) {
-            return IGraphTransformer::TStatus::Error;
-        }
-        result = std::move(*syncResult);
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    TSet<TString> requestedColumns;
-    auto status = TryEstimateDataSize(result, requestedColumns, cluster, paths, columns, state, ctx);
-    auto settings = inputSection.Settings().Ptr();
-    if (status == TStatus::Repeat) {
-        bool hasStatColumns = NYql::HasSetting(inputSection.Settings().Ref(), EYtSettingType::StatColumns);
-        if (hasStatColumns) {
-            auto oldColumns = NYql::GetSettingAsColumnList(*settings, EYtSettingType::StatColumns);
-            TSet<TString> oldColumnSet(oldColumns.begin(), oldColumns.end());
-
-            bool alreadyRequested = AllOf(requestedColumns, [&](const auto& c) {
-                return oldColumnSet.contains(c);
-            });
-
-            YQL_ENSURE(!alreadyRequested);
-
-            settings = NYql::RemoveSetting(*settings, EYtSettingType::StatColumns, ctx);
-        }
-
-        YQL_CLOG(INFO, ProviderYt) << "Stat missing for columns: " << JoinSeq(", ", requestedColumns) << ", rebuilding section";
-        TVector<TString> requestedColumnList(requestedColumns.begin(), requestedColumns.end());
-
-        inputSection = Build<TYtSection>(ctx, inputSection.Ref().Pos())
-            .InitFrom(inputSection)
-            .Settings(NYql::AddSettingAsColumnList(*settings, EYtSettingType::StatColumns, requestedColumnList, ctx))
-            .Done();
-    }
-    return status;
-}
-
 TStatus UpdateInMemorySizeSetting(TMapJoinSettings& settings, TYtSection& inputSection, const TJoinLabels& labels,
     const TYtJoinNodeOp& op, TExprContext& ctx, bool isLeft,
     const TStructExprType* itemType, const TVector<TString>& joinKeyList, const TYtState::TPtr& state, const TString& cluster,
@@ -4857,6 +4816,48 @@ EStarRewriteStatus RewriteYtEquiJoinStar(TYtEquiJoin equiJoin, TYtJoinNodeOp& op
 
 } // namespace
 
+IGraphTransformer::TStatus TryEstimateDataSizeChecked(TVector<ui64>& result, TYtSection& inputSection, const TString& cluster,
+    const TVector<TYtPathInfo::TPtr>& paths, const TMaybe<TVector<TString>>& columns, const TYtState& state, TExprContext& ctx)
+{
+    if (GetJoinCollectColumnarStatisticsMode(*state.Configuration) == EJoinCollectColumnarStatisticsMode::Sync) {
+        auto syncResult = EstimateDataSize(cluster, paths, columns, state, ctx);
+        if (!syncResult) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        result = std::move(*syncResult);
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    TSet<TString> requestedColumns;
+    auto status = TryEstimateDataSize(result, requestedColumns, cluster, paths, columns, state, ctx);
+    auto settings = inputSection.Settings().Ptr();
+    if (status == TStatus::Repeat) {
+        bool hasStatColumns = NYql::HasSetting(inputSection.Settings().Ref(), EYtSettingType::StatColumns);
+        if (hasStatColumns) {
+            auto oldColumns = NYql::GetSettingAsColumnList(*settings, EYtSettingType::StatColumns);
+            TSet<TString> oldColumnSet(oldColumns.begin(), oldColumns.end());
+
+            bool alreadyRequested = AllOf(requestedColumns, [&](const auto& c) {
+                return oldColumnSet.contains(c);
+            });
+
+            YQL_ENSURE(!alreadyRequested);
+
+            settings = NYql::RemoveSetting(*settings, EYtSettingType::StatColumns, ctx);
+        }
+
+        YQL_CLOG(INFO, ProviderYt) << "Stat missing for columns: " << JoinSeq(", ", requestedColumns) << ", rebuilding section";
+        TVector<TString> requestedColumnList(requestedColumns.begin(), requestedColumns.end());
+
+        inputSection = Build<TYtSection>(ctx, inputSection.Ref().Pos())
+            .InitFrom(inputSection)
+            .Settings(NYql::AddSettingAsColumnList(*settings, EYtSettingType::StatColumns, requestedColumnList, ctx))
+            .Done();
+    }
+    return status;
+}
+
+
 ui64 CalcInMemorySizeNoCrossJoin(const TJoinLabel& label, const TYtJoinNodeOp& op, const TMapJoinSettings& settings, bool isLeft, TExprContext& ctx, bool needPayload, ui64 size)
 {
     const auto& keys = *(isLeft ? op.LeftLabel : op.RightLabel);
@@ -5046,112 +5047,6 @@ TYtJoinNodeOp::TPtr ImportYtEquiJoin(TYtEquiJoin equiJoin, TExprContext& ctx) {
 
     root->CostBasedOptPassed = HasSetting(equiJoin.JoinOptions().Ref(), "cbo_passed");
     return root;
-}
-
-IGraphTransformer::TStatus CollectCboStatsLeaf(
-    const THashMap<TString, THashSet<TString>>& relJoinColumns,
-    const TString& cluster,
-    TYtJoinNodeLeaf& leaf,
-    const TYtState::TPtr& state,
-    TExprContext& ctx) {
-
-    const TMaybe<ui64> maxChunkCountExtendedStats = state->Configuration->ExtendedStatsMaxChunkCount.Get();
-    TVector<TYtPathInfo::TPtr> tables;
-    if (maxChunkCountExtendedStats) {
-        TVector<TString> requestedColumnList;
-        auto columnsPos = relJoinColumns.find(JoinLeafLabel(leaf.Label));
-        if (columnsPos != relJoinColumns.end()) {
-            requestedColumnList.assign(columnsPos->second.begin(), columnsPos->second.end());
-        }
-
-        THashSet<TString> memSizeColumns(requestedColumnList.begin(), requestedColumnList.end());
-        TVector<IYtGateway::TPathStatReq> pathStatReqs;
-
-        ui64 sectionChunkCount = 0;
-        for (auto path: leaf.Section.Paths()) {
-            auto pathInfo = MakeIntrusive<TYtPathInfo>(path);
-            tables.push_back(pathInfo);
-            sectionChunkCount += pathInfo->Table->Stat->ChunkCount;
-
-            if (pathInfo->HasColumns()) {
-                NYT::TRichYPath path;
-                pathInfo->FillRichYPath(path);
-                std::copy(path.Columns_->Parts_.begin(), path.Columns_->Parts_.end(), std::inserter(memSizeColumns, memSizeColumns.end()));
-            }
-
-            auto ytPath = BuildYtPathForStatRequest(cluster, *pathInfo, requestedColumnList, *state, ctx);
-
-            if (!ytPath) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            pathStatReqs.push_back(
-                IYtGateway::TPathStatReq()
-                    .Path(*ytPath)
-                    .IsTemp(pathInfo->Table->IsTemp)
-                    .IsAnonymous(pathInfo->Table->IsAnonymous)
-                    .Epoch(pathInfo->Table->Epoch.GetOrElse(0)));
-        }
-
-        if (!pathStatReqs.empty() && (*maxChunkCountExtendedStats == 0 || sectionChunkCount <= *maxChunkCountExtendedStats)) {
-            IYtGateway::TPathStatOptions pathStatOptions =
-                IYtGateway::TPathStatOptions(state->SessionId)
-                    .Cluster(cluster)
-                    .Paths(pathStatReqs)
-                    .Config(state->Configuration->Snapshot())
-                    .Extended(true);
-
-            IYtGateway::TPathStatResult pathStats = state->Gateway->TryPathStat(std::move(pathStatOptions));
-
-            if (!pathStats.Success()) {
-                leaf.Section = Build<TYtSection>(ctx, leaf.Section.Ref().Pos())
-                    .InitFrom(leaf.Section)
-                    .Settings(NYql::AddSettingAsColumnList(leaf.Section.Settings().Ref(), EYtSettingType::StatColumns, requestedColumnList, ctx))
-                    .Done();
-                return TStatus::Repeat;
-            }
-        }
-    }
-
-    TVector<ui64> dataSize;
-    return TryEstimateDataSizeChecked(dataSize, leaf.Section, cluster, tables, {}, *state, ctx);
-}
-
-void AddJoinColumns(THashMap<TString, THashSet<TString>>& relJoinColumns, const TYtJoinNodeOp& op) {
-    for (ui32 i = 0; i < op.LeftLabel->ChildrenSize(); i += 2) {
-        auto ltable = op.LeftLabel->Child(i)->Content();
-        auto lcolumn = op.LeftLabel->Child(i + 1)->Content();
-        auto rtable = op.RightLabel->Child(i)->Content();
-        auto rcolumn = op.RightLabel->Child(i + 1)->Content();
-
-        relJoinColumns[TString(ltable)].insert(TString(lcolumn));
-        relJoinColumns[TString(rtable)].insert(TString(rcolumn));
-    }
-}
-
-IGraphTransformer::TStatus CollectCboStatsNode(THashMap<TString, THashSet<TString>>& relJoinColumns, const TString& cluster, TYtJoinNodeOp& op, const TYtState::TPtr& state, TExprContext& ctx) {
-    IGraphTransformer::TStatus result = TStatus::Ok;
-    TYtJoinNodeLeaf* leftLeaf = dynamic_cast<TYtJoinNodeLeaf*>(op.Left.Get());
-    TYtJoinNodeLeaf* rightLeaf = dynamic_cast<TYtJoinNodeLeaf*>(op.Right.Get());
-    AddJoinColumns(relJoinColumns, op);
-    if (leftLeaf) {
-        result = result.Combine(CollectCboStatsLeaf(relJoinColumns, cluster, *leftLeaf, state, ctx));
-    } else {
-        auto& leftOp = *dynamic_cast<TYtJoinNodeOp*>(op.Left.Get());
-        result = result.Combine(CollectCboStatsNode(relJoinColumns, cluster, leftOp, state, ctx));
-    }
-    if (rightLeaf) {
-        result = result.Combine(CollectCboStatsLeaf(relJoinColumns, cluster, *rightLeaf, state, ctx));
-    } else {
-        auto& rightOp = *dynamic_cast<TYtJoinNodeOp*>(op.Right.Get());
-        result = result.Combine(CollectCboStatsNode(relJoinColumns, cluster, rightOp, state, ctx));
-    }
-    return result;
-}
-
-IGraphTransformer::TStatus CollectCboStats(const TString& cluster, TYtJoinNodeOp& op, const TYtState::TPtr& state, TExprContext& ctx) {
-    THashMap<TString, THashSet<TString>> relJoinColumns;
-    return CollectCboStatsNode(relJoinColumns, cluster, op, state, ctx);
 }
 
 IGraphTransformer::TStatus RewriteYtEquiJoin(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, const TYtState::TPtr& state, TExprContext& ctx) {

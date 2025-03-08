@@ -20,7 +20,7 @@ using namespace std::string_view_literals;
 namespace NKikimr {
 namespace NMiniKQL {
 
-static_assert(RuntimeVersion >= 40);
+static_assert(RuntimeVersion >= 47U);
 
 namespace {
 
@@ -1554,10 +1554,6 @@ TRuntimeNode TProgramBuilder::AsScalar(TRuntimeNode value) {
 }
 
 TRuntimeNode TProgramBuilder::ReplicateScalar(TRuntimeNode value, TRuntimeNode count) {
-    if constexpr (RuntimeVersion < 43U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     auto valueType = AS_TYPE(TBlockType, value.GetStaticType());
     auto countType = AS_TYPE(TBlockType, count.GetStaticType());
 
@@ -4617,12 +4613,6 @@ TRuntimeNode TProgramBuilder::CommonJoinCore(TRuntimeNode flow, EJoinKind joinKi
 }
 
 TRuntimeNode TProgramBuilder::WideCombiner(TRuntimeNode flow, i64 memLimit, const TWideLambda& extractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish) {
-    if (memLimit < 0) {
-        if constexpr (RuntimeVersion < 46U) {
-            THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__ << " with limit " << memLimit;
-        }
-    }
-
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
 
     TRuntimeNode::TList itemArgs;
@@ -4662,10 +4652,7 @@ TRuntimeNode TProgramBuilder::WideCombiner(TRuntimeNode flow, i64 memLimit, cons
 
     TCallableBuilder callableBuilder(Env, __func__, NewFlowType(NewMultiType(tupleItems)));
     callableBuilder.Add(flow);
-    if constexpr (RuntimeVersion < 46U)
-        callableBuilder.Add(NewDataLiteral(ui64(memLimit)));
-    else
-        callableBuilder.Add(NewDataLiteral(memLimit));
+    callableBuilder.Add(NewDataLiteral(memLimit));
     callableBuilder.Add(NewDataLiteral(ui32(keyArgs.size())));
     callableBuilder.Add(NewDataLiteral(ui32(stateArgs.size())));
     std::for_each(itemArgs.cbegin(), itemArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
@@ -5366,10 +5353,6 @@ TRuntimeNode TProgramBuilder::PgConst(TPgType* pgType, const std::string_view& v
 TRuntimeNode TProgramBuilder::PgResolvedCall(bool useContext, const std::string_view& name,
     ui32 id, const TArrayRef<const TRuntimeNode>& args,
     TType* returnType, bool rangeFunction) {
-    if constexpr (RuntimeVersion < 45U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(NewDataLiteral(useContext));
     callableBuilder.Add(NewDataLiteral(rangeFunction));
@@ -5405,10 +5388,6 @@ TRuntimeNode TProgramBuilder::PgTableContent(
     const std::string_view& cluster,
     const std::string_view& table,
     TType* returnType) {
-    if constexpr (RuntimeVersion < 47U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(cluster));
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(table));
@@ -5904,8 +5883,6 @@ TRuntimeNode TProgramBuilder::MatchRecognizeCore(
     const NYql::NMatchRecognize::TAfterMatchSkipTo& skipTo,
     NYql::NMatchRecognize::ERowsPerMatch rowsPerMatch
 ) {
-    MKQL_ENSURE(RuntimeVersion >= 42, "MatchRecognize is not supported in runtime version " << RuntimeVersion);
-
     const auto inputRowType = AS_TYPE(TStructType, AS_TYPE(TFlowType, inputStream.GetStaticType())->GetItemType());
     const auto inputRowArg = Arg(inputRowType);
     const auto partitionKeySelectorNode = getPartitionKeySelectorNode(inputRowArg);
@@ -6092,8 +6069,6 @@ TRuntimeNode TProgramBuilder::TimeOrderRecover(
     TRuntimeNode rowLimit
     )
 {
-    MKQL_ENSURE(RuntimeVersion >= 44, "TimeOrderRecover is not supported in runtime version " << RuntimeVersion);
-
     auto& inputRowType = *static_cast<TStructType*>(AS_TYPE(TStructType, AS_TYPE(TFlowType, inputStream.GetStaticType())->GetItemType()));
     const auto inputRowArg = Arg(&inputRowType);
     TStructTypeBuilder outputRowTypeBuilder(Env);

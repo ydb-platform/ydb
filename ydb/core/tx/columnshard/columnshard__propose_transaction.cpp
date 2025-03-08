@@ -12,6 +12,8 @@ using namespace NTabletFlatExecutor;
 class TTxProposeTransaction: public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
 private:
     using TBase = NTabletFlatExecutor::TTransactionBase<TColumnShard>;
+    TEvColumnShard::TEvProposeTransaction::TPtr Ev;
+    std::shared_ptr<TTxController::ITransactionOperator> TxOperator;
     std::optional<TTxController::TTxInfo> TxInfo;
 
 public:
@@ -77,7 +79,7 @@ public:
                 msgSeqNo = SeqNoFromProto(schemaTxBody.GetSeqNo());
             }
         }
-        TxInfo.emplace(txKind, txId, Ev->Get()->GetSource(), Ev->Cookie, msgSeqNo);
+        TxInfo.emplace(txKind, txId, Ev->Get()->GetSource(), Self->GetProgressTxController().GetAllowedStep(), Ev->Cookie, msgSeqNo);
         TxOperator = Self->GetProgressTxController().StartProposeOnExecute(*TxInfo, txBody, txc);
         return true;
     }
@@ -125,8 +127,6 @@ public:
     }
 
 private:
-    TEvColumnShard::TEvProposeTransaction::TPtr Ev;
-    std::shared_ptr<TTxController::ITransactionOperator> TxOperator;
 
     TTxController::TProposeResult ProposeTtlDeprecated(const TString& txBody) {
         /// @note There's no tx guaranties now. For now TX_KIND_TTL is used to trigger TTL in tests only.

@@ -77,7 +77,7 @@ def cfg_generate(args):
         write_to_file(os.path.join(args.output_dir, cfg_name), cfg_value)
 
     if args.backport_to_template:
-        backport(args.cluster_description, all_configs["config.yaml"], "blob_storage_config")
+        backport(args.cluster_description, all_configs["config.yaml"], ["blob_storage_config"])
 
 def main():
     parser = get_parser(cfg_generate)

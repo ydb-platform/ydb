@@ -166,6 +166,10 @@ def wrap_parse_dict(dictionary, proto):
             'NtoSelect': 'NToSelect',
             'Ssid': 'SSId',
             'Sids': 'SIDs',
+            'GroupId': 'GroupID',
+            'NodeId': 'NodeID',
+            'DiskId': 'DiskID',
+            'SlotId': 'SlotID',
         }
         for k, v in abbreviations.items():
             camelCased = camelCased.replace(k, v)
@@ -223,3 +227,12 @@ def backport(template_path, config_yaml, backported_sections):
 
     with open(template_path, 'w') as file:
         file.writelines(lines)
+
+def need_generate_bs_config(template_bs_config):
+    # We need to generate blob_storage_config if template file does not contain static group:
+    # blob_storage_config.service_set.groups
+
+    if template_bs_config is None:
+        return True
+
+    return template_bs_config.get("service_set", {}).get("groups") is None

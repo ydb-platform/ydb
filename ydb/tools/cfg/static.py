@@ -488,7 +488,8 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.s3_proxy_resolver_config is not None:
             normalized_config["s3_proxy_resolver_config"] = self.__cluster_details.s3_proxy_resolver_config
 
-        if self.__cluster_details.blob_storage_config is not None:
+
+        if not utils.need_generate_bs_config(self.__cluster_details.blob_storage_config):
             normalized_config["blob_storage_config"] = self.__cluster_details.blob_storage_config
         else:
             blobstorage_config_service_set = normalized_config["blob_storage_config"]["service_set"]
@@ -864,7 +865,7 @@ class StaticConfigGenerator(object):
         dc_enumeration = {}
 
         if not self.__cluster_details.get_service("static_groups"):
-            if self.__cluster_details.blob_storage_config:
+            if not utils.need_generate_bs_config(self.__cluster_details.blob_storage_config):
                 return
             self.__proto_configs["bs.txt"] = self._read_generated_bs_config(
                 str(self.__cluster_details.static_erasure),
@@ -873,6 +874,13 @@ class StaticConfigGenerator(object):
                 str(self.__cluster_details.fail_domain_type),
                 bs_format_config,
             )
+
+            # Merging generated static group config with other keys
+            if self.__cluster_details.blob_storage_config is not None:
+                template_proto = config_pb2.TBlobStorageConfig()
+                utils.wrap_parse_dict(self.__cluster_details.blob_storage_config, template_proto)
+                self.__proto_configs["bs.txt"].MergeFrom(template_proto)
+
             if self.__cluster_details.nw_cache_file_path is not None:
                 self.__proto_configs["bs.txt"].CacheFilePath = self.__cluster_details.nw_cache_file_path
             return

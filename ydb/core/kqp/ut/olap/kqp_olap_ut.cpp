@@ -3215,9 +3215,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto client = kikimr.GetTableClient();
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
-
-
-
         {
             auto result = kikimr.GetQueryClient()
                               .ExecuteQuery(R"(

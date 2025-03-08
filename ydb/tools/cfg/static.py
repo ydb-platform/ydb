@@ -488,7 +488,6 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.s3_proxy_resolver_config is not None:
             normalized_config["s3_proxy_resolver_config"] = self.__cluster_details.s3_proxy_resolver_config
 
-
         if not utils.need_generate_bs_config(self.__cluster_details.blob_storage_config):
             normalized_config["blob_storage_config"] = self.__cluster_details.blob_storage_config
         else:

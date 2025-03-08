@@ -79,6 +79,7 @@ def cfg_generate(args):
     if args.backport_to_template:
         backport(args.cluster_description, all_configs["config.yaml"], ["blob_storage_config"])
 
+
 def main():
     parser = get_parser(cfg_generate)
     args = parser.parse_args()

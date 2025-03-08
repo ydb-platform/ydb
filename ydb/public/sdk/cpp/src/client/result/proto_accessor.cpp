@@ -2,7 +2,7 @@
 
 #include <ydb-cpp-sdk/client/proto/accessor.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 const Ydb::ResultSet& TProtoAccessor::GetProto(const TResultSet& resultSet) {
     return resultSet.GetProto();

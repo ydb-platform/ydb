@@ -19,7 +19,7 @@
 #include <util/generic/bitmap.h>
 #include <util/string/builder.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 static void CheckKind(TTypeParser::ETypeKind actual, TTypeParser::ETypeKind expected, const std::string& method)
 {

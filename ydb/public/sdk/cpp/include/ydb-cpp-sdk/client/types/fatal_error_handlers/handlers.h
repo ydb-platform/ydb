@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 void ThrowFatalError(const std::string& str);
 

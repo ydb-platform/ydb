@@ -8,7 +8,7 @@
 #include <ydb-cpp-sdk/client/common_client/ssl_credentials.h>
 #include <src/client/types/core_facility/core_facility.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class ICredentialsProvider;
 class ICredentialsProviderFactory;

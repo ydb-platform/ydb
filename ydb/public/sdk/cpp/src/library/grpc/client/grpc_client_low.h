@@ -26,6 +26,7 @@
  * This file should not be used in high level code without special reason
  */
 namespace NYdbGrpc {
+inline namespace Dev {
 
 const size_t DEFAULT_NUM_THREADS = 2;
 
@@ -1437,4 +1438,5 @@ private:
     std::mutex JoinMutex_;
 };
 
-} // namespace NGRpc
+}
+}

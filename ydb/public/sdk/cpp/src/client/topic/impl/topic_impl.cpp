@@ -3,7 +3,7 @@
 #include "read_session.h"
 #include "write_session.h"
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 std::shared_ptr<IReadSession> TTopicClient::TImpl::CreateReadSession(const TReadSessionSettings& settings) {
     std::optional<TReadSessionSettings> maybeSettings;

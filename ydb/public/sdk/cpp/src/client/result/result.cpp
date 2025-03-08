@@ -11,7 +11,7 @@
 
 #include <google/protobuf/text_format.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 std::string TColumn::ToString() const {
     TString result;

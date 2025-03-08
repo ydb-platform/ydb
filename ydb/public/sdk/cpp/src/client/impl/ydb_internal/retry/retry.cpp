@@ -9,7 +9,7 @@
 
 #include <cmath>
 
-namespace NYdb::inline V3::NRetry {
+namespace NYdb::inline Dev::NRetry {
 
 constexpr ui32 MAX_BACKOFF_DURATION_MS = TDuration::Hours(1).MilliSeconds();
 

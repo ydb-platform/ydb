@@ -7,7 +7,7 @@
 
 #include <google/protobuf/duration.pb.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 void SetDuration(const TDuration& duration, google::protobuf::Duration& protoValue);
 

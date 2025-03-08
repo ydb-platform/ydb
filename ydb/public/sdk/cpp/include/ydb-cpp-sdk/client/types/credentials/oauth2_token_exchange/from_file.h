@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 // Lists supported algorithms for creation of OAuth 2.0 token exchange provider via config file
 std::vector<std::string> GetSupportedOauth2TokenExchangeJwtAlgorithms();

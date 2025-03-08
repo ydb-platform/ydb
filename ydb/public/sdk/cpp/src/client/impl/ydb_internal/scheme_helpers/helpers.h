@@ -3,7 +3,7 @@
 #include <ydb-cpp-sdk/client/scheme/scheme.h>
 #include <vector>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 template<typename TFrom>
 inline void PermissionToSchemeEntry(const TFrom& from, std::vector<NScheme::TPermissions>* to) {

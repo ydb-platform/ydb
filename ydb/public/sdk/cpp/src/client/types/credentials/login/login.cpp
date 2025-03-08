@@ -9,7 +9,7 @@
 
 #include <jwt-cpp/jwt.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 namespace {
 

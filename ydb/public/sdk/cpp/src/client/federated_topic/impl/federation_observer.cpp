@@ -3,7 +3,7 @@
 
 #include <src/client/federated_topic/impl/federation_observer.h>
 
-namespace NYdb::inline V3::NFederatedTopic {
+namespace NYdb::inline Dev::NFederatedTopic {
 
 constexpr TDuration REDISCOVERY_DELAY = TDuration::Seconds(30);
 
@@ -200,4 +200,4 @@ IOutputStream& operator<<(IOutputStream& out, TFederatedDbState const& state) {
     return out << " }";
 }
 
-} // namespace NYdb::V3::NFederatedTopic
+} // namespace NYdb::NFederatedTopic

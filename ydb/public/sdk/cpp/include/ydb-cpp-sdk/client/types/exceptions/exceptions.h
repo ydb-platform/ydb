@@ -4,7 +4,7 @@
 
 #include <util/generic/yexception.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class TYdbException : public yexception {
 public:

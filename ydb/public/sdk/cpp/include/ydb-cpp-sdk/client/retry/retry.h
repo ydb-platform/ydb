@@ -3,7 +3,7 @@
 #include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 #include <util/datetime/base.h>
 
-namespace NYdb::inline V3::NRetry {
+namespace NYdb::inline Dev::NRetry {
 
 struct TBackoffSettings {
     using TSelf = TBackoffSettings;
@@ -41,4 +41,4 @@ struct TRetryOperationSettings {
     }
 };
 
-} // namespace NYdb::V3::NRetry
+} // namespace NYdb::NRetry

@@ -15,7 +15,7 @@ namespace Ydb::RateLimiter {
     class MeteringConfig_Metric;
 } // namespace Ydb::RateLimiter
 
-namespace NYdb::inline V3::NRateLimiter {
+namespace NYdb::inline Dev::NRateLimiter {
 
 struct TReplicatedBucketSettings {
     using TSelf = TReplicatedBucketSettings;
@@ -320,4 +320,4 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-} // namespace NYdb::V3::NRateLimiter
+} // namespace NYdb::NRateLimiter

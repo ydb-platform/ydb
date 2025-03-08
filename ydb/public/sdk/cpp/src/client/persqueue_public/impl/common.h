@@ -4,7 +4,7 @@
 
 #include <library/cpp/retry/retry_policy.h>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
     ERetryErrorClass GetRetryErrorClass(EStatus status);
     ERetryErrorClass GetRetryErrorClassV2(EStatus status);
 }

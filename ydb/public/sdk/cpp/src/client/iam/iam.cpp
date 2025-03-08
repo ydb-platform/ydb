@@ -10,7 +10,7 @@
 
 using namespace yandex::cloud::iam::v1;
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class TIAMCredentialsProvider : public ICredentialsProvider {
 public:

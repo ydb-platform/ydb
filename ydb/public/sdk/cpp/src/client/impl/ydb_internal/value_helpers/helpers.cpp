@@ -4,7 +4,7 @@
 
 #include <util/string/builder.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 bool TypesEqual(const Ydb::Type& t1, const Ydb::Type& t2) {
     if (t1.type_case() != t2.type_case()) {

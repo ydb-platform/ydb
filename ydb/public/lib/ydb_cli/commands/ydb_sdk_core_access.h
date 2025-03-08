@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/src/client/types/core_facility/core_facility.h>
 #include <memory>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
     class TDriver;
 }
 

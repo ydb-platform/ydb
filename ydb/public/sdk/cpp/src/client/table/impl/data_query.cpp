@@ -2,7 +2,7 @@
 
 #include <openssl/sha.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NTable {
 
 std::string GetQueryHash(const std::string& text) {

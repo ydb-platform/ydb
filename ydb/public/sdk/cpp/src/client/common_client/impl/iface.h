@@ -3,7 +3,7 @@
 #include <functional>
 #include <util/datetime/base.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class IClientImplCommon {
 public:

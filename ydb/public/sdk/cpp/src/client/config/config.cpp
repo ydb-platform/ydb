@@ -5,7 +5,7 @@
 
 #include <ydb/public/api/grpc/ydb_config_v1.grpc.pb.h>
 
-namespace NYdb::inline V3::NConfig {
+namespace NYdb::inline Dev::NConfig {
 
 class TConfigClient::TImpl : public TClientImplCommon<TConfigClient::TImpl> {
 public:

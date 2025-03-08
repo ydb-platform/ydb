@@ -15,7 +15,7 @@
 #include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 #include <src/client/common_client/impl/client.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NOperation {
 
 constexpr TDuration OPERATION_CLIENT_TIMEOUT = TDuration::Seconds(5);

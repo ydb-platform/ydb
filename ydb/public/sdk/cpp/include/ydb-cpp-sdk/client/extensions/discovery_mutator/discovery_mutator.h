@@ -2,7 +2,7 @@
 
 #include <ydb-cpp-sdk/client/extension_common/extension.h>
 
-namespace NDiscoveryMutator::inline V3 {
+namespace NDiscoveryMutator::inline Dev {
 
 class TDiscoveryMutator: public NYdb::IExtension {
 public:

@@ -11,7 +11,7 @@
 #include <util/generic/size_literals.h>
 
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 //! Read settings for single topic.
 struct TTopicReadSettings {

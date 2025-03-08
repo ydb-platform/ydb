@@ -2,6 +2,8 @@
 
 #include <string>
 
+namespace NYdb {
+inline namespace Dev {
 namespace NUtils {
 
 char* ToLower(char* str) noexcept(noexcept(std::tolower(0)));
@@ -80,4 +82,6 @@ std::string Join(const R&... r) {
 template <typename TChar>
 std::basic_string<TChar> FromAscii(const std::string_view& s);
 
-} // namespace NUtils
+}
+}
+}

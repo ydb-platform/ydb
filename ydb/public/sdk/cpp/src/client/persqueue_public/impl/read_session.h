@@ -8,7 +8,7 @@
 
 #include <unordered_map>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 // High level class that manages several read session impls.
 // Each one of them works with single cluster.

@@ -13,7 +13,7 @@
 
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 struct TOffsetsRange {
     ui64 Start;
     ui64 End;

@@ -11,11 +11,11 @@
 
 #include <util/generic/size_literals.h>
 
-namespace NYdb::inline V3::NTable {
+namespace NYdb::inline Dev::NTable {
     class TTransaction;
 }
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 using TTransaction = NTable::TTransaction;
 

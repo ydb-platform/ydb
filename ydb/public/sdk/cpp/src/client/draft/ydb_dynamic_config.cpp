@@ -4,7 +4,7 @@
 #include <src/client/common_client/impl/client.h>
 #include <src/client/impl/ydb_internal/make_request/make.h>
 
-namespace NYdb::inline V3::NDynamicConfig {
+namespace NYdb::inline Dev::NDynamicConfig {
 
 class TDynamicConfigClient::TImpl : public TClientImplCommon<TDynamicConfigClient::TImpl> {
 public:
@@ -464,4 +464,4 @@ TAsyncFetchStartupConfigResult TDynamicConfigClient::FetchStartupConfig(const TC
     return Impl_->FetchStartupConfig(settings);
 }
 
-} // namespace NYdb::V3::NDynamicConfig
+} // namespace NYdb::NDynamicConfig

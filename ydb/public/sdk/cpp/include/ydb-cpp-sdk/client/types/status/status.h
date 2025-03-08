@@ -10,7 +10,7 @@
 
 #include <library/cpp/threading/future/future.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 //! Internal status representation
 struct TPlainStatus;

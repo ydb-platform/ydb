@@ -5,7 +5,7 @@
 #include <src/client/impl/ydb_internal/stats_extractor/extractor.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 void IExtension::SelfRegister(TDriver driver) {
     CreateInternalInterface(driver)->RegisterExtension(this);

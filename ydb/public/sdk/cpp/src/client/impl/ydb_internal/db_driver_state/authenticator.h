@@ -6,7 +6,7 @@
 
 #include <src/library/grpc/client/grpc_client_low.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class TYdbAuthenticator : public grpc::MetadataCredentialsPlugin {
 public:

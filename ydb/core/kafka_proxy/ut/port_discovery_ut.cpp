@@ -189,12 +189,14 @@ namespace NKafka::NTests {
         }
 
         void CreateMetarequestActor(
-                const TActorId& edge, const TString& topicPath, auto* runtime, const auto& kafkaConfig, const TActorId& fakeCacheId = {}
+                const TActorId& edge, const TVector<TString>& topics, auto* runtime, const auto& kafkaConfig, const TActorId& fakeCacheId = {}
         ) {
             TMetadataRequestData::TPtr metaRequest = std::make_shared<TMetadataRequestData>();
-            metaRequest->Topics.emplace_back();
-            auto& topic = metaRequest->Topics[0];
-            topic.Name = topicPath;
+            for (const auto& topicPath : topics) {
+                metaRequest->Topics.emplace_back();
+                auto& topic = metaRequest->Topics.back();
+                topic.Name = topicPath;
+            }
 
             auto context = std::make_shared<TContext>(kafkaConfig);
             context->ConnectionId = edge;
@@ -215,14 +217,16 @@ namespace NKafka::NTests {
             runtime->EnableScheduleForActor(actorId);
         }
 
-        void CheckKafkaMetaResponse(TTestActorRuntime* runtime, ui64 kafkaPort, bool error = false) {
+        void CheckKafkaMetaResponse(TTestActorRuntime* runtime, ui64 kafkaPort, bool error = false, ui64 expectedCount = 1) {
             TAutoPtr<IEventHandle> handle;
             auto* ev = runtime->GrabEdgeEvent<TEvKafka::TEvResponse>(handle);
             UNIT_ASSERT(ev);
             auto response = dynamic_cast<TMetadataResponseData*>(ev->Response.get());
-            UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), expectedCount);
             if (!error) {
-                UNIT_ASSERT(response->Topics[0].ErrorCode == EKafkaErrors::NONE_ERROR);
+                for (const auto& topic : response->Topics) {
+                    UNIT_ASSERT(topic.ErrorCode == EKafkaErrors::NONE_ERROR);
+                }
             } else {
                 UNIT_ASSERT(response->Topics[0].ErrorCode == EKafkaErrors::LISTENER_NOT_FOUND);
                 UNIT_ASSERT(ev->ErrorCode == EKafkaErrors::LISTENER_NOT_FOUND);
@@ -239,7 +243,7 @@ namespace NKafka::NTests {
             auto* runtime = server.GetRuntime();
             auto edge = runtime->AllocateEdgeActor();
 
-            CreateMetarequestActor(edge, NKikimr::JoinPath({"/Root/PQ/", topicName}), runtime,
+            CreateMetarequestActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime,
                                    config);
 
             CheckKafkaMetaResponse(runtime, kafkaPort);
@@ -262,7 +266,7 @@ namespace NKafka::NTests {
             ep->set_node_id(9998);
             auto fakeCache = runtime->Register(new TFakeDiscoveryCache(leResult, false));
             runtime->EnableScheduleForActor(fakeCache);
-            CreateMetarequestActor(edge, NKikimr::JoinPath({"/Root/PQ/", topicName}), runtime,
+            CreateMetarequestActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime,
                                    config, fakeCache);
 
             CheckKafkaMetaResponse(runtime, kafkaPort);
@@ -277,7 +281,7 @@ namespace NKafka::NTests {
             Ydb::Discovery::ListEndpointsResult leResult;
             auto fakeCache = runtime->Register(new TFakeDiscoveryCache(leResult, true));
             runtime->EnableScheduleForActor(fakeCache);
-            CreateMetarequestActor(edge, NKikimr::JoinPath({"/Root/PQ/", topicName}), runtime,
+            CreateMetarequestActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime,
                                    config, fakeCache);
 
             CheckKafkaMetaResponse(runtime, kafkaPort, true);
@@ -296,10 +300,23 @@ namespace NKafka::NTests {
             ep->set_node_id(runtime->GetNodeId(0));
             auto fakeCache = runtime->Register(new TFakeDiscoveryCache(leResult, false));
             runtime->EnableScheduleForActor(fakeCache);
-            CreateMetarequestActor(edge, NKikimr::JoinPath({"/Root/PQ/", topicName}), runtime,
+            CreateMetarequestActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime,
                                    config, fakeCache);
 
             CheckKafkaMetaResponse(runtime, 12345);
+        }
+
+
+        Y_UNIT_TEST(MetadataActorDoubleTopic) {
+            auto [server, kafkaPort, config, topicName] = SetupServer("topic1");
+
+            auto* runtime = server.GetRuntime();
+            auto edge = runtime->AllocateEdgeActor();
+
+            auto path = NKikimr::JoinPath({"/Root/PQ/", topicName});
+            CreateMetarequestActor(edge, {path, path}, runtime, config);
+
+            CheckKafkaMetaResponse(runtime, kafkaPort, false, 2);
         }
     }
 }

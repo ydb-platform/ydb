@@ -90,7 +90,7 @@ bool HasIndexesToWrite(const TKikimrTableDescription& tableData) {
     return hasIndexesToWrite;
 }
 
-TExprBase BuildReadTable(const TCoAtomList& columns, TPositionHandle pos, const TKikimrTableDescription& tableData, bool forcePrimary, TMaybe<ui64> shardId,
+TExprBase BuildReadTable(const TCoAtomList& columns, TPositionHandle pos, const TKikimrTableDescription& tableData, bool forcePrimary, TMaybe<ui64> tabletId,
     TExprContext& ctx)
 {
     TExprNode::TPtr readTable;
@@ -98,7 +98,7 @@ TExprBase BuildReadTable(const TCoAtomList& columns, TPositionHandle pos, const 
 
     TKqpReadTableSettings settings;
     settings.ForcePrimary = forcePrimary;
-    settings.ShardId = shardId;
+    settings.TabletId = tabletId;
 
     readTable = Build<TKqlReadTableRanges>(ctx, pos)
         .Table(tableMeta)
@@ -118,10 +118,10 @@ TExprBase BuildReadTable(const TKiReadTable& read, const TKikimrTableDescription
     bool withSystemColumns, TExprContext& ctx)
 {
     const auto& columns = read.GetSelectColumns(ctx, tableData, withSystemColumns);
-    const auto shardId =  NYql::HasSetting(read.Settings().Ref(), "shardid")
-        ? TMaybe<ui64>{FromString<ui64>(NYql::GetSetting(read.Settings().Ref(), "shardid")->Child(1)->Content())}
+    const auto tabletId =  NYql::HasSetting(read.Settings().Ref(), "tabletid")
+        ? TMaybe<ui64>{FromString<ui64>(NYql::GetSetting(read.Settings().Ref(), "tabletid")->Child(1)->Content())}
         : TMaybe<ui64>{};
-    auto readNode = BuildReadTable(columns, read.Pos(), tableData, forcePrimary, shardId, ctx);
+    auto readNode = BuildReadTable(columns, read.Pos(), tableData, forcePrimary, tabletId, ctx);
 
     return readNode;
 }

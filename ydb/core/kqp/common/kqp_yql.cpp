@@ -169,9 +169,9 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.ForcePrimary = true;
         } else if (name == TKqpReadTableSettings::GroupByFieldNames) {
-        } else if (name == TKqpReadTableSettings::ShardIdName) {
+        } else if (name == TKqpReadTableSettings::TabletIdName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
-            settings.ShardId = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
+            settings.TabletId = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
         }else {
             YQL_ENSURE(false, "Unknown KqpReadTable setting name '" << name << "'");
         }
@@ -259,13 +259,13 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                 .Done());
     }
 
-    if (ShardId) {
+    if (TabletId) {
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name()
-                    .Build(ShardIdName)
+                    .Build(TabletIdName)
                 .Value<TCoAtom>()
-                    .Value(ToString(*ShardId))
+                    .Value(ToString(*TabletId))
                     .Build()
                 .Done());
     }

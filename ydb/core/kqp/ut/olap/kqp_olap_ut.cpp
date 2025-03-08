@@ -3275,7 +3275,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     PRIMARY KEY (Name, Id)
                 ) WITH (
                     STORE = COLUMN,
-                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3
+                    PARTITION_COUNT = 3
                 );
 
             )", noTx).GetValueSync();
@@ -3297,13 +3297,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         //TODO USE shard ids from the table description. Not avaiable now
         {
-            auto result = queryClient.ExecuteQuery("SELECT * FROM Test WITH (ShardId = '72075186224037888')", noTx).GetValueSync();
+            auto result = queryClient.ExecuteQuery("SELECT * FROM Test WITH TabletId = '72075186224037888'", noTx).GetValueSync();
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson("[[[\"bb\"];20u;\"n2\"];[[\"dd\"];40u;\"n4\"]]", FormatResultSetYson(result.GetResultSet(0)));
-            result = queryClient.ExecuteQuery("SELECT * FROM Test WITH ShardId = '72075186224037889'", noTx).GetValueSync();
+            result = queryClient.ExecuteQuery("SELECT * FROM Test WITH TabletId = '72075186224037889'", noTx).GetValueSync();
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson("[[[\"ee\"];50u;\"n5\"]]", FormatResultSetYson(result.GetResultSet(0)));
-            result = queryClient.ExecuteQuery("SELECT * FROM Test WITH (ShardId = '72075186224037890')", noTx).GetValueSync();
+            result = queryClient.ExecuteQuery("SELECT * FROM Test WITH TabletId = '72075186224037890'", noTx).GetValueSync();
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson("[[[\"aa\"];10u;\"n1\"];[[\"cc\"];30u;\"n3\"]]", FormatResultSetYson(result.GetResultSet(0)));
         }

@@ -712,7 +712,7 @@ THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpReadOlapRan
         return shardInfoMap;
 
     for (const auto& partition :  stageInfo.Meta.ShardKey->GetPartitions()) {
-        if (!readRanges.HasShardId() || readRanges.GetShardId() == partition.ShardId) {
+        if (!readRanges.HasTabletId() || readRanges.GetTabletId() == partition.ShardId) {
             auto& shardInfo = shardInfoMap[partition.ShardId];
 
             YQL_ENSURE(!shardInfo.KeyReadRanges);

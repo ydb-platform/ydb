@@ -1,0 +1,410 @@
+#include "execution.h"
+#include "graph_execute.h"
+#include "graph_optimization.h"
+#include "visitor.h"
+
+namespace NKikimr::NArrow::NSSA::NGraph::NExecution {
+
+class TResourceUsageInfo {
+private:
+    YDB_READONLY_DEF(std::optional<ui32>, LastUsage);
+    YDB_READONLY_DEF(std::optional<ui32>, Construct);
+
+public:
+    void InUsage(const ui32 stepIdx) {
+        AFL_VERIFY(!!Construct);
+        if (!!LastUsage) {
+            AFL_VERIFY(*LastUsage < stepIdx);
+        }
+        LastUsage = stepIdx;
+    }
+
+    void Constructed(const ui32 stepIdx) {
+        if (!Construct) {
+            Construct = stepIdx;
+        } else {
+            AFL_VERIFY(Construct < stepIdx);
+        }
+    }
+};
+
+class TStepResourcesUsage {
+private:
+    YDB_READONLY_DEF(THashSet<ui32>, LastUsageResources);
+
+public:
+    void OnLastUsage(const ui32 resourceId) {
+        AFL_VERIFY(LastUsageResources.emplace(resourceId).second);
+    }
+};
+
+TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const IColumnResolver& resolver) {
+    for (auto&& i : original.GetNodes()) {
+        Nodes.emplace(i.first, std::make_shared<TNode>(i.first, i.second->GetProcessor()));
+    }
+    for (auto&& n : original.GetNodes()) {
+        auto itTo = Nodes.find(n.first);
+        AFL_VERIFY(itTo != Nodes.end());
+        for (auto&& from : n.second->GetInputEdges()) {
+            auto itFrom = Nodes.find(from.first.GetNodeId());
+            AFL_VERIFY(itFrom != Nodes.end());
+            itFrom->second->ConnectTo(itTo->second.get());
+        }
+    }
+    std::vector<TNode*> currentNodes;
+    for (auto&& n : Nodes) {
+        if (n.second->GetInputEdges().empty()) {
+            currentNodes.emplace_back(n.second.get());
+            n.second->CalcWeight(resolver);
+        }
+    }
+    ui32 nodesCount = currentNodes.size();
+    while (currentNodes.size()) {
+        std::vector<TNode*> nextNodes;
+        THashSet<ui32> nextNodeIds;
+        for (auto&& i : currentNodes) {
+            for (auto&& near : i->GetOutputEdges()) {
+                if (!nextNodeIds.emplace(near->GetIdentifier()).second) {
+                    continue;
+                }
+                AFL_VERIFY(!near->HasWeight());
+                bool hasWeight = true;
+                for (auto&& test : near->GetInputEdges()) {
+                    if (!test->HasWeight()) {
+                        hasWeight = false;
+                        break;
+                    }
+                }
+                if (hasWeight) {
+                    nextNodes.emplace_back(near);
+                }
+            }
+        }
+        for (auto&& i : nextNodes) {
+            ++nodesCount;
+            i->CalcWeight(resolver);
+        }
+        currentNodes = std::move(nextNodes);
+    }
+    AFL_VERIFY(nodesCount == Nodes.size())("init", nodesCount)("nodes", Nodes.size());
+    for (auto&& i : Nodes) {
+        i.second->SortInputs();
+        if (!i.second->GetOutputEdges().size()) {
+            if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::Filter) {
+                AFL_VERIFY(!IsFilterRoot(i.second->GetIdentifier()));
+                FilterRoot.emplace_back(i.second);
+            } else if (i.second->GetProcessor()->GetProcessorType() != EProcessorType::Const) {
+                AFL_VERIFY(!ResultRoot)("debug", DebugDOT());
+                ResultRoot = i.second;
+            }
+        }
+    }
+    THashMap<ui32, TResourceUsageInfo> usage;
+    std::vector<TNode*> sortedNodes;
+    {
+        ui32 currentIndex = 0;
+        auto it = BuildIterator(nullptr);
+        for (; it->IsValid(); it->Next()) {
+            it->MutableCurrentNode().SetSequentialIdx(currentIndex);
+            Cerr << DebugDOT() << Endl;
+            for (auto&& i : it->GetProcessorVerified()->GetInput()) {
+                if (resolver.HasColumn(i.GetColumnId())) {
+                    if (IsFilterRoot(it->GetCurrentGraphNode()->GetIdentifier())) {
+                        FilterColumns.emplace(i.GetColumnId());
+                    }
+                    SourceColumns.emplace(i.GetColumnId());
+                }
+                usage[i.GetColumnId()].InUsage(currentIndex);
+            }
+            for (auto&& i : it->GetProcessorVerified()->GetOutput()) {
+                usage[i.GetColumnId()].Constructed(currentIndex);
+            }
+            sortedNodes.emplace_back(&it->MutableCurrentNode());
+            ++currentIndex;
+        }
+    }
+    AFL_VERIFY(sortedNodes.size() == Nodes.size());
+    THashMap<ui32, TStepResourcesUsage> stepInfo;
+    for (auto&& u : usage) {
+        if (u.second.GetLastUsage()) {
+            stepInfo[*u.second.GetLastUsage()].OnLastUsage(u.first);
+        }
+    }
+    for (auto&& i : stepInfo) {
+        AFL_VERIFY(i.first < sortedNodes.size());
+        auto* node = sortedNodes[i.first];
+        if (i.first + 1 != sortedNodes.size()) {
+            node->SetRemoveResourceIds(i.second.GetLastUsageResources());
+        }
+    }
+}
+
+TConclusionStatus TCompiledGraph::ApplyImpl(const std::shared_ptr<TCompiledGraph::TNode>& rootNode, const std::shared_ptr<TIterator>& it) const {
+    AFL_VERIFY(rootNode);
+    {
+        auto conclusion = it->Reset({ rootNode });
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+    }
+    while (it->IsValid()) {
+        auto conclusion = it->Next();
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+    }
+    return TConclusionStatus::Success();
+}
+
+TConclusionStatus TCompiledGraph::Apply(
+    const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TAccessorsCollection>& resources) const {
+    AFL_VERIFY(FilterRoot.size() || !!ResultRoot);
+    TProcessorContext context(source, resources, std::nullopt, false);
+    std::shared_ptr<TExecutionVisitor> visitor = std::make_shared<TExecutionVisitor>(context);
+    auto it = std::make_shared<TIterator>(visitor);
+    for (auto&& i : FilterRoot) {
+        auto conclusion = ApplyImpl(i, it);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+        if (resources->IsEmptyFiltered()) {
+            resources->Clear();
+            return TConclusionStatus::Success();
+        }
+    }
+    if (ResultRoot) {
+        auto conclusion = ApplyImpl(ResultRoot, it);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+    }
+    return TConclusionStatus::Success();
+}
+
+NJson::TJsonValue TCompiledGraph::DebugJson() const {
+    NJson::TJsonValue result = NJson::JSON_MAP;
+    auto& jsonNodes = result.InsertValue("nodes", NJson::JSON_MAP);
+    for (auto&& i : Nodes) {
+        jsonNodes.InsertValue(::ToString(i.first), i.second->DebugJson());
+    }
+    auto& jsonEdges = result.InsertValue("edges", NJson::JSON_ARRAY);
+    for (auto&& i : Nodes) {
+        auto& jsonProcessor = jsonEdges.AppendValue(NJson::JSON_MAP);
+        jsonProcessor.InsertValue("owner_id", i.first);
+        auto& jsonInputs = jsonProcessor.InsertValue("inputs", NJson::JSON_ARRAY);
+        for (auto&& input : i.second->GetInputEdges()) {
+            auto& jsonEdge = jsonInputs.AppendValue(NJson::JSON_MAP);
+            jsonEdge.InsertValue("from", input->GetIdentifier());
+        }
+    }
+    return result;
+}
+
+TString TCompiledGraph::DebugDOT() const {
+    TStringBuilder result;
+    result << "digraph program {";
+    std::map<ui32, ui32> remapSeqToId;
+    for (auto&& i : Nodes) {
+        if (i.second->GetSequentialIdx(-1) != -1) {
+            remapSeqToId.emplace(i.second->GetSequentialIdx(), i.first);
+        }
+        NJson::TJsonValue quote;
+        quote.AppendValue(i.second->GetProcessor()->DebugJson().GetStringRobust());
+        const TString data = quote.GetStringRobust();
+        TStringBuilder label;
+        label << "N" << i.second->GetSequentialIdx(-1) << ":" << data.substr(2, data.size() - 4) << Endl;
+        if (i.second->GetRemoveResourceIds().size()) {
+            label << "REMOVE:" << JoinSeq(",", i.second->GetRemoveResourceIds());
+        }
+        result << "N" << i.second->GetIdentifier() << "[shape=box, label=\"" << label << "\"" << Endl;
+        if (i.second->GetOutputEdges().empty()) {
+            result << ",style=filled,color=\"0.9, 0.5, 0.5\"";
+        } else if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::AssembleOriginalData ||
+                   i.second->GetProcessor()->GetProcessorType() == EProcessorType::FetchOriginalData) {
+            result << ",style=filled,color=\"0.5, 0.9, 0.5\"";
+        }
+        result << "];";
+        ui32 idx = 1;
+        for (auto&& input : i.second->GetInputEdges()) {
+            result << "N" << input->GetIdentifier() << " -> " << "N" << i.second->GetIdentifier() << "[label=\"" + ::ToString(idx) + "\"];"
+                   << Endl;
+            ++idx;
+        }
+    }
+    if (remapSeqToId.size()) {
+        TStringBuilder seq;
+        for (auto&& i : remapSeqToId) {
+            if (seq.size()) {
+                seq << "->";
+            }
+            seq << "N" << i.second;
+        }
+        seq << "[color=red];";
+        result << seq;
+    }
+    result << "}";
+    return result;
+}
+
+std::shared_ptr<TCompiledGraph::TIterator> TCompiledGraph::BuildIterator(const std::shared_ptr<IVisitor>& visitor) const {
+    auto result = std::make_shared<TIterator>(visitor);
+    auto rootNodes = FilterRoot;
+    rootNodes.emplace_back(ResultRoot);
+    result->Reset(rootNodes).DetachResult();
+    return result;
+}
+
+bool TCompiledGraph::IsFilterRoot(const ui32 identifier) const {
+    for (auto&& i : FilterRoot) {
+        if (i->GetIdentifier() == identifier) {
+            return true;
+        }
+    }
+    return false;
+}
+
+TConclusionStatus TCompiledGraph::TIterator::ProvideCurrentToExecute() {
+    while (true) {
+        AFL_VERIFY(CurrentNode);
+        if (Visitor) {
+            auto conclusion = Visitor->OnEnter(*CurrentNode);
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
+        }
+        NodesStack.emplace_back(CurrentNode);
+        auto it = Statuses.find(CurrentNode->GetIdentifier());
+        if (it == Statuses.end()) {
+            AFL_VERIFY(Statuses.emplace(CurrentNode->GetIdentifier(), ENodeStatus::InProgress).second);
+            bool needInput = false;
+            for (auto&& input : CurrentNode->GetInputEdges()) {
+                auto it = Statuses.find(input->GetIdentifier());
+                if (it == Statuses.end()) {
+                    CurrentNode = input;
+                    needInput = true;
+                    break;
+                } else {
+                    AFL_VERIFY(it->second == ENodeStatus::Finished);
+                }
+            }
+            if (!needInput) {
+                break;
+            }
+        } else {
+            AFL_VERIFY(it->second == ENodeStatus::Finished);
+            NodesStack.pop_back();
+            if (NodesStack.size()) {
+                CurrentNode = NodesStack.back();
+            } else {
+                CurrentNode = nullptr;
+            }
+            break;
+        }
+    }
+    return TConclusionStatus::Success();
+}
+
+TConclusion<bool> TCompiledGraph::TIterator::GlobalInitialize() {
+    while (!IsValid()) {
+        if (CurrentGraphNodeIdx + 1 < GraphNodes.size()) {
+            ++CurrentGraphNodeIdx;
+        } else {
+            break;
+        }
+        CurrentGraphNode = GraphNodes[CurrentGraphNodeIdx];
+        CurrentNode = CurrentGraphNode.get();
+        auto conclusion = ProvideCurrentToExecute();
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+    }
+    return IsValid();
+}
+
+TConclusion<bool> TCompiledGraph::TIterator::Reset(const std::vector<std::shared_ptr<TCompiledGraph::TNode>>& graphNodes) {
+    GraphNodes = graphNodes;
+    GraphNodes.erase(std::remove_if(GraphNodes.begin(), GraphNodes.end(),
+                         [](const std::shared_ptr<TCompiledGraph::TNode>& item) {
+                             return !item;
+                         }),
+        GraphNodes.end());
+    AFL_VERIFY(GraphNodes.size());
+
+    CurrentGraphNode = GraphNodes.front();
+    CurrentGraphNodeIdx = 0;
+    CurrentNode = CurrentGraphNode.get();
+    {
+        auto conclusion = ProvideCurrentToExecute();
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+    }
+    return GlobalInitialize();
+}
+
+TConclusion<bool> TCompiledGraph::TIterator::Next() {
+    AFL_VERIFY(CurrentNode);
+    AFL_VERIFY(NodesStack.size());
+    TNode* nextNode = nullptr;
+    if (NodesStack.size() > 1) {
+        auto owner = NodesStack[NodesStack.size() - 2];
+        AFL_VERIFY(owner);
+        bool found = false;
+        for (ui32 idx = 0; idx < owner->GetInputEdges().size(); ++idx) {
+            if (found) {
+                auto itStatus = Statuses.find(owner->GetInputEdges()[idx]->GetIdentifier());
+                if (itStatus == Statuses.end()) {
+                    nextNode = owner->GetInputEdges()[idx];
+                    break;
+                } else {
+                    AFL_VERIFY(itStatus->second == ENodeStatus::Finished);
+                }
+            } else if (owner->GetInputEdges()[idx]->GetIdentifier() == CurrentNode->GetIdentifier()) {
+                if (Visitor) {
+                    std::vector<TColumnChainInfo> columnsInput;
+                    for (auto&& out : owner->GetInputEdges()[idx]->GetProcessor()->GetOutput()) {
+                        if (owner->GetProcessor()->HasInput(out.GetColumnId())) {
+                            columnsInput.emplace_back(out.GetColumnId());
+                        }
+                    }
+                    AFL_VERIFY(columnsInput.size());
+                    auto conclusion = Visitor->OnComeback(*owner, columnsInput);
+                    if (conclusion.IsFail()) {
+                        return conclusion;
+                    }
+                }
+                found = true;
+            }
+        }
+        AFL_VERIFY(found);
+    }
+    AFL_VERIFY(NodesStack.size());
+    if (Visitor) {
+        AFL_VERIFY(NodesStack.back());
+        auto conclusion = Visitor->OnExit(*NodesStack.back());
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+    }
+    NodesStack.pop_back();
+    auto itStatus = Statuses.find(CurrentNode->GetIdentifier());
+    AFL_VERIFY(itStatus != Statuses.end());
+    AFL_VERIFY(itStatus->second == ENodeStatus::InProgress);
+    itStatus->second = ENodeStatus::Finished;
+    if (!!nextNode) {
+        CurrentNode = nextNode;
+        auto conclusion = ProvideCurrentToExecute();
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+    } else {
+        if (NodesStack.size()) {
+            CurrentNode = NodesStack.back();
+        } else {
+            CurrentNode = nullptr;
+        }
+    }
+    return GlobalInitialize();
+}
+
+}   // namespace NKikimr::NArrow::NSSA::NGraph::NExecution

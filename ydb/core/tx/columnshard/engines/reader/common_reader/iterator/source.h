@@ -1,8 +1,11 @@
 #pragma once
 #include "context.h"
 #include "fetched_data.h"
+#include "fetching.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/program/execution.h>
+#include <ydb/core/formats/arrow/program/visitor.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/action.h>
@@ -24,7 +27,7 @@ namespace NKikimr::NOlap::NReader::NCommon {
 
 class TFetchingScriptCursor;
 
-class IDataSource: public ICursorEntity {
+class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource {
 private:
     YDB_READONLY(ui64, SourceId, 0);
     YDB_READONLY(ui32, SourceIdx, 0);
@@ -35,6 +38,8 @@ private:
     YDB_READONLY_DEF(std::optional<ui64>, ShardingVersionOptional);
     YDB_READONLY(bool, HasDeletions, false);
     std::optional<ui64> MemoryGroupId;
+    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator> ProgramIterator;
+    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor> ExecutionVisitor;
 
     virtual bool DoAddTxConflict() = 0;
 
@@ -57,12 +62,44 @@ private:
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
 
+    std::optional<TFetchingScriptCursor> CursorStep;
+
 protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
     std::unique_ptr<TFetchedData> StageData;
     std::unique_ptr<TFetchedResult> StageResult;
 
 public:
+    bool HasProgramIterator() const {
+        return !!ProgramIterator;
+    }
+
+    void SetProgramIterator(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>& it,
+        const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& visitor) {
+        AFL_VERIFY(!ProgramIterator);
+        ProgramIterator = it;
+        ExecutionVisitor = visitor;
+    }
+
+    void SetCursorStep(const TFetchingScriptCursor& step) {
+        AFL_VERIFY(!CursorStep);
+        CursorStep = step;
+    }
+
+    const TFetchingScriptCursor& GetCursorStep() const {
+        AFL_VERIFY(!!CursorStep);
+        return *CursorStep;
+    }
+
+    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>& GetProgramIteratorVerified() const {
+        AFL_VERIFY(!!ProgramIterator);
+        return ProgramIterator;
+    }
+
+    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& GetExecutionVisitorVerified() const {
+        AFL_VERIFY(!!ExecutionVisitor);
+        return ExecutionVisitor;
+    }
 
     virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const {
         AFL_VERIFY(false);

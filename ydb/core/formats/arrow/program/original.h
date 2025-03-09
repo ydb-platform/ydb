@@ -5,34 +5,46 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-class TOriginalColumnProcessor: public IResourceProcessor {
+class TOriginalColumnDataProcessor: public IResourceProcessor {
 private:
     using TBase = IResourceProcessor;
+    const ui32 ColumnId;
 
-    YDB_ACCESSOR(ui32, ColumnId, 0);
     YDB_ACCESSOR_DEF(TString, ColumnName);
+    YDB_ACCESSOR_DEF(TString, SubColumnName);
 
-    virtual TConclusionStatus DoExecute(
-        const std::shared_ptr<TAccessorsCollection>& /*resources*/, const TProcessorContext& /*context*/) const override {
-        AFL_VERIFY(false);
-        return TConclusionStatus::Success();
-    }
+    virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 
     virtual bool IsAggregation() const override {
         return false;
     }
 
 public:
-    TOriginalColumnProcessor(const ui32 columnId, const TString& columnName)
-        : TBase({}, { columnId }, EProcessorType::Original)
-        , ColumnName(columnName) {
+    TOriginalColumnDataProcessor(const ui32 outputId, const ui32 columnId, const TString& columnName, const TString& subColumnName)
+        : TBase({}, { outputId }, EProcessorType::FetchOriginalData)
+        , ColumnId(columnId)
+        , ColumnName(columnName)
+        , SubColumnName(subColumnName) {
         AFL_VERIFY(!!ColumnName);
     }
+};
 
-    virtual std::optional<TFetchingInfo> BuildFetchTask(const ui32 columnId, const NAccessor::IChunkedArray::EType arrType,
-        const std::shared_ptr<TAccessorsCollection>& resources) const override {
-        AFL_VERIFY(false);
-        return TBase::BuildFetchTask(columnId, arrType, resources);
+class TOriginalColumnAccessorProcessor: public IResourceProcessor {
+private:
+    using TBase = IResourceProcessor;
+    YDB_READONLY(ui32, ColumnId, 0);
+    YDB_READONLY_DEF(TString, SubColumnName);
+    virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
+
+    virtual bool IsAggregation() const override {
+        return false;
+    }
+
+public:
+    TOriginalColumnAccessorProcessor(const ui32 inputId, const ui32 outputId, const ui32 columnId, const TString& subColumnName)
+        : TBase({ inputId }, { outputId }, EProcessorType::AssembleOriginalData)
+        , ColumnId(columnId)
+        , SubColumnName(subColumnName) {
     }
 };
 

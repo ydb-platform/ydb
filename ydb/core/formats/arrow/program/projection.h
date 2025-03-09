@@ -7,15 +7,18 @@ class TProjectionProcessor: public IResourceProcessor {
 private:
     using TBase = IResourceProcessor;
 
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& context) const override;
+    virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 
     virtual bool IsAggregation() const override {
         return false;
     }
 
+    std::optional<ui32> Limit;
+
 public:
-    TProjectionProcessor(std::vector<TColumnChainInfo>&& columns)
-        : TBase(std::vector<TColumnChainInfo>(columns), {}, EProcessorType::Projection) {
+    TProjectionProcessor(std::vector<TColumnChainInfo>&& columns, const std::optional<ui32>& limit)
+        : TBase(std::vector<TColumnChainInfo>(columns), {}, EProcessorType::Projection)
+        , Limit(limit) {
     }
 };
 

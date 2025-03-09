@@ -1,5 +1,6 @@
 #include "assign_const.h"
 #include "collection.h"
+#include "execution.h"
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 
@@ -10,10 +11,18 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusionStatus TConstProcessor::DoExecute(const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& /*context*/) const {
+TConclusion<IResourceProcessor::EExecutionResult> TConstProcessor::DoExecute(
+    const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     AFL_VERIFY(GetInput().empty());
-    resources->AddConstantVerified(GetOutputColumnIdOnce(), ScalarConstant);
-    return TConclusionStatus::Success();
+    context.GetResources()->AddConstantVerified(GetOutputColumnIdOnce(), ScalarConstant);
+    return IResourceProcessor::EExecutionResult::Success;
+}
+
+NJson::TJsonValue TConstProcessor::DoDebugJson() const {
+    NJson::TJsonValue result = NJson::JSON_MAP;
+    AFL_VERIFY(ScalarConstant);
+    result.InsertValue("v", ScalarConstant->ToString());
+    return result;
 }
 
 }   // namespace NKikimr::NArrow::NSSA

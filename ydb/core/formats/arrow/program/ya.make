@@ -23,7 +23,12 @@ ENDIF()
 
 SRCS(
     abstract.cpp
-    graph.cpp
+    stream_logic.cpp
+    visitor.cpp
+    index.cpp
+    execution.cpp
+    graph_optimization.cpp
+    graph_execute.cpp
     original.cpp
     collection.cpp
     functions.cpp
@@ -33,7 +38,6 @@ SRCS(
     projection.cpp
     assign_const.cpp
     assign_internal.cpp
-    chain.cpp
     custom_registry.cpp
     GLOBAL kernel_logic.cpp
 )

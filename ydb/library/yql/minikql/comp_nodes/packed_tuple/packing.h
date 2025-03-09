@@ -311,13 +311,7 @@ template <class TTraits> struct SIMDPack {
         return TupleOrImpl<Left>(vec) | TupleOrImpl<Right>(vec + Left);
     }
 
-    template <> TSimd<ui8> TupleOrImpl<0>(TSimd<ui8>[]) { std::abort(); }
-
     template <> TSimd<ui8> TupleOrImpl<1>(TSimd<ui8> vec[]) { return vec[0]; }
-
-    template <> TSimd<ui8> TupleOrImpl<2>(TSimd<ui8> vec[]) {
-        return vec[0] | vec[1];
-    }
 
     template <ui8 StoresPerLoad, ui8 Cols>
     static void

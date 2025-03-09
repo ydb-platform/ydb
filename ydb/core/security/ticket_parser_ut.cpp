@@ -278,6 +278,72 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetGroupSIDs().size(), 3);
     }
 
+    Y_UNIT_TEST(LoginRefreshGroupsWithError) {
+        using namespace Tests;
+        TPortManager tp;
+        ui16 kikimrPort = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBlackBox(false);
+        authConfig.SetUseLoginProvider(true);
+        authConfig.SetRefreshTime("5s");
+        auto settings = TServerSettings(kikimrPort, authConfig);
+        settings.SetDomainName("Root");
+        settings.CreateTicketParser = NKikimr::CreateTicketParser;
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
+        TClient client(settings);
+        NClient::TKikimr kikimr(client.GetClientConfig());
+        client.InitRootScheme();
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        NLogin::TLoginProvider provider;
+
+        provider.Audience = "/Root";
+        provider.RotateKeys();
+
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        provider.CreateGroup({.Group = "group1"});
+        provider.CreateUser({.User = "user1", .Password = "password1"});
+        provider.AddGroupMembership({.Group = "group1", .Member = "user1"});
+
+        NLogin::TLoginProvider emptyProvider;
+        emptyProvider.Audience = "/Root";
+
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(emptyProvider.GetSecurityState())), 0);
+
+        auto loginResponse = provider.LoginUser({.User = "user1", .Password = "password1"});
+
+        UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
+
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+
+        TAutoPtr<IEventHandle> handle;
+
+        TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        UNIT_ASSERT_C(!result->Error.empty(), "Expected return error message");
+        UNIT_ASSERT(result->Token == nullptr);
+        UNIT_ASSERT_STRINGS_EQUAL(result->Error.Message, "Security state is empty");
+        UNIT_ASSERT_EQUAL(result->Error.Retryable, true);
+
+        Sleep(TDuration::Seconds(3));
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(provider.GetSecurityState())), 0);
+        Sleep(TDuration::Seconds(7));
+
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+
+        result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+
+        UNIT_ASSERT_C(result->Error.empty(), result->Error);
+        UNIT_ASSERT(result->Token != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1");
+        UNIT_ASSERT(result->Token->IsExist("group1"));
+        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetGroupSIDs().size(), 2);
+    }
+
     Y_UNIT_TEST(LoginCheckRemovedUser) {
         using namespace Tests;
         TPortManager tp;

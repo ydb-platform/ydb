@@ -1168,6 +1168,61 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
         ldapServer.Stop();
     }
 
+    void LdapRefreshGroupsInfoWithError(const ESecurityConnectionType& secureType) {
+        TString login = "ldapuser";
+        TString password = "ldapUserPassword";
+
+        TLdapKikimrServer server(InitLdapSettings, secureType);
+        auto responses = TCorrectLdapResponse::GetResponses(login);
+        LdapMock::TLdapMockResponses updatedResponses = responses;
+        LdapMock::TSearchResponseInfo responseServerBusy {
+            .ResponseEntries = {}, // Server is busy, can retry attempt
+            .ResponseDone = {.Status = LdapMock::EStatus::BUSY}
+        };
+
+        auto& searchResponse = responses.SearchResponses.front();
+        searchResponse.second = responseServerBusy;
+        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), {responses, updatedResponses}, secureType == ESecurityConnectionType::LDAPS_SCHEME);
+
+        auto loginResponse = GetLoginResponse(server, login, password);
+        TTestActorRuntime* runtime = server.GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        TAutoPtr<IEventHandle> handle;
+        TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+
+        // Server is busy, return retryable error
+        UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+        UNIT_ASSERT(ticketParserResult->Token == nullptr);
+        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not login via LDAP");
+        UNIT_ASSERT_EQUAL(ticketParserResult->Error.Retryable, true);
+
+        Sleep(TDuration::Seconds(3));
+        ldapServer.UpdateResponses();
+        Sleep(TDuration::Seconds(7));
+
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+
+        // After refresh ticket, server return success
+        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT(ticketParserResult->Token != nullptr);
+        const TString ldapDomain = "@ldap";
+        UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
+        const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
+        THashSet<TString> groups(fetchedGroups.begin(), fetchedGroups.end());
+
+        THashSet<TString> expectedGroups = TCorrectLdapResponse::GetAllGroups(ldapDomain);
+        expectedGroups.insert("all-users@well-known");
+
+        UNIT_ASSERT_VALUES_EQUAL(fetchedGroups.size(), expectedGroups.size());
+        for (const auto& expectedGroup : expectedGroups) {
+            UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
+        }
+
+        ldapServer.Stop();
+    }
+
 Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
     Y_UNIT_TEST(LdapServerIsUnavailable) {
         CheckRequiredLdapSettings(InitLdapSettingsWithUnavailableHost, "Could not login via LDAP", ESecurityConnectionType::START_TLS);
@@ -1246,6 +1301,10 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest_LdapsScheme) {
     Y_UNIT_TEST(LdapRefreshRemoveUserBad) {
         LdapRefreshRemoveUserBad(ESecurityConnectionType::LDAPS_SCHEME);
     }
+
+    Y_UNIT_TEST(LdapRefreshGroupsInfoWithError) {
+        LdapRefreshGroupsInfoWithError(ESecurityConnectionType::LDAPS_SCHEME);
+    }
 }
 
 Y_UNIT_TEST_SUITE(LdapAuthProviderTest_StartTls) {
@@ -1304,6 +1363,10 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest_StartTls) {
     Y_UNIT_TEST(LdapRefreshRemoveUserBad) {
         LdapRefreshRemoveUserBad(ESecurityConnectionType::START_TLS);
     }
+
+    Y_UNIT_TEST(LdapRefreshGroupsInfoWithError) {
+        LdapRefreshGroupsInfoWithError(ESecurityConnectionType::START_TLS);
+    }
 }
 
 Y_UNIT_TEST_SUITE(LdapAuthProviderTest_nonSecure) {
@@ -1361,6 +1424,10 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest_nonSecure) {
 
     Y_UNIT_TEST(LdapRefreshRemoveUserBad) {
         LdapRefreshRemoveUserBad(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapRefreshGroupsInfoWithError) {
+        LdapRefreshGroupsInfoWithError(ESecurityConnectionType::NON_SECURE);
     }
 }
 

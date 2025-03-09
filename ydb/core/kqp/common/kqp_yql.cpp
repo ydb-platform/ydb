@@ -169,7 +169,10 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.ForcePrimary = true;
         } else if (name == TKqpReadTableSettings::GroupByFieldNames) {
-        } else {
+        } else if (name == TKqpReadTableSettings::TabletIdName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
+            settings.TabletId = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
+        }else {
             YQL_ENSURE(false, "Unknown KqpReadTable setting name '" << name << "'");
         }
     }
@@ -252,6 +255,17 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                     .Build(SequentialSettingName)
                 .Value<TCoAtom>()
                     .Value(ToString(*SequentialInFlight))
+                    .Build()
+                .Done());
+    }
+
+    if (TabletId) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name()
+                    .Build(TabletIdName)
+                .Value<TCoAtom>()
+                    .Value(ToString(*TabletId))
                     .Build()
                 .Done());
     }

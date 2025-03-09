@@ -211,6 +211,8 @@ message TKqpPhyOpReadOlapRanges {
     EReadType ReadType = 13;
 
     repeated string GroupByColumnNames = 14;
+    // If set, only data from the specified tablet will be processed
+    optional uint64 TabletId = 15;
 }
 
 message TKqpPhyOpReadRanges {

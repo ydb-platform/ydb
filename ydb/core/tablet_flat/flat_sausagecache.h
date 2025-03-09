@@ -81,10 +81,17 @@ public:
             return Info->IsSticky(Id);
         }
 
-        void Fill(TSharedPageRef shared) {
-            SharedBody = std::move(shared);
+        void Fill(TSharedPageRef sharedBody) {
+            SharedBody = std::move(sharedBody);
             LoadState = LoadStateLoaded;
             PinnedBody = TPinnedPageRef(SharedBody).GetData();
+        }
+
+        void ProvideSharedBody(TSharedPageRef sharedBody) {
+            SharedBody = std::move(sharedBody);
+            SharedBody.UnUse();
+            LoadState = LoadStateNo;
+            PinnedBody = { };
         }
 
         const TSharedData* GetPinnedBody() const noexcept {
@@ -118,11 +125,11 @@ public:
         }
 
         // Note: this method is only called during a page collection creation
-        void Fill(TPageId pageId, TSharedPageRef page, bool sticky) noexcept {
+        void Fill(TPageId pageId, TSharedPageRef sharedBody, bool sticky) noexcept {
             if (sticky) {
-                AddSticky(pageId, page);
+                AddSticky(pageId, sharedBody);
             }
-            EnsurePage(pageId)->Fill(std::move(page));
+            EnsurePage(pageId)->ProvideSharedBody(std::move(sharedBody));
         }
 
         void AddSticky(TPageId pageId, TSharedPageRef page) noexcept {

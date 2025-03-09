@@ -51,7 +51,7 @@ namespace {
             if (stats->Nrows > 1) {
                 return 0.1;
             }
-                
+
             return 1.0;
         }
     }
@@ -166,7 +166,7 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(cons
                 }
                 return DefaultSelectivity(Stats, attributeName);
             }
-            
+
             if (auto countMinSketch = Stats->ColumnStatistics->Data[attributeName].CountMinSketch; countMinSketch != nullptr) {
                 auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
                 std::optional<ui32> countMinEstimation = EstimateCountMin(right, columnType,  countMinSketch);
@@ -175,7 +175,7 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(cons
                 }
                 return countMinEstimation.value() / Stats->Nrows;
             }
-            
+
             return DefaultSelectivity(Stats, attributeName);
         }
     }
@@ -333,7 +333,7 @@ double TPredicateSelectivityComputer::Compute(
 
     else if (auto maybeIfExpr = input.Maybe<TCoIf>()) {
         auto ifExpr = maybeIfExpr.Cast();
-        
+
         // attr in ('a', 'b', 'c' ...)
         if (ifExpr.Predicate().Maybe<TCoExists>() && ifExpr.ThenValue().Maybe<TCoJust>() && ifExpr.ElseValue().Maybe<TCoNothing>()) {
             auto list = FindNode<TExprList>(ifExpr.ThenValue());

@@ -8,7 +8,7 @@
 #include <util/string/printf.h>
 #include "bitset.h"
 
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h> 
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 #include <yql/essentials/core/yql_cost_function.h>
 #include <library/cpp/iterator/zip.h>
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
@@ -19,7 +19,7 @@
 
 namespace NYql::NDq {
 
-/* 
+/*
  * JoinHypergraph - a graph, whose edge connects two sets of nodes.
  * It represents relation between tables and ordering constraints.
  * Graph is directed, so it stores each edge twice (original and reversed) for DPHyp algorithm.
@@ -87,7 +87,7 @@ public:
         bool IsReversed;
         int64_t ReversedEdgeId = -1;
 
-        TEdge CreateReversed(int64_t reversedEdgeId) const { 
+        TEdge CreateReversed(int64_t reversedEdgeId) const {
             auto reversedEdge = TEdge(Right, Left, JoinKind, RightAny, LeftAny, IsCommutative, RightJoinKeys, LeftJoinKeys);
             reversedEdge.IsReversed = true; reversedEdge.ReversedEdgeId = reversedEdgeId;
             std::swap(reversedEdge.LeftJoinKeysShuffleOrderingIdx, reversedEdge.RightJoinKeysShuffleOrderingIdx);
@@ -118,13 +118,13 @@ public:
 
         res.append(Sprintf("Edges(%ld): ", Edges_.size())).append("\n");
 
-        auto edgeSideToString = 
+        auto edgeSideToString =
             [&relNameByNodeId](const TNodeSet& edgeSide) {
                 TString res;
                 res.append("{");
 
                 for (size_t i = 0; i < edgeSide.size(); ++i) {
-                    if (edgeSide[i]) {    
+                    if (edgeSide[i]) {
                         res.append(relNameByNodeId[i]).append(", ");
                     }
                 }
@@ -150,14 +150,14 @@ public:
                 conds.push_back(std::move(cond));
             }
 
-            res 
+            res
                 .append(edgeSideToString(edge.Left))
                 .append(" -> ")
                 .append(edgeSideToString(edge.Right))
                 .append("\t").append(JoinSeq(", ", conds))
                 .append("\n");
         }
-        
+
         return res;
     }
 
@@ -165,7 +165,7 @@ public:
     size_t AddNode(const std::shared_ptr<IBaseOptimizerNode>& relationNode) {
         Y_ASSERT(relationNode->Labels().size() == 1);
 
-        size_t nodeId = Nodes_.size(); 
+        size_t nodeId = Nodes_.size();
         NodeIdByRelationName_.insert({relationNode->Labels()[0], nodeId});
 
         Nodes_.push_back({});
@@ -211,7 +211,7 @@ public:
                 simpleEdges.push_back(edge);
             }
         }
-        
+
         return simpleEdges;
     }
 
@@ -221,7 +221,7 @@ public:
                 return false;
             }
         }
-        
+
         return true;
     }
 
@@ -249,14 +249,14 @@ public:
         return nullptr;
     }
 
-    /* 
-     * This functions returns all conditions without redundancy between lhs and rhs 
+    /*
+     * This functions returns all conditions without redundancy between lhs and rhs
      * Many conditions can cause in a graph with cycles, but transitive closure conditions in one eq. class
      * will be redudant, so we consider only one of condition from eq. class.
      */
     void FindAllConditionsBetween(
-        const TNodeSet& lhs, 
-        const TNodeSet& rhs, 
+        const TNodeSet& lhs,
+        const TNodeSet& rhs,
         TVector<TJoinColumn>& resLeftJoinKeys,
         TVector<TJoinColumn>& resRightJoinKeys
     ) {
@@ -271,10 +271,10 @@ public:
                     bool hasSameEquivClass = false;
                     for (const auto& lhsResJoinKey: resLeftJoinKeys) {
                         if (lhsEdgeCond.EquivalenceClass.has_value() && lhsEdgeCond.EquivalenceClass == lhsResJoinKey.EquivalenceClass || lhsEdgeCond == lhsResJoinKey) {
-                            hasSameEquivClass = true; break; 
+                            hasSameEquivClass = true; break;
                         }
                     }
-                    
+
                     if (!hasSameEquivClass) {
                         resLeftJoinKeys.push_back(lhsEdgeCond);
                         resRightJoinKeys.push_back(rhsEdgeCond);
@@ -321,10 +321,10 @@ private:
     TVector<TEdge> Edges_;
 };
 
-/* 
+/*
  * This class applies join order hints to a hypergraph.
  * It traverses a hints tree and modifies the edges to restrict the join order in the subgraph, which has all the nodes from the hints tree.
- * Then, it restricts the join order of the edges, which connect the subgraph with the all graph.  
+ * Then, it restricts the join order of the edges, which connect the subgraph with the all graph.
  */
 template <typename TNodeSet>
 class TJoinOrderHintsApplier {
@@ -338,10 +338,10 @@ public:
             if (!Graph_.HasLabels(hint.Tree->Labels())) {
                 continue;
             }
-            
+
             auto labels = ApplyHintsToSubgraph(hint.Tree);
             auto nodes = Graph_.GetNodesByRelNames(labels);
-            
+
             for (size_t i = 0; i < Graph_.GetEdges().size(); ++i) {
                 TNodeSet newLeft = Graph_.GetEdge(i).Left;
                 if (Overlaps(Graph_.GetEdge(i).Left, nodes) && !IsSubset(Graph_.GetEdge(i).Right, nodes)) {
@@ -369,11 +369,11 @@ private:
 
             auto lhs = Graph_.GetNodesByRelNames(lhsLabels);
             auto rhs = Graph_.GetNodesByRelNames(rhsLabels);
-            
+
             auto* maybeEdge = Graph_.FindEdgeBetween(lhs, rhs);
             if (maybeEdge == nullptr) {
                 const char* errStr = "There is no edge between {%s}, {%s}. The graf: %s";
-                Y_ENSURE(false, Sprintf(errStr, JoinSeq(", ", lhsLabels).c_str(), JoinSeq(", ", rhsLabels).c_str(), Graph_.String().c_str()));            
+                Y_ENSURE(false, Sprintf(errStr, JoinSeq(", ", lhsLabels).c_str(), JoinSeq(", ", rhsLabels).c_str(), Graph_.String().c_str()));
             }
 
             size_t revEdgeIdx = maybeEdge->ReversedEdgeId;
@@ -392,8 +392,8 @@ private:
 
             TVector<TString> joinLabels = std::move(lhsLabels);
             joinLabels.insert(
-                joinLabels.end(), 
-                std::make_move_iterator(rhsLabels.begin()), 
+                joinLabels.end(),
+                std::make_move_iterator(rhsLabels.begin()),
                 std::make_move_iterator(rhsLabels.end())
             );
             return joinLabels;
@@ -407,15 +407,15 @@ private:
     TJoinHypergraph<TNodeSet>& Graph_;
 };
 
-/* 
- *  This class construct transitive closure between nodes in hypergraph. 
+/*
+ *  This class construct transitive closure between nodes in hypergraph.
  *  Transitive closure means that if we have an edge from (1,2) with join
  *  condition R.Z = S.A and we have an edge from (2,3) with join condition
  *  S.A = T.V, we will find out that the join conditions form an equivalence set
  *  and add an edge (1,3) with join condition R.Z = T.V.
  *  Algorithm works as follows:
  *      1) We leave only inner-join simple edges
- *      2) We build connected components (by join conditions) and in each components we add missing edges. 
+ *      2) We build connected components (by join conditions) and in each components we add missing edges.
  */
 template <typename TNodeSet>
 class TTransitiveClosureConstructor {
@@ -431,12 +431,12 @@ public:
         auto edges = Graph_.GetEdges();
 
         EraseIf(
-            edges, 
+            edges,
             [](const THyperedge& edge) {
                 return edge.IsReversed || !edge.IsSimple() || edge.JoinKind != InnerJoin || edge.LeftAny || edge.RightAny;
             }
         );
-        
+
         ConstructImpl(edges);
     }
 
@@ -515,7 +515,7 @@ private:
     TJoinHypergraph<TNodeSet>& Graph_;
 };
 
-/* 
+/*
  * This class builds FSM which is used for the DPHypElimination algorithm. It fills edges with information of orderings and FD's
  * which they have. Also, it converts orderings (vector of shuffles) into inner representation (just indexes) for faster enumeration.
  */
@@ -546,7 +546,7 @@ public:
                 fdsByEdgeIdx[revEdgeIdx].push_back(fdIdx);
             }
 
-            std::size_t orderingIdx; 
+            std::size_t orderingIdx;
             orderingIdx = fdStorage.AddInterestingOrdering(edges[i].LeftJoinKeys , TOrdering::EShuffle);
             edges[edgeIdx].LeftJoinKeysShuffleOrderingIdx = orderingIdx;
             edges[revEdgeIdx].RightJoinKeysShuffleOrderingIdx = orderingIdx; // reversed edge
@@ -581,12 +581,12 @@ public:
         for (std::size_t i = 0; i < Graph_.GetNodes().size(); ++i) {
             auto& node = Graph_.GetNodes()[i].RelationOptimizerNode;
             node->LogicalOrderings = orderingsFSM.CreateState();
-            if (shuffleOrderingIdxByNodeIdx[i] == -1) { 
-                continue; 
+            if (shuffleOrderingIdxByNodeIdx[i] == -1) {
+                continue;
             }
             node->LogicalOrderings.SetOrdering(shuffleOrderingIdxByNodeIdx[i]);
         }
-        
+
         return orderingsFSM;
     }
 

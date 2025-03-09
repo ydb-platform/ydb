@@ -113,7 +113,7 @@ void BuildHashShuffleChannels(TGraph& graph, const typename TGraph::TStageInfoTy
 
         taskOutput.Type = TTaskOutputType::HashPartition;
         taskOutput.HashKind = hashKind;
-        
+
         for (const auto& keyColumn : keyColumns) {
             taskOutput.KeyColumns.push_back(keyColumn);
         }

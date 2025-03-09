@@ -11,12 +11,14 @@ struct IExternalSourceFactory : public TThrRefBase {
     virtual IExternalSource::TPtr GetOrCreate(const TString& type) const = 0;
 };
 
+std::set<TString> GetAllExternalDataSourceTypes();
+
 IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TString>& hostnamePatterns,
                                                          NActors::TActorSystem* actorSystem = nullptr,
                                                          size_t pathsLimit = 50000,
                                                          std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory = nullptr,
                                                          bool enableInfer = false,
                                                          bool allowLocalFiles = false,
-                                                         const std::set<TString>& availableExternalDataSources = {});
+                                                         const std::set<TString>& availableExternalDataSources = GetAllExternalDataSourceTypes());
 
 }

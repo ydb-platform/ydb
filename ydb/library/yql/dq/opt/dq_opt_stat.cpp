@@ -49,7 +49,7 @@ namespace {
         if (!joinColumns.Size()) {
             return TVector<TString>();
         }
-        
+
         auto fullColumnName = joinColumns.Item(0).StringValue();
         for (size_t i = 0; i < fullColumnName.size(); i++) {
             if (fullColumnName[i]=='.') {
@@ -66,8 +66,8 @@ namespace {
     }
 
     std::shared_ptr<TOptimizerStatistics> ApplyCardinalityHints(
-        std::shared_ptr<TOptimizerStatistics>& inputStats, 
-        TVector<TString>& labels, 
+        std::shared_ptr<TOptimizerStatistics>& inputStats,
+        TVector<TString>& labels,
         TCardinalityHints hints) {
 
             if (labels.size() != 1) {
@@ -77,11 +77,11 @@ namespace {
             for (auto h : hints.Hints) {
                 if (h.JoinLabels.size() == 1 && h.JoinLabels == labels) {
                     auto outputStats = std::make_shared<TOptimizerStatistics>(
-                        inputStats->Type, 
-                        h.ApplyHint(inputStats->Nrows), 
-                        inputStats->Ncols, 
-                        inputStats->ByteSize, 
-                        inputStats->Cost, 
+                        inputStats->Type,
+                        h.ApplyHint(inputStats->Nrows),
+                        inputStats->Ncols,
+                        inputStats->ByteSize,
+                        inputStats->Cost,
                         inputStats->KeyColumns,
                         inputStats->ColumnStatistics,
                         inputStats->StorageType);
@@ -251,7 +251,7 @@ bool IsConstantExprWithParams(const TExprNode::TPtr& input) {
  * FIX: Currently we treat all join the same from the cost perspective, need to refine cost function
  */
 void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TCardinalityHints hints) {
-    
+
     auto inputNode = TExprBase(input);
     auto join = inputNode.Cast<TCoMapJoinCore>();
 
@@ -286,13 +286,13 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
     }
 
     auto unionOfLabels = UnionLabels(leftLabels, rightLabels);
-    auto resStats = std::make_shared<TOptimizerStatistics>(           
+    auto resStats = std::make_shared<TOptimizerStatistics>(
         ctx.ComputeJoinStatsV1(
-            *leftStats, 
-            *rightStats, 
-            leftJoinKeys, 
-            rightJoinKeys, 
-            EJoinAlgoType::MapJoin, 
+            *leftStats,
+            *rightStats,
+            leftJoinKeys,
+            rightJoinKeys,
+            EJoinAlgoType::MapJoin,
             ConvertToJoinKind(join.JoinKind().StringValue()),
             FindCardHint(unionOfLabels, hints),
             false,
@@ -358,7 +358,7 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
                 *leftStats,
                 *rightStats,
                 leftJoinKeys,
-                rightJoinKeys, 
+                rightJoinKeys,
                 joinAlgo,
                 ConvertToJoinKind(join.JoinKind().StringValue()),
                 FindCardHint(unionOfLabels, hints),
@@ -392,7 +392,7 @@ void InferStatisticsForDqJoin(const TExprNode::TPtr& input, TTypeAnnotationConte
     }
 
     auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
-    if (joinAlgo == EJoinAlgoType::Undefined) {
+    if (joinAlgo == EJoinAlgoType::Undefined && join.JoinType().StringValue() != "Cross" /* we don't set any join algo to cross join */) {
         return;
     }
 
@@ -423,7 +423,7 @@ void InferStatisticsForDqJoin(const TExprNode::TPtr& input, TTypeAnnotationConte
                 *leftStats,
                 *rightStats,
                 leftJoinKeys,
-                rightJoinKeys, 
+                rightJoinKeys,
                 joinAlgo,
                 ConvertToJoinKind(join.JoinType().StringValue()),
                 FindCardHint(unionOfLabels, hints),
@@ -458,7 +458,7 @@ void InferStatisticsForDqSource(const TExprNode::TPtr& input, TTypeAnnotationCon
  * For Flatmap we check the input and fetch the statistcs and cost from below
  * Then we analyze the filter predicate and compute it's selectivity and apply it
  * to the result.
- * 
+ *
  * If this flatmap's lambda is a join, we propagate the join result as the output of FlatMap
  */
 void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
@@ -480,11 +480,11 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
         double selectivity = TPredicateSelectivityComputer(inputStats).Compute(flatmap.Lambda().Body());
 
         auto outputStats = TOptimizerStatistics(
-            inputStats->Type, 
-            inputStats->Nrows * selectivity, 
-            inputStats->Ncols, 
-            inputStats->ByteSize * selectivity, 
-            inputStats->Cost, 
+            inputStats->Type,
+            inputStats->Nrows * selectivity,
+            inputStats->Ncols,
+            inputStats->ByteSize * selectivity,
+            inputStats->Cost,
             inputStats->KeyColumns,
             inputStats->ColumnStatistics,
             inputStats->StorageType);
@@ -496,7 +496,7 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
 
         typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(std::move(outputStats)) );
     }
-    else if (flatmap.Lambda().Body().Maybe<TCoMapJoinCore>() || 
+    else if (flatmap.Lambda().Body().Maybe<TCoMapJoinCore>() ||
             flatmap.Lambda().Body().Maybe<TCoMap>().Input().Maybe<TCoMapJoinCore>() ||
             flatmap.Lambda().Body().Maybe<TCoJoinDict>() ||
             flatmap.Lambda().Body().Maybe<TCoMap>().Input().Maybe<TCoJoinDict>() ||
@@ -535,11 +535,11 @@ void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationConte
     double selectivity = TPredicateSelectivityComputer(inputStats).Compute(filterBody);
 
     auto outputStats = TOptimizerStatistics(
-        inputStats->Type, 
-        inputStats->Nrows * selectivity, 
-        inputStats->Ncols, 
-        inputStats->ByteSize * selectivity, 
-        inputStats->Cost, 
+        inputStats->Type,
+        inputStats->Nrows * selectivity,
+        inputStats->Ncols,
+        inputStats->ByteSize * selectivity,
+        inputStats->Cost,
         inputStats->KeyColumns,
         inputStats->ColumnStatistics,
         inputStats->StorageType
@@ -587,21 +587,26 @@ void InferStatisticsForAggregateCombine(const TExprNode::TPtr& input, TTypeAnnot
         return;
     }
 
-    if (inputStats->ShuffledByColumns) {
+    auto aggrStats = std::make_shared<TOptimizerStatistics>(*inputStats);
+    if (aggrStats->ShuffledByColumns) {
         TString relName{};
-        if (!inputStats->ShuffledByColumns->Data.empty()) {
+        if (!aggrStats->ShuffledByColumns->Data.empty()) {
             relName = inputStats->ShuffledByColumns->Data.front().RelName;
         }
+
 
         TVector<NDq::TJoinColumn> shuffledBy;
         shuffledBy.reserve(agg.Keys().Size());
         for (const auto& key: agg.Keys()) {
             shuffledBy.push_back(TJoinColumn(relName, key.StringValue()));
         }
-        inputStats->ShuffledByColumns->Data = std::move(shuffledBy);
+        aggrStats->ShuffledByColumns =
+            TIntrusivePtr<TOptimizerStatistics::TShuffledByColumns>(
+                new TOptimizerStatistics::TShuffledByColumns(std::move(shuffledBy))
+            );
     }
 
-    typeCtx->SetStats( input.Get(), RemoveOrdering(inputStats));
+    typeCtx->SetStats( input.Get(), RemoveOrdering(aggrStats));
 }
 
 /**
@@ -694,20 +699,20 @@ void PropagateStatisticsToLambdaArgument(const TExprNode::TPtr& input, TTypeAnno
                     typeCtx->SetStats( lambda.Args().Arg(j).Raw(), inputStats );
                 }
             }
-            
+
         }
         else {
             auto inputStats = typeCtx->GetStats(callableInput.Get());
             if (!inputStats) {
                 return;
             }
-            
+
             // We have a special case of Olap tables, where statistics is computed before lambda, but
             // is finalized after visiting labda (which may contain a filter)
             if (typeCtx->GetStats(input.Get())){
                 inputStats = typeCtx->GetStats(input.Get());
             }
-            
+
             typeCtx->SetStats( lambda.Args().Arg(0).Raw(), inputStats );
         }
     }
@@ -767,7 +772,7 @@ void InferStatisticsForDqMerge(const TExprNode::TPtr& input, TTypeAnnotationCont
     typeCtx->SetStats(merge.Raw(), newStats);
 }
 
-/** 
+/**
  * Just update the sorted order with alias
  */
 void InferStatisticsForDqPhyCrossJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
@@ -784,7 +789,7 @@ void InferStatisticsForDqPhyCrossJoin(const TExprNode::TPtr& input, TTypeAnnotat
     if (auto leftLabel = cross.LeftLabel().Maybe<TCoAtom>()) {
         aliasName = leftLabel.Cast().StringValue();
     }
-    
+
     TVector<TString> sortedPrefixCols;
     TVector<TString> sortedPrefixAliases;
 

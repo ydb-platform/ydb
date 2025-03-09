@@ -1403,7 +1403,7 @@ protected:
                     partitionsCount = originStageInfo.Tasks.size();
                     UnknownAffectedShardCount = true;
                     break;
-                case NKqpProto::TKqpPhyConnection::kMap: 
+                case NKqpProto::TKqpPhyConnection::kMap:
                     partitionsCount = originStageInfo.Tasks.size();
                     forceMapTasks = true;
                     ++mapCnt;
@@ -1631,13 +1631,14 @@ protected:
         THashMap<ui64, ui64> assignedShardsCount;
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
+        auto& columnShardHashV1Params = stageInfo.Meta.ColumnShardHashV1Params;
         if (enableShuffleElimination && stageInfo.Meta.ColumnTableInfoPtr) {
             const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
-            stageInfo.Meta.SourceShardCount = tableDesc.GetColumnShardCount();
-            stageInfo.Meta.SourceTableKeyColumnTypes = std::make_shared<TVector<NScheme::TTypeInfo>>();
+            columnShardHashV1Params.SourceShardCount = tableDesc.GetColumnShardCount();
+            columnShardHashV1Params.SourceTableKeyColumnTypes = std::make_shared<TVector<NScheme::TTypeInfo>>();
             for (const auto& column: tableDesc.GetSharding().GetHashSharding().GetColumns()) {
                 auto columnType = stageInfo.Meta.TableConstInfo->Columns.at(column).Type;
-                stageInfo.Meta.SourceTableKeyColumnTypes->push_back(columnType);
+                columnShardHashV1Params.SourceTableKeyColumnTypes->push_back(columnType);
             }
         }
 
@@ -1697,8 +1698,8 @@ protected:
 
             } else if (enableShuffleElimination /* save partitioning for shuffle elimination */) {
                 std::size_t stageInternalTaskId = 0;
-                stageInfo.Meta.TaskIdByHash = std::make_shared<TVector<ui64>>();
-                stageInfo.Meta.TaskIdByHash->resize(stageInfo.Meta.SourceShardCount);
+                columnShardHashV1Params.TaskIdByHash = std::make_shared<TVector<ui64>>();
+                columnShardHashV1Params.TaskIdByHash->resize(columnShardHashV1Params.SourceShardCount);
 
                 for (auto&& pair : nodeShards) {
                     const auto nodeId = pair.first;
@@ -1709,11 +1710,11 @@ protected:
                         for (std::size_t i = 0; i < shardsInfo.size(); ++i) {
                             auto&& shardInfo = shardsInfo[i];
                             MergeReadInfoToTaskMeta(
-                                metas[i % maxTasksPerNode], 
-                                shardInfo.ShardId, 
-                                shardInfo.KeyReadRanges, 
+                                metas[i % maxTasksPerNode],
+                                shardInfo.ShardId,
+                                shardInfo.KeyReadRanges,
                                 readSettings,
-                                columns, op, 
+                                columns, op,
                                 /*isPersistentScan*/ true
                             );
                         }
@@ -1727,13 +1728,14 @@ protected:
 
                     // in runtime we calc hash, which will be in [0; shardcount]
                     // so we merge to mappings : hash -> shardID and shardID -> channelID for runtime
-                    THashMap<ui64, ui64> hashByShardId; 
+                    THashMap<ui64, ui64> hashByShardId;
+                    Y_ENSURE(stageInfo.Meta.ColumnTableInfoPtr != nullptr, "ColumnTableInfoPtr is nullptr, maybe information about shards haven't beed delivered yet.");
                     const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
                     const auto& sharding = tableDesc.GetSharding();
                     for (std::size_t i = 0; i < sharding.ColumnShardsSize(); ++i) {
                         hashByShardId.insert({sharding.GetColumnShards(i), i});
                     }
-                    
+
                     for (ui32 t = 0; t < maxTasksPerNode; ++t, ++stageInternalTaskId) {
                         auto& task = TasksGraph.AddTask(stageInfo);
                         task.Meta = metas[t];
@@ -1745,14 +1747,21 @@ protected:
                         task.SetMetaId(t);
                         FillSecureParamsFromStage(task.Meta.SecureParams, stage);
                         BuildSinks(stage, task);
-    
+
                         for (const auto& readInfo: *task.Meta.Reads) {
                             Y_ENSURE(hashByShardId.contains(readInfo.ShardId));
-                            (*stageInfo.Meta.TaskIdByHash)[hashByShardId[readInfo.ShardId]] = stageInternalTaskId;
+                            (*columnShardHashV1Params.TaskIdByHash)[hashByShardId[readInfo.ShardId]] = stageInternalTaskId;
                         }
 
                     }
                 }
+
+                LOG_DEBUG_S(
+                    *TlsActivationContext,
+                    NKikimrServices::KQP_EXECUTER,
+                    "Stage with scan " << "[" << stageInfo.Id.TxId << ":" << stageInfo.Id.StageId << "]" << " has keys: "
+                    << columnShardHashV1Params.KeyTypesToString();
+                );
             } else {
                 ui32 metaId = 0;
                 for (auto&& pair : nodeShards) {

@@ -2,6 +2,7 @@
 #include <ydb/library/accessor/validator.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
+#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -176,6 +177,10 @@ bool TOlapColumnsDescription::ValidateForStore(const NKikimrSchemeOp::TColumnTab
             return false;
         }
         const TString& colName = colProto.GetName();
+        if (!IsValidColumnName(colName, false)) {
+            errors.AddError(Sprintf("Invalid name for column '%s'", colName.data()));
+            return false;
+        }
         auto* col = GetByName(colName);
         if (!col) {
             errors.AddError("Column '" + colName + "' does not match schema preset");

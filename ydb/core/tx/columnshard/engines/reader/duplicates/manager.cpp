@@ -36,8 +36,7 @@ TIntervalCounter::TIntervalCounter(const std::vector<std::pair<ui32, ui32>>& int
 }
 
 bool TIntervalCounter::IsAllZeros() const {
-    // Not implemented
-    return false;
+    return Count.empty();
 }
 
 std::vector<ui32> TIntervalCounter::DecAndGetZeros(const ui32 l, const ui32 r) {

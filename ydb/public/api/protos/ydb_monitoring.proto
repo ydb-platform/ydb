@@ -29,6 +29,7 @@ message SelfCheckRequest {
     uint32 maximum_level = 4; // maximum level of issues to return
     bool do_not_cache = 5; // by default database health state is taken from metadata cache; this option can be used to force bypassing that cache
     bool merge_records = 6; // combine similar records with similar status, message and level into one issue
+    bool return_hints = 7; // return hints for common problems
 }
 
 message SelfCheckResponse {
@@ -163,10 +164,16 @@ message LocationComputeTablet {
     uint32 count = 3;
 }
 
+message LocationComputeSchema {
+    string type = 1;
+    string path = 2;
+}
+
 message LocationCompute {
     LocationNode node = 1;
     LocationComputePool pool = 2;
     LocationComputeTablet tablet = 3;
+    LocationComputeSchema schema = 4;
 }
 
 message LocationDatabase {

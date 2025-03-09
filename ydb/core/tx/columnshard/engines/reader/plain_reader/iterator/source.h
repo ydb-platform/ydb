@@ -47,6 +47,14 @@ private:
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override;
     virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
+    virtual void DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
+        AFL_VERIFY(false);
+    }
+    virtual TConclusion<bool> DoStartFetchData(
+        const NArrow::NSSA::TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
+        AFL_VERIFY(false);
+        return false;
+    }
 
 protected:
     THashMap<ui32, TFetchingInterval*> Intervals;

@@ -285,6 +285,11 @@ private:
     virtual bool DoStartFetchingIndexes(
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) override;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) override;
+
+    virtual void DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
+    virtual TConclusion<bool> DoStartFetchData(
+        const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
+
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "portion");

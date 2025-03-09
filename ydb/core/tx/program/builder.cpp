@@ -285,14 +285,23 @@ TConclusionStatus TProgramBuilder::ReadAssign(
             if (function.IsFail()) {
                 return function;
             }
-            auto processor = TCalculationProcessor::Build(std::move(arguments), columnName.GetColumnId(), function.DetachResult(), kernelLogic);
-            if (processor.IsFail()) {
-                return processor;
+            
+            if (assign.GetFunction().GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::And) {
+                auto processor = std::make_shared<TStreamLogicProcessor>(std::move(arguments), columnName.GetColumnId(), EOperation::And);
+                Builder.Add(processor);
+            } else if (assign.GetFunction().GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Or) {
+                auto processor = std::make_shared<TStreamLogicProcessor>(std::move(arguments), columnName.GetColumnId(), EOperation::Or);
+                Builder.Add(processor);
+            } else {
+                auto processor = TCalculationProcessor::Build(std::move(arguments), columnName.GetColumnId(), function.DetachResult(), kernelLogic);
+                if (processor.IsFail()) {
+                    return processor;
+                }
+                if (assign.GetFunction().HasYqlOperationId()) {
+                    processor.GetResult()->SetYqlOperationId(assign.GetFunction().GetYqlOperationId());
+                }
+                Builder.Add(processor.DetachResult());
             }
-            if (assign.GetFunction().HasYqlOperationId()) {
-                processor.GetResult()->SetYqlOperationId(assign.GetFunction().GetYqlOperationId());
-            }
-            Builder.Add(processor.DetachResult());
             break;
         }
         case TId::kConstant: {
@@ -325,7 +334,7 @@ TConclusionStatus TProgramBuilder::ReadFilter(const NKikimrSSA::TProgram::TFilte
     if (!column.HasId() || !column.GetId()) {
         return TConclusionStatus::Fail("incorrect column in filter predicate");
     }
-    Builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo(column.GetId())));
+    Builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo(column.GetId()), Limit));
     return TConclusionStatus::Success();
 }
 
@@ -337,7 +346,7 @@ TConclusionStatus TProgramBuilder::ReadProjection(const NKikimrSSA::TProgram::TP
     for (auto& col : projection.GetColumns()) {
         columns.emplace_back(col.GetId());
     }
-    Builder.Add(std::make_shared<TProjectionProcessor>(std::move(columns)));
+    Builder.Add(std::make_shared<TProjectionProcessor>(std::move(columns), Limit));
     return TConclusionStatus::Success();
 }
 

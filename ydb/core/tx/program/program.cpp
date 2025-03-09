@@ -3,6 +3,7 @@
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/program/collection.h>
+#include <ydb/core/formats/arrow/program/execution.h>
 
 namespace NKikimr::NOlap {
 
@@ -107,7 +108,7 @@ TConclusionStatus TProgramContainer::ParseProgram(const NArrow::NSSA::IColumnRes
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("parse_proto_program", program.DebugString());
 
-    NArrow::NSSA::TProgramBuilder programBuilder(columnResolver, KernelsRegistry);
+    NArrow::NSSA::TProgramBuilder programBuilder(columnResolver, KernelsRegistry, Limit);
     for (auto& cmd : program.GetCommand()) {
         switch (cmd.GetLineCase()) {
             case TId::kAssign: {
@@ -162,7 +163,8 @@ const THashSet<ui32>& TProgramContainer::GetProcessingColumns() const {
 
 TConclusionStatus TProgramContainer::ApplyProgram(const std::shared_ptr<NArrow::NAccessor::TAccessorsCollection>& collection) const {
     if (Program) {
-        return Program->Apply(collection);
+        auto source = std::make_shared<NArrow::NSSA::TFailDataSource>();
+        return Program->Apply(source, collection);
     } else if (OverrideProcessingColumnsVector) {
         collection->RemainOnly(*OverrideProcessingColumnsVector, true);
     }

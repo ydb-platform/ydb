@@ -6,6 +6,8 @@
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/sub_columns_fetching.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
@@ -211,6 +213,42 @@ void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& in
     } else {
         StageData->AddFilter(constructor);
     }
+}
+
+TConclusion<bool> TPortionDataSource::DoStartFetchData(
+    const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
+    std::shared_ptr<NCommon::IKernelFetchLogic> fetcher;
+    auto source = std::static_pointer_cast<IDataSource>(context.GetDataSource());
+    if (subColumnName) {
+        fetcher = std::make_shared<NCommon::TSubColumnsFetchLogic>(columnId, source, std::vector<TString>({ subColumnName }));
+    } else {
+        fetcher = std::make_shared<NCommon::TDefaultFetchLogic>(columnId, GetContext()->GetCommonContext()->GetStoragesManager());
+    }
+
+    TReadActionsCollection readActions;
+    NCommon::TFetchingResultContext contextFetch(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
+    fetcher->Start(readActions, contextFetch);
+
+    if (readActions.IsEmpty()) {
+        NBlobOperations::NRead::TCompositeReadBlobs blobs;
+        fetcher->OnDataReceived(readActions, blobs);
+        MutableStageData().AddFetcher(fetcher);
+        AFL_VERIFY(readActions.IsEmpty());
+        return false;
+    }
+    THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>> fetchers;
+    fetchers.emplace(columnId, fetcher);
+    NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(
+        std::make_shared<NCommon::TColumnsFetcherTask>(std::move(readActions), fetchers, source, GetCursorStep(), "fetcher", "")));
+    return true;
+}
+
+void TPortionDataSource::DoAssembleAccessor(
+    const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& /*subColumnName*/) {
+    auto source = std::static_pointer_cast<IDataSource>(context.GetDataSource());
+    NCommon::TFetchingResultContext fetchContext(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
+    auto fetcher = MutableStageData().ExtractFetcherVerified(columnId);
+    fetcher->OnDataCollected(fetchContext);
 }
 
 void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) {

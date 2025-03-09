@@ -1,7 +1,6 @@
 #include "aggregation.h"
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
-#include <ydb/core/kqp/ut/olap/helpers/query_executor.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 

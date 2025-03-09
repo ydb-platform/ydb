@@ -3,8 +3,8 @@
 #include "registry.h"
 
 #include <ydb/core/formats/arrow/process_columns.h>
-#include <ydb/core/formats/arrow/program/chain.h>
 #include <ydb/core/formats/arrow/program/custom_registry.h>
+#include <ydb/core/formats/arrow/program/graph_execute.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/checker.h>
 
@@ -15,8 +15,9 @@ namespace NKikimr::NOlap {
 class TProgramContainer {
 private:
     using TColumnInfo = NArrow::NSSA::TColumnInfo;
+    YDB_READONLY_DEF(std::optional<ui32>, Limit);
     NKikimrSSA::TProgram ProgramProto;
-    std::shared_ptr<NArrow::NSSA::TProgramChain> Program;
+    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
     std::shared_ptr<arrow::RecordBatch> ProgramParameters;   // TODO
     NArrow::NSSA::TKernelsRegistry KernelsRegistry;
     std::optional<THashSet<ui32>> OverrideProcessingColumnsSet;
@@ -24,6 +25,11 @@ private:
     YDB_READONLY_DEF(NIndexes::TIndexCheckerContainer, IndexChecker);
 
 public:
+    void SetLimit(const ui32 value) {
+        AFL_VERIFY(!Limit);
+        Limit = value;
+    }
+
     bool IsGenerated(const ui32 columnId) const {
         if (!Program) {
             return false;
@@ -78,7 +84,7 @@ public:
     [[nodiscard]] TConclusionStatus Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TOlapProgram& olapProgramProto) noexcept;
     [[nodiscard]] TConclusionStatus Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TProgram& programProto) noexcept;
 
-    const std::shared_ptr<NArrow::NSSA::TProgramChain>& GetChainVerified() const {
+    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& GetChainVerified() const {
         AFL_VERIFY(!!Program);
         return Program;
     }

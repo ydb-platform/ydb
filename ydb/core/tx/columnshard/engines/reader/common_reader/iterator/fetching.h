@@ -324,39 +324,13 @@ public:
 class TProgramStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
-    const NArrow::NSSA::TResourceProcessorStep Step;
+    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
 
 public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
-    TProgramStep(const NArrow::NSSA::TResourceProcessorStep& step)
-        : TBase("EARLY_FILTER_STEP")
-        , Step(step) {
-    }
-};
-
-class TProgramStepPrepare: public IFetchingStep {
-private:
-    using TBase = IFetchingStep;
-    const NArrow::NSSA::TResourceProcessorStep Step;
-
-public:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
-    TProgramStepPrepare(const NArrow::NSSA::TResourceProcessorStep& step)
-        : TBase("PROGRAM_STEP_PREPARE")
-        , Step(step) {
-    }
-};
-
-class TProgramStepAssemble: public IFetchingStep {
-private:
-    using TBase = IFetchingStep;
-    const NArrow::NSSA::TResourceProcessorStep Step;
-
-public:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
-    TProgramStepAssemble(const NArrow::NSSA::TResourceProcessorStep& step)
-        : TBase("PROGRAM_STEP_ASSEMBLE")
-        , Step(step) {
+    TProgramStep(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program)
+        : TBase("PROGRAM_EXECUTION")
+        , Program(program) {
     }
 };
 

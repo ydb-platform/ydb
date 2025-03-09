@@ -77,6 +77,14 @@ public:
         return std::min<i64>(FilteredCountLimit.value_or(Max<i64>()), RequestedLimit.value_or(Max<i64>()));
     }
 
+    std::optional<i64> GetLimitRobustOptional() const {
+        if (HasLimit()) {
+            return GetLimitRobust();
+        } else {
+            return std::nullopt;
+        }
+    }
+
     bool HasLimit() const {
         return !!FilteredCountLimit || !!RequestedLimit;
     }

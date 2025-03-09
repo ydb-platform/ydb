@@ -15,12 +15,18 @@ NKikimr::TConclusionStatus IScannerConstructor::ParseProgram(const TVersionedInd
             read.ColumnIds = std::vector<ui32>(schema->GetColumnIds().begin(), schema->GetColumnIds().end());
         }
         TProgramContainer container;
+        if (ItemsLimit) {
+            container.SetLimit(ItemsLimit);
+        }
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "overriden_columns")("ids", JoinSeq(",", read.ColumnIds));
         container.OverrideProcessingColumns(read.ColumnIds);
         read.SetProgram(std::move(container));
         return TConclusionStatus::Success();
     } else {
         TProgramContainer ssaProgram;
+        if (ItemsLimit) {
+            ssaProgram.SetLimit(ItemsLimit);
+        }
         auto statusInit = ssaProgram.Init(columnResolver, programType, serializedProgram);
         if (statusInit.IsFail()) {
             return TConclusionStatus::Fail(TStringBuilder() << "Can't parse SsaProgram: " << statusInit.GetErrorMessage());

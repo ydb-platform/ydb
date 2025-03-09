@@ -101,6 +101,14 @@ public:
         , Header(std::move(header)) {
     }
 
+    virtual bool HasWholeDataVolume() const override {
+        return false;
+    }
+
+    virtual bool HasSubColumnData(const TString& subColumnName) const override {
+        return !NeedFetch(std::string_view(subColumnName.data(), subColumnName.size()));
+    }
+
     static std::shared_ptr<TSubColumnsPartialArray> BuildEmpty(const std::shared_ptr<arrow::DataType>& dataType, const ui32 recordsCount) {
         return std::make_shared<TSubColumnsPartialArray>(TSubColumnsHeader::BuildEmpty(), recordsCount, dataType);
     }

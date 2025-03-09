@@ -247,6 +247,9 @@ private:
     }
     virtual std::optional<ui64> DoGetRawSize() const = 0;
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const = 0;
+    virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& /*value*/) const {
+        return std::nullopt;
+    }
 
     virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
         const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
@@ -327,6 +330,18 @@ protected:
 
 public:
     std::shared_ptr<IChunkedArray> ApplyFilter(const TColumnFilter& filter, const std::shared_ptr<IChunkedArray>& selfPtr) const;
+
+    virtual bool HasWholeDataVolume() const {
+        return true;
+    }
+
+    std::optional<bool> CheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
+        return DoCheckOneValueAccessor(value);
+    }
+
+    virtual bool HasSubColumnData(const TString& /*subColumnName*/) const {
+        return true;
+    }
 
     virtual void Reallocate() {
 

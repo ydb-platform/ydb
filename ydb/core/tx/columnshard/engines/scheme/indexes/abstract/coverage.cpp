@@ -10,20 +10,20 @@ std::shared_ptr<TDataForIndexesCheckers> TDataForIndexesCheckers::Build(const TP
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "no_data_in_program");
         return nullptr;
     }
-    if (!program.GetChainVerified()->GetLastOriginalDataFilter()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "no_filter_in_program");
+//    if (!program.GetChainVerified()->GetLastOriginalDataFilter()) {
+//        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "no_filter_in_program");
         return nullptr;
-    }
+//    }
     TNormalForm nForm;
-    for (ui32 stepIdx = 0; stepIdx <= *program.GetChainVerified()->GetLastOriginalDataFilter();  ++stepIdx) {
-        auto& s = program.GetChainVerified()->GetProcessors()[stepIdx];
-        if (s->GetProcessorType() == NArrow::NSSA::EProcessorType::Filter) {
-            continue;
-        }
-        if (!nForm.Add(*s, program)) {
-            return nullptr;
-        }
-    }
+//    for (ui32 stepIdx = 0; stepIdx <= *program.GetChainVerified()->GetLastOriginalDataFilter();  ++stepIdx) {
+//        auto& s = program.GetChainVerified()->GetProcessors()[stepIdx];
+//        if (s->GetProcessorType() == NArrow::NSSA::EProcessorType::Filter) {
+//            continue;
+//        }
+//        if (!nForm.Add(*s, program)) {
+//            return nullptr;
+//        }
+//    }
     auto rootNode = nForm.GetRootNode();
     AFL_VERIFY(rootNode);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("original_program", rootNode->SerializeToJson());

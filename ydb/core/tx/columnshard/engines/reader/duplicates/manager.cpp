@@ -25,23 +25,50 @@ std::vector<ui64> TRangeIndex::FindIntersections(const ui64 p) const {
     return result;
 }
 
-void TIntervalCounter::Inc(const ui32 l, const ui32 r) {
-    for (ui32 i = l; i <= r; ++i) {
-        ++Count[i];
+void TIntervalCounter::PropagateDelta(const TPosition& node) {
+    if (PropagatedDeltas[node.GetIndex()]) {
+        Count[node.GetIndex() * 2 + 1] += PropagatedDeltas[node.GetIndex()] * node.IntervalSize();
+        Count[node.GetIndex() * 2 + 2] += PropagatedDeltas[node.GetIndex()] * node.IntervalSize();
+        PropagatedDeltas[node.GetIndex()] = 0;
     }
 }
 
+void TIntervalCounter::Update(const TPosition& node, const TModification& modification, TZerosCollector* callback) {
+    if (modification.GetLeft() <= node.GetLeft() && modification.GetRight() >= node.GetRight()) {
+        if (callback) {
+            callback->OnUpdate(node.GetLeft(), node.GetRight(), GetCount(node), modification.GetDelta());
+        }
+        if (node.GetLeft() == node.GetRight()) {
+            Count[node.GetIndex()] += modification.GetDelta();
+        } else {
+            PropagatedDeltas[node.GetIndex()] += modification.GetDelta();
+        }
+    } else {
+        PropagateDelta(node.GetIndex());
+        if (modification.GetLeft() <= node.LeftChild().GetRight()) {
+            Update(node.LeftChild(), modification, callback);
+        }
+        if (modification.GetRight() >= node.RightChild().GetLeft()) {
+            Update(node.RightChild(), modification, callback);
+        }
+    }
+}
+
+void TIntervalCounter::Inc(const ui32 l, const ui32 r) {
+    Update(TPosition(MaxIndex), TModification(l, r, 1), nullptr);
+}
+
 TIntervalCounter::TIntervalCounter(const std::vector<std::pair<ui32, ui32>>& intervals) {
-    // ui32 maxValue = 0;
-    // for (const auto& [l, r] : intervals) {
-    //     AFL_VERIFY(l <= r);
-    //     if (r > maxValue) {
-    //         maxValue = r;
-    //     }
-    // }
-    // const ui32 size = std::bit_ceil(maxValue);
-    // Count.resize(size * 2 - 1);
-    // PropagateDelta.resize(size * 2 - 1);
+    ui32 maxValue = 0;
+    for (const auto& [l, r] : intervals) {
+        AFL_VERIFY(l <= r);
+        if (r > maxValue) {
+            maxValue = r;
+        }
+    }
+    MaxIndex = std::bit_ceil(maxValue);
+    Count.resize(MaxIndex * 2 - 1);
+    PropagatedDeltas.resize(MaxIndex * 2 - 1);
 
     for (const auto& [l, r] : intervals) {
         Inc(l, r);
@@ -49,21 +76,13 @@ TIntervalCounter::TIntervalCounter(const std::vector<std::pair<ui32, ui32>>& int
 }
 
 bool TIntervalCounter::IsAllZeros() const {
-    return Count.empty();
+    return GetCount(TPosition(MaxIndex)) == 0;
 }
 
 std::vector<ui32> TIntervalCounter::DecAndGetZeros(const ui32 l, const ui32 r) {
-    std::vector<ui32> zeros;
-    for (ui32 i = l; i <= r; ++i) {
-        auto find = Count.find(i);
-        AFL_VERIFY(find != Count.end());
-        --find->second;
-        if (!find->second) {
-            Count.erase(find);
-            zeros.emplace_back(i);
-        }
-    }
-    return zeros;
+    TZerosCollector callback;
+    Update(TPosition(MaxIndex), TModification(l, r, -1), &callback);
+    return callback.ExtractValues();
 }
 
 void TDuplicateFilterConstructor::TSourceFilterConstructor::SetFilter(const ui32 intervalIdx, NArrow::TColumnFilter&& filter) {

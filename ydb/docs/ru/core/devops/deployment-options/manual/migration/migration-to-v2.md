@@ -64,7 +64,32 @@ http://<node.ydb.tech>:8765/actors/configs_dispatcher
 
     В дальнейшнем система самостоятельно будет сохранять обновления конфигурации в указанную директорию.
 
-1. Перезапустить все узлы кластера с помощью процедуры [rolling-restart](../../../../maintenance/manual/node_restarting.md), добавив опцию `ydbd --config-dir` при запуске узла с указанием пути до директории.
+1. Перезапустить все узлы кластера с помощью процедуры [rolling-restart](../../../../maintenance/manual/node_restarting.md), добавив опцию `ydbd --config-dir` при запуске узла с указанием пути до директории, а также убрав опцию `ydbd --yaml-config`.
+
+{% list tabs group=manual-systemd %}
+- Вручную
+
+  При ручном запуске добавьте опцию `--config-dir`, к команде `ydbd server`, не указывая опцию `--yaml-config`:
+
+  ```bash
+  ydbd server --config-dir /opt/ydb/config-dir
+  ```
+
+- С использованием systemd
+
+  При использовании systemd добавьте опцию `--config-dir` к команде `ydbd server` в конфигурационный файл systemd, а также избавьтесь от опции `--yaml-config`:
+
+  ```ini
+  ExecStart=/opt/ydb/bin/ydbd server --config-dir /opt/ydb/config-dir
+  ```
+
+  После обновления файла systemd выполните следующую команду, чтобы применить изменения:
+
+  ```bash
+  sudo systemctl daemon-reload
+  ```
+
+{% endlist %}
 
 1. Выполнить первоначальное размещение подготовленной ранее конфигурации из файла `config.yaml` во внутреннем хранилище кластера при помощи команды:
 

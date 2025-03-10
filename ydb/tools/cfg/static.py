@@ -807,17 +807,24 @@ class StaticConfigGenerator(object):
     def __generate_boot_txt(self):
         self.__proto_configs["boot.txt"] = bootstrap_pb2.TBootstrap()
 
+        # New style `config.yaml`, allow specifying bootstrap_config
+        if self.__cluster_details.bootstrap_config is not None:
+            template_proto = bootstrap_pb2.TBootstrap()
+            utils.wrap_parse_dict(self.__cluster_details.bootstrap_config, template_proto)
+            self.__proto_configs["boot.txt"].MergeFrom(template_proto)
+        else:
+            # Old style `template.yaml`, just get random fields from top-level of `template.yaml`
+            if self.__cluster_details.shared_cache_memory_limit is not None:
+                boot_txt = self.__proto_configs["boot.txt"]
+                boot_txt.SharedCacheConfig.MemoryLimit = self.__cluster_details.shared_cache_memory_limit
+            shared_cache_size = self.__cluster_details.pq_shared_cache_size
+            if shared_cache_size is not None:
+                boot_txt = self.__proto_configs["boot.txt"]
+                boot_txt.NodeLimits.PersQueueNodeConfig.SharedCacheSizeMb = shared_cache_size
+
         for tablet_type, tablet_count in self.__system_tablets:
             for index in range(int(tablet_count)):
                 self.__add_tablet(tablet_type, index, self.__cluster_details.system_tablets_node_ids)
-
-        if self.__cluster_details.shared_cache_memory_limit is not None:
-            boot_txt = self.__proto_configs["boot.txt"]
-            boot_txt.SharedCacheConfig.MemoryLimit = self.__cluster_details.shared_cache_memory_limit
-        shared_cache_size = self.__cluster_details.pq_shared_cache_size
-        if shared_cache_size is not None:
-            boot_txt = self.__proto_configs["boot.txt"]
-            boot_txt.NodeLimits.PersQueueNodeConfig.SharedCacheSizeMb = shared_cache_size
 
     def __generate_bs_txt(self):
         self.__proto_configs["bs.txt"] = config_pb2.TBlobStorageConfig()

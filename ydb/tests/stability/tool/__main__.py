@@ -541,15 +541,12 @@ def main():
                     '--endpoint', f'grpc://localhost:{first_node.grpc_port}',
                     '--database', '/Root/db1',
                     'workload', 'log', 'init',
-                    '--len', '1000',
-                    '--int-cols', '18',
-                    '--key-cols', '18',
                     '--min-partitions', '100',
                     '--partition-size', '10',
                     '--auto-partition', '0',
                     '--store', store_type,
                     '--path', f'log_workload_{store_type}',
-                    '--ttl', '20160'
+                    '--ttl', '4800'
                     ],
                     raise_on_error=False
                 )
@@ -560,10 +557,8 @@ def main():
                         '--endpoint', f'grpc://localhost:{node.grpc_port}',
                         '--database', '/Root/db1',
                         'workload', 'log', 'run', 'bulk_upsert',
-                        '--len', '1000',
-                        '--int-cols', '18',
-                        '--key-cols', '18',
-                        '--threads', '1',
+                        '--rows', "2000",
+                        '--threads', '10',
                         '--timestamp_deviation', '180',
                         '--seconds', '86400',
                         '--path', f'log_workload_{store_type}',
@@ -571,6 +566,7 @@ def main():
                         ],
                         raise_on_error=True
                     )
+
                     node.ssh_command([
                         f'screen -s workload_log_{store_type}_select -d -m bash -c "while true; do',
                         '/Berkanavt/nemesis/bin/ydb_cli',

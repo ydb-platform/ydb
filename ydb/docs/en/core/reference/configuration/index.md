@@ -229,7 +229,7 @@ domains_config:
     default_groups: <initial list of groups>
     default_access: <initial permissions>
 
-    # настройки привилегий
+    # access level settings
     viewer_allowed_sids: <list of SIDs enabled for YDB UI access>
     monitoring_allowed_sids: <list of SIDs enabled for tablet administration>
     administration_allowed_sids: <list of SIDs enabled for storage administration>

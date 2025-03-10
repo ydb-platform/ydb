@@ -2632,6 +2632,8 @@ attributes {
         )", port);
 
         TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(true));
+        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
+        
         Run(runtime, env, TVector<TString>{
             R"(
                 Name: "Table"

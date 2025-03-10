@@ -1146,6 +1146,10 @@ public:
         Callbacks->OnError(statusCode, std::move(issues));
     }
 
+    void Unlink() {
+        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
+    }
+
     void PassAway() override {;
         Counters->WriteActorsCount->Dec();
         Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
@@ -2645,6 +2649,10 @@ public:
         });
         ExecuterActorId = {};
         Y_ABORT_UNLESS(GetTotalMemory() == 0);
+
+        for (auto& [_, info] : WriteInfos) {
+            info.WriteTableActor->Unlink();
+        }
     }
 
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::EYqlIssueCode id, const TString& message, const NYql::TIssues& subIssues) override {

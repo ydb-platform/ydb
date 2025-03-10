@@ -5270,16 +5270,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         // The original table was removed
         // We must not be able to commit the transaction
-        if (UseSink) {
-            // In case of sinks, we encountered an error while the tablet was rebooting.
-            UNIT_ASSERT_VALUES_EQUAL(
-                KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1"),
-                "ERROR: UNAVAILABLE");
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(
-                KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1"),
-                "ERROR: ABORTED");
-        }
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1"),
+            "ERROR: ABORTED");
 
         runtime.SimulateSleep(TDuration::Seconds(1));
 

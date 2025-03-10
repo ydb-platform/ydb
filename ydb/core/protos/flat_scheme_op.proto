@@ -2102,3 +2102,7 @@ message TImportTableChangefeeds {
     }
     repeated TImportChangefeedTopic Changefeeds = 1;
 }
+
+message TChangefeedUnderlyingTopics {
+    repeated TPathDescription ChangefeedUnderlyingTopics = 1;
+}

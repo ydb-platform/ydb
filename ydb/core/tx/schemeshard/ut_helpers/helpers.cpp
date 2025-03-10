@@ -821,6 +821,7 @@ namespace NSchemeShardUT_Private {
 
     // table
     GENERIC_WITH_ATTRS_HELPERS(CreateTable, NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable, &NKikimrSchemeOp::TModifyScheme::MutableCreateTable)
+    GENERIC_HELPERS(SimpleCreateTable, NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable, &NKikimrSchemeOp::TModifyScheme::MutableCreateTable)
     GENERIC_HELPERS(CreateIndexedTable, NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable, &NKikimrSchemeOp::TModifyScheme::MutableCreateIndexedTable)
     GENERIC_HELPERS(ConsistentCopyTables, NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables, &NKikimrSchemeOp::TModifyScheme::MutableCreateConsistentCopyTables)
     GENERIC_HELPERS(AlterTable, NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable, &NKikimrSchemeOp::TModifyScheme::MutableAlterTable)

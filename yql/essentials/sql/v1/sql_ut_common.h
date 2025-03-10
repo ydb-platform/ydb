@@ -7481,6 +7481,15 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
     }
 
+    Y_UNIT_TEST(CreateViewWithUdfs) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                CREATE VIEW TheView WITH (security_invoker = TRUE) AS SELECT "bbb" LIKE Unwrap("aaa");
+            )"
+        );
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+    }
+
     Y_UNIT_TEST(CreateViewIfNotExists) {
         constexpr const char* name = "TheView";
         NYql::TAstParseResult res = SqlToYql(std::format(R"(

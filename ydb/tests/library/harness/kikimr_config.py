@@ -164,8 +164,6 @@ class KikimrConfigGenerator(object):
             separate_node_configs=False,
             default_clusteradmin=None,
             enable_resource_pools=None,
-            table_service_config=None,
-            memory_controller_config=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -251,9 +249,7 @@ class KikimrConfigGenerator(object):
         if overrided_actor_system_config:
             self.yaml_config["actor_system_config"] = overrided_actor_system_config
 
-        if table_service_config:
-            self.yaml_config["table_service_config"] = table_service_config
-        else:
+        if "table_service_config" not in self.yaml_config:
             self.yaml_config["table_service_config"] = {}
 
         if os.getenv('YDB_KQP_ENABLE_IMMEDIATE_EFFECTS', 'false').lower() == 'true':
@@ -390,13 +386,8 @@ class KikimrConfigGenerator(object):
         if default_user_sid:
             self.yaml_config["domains_config"]["security_config"]["default_user_sids"] = [default_user_sid]
 
-        if memory_controller_config:
-            self.yaml_config["memory_controller_config"] = memory_controller_config
-        else:
-            self.yaml_config["memory_controller_config"] = {}
-
         if os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"):
-            self.yaml_config["memory_controller_config"]["hard_limit_bytes"] = int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))
+            self.yaml_config["memory_controller_config"] = {"hard_limit_bytes": int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))}
 
         if os.getenv("YDB_CHANNEL_BUFFER_SIZE"):
             self.yaml_config["table_service_config"]["resource_manager"]["channel_buffer_size"] = int(os.getenv("YDB_CHANNEL_BUFFER_SIZE"))

@@ -309,7 +309,7 @@ The following system views store data for analyzing various [access control enti
 
 The `auth_users` view lists internal {{ ydb-short-name }} [users](../concepts/glossary.md#access-user). It does not include users authenticated through external systems such as LDAP.
 
-This view can be fully accessed by database administrators, while regular users can only view their own details.
+This view can be fully accessed by administrators, while regular users can only view their own details.
 
 Table structure:
 
@@ -328,7 +328,7 @@ Table structure:
 
 The `auth_groups` view lists [access groups](../concepts/glossary.md#access-group).
 
-This view can be accessed only by database administrators.
+This view can be accessed only by administrators.
 
 Table structure:
 
@@ -340,7 +340,7 @@ Table structure:
 
 The `auth_group_members` view lists membership details within [access groups](../concepts/glossary.md#access-group).
 
-This view can be accessed only by database administrators.
+This view can be accessed only by administrators.
 
 Table structure:
 

@@ -43,6 +43,7 @@ class DistConfKiKiMRTest(object):
         log_configs = {
             'BS_NODE': LogLevels.DEBUG,
             'GRPC_SERVER': LogLevels.DEBUG,
+            'GRPC_PROXY': LogLevels.DEBUG,
             'TX_PROXY': LogLevels.DEBUG,
             'TICKER_PARSER': LogLevels.DEBUG,
         }
@@ -52,8 +53,9 @@ class DistConfKiKiMRTest(object):
                                              use_config_store=cls.use_config_store,
                                              metadata_section=cls.metadata_section,
                                              separate_node_configs=cls.separate_node_configs,
-                                             use_distconf=True,
+                                             use_distconf=False,
                                              simple_config=True,
+                                             use_self_management=True,
                                              extra_grpc_services=['config'],
                                              additional_log_configs=log_configs)
 

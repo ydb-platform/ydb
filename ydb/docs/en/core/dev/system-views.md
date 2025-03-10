@@ -311,7 +311,7 @@ The `auth_users` view lists internal {{ ydb-short-name }} [users](../concepts/gl
 
 This view can be fully accessed by database administrators, while regular users can only view their own details.
 
-Table Structure:
+Table structure:
 
 | Column | Description |
 |--------|-------------|
@@ -330,7 +330,7 @@ The `auth_groups` view lists [access groups](../concepts/glossary.md#access-grou
 
 This view can be accessed only by database administrators.
 
-Table Structure:
+Table structure:
 
 | Column | Description |
 |--------|-------------|
@@ -342,7 +342,7 @@ The `auth_group_members` view lists membership details within [access groups](..
 
 This view can be accessed only by database administrators.
 
-Table Structure:
+Table structure:
 
 | Column | Description |
 |--------|-------------|
@@ -360,7 +360,7 @@ Contains two views:
 
 A user can view an [access object](../concepts/glossary.md#access-object) in the results if they have the `ydb.granular.describe_schema` permission on it.
 
-Table Structure:
+Table structure:
 
 | Column | Description |
 |--------|-------------|
@@ -400,7 +400,7 @@ The `auth_owners` view lists details of [access objects](../concepts/glossary.md
 
 A user can view an [access object](../concepts/glossary.md#access-object) in the results if they have the `ydb.granular.describe_schema` permission on it.
 
-Table Structure:
+Table structure:
 
 | Column | Description |
 |--------|-------------|

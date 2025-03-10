@@ -22,6 +22,7 @@ namespace NYql {
         extern const TString YT_COORDINATOR;
         extern const TString YT_BACKEND;
         extern const TString YT_FORCE_IPV4;
+        extern const TString YT_LOCAL_LD_LIBRARY_PATH;
     }
 
     class ICoordinationHelper;
@@ -72,6 +73,7 @@ namespace NYql {
         int MaxRetries = -1;
 
         bool ForceIPv4 = false;
+        bool UseLocalLDLibraryPath = false;
 
         std::optional<NYT::NYson::TYsonString> AddressResolverConfig;
 

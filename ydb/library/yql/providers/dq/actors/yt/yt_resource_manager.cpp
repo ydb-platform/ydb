@@ -35,6 +35,7 @@ namespace NYql {
         const TString YT_COORDINATOR("YT_COORDINATOR");
         const TString YT_BACKEND("YT_BACKEND");
         const TString YT_FORCE_IPV4("YT_FORCE_IPV4");
+        const TString YT_LOCAL_LD_LIBRARY_PATH("YT_LOCAL_LD_LIBRARY_PATH");
     }
 
     using namespace NActors;
@@ -603,6 +604,7 @@ namespace NYql {
                             .Item(NCommonJobVars::YT_COORDINATOR).Value(coordinatorStr)
                             .Item(NCommonJobVars::YT_BACKEND).Value(backendStr)
                             .Item(NCommonJobVars::YT_FORCE_IPV4).Value(Options.ForceIPv4)
+                            .Item(NCommonJobVars::YT_LOCAL_LD_LIBRARY_PATH).Value(Options.UseLocalLDLibraryPath)
                             .DoFor(Options.YtBackend.GetVaultEnv(), [&] (NYT::TFluentMap fluent, const NYql::NProto::TDqConfig::TAttr& envVar) { // Добавляем env variables
                                 TString tokenValue;
                                 try {

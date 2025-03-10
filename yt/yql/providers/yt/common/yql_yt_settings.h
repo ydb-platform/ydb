@@ -76,6 +76,12 @@ enum class EBlockOutputMode {
     Force    /* "force" */,
 };
 
+enum class ERuntimeClusterSelectionMode {
+    Disable  /* "disable" */,
+    Auto     /* "auto" */,
+    Force    /* "force" */,
+};
+
 struct TYtSettings {
     using TConstPtr = std::shared_ptr<const TYtSettings>;
 
@@ -115,6 +121,7 @@ struct TYtSettings {
     NCommon::TConfSetting<EInferSchemaMode, false> InferSchemaMode;
     NCommon::TConfSetting<ui32, false> BatchListFolderConcurrency;
     NCommon::TConfSetting<bool, false> ForceTmpSecurity;
+    NCommon::TConfSetting<ERuntimeClusterSelectionMode, false> RuntimeClusterSelection;
 
     // Job runtime
     NCommon::TConfSetting<TString, true> Pool;
@@ -212,6 +219,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TSet<TString>, true> BlockReaderSupportedTypes;
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> BlockReaderSupportedDataTypes;
     NCommon::TConfSetting<TString, true> _BinaryCacheFolder;
+    NCommon::TConfSetting<TString, true> RuntimeCluster;
 
     // Optimizers
     NCommon::TConfSetting<bool, true> _EnableDq;

@@ -64,7 +64,7 @@ def test(suite, case, cfg, solomon):
                     scheme_file=os.path.join('ydb/tests/fq/solomon/cfg', 'kqprun_scheme.sql'))
     yqlrun_res = kqprun.yql_exec(
         program=sql_query,
-        var_templates=['SOLOMON_ENDPOINT'],
+        var_templates=['SOLOMON_ENDPOINT', 'SOLOMON_PORT'],
         verbose=True,
         check_error=not xfail
     )

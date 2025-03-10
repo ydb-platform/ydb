@@ -1,15 +1,14 @@
 #pragma once
 
-#include <ydb/library/yql/utils/actors/http_sender.h>
-
+#include <library/cpp/monlib/encode/encoder.h>
+#include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
 #include <yql/essentials/public/udf/udf_value.h>
 
-#include <library/cpp/monlib/encode/json/json.h>
-
-#include <util/stream/str.h>
-
-
 namespace NYql::NDq {
+
+struct TDqSolomonReadParams {
+    NSo::NProto::TDqSolomonSource Source;
+};
 
 class TMetricsEncoder {
 public:
@@ -28,4 +27,4 @@ private:
     bool UseCloudFormat;
 };
 
-}
+} // namespace NYql::NDq

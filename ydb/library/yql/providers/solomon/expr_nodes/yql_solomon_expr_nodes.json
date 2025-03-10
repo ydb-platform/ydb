@@ -56,11 +56,12 @@
                 {"Index": 5, "Name": "LabelNames", "Type": "TCoAtomList"},
                 {"Index": 6, "Name": "From", "Type": "TCoAtom"},
                 {"Index": 7, "Name": "To", "Type": "TCoAtom"},
-                {"Index": 8, "Name": "Program", "Type": "TCoAtom"},
-                {"Index": 9, "Name": "DownsamplingDisabled", "Type": "TCoBool"},
-                {"Index": 10, "Name": "DownsamplingAggregation", "Type": "TCoAtom"},
-                {"Index": 11, "Name": "DownsamplingFill", "Type": "TCoAtom"},
-                {"Index": 12, "Name": "DownsamplingGridSec", "Type": "TCoUint32"}
+                {"Index": 8, "Name": "Selectors", "Type": "TCoAtom"},
+                {"Index": 9, "Name": "Program", "Type": "TCoAtom"},
+                {"Index": 10, "Name": "DownsamplingDisabled", "Type": "TCoBool"},
+                {"Index": 11, "Name": "DownsamplingAggregation", "Type": "TCoAtom"},
+                {"Index": 12, "Name": "DownsamplingFill", "Type": "TCoAtom"},
+                {"Index": 13, "Name": "DownsamplingGridSec", "Type": "TCoUint32"}
             ]
         },
         {

@@ -40,6 +40,14 @@ public:
         cluster.SetName(name);
         cluster.SetCluster(properties.Value("location", ""));
         cluster.SetToken(token);
+        cluster.SetUseSsl(properties.Value("use_ssl", "true") == "true"sv);
+
+        if (auto value = properties.Value("grpc_port", ""); !value.empty()) {
+            auto grpcPort = cluster.MutableSettings()->Add();
+            *grpcPort->MutableName() = "grpcPort";
+            *grpcPort->MutableValue() = value;
+        }
+
         State_->Gateway->AddCluster(cluster);
 
         State_->Configuration->AddValidCluster(name);

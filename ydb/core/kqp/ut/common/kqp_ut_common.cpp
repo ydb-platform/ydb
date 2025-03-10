@@ -101,14 +101,10 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
 
     TVector<NKikimrKqp::TKqpSetting> effectiveKqpSettings;
 
-    bool enableSpilling = false;
-    if (settings.AppConfig.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable()) {
-        NKikimrKqp::TKqpSetting setting;
-        setting.SetName("_KqpEnableSpilling");
-        setting.SetValue("true");
-        effectiveKqpSettings.push_back(setting);
-        enableSpilling = true;
-    }
+    NKikimrKqp::TKqpSetting setting;
+    setting.SetName("_KqpEnableSpilling");
+    setting.SetValue("false");
+    effectiveKqpSettings.push_back(setting);
 
     effectiveKqpSettings.insert(effectiveKqpSettings.end(), settings.KqpSettings.begin(), settings.KqpSettings.end());
 
@@ -121,10 +117,12 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     NKikimrConfig::TAppConfig appConfig = settings.AppConfig;
     appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
     appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
+    appConfig.MutableTableServiceConfig()->MutableSpillingServiceConfig()->MutableLocalFileConfig()->SetEnable(false);
+
     ServerSettings->SetAppConfig(appConfig);
     ServerSettings->SetFeatureFlags(settings.FeatureFlags);
     ServerSettings->SetNodeCount(settings.NodeCount);
-    ServerSettings->SetEnableKqpSpilling(enableSpilling);
+    ServerSettings->SetEnableKqpSpilling(false);
     ServerSettings->SetEnableDataColumnForIndexTable(true);
     ServerSettings->SetKeepSnapshotTimeout(settings.KeepSnapshotTimeout);
     ServerSettings->SetFrFactory(&UdfFrFactory);
@@ -1488,7 +1486,7 @@ NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& par
             opName.find("Join") != TString::npos ||
             opName.find("Union") != TString::npos ||
             (opName.find("Filter") != TString::npos && params.IncludeFilters) ||
-            (opName.find("HashShuffle") != TString::npos && params.IncludeShuffles) 
+            (opName.find("HashShuffle") != TString::npos && params.IncludeShuffles)
         ) {
             NJson::TJsonValue newChildren;
 

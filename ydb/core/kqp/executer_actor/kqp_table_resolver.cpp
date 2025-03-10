@@ -85,6 +85,9 @@ private:
             }
 
             for (auto stageId : stageIds) {
+                const NKikimr::NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo *ptr = entry.ColumnTableInfo.get();
+                intptr_t a = reinterpret_cast<intptr_t>(ptr);
+                Cout << "STAGES: "  << stageId.TxId << ":" << stageId.StageId << " IS " << a << Endl;
                 TasksGraph.GetStageInfo(stageId).Meta.ColumnTableInfoPtr = entry.ColumnTableInfo;
             }
         }
@@ -173,12 +176,15 @@ private:
 
                     stageInfo.Meta.ShardKey = ExtractKey(stageInfo.Meta.TableId, stageInfo.Meta.TableConstInfo, operation);
 
-                    if (stageInfo.Meta.TableKind == ETableKind::Olap && TableRequestIds.find(stageInfo.Meta.TableId) == TableRequestIds.end()) {
+                    if (stageInfo.Meta.TableKind == ETableKind::Olap) {
+                        if (TableRequestIds.find(stageInfo.Meta.TableId) == TableRequestIds.end()) {
+                            auto& entry = requestNavigate->ResultSet.emplace_back();
+                            entry.TableId = stageInfo.Meta.TableId;
+                            entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+                            entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
+                        }
+
                         TableRequestIds[stageInfo.Meta.TableId].emplace_back(pair.first);
-                        auto& entry = requestNavigate->ResultSet.emplace_back();
-                        entry.TableId = stageInfo.Meta.TableId;
-                        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
-                        entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
                     }
 
                     auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey));

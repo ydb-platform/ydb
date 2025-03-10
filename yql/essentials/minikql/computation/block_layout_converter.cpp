@@ -295,7 +295,7 @@ public:
 class TExternalOptionalColumnDataExtractor : public IColumnDataExtractor {
 public:
     TExternalOptionalColumnDataExtractor(
-        IColumnDataExtractor::TPtr inner, arrow::MemoryPool* pool, TType* type
+        IColumnDataExtractor::TPtr inner, arrow::MemoryPool* pool, TType* type // use GetItemType method for type???
     )
         : Inner_(std::move(inner))
         , Pool_(pool)

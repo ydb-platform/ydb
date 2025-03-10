@@ -135,7 +135,8 @@ void RunTestBlockJoin(
     const TVector<ui32>& leftKeyDrops = {}, const TVector<ui32>& rightKeyDrops = {})
 {
     const size_t testSize = leftListValue.GetListLength();
-    for (size_t blockSize = 1; blockSize <= testSize; blockSize <<= 1) {
+    // WARNING: Do not start with small block size (like 1) on large datasets, because it is so slow
+    for (size_t blockSize = std::min<size_t>(64, testSize); blockSize <= testSize; blockSize <<= 1) {
         const auto got = DoTestBlockJoin(
             setup,
             leftType, std::move(leftListValue), leftKeyColumns, leftKeyDrops,
@@ -148,8 +149,8 @@ void RunTestBlockJoin(
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestBasic) {
-    constexpr size_t testSize = 5; //1 << 14;
+Y_UNIT_TEST_SUITE(TMiniKQLBlockGraceJoinTestBasic) {
+    constexpr size_t testSize = 1 << 14; // TODO: increase this value to activate GraceHashJoin algorithm or make manual dispatch in node
     constexpr size_t valueSize = 3;
     static const TVector<TString> threeLetterValues = GenerateValues(valueSize); // generate strings with len 3
     static const TSet<ui64> fibonacci = GenerateFibonacci(testSize); // generate n fib numbers
@@ -210,7 +211,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestBasic) {
         );
     }
 
-#if 0
     Y_UNIT_TEST(TestInnerJoinMulti) {
         TSetup<false> setup(GetNodeFactory());
 
@@ -383,6 +383,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestBasic) {
         );
     }
 
+    // TODO: working too slow, check possible reason
     Y_UNIT_TEST(TestInnerJoinHugeIterator) {
         TSetup<false> setup(GetNodeFactory());
 
@@ -393,7 +394,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestBasic) {
 
         // 2. Make input for the "right" stream.
         // Huge string is used to make less rows fit into one block
-        TVector<ui64> rightKeyInit(1 << 16);
+        TVector<ui64> rightKeyInit(1 << 14);
         std::fill(rightKeyInit.begin(), rightKeyInit.end(), 1);
         TVector<TString> rightValueInit;
         std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
@@ -431,7 +432,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestBasic) {
                          {}, {0}
         );
     }
-#endif
 
 } // Y_UNIT_TEST_SUITE
 

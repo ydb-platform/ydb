@@ -623,7 +623,7 @@ private:
                 SwitchModeTo(TMode::HashJoin);
                 return NUdf::EFetchStatus::Yield; // return from WideFetch to switch to the next state
             } else {
-                Y_UNREACHABLE(); // Grace hash join not implemented yet
+                Y_ASSERT(false); // Grace hash join not implemented yet
                 SwitchModeTo(TMode::GraceHashJoin);
                 return NUdf::EFetchStatus::Yield;
             }
@@ -641,7 +641,7 @@ private:
         break;
         case TMode::GraceHashJoin:
         {
-            Y_UNREACHABLE(); // Grace hash join not implemented yet
+            Y_ASSERT(false); // Grace hash join not implemented yet
         }
         break;
         }

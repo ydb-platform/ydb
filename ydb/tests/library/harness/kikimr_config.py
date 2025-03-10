@@ -163,6 +163,7 @@ class KikimrConfigGenerator(object):
             separate_node_configs=False,
             default_clusteradmin=None,
             enable_resource_pools=None,
+            use_self_management=False,
             use_distconf=False,
             simple_config=False,
     ):
@@ -173,8 +174,11 @@ class KikimrConfigGenerator(object):
 
         self.use_log_files = use_log_files
         self.use_distconf = use_distconf
+        self.use_self_management = use_self_management
         self.simple_config = simple_config
         self.suppress_version_check = suppress_version_check
+        if use_self_management:
+            self.suppress_version_check = False
         self._pdisk_store_path = pdisk_store_path
         self.static_pdisk_size = static_pdisk_size
         self.app_config = config_pb2.TAppConfig()
@@ -252,6 +256,9 @@ class KikimrConfigGenerator(object):
             self.yaml_config["erasure"] = self.yaml_config.pop("static_erasure")
 
         security_config_root = self.yaml_config["domains_config"]
+        if self.use_self_management:
+            self.yaml_config["self_management_config"] = dict()
+            self.yaml_config["self_management_config"]["enabled"] = True
 
         if self.use_distconf:
             if "security_config" in self.yaml_config["domains_config"]:
@@ -376,9 +383,6 @@ class KikimrConfigGenerator(object):
         if datashard_config:
             self.yaml_config["data_shard_config"] = datashard_config
 
-        if column_shard_config:
-            self.yaml_config["column_shard_config"] = column_shard_config
-
         if not self.use_distconf:
             self.__build()
 
@@ -467,6 +471,10 @@ class KikimrConfigGenerator(object):
             self.yaml_config["kafka_proxy_config"] = kafka_proxy_config
 
         self.full_config = dict()
+        if self.use_self_management:
+            self.yaml_config["domains_config"].pop("security_config")
+            self.yaml_config.pop("nameservice_config")
+            # self.yaml_config.pop("blob_storage_config")
         if self.use_distconf:
             self.yaml_config.pop("domains_config")
             self.yaml_config.pop("channel_profile_config")

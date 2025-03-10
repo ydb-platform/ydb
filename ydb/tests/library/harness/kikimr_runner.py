@@ -10,6 +10,8 @@ from importlib_resources import read_binary
 from google.protobuf import text_format
 import yaml
 import subprocess
+import requests
+from requests.exceptions import RequestException
 
 from six.moves.queue import Queue
 
@@ -366,14 +368,14 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         for node_id in self.__configurator.all_node_ids():
             self.__run_node(node_id)
 
-        if self.__configurator.use_distconf:
+        if self.__configurator.use_self_management:
             self.__cluster_bootstrap()
 
-        bs_needed = ('blob_storage_config' in self.__configurator.yaml_config) or self.__configurator.use_distconf
+        bs_needed = ('blob_storage_config' in self.__configurator.yaml_config) or self.__configurator.use_self_management
 
         if bs_needed:
             self.__wait_for_bs_controller_to_start()
-            if not self.__configurator.use_distconf:
+            if not self.__configurator.use_self_management:
                 self.__add_bs_box()
 
         pools = {}

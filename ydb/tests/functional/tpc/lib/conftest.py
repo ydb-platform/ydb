@@ -4,38 +4,15 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 
+from typing import Dict
+
 
 class FunctionalTestBase:
     cluster = None
 
-    table_service_config_for_spilling = {
-        'enable_spilling_nodes': 'All',
-        'spilling_service_config': {
-            'local_file_config': {
-                'enable': True,
-                'max_total_size': 536870912000,
-                'max_file_size': 107374182400,
-            }
-        },
-        'resource_manager': {
-            'verbose_memory_limit_exception': True
-        },
-    }
-
-    memory_controller_config = {
-        'activities_limit_percent': 60,
-        'query_execution_limit_percent': 50,
-    }
 
     @classmethod
-    def setup_cluster(cls, with_spilling: bool = False) -> None:
-        table_service_config = {}
-        if with_spilling:
-            table_service_config = cls.table_service_config_for_spilling
-        memory_controller_config = {}
-        if with_spilling:
-            memory_controller_config = cls.memory_controller_config
-        print('MISHA', table_service_config)
+    def setup_cluster(cls, table_service_config: Dict = {}, memory_controller_config: Dict = {}) -> None:
         cls.cluster = KiKiMR(configurator=KikimrConfigGenerator(
             domain_name='local',
             extra_feature_flags=["enable_resource_pools"],

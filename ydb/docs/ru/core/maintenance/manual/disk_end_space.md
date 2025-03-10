@@ -27,6 +27,7 @@
     ```bash
     dstool -e <bs_endpoint> vdisk wipe --vdisk-ids <VDiskId> --run
     ```
+
     `<bs_enpoint>` - эндпоинт произвольного [узла хранения](../../concepts/glossary.md#storage-node) кластера.
     `<VDiskId>` - идентификатор VDisk-а. Узнать `VDiskId` можно во вьювере, выбрав нужный VDisk. Также команда допускает множественное указание `VDiskId`, через пробел.
 

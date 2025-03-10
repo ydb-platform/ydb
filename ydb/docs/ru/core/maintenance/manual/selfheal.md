@@ -23,6 +23,8 @@ SelfHeal включен по умолчанию.
 ydb-dstool -e <bs_endpoint> cluster set --enable-self-heal
 ```
 
+`<bs_endpoint>` - эндпоинт произвольного [узла хранения](../../concepts/glossary.md#storage-node) кластера.
+
 Чтобы выключить SelfHeal выполните команду:
 
 ```bash

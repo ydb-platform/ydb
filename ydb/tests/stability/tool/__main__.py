@@ -567,22 +567,21 @@ def main():
                         raise_on_error=True
                     )
 
-                    # # not working properly now 
-                    # node.ssh_command([
-                    #     f'screen -s workload_log_{store_type}_select -d -m bash -c "while true; do',
-                    #     '/Berkanavt/nemesis/bin/ydb_cli',
-                    #     '--verbose',
-                    #     '--endpoint', f'grpc://localhost:{node.grpc_port}',
-                    #     '--database', '/Root/db1',
-                    #     'workload', 'log', 'run', 'select',
-                    #     '--client-timeout', '1800000',
-                    #     '--threads', '1',
-                    #     '--seconds', '86400',
-                    #     '_', f'log_workload_{store_type}',
-                    #     '; done"'
-                    #     ],
-                    #     raise_on_error=True
-                    # )
+                    node.ssh_command([
+                        f'screen -s workload_log_{store_type}_select -d -m bash -c "while true; do',
+                        '/Berkanavt/nemesis/bin/ydb_cli',
+                        '--verbose',
+                        '--endpoint', f'grpc://localhost:{node.grpc_port}',
+                        '--database', '/Root/db1',
+                        'workload', 'log', 'run', 'select',
+                        '--client-timeout', '1800000',
+                        '--threads', '1',
+                        '--seconds', '86400',
+                        '_', f'log_workload_{store_type}',
+                        '; done"'
+                        ],
+                        raise_on_error=True
+                    )
             stability_cluster.get_state()
         if action == "start_workload_simple_queue_row":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):

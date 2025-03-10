@@ -10,7 +10,6 @@ from typing import Dict
 class FunctionalTestBase:
     cluster = None
 
-
     @classmethod
     def setup_cluster(cls, table_service_config: Dict = {}, memory_controller_config: Dict = {}) -> None:
         cls.cluster = KiKiMR(configurator=KikimrConfigGenerator(

@@ -19,13 +19,13 @@ jobs:
           - build_preset: relwithdebinfo
             threads_count: 52
             timeout: 300
-            build_target: "ydb/tests/sql/ ydb/tests/stress"
+            build_target: "ydb/tests/sql/ ydb/tests/stress ydb/tests/functional/tpc ydb/tests/functional/benchmarks_init"
             test_size: small,medium,large
             test_type: unittest,py3test,py2test,pytest
           - build_preset: release-asan
             threads_count: 20
             timeout: 480
-            build_target: "ydb/tests/sql/ ydb/tests/stress"
+            build_target: "ydb/tests/sql/ ydb/tests/stress ydb/tests/functional/tpc ydb/tests/functional/benchmarks_init"
             test_size: small,medium,large
             test_type: unittest,py3test,py2test,pytest
           - build_preset: release-msan
@@ -37,7 +37,7 @@ jobs:
           - build_preset: release-tsan
             threads_count: 10
             timeout: 600
-            build_target: "ydb/tests/sql/ ydb/tests/stress"
+            build_target: "ydb/tests/sql/ ydb/tests/stress ydb/tests/functional/tpc ydb/tests/functional/benchmarks_init"
             test_size: small,medium
             test_type: unittest,py3test,py2test,pytest
 

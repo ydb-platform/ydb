@@ -23,6 +23,37 @@ std::shared_ptr<arrow::Array> IChunkedArray::TReader::CopyRecord(const ui64 reco
     return NArrow::CopyRecords(address.GetArray(), { address.GetPosition() });
 }
 
+IChunkedArray::TRowRange IChunkedArray::TReader::EqualRange(const TAddress& value, const TRowRange& range) const {
+    const TRowRange clippedRange = range.Intersect({0, GetRecordsCount()});
+    const auto localIndexes = std::ranges::iota_view(clippedRange.GetBegin(), clippedRange.GetEnd());
+
+    const ui64 begin = [&]() {
+        const auto findBound =
+            std::lower_bound(localIndexes.begin(), localIndexes.end(), value, [this](const ui64 index, const TAddress& bound) {
+                return GetReadChunk(index).Compare(bound) == std::partial_ordering::less;
+            });
+        if (findBound == localIndexes.end()) {
+            return clippedRange.GetEnd();
+        } else {
+            return *findBound;
+        }
+    }();
+
+    const ui64 end = [&]() {
+        const auto findBound =
+            std::upper_bound(localIndexes.begin(), localIndexes.end(), value, [this](const TAddress& bound, const ui64 index) {
+                return GetReadChunk(index).Compare(bound) == std::partial_ordering::greater;
+            });
+        if (findBound == localIndexes.end()) {
+            return clippedRange.GetEnd();
+        } else {
+            return *findBound;
+        }
+    }();
+
+    return { begin, end };
+}
+
 std::shared_ptr<arrow::ChunkedArray> IChunkedArray::Slice(const ui32 offset, const ui32 count) const {
     AFL_VERIFY(offset + count <= (ui64)GetRecordsCount())("offset", offset)("count", count)("length", GetRecordsCount());
     ui32 currentOffset = offset;
@@ -143,6 +174,15 @@ std::shared_ptr<arrow::ChunkedArray> IChunkedArray::GetChunkedArray() const {
         position += address->GetArray()->length();
     }
     return std::make_shared<arrow::ChunkedArray>(chunks, GetDataType());
+}
+
+TColumnFilter IChunkedArray::TRowRange::MakeFilter(const ui64 recordsCount) const {
+    AFL_VERIFY(End <= recordsCount)("end", End)("count", recordsCount);
+    TColumnFilter result = TColumnFilter::BuildAllowFilter();
+    result.Add(false, Begin);
+    result.Add(true, Size());
+    result.Add(false, recordsCount - End);
+    return result;
 }
 
 TString IChunkedArray::TReader::DebugString(const ui32 position) const {

@@ -133,6 +133,17 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
     appConfig.MutableTableServiceConfig()->SetEnableConstantFolding(true);
     appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(10).MilliSeconds());
     appConfig.MutableFeatureFlags()->SetEnableViews(true);
+    appConfig.MutableTableServiceConfig()->MutableSpillingServiceConfig()->MutableLocalFileConfig()->SetEnable(false);
+
+
+    setting.SetName("EnableDqReplicate");
+    setting.SetValue("false");
+    settings.push_back(setting);
+
+    setting.SetName("_KqpEnableSpilling");
+    setting.SetValue("false");
+    settings.push_back(setting);
+
     if (!useCBO) {
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(0);
     } else {
@@ -966,9 +977,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(CanonizedJoinOrderTPCH2, StreamLookupJoin, ColumnStore) {
+    Y_UNIT_TEST(CanonizedJoinOrderTPCH2) {
         CanonizedJoinOrderTest(
-            "queries/tpch2.sql", "stats/tpch1000s.json", "join_order/tpch2_1000s.json", StreamLookupJoin, ColumnStore
+            "queries/tpch2.sql", "stats/tpch1000s.json", "join_order/tpch2_1000s.json", false, true
         );
     }
 

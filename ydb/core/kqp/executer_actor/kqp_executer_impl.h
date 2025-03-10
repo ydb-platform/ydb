@@ -764,7 +764,7 @@ protected:
     }
 
     void HandleAbortExecution(
-            NYql::NDqProto::StatusIds::StatusCode statusCode, 
+            NYql::NDqProto::StatusIds::StatusCode statusCode,
             const NYql::TIssues& issues,
             const bool sessionSender) {
         LOG_D("Got EvAbortExecution, status: " << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode)
@@ -1668,7 +1668,7 @@ protected:
 
             for (auto&& i: partitions) {
                 const ui64 nodeId = ShardIdToNodeId.at(i.first);
-                nodeShards[nodeId].emplace_back(TShardInfoWithId(i.first, std::move(i.second)));
+                nodeShards[nodeId].emplace_back(TShardInfoWithId(i.first,  i.second)));
             }
 
             if (CollectProfileStats(Request.StatsMode)) {

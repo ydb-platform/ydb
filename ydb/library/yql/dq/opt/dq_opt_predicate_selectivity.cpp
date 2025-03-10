@@ -486,22 +486,22 @@ double TPredicateSelectivityComputer::Compute(
     }
 
     else if (auto maybeIfExpr = input.Maybe<TCoIf>()) {
-        auto ifExpr = maybeIfExpr.Cast();
+      auto ifExpr = maybeIfExpr.Cast();
 
-        // attr in ('a', 'b', 'c' ...)
-        if (ifExpr.Predicate().Maybe<TCoExists>() && ifExpr.ThenValue().Maybe<TCoJust>() && ifExpr.ElseValue().Maybe<TCoNothing>()) {
-            auto list = FindNode<TExprList>(ifExpr.ThenValue());
+      // attr in ('a', 'b', 'c' ...)
+      if (ifExpr.Predicate().Maybe<TCoExists>() && ifExpr.ThenValue().Maybe<TCoJust>() &&
+          ifExpr.ElseValue().Maybe<TCoNothing>()) {
+        auto list = FindNode<TExprList>(ifExpr.ThenValue());
 
-            if (list != nullptr) {
-                double tmpSelectivity = 0.0;
-                TExprBase lhs = ifExpr.Predicate();
-                for (const auto& child: list->Children()) {
-                    TExprBase rhs = TExprBase(child);
-                    tmpSelectivity += ComputeEqualitySelectivity(lhs, rhs);
-                }
+        if (list != nullptr) {
+          double tmpSelectivity = 0.0;
+          TExprBase lhs = ifExpr.Predicate();
+          for (const auto& child : list->Children()) {
+            TExprBase rhs = TExprBase(child);
+            tmpSelectivity += ComputeEqualitySelectivity(lhs, rhs);
+          }
 
-                resSelectivity = tmpSelectivity;
-            }
+          resSelectivity = tmpSelectivity;
         }
       }
     }

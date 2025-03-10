@@ -253,6 +253,12 @@ class TEqWidthHistogramEstimator {
     return std::max(1U, static_cast<ui32>(histogram->GetNumElementsInBucket(index) / histogram->template GetBucketWidth<T>()));
   }
 
+  template <>
+  ui64 EstimateEqual(TStringPrefix prefix) const {
+    const auto index = histogram->FindBucketIndex(prefix);
+    return std::max(1U, static_cast<ui32>(histogram->GetNumElementsInBucket(index)));
+  }
+
   // Returns the total number elements in histogram.
   // Could be used to adjust scale.
   ui64 GetNumElements() const { return prefixSum.back(); }

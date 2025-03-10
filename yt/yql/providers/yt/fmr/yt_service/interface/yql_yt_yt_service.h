@@ -11,9 +11,17 @@ public:
 
     using TPtr = TIntrusivePtr<IYtService>;
 
-    virtual std::variant<THolder<TTempFileHandle>, TError> Download(const TYtTableRef& ytTable, const TClusterConnection& clusterConnection = TClusterConnection()) = 0;
+    virtual std::variant<THolder<TTempFileHandle>, TError> Download(
+        const TYtTableRef& ytTable,
+        ui64& rowsCount,
+        const TClusterConnection& clusterConnection = TClusterConnection()
+    ) = 0;
 
-    virtual TMaybe<TError> Upload(const TYtTableRef& ytTable, IInputStream& tableContent, const TClusterConnection& clusterConnection = TClusterConnection()) = 0;
+    virtual TMaybe<TError> Upload(
+        const TYtTableRef& ytTable,
+        IInputStream& tableContent,
+        const TClusterConnection& clusterConnection = TClusterConnection()
+    ) = 0;
 };
 
 } // namespace NYql::NFmr

@@ -2,6 +2,7 @@ PROTO_LIBRARY()
 
 SRCS(
     portion_info.proto
+    index.proto
 )
 
 PEERDIR(

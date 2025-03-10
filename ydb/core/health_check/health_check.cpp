@@ -16,6 +16,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
@@ -28,6 +29,7 @@
 #include <ydb/core/util/tuples.h>
 
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
@@ -121,11 +123,12 @@ public:
     ui64 Cookie;
     NWilson::TSpan Span;
 
-    TSelfCheckRequest(const TActorId& sender, THolder<TEvSelfCheckRequest> request, ui64 cookie, NWilson::TTraceId&& traceId)
+    TSelfCheckRequest(const TActorId& sender, THolder<TEvSelfCheckRequest> request, ui64 cookie, NWilson::TTraceId&& traceId, const NKikimrConfig::THealthCheckConfig& config)
         : Sender(sender)
         , Request(std::move(request))
         , Cookie(cookie)
         , Span(TComponentTracingLevels::TTablet::Basic, std::move(traceId), "health_check", NWilson::EFlags::AUTO_END)
+        , HealthCheckConfig(config)
     {}
 
     using TGroupId = ui32;
@@ -163,7 +166,7 @@ public:
     struct TNodeTabletState {
         struct TTabletStateSettings {
             TInstant AliveBarrier;
-            ui32 MaxRestartsPerPeriod = 30; // per hour
+            ui32 MaxRestartsPerPeriod; // per hour
             ui32 MaxTabletIdsStored = 10;
             bool ReportGoodTabletsIds = false;
         };
@@ -646,6 +649,8 @@ public:
     std::optional<TRequestResponse<TEvNodeWardenStorageConfig>> NodeWardenStorageConfig;
     std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> DatabaseBoardInfo;
     THashSet<TNodeId> UnknownStaticGroups;
+
+    const NKikimrConfig::THealthCheckConfig& HealthCheckConfig;
 
     std::vector<TNodeId> SubscribedNodeIds;
     THashSet<TNodeId> StorageNodeIds;
@@ -1504,6 +1509,7 @@ public:
         for (const auto& [hiveId, hiveResponse] : HiveInfo) {
             if (hiveResponse.IsOk()) {
                 settings.AliveBarrier = TInstant::MilliSeconds(hiveResponse->Record.GetResponseTimestamp()) - TDuration::Minutes(5);
+                settings.MaxRestartsPerPeriod = HealthCheckConfig.GetTabletsRestartsPerPeriodOrangeThreshold();
                 for (const NKikimrHive::TTabletInfo& hiveTablet : hiveResponse->Record.GetTablets()) {
                     TSubDomainKey tenantId = TSubDomainKey(hiveTablet.GetObjectDomain());
                     auto itDomain = FilterDomainKey.find(tenantId);
@@ -1729,9 +1735,9 @@ public:
         FillNodeInfo(nodeId, context.Location.mutable_compute()->mutable_node());
 
         TSelfCheckContext rrContext(&context, "NODE_UPTIME");
-        if (databaseState.NodeRestartsPerPeriod[nodeId] >= 30) {
+        if (databaseState.NodeRestartsPerPeriod[nodeId] >= HealthCheckConfig.GetNodeRestartsPerPeriodOrangeThreshold()) {
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Node is restarting too often", ETags::Uptime);
-        } else if (databaseState.NodeRestartsPerPeriod[nodeId] >= 10) {
+        } else if (databaseState.NodeRestartsPerPeriod[nodeId] >= HealthCheckConfig.GetNodeRestartsPerPeriodYellowThreshold()) {
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "The number of node restarts has increased", ETags::Uptime);
         } else {
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
@@ -1769,9 +1775,9 @@ public:
                 long timeDifferenceUs = nodeSystemState.GetMaxClockSkewWithPeerUs();
                 TDuration timeDifferenceDuration = TDuration::MicroSeconds(abs(timeDifferenceUs));
                 Ydb::Monitoring::StatusFlag::Status status;
-                if (timeDifferenceDuration > MAX_CLOCKSKEW_ORANGE_ISSUE_TIME) {
+                if (timeDifferenceDuration > TDuration::MicroSeconds(HealthCheckConfig.GetNodesTimeDifferenceUsOrangeThreshold())) {
                     status = Ydb::Monitoring::StatusFlag::ORANGE;
-                } else if (timeDifferenceDuration > MAX_CLOCKSKEW_YELLOW_ISSUE_TIME) {
+                } else if (timeDifferenceDuration > TDuration::MicroSeconds(HealthCheckConfig.GetNodesTimeDifferenceUsYellowThreshold())) {
                     status = Ydb::Monitoring::StatusFlag::YELLOW;
                 } else {
                     status = Ydb::Monitoring::StatusFlag::GREEN;
@@ -2921,9 +2927,6 @@ public:
         }
     }
 
-    const TDuration MAX_CLOCKSKEW_ORANGE_ISSUE_TIME = TDuration::MicroSeconds(25000);
-    const TDuration MAX_CLOCKSKEW_YELLOW_ISSUE_TIME = TDuration::MicroSeconds(5000);
-
     void FillResult(TOverallStateContext context) {
         if (IsSpecificDatabaseFilter()) {
             FillDatabaseResult(context, FilterDatabase, DatabaseState[FilterDatabase]);
@@ -3252,12 +3255,16 @@ void TNodeCheckRequest<NMon::TEvHttpInfo>::Bootstrap() {
 class THealthCheckService : public TActorBootstrapped<THealthCheckService> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::MONITORING_SERVICE; }
+    NKikimrConfig::THealthCheckConfig HealthCheckConfig;
 
     THealthCheckService()
     {
     }
 
     void Bootstrap() {
+        HealthCheckConfig.CopyFrom(AppData()->HealthCheckConfig);
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({NKikimrConsole::TConfigItem::HealthCheckConfigItem}));
         TMon* mon = AppData()->Mon;
         if (mon) {
             mon->RegisterActorPage({
@@ -3270,8 +3277,16 @@ public:
         Become(&THealthCheckService::StateWork);
     }
 
+    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        if (record.GetConfig().HasHealthCheckConfig()) {
+            HealthCheckConfig.CopyFrom(record.GetConfig().GetHealthCheckConfig());
+        }
+        Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
+    }
+
     void Handle(TEvSelfCheckRequest::TPtr& ev) {
-        Register(new TSelfCheckRequest(ev->Sender, ev.Get()->Release(), ev->Cookie, std::move(ev->TraceId)));
+        Register(new TSelfCheckRequest(ev->Sender, ev.Get()->Release(), ev->Cookie, std::move(ev->TraceId), HealthCheckConfig));
     }
 
     std::shared_ptr<NYdbGrpc::TGRpcClientLow> GRpcClientLow;
@@ -3299,6 +3314,7 @@ public:
             hFunc(TEvSelfCheckRequest, Handle);
             hFunc(TEvNodeCheckRequest, Handle);
             hFunc(NMon::TEvHttpInfo, Handle);
+            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
             cFunc(TEvents::TSystem::PoisonPill, PassAway);
         }
     }

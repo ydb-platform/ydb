@@ -49,7 +49,7 @@ CLUSTER_CONFIG = dict(
 )
 
 
-# ydb_fixtures.ydb_cluster_configuration local override
+# fixtures.ydb_cluster_configuration local override
 @pytest.fixture(scope='module')
 def ydb_cluster_configuration():
     conf = copy.deepcopy(CLUSTER_CONFIG)
@@ -88,20 +88,27 @@ def stream_query_result(driver, query):
     return result, error
 
 
-@pytest.fixture(scope='function')
-def prepared_test_env(ydb_cluster, ydb_root, ydb_database, ydb_client):
+@pytest.fixture(scope='module')
+def prepared_root_db(ydb_cluster, ydb_root, ydb_endpoint):
     cluster_admin = ydb.AuthTokenCredentials(ydb_cluster.config.default_clusteradmin)
 
     # prepare root database
-    with ydb_client(ydb_root, credentials=cluster_admin) as driver:
+    driver_config = ydb.DriverConfig(ydb_endpoint, ydb_root, credentials=cluster_admin)
+    with ydb.Driver(driver_config) as driver:
         pool = ydb.SessionPool(driver)
         with pool.checkout() as session:
             session.execute_scheme("create user clusteradmin password '1234'")
             session.execute_scheme("create user clusteruser password '1234'")
 
+
+@pytest.fixture(scope='module')
+def prepared_tenant_db(ydb_cluster, ydb_endpoint, ydb_database_module_scope):
+    cluster_admin = ydb.AuthTokenCredentials(ydb_cluster.config.default_clusteradmin)
+
     # prepare tenant database
-    database_path = ydb_database
-    with ydb_client(database_path, credentials=cluster_admin) as driver:
+    database_path = ydb_database_module_scope
+    driver_config = ydb.DriverConfig(ydb_endpoint, database_path, credentials=cluster_admin)
+    with ydb.Driver(driver_config) as driver:
         pool = ydb.SessionPool(driver)
         with pool.checkout() as session:
             # add users
@@ -139,8 +146,8 @@ def login_user(endpoint, database, user, password):
     ('dbadmin', True),
     ('ordinaryuser', False)
 ])
-def test_tenant_auth_groups_access(ydb_endpoint, ydb_root, prepared_test_env, ydb_client, user, expected_access):
-    tenant_database = prepared_test_env
+def test_tenant_auth_groups_access(ydb_endpoint, ydb_root, prepared_root_db, prepared_tenant_db, ydb_client, user, expected_access):
+    tenant_database = prepared_tenant_db
 
     # user could be either from the root or tenant database,
     # but they must obtain auth token by logging in the database they live in

@@ -670,7 +670,7 @@ class LintConfigs:
 class LintExtraParams:
     KEY = 'LINT-EXTRA-PARAMS'
 
-    _CUSTOM_CLANG_FORMAT_BIN_ALLOWED_PATHS = ('ads', 'bigrt', 'grut', 'yabs')
+    _CUSTOM_CLANG_FORMAT_ALLOWED_PATHS = ('ads', 'bigrt', 'grut', 'yabs', 'maps')
 
     @classmethod
     def from_macro_args(cls, unit, flat_args, spec_args):
@@ -680,9 +680,9 @@ class LintExtraParams:
                 message = 'Wrong EXTRA_PARAMS value: "{}". Values must have format "name=value".'.format(arg)
                 ymake.report_configure_error(message)
                 raise DartValueError()
-            if 'clang_format_bin' in arg:
+            if 'custom_clang_format' in arg:
                 upath = unit.path()[3:]
-                if not upath.startswith(cls._CUSTOM_CLANG_FORMAT_BIN_ALLOWED_PATHS):
+                if not upath.startswith(cls._CUSTOM_CLANG_FORMAT_ALLOWED_PATHS):
                     message = f'Custom clang-format is not allowed in upath: {upath}'
                     ymake.report_configure_error(message)
                     raise DartValueError()
@@ -1183,6 +1183,14 @@ class TestFiles:
         'maps/renderer/tools/mapcheck2/tests',
     )
 
+    # XXX: this is a workaround to support very specific linting settings.
+    # Do not use it as a general mechanism!
+    _MAPS_B2BGEO_PREFIX = 'maps/b2bgeo/mvrp_solver'
+    _MAPS_B2BGEO_INCLUDE_LINTER_TEST_PATHS = (
+        'maps/b2bgeo/mvrp_solver/backend',
+        'maps/b2bgeo/mvrp_solver/aws_docker',
+    )
+
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         data_re = re.compile(r"sbr:/?/?(\d+)=?.*")
@@ -1286,6 +1294,13 @@ class TestFiles:
 
         if upath.startswith(cls._MAPS_RENDERER_PREFIX):
             for path in cls._MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS:
+                if os.path.commonpath([upath, path]) == path:
+                    break
+            else:
+                raise DartValueError()
+
+        if upath.startswith(cls._MAPS_B2BGEO_PREFIX):
+            for path in cls._MAPS_B2BGEO_INCLUDE_LINTER_TEST_PATHS:
                 if os.path.commonpath([upath, path]) == path:
                     break
             else:

@@ -375,6 +375,14 @@ public:
         Size_ += value.size();
     }
 
+    void WriteData(const TSharedRef& value) override
+    {
+        EnsureFreeSpace(value.size());
+
+        std::copy(value.begin(), value.end(), Buffer_.begin() + Size_);
+        Size_ += value.size();
+    }
+
     void StartBytes() override
     {
         WriteInt32(0);
@@ -391,6 +399,11 @@ public:
     TSharedRef Finish() override
     {
         return Buffer_.Slice(0, Size_);
+    }
+
+    i64 GetSize() const override
+    {
+        return Size_;
     }
 
 private:

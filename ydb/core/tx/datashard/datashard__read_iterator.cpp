@@ -2399,6 +2399,7 @@ public:
                         return true;
                     }
                     auto& state = *readIt->second;
+                    state.EnqueuedLocalTxId = 0;
                     ReplyError(
                         Ydb::StatusIds::INTERNAL_ERROR,
                         TStringBuilder() << "Failed to sync follower: " << errMessage
@@ -2417,6 +2418,7 @@ public:
                 const auto& record = request->Record;
 
                 Y_ABORT_UNLESS(state.State == TReadIteratorState::EState::Init);
+                state.EnqueuedLocalTxId = 0;
 
                 bool setUsingSnapshotFlag = false;
 
@@ -3221,7 +3223,9 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
 
     SetCounter(COUNTER_READ_ITERATORS_COUNT, ReadIterators.size());
 
-    Executor()->Execute(new TTxReadViaPipeline(this, localReadId, request->ReadSpan.GetTraceId()), ctx);
+    // Note: we may have a read cancellation already in the mailbox, so we
+    // enqueue a low-priority transaction.
+    state.EnqueuedLocalTxId = Executor()->EnqueueLowPriority(new TTxReadViaPipeline(this, localReadId, request->ReadSpan.GetTraceId()));
 }
 
 void TDataShard::Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorContext& ctx) {
@@ -3453,6 +3457,9 @@ void TDataShard::DeleteReadIterator(TReadIteratorsMap::iterator it) {
     }
     if (state.IsExhausted()) {
         DecCounter(COUNTER_READ_ITERATORS_EXHAUSTED_COUNT);
+    }
+    if (state.EnqueuedLocalTxId) {
+        Executor()->CancelTransaction(state.EnqueuedLocalTxId);
     }
     ReadIteratorsByLocalReadId.erase(state.LocalReadId);
     ReadIterators.erase(it);

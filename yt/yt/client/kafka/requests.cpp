@@ -77,20 +77,51 @@ void TResponseHeader::Serialize(IKafkaProtocolWriter* writer, int version)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TMessage::Serialize(IKafkaProtocolWriter* writer, int version) const
+void TRecordHeader::Serialize(IKafkaProtocolWriter* writer, int /*version*/) const
 {
-    writer->WriteByte(Attributes);
+    writer->WriteVarInt(HeaderKey.size());
+    writer->WriteData(HeaderKey);
 
+    writer->WriteVarInt(HeaderValue.size());
+    writer->WriteData(HeaderValue);
+}
+
+void TRecordHeader::Deserialize(IKafkaProtocolReader* reader, int /*version*/)
+{
+    auto keySize = reader->ReadVarInt();
+    reader->ReadString(&HeaderKey, keySize);
+
+    auto valueSize = reader->ReadVarInt();
+    reader->ReadString(&HeaderValue, valueSize);
+}
+
+void TRecord::Serialize(IKafkaProtocolWriter* writer, int version) const
+{
     if (version == 2) {
-        writer->WriteVarInt(TimestampDelta);
-        writer->WriteVarInt(OffsetDelta);
+        auto recordWriter = CreateKafkaProtocolWriter();
 
-        writer->WriteVarInt(Key.size());
-        writer->WriteData(Key);
+        recordWriter->WriteByte(Attributes);
+        recordWriter->WriteVarLong(TimestampDelta);
+        recordWriter->WriteVarInt(OffsetDelta);
 
-        writer->WriteVarInt(Value.size());
-        writer->WriteData(Value);
+        recordWriter->WriteVarInt(Key.size());
+        recordWriter->WriteData(Key);
+
+        recordWriter->WriteVarInt(Value.size());
+        recordWriter->WriteData(Value);
+
+        recordWriter->WriteVarInt(Headers.size());
+        for (const auto& header : Headers) {
+            header.Serialize(recordWriter.get(), version);
+        }
+
+        auto record = recordWriter->Finish();
+
+        writer->WriteVarInt(record.Size());
+        writer->WriteData(record);
     } else if (version == 1 || version == 0) {
+        writer->WriteByte(Attributes);
+
         if (version == 1) {
             writer->WriteInt64(TimestampDelta);
         }
@@ -98,11 +129,11 @@ void TMessage::Serialize(IKafkaProtocolWriter* writer, int version) const
         writer->WriteBytes(Key);
         writer->WriteBytes(Value);
     } else {
-        THROW_ERROR_EXCEPTION("Unsupported Message version %v in serialization", version);
+        THROW_ERROR_EXCEPTION("Unsupported Record version %v in serialization", version);
     }
 }
 
-void TMessage::Deserialize(IKafkaProtocolReader* reader, int version)
+void TRecord::Deserialize(IKafkaProtocolReader* reader, int version)
 {
     if (version == 2) {
         reader->ReadVarInt();  // Length, not used.
@@ -110,15 +141,20 @@ void TMessage::Deserialize(IKafkaProtocolReader* reader, int version)
     Attributes = reader->ReadByte();
 
     if (version == 2) {
-        TimestampDelta = reader->ReadVarInt();
+        TimestampDelta = reader->ReadVarLong();
         OffsetDelta = reader->ReadVarInt();
-
 
         auto keySize = reader->ReadVarInt();
         reader->ReadString(&Key, keySize);
 
         auto valueSize = reader->ReadVarInt();
         reader->ReadString(&Value, valueSize);
+
+        auto headerCount = reader->ReadVarInt();
+        Headers.resize(headerCount);
+        for (auto& header : Headers) {
+            header.Deserialize(reader, version);
+        }
     } else if (version == 1 || version == 0) {
         if (version == 1) {
             TimestampDelta = reader->ReadInt64();
@@ -126,69 +162,81 @@ void TMessage::Deserialize(IKafkaProtocolReader* reader, int version)
         Key = reader->ReadBytes();
         Value = reader->ReadBytes();
     } else {
-        THROW_ERROR_EXCEPTION("Unsupported Message version %v in deserialization", version);
+        THROW_ERROR_EXCEPTION("Unsupported Record version %v in deserialization", version);
     }
 }
 
-void TRecord::Serialize(IKafkaProtocolWriter* writer) const
+void TRecordBatch::Serialize(IKafkaProtocolWriter* writer) const
 {
-    writer->WriteInt64(FirstOffset);
+    writer->WriteInt64(BaseOffset);
 
     writer->StartBytes();  // Write Length.
 
-    writer->WriteInt32(Crc);
-    writer->WriteByte(MagicByte);
+    if (MagicByte == 0 || MagicByte == 1) {
+        writer->WriteInt32(CrcOld);
+        writer->WriteByte(MagicByte);
 
-    if (MagicByte == 1 || MagicByte == 0) {
-        YT_VERIFY(Messages.size() == 1);
-        Messages[0].Serialize(writer, MagicByte);
+        YT_VERIFY(Records.size() == 1);
+        Records[0].Serialize(writer, MagicByte);
     } else if (MagicByte == 2) {
+        writer->WriteInt32(PartitionLeaderEpoch);
+        writer->WriteByte(MagicByte);
+        writer->WriteUint32(Crc);
         writer->WriteInt16(Attributes);
         writer->WriteInt32(LastOffsetDelta);
         writer->WriteInt64(FirstTimestamp);
         writer->WriteInt64(MaxTimestamp);
         writer->WriteInt64(ProducerId);
-        writer->WriteInt16(Epoch);
-        writer->WriteInt32(FirstSequence);
+        writer->WriteInt16(ProducerEpoch);
+        writer->WriteInt32(BaseSequence);
 
-        for (const auto& message : Messages) {
-            message.Serialize(writer, MagicByte);
+        writer->WriteInt32(Records.size());
+        for (const auto& record : Records) {
+            record.Serialize(writer, MagicByte);
         }
     } else {
-        THROW_ERROR_EXCEPTION("Unsupported MagicByte %v in Record serialization", static_cast<int>(MagicByte));
+        THROW_ERROR_EXCEPTION("Unsupported MagicByte %v in RecordBatch serialization", static_cast<int>(MagicByte));
     }
     writer->FinishBytes();
 }
 
-void TRecord::Deserialize(IKafkaProtocolReader* reader)
+void TRecordBatch::Deserialize(IKafkaProtocolReader* reader)
 {
-    FirstOffset = reader->ReadInt64();
+    BaseOffset = reader->ReadInt64();
     Length = reader->ReadInt32();
 
     reader->StartReadBytes(/*needReadSize*/ false);
 
-    Crc = reader->ReadInt32();
+    PartitionLeaderEpoch = reader->ReadInt32();
+
     MagicByte = reader->ReadByte();
 
     if (MagicByte == 0 || MagicByte == 1) {
-        auto& message = Messages.emplace_back();
-        message.Deserialize(reader, MagicByte);
+        // In v0/v1 CRC is before MagicByte and there is no PartitionLeaderEpoch;
+        CrcOld = PartitionLeaderEpoch;
+        PartitionLeaderEpoch = 0;
+
+        // It's a message in v0/v1.
+        auto& record = Records.emplace_back();
+        record.Deserialize(reader, MagicByte);
     } else if (MagicByte == 2) {
+        Crc = reader->ReadUint32();
+
         Attributes = reader->ReadInt16();
         LastOffsetDelta = reader->ReadInt32();
         FirstTimestamp = reader->ReadInt64();
         MaxTimestamp = reader->ReadInt64();
         ProducerId = reader->ReadInt64();
-        Epoch = reader->ReadInt16();
-        FirstSequence = reader->ReadInt32();
+        ProducerEpoch = reader->ReadInt16();
+        BaseSequence = reader->ReadInt32();
 
         while (reader->GetReadBytesCount() < Length) {
-            TMessage message;
-            message.Deserialize(reader, MagicByte);
-            Messages.push_back(std::move(message));
+            TRecord record;
+            record.Deserialize(reader, MagicByte);
+            Records.push_back(std::move(record));
         }
     } else {
-        THROW_ERROR_EXCEPTION("Unsupported MagicByte %v in Record deserialization", static_cast<int>(MagicByte));
+        THROW_ERROR_EXCEPTION("Unsupported MagicByte %v in RecordBatch deserialization", static_cast<int>(MagicByte));
     }
     reader->FinishReadBytes();
 }
@@ -534,9 +582,14 @@ void TReqFetchTopic::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
 
 void TReqFetch::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
 {
+    ApiVersion = apiVersion;
+
     ReplicaId = reader->ReadInt32();
     MaxWaitMs = reader->ReadInt32();
     MinBytes = reader->ReadInt32();
+    if (apiVersion >= 3) {
+        MaxBytes = reader->ReadInt32();
+    }
     Topics.resize(reader->ReadInt32());
     for (auto& topic : Topics) {
         topic.Deserialize(reader, apiVersion);
@@ -549,12 +602,12 @@ void TRspFetchResponsePartition::Serialize(IKafkaProtocolWriter* writer, int /*a
     writer->WriteErrorCode(ErrorCode);
     writer->WriteInt64(HighWatermark);
 
-    if (!Records) {
+    if (!RecordBatches) {
         writer->WriteInt32(-1);
     } else {
         writer->StartBytes();
-        for (const auto& record : *Records) {
-            record.Serialize(writer);
+        for (const auto& recordBatch : *RecordBatches) {
+            recordBatch.Serialize(writer);
         }
         writer->FinishBytes();
     }
@@ -563,6 +616,7 @@ void TRspFetchResponsePartition::Serialize(IKafkaProtocolWriter* writer, int /*a
 void TRspFetchResponse::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 {
     writer->WriteString(Topic);
+
     writer->WriteInt32(Partitions.size());
     for (const auto& partition : Partitions) {
         partition.Serialize(writer, apiVersion);
@@ -571,7 +625,11 @@ void TRspFetchResponse::Serialize(IKafkaProtocolWriter* writer, int apiVersion) 
 
 void TRspFetch::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 {
+    if (apiVersion >= 2) {
+        writer->WriteInt32(ThrottleTimeMs);
+    }
     writer->WriteInt32(Responses.size());
+
     for (const auto& response : Responses) {
         response.Serialize(writer, apiVersion);
     }
@@ -622,10 +680,10 @@ void TReqProduceTopicDataPartitionData::Deserialize(IKafkaProtocolReader* reader
         bytesCount = reader->StartReadCompactBytes();
     }
     while (reader->GetReadBytesCount() < bytesCount) {
-        TRecord record;
-        record.Deserialize(reader);
+        TRecordBatch recordBatch;
+        recordBatch.Deserialize(reader);
 
-        Records.push_back(std::move(record));
+        RecordBatches.push_back(std::move(recordBatch));
     }
     reader->FinishReadBytes();
 

@@ -1,3 +1,4 @@
+#include "common_ut.h"
 #include "s3_writer.h"
 #include "worker.h"
 
@@ -60,8 +61,7 @@ Y_UNIT_TEST_SUITE(S3Writer) {
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().at("/TEST/writer.AtufpxzetsqaVnEuozdXpD.json"),
                                  R"({"finished":false,"table_name":"/MyRoot/Table","writer_name":"AtufpxzetsqaVnEuozdXpD"})");
 
-        using TRecord = TEvWorker::TEvData::TRecord;
-        env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData({
+        env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData(0, "TestSource", {
             TRecord(1, R"({"key":[1], "update":{"value":"10"}})"),
             TRecord(2, R"({"key":[2], "update":{"value":"20"}})"),
             TRecord(3, R"({"key":[3], "update":{"value":"30"}})"),
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(S3Writer) {
                                  R"({"key":[2], "update":{"value":"20"}})" "\n"
                                  R"({"key":[3], "update":{"value":"30"}})" "\n");
 
-        auto res = env.Send<TEvWorker::TEvGone>(writer, new TEvWorker::TEvData({}));
+        auto res = env.Send<TEvWorker::TEvGone>(writer, new TEvWorker::TEvData(0, "TestSource", {}));
 
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, TEvWorker::TEvGone::DONE);
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 2);

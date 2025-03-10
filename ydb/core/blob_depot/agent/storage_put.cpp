@@ -3,7 +3,8 @@
 namespace NKikimr::NBlobDepot {
 
     template<>
-    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvPut>(std::unique_ptr<IEventHandle> ev) {
+    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvPut>(std::unique_ptr<IEventHandle> ev,
+            TMonotonic received) {
         class TPutQuery : public TBlobStorageQuery<TEvBlobStorage::TEvPut> {
             const bool SuppressFooter = true;
             const bool IssueUncertainWrites = false;
@@ -17,6 +18,7 @@ namespace NKikimr::NBlobDepot {
             TBlobSeqId BlobSeqId;
             std::optional<TS3Locator> LocatorInFlight;
             TActorId WriterActorId;
+            ui64 ConnectionInstanceOnStart;
 
             struct TLifetimeToken {};
             std::shared_ptr<TLifetimeToken> LifetimeToken;
@@ -409,6 +411,8 @@ namespace NKikimr::NBlobDepot {
                             .AddMetadata("key", Request.Id.ToString()),
                         Request.Buffer.ExtractUnderlyingContainerOrCopy<TString>()),
                     IEventHandle::FlagTrackDelivery));
+
+                ConnectionInstanceOnStart = Agent.ConnectionInstance;
             }
 
             void OnPutS3ObjectResponse(std::optional<TString>&& error) {
@@ -417,18 +421,28 @@ namespace NKikimr::NBlobDepot {
 
                 WriterActorId = {};
 
+                if (ConnectionInstanceOnStart != Agent.ConnectionInstance) {
+                    error = "BlobDepot tablet disconnected";
+                    LocatorInFlight.reset(); // prevent discarding this locator
+                }
+
                 if (error) {
+                    ++*Agent.S3PutsError;
+
                     // LocatorInFlight is not reset here on purpose: OnDestroy will generate spoiled blob message to the
                     // tablet
                     EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to put object to S3: " << *error);
                 } else {
+                    ++*Agent.S3PutsOk;
+                    *Agent.S3PutBytesOk += LocatorInFlight->Len;
+
                     LocatorInFlight.reset();
                     IssueCommitBlobSeq(false);
                 }
             }
         };
 
-        return new TPutQuery(*this, std::move(ev));
+        return new TPutQuery(*this, std::move(ev), received);
     }
 
 } // NKikimr::NBlobDepot

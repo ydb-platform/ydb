@@ -14,6 +14,7 @@ namespace NKikimr::NBlobDepot {
             ConnectToBlobDepot();
         } else {
             PipeServerId = msg.ServerId;
+            SwitchMode(EMode::Registering);
         }
     }
 
@@ -34,6 +35,7 @@ namespace NKikimr::NBlobDepot {
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA05, "ConnectToBlobDepot", (AgentId, LogId), (PipeId, PipeId), (RequestId, id));
         NTabletPipe::SendData(SelfId(), PipeId, new TEvBlobDepot::TEvRegisterAgent(VirtualGroupId, AgentInstanceId), id);
         RegisterRequest(id, this, nullptr, {}, true);
+        SwitchMode(EMode::ConnectPending);
     }
 
     void TBlobDepotAgent::Handle(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvRegisterAgentResult& msg) {
@@ -147,10 +149,14 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::OnConnect() {
         IsConnected = true;
+        SwitchMode(EMode::Connected);
+
         HandlePendingEvent();
     }
 
     void TBlobDepotAgent::OnDisconnect() {
+        ++ConnectionInstance;
+
         while (!TabletRequestInFlight.empty()) {
             auto node = TabletRequestInFlight.extract(TabletRequestInFlight.begin());
             auto& requestInFlight = node.value();
@@ -163,6 +169,7 @@ namespace NKikimr::NBlobDepot {
 
         ClearPendingEventQueue("BlobDepot tablet disconnected");
 
+        SwitchMode(EMode::None);
         IsConnected = false;
     }
 

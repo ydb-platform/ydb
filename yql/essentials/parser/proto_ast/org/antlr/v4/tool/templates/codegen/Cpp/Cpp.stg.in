@@ -648,17 +648,7 @@ public:
   <attrs: {a | <a>;}; separator = "\n">
   <if (ctorAttrs)><struct.escapedName>(antlr4::ParserRuleContext *parent, size_t invokingState);<endif>
   <struct.escapedName>(antlr4::ParserRuleContext *parent, size_t invokingState<ctorAttrs: {a | , <a>}>);
-<if (struct.provideCopyFrom)> <! don't need copy unless we have subclasses !>
-  <struct.escapedName>() = default;
-  void copyFrom(<struct.escapedName> *context);
-  using antlr4::ParserRuleContext::copyFrom;
-<endif>
-
   virtual size_t getRuleIndex() const override;
-  <getters: {g | <g>}; separator = "\n">
-
-  <dispatchMethods; separator = "\n">
-<! TODO: untested !> <extensionMembers; separator = "\n">
 };
 
 >>
@@ -681,20 +671,11 @@ StructDecl(struct, ctorAttrs, attrs, getters, dispatchMethods, interfaces, exten
   <struct.ctorAttrs: {a | this-><a.escapedName> = <a.escapedName>;}; separator="\n">
 }
 
-<getters: {g | <g>}; separator = "\n">
 
 size_t <parser.name>::<struct.escapedName>::getRuleIndex() const {
   return <parser.name>::Rule<struct.derivedFromName; format = "cap">;
 }
 
-<if (struct.provideCopyFrom)>
-void <parser.name>::<struct.escapedName>::copyFrom(<struct.escapedName> *ctx) {
-  <if (contextSuperClass)><contextSuperClass><else>ParserRuleContext<endif>::copyFrom(ctx);
-  <struct.attrs: {a | this-><a.escapedName> = ctx-><a.escapedName>;}; separator = "\n">
-}
-<endif>
-<dispatchMethods; separator = "\n\n">
-<! TODO: untested !><extensionMembers; separator = "\n\n">
 
 >>
 
@@ -703,9 +684,6 @@ class <file.exportMacro> <struct.escapedName> : public <currentRule.name; format
 public:
   <struct.escapedName>(<currentRule.name; format = "cap">Context *ctx);
 
-  <if (attrs)><attrs: {a | <a>;}; separator = "\n"><endif>
-  <getters: {g | <g>}; separator = "\n">
-  <dispatchMethods; separator = "\n">
 };
 
 >>
@@ -713,11 +691,8 @@ public:
 AltLabelStructDecl(struct, attrs, getters, dispatchMethods) ::= <<
 //----------------- <struct.escapedName> ------------------------------------------------------------------
 
-<! TODO: untested !><if (attrs)><attrs: {a | <a>}; separator = "\n"><endif>
-<getters: {g | <g>}; separator = "\n">
 <parser.name>::<struct.escapedName>::<struct.escapedName>(<currentRule.name; format = "cap">Context *ctx) { copyFrom(ctx); }
 
-<dispatchMethods; separator="\n">
 >>
 
 
@@ -1273,54 +1248,23 @@ RuleContextDecl(r) ::= "<! Variable Declaration !>"
 RuleContextListDeclHeader(rdecl) ::= "std::vector\<<rdecl.ctxName> *> <rdecl.escapedName>"
 RuleContextListDecl(rdecl) ::= "<! Variable Declaration !>"
 
-ContextTokenGetterDeclHeader(t) ::= "antlr4::tree::TerminalNode *TOKEN_<t.escapedName>();"
-ContextTokenGetterDecl(t) ::= <<
-tree::TerminalNode* <parser.name>::<t.ctx.name>::TOKEN_<t.escapedName>() {
-  return getToken(<parser.name>::TOKEN_<t.escapedName>, 0);
-}
+ContextTokenGetterDeclHeader(t) ::= ""
+ContextTokenGetterDecl(t) ::= ""
 
->>
+ContextTokenListGetterDeclHeader(t) ::= ""
+ContextTokenListGetterDecl(t) ::= ""
 
-ContextTokenListGetterDeclHeader(t) ::= "std::vector\<antlr4::tree::TerminalNode *> TOKEN_<t.escapedName>();"
-ContextTokenListGetterDecl(t) ::= <<
-std::vector\<tree::TerminalNode *> <parser.name>::<t.ctx.name>::TOKEN_<t.escapedName>() {
-  return getTokens(<parser.name>::TOKEN_<t.escapedName>);
-}
+ContextTokenListIndexedGetterDeclHeader(t) ::= ""
+ContextTokenListIndexedGetterDecl(t)  ::= ""
 
->>
+ContextRuleGetterDeclHeader(r) ::= ""
+ContextRuleGetterDecl(r) ::= ""
 
-ContextTokenListIndexedGetterDeclHeader(t) ::= "antlr4::tree::TerminalNode* TOKEN_<t.escapedName>(size_t i);"
-ContextTokenListIndexedGetterDecl(t)  ::= <<
-tree::TerminalNode* <parser.name>::<t.ctx.name>::TOKEN_<t.escapedName>(size_t i) {
-  return getToken(<parser.name>::TOKEN_<t.escapedName>, i);
-}
+ContextRuleListGetterDeclHeader(r) ::= ""
+ContextRuleListGetterDecl(r) ::= ""
 
->>
-
-ContextRuleGetterDeclHeader(r) ::= "<r.ctxName> *<r.escapedName>();"
-ContextRuleGetterDecl(r) ::= <<
-<! Note: ctxName is the name of the context to return, while ctx is the owning context. !>
-<parser.name>::<r.ctxName>* <parser.name>::<r.ctx.name>::<r.escapedName>() {
-  return getRuleContext\<<parser.name>::<r.ctxName>\>(0);
-}
-
->>
-
-ContextRuleListGetterDeclHeader(r) ::= "std::vector\<<r.ctxName> *> <r.escapedName>();"
-ContextRuleListGetterDecl(r) ::= <<
-std::vector\<<parser.name>::<r.ctxName> *> <parser.name>::<r.ctx.name>::<r.escapedName>() {
-  return getRuleContexts\<<parser.name>::<r.ctxName>\>();
-}
-
->>
-
-ContextRuleListIndexedGetterDeclHeader(r) ::= "<r.ctxName>* <r.escapedName>(size_t i);"
-ContextRuleListIndexedGetterDecl(r) ::= <<
-<parser.name>::<r.ctxName>* <parser.name>::<r.ctx.name>::<r.escapedName>(size_t i) {
-  return getRuleContext\<<parser.name>::<r.ctxName>\>(i);
-}
-
->>
+ContextRuleListIndexedGetterDeclHeader(r) ::= ""
+ContextRuleListIndexedGetterDecl(r) ::= ""
 
 LexerRuleContext() ::= "antlr4::RuleContext"
 

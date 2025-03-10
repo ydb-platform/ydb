@@ -57,11 +57,18 @@ def _set_logs_command(test_info: dict[str, str], start_time: float, end_time: fl
             hosts.append(node.host)
     hosts_cmd = ' '.join([f'-H {h}' for h in hosts])
     tz = timezone('Europe/Moscow')
-    start = datetime.fromtimestamp(start_time, tz).isoformat()
-    end = datetime.fromtimestamp(end_time, tz).isoformat()
+    start = datetime.fromtimestamp(start_time, tz)
+    end = datetime.fromtimestamp(end_time, tz)
+    start_iso = start.isoformat()
+    end_iso = end.isoformat()
     time_cmd = f'-S "{start}" -U "{end}"'
-    cmd = f"parallel-ssh {hosts_cmd} -o . 'ulimit -n 100500;unified_agent select {time_cmd} -s kikimr'"
-    test_info['logs_command'] = f'<code>{cmd}</code>'
+    time_cmd_iso = f'-S "{start_iso}" -U "{end_iso}"'
+    not_ask_for_key = '-x \"-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no\"'
+
+    cmd = f"parallel-ssh {hosts_cmd} -i {not_ask_for_key} 'ulimit -n 100500;unified_agent select {time_cmd_iso} -s kikimr' 2>/dev/null 1>kikimr.log"
+    dmesg_cmd = f"parallel-ssh {hosts_cmd} -i {not_ask_for_key} 'sudo journalctl -k {time_cmd} --grep ydb' 2>/dev/null 1>journalctrl.log"
+    test_info['kikimr_log'] = f'<details><code>{cmd}</code></details>'
+    test_info['kernel_log'] = f'<details><code>{dmesg_cmd}</code></details>'
 
 
 def allure_test_description(

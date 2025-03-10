@@ -778,19 +778,20 @@ public:
                 return builder;
             }());
 
-        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-            Y_ABORT_UNLESS(Mode == EMode::WRITE);
-            if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
-                YQL_ENSURE(TxManager->BrokenLocks());
-                NYql::TIssues issues;
-                issues.AddIssue(*TxManager->GetLockIssue());
-                RuntimeError(
-                    NYql::NDqProto::StatusIds::ABORTED,
-                    NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
-                    TStringBuilder() << "Transaction locks invalidated. Table `"
-                        << TablePath << "`.",
-                    issues);
-                return;
+        if (Mode == EMode::WRITE) {
+            for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+                if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
+                    YQL_ENSURE(TxManager->BrokenLocks());
+                    NYql::TIssues issues;
+                    issues.AddIssue(*TxManager->GetLockIssue());
+                    RuntimeError(
+                        NYql::NDqProto::StatusIds::ABORTED,
+                        NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
+                        TStringBuilder() << "Transaction locks invalidated. Table `"
+                            << TablePath << "`.",
+                        issues);
+                    return;
+                }
             }
         }
 

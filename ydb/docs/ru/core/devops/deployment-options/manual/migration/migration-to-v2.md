@@ -27,7 +27,7 @@
 http://<node.ydb.tech>:8765/actors/configs_dispatcher
 ```
 
-![configs-dispatcher-page](./_assets/viewer.png)
+![configs-dispatcher-page](./_assets/viewer-v1.png)
 
 
 В верхней части страницы указана версия конфигурации - `Configuration version`. Проверьте версию конфигурации для каждого из узлов, подключенных к кластеру.
@@ -55,6 +55,7 @@ http://<node.ydb.tech>:8765/actors/configs_dispatcher
     ```
 
 1. Разместить полученный файл `config.yaml` на все узлы кластера, заместив им предыдущий файл конфигурации.
+
 1. Создать директорию для работы кластера с конфигурацией на каждом из узлов. В случае поднятия нескольких узлов кластера на одном хосте, рекомендуется использовать одну и ту же директорию. Инициализируйте директорию, выполнив команду на каждом из узлов:
 
     ```bash
@@ -131,32 +132,32 @@ http://<node.ydb.tech>:8765/actors/configs_dispatcher
 
 1. Получить текущую конфигурацию кластера:
 
-  ```bash
-  ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch > config.yaml
-  ```
+    ```bash
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch > config.yaml
+    ```
 
-  Файл `config.yaml` должен совпадать с конфигурационными файлами, разложенными по узлам кластера, за исключением поля `metadata.version`, которое должно быть больше на единицу по сравнению с версией на узлах кластера.
+    Файл `config.yaml` должен совпадать с конфигурационными файлами, разложенными по узлам кластера, за исключением поля `metadata.version`, которое должно быть больше на единицу по сравнению с версией на узлах кластера.
 
-2. Добавить в `config.yaml` в разделе `config` следующий блок:
+1. Добавить в `config.yaml` в разделе `config` следующий блок:
 
-  ```yaml
-  self_management_config:
-    enabled: true
-  ```
+    ```yaml
+    self_management_config:
+      enabled: true
+    ```
 
-3. Загрузить обновленный конфигурационный файл на кластер:
+1. Загрузить обновленный конфигурационный файл на кластер:
 
-  ```bash
-  ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
-  ```
+    ```bash
+    ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
+    ```
 
-4. Перезапустить все [узлы хранения](../../../../concepts/glossary.md#storage-node) кластера с помощью процедуры [rolling restart](../../../../reference/ydbops/rolling-restart-scenario.md).
-5. При наличии секции `config.domains_config.security_config` в файле `config.yaml`, вынести её на уровень выше, в секцию `config`.
-6. Удалить из файла `config.yaml` секции `config.blob_storage_config` и `config.domains_config`.
-7. Загрузить обновленный конфигурационный файл на кластер:
+1. Перезапустить все [узлы хранения](../../../../concepts/glossary.md#storage-node) кластера с помощью процедуры [rolling restart](../../../../reference/ydbops/rolling-restart-scenario.md).
+1. При наличии секции `config.domains_config.security_config` в файле `config.yaml`, вынести её на уровень выше, в секцию `config`.
+1. Удалить из файла `config.yaml` секции `config.blob_storage_config` и `config.domains_config`.
+1. Загрузить обновленный конфигурационный файл на кластер:
 
- ```bash
-  ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
-  ```
+    ```bash
+    ydb -e grpc://<node.ydb.tech>:2135 cluster config replace -f config.yaml
+    ```
 
 В результате проделанных действий кластер будет переведён в режим автоматического управление конфигурацией [State Storage](../../../../reference/configuration/index.md#domains-state) и [статической группой](../../../../reference/configuration/index.md#blob_storage_config). Технически, оно осуществляется с помощью механизма [распределённой конфигурации](../../../../concepts/glossary.md#distributed-configuration).

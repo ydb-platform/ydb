@@ -268,8 +268,8 @@ Command parameters and their values:
 
 You can check if the profile has been created using the command `./ydb config profile list`, which will display a list of profiles. After creating a profile, you need to activate it with the command `./ydb config profile activate <profile name>`. To verify that the profile has been activated, you can rerun the command `./ydb config profile list` – the active profile will have an (active) mark.
 
-To execute a YQL query, you can use the command `./ydb yql -s 'select 1;'`, which will return the result of the `select 1` command in table form to the terminal. After checking the connection, you can create a test table with the command:
-`./ydb workload kv init --init-upserts 1000 --cols 4`. This will create a test table `kv_test` consisting of 4 columns and 1000 rows. You can verify that the `kv_test` table was created and filled with test data by using the command `./ydb yql -s 'select * from kv_test limit 10;'`.
+To execute a YQL query, you can use the command `./ydb sql -s 'select 1;'`, which will return the result of the `select 1` command in table form to the terminal. After checking the connection, you can create a test table with the command:
+`./ydb workload kv init --init-upserts 1000 --cols 4`. This will create a test table `kv_test` consisting of 4 columns and 1000 rows. You can verify that the `kv_test` table was created and filled with test data by using the command `./ydb sql -s 'select * from kv_test limit 10;'`.
 
 The terminal will display a table of 10 rows. Now, you can perform cluster performance testing. The article [{#T}](../../reference/ydb-cli/workload-kv.md) describes 5 types of workloads (`upsert`, `insert`, `select`, `read-rows`, `mixed`) and the parameters for their execution. An example of executing the `upsert` test workload with the parameter to print the execution time `--print-timestamp` and standard execution parameters is: `./ydb workload kv run upsert --print-timestamp`.
 

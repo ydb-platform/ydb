@@ -374,24 +374,24 @@ All the directly assigned permissions for the table located at the path `my_tabl
 
 ```yql
 SELECT *
-    FROM `.sys/auth_permissions`
-    WHERE Path = "my_table"
+FROM `.sys/auth_permissions`
+WHERE Path = "my_table"
 ```
 
 All the effective permissions for the table located at the path `my_table`, including inherited permissions:
 
 ```yql
 SELECT *
-    FROM `.sys/auth_effective_permissions`
-    WHERE Path = "my_table"
+FROM `.sys/auth_effective_permissions`
+WHERE Path = "my_table"
 ```
 
 All permissions directly assigned to the user identified as `user3`:
 
 ```yql
 SELECT *
-    FROM `.sys/auth_permissions`
-    WHERE Sid = "user3"
+FROM `.sys/auth_permissions`
+WHERE Sid = "user3"
 ```
 
 ### Auth owners

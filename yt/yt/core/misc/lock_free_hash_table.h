@@ -117,6 +117,7 @@ public:
     ~TLockFreeHashTable();
 
     size_t GetByteSize() const;
+    static size_t GetByteSize(size_t capacity);
 
     //! Inserts element. Called concurrently from multiple threads.
     typename TLockFreeHashTable<T>::TItemRef Insert(TFingerprint fingerprint, TValuePtr value);

@@ -5,6 +5,7 @@ from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
 
 class TestTpchSpillingS10(tpch.TestTpch10, FunctionalTestBase):
     iterations: int = 1
+    query_settings = { i : tpch.TestTpch10.QuerySettings(query_prefix='pragma ydb.UseGraceJoinCoreForMap = "true";') for i in range(1, 23) }
 
     table_service_config = {
         'enable_spilling_nodes': 'All',
@@ -23,7 +24,7 @@ class TestTpchSpillingS10(tpch.TestTpch10, FunctionalTestBase):
     memory_controller_config = {
         'activities_limit_percent': 60,
         'query_execution_limit_percent': 50,
-        'hard_limit_bytes': 3 * 1073741824,
+        'hard_limit_bytes': 6 * 1073741824,
     }
 
     @classmethod
@@ -31,4 +32,5 @@ class TestTpchSpillingS10(tpch.TestTpch10, FunctionalTestBase):
         cls.setup_cluster(table_service_config=cls.table_service_config, memory_controller_config=cls.memory_controller_config)
         cls.run_cli(['workload', 'tpch', '-p', 'olap_yatests/tpch/s10', 'init', '--store=column'])
         cls.run_cli(['workload', 'tpch', '-p', 'olap_yatests/tpch/s10', 'import', 'generator', '--scale=10'])
+
         tpch.TestTpch10.setup_class()

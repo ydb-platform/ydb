@@ -24,12 +24,7 @@ THashMap<NKikimrSchemeOp::EPathType, TCreateHandler> CreateHandlers = {
     {EPathTypeCdcStream, GEN_CREATE_HANDLER(TestCreateCdcStream)},
 };
 
-void TestCreate(
-    TTestActorRuntime& runtime,
-    ui64& txId,
-    const TString& scheme,
-    NKikimrSchemeOp::EPathType pathType
-) {
+void TestCreate(TTestActorRuntime& runtime, ui64 txId, const TString& scheme, NKikimrSchemeOp::EPathType pathType) {
     if (CreateHandlers.contains(pathType)) {
         CreateHandlers[pathType](runtime, txId, "/MyRoot", scheme);
     } else {

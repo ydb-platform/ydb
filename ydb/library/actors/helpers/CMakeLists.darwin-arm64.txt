@@ -26,6 +26,8 @@ target_link_libraries(library-actors-helpers PUBLIC
 
 target_sources(library-actors-helpers PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/helpers/activeactors.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/helpers/collector_counters.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/helpers/pool_stats_collector.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/helpers/selfping_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/helpers/activeactors.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/helpers/future_callback.h

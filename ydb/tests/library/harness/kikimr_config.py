@@ -248,10 +248,6 @@ class KikimrConfigGenerator(object):
 
         self.yaml_config = _load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.__additional_log_configs)
 
-        print("MISHA: ", self.yaml_config)
-        self.yaml_config["kqpconfig"]["settings"].append({"name": "UseGraceJoinCoreForMap", "value": "true"})
-        print("MISHA2: ", self.yaml_config)
-
         if overrided_actor_system_config:
             self.yaml_config["actor_system_config"] = overrided_actor_system_config
 

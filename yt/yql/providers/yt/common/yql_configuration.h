@@ -118,4 +118,6 @@ constexpr bool DEFAULT_PRUNE_QL_FILTER_LAMBDA = true;
 
 constexpr bool DEFAULT_DROP_UNUSED_KEYS_FROM_KEY_FILTER = false;
 
+constexpr bool DEFAULT_REPORT_EQUIJOIN_STATS = false;
+
 } // NYql

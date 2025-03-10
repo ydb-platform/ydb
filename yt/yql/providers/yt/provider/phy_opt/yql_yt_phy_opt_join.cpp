@@ -1,6 +1,7 @@
 #include "yql_yt_phy_opt.h"
 #include "yql_yt_phy_opt_helper.h"
 
+#include <yt/yql/providers/yt/common/yql_configuration.h>
 #include <yt/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <yt/yql/providers/yt/provider/yql_yt_cbo_helpers.h>
 #include <yt/yql/providers/yt/provider/yql_yt_join_impl.h>
@@ -282,6 +283,13 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
     auto parentsMap = getParents();
     YQL_ENSURE(parentsMap);
     auto joinOptions = CollectPreferredSortsForEquiJoinOutput(node, equiJoin.Arg(equiJoin.ArgCount() - 1).Ptr(), ctx, *parentsMap);
+
+    if (sections.size() > 2 && State_->Configuration->ReportEquiJoinStats.Get().GetOrElse(DEFAULT_REPORT_EQUIJOIN_STATS)) {
+        joinOptions = AddSetting(*joinOptions, joinOptions->Pos(), "multiple_joins", {}, ctx);
+        with_lock(State_->StatisticsMutex) {
+            State_->Statistics[Max<ui32>()].Entries.emplace_back("YtEquiJoin_MultipleCount", 0, 0, 0, 0, 1);
+        }
+    }
 
     const auto join = Build<TYtEquiJoin>(ctx, node.Pos())
         .World(ApplySyncListToWorld(ctx.NewWorld(node.Pos()), worldList, ctx))

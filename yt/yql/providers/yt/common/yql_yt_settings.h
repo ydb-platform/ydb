@@ -304,6 +304,7 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> _EnableYtDqProcessWriteConstraints;
     NCommon::TConfSetting<bool, false> CompactForDistinct;
     NCommon::TConfSetting<bool, false> DropUnusedKeysFromKeyFilter;
+    NCommon::TConfSetting<bool, false> ReportEquiJoinStats;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

@@ -530,6 +530,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, _EnableYtDqProcessWriteConstraints);
     REGISTER_SETTING(*this, CompactForDistinct);
     REGISTER_SETTING(*this, DropUnusedKeysFromKeyFilter);
+    REGISTER_SETTING(*this, ReportEquiJoinStats);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

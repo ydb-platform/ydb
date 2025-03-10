@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(1.10.0)
+VERSION(1.11.0)
 
-ORIGINAL_SOURCE(https://github.com/ngtcp2/ngtcp2/releases/download/v1.10.0/ngtcp2-1.10.0.tar.xz)
+ORIGINAL_SOURCE(https://github.com/ngtcp2/ngtcp2/releases/download/v1.11.0/ngtcp2-1.11.0.tar.xz)
 
 LICENSE(
     BSD-3-Clause AND
@@ -48,6 +48,7 @@ SRCS(
     lib/ngtcp2_conn.c
     lib/ngtcp2_conv.c
     lib/ngtcp2_crypto.c
+    lib/ngtcp2_dcidtr.c
     lib/ngtcp2_err.c
     lib/ngtcp2_frame_chain.c
     lib/ngtcp2_gaptr.c

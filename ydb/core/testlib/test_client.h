@@ -296,6 +296,7 @@ namespace Tests {
             AppConfig->MutableHiveConfig()->SetMinScatterToBalance(100);
             AppConfig->MutableHiveConfig()->SetObjectImbalanceToBalance(100);
             AppConfig->MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+            AppConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
             FeatureFlags.SetEnableSeparationComputeActorsFromRead(true);
             FeatureFlags.SetEnableWritePortionsOnInsert(true);
             FeatureFlags.SetEnableFollowerStats(true);

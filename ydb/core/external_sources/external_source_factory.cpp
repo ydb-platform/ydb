@@ -14,22 +14,46 @@ namespace NKikimr::NExternalSource {
 namespace {
 
 struct TExternalSourceFactory : public IExternalSourceFactory {
-    TExternalSourceFactory(const TMap<TString, IExternalSource::TPtr>& sources)
+    TExternalSourceFactory(
+        const TMap<TString, IExternalSource::TPtr>& sources,
+        const std::set<TString>& availableExternalDataSources)
         : Sources(sources)
+        , AvailableExternalDataSources(availableExternalDataSources)
     {}
 
     IExternalSource::TPtr GetOrCreate(const TString& type) const override {
         auto it = Sources.find(type);
-        if (it != Sources.end()) {
-            return it->second;
+        if (it == Sources.end()) {
+            throw TExternalSourceException() << "External source with type " << type << " was not found";
         }
-        throw TExternalSourceException() << "External source with type " << type << " was not found";
+        if (!AvailableExternalDataSources.contains(type)) {
+            throw TExternalSourceException() << "External source with type " << type << " is disabled. Please contact your system administrator to enable it";
+        }
+        return it->second;
     }
 
 private:
-    TMap<TString, IExternalSource::TPtr> Sources;
+    const TMap<TString, IExternalSource::TPtr> Sources;
+    const std::set<TString> AvailableExternalDataSources;
 };
 
+}
+
+std::set<TString> GetAllExternalDataSourceTypes() {
+    static std::set<TString> allTypes = {
+        ToString(NYql::EDatabaseType::ObjectStorage),
+        ToString(NYql::EDatabaseType::ClickHouse),
+        ToString(NYql::EDatabaseType::PostgreSQL),
+        ToString(NYql::EDatabaseType::MySQL),
+        ToString(NYql::EDatabaseType::Ydb),
+        ToString(NYql::EDatabaseType::YT),
+        ToString(NYql::EDatabaseType::Greenplum),
+        ToString(NYql::EDatabaseType::MsSQLServer),
+        ToString(NYql::EDatabaseType::Oracle),
+        ToString(NYql::EDatabaseType::Logging),
+        ToString(NYql::EDatabaseType::Solomon)
+    };
+    return allTypes;
 }
 
 IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TString>& hostnamePatterns,
@@ -37,7 +61,8 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
                                                          size_t pathsLimit,
                                                          std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
                                                          bool enableInfer,
-                                                         bool allowLocalFiles) {
+                                                         bool allowLocalFiles,
+                                                         const std::set<TString>& availableExternalDataSources) {
     std::vector<TRegExMatch> hostnamePatternsRegEx(hostnamePatterns.begin(), hostnamePatterns.end());
     return MakeIntrusive<TExternalSourceFactory>(TMap<TString, IExternalSource::TPtr>{
         {
@@ -84,7 +109,8 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
             ToString(NYql::EDatabaseType::Solomon),
             CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN"}, {}, hostnamePatternsRegEx)
         }
-    }); 
+    },
+    availableExternalDataSources); 
 }
 
 }

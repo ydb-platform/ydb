@@ -1,8 +1,7 @@
 #include "columnshard_impl.h"
 #include "columnshard_schema.h"
 #include "inflight_request_tracker.h"
-
-#include "data_sharing/common/transactions/tx_extension.h"
+#include "tablet/ext_tx_base.h"
 #include "engines/column_engine.h"
 #include "engines/reader/plain_reader/constructor/read_metadata.h"
 #include "hooks/abstract/abstract.h"
@@ -13,15 +12,14 @@ NOlap::NReader::TReadMetadataBase::TConstPtr TInFlightReadsTracker::ExtractInFli
     ui64 cookie, const NOlap::TVersionedIndex* /*index*/, const TInstant now) {
     auto it = RequestsMeta.find(cookie);
     AFL_VERIFY(it != RequestsMeta.end())("cookie", cookie);
+    AFL_VERIFY(ActorIds.erase(cookie));
     const NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase = it->second;
 
     {
         {
             auto it = SnapshotsLive.find(readMetaBase->GetRequestSnapshot());
             AFL_VERIFY(it != SnapshotsLive.end());
-            if (it->second.DelRequest(cookie, now)) {
-                SnapshotsLive.erase(it);
-            }
+            Y_UNUSED(it->second.DelRequest(cookie, now));
         }
 
         if (NOlap::NReader::NPlain::TReadMetadata::TConstPtr readMeta =
@@ -61,9 +59,9 @@ void TInFlightReadsTracker::AddToInFlightRequest(
 }
 
 namespace {
-class TTransactionSavePersistentSnapshots: public NOlap::NDataSharing::TExtendedTransactionBase<NColumnShard::TColumnShard> {
+class TTransactionSavePersistentSnapshots: public TExtendedTransactionBase {
 private:
-    using TBase = NOlap::NDataSharing::TExtendedTransactionBase<NColumnShard::TColumnShard>;
+    using TBase = TExtendedTransactionBase;
     const std::set<NOlap::TSnapshot> SaveSnapshots;
     const std::set<NOlap::TSnapshot> RemoveSnapshots;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override {
@@ -93,27 +91,29 @@ public:
 }   // namespace
 
 std::unique_ptr<NTabletFlatExecutor::ITransaction> TInFlightReadsTracker::Ping(
-    TColumnShard* self, const TDuration critDuration, const TInstant now) {
+    TColumnShard* self, const TDuration stalenessInMem, const TDuration usedSnapshotLivetime, const TInstant now) {
     std::set<NOlap::TSnapshot> snapshotsToSave;
-    std::set<NOlap::TSnapshot> snapshotsToFree;
+    std::set<NOlap::TSnapshot> snapshotsToFreeInDB;
+    std::set<NOlap::TSnapshot> snapshotsToFreeInMem;
     for (auto&& i : SnapshotsLive) {
-        if (i.second.Ping(critDuration, now)) {
+        if (i.second.IsExpired(usedSnapshotLivetime, now)) {
             if (i.second.GetIsLock()) {
-                Counters->OnSnapshotLocked();
-                snapshotsToSave.emplace(i.first);
-            } else {
                 Counters->OnSnapshotUnlocked();
-                snapshotsToFree.emplace(i.first);
+                snapshotsToFreeInDB.emplace(i.first);
             }
+            snapshotsToFreeInMem.emplace(i.first);
+        } else if (i.second.CheckToLock(stalenessInMem, usedSnapshotLivetime, now)) {
+            Counters->OnSnapshotLocked();
+            snapshotsToSave.emplace(i.first);
         }
     }
-    for (auto&& i : snapshotsToFree) {
+    for (auto&& i : snapshotsToFreeInMem) {
         SnapshotsLive.erase(i);
     }
     Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
-    if (snapshotsToFree.size() || snapshotsToSave.size()) {
-        NYDBTest::TControllers::GetColumnShardController()->OnRequestTracingChanges(snapshotsToSave, snapshotsToFree);
-        return std::make_unique<TTransactionSavePersistentSnapshots>(self, std::move(snapshotsToSave), std::move(snapshotsToFree));
+    if (snapshotsToFreeInDB.size() || snapshotsToSave.size()) {
+        NYDBTest::TControllers::GetColumnShardController()->OnRequestTracingChanges(snapshotsToSave, snapshotsToFreeInMem);
+        return std::make_unique<TTransactionSavePersistentSnapshots>(self, std::move(snapshotsToSave), std::move(snapshotsToFreeInDB));
     } else {
         return nullptr;
     }

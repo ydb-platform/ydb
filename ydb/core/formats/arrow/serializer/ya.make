@@ -13,6 +13,7 @@ SRCS(
     GLOBAL native.cpp
     stream.cpp
     parsing.cpp
+    utils.cpp
 )
 
 END()

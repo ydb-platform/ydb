@@ -170,6 +170,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableCreateTableAs = false;
     ui64 IdxLookupJoinsPrefixPointLimit = 1;
     bool OldLookupJoinBehaviour = true;
+    bool AllowOlapDataQuery = false;
     bool EnableOlapSink = false;
     bool EnableOltpSink = false;
     bool EnableHtapTx = false;

@@ -198,6 +198,8 @@ struct IDqComputeActorAsyncOutput {
 
     virtual TMaybe<google::protobuf::Any> ExtraData() { return {}; }
 
+    virtual void FillExtraStats(NDqProto::TDqTaskStats* /* stats */, bool /* finalized stats */, const NYql::NDq::TDqMeteringStats*) { }
+
     virtual void PassAway() = 0; // The same signature as IActor::PassAway()
 
     virtual ~IDqComputeActorAsyncOutput() = default;

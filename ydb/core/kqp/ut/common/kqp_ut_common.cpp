@@ -132,8 +132,11 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetUseRealThreads(settings.UseRealThreads);
     ServerSettings->SetEnableTablePgTypes(true);
     ServerSettings->SetEnablePgSyntax(true);
-    ServerSettings->SetEnableOlapCompression(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
+
+    if (!settings.FeatureFlags.HasEnableOlapCompression()) {
+        ServerSettings->SetEnableOlapCompression(true);
+    }
 
     if (settings.Storage) {
         ServerSettings->SetCustomDiskParams(*settings.Storage);
@@ -519,6 +522,7 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::KQP_BLOBS_STORAGE);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_WORKLOAD_SERVICE);
     SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD);
+    SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD_SCAN);
     SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
 
     RunCall([this, domain = settings.DomainRoot]{

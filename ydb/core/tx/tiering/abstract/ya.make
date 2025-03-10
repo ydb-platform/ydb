@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/actors/core
+    ydb/core/tx/tiering/tier
 )
 
 END()

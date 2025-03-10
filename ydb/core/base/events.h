@@ -181,6 +181,7 @@ struct TKikimrEvents : TEvents {
         ES_LIMITER = 4258, 
         //ES_MEMORY = 4259, NB. exists in main
         ES_GROUPED_ALLOCATIONS_MANAGER = 4260,
+        ES_PRIORITY_QUEUE = 4263,
     };
 };
 

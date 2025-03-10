@@ -10,7 +10,6 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.*
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
 ydb/core/kqp/ut/join KqpJoinOrder.Chain65Nodes
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.*
-ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
 ydb/core/kqp/ut/tx KqpLocksTricky.TestNoLocksIssueInteractiveTx+withSink
 ydb/core/kqp/ut/tx KqpLocksTricky.TestNoLocksIssue+withSink
@@ -32,6 +31,9 @@ ydb/core/kqp/ut/service KqpQueryService.TableSink_OltpUpdate
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service [38/50]*
 ydb/core/kqp/ut/service KqpQueryService.TableSink_OltpReplace+HasSecondaryIndex
+ydb/core/kqp/ut/spilling KqpScanSpilling.HandleErrorsCorrectly
+ydb/core/mind/hive/ut THiveTest.TestHiveBalancerNodeRestarts
+ydb/core/persqueue/ut TPQTest.TestReadAndDeleteConsumer
 ydb/core/persqueue/ut [37/40] chunk chunk
 ydb/core/persqueue/ut [38/40] chunk chunk
 ydb/core/persqueue/ut TPQTest.*DirectRead*
@@ -48,6 +50,7 @@ ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitBySizeTest.Merge1KShards
+ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst*
 ydb/core/tx/tx_proxy/ut_storage_tenant TStorageTenantTest.RemoveStoragePoolBeforeDroppingTablet
 ydb/core/util/ut TCircularOperationQueueTest.ShouldShuffle
@@ -56,6 +59,8 @@ ydb/core/viewer/ut Viewer.TabletMergingPacked
 ydb/library/actors/http/ut HttpProxy.TooLongHeader
 ydb/library/actors/http/ut sole*
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb* *
+ydb/library/yql/tests/sql/hybrid_file/part2 test.py.test[bigdate-table_int_cast-default.txt-Debug]
+ydb/library/yql/tests/sql/hybrid_file/part7 test.py.test[bigdate-table_arithmetic_mul_div-default.txt-Debug]
 ydb/public/lib/ydb_cli/topic/ut TTopicReaderTests.TestRun_ReadOneMessage
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut RetryPolicy.TWriteSession_TestBrokenPolicy
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut [9/10] chunk chunk
@@ -87,6 +92,7 @@ ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestActiveSessionCountAfterBadSe
 ydb/services/ydb/sdk_sessions_ut [6/10]*
 ydb/services/ydb/table_split_ut YdbTableSplit.SplitByLoadWithReadsMultipleSplitsWithData
 ydb/services/ydb/table_split_ut [5/7]*
+ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/services/ydb/ut YdbOlapStore.LogPagingAfter-NotNull
 ydb/services/ydb/ut YdbQueryService.TestCreateAndAttachSession
 ydb/services/ydb/ut YdbScripting.BasicV0
@@ -96,6 +102,9 @@ ydb/tests/fq/multi_plane *
 ydb/tests/fq/plans test_stats_mode.py.TestStatsMode.test_mode[v1-STATS_MODE_FULL-client0]
 ydb/tests/fq/yds *
 ydb/tests/fq/control_plane_storage *
+ydb/tests/fq/s3 test_bindings_1.py.TestBindings.test_pg_binding[v2-client0]
+ydb/tests/fq/s3 test_bindings_1.py.TestBindings.test_count_for_pg_binding[v2-pg_syntax-client0]
+ydb/tests/fq/s3 test_format_setting.py.TestS3.test_precompute_with_pg_binding[v2-pg_types-pg_syntax-client0]
 ydb/tests/functional/audit *
 ydb/tests/functional/blobstorage test_replication.py.TestReplicationAfterNodesRestart.test_replication*
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
@@ -106,6 +115,7 @@ ydb/tests/functional/tenants test_dynamic_tenants.py.*
 ydb/tests/functional/tenants test_storage_config.py.TestStorageConfig.*
 ydb/tests/functional/tenants test_tenants.py.*
 ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset*
+ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/join2.test]
 ydb/tests/tools/pq_read/test test_timeout.py.TestTimeout.test_timeout
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation

@@ -89,7 +89,7 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_pt
             Cerr << "\n";
         }
         UNIT_ASSERT_VALUES_EQUAL(op.status(), expectedStatus);
-        });
+    });
 
     TDispatchOptions options;
     options.CustomFinalCondition = [&]() {
@@ -119,7 +119,7 @@ std::shared_ptr<arrow::Schema> THelper::GetArrowSchema() const {
     return std::make_shared<arrow::Schema>(std::move(fields));
 }
 
-std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui32 tsStepUs) const {
+std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui64 tsStepUs) const {
     std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
 
     arrow::TimestampBuilder b1(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool());
@@ -193,7 +193,6 @@ TString THelper::GetTestTableSchema() const {
     sb << R"(
         KeyColumnNames: "timestamp"
         KeyColumnNames: "uid"
-        Engine : COLUMN_ENGINE_REPLACING_TIMESERIES
     )";
     return sb;
 }
@@ -227,7 +226,33 @@ void THelper::CreateSchemaOlapTablesWithStore(const TString tableSchema, TVector
 }
 
 void THelper::CreateOlapTablesWithStore(TVector<TString> tableNames /*= {"olapTable"}*/, TString storeName /*= "olapStore"*/, ui32 storeShardsCount /*= 4*/, ui32 tableShardsCount /*= 3*/) {
-        CreateSchemaOlapTablesWithStore(GetTestTableSchema(), tableNames, storeName, storeShardsCount, tableShardsCount);
+    CreateSchemaOlapTablesWithStore(GetTestTableSchema(), tableNames, storeName, storeShardsCount, tableShardsCount);
+}
+
+void THelper::CreateSchemaOlapTables(const TString tableSchema, TVector<TString> tableNames, ui32 tableShardsCount) {
+    TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
+
+    const TString shardingColumns = "[\"" + JoinSeq("\",\"", GetShardingColumns()) + "\"]";
+
+    for (const TString& tableName : tableNames) {
+        TBase::CreateTestOlapTable(sender, "", Sprintf(R"(
+            Name: "%s"
+            ColumnShardCount: %d
+            Sharding {
+                HashSharding {
+                    Function: %s
+                    Columns: %s
+                }
+            }
+            Schema {
+                %s
+            }
+        )", tableName.c_str(), tableShardsCount, ShardingMethod.data(), shardingColumns.c_str(), tableSchema.data()));
+    }
+}
+
+void THelper::CreateOlapTables(TVector<TString> tableNames /*= {"olapTable"}*/, ui32 tableShardsCount /*= 3*/) {
+    CreateSchemaOlapTables(GetTestTableSchema(), tableNames, tableShardsCount);
 }
 
 // Clickbench table
@@ -235,7 +260,7 @@ void THelper::CreateOlapTablesWithStore(TVector<TString> tableNames /*= {"olapTa
 std::shared_ptr<arrow::Schema> TCickBenchHelper::GetArrowSchema() const {
     return std::make_shared<arrow::Schema>(
         std::vector<std::shared_ptr<arrow::Field>> {
-            arrow::field("WatchID", arrow::int64(), false),
+        arrow::field("WatchID", arrow::int64(), false),
             arrow::field("JavaEnable", arrow::int16(), false),
             arrow::field("Title", arrow::utf8(), false),
             arrow::field("GoodEvent", arrow::int16(), false),
@@ -343,7 +368,7 @@ std::shared_ptr<arrow::Schema> TCickBenchHelper::GetArrowSchema() const {
     });
 }
 
-std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 begin, size_t rowCount, const ui32 tsStepUs) const {
+std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 begin, size_t rowCount, const ui64 tsStepUs) const {
     std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
     UNIT_ASSERT(schema);
     UNIT_ASSERT(schema->num_fields());
@@ -403,7 +428,7 @@ std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 
 std::shared_ptr<arrow::Schema> TTableWithNullsHelper::GetArrowSchema() const {
     return std::make_shared<arrow::Schema>(
         std::vector<std::shared_ptr<arrow::Field>>{
-            arrow::field("id", arrow::int32(), false),
+        arrow::field("id", arrow::int32(), false),
             arrow::field("resource_id", arrow::utf8()),
             arrow::field("level", arrow::int32()),
             arrow::field("binary_str", arrow::binary()),
@@ -416,7 +441,7 @@ std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch() cons
     return TestArrowBatch(0, 0, 10, 1);
 }
 
-std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, ui64, size_t rowCount, const ui32 /*tsStepUs*/) const {
+std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, ui64, size_t rowCount, const ui64 /*tsStepUs*/) const {
     rowCount = 10;
     std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
 

@@ -490,8 +490,8 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const Ydb::Value& valu
         case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
             CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "JsonDocument");
             const auto binaryJson = NBinaryJson::SerializeToBinaryJson(value.text_value());
-            if (!binaryJson.Defined()) {
-                throw yexception() << "Invalid JsonDocument value";
+            if (binaryJson.IsFail()) {
+                throw yexception() << "Invalid JsonDocument value: " << binaryJson.GetErrorMessage();
             }
             res.SetBytes(binaryJson->Data(), binaryJson->Size());
             break;
@@ -1216,8 +1216,8 @@ bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Val
         }
     case NScheme::NTypeIds::JsonDocument : {
         const auto binaryJson = NBinaryJson::SerializeToBinaryJson(val.Gettext_value());
-        if (!binaryJson.Defined()) {
-            err = "Invalid JSON for JsonDocument provided";
+        if (binaryJson.IsFail()) {
+            err = "Invalid JSON for JsonDocument provided: " + binaryJson.GetErrorMessage();
             return false;
         }
         const auto binaryJsonInPool = valueDataPool.AppendString(TStringBuf(binaryJson->Data(), binaryJson->Size()));

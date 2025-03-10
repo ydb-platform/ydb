@@ -2957,6 +2957,31 @@ void TSchemeShard::PersistRemoveExternalDataSource(NIceDb::TNiceDb& db, TPathId 
     db.Table<Schema::ExternalDataSource>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
+void TSchemeShard::PersistExternalDataSourceReference(NIceDb::TNiceDb& db, TPathId pathId, const TPath& referrer) {
+    auto findSource = ExternalDataSources.FindPtr(pathId);
+    Y_ABORT_UNLESS(findSource);
+    auto* ref = (*findSource)->ExternalTableReferences.AddReferences();
+    ref->SetPath(referrer.PathString());
+    PathIdFromPathId(referrer->PathId, ref->MutablePathId());
+    db.Table<Schema::ExternalDataSource>()
+        .Key(pathId.OwnerId, pathId.LocalPathId)
+        .Update(
+            NIceDb::TUpdate<Schema::ExternalDataSource::ExternalTableReferences>{ (*findSource)->ExternalTableReferences.SerializeAsString() });
+}
+
+void TSchemeShard::PersistRemoveExternalDataSourceReference(NIceDb::TNiceDb& db, TPathId pathId, TPathId referrer) {
+    auto findSource = ExternalDataSources.FindPtr(pathId);
+    Y_ABORT_UNLESS(findSource);
+    EraseIf(*(*findSource)->ExternalTableReferences.MutableReferences(),
+        [referrer](const NKikimrSchemeOp::TExternalTableReferences::TReference& reference) {
+            return PathIdFromPathId(reference.GetPathId()) == referrer;
+        });
+    db.Table<Schema::ExternalDataSource>()
+        .Key(pathId.OwnerId, pathId.LocalPathId)
+        .Update(
+            NIceDb::TUpdate<Schema::ExternalDataSource::ExternalTableReferences>{ (*findSource)->ExternalTableReferences.SerializeAsString() });
+}
+
 void TSchemeShard::PersistView(NIceDb::TNiceDb &db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 

@@ -526,6 +526,18 @@ public:
             return result;
         }
 
+        for (auto&& tPathId: alterData->ColumnTables) {
+            auto table = context.SS->ColumnTables.GetVerifiedPtr(tPathId);
+            if (!table->Description.HasTtlSettings()) {
+                continue;
+            }
+            auto it = alterData->SchemaPresets.find(table->Description.GetSchemaPresetId());
+            AFL_VERIFY(it != alterData->SchemaPresets.end())("preset_info", table->Description.DebugString());
+            if (!it->second.ValidateTtlSettings(table->Description.GetTtlSettings(), context, errors)) {
+                return result;
+            }
+        }
+
         if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {
             for (auto& [_, preset]: alterData->SchemaPresets) {
                 for (auto& [_, column]: preset.GetColumns().GetColumns()) {

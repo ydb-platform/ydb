@@ -29,23 +29,24 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
+    library/cpp/threading/hot_swap
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats
     ydb/core/kqp/common
+    ydb/core/kqp/common/buffer
     ydb/core/protos
     ydb/core/scheme
     ydb/core/ydb_convert
-    ydb/library/yql/minikql/computation/llvm14
-    ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/utils
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/actors/spilling
     ydb/library/yql/dq/common
     ydb/library/yql/dq/runtime
-    library/cpp/threading/hot_swap
+    ydb/library/yql/minikql/comp_nodes
+    ydb/library/yql/minikql/computation/llvm14
+    ydb/library/yql/utils
 )
 
 YQL_LAST_ABI_VERSION()

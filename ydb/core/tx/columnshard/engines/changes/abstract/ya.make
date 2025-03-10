@@ -4,6 +4,9 @@ SRCS(
     abstract.cpp
     compaction_info.cpp
     settings.cpp
+    remove_portions.cpp
+    move_portions.cpp
+    changes.cpp
 )
 
 PEERDIR(

@@ -1113,6 +1113,9 @@ TCheckFunc HasTtlEnabled(const TString& columnName, const TDuration& expireAfter
         UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), columnName);
         UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnUnit(), columnUnit);
         UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetExpireAfterSeconds(), expireAfter.Seconds());
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().TiersSize(), 1);
+        UNIT_ASSERT(ttl.GetEnabled().GetTiers(0).HasDelete());
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetTiers(0).GetApplyAfterSeconds(), expireAfter.Seconds());
     };
 }
 
@@ -1186,12 +1189,22 @@ TCheckFunc HasColumnTableTtlSettingsDisabled() {
     };
 }
 
-TCheckFunc HasColumnTableTtlSettingsTiering(const TString& tieringName) {
+TCheckFunc HasColumnTableTtlSettingsTier(const TString& columnName, const TDuration& evictAfter, const std::optional<TString>& storageName) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         const auto& table = record.GetPathDescription().GetColumnTableDescription();
         UNIT_ASSERT(table.HasTtlSettings());
         const auto& ttl = table.GetTtlSettings();
-        UNIT_ASSERT_EQUAL(ttl.GetUseTiering(), tieringName);
+        UNIT_ASSERT(ttl.HasEnabled());
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), columnName);
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().TiersSize(), 1);
+        const auto& tier = ttl.GetEnabled().GetTiers(0);
+        UNIT_ASSERT_VALUES_EQUAL(tier.GetApplyAfterSeconds(), evictAfter.Seconds());
+        if (storageName) {
+            UNIT_ASSERT(tier.HasEvictToExternalStorage());
+            UNIT_ASSERT_VALUES_EQUAL(tier.GetEvictToExternalStorage().GetStorage(), storageName);
+        } else {
+            UNIT_ASSERT(tier.HasDelete());
+        }
     };
 }
 

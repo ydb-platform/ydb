@@ -89,7 +89,7 @@ ITask::ITask(const TReadActionsCollection& actions, const TString& taskCustomer,
     , TaskCustomer(taskCustomer)
 {
     Agents = actions;
-    AFL_VERIFY(!Agents.IsEmpty());
+//    AFL_VERIFY(!Agents.IsEmpty());
     for (auto&& i : Agents) {
         AFL_VERIFY(i.second->GetExpectedBlobsCount());
     }

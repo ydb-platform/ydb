@@ -185,8 +185,8 @@ public:
         return StartTxIds.empty() && FinishTxIds.empty() && IntervalTxIds.empty();
     }
 
-    void ProvideTxIdsFrom(const TPointInfo& previouse) {
-        for (auto&& i : previouse.IntervalTxIds) {
+    void ProvideTxIdsFrom(const TPointInfo& previous) {
+        for (auto&& i : previous.IntervalTxIds) {
             auto provided = i.second;
             {
                 auto it = StartTxIds.find(i.first);
@@ -350,7 +350,7 @@ public:
         AFL_VERIFY(writtenPrimaryKeys);
         auto it = IntervalsInfo.begin();
         THashSet<ui64> affectedTxIds;
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("batch", writtenPrimaryKeys->ToString())("info", DebugJson().GetStringRobust());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("batch", writtenPrimaryKeys->ToString())("info", DebugJson().GetStringRobust());
         for (ui32 i = 0; i < writtenPrimaryKeys->num_rows();) {
             if (it == IntervalsInfo.end()) {
                 return affectedTxIds;
@@ -400,6 +400,10 @@ private:
     THashMap<ui64, TReadIntervals> ReadIntervalsByPathId;
 
 public:
+    bool HasReadIntervals(const ui64 pathId) const {
+        return ReadIntervalsByPathId.contains(pathId);
+    }
+
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         for (auto&& i : ReadIntervalsByPathId) {

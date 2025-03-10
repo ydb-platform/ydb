@@ -32,4 +32,12 @@ EValidationResult ValidateStaticGroup(
     const NKikimrConfig::TAppConfig& proposed,
     std::vector<TString>& msg);
 
+EValidationResult ValidateColumnShardConfig(
+    const NKikimrConfig::TColumnShardConfig& columnShardConfig, 
+    std::vector<TString>& msg);
+
+EValidationResult ValidateConfig(
+    const NKikimrConfig::TAppConfig& config,
+    std::vector<TString>& msg);
+
 } // namespace NKikimr::NConfig

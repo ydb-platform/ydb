@@ -133,6 +133,15 @@ TSortableScanData::TSortableScanData(
     BuildPosition(position);
 }
 
+TSortableScanData::TSortableScanData(
+    const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch) {
+    for (auto&& c : batch->columns()) {
+        Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(c));
+    }
+    Fields = batch->schema()->fields();
+    BuildPosition(position);
+}
+
 TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns) {
     for (auto&& i : columns) {
         auto c = batch->GetColumnByName(i);

@@ -222,6 +222,10 @@ namespace Tests {
             return *this;
         }
 
+        TServerSettings& SetColumnShardAlterObjectEnabled(bool enable) {
+            AppConfig->MutableColumnShardConfig()->SetAlterObjectEnabled(enable);
+            return *this;
+        }
 
         // Add additional grpc services
         template <typename TService>
@@ -252,6 +256,7 @@ namespace Tests {
             AppConfig->MutableHiveConfig()->SetObjectImbalanceToBalance(100);
             AppConfig->MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
             FeatureFlags.SetEnableSeparationComputeActorsFromRead(true);
+            FeatureFlags.SetEnableWritePortionsOnInsert(true);
         }
 
         TServerSettings(const TServerSettings& settings) = default;

@@ -3,7 +3,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
-#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
@@ -11,12 +10,9 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 
-namespace NKikimr::NOlap {
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
-TIndexInfo::TIndexInfo(const TString& name)
-    : Name(name) {
-    CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
-}
+namespace NKikimr::NOlap {
 
 bool TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
     if (!other.GetPrimaryKey()->Equals(PrimaryKey)) {
@@ -32,25 +28,23 @@ ui32 TIndexInfo::GetColumnIdVerified(const std::string& name) const {
 }
 
 std::optional<ui32> TIndexInfo::GetColumnIdOptional(const std::string& name) const {
-    const auto pred = [](const TNameInfo& item, const std::string& value) {
-        return item.GetName() < value;
-    };
-    auto it = std::lower_bound(ColumnNames.begin(), ColumnNames.end(), name, pred);
-    if (it != ColumnNames.end() && it->GetName() == name) {
-        return it->GetColumnId();
+    auto idx = GetColumnIndexOptional(name);
+    if (!idx) {
+        return std::nullopt;
     }
-    return IIndexInfo::GetColumnIdOptional(name);
+    AFL_VERIFY(*idx < SchemaColumnIdsWithSpecials.size());
+    return SchemaColumnIdsWithSpecials[*idx];
 }
 
 std::optional<ui32> TIndexInfo::GetColumnIndexOptional(const std::string& name) const {
-    const auto pred = [](const TNameInfo& item, const std::string& value) {
-        return item.GetName() < value;
-    };
-    auto it = std::lower_bound(ColumnNames.begin(), ColumnNames.end(), name, pred);
-    if (it != ColumnNames.end() && it->GetName() == name) {
-        return it->GetColumnIdx();
+    auto it = std::lower_bound(ColumnIdxSortedByName.begin(), ColumnIdxSortedByName.end(), name, [this](const ui32 idx, const std::string name) {
+        AFL_VERIFY(idx < ColumnFeatures.size());
+        return ColumnFeatures[idx]->GetColumnName() < name;
+    });
+    if (it != ColumnIdxSortedByName.end() && SchemaWithSpecials->GetFieldByIndexVerified(*it)->name() == name) {
+        return *it;
     }
-    return IIndexInfo::GetColumnIndexOptional(name, ColumnNames.size());
+    return std::nullopt;
 }
 
 TString TIndexInfo::GetColumnName(const ui32 id, bool required) const {
@@ -63,11 +57,12 @@ TString TIndexInfo::GetColumnName(const ui32 id, bool required) const {
     }
 }
 
-const std::vector<ui32>& TIndexInfo::GetColumnIds(const bool withSpecial) const {
+TColumnIdsView TIndexInfo::GetColumnIds(const bool withSpecial) const {
     if (withSpecial) {
-        return SchemaColumnIdsWithSpecials;
+        return {SchemaColumnIdsWithSpecials.begin(), SchemaColumnIdsWithSpecials.end()};
     } else {
-        return SchemaColumnIds;
+        AFL_VERIFY(SpecialColumnsCount < SchemaColumnIdsWithSpecials.size());
+        return {SchemaColumnIdsWithSpecials.begin(), SchemaColumnIdsWithSpecials.end() - SpecialColumnsCount};
     }
 }
 
@@ -80,7 +75,8 @@ std::vector<TString> TIndexInfo::GetColumnNames(const std::vector<ui32>& ids) co
     return out;
 }
 
-std::vector<std::string> TIndexInfo::GetColumnSTLNames(const std::vector<ui32>& ids) const {
+std::vector<std::string> TIndexInfo::GetColumnSTLNames(const bool withSpecial) const {
+    const TColumnIdsView ids = GetColumnIds(withSpecial);
     std::vector<std::string> out;
     out.reserve(ids.size());
     for (ui32 id : ids) {
@@ -89,9 +85,9 @@ std::vector<std::string> TIndexInfo::GetColumnSTLNames(const std::vector<ui32>& 
     return out;
 }
 
-const std::shared_ptr<NArrow::TSchemaLite>& TIndexInfo::ArrowSchema() const {
-    AFL_VERIFY(Schema);
-    return Schema;
+NArrow::TSchemaLiteView TIndexInfo::ArrowSchema() const {
+    const auto& schema = ArrowSchemaWithSpecials();
+    return std::span<const std::shared_ptr<arrow::Field>>(schema->fields().begin(), schema->fields().end() - SpecialColumnsCount);
 }
 
 const std::shared_ptr<NArrow::TSchemaLite>& TIndexInfo::ArrowSchemaWithSpecials() const {
@@ -125,15 +121,9 @@ void TIndexInfo::SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, 
         PKColumns.emplace_back(TNameTypeInfo(it->second.Name, it->second.PType));
     }
 
-    for (const auto& [colId, column] : columns) {
-        if (NArrow::IsPrimitiveYqlType(column.PType)) {
-            MinMaxIdxColumnsIds.insert(colId);
-        }
-    }
-    MinMaxIdxColumnsIds.insert(GetPKFirstColumnId());
-    if (!Schema) {
-        AFL_VERIFY(!SchemaWithSpecials);
+    if (!SchemaWithSpecials) {
         InitializeCaches(operators, columns, nullptr);
+        Precalculate();
     }
 }
 
@@ -141,10 +131,10 @@ TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId) const {
     return GetColumnFeaturesVerified(columnId).GetColumnSaver();
 }
 
-std::shared_ptr<TColumnLoader> TIndexInfo::GetColumnLoaderOptional(const ui32 columnId) const {
+const std::shared_ptr<TColumnLoader>& TIndexInfo::GetColumnLoaderOptional(const ui32 columnId) const {
     const auto& cFeatures = GetColumnFeaturesOptional(columnId);
     if (!cFeatures) {
-        return nullptr;
+        return Default<std::shared_ptr<TColumnLoader>>();
     } else {
         return cFeatures->GetLoader();
     }
@@ -175,10 +165,24 @@ std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldVerified(const ui32 colu
 }
 
 std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchema(const std::set<ui32>& columnIds) const {
-    Y_ABORT_UNLESS(columnIds.size());
+    AFL_VERIFY(columnIds.size());
     std::vector<std::shared_ptr<arrow::Field>> fields;
     for (auto&& i : columnIds) {
         fields.emplace_back(GetColumnFieldVerified(i));
+    }
+    return std::make_shared<arrow::Schema>(fields);
+}
+
+std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchemaByOrderedIndexes(const std::vector<ui32>& columnIdxs) const {
+    AFL_VERIFY(columnIdxs.size());
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::optional<ui32> predColumnIdx;
+    for (auto&& i : columnIdxs) {
+        if (predColumnIdx) {
+            AFL_VERIFY(*predColumnIdx < i);
+        }
+        predColumnIdx = i;
+        fields.emplace_back(ArrowSchemaWithSpecials()->GetFieldByIndexVerified(i));
     }
     return std::make_shared<arrow::Schema>(fields);
 }
@@ -187,35 +191,64 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) 
     return GetColumnsSchema({ columnId });
 }
 
-bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators,
-    const std::shared_ptr<TSchemaObjectsCache>& cache) {
-    if (schema.GetEngine() != NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_index_info")("reason", "incorrect_engine_in_schema");
+void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTableSchemeOptions& optionsProto) {
+    TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::Options");
+    SchemeNeedActualization = optionsProto.GetSchemeNeedActualization();
+    if (optionsProto.HasScanReaderPolicyName()) {
+        ScanReaderPolicyName = optionsProto.GetScanReaderPolicyName();
+    }
+    if (optionsProto.HasCompactionPlannerConstructor()) {
+        auto container =
+            NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(optionsProto.GetCompactionPlannerConstructor());
+        CompactionPlannerConstructor = container.DetachResult().GetObjectPtrVerified();
+    } else {
+        CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
+    }
+    if (optionsProto.HasMetadataManagerConstructor()) {
+        auto container =
+            NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(optionsProto.GetMetadataManagerConstructor());
+        MetadataManagerConstructor = container.DetachResult().GetObjectPtrVerified();
+    } else {
+        MetadataManagerConstructor = NDataAccessorControl::IManagerConstructor::BuildDefault();
+    }
+}
+
+bool TIndexInfo::DeserializeDefaultCompressionFromProto(const NKikimrSchemeOp::TCompressionOptions& compressionProto) {
+    TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::Serializer");
+    NArrow::NSerialization::TSerializerContainer container;
+    if (!container.DeserializeFromProto(compressionProto)) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_index_info")("reason", "cannot_parse_default_serializer");
         return false;
     }
+    DefaultSerializer = container;
+    return true;
+}
+
+TConclusion<std::shared_ptr<TColumnFeatures>> TIndexInfo::CreateColumnFeatures(const NTable::TColumn& col,
+    const NKikimrSchemeOp::TOlapColumnDescription& colProto, const std::shared_ptr<IStoragesManager>& operators,
+    const std::shared_ptr<TSchemaObjectsCache>& cache) const {
+    const TString fingerprint = cache ? ("C:" + colProto.SerializeAsString()) : Default<TString>();
+    const auto createPred = [&]() -> TConclusion<std::shared_ptr<TColumnFeatures>> {
+        auto f = BuildDefaultColumnFeatures(col, operators);
+        auto parsed = f->DeserializeFromProto(colProto, operators);
+        if (parsed.IsFail()) {
+            return parsed;
+        }
+        return f;
+    };
+    return cache->GetOrCreateColumnFeatures(fingerprint, createPred);
+}
+
+bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators,
+    const std::shared_ptr<TSchemaObjectsCache>& cache) {
     AFL_VERIFY(cache);
 
-    {
-        TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::Optimizer");
-        SchemeNeedActualization = schema.GetOptions().GetSchemeNeedActualization();
-        ExternalGuaranteeExclusivePK = schema.GetOptions().GetExternalGuaranteeExclusivePK();
-        if (schema.GetOptions().HasCompactionPlannerConstructor()) {
-            auto container =
-                NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(schema.GetOptions().GetCompactionPlannerConstructor());
-            CompactionPlannerConstructor = container.DetachResult().GetObjectPtrVerified();
-        } else {
-            AFL_VERIFY(!!CompactionPlannerConstructor);
-        }
-    }
+    DeserializeOptionsFromProto(schema.GetOptions());
 
     if (schema.HasDefaultCompression()) {
-        TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::Serializer");
-        NArrow::NSerialization::TSerializerContainer container;
-        if (!container.DeserializeFromProto(schema.GetDefaultCompression())) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_index_info")("reason", "cannot_parse_default_serializer");
+        if (!DeserializeDefaultCompressionFromProto(schema.GetDefaultCompression())) {
             return false;
         }
-        DefaultSerializer = container;
     }
     {
         TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::Indexes");
@@ -226,49 +259,40 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
         }
     }
     THashMap<ui32, NTable::TColumn> columns;
+    AFL_VERIFY(PKColumnIds.empty());
     {
         TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::Columns");
+        THashMap<TString, ui32> columnIds;
         for (const auto& col : schema.GetColumns()) {
-            const ui32 id = col.GetId();
-            const TString& name = cache->GetStringCache(col.GetName());
-            const bool notNull = col.HasNotNull() ? col.GetNotNull() : false;
-            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(), col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
-            columns[id] = NTable::TColumn(name, id, typeInfoMod.TypeInfo, cache->GetStringCache(typeInfoMod.TypeMod), notNull);
+            auto tableCol = BuildColumnFromProto(col, cache);
+            auto id = tableCol.Id;
+            AFL_VERIFY(columnIds.emplace(tableCol.Name, id).second);
+            AFL_VERIFY(columns.emplace(id, std::move(tableCol)).second);
         }
-        ColumnNames = TNameInfo::BuildColumnNames(columns);
-    }
-    PKColumnIds.clear();
-    for (const auto& keyName : schema.GetKeyColumnNames()) {
-        const ui32 columnId = GetColumnIdVerified(keyName);
-        auto it = columns.find(columnId);
-        AFL_VERIFY(it != columns.end());
-        it->second.KeyOrder = PKColumnIds.size();
-        PKColumnIds.push_back(columnId);
+        for (const auto& keyName : schema.GetKeyColumnNames()) {
+            const ui32* findColumnId = columnIds.FindPtr(keyName);
+            AFL_VERIFY(findColumnId);
+            auto it = columns.find(*findColumnId);
+            AFL_VERIFY(it != columns.end());
+            it->second.KeyOrder = PKColumnIds.size();
+            PKColumnIds.push_back(*findColumnId);
+        }
     }
     InitializeCaches(operators, columns, cache, false);
     SetAllKeys(operators, columns);
     {
         TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::Columns::Features");
         for (const auto& col : schema.GetColumns()) {
-            THashMap<ui32, std::shared_ptr<TColumnFeatures>> it;
-            const TString fingerprint = cache ? ("C:" + col.SerializeAsString()) : Default<TString>();
-            const auto createPred = [&]() -> TConclusion<std::shared_ptr<TColumnFeatures>> {
-                auto f = BuildDefaultColumnFeatures(col.GetId(), columns, operators);
-                auto parsed = f->DeserializeFromProto(col, operators);
-                if (parsed.IsFail()) {
-                    return parsed;
-                }
-                return f;
-            };
-            auto fConclusion = cache->GetOrCreateColumnFeatures(fingerprint, createPred);
+            auto it = columns.find(col.GetId());
+            AFL_VERIFY(it != columns.end());
+            auto fConclusion = CreateColumnFeatures(it->second, col, operators, cache);
             if (fConclusion.IsFail()) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_column_feature")("reason", fConclusion.GetErrorMessage());
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_build_column_feature")("reason", fConclusion.GetErrorMessage());
                 return false;
             }
             ColumnFeatures.emplace_back(fConclusion.DetachResult());
         }
         for (auto&& cId : GetSystemColumnIds()) {
-            THashMap<ui32, std::shared_ptr<TColumnFeatures>> it;
             const TString fingerprint = "SC:" + ::ToString(cId);
             const auto createPred = [&]() -> TConclusion<std::shared_ptr<TColumnFeatures>> {
                 return BuildDefaultColumnFeatures(cId, {}, operators);
@@ -283,6 +307,8 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
     }
 
     Version = schema.GetVersion();
+    Precalculate();
+    Validate();
     return true;
 }
 
@@ -299,37 +325,29 @@ std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& table
 
 std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema,
     const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache) {
-    TIndexInfo result("");
+    TIndexInfo result;
     if (!result.DeserializeFromProto(schema, operators, cache)) {
         return std::nullopt;
     }
     return result;
 }
 
-std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids,
-    const std::shared_ptr<TSchemaObjectsCache>& cache) {
+std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const NKikimrSchemeOp::TColumnTableSchemaDiff& diff, const TIndexInfo& prevSchema,
+    const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache) {
+    TSchemaDiffView diffView;
+    diffView.DeserializeFromProto(diff).Validate();
+    return TIndexInfo(prevSchema, diffView, operators, cache);
+}
+
+std::vector<std::shared_ptr<arrow::Field>> TIndexInfo::MakeArrowFields(
+    const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const std::shared_ptr<TSchemaObjectsCache>& cache) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     for (const ui32 id : ids) {
         AFL_VERIFY(!TIndexInfo::IsSpecialColumn(id));
         auto it = columns.find(id);
         AFL_VERIFY(it != columns.end());
-
-        const auto& column = it->second;
-        std::string colName(column.Name.data(), column.Name.size());
-        auto arrowType = NArrow::GetArrowType(column.PType);
-        AFL_VERIFY(arrowType.ok());
-        auto f = std::make_shared<arrow::Field>(colName, arrowType.ValueUnsafe(), !column.NotNull);
-        if (cache) {
-            auto fFound = cache->GetField(f->ToString(true));
-            if (!fFound) {
-                cache->RegisterField(f->ToString(true), f);
-                fields.emplace_back(f);
-            } else {
-                fields.emplace_back(fFound);
-            }
-        } else {
-            fields.emplace_back(f);
-        }
+        auto f = TIndexInfo::BuildArrowField(it->second, cache);
+        fields.emplace_back(f);
     }
 
     return fields;
@@ -337,30 +355,30 @@ std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const NTable::TScheme
 
 std::shared_ptr<arrow::Schema> MakeArrowSchema(
     const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const std::shared_ptr<TSchemaObjectsCache>& cache) {
-    return std::make_shared<arrow::Schema>(MakeArrowFields(columns, ids, cache));
+    return std::make_shared<arrow::Schema>(TIndexInfo::MakeArrowFields(columns, ids, cache));
 }
 
-void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& operators, const THashMap<ui32, NTable::TColumn>& columns, const std::shared_ptr<TSchemaObjectsCache>& cache,
-    const bool withColumnFeatures) {
+void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& operators, const THashMap<ui32, NTable::TColumn>& columns,
+    const std::shared_ptr<TSchemaObjectsCache>& cache, const bool withColumnFeatures) {
     {
         TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::InitializeCaches::Schema");
-        AFL_VERIFY(!Schema);
-        SchemaColumnIds.reserve(columns.size());
+        AFL_VERIFY(!SchemaWithSpecials);
+        SchemaColumnIdsWithSpecials.reserve(columns.size());
         for (const auto& [id, _] : columns) {
-            SchemaColumnIds.push_back(id);
+            SchemaColumnIdsWithSpecials.push_back(id);
         }
 
-        std::sort(SchemaColumnIds.begin(), SchemaColumnIds.end());
-        auto originalFields = MakeArrowFields(columns, SchemaColumnIds, cache);
-        Schema = std::make_shared<NArrow::TSchemaLite>(originalFields);
+        std::sort(SchemaColumnIdsWithSpecials.begin(), SchemaColumnIdsWithSpecials.end());
+        auto originalFields = TIndexInfo::MakeArrowFields(columns, SchemaColumnIdsWithSpecials, cache);
         IIndexInfo::AddSpecialFields(originalFields);
         SchemaWithSpecials = std::make_shared<NArrow::TSchemaLite>(originalFields);
     }
     {
         TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::InitializeCaches::SchemaFields");
-        SchemaColumnIdsWithSpecials = IIndexInfo::AddSpecialFieldIds(SchemaColumnIds);
+        IIndexInfo::AddSpecialFieldIds(SchemaColumnIdsWithSpecials);
     }
     if (withColumnFeatures) {
+        AFL_VERIFY(ColumnFeatures.empty());
         {
             TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::InitializeCaches::Columns");
             for (auto&& c : columns) {
@@ -393,7 +411,7 @@ NSplitter::TEntityGroups TIndexInfo::GetEntityGroupsByStorageId(const TString& s
     return groups;
 }
 
-std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> TIndexInfo::GetCompactionPlannerConstructor() const {
+const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& TIndexInfo::GetCompactionPlannerConstructor() const {
     AFL_VERIFY(!!CompactionPlannerConstructor);
     return CompactionPlannerConstructor;
 }
@@ -408,14 +426,15 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueVerified
 }
 
 NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData,
-    const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, TSecondaryData& result) const {
+    const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, TSecondaryData& result) const {
     auto it = Indexes.find(indexId);
     AFL_VERIFY(it != Indexes.end());
     auto& index = it->second;
-    std::shared_ptr<IPortionDataChunk> chunk = index->BuildIndex(originalData, *this);
+    std::shared_ptr<IPortionDataChunk> chunk = index->BuildIndex(originalData, recordsCount, *this);
     auto opStorage = operators->GetOperatorVerified(index->GetStorageId());
     if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
-        return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ") bigger than limit (" +
+        return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ":" + ::ToString(chunk->GetPackedSize()) + ":" +
+                                       ::ToString(recordsCount) + ") bigger than limit (" +
                                        ::ToString(opStorage->GetBlobSplitSettings().GetMaxBlobSize()) + ")");
     }
     if (index->GetStorageId() == IStoragesManager::LocalMetadataStorageId) {
@@ -453,11 +472,19 @@ std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> TIndexInfo::GetIndexMetaC
 }
 
 std::vector<ui32> TIndexInfo::GetEntityIds() const {
-    auto result = GetColumnIds(true);
+    const TColumnIdsView columnIds = GetColumnIds(true);
+    std::vector<ui32> result(columnIds.begin(), columnIds.end());
     for (auto&& i : Indexes) {
         result.emplace_back(i.first);
     }
     return result;
+}
+
+std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnFeatures(
+    const NTable::TColumn& column, const std::shared_ptr<IStoragesManager>& operators) const {
+    AFL_VERIFY(!IsSpecialColumn(column.Id));
+    return std::make_shared<TColumnFeatures>(column.Id, GetColumnFieldVerified(column.Id), DefaultSerializer, operators->GetDefaultOperator(),
+        NArrow::IsPrimitiveYqlType(column.PType), column.Id == GetPKFirstColumnId(), false, nullptr, column.GetCorrectKeyOrder());
 }
 
 std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnFeatures(
@@ -476,6 +503,150 @@ std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnF
 std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueByIndexVerified(const ui32 colIndex) const {
     AFL_VERIFY(colIndex < ColumnFeatures.size())("index", colIndex)("size", ColumnFeatures.size());
     return ColumnFeatures[colIndex]->GetDefaultValue().GetValue();
+}
+
+TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, const std::shared_ptr<IStoragesManager>& operators,
+    const std::shared_ptr<TSchemaObjectsCache>& cache) {
+    {
+        std::vector<std::shared_ptr<arrow::Field>> fields;
+        const auto addFromOriginal = [&](const ui32 index) {
+            AFL_VERIFY(index < original.SchemaColumnIdsWithSpecials.size());
+            const ui32 originalColId = original.SchemaColumnIdsWithSpecials[index];
+            SchemaColumnIdsWithSpecials.emplace_back(originalColId);
+            if (!IIndexInfo::IsSpecialColumn(originalColId)) {
+                AFL_VERIFY(index < original.SchemaColumnIdsWithSpecials.size() - SpecialColumnsCount);
+                fields.emplace_back(original.SchemaWithSpecials->field(index));
+            }
+        };
+
+        const auto addFromDiff = [&](const NKikimrSchemeOp::TOlapColumnDescription& col, const std::optional<ui32> /*originalIndex*/) {
+            const ui32 colId = col.GetId();
+            AFL_VERIFY(!IIndexInfo::IsSpecialColumn(colId));
+            SchemaColumnIdsWithSpecials.emplace_back(colId);
+            auto tableCol = BuildColumnFromProto(col, cache);
+            fields.emplace_back(BuildArrowField(tableCol, cache));
+        };
+        diff.ApplyForColumns(original.SchemaColumnIdsWithSpecials, addFromOriginal, addFromDiff);
+        IIndexInfo::AddSpecialFields(fields);
+        SchemaWithSpecials = std::make_shared<NArrow::TSchemaLite>(fields);
+        PKColumnIds = original.PKColumnIds;
+        PKColumns = original.PKColumns;
+    }
+    {
+        const auto addFromOriginal = [&](const ui32 index) {
+            ColumnFeatures.emplace_back(original.ColumnFeatures[index]);
+        };
+
+        const auto addFromDiff = [&](const NKikimrSchemeOp::TOlapColumnDescription& col, const std::optional<ui32> originalIndex) {
+            auto tableCol = BuildColumnFromProto(col, cache);
+            if (originalIndex && original.ColumnFeatures[*originalIndex]->GetPKColumnIndex()) {
+                tableCol.KeyOrder = *original.ColumnFeatures[*originalIndex]->GetPKColumnIndex();
+            }
+            ColumnFeatures.emplace_back(CreateColumnFeatures(tableCol, col, operators, cache).DetachResult());
+        };
+        diff.ApplyForColumns(original.SchemaColumnIdsWithSpecials, addFromOriginal, addFromDiff);
+    }
+    {
+        TMemoryProfileGuard g("TIndexInfo::ApplyDiff::Indexes");
+        Indexes = original.Indexes;
+        for (auto&& i : diff.GetModifiedIndexes()) {
+            if (!i.second) {
+                AFL_VERIFY(Indexes.erase(i.first));
+            } else {
+                auto it = Indexes.find(i.first);
+                NIndexes::TIndexMetaContainer meta;
+                AFL_VERIFY(meta.DeserializeFromProto(*i.second));
+                if (it != Indexes.end()) {
+                    it->second = std::move(meta);
+                } else {
+                    Indexes.emplace(i.first, std::move(meta));
+                }
+            }
+        }
+    }
+
+    DeserializeOptionsFromProto(diff.GetSchemaOptions());
+    Version = diff.GetVersion();
+    PrimaryKey = original.PrimaryKey;
+    if (diff.GetCompressionOptions()) {
+        DeserializeDefaultCompressionFromProto(*diff.GetCompressionOptions());
+    }
+    Precalculate();
+    Validate();
+}
+
+void TIndexInfo::Precalculate() {
+    BuildColumnIndexByName();
+    UsedStorageIds = std::make_shared<std::set<TString>>();
+    for (auto&& i : ColumnFeatures) {
+        UsedStorageIds->emplace(i->GetOperator()->GetStorageId());
+    }
+}
+
+void TIndexInfo::BuildColumnIndexByName() {
+    const ui32 columnCount = SchemaColumnIdsWithSpecials.size();
+    std::erase_if(ColumnIdxSortedByName, [columnCount](const ui32 idx) {
+        return idx >= columnCount;
+    });
+    ColumnIdxSortedByName.reserve(columnCount);
+    for (ui32 i = 0; i < columnCount; ++i) {
+        ColumnIdxSortedByName.push_back(i);
+    }
+
+    std::sort(ColumnIdxSortedByName.begin(), ColumnIdxSortedByName.end(), [this](const ui32 lhs, const ui32 rhs) {
+        return CompareColumnIdxByName(lhs, rhs);
+    });
+}
+
+void TIndexInfo::Validate() const {
+    AFL_VERIFY(!!UsedStorageIds);
+    AFL_VERIFY(ColumnFeatures.size() == SchemaColumnIdsWithSpecials.size());
+    AFL_VERIFY(ColumnFeatures.size() == (ui32)SchemaWithSpecials->num_fields());
+    {
+        ui32 idx = 0;
+        for (auto&& i : SchemaColumnIdsWithSpecials) {
+            AFL_VERIFY(i == ColumnFeatures[idx]->GetColumnId());
+            AFL_VERIFY(SchemaWithSpecials->field(idx)->name() == ColumnFeatures[idx]->GetColumnName());
+            ++idx;
+        }
+    }
+    AFL_VERIFY(std::is_sorted(SchemaColumnIdsWithSpecials.begin(), SchemaColumnIdsWithSpecials.end()));
+
+    AFL_VERIFY(ColumnFeatures.size() == ColumnIdxSortedByName.size());
+    AFL_VERIFY(std::is_sorted(ColumnIdxSortedByName.begin(), ColumnIdxSortedByName.end(), [this](const ui32 lhs, const ui32 rhs) {
+        return CompareColumnIdxByName(lhs, rhs);
+    }));
+
+    {
+        ui32 pkIdx = 0;
+        for (auto&& i : PKColumnIds) {
+            const ui32 idx = GetColumnIndexVerified(i);
+            AFL_VERIFY(ColumnFeatures[idx]->GetPKColumnIndex());
+            AFL_VERIFY(*ColumnFeatures[idx]->GetPKColumnIndex() == pkIdx);
+            ++pkIdx;
+        }
+    }
+}
+
+TIndexInfo TIndexInfo::BuildDefault() {
+    TIndexInfo result;
+    result.CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
+    result.MetadataManagerConstructor = NDataAccessorControl::IManagerConstructor::BuildDefault();
+    return result;
+}
+
+TConclusion<std::shared_ptr<arrow::Array>> TIndexInfo::BuildDefaultColumn(
+    const ui32 fieldIndex, const ui32 rowsCount, const bool force) const {
+    auto defaultValue = GetColumnExternalDefaultValueByIndexVerified(fieldIndex);
+    auto f = ArrowSchemaWithSpecials()->GetFieldByIndexVerified(fieldIndex);
+    if (!defaultValue && !IsNullableVerifiedByIndex(fieldIndex)) {
+        if (force) {
+            defaultValue = NArrow::DefaultScalar(f->type());
+        } else {
+            return TConclusionStatus::Fail("not nullable field with no default: " + f->name());
+        }
+    }
+    return NArrow::TThreadSimpleArraysCache::Get(f->type(), defaultValue, rowsCount);
 }
 
 }   // namespace NKikimr::NOlap

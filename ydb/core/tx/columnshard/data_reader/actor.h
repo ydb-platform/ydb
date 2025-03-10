@@ -8,6 +8,7 @@ namespace NKikimr::NOlap::NDataReader {
 
 class IRestoreTask {
 private:
+    YDB_READONLY_DEF(TString, TaskId);
     YDB_READONLY(ui64, TabletId, 0);
     YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
     virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) = 0;
@@ -16,6 +17,9 @@ private:
     virtual std::unique_ptr<TEvColumnShard::TEvInternalScan> DoBuildRequestInitiator() const = 0;
 
 public:
+    virtual bool IsActive() const = 0;
+    virtual TDuration GetTimeout() const = 0;
+
     TConclusionStatus OnDataChunk(const std::shared_ptr<arrow::Table>& data) {
         AFL_VERIFY(data->num_rows());
         return DoOnDataChunk(data);
@@ -33,8 +37,9 @@ public:
         return DoBuildRequestInitiator();
     }
 
-    IRestoreTask(const ui64 tabletId, const NActors::TActorId& tabletActorId)
-        : TabletId(tabletId)
+    IRestoreTask(const ui64 tabletId, const NActors::TActorId& tabletActorId, const TString& taskId)
+        : TaskId(taskId)
+        , TabletId(tabletId)
         , TabletActorId(tabletActorId)
     {
 
@@ -65,11 +70,16 @@ private:
         }
         Stage = to;
     }
+    std::optional<TMonotonic> LastAck;
+    bool AbortedFlag = false;
+    bool CheckActivity();
 
 protected:
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev);
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev);
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& ev);
+    void HandleExecute(NActors::TEvents::TEvUndelivered::TPtr& ev);
+    void HandleExecute(NActors::TEvents::TEvWakeup::TPtr& ev);
 
 public:
     TActor(const std::shared_ptr<IRestoreTask>& rTask)
@@ -79,14 +89,17 @@ public:
     }
 
     STATEFN(StateFunc) {
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", RestoreTask->GetTabletId());
+        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", RestoreTask->GetTabletId())("tablet_actor_id",
+            RestoreTask->GetTabletActorId())("this", (ui64)this)("activity", RestoreTask->IsActive())("task_id", RestoreTask->GetTaskId());
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NKqp::TEvKqpCompute::TEvScanInitActor, HandleExecute);
                 hFunc(NKqp::TEvKqpCompute::TEvScanData, HandleExecute);
                 hFunc(NKqp::TEvKqpCompute::TEvScanError, HandleExecute);
+                hFunc(NActors::TEvents::TEvUndelivered, HandleExecute);
+                hFunc(NActors::TEvents::TEvWakeup, HandleExecute);
                 default:
-                    AFL_VERIFY(false);
+                    AFL_VERIFY(false)("type", ev->GetTypeName());
             }
         } catch (...) {
             AFL_VERIFY(false);

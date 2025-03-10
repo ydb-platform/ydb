@@ -83,8 +83,8 @@ Y_UNIT_TEST_SUITE(StorageOptimizer) {
         auto task = dynamic_pointer_cast<NKikimr::NOlap::TCompactColumnEngineChanges>(planner.GetOptimizationTask(limits, nullptr));
         Y_ABORT_UNLESS(task);
         Y_ABORT_UNLESS(task->SwitchedPortions.size() == 2);
-        Y_ABORT_UNLESS(task->SwitchedPortions[0].GetPortion() == 1);
-        Y_ABORT_UNLESS(task->SwitchedPortions[1].GetPortion() == 2);
+        Y_ABORT_UNLESS(task->SwitchedPortions[0].GetPortionId() == 1);
+        Y_ABORT_UNLESS(task->SwitchedPortions[1].GetPortionId() == 2);
     }
 
 };

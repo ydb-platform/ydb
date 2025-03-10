@@ -181,7 +181,7 @@ struct TDataRow {
         std::vector<TCell> cells(value.Cells().data(), value.Cells().data() + value.Cells().size());
 
         auto binaryJson = NBinaryJson::SerializeToBinaryJson(TStringBuf(JsonDocument.data(), JsonDocument.size()));
-        UNIT_ASSERT(binaryJson.Defined());
+        UNIT_ASSERT(binaryJson.IsSuccess());
 
         cells[19] = TCell(binaryJson->Data(), binaryJson->Size());
         return TOwnedCellVec(cells);

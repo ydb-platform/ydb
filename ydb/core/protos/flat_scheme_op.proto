@@ -126,6 +126,7 @@ message TFamilyDescription {
     optional EColumnCache ColumnCache = 7;
     optional EColumnStorage Storage = 8; // DEPRECATED: use StorageConfig
     optional TStorageConfig StorageConfig = 9;
+    optional int32 ColumnCodecLevel = 10;
 }
 
 enum ECompactionStrategy {
@@ -324,11 +325,24 @@ message TTTLSettings {
         optional uint32 MaxShardsInFlight = 6 [default = 0]; // zero means no limit
     }
 
+    message TEvictionToExternalStorageSettings {
+        optional string Storage = 1;
+    }
+
+    message TTier {
+        optional uint32 ApplyAfterSeconds = 1;
+        oneof Action {
+            google.protobuf.Empty Delete = 2;
+            TEvictionToExternalStorageSettings EvictToExternalStorage = 3;
+        }
+    }
+
     message TEnabled {
         optional string ColumnName = 1;
-        optional uint32 ExpireAfterSeconds = 2;
+        optional uint32 ExpireAfterSeconds = 2 [deprecated = true];
         optional EUnit ColumnUnit = 3;
         optional TSysSettings SysSettings = 4;
+        repeated TTier Tiers = 5;
     }
 
     message TDisabled {
@@ -339,7 +353,7 @@ message TTTLSettings {
         TDisabled Disabled = 2;
     }
 
-    optional string UseTiering = 3;
+    reserved 3;
 }
 
 message TTableReplicationConfig {
@@ -426,6 +440,7 @@ message TOlapColumnDiff {
     optional string StorageId = 6;
     optional string DefaultValue = 7;
     optional NKikimrArrowAccessorProto.TRequestedConstructor DataAccessorConstructor = 8;
+    optional string ColumnFamilyName = 9;
 }
 
 message TOlapColumnDescription {
@@ -446,11 +461,21 @@ message TOlapColumnDescription {
     optional string StorageId = 11;
     optional NKikimrColumnShardColumnDefaults.TColumnDefault DefaultValue = 12;
     optional NKikimrArrowAccessorProto.TConstructor DataAccessorConstructor = 13;
+    optional uint32 ColumnFamilyId = 14;
+    optional string ColumnFamilyName = 15;
 }
 
 message TRequestedBloomFilter {
     optional double FalsePositiveProbability = 1 [default = 0.1];
     repeated string ColumnNames = 3;
+}
+
+message TRequestedBloomNGrammFilter {
+    optional uint32 NGrammSize = 1;
+    optional uint32 FilterSizeBytes = 2;
+    optional uint32 HashesCount = 3;
+    optional string ColumnName = 4;
+    optional uint32 RecordsCount = 5;
 }
 
 message TRequestedMaxIndex {
@@ -472,6 +497,7 @@ message TOlapIndexRequested {
         TRequestedBloomFilter BloomFilter = 40;
         TRequestedMaxIndex MaxIndex = 41;
         TRequestedCountMinSketch CountMinSketch = 42;
+        TRequestedBloomNGrammFilter BloomNGrammFilter = 43;
     }
 }
 
@@ -479,6 +505,14 @@ message TBloomFilter {
     optional double FalsePositiveProbability = 1 [default = 0.1];
     optional uint64 MaxBytesCount = 2 [default = 8196];
     repeated uint32 ColumnIds = 3;
+}
+
+message TBloomNGrammFilter {
+    optional uint32 NGrammSize = 1;
+    optional uint32 FilterSizeBytes = 2;
+    optional uint32 HashesCount = 3;
+    optional uint32 ColumnId = 4;
+    optional uint32 RecordsCount = 5;
 }
 
 message TMaxIndex {
@@ -503,6 +537,7 @@ message TOlapIndexDescription {
         TBloomFilter BloomFilter = 41;
         TMaxIndex MaxIndex = 42;
         TCountMinSketch CountMinSketch = 43;
+        TBloomNGrammFilter BloomNGrammFilter = 44;
     }
 }
 
@@ -522,6 +557,21 @@ message TStorageTierConfig {
     optional TCompressionOptions Compression = 3;
 }
 
+message TCompactionLevelConstructorContainer {
+    optional string ClassName = 1;
+
+    message TZeroLevel {
+        optional uint32 PortionsLiveDurationSeconds = 1;
+        optional uint64 ExpectedBlobsSize = 2;
+        optional uint64 PortionsCountAvailable = 3;
+    }
+
+    oneof Implementation {
+        TZeroLevel ZeroLevel = 10;
+    }
+
+}
+
 message TCompactionPlannerConstructorContainer {
     optional string ClassName = 1;
 
@@ -534,25 +584,45 @@ message TCompactionPlannerConstructorContainer {
         optional uint32 FreshnessCheckDurationSeconds = 2 [default = 300];
     }
 
+    message TLCOptimizer {
+        repeated TCompactionLevelConstructorContainer Levels = 1;
+    }
+
     oneof Implementation {
         TLOptimizer LBuckets = 20;
         TSOptimizer SBuckets = 21;
+        TLCOptimizer LCBuckets = 22;
+    }
+}
+
+message TMetadataManagerConstructorContainer {
+    optional string ClassName = 1;
+
+    message TInMem {
+    }
+
+    message TLocalDB {
+        optional uint64 MemoryCacheSize = 1 [default = 128000000];
+        optional bool FetchOnStart = 2 [default = false];
+    }
+
+    oneof Implementation {
+        TInMem InMem = 20;
+        TLocalDB LocalDB = 21;
     }
 }
 
 message TColumnTableSchemeOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
-    optional bool ExternalGuaranteeExclusivePK = 2 [default = false];
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
+    optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
+    optional string ScanReaderPolicyName = 5;
 }
 
 message TColumnTableSchema {
     // A list of columns for tables with this schema
     repeated TOlapColumnDescription Columns = 1;
     repeated string KeyColumnNames = 2;
-
-    // A type of engine used by the table
-    optional EColumnTableEngine Engine = 3;
 
     // Internal fields
     optional uint32 NextColumnId = 4;
@@ -564,15 +634,33 @@ message TColumnTableSchema {
     //optional int32 DefaultCompressionLevel = 7; // deprecated, not used before replace
     optional TCompressionOptions DefaultCompression = 8;
 
-    optional bool CompositeMarksDeprecated = 9 [ default = false ];
     repeated TOlapIndexDescription Indexes = 10;
     optional TColumnTableSchemeOptions Options = 12;
+
+    repeated TFamilyDescription ColumnFamilies = 13;
+    // Internal fields
+    optional uint32 NextColumnFamilyId = 14;
+}
+
+message TColumnTableSchemaDiff {
+    optional uint64 Version = 1;
+
+    repeated TOlapColumnDescription UpsertColumns = 2;
+    repeated uint32 DropColumns = 3;
+
+    optional TCompressionOptions DefaultCompression = 4;
+
+    repeated TOlapIndexDescription UpsertIndexes = 5;
+    repeated uint32 DropIndexes = 6;
+
+    optional TColumnTableSchemeOptions Options = 7;
 }
 
 message TColumnTableRequestedOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
-    optional bool ExternalGuaranteeExclusivePK = 2;
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
+    optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
+    optional string ScanReaderPolicyName = 5;
 }
 
 message TAlterColumnTableSchema {
@@ -583,6 +671,8 @@ message TAlterColumnTableSchema {
     repeated TOlapIndexRequested UpsertIndexes = 8;
     repeated string DropIndexes = 9;
     optional TColumnTableRequestedOptions Options = 12;
+    repeated TFamilyDescription AddColumnFamily = 13;
+    repeated TFamilyDescription AlterColumnFamily = 14;
 }
 
 // Schema presets are used to manage multiple tables with the same schema
@@ -616,10 +706,11 @@ message TColumnDataLifeCycle {
     message TTtl {
         optional string ColumnName = 1;
         oneof Expire {
-            uint32 ExpireAfterSeconds = 2;
+            uint32 ExpireAfterSeconds = 2 [deprecated = true]; // ignored if Tiers are not empty
             uint64 ExpireAfterBytes = 4;
         }
         optional TTTLSettings.EUnit ColumnUnit = 3;
+        repeated TTTLSettings.TTier Tiers = 5;
     }
 
     message TDisabled {
@@ -633,7 +724,7 @@ message TColumnDataLifeCycle {
     // Incremented on each settings change
     optional uint64 Version = 3 [default = 1];
 
-    optional string UseTiering = 5;
+    reserved 5;
 }
 
 message TColumnTableTtlSettingsPreset {

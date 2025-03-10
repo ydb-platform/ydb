@@ -2436,6 +2436,66 @@ private:
         Visit(msg.GetToken5());
     }
 
+    void VisitTableSettingValue(const TRule_table_setting_value& msg) {
+        switch (msg.GetAltCase()) {
+            case TRule_table_setting_value::kAltTableSettingValue5: {
+                // | ttl_tier_list ON an_id (AS (SECONDS | MILLISECONDS | MICROSECONDS | NANOSECONDS))?
+                const auto& ttlSettings = msg.GetAlt_table_setting_value5();
+                const auto& tierList = ttlSettings.GetRule_ttl_tier_list1();
+                const bool needIndent = tierList.HasBlock2() && tierList.GetBlock2().Block2Size() > 0; // more then one tier
+                if (needIndent) {
+                    NewLine();
+                    PushCurrentIndent();
+                    Visit(tierList.GetRule_expr1());
+                    VisitTtlTierAction(tierList.GetBlock2().GetRule_ttl_tier_action1());
+
+                    for (const auto& tierEntry : tierList.GetBlock2().GetBlock2()) {
+                        Visit(tierEntry.GetToken1()); // comma
+                        NewLine();
+                        Visit(tierEntry.GetRule_expr2());
+                        VisitTtlTierAction(tierEntry.GetRule_ttl_tier_action3());
+                    }
+
+                    PopCurrentIndent();
+                    NewLine();
+                } else {
+                    Visit(tierList.GetRule_expr1());
+                    if (tierList.HasBlock2()) {
+                        VisitTtlTierAction(tierList.GetBlock2().GetRule_ttl_tier_action1());
+                    }
+                }
+
+                VisitKeyword(ttlSettings.GetToken2());
+                Visit(ttlSettings.GetRule_an_id3());
+                if (ttlSettings.HasBlock4()) {
+                    VisitKeyword(ttlSettings.GetBlock4().GetToken1());
+                    VisitKeyword(ttlSettings.GetBlock4().GetToken2());
+                }
+            } break;
+            default:
+                VisitAllFields(TRule_table_setting_value::GetDescriptor(), msg);
+        }
+    }
+
+    void VisitTtlTierAction(const TRule_ttl_tier_action& msg) {
+        switch (msg.GetAltCase()) {
+            case TRule_ttl_tier_action::kAltTtlTierAction1:
+                // | TO EXTERNAL DATA SOURCE an_id
+                VisitKeyword(msg.GetAlt_ttl_tier_action1().GetToken1());
+                VisitKeyword(msg.GetAlt_ttl_tier_action1().GetToken2());
+                VisitKeyword(msg.GetAlt_ttl_tier_action1().GetToken3());
+                VisitKeyword(msg.GetAlt_ttl_tier_action1().GetToken4());
+                Visit(msg.GetAlt_ttl_tier_action1().GetRule_an_id5());
+                break;
+            case TRule_ttl_tier_action::kAltTtlTierAction2:
+                // | DELETE
+                VisitKeyword(msg.GetAlt_ttl_tier_action2().GetToken1());
+                break;
+            case TRule_ttl_tier_action::ALT_NOT_SET:
+                break;
+        }
+    }
+
     void VisitExpr(const TRule_expr& msg) {
         if (msg.HasAlt_expr2()) {
             Visit(msg.GetAlt_expr2());
@@ -2724,6 +2784,8 @@ TStaticData::TStaticData()
         {TRule_case_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCaseExpr)},
         {TRule_when_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWhenExpr)},
         {TRule_with_table_settings::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWithTableSettingsExpr)},
+        {TRule_table_setting_value::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTableSettingValue)},
+        {TRule_ttl_tier_action::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTtlTierAction)},
 
         {TRule_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExpr)},
         {TRule_or_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitOrSubexpr)},

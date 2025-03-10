@@ -170,6 +170,7 @@ struct TColumnFamily {
     TString Name;
     TMaybe<TString> Data;
     TMaybe<TString> Compression;
+    TMaybe<i32> CompressionLevel;
 };
 
 struct TTtlSettings {
@@ -180,9 +181,14 @@ struct TTtlSettings {
         Nanoseconds = 4,
     };
 
+    struct TTier {
+        TDuration ApplyAfter;
+        std::optional<TString> StorageName;
+    };
+
     TString ColumnName;
-    TDuration ExpireAfter;
     TMaybe<EUnit> ColumnUnit;
+    std::vector<TTier> Tiers;
 
     static bool TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSettings& settings, TString& error);
 };
@@ -200,7 +206,6 @@ struct TTableSettings {
     TMaybe<TString> KeyBloomFilter;
     TMaybe<TString> ReadReplicasSettings;
     TResetableSetting<TTtlSettings, void> TtlSettings;
-    TResetableSetting<TString, void> Tiering;
     TMaybe<TString> PartitionByHashFunction;
     TMaybe<TString> StoreExternalBlobs;
 
@@ -648,6 +653,7 @@ struct TCreateTableStoreSettings {
     TVector<TString> KeyColumnNames;
     TVector<TString> ColumnOrder;
     TVector<TIndexDescription> Indexes;
+    TVector<TColumnFamily> ColumnFamilies;
 };
 
 struct TAlterTableStoreSettings {
@@ -1006,7 +1012,7 @@ public:
     virtual NThreading::TFuture<TGenericResult> CreateColumnTable(
         TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> AlterColumnTable(const TString& cluster, const TAlterColumnTableSettings& settings) = 0;
+    virtual NThreading::TFuture<TGenericResult> AlterColumnTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateTableStore(const TString& cluster,
         const TCreateTableStoreSettings& settings, bool existingOk = false) = 0;

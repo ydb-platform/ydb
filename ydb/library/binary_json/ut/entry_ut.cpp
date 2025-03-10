@@ -17,6 +17,7 @@ public:
         UNIT_TEST(TestGetContainer);
         UNIT_TEST(TestGetString);
         UNIT_TEST(TestGetNumber);
+        UNIT_TEST(TestInvalidInput);
     UNIT_TEST_SUITE_END();
 
     void TestGetType() {
@@ -91,6 +92,18 @@ public:
             const auto container = reader->GetRootCursor();
 
             UNIT_ASSERT_VALUES_EQUAL(container.GetElement(0).GetNumber(), testCase.second);
+        }
+    }
+
+    void TestInvalidInput() {
+        const TVector<std::pair<TString, TString>> testCases = {
+            {"nul", "INCORRECT_TYPE: The JSON element does not have the requested type."},
+        };
+
+        for (const auto& testCase : testCases) {
+            const auto parsingResult = SerializeToBinaryJson(testCase.first);
+            UNIT_ASSERT(parsingResult.IsFail());
+            UNIT_ASSERT_VALUES_EQUAL(parsingResult.GetErrorMessage(), testCase.second);
         }
     }
 };

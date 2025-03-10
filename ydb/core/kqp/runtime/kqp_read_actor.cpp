@@ -588,8 +588,8 @@ public:
                 PendingShards.PushBack(state.Release());
                 return;
             }
-        } else if (!Snapshot.IsValid() && !Settings->GetAllowInconsistentReads()) {
-            return RuntimeError("Inconsistent reads after shards split", NDqProto::StatusIds::UNAVAILABLE);
+        } else if (!Snapshot.IsValid() && !Settings->HasLockTxId() && !Settings->GetAllowInconsistentReads()) {
+            return RuntimeError("Inconsistent reads without locks", NDqProto::StatusIds::UNAVAILABLE);
         }
 
         const auto& tr = *AppData()->TypeRegistry;

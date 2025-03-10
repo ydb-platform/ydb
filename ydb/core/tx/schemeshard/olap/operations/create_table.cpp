@@ -23,7 +23,7 @@ private:
 protected:
     ui32 ShardsCount = 0;
 public:
-    bool Deserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) {
+    bool Deserialize(const NKikimrSchemeOp::TColumnTableDescription& description, const TOperationContext& context, IErrorCollector& errors) {
         Name = description.GetName();
         ShardsCount = std::max<ui32>(description.GetColumnShardCount(), 1);
 
@@ -33,7 +33,7 @@ public:
 
         if (description.HasTtlSettings()) {
             TtlSettings = description.GetTtlSettings();
-            if (!GetSchema().ValidateTtlSettings(description.GetTtlSettings(), errors)) {
+            if (!GetSchema().ValidateTtlSettings(description.GetTtlSettings(), context, errors)) {
                 return false;
             }
         }
@@ -49,7 +49,7 @@ public:
         }
         FillDefaultSharding(*tableInfo->Description.MutableSharding());
 
-        if (!Deserialize(description, errors)) {
+        if (!Deserialize(description, context, errors)) {
             return nullptr;
         }
         if (tableInfo->Description.GetSharding().HasHashSharding()) {
@@ -192,7 +192,7 @@ private:
         }
 
         TOlapSchemaUpdate schemaDiff;
-        if (!schemaDiff.Parse(description.GetSchema(), errors)) {
+        if (!schemaDiff.Parse(description.GetSchema(), errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK())) {
             return false;
         }
 
@@ -558,13 +558,34 @@ class TCreateColumnTable: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+    void AddDefaultFamilyIfNotExists(NKikimrSchemeOp::TColumnTableDescription& createDescription) {
+        auto schema = createDescription.GetSchema();
+        for (const auto& family : schema.GetColumnFamilies()) {
+            if (family.GetName() == "default") {
+                return;
+            }
+        }
+
+        auto mutableSchema = createDescription.MutableSchema();
+        auto defaultFamily = mutableSchema->AddColumnFamilies();
+        defaultFamily->SetName("default");
+        defaultFamily->SetId(0);
+
+        for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+            if (!schema.GetColumns(i).HasColumnFamilyName() || !schema.GetColumns(i).HasColumnFamilyId()) {
+                mutableSchema->MutableColumns(i)->SetColumnFamilyName("default");
+                mutableSchema->MutableColumns(i)->SetColumnFamilyId(0);
+            }
+        }
+    }
+
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
 
-        // Copy CreateColumnTable for changes. Update default sharding if not set.
+        // Copy CreateColumnTable for changes. Update default sharding if not set and add default family if not set.
         auto createDescription = Transaction.GetCreateColumnTable();
         if (!createDescription.HasColumnShardCount()) {
             createDescription.SetColumnShardCount(TTableConstructorBase::DEFAULT_SHARDS_COUNT);
@@ -698,6 +719,7 @@ public:
                 result->SetError(NKikimrScheme::StatusSchemeError, errStr);
                 return result;
             }
+            AddDefaultFamilyIfNotExists(createDescription);
             TOlapTableConstructor tableConstructor;
             tableInfo = tableConstructor.BuildTableInfo(createDescription, context, errors);
         }
@@ -811,6 +833,13 @@ public:
         }
 
         NIceDb::TNiceDb db(context.GetDB());
+
+        for (const auto& tier : tableInfo->GetUsedTiers()) {
+            auto tierPath = TPath::Resolve(tier, context.SS);
+            AFL_VERIFY(tierPath.IsResolved())("path", tier);
+            context.SS->PersistExternalDataSourceReference(db, tierPath->PathId, dstPath);
+        }
+
         context.SS->PersistTxState(db, OperationId);
 
         context.OnComplete.ActivateTx(OperationId);

@@ -592,6 +592,11 @@ message TConveyorConfig {
     optional double WorkersCountDouble = 5;
 }
 
+message TPrioritiesQueueConfig {
+    optional bool Enabled = 1 [default = true];
+    optional uint32 Limit = 2 [default = 32];
+}
+
 message TLimiterConfig {
     optional bool Enabled = 1 [default = true];
     optional uint64 Limit = 2;
@@ -601,6 +606,7 @@ message TLimiterConfig {
 message TGroupedMemoryLimiterConfig {
     optional bool Enabled = 1 [default = true];
     optional uint64 MemoryLimit = 2;
+    optional uint64 HardMemoryLimit = 3;
 }
 
 message TExternalIndexConfig {
@@ -1588,7 +1594,7 @@ message TColumnShardConfig {
         }
     }
     optional TTablesStorageLayoutPolicy TablesStorageLayoutPolicy = 1;
-    optional bool DisabledOnSchemeShard = 2 [default = true];
+    optional bool DisabledOnSchemeShard = 2 [default = false];
     optional bool IndexationEnabled = 4 [default = true];
     optional bool CompactionEnabled = 5 [default = true];
     optional bool TTLEnabled = 6 [default = true];
@@ -1609,6 +1615,7 @@ message TColumnShardConfig {
     message TRepairInfo {
         optional string ClassName = 1;
         optional string Description = 2;
+        optional bool DryRun = 3;
     }
     repeated TRepairInfo Repairs = 15;
 
@@ -1620,6 +1627,21 @@ message TColumnShardConfig {
     optional uint32 LagForCompactionBeforeTieringsMs = 22 [default = 3600000];
     optional uint32 OptimizerFreshnessCheckDurationMs = 23 [default = 300000];
     optional uint32 SmallPortionDetectSizeLimit = 24 [default = 1048576];  // 1 << 20
+    optional bool ColumnChunksV0Usage = 25 [default = true];
+    optional bool ColumnChunksV1Usage = 26 [default = true];
+    optional uint64 MemoryLimitScanPortion = 27 [default = 100000000];
+    optional string ReaderClassName = 28;
+    optional bool AllowNullableColumnsInPK = 29 [default = false];
+    optional uint32 RestoreDataOnWriteTimeoutSeconds = 30;
+    optional bool UseSlicesFilter = 31 [default = true];
+    optional uint32 LimitForPortionsMetadataAsk = 32 [default = 1000];
+    optional uint64 WritingBufferVolumeMb = 33 [default = 32];
+    optional uint64 WritingInFlightRequestsCountLimit = 34 [default = 1000];
+    optional uint64 WritingInFlightRequestBytesLimit = 35 [default = 128000000];
+    optional NKikimrSchemeOp.EColumnCodec DefaultCompression = 36;
+    optional int32 DefaultCompressionLevel = 37;
+    optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];
+    optional bool AlterObjectEnabled = 39 [default = false];
 }
 
 message TSchemeShardConfig {
@@ -2010,9 +2032,10 @@ message TAppConfig {
     optional TLimiterConfig CompDiskLimiterConfig = 79;
     optional TMetadataCacheConfig MetadataCacheConfig = 80;
     //optional TMemoryControllerConfig MemoryControllerConfig = 81; NB. exist in main
-	optional TGroupedMemoryLimiterConfig GroupedMemoryLimiterConfig = 82;
+    optional TGroupedMemoryLimiterConfig GroupedMemoryLimiterConfig = 82;
     optional NKikimrReplication.TReplicationDefaults ReplicationConfig = 83;
     optional TShutdownConfig ShutdownConfig = 84;
+    optional TPrioritiesQueueConfig CompPrioritiesConfig = 85;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

@@ -1,12 +1,15 @@
 #pragma once
 #include "counters.h"
+
+#include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
-#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
-#include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
+#include <ydb/core/tx/tiering/manager.h>
 
 namespace NKikimr::NOlap {
 class TTiering;
+class TCSMetadataRequest;
 }
 
 namespace NKikimr::NOlap::NActualizer {
@@ -115,26 +118,36 @@ private:
     std::shared_ptr<ISnapshotSchema> TargetCriticalSchema;
     const ui64 PathId;
     const TVersionedIndex& VersionedIndex;
+    const std::shared_ptr<IStoragesManager>& StoragesManager;
 
     THashMap<TRWAddress, TRWAddressPortionsInfo> PortionIdByWaitDuration;
     THashMap<ui64, TFindActualizationInfo> PortionsInfo;
+    THashSet<ui64> NewPortionIds;
+    THashMap<ui64, std::shared_ptr<arrow::Scalar>> MaxByPortionId;
 
     std::shared_ptr<ISnapshotSchema> GetTargetSchema(const std::shared_ptr<ISnapshotSchema>& portionSchema) const;
 
     std::optional<TFullActualizationInfo> BuildActualizationInfo(const TPortionInfo& portion, const TInstant now) const;
 
+    void AddPortionImpl(const TPortionInfo& portion, const TInstant now);
+
     virtual void DoAddPortion(const TPortionInfo& portion, const TAddExternalContext& addContext) override;
     virtual void DoRemovePortion(const ui64 portionId) override;
     virtual void DoExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& internalContext) override;
-
 public:
+    void ActualizePortionInfo(const TPortionDataAccessor& accessor, const TActualizationContext& context);
+    std::vector<TCSMetadataRequest> BuildMetadataRequests(
+        const ui64 pathId, const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TTieringActualizer>& index);
+
     void Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext);
 
-    TTieringActualizer(const ui64 pathId, const TVersionedIndex& versionedIndex)
+    TTieringActualizer(const ui64 pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager)
         : PathId(pathId)
         , VersionedIndex(versionedIndex)
+        , StoragesManager(storagesManager)
     {
         Y_UNUSED(PathId);
+        AFL_VERIFY(StoragesManager);
     }
 };
 

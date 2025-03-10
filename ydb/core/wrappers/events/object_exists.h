@@ -21,10 +21,10 @@ public:
     using TBase::TBase;
 };
 
-class TEvCheckObjectExistsResponse: public TBaseGenericResponse<TEvCheckObjectExistsResponse,
+class TEvCheckObjectExistsResponse: public TGenericResponse<TEvCheckObjectExistsResponse,
     EvCheckObjectExistsResponse, Aws::S3::Model::HeadObjectResult> {
 private:
-    using TBase = TBaseGenericResponse<TEvCheckObjectExistsResponse, EvCheckObjectExistsResponse, Aws::S3::Model::HeadObjectResult>;
+    using TBase = TGenericResponse<TEvCheckObjectExistsResponse, EvCheckObjectExistsResponse, Aws::S3::Model::HeadObjectResult>;
 public:
     using TBase::TBase;
     bool IsExists() const {

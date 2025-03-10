@@ -75,6 +75,7 @@ private:
         return StartPosition <= position && position < FinishPosition;
     }
 public:
+    TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch);
     TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns);
     TSortableScanData(const ui64 position, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns);
     TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<std::string>& columns);
@@ -357,6 +358,19 @@ public:
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
     }
 
+    template <class TRecords>
+    TSortableBatchPosition(const std::shared_ptr<TRecords>& batch, const ui32 position, const bool reverseSort)
+        : Position(position)
+        , ReverseSort(reverseSort) {
+        Y_ABORT_UNLESS(batch);
+        Y_ABORT_UNLESS(batch->num_rows());
+        RecordsCount = batch->num_rows();
+        AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
+        Sorting = std::make_shared<TSortableScanData>(Position, batch);
+        Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
+        Y_ABORT_UNLESS(Sorting->GetColumns().size());
+    }
+
     std::partial_ordering GetReverseForCompareResult(const std::partial_ordering directResult) const {
         if (directResult == std::partial_ordering::less) {
             return std::partial_ordering::greater;
@@ -451,12 +465,51 @@ class TIntervalPositions {
 private:
     std::vector<TIntervalPosition> Positions;
 public:
+    using const_iterator = std::vector<TIntervalPosition>::const_iterator;
+
+    void Merge(const TIntervalPositions& from) {
+        auto itSelf = Positions.begin();
+        auto itFrom = from.Positions.begin();
+        while (itSelf != Positions.end() && itFrom != from.Positions.end()) {
+            if (*itSelf < *itFrom) {
+                Positions.emplace_back(*itSelf);
+                ++itSelf;
+            } else if (*itFrom < *itSelf) {
+                Positions.emplace_back(*itFrom);
+                ++itFrom;
+            } else {
+                Positions.emplace_back(*itFrom);
+                ++itSelf;
+                ++itFrom;
+            }
+        }
+        if (itSelf == Positions.end()) {
+            Positions.insert(Positions.end(), itFrom, from.Positions.end());
+        } else {
+            Positions.insert(Positions.end(), itSelf, Positions.end());
+        }
+    }
+
+    ui32 GetPointsCount() const {
+        return Positions.size();
+    }
+
     bool IsEmpty() const {
         return Positions.empty();
     }
 
     std::vector<TIntervalPosition>::const_iterator begin() const {
         return Positions.begin();
+    }
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "[";
+        for (auto&& p : Positions) {
+            sb << p.DebugJson().GetStringRobust() << ";";
+        }
+        sb << "]";
+        return sb;
     }
 
     std::vector<TIntervalPosition>::const_iterator end() const {
@@ -484,19 +537,17 @@ public:
 
     void AddPosition(TIntervalPosition&& intervalPosition) {
         if (Positions.size()) {
-            AFL_VERIFY(Positions.back() < intervalPosition)("back", Positions.back().DebugJson())("pos", intervalPosition.DebugJson());
+            AFL_VERIFY_DEBUG(Positions.back() < intervalPosition)("back", Positions.back().DebugJson())("pos", intervalPosition.DebugJson());
         }
         Positions.emplace_back(std::move(intervalPosition));
     }
 
     void AddPosition(TSortableBatchPosition&& position, const bool includePositionToLeftInterval) {
-        TIntervalPosition intervalPosition(std::move(position), includePositionToLeftInterval);
-        AddPosition(std::move(intervalPosition));
+        AddPosition(TIntervalPosition(std::move(position), includePositionToLeftInterval));
     }
 
     void AddPosition(const TSortableBatchPosition& position, const bool includePositionToLeftInterval) {
-        TIntervalPosition intervalPosition(position, includePositionToLeftInterval);
-        AddPosition(std::move(intervalPosition));
+        AddPosition(TIntervalPosition(position, includePositionToLeftInterval));
     }
 };
 
@@ -568,7 +619,11 @@ public:
             result.emplace_back(nullptr);
             return result;
         }
+        if (!it.IsValid()) {
+            return { batch };
+        }
         TRWSortableBatchPosition pos(batch, 0, columnNames, {}, false);
+        it.SkipToUpper(pos);
         bool batchFinished = false;
         i64 recordsCountSplitted = 0;
         for (; it.IsValid() && !batchFinished; it.Next()) {
@@ -624,6 +679,10 @@ public:
         const auto& CurrentPosition() const {
             return Current->first;
         }
+
+        void SkipToUpper(const TSortableBatchPosition& /*toPos*/) {
+            return;
+        }
     };
 
     template <class TContainer>
@@ -654,6 +713,10 @@ public:
         const auto& CurrentPosition() const {
             return *Current;
         }
+
+        void SkipToUpper(const TSortableBatchPosition& /*toPos*/) {
+            return;
+        }
     };
 
     template <class TContainer>
@@ -662,6 +725,49 @@ public:
         return SplitByBorders(batch, columnNames, it);
     }
 
+    class TIntervalPointsIterator {
+    private:
+        TIntervalPositions::const_iterator Current;
+        TIntervalPositions::const_iterator End;
+
+    public:
+        TIntervalPointsIterator(const TIntervalPositions& container)
+            : Current(container.begin())
+            , End(container.end()) {
+        }
+
+        bool IsValid() const {
+            return Current != End;
+        }
+
+        void Next() {
+            ++Current;
+        }
+
+        const auto& CurrentPosition() const {
+            return Current->GetPosition();
+        }
+
+        struct TComparator {
+            bool operator()(const TIntervalPosition& pos, const TSortableBatchPosition& value) const {
+                return pos.GetPosition() < value;
+            }
+            bool operator()(const TSortableBatchPosition& value, const TIntervalPosition& pos) const {
+                return value < pos.GetPosition();
+            }
+
+        };
+
+        void SkipToUpper(const TSortableBatchPosition& toPos) {
+            Current = std::upper_bound(Current, End, toPos, TComparator());
+        }
+    };
+
+    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInIntervalPositions(
+        const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, const TIntervalPositions& container) {
+        TIntervalPointsIterator it(container);
+        return SplitByBorders(batch, columnNames, it);
+    }
 };
 
 }

@@ -53,22 +53,22 @@ std::shared_ptr<NKikimr::NOlap::TUserData> TWideSerializedBatch::BuildInsertionU
     return std::make_shared<NOlap::TUserData>(writeMeta.GetTableId(), blobRange, meta, tableSchema->GetVersion(), SplittedBlobs.GetData());
 }
 
-void TWritingBuffer::InitReadyInstant(const TMonotonic instant) {
-    for (auto&& aggr : Aggregations) {
-        aggr->MutableWriteMeta().SetWriteMiddle5StartInstant(instant);
-    }
+void TWritingBuffer::InitReadyInstant(const TMonotonic /*instant*/) {
+//     for (auto&& aggr : Aggregations) {
+//        aggr->MutableWriteMeta().SetWriteMiddle5StartInstant(instant);
+//     }
 }
 
-void TWritingBuffer::InitStartSending(const TMonotonic instant) {
-    for (auto&& aggr : Aggregations) {
-        aggr->MutableWriteMeta().SetWriteMiddle4StartInstant(instant);
-    }
+void TWritingBuffer::InitStartSending(const TMonotonic /*instant*/) {
+//     for (auto&& aggr : Aggregations) {
+//         aggr->MutableWriteMeta().SetWriteMiddle4StartInstant(instant);
+//     }
 }
 
-void TWritingBuffer::InitReplyReceived(const TMonotonic instant) {
-    for (auto&& aggr : Aggregations) {
-        aggr->MutableWriteMeta().SetWriteMiddle6StartInstant(instant);
-    }
+void TWritingBuffer::InitReplyReceived(const TMonotonic /*instant*/) {
+//    for (auto&& aggr : Aggregations) {
+//        aggr->MutableWriteMeta().SetWriteMiddle6StartInstant(instant);
+//    }
 }
 
 std::vector<NKikimr::NOlap::TWritingBlob> TWritingBuffer::GroupIntoBlobs() {

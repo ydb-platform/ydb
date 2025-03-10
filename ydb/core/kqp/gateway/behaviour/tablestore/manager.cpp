@@ -31,6 +31,9 @@ NThreading::TFuture<TTableStoreManager::TYqlConclusionStatus> TTableStoreManager
             return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("not implemented"));
         case EActivityType::Alter:
         try {
+            if (IsStandalone && !AppData()->ColumnShardConfig.GetAlterObjectEnabled()) {
+                return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("ALTER OBJECT is disabled for column tables"));
+            }
             auto actionName = settings.GetFeaturesExtractor().Extract("ACTION");
             if (!actionName) {
                 return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("can't find ACTION parameter"));

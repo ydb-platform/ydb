@@ -198,6 +198,8 @@ public:
         std::optional<EStatus> Status = EStatus::Created;
 
     private:
+        mutable TAtomicCounter PreparationsStarted = 0;
+
         friend class TTxController;
         virtual bool DoParse(TColumnShard& owner, const TString& data) = 0;
         virtual TTxController::TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) = 0;
@@ -215,6 +217,9 @@ public:
             return false;
         }
 
+        virtual bool DoIsInProgress() const {
+            return false;
+        }
         virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* /*owner*/) const {
             return nullptr;
         }
@@ -240,6 +245,10 @@ public:
         using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperator, NKikimrTxColumnShard::ETransactionKind, TTxInfo>;
         using OpType = TString;
 
+        bool IsInProgress() const {
+            return DoIsInProgress();
+        }
+
         bool PingTimeout(TColumnShard& owner, const TMonotonic now) {
             return DoPingTimeout(owner, now);
         }
@@ -257,6 +266,16 @@ public:
         }
 
         std::unique_ptr<NTabletFlatExecutor::ITransaction> BuildTxPrepareForProgress(TColumnShard* owner) const {
+            const NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tx_id", GetTxId());
+            if (!IsInProgress()) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "not_in_progress");
+                return nullptr;
+            }
+            if (PreparationsStarted.Val()) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "prepared_already");
+                return nullptr;
+            }
+            PreparationsStarted.Inc();
             return DoBuildTxPrepareForProgress(owner);
         }
 
@@ -418,11 +437,14 @@ public:
         return TValidator::CheckNotNull(GetTxOperatorOptional(txId));
     }
     template <class TExpectedTransactionOperator>
-    std::shared_ptr<TExpectedTransactionOperator> GetTxOperatorVerifiedAs(const ui64 txId) const {
+    std::shared_ptr<TExpectedTransactionOperator> GetTxOperatorVerifiedAs(const ui64 txId, const bool optionalExists = false) const {
         auto result = GetTxOperatorOptional(txId);
-        AFL_VERIFY(result);
+        if (optionalExists && !result) {
+            return nullptr;
+        }
+        AFL_VERIFY(result)("tx_id", txId);
         auto resultClass = dynamic_pointer_cast<TExpectedTransactionOperator>(result);
-        AFL_VERIFY(resultClass);
+        AFL_VERIFY(resultClass)("tx_id", txId);
         return resultClass;
     }
 

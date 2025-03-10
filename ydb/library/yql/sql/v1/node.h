@@ -1098,11 +1098,18 @@ namespace NSQLTranslationV1 {
             Nanoseconds /* "nanoseconds" */,
         };
 
+        struct TTierSettings {
+            TNodePtr EvictionDelay;
+            std::optional<TIdentifier> StorageName;
+
+            TTierSettings(const TNodePtr& evictionDelay, const std::optional<TIdentifier>& storageName = std::nullopt);
+        };
+
         TIdentifier ColumnName;
-        TNodePtr Expr;
+        std::vector<TTierSettings> Tiers;
         TMaybe<EUnit> ColumnUnit;
 
-        TTtlSettings(const TIdentifier& columnName, const TNodePtr& expr, const TMaybe<EUnit>& columnUnit = {});
+        TTtlSettings(const TIdentifier& columnName, const std::vector<TTierSettings>& tiers, const TMaybe<EUnit>& columnUnit = {});
     };
 
     struct TTableSettings {
@@ -1143,6 +1150,7 @@ namespace NSQLTranslationV1 {
         TIdentifier Name;
         TNodePtr Data;
         TNodePtr Compression;
+        TNodePtr CompressionLevel;
     };
 
     struct TIndexDescription {

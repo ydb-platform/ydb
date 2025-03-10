@@ -2,20 +2,19 @@
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/operations/common/context.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/data_events/write_data.h>
 
 namespace NKikimr::NOlap {
 
-class TBuildSlicesTask: public NConveyor::ITask {
+class TBuildSlicesTask: public NConveyor::ITask, public NColumnShard::TMonitoringObjectsCounter<TBuildSlicesTask> {
 private:
     NEvWrite::TWriteData WriteData;
     const ui64 TabletId;
-    const NActors::TActorId ParentActorId;
-    const NActors::TActorId BufferActorId;
     std::shared_ptr<arrow::RecordBatch> OriginalBatch;
     std::optional<std::vector<NArrow::TSerializedBatch>> BuildSlices();
-    const std::shared_ptr<ISnapshotSchema> ActualSchema;
+    const TWritingContext Context;
     void ReplyError(const TString& message, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass);
 
 protected:
@@ -26,14 +25,13 @@ public:
         return "Write::ConstructBlobs::Slices";
     }
 
-    TBuildSlicesTask(const ui64 tabletId, const NActors::TActorId parentActorId, const NActors::TActorId bufferActorId,
-        NEvWrite::TWriteData&& writeData, const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<ISnapshotSchema>& actualSchema)
+    TBuildSlicesTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<arrow::RecordBatch>& batch,
+        const TWritingContext& context)
         : WriteData(std::move(writeData))
-        , TabletId(tabletId)
-        , ParentActorId(parentActorId)
-        , BufferActorId(bufferActorId)
+        , TabletId(WriteData.GetWriteMeta().GetTableId())
         , OriginalBatch(batch)
-        , ActualSchema(actualSchema) {
+        , Context(context) {
+        WriteData.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::BuildSlices);
     }
 };
 }   // namespace NKikimr::NOlap

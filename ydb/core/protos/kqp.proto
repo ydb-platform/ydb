@@ -680,6 +680,19 @@ message TEvScanError {
     optional uint64 TabletId = 4;
 }
 
+message TEvKqpScanCursor {
+    message TColumnShardScanPlain {
+    }
+    message TColumnShardScanSimple {
+        optional uint64 SourceId = 1;
+        optional uint32 StartRecordIndex = 2;
+    }
+    oneof Implementation {
+        TColumnShardScanPlain ColumnShardPlain = 10;
+        TColumnShardScanSimple ColumnShardSimple = 11;
+    }
+}
+
 message TEvRemoteScanData {
     optional uint32 ScanId = 1;
     optional uint64 CpuTimeUs = 2;
@@ -703,6 +716,7 @@ message TEvRemoteScanData {
 
     optional bool RequestedBytesLimitReached = 11 [default = false];
     optional uint32 AvailablePacks = 12;
+    optional TEvKqpScanCursor LastCursor = 13;
 }
 
 message TEvRemoteScanDataAck {
@@ -734,13 +748,9 @@ message TEvKillScanTablet {
 
 message TEvKqpOutputActorResultInfo {
     repeated NKikimrDataEvents.TLock Locks = 1;
+    optional bool HasRead = 2;
 }
 
-message TKqpTableSinkLocks {
-    repeated NKikimrDataEvents.TLock Locks = 1;
-    repeated uint64 SendingShards = 2;
-    repeated uint64 ReceivingShards = 3;
-}
 
 message TKqpTableSinkSettings {
     enum EType {
@@ -756,11 +766,11 @@ message TKqpTableSinkSettings {
     repeated TKqpColumnMetadataProto Columns = 5;
     optional uint64 LockTxId = 6;
     optional uint64 LockNodeId = 7;
-    optional bool FinalTx = 8; // If tx is immediate then commit, otherwise send prepare
-    optional bool ImmediateTx = 9; // Try to be immediate tx
-    optional bool InconsistentTx = 10; // Write each batch in it's own single immediate tx
-    optional EType Type = 11;
-    optional TKqpTableSinkLocks Locks = 12;
+    optional bool InconsistentTx = 8; // Write each batch in it's own single immediate tx
+    optional EType Type = 9;
+    optional NActorsProto.TActorId BufferActorId = 10;
+    optional int64 Priority = 11;
+    optional bool IsOlap = 12;
 }
 
 message TKqpStreamLookupSettings {

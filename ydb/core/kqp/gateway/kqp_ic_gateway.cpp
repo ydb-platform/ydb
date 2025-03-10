@@ -1120,10 +1120,9 @@ public:
         return NotImplemented<TGenericResult>();
     }
 
-    TFuture<TGenericResult> AlterColumnTable(const TString& cluster,
-                                             const NYql::TAlterColumnTableSettings& settings) override {
+    TFuture<TGenericResult> AlterColumnTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req) override {
         Y_UNUSED(cluster);
-        Y_UNUSED(settings);
+        Y_UNUSED(req);
         return NotImplemented<TGenericResult>();
     }
 

@@ -25,17 +25,7 @@ private:
 public:
     std::shared_ptr<IChunkedArray> BuildDefaultAccessor(const ui32 recordsCount) const;
 
-    bool IsEqualTo(const TColumnLoader& item) const {
-        if (!!Transformer != !!item.Transformer) {
-            return false;
-        } else if (!!Transformer && !Transformer->IsEqualTo(*item.Transformer)) {
-            return false;
-        }
-        if (!Serializer.IsEqualTo(item.Serializer)) {
-            return false;
-        }
-        return true;
-    }
+    bool IsEqualTo(const TColumnLoader& item) const;
 
     TString DebugString() const;
 
@@ -49,7 +39,9 @@ public:
 
     const std::shared_ptr<arrow::Field>& GetField() const;
 
+    TChunkConstructionData BuildAccessorContext(const ui32 recordsCount) const;
     std::shared_ptr<IChunkedArray> ApplyVerified(const TString& data, const ui32 expectedRecordsCount) const;
+    TConclusion<std::shared_ptr<IChunkedArray>> ApplyConclusion(const TString& data, const ui32 expectedRecordsCount) const;
     std::shared_ptr<arrow::RecordBatch> ApplyRawVerified(const TString& data) const;
 };
 

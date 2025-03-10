@@ -201,4 +201,8 @@ enum ETxTypes {
     TXTYPE_GC_START = 34                                    [(TxTypeOpts) = {Name: "TxGarbageCollectionStart"}];
     TXTYPE_APPLY_NORMALIZER = 35                            [(TxTypeOpts) = {Name: "TxApplyNormalizer"}];
     TXTYPE_START_INTERNAL_SCAN = 36                         [(TxTypeOpts) = {Name: "TxStartInternalScan"}];
+    TXTYPE_DATA_SHARING_START_SOURCE_CURSOR = 37            [(TxTypeOpts) = {Name: "TxDataSharingStartSourceCursor"}];
+    TXTYPE_ASK_PORTION_METADATA = 38                        [(TxTypeOpts) = {Name: "TxAskPortionMetadata"}];
+    TXTYPE_WRITE_PORTIONS_FINISHED = 39                     [(TxTypeOpts) = {Name: "TxWritePortionsFinished"}];
+    TXTYPE_WRITE_PORTIONS_FAILED = 40                       [(TxTypeOpts) = {Name: "TxWritePortionsFailed"}];
 }

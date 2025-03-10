@@ -25,11 +25,9 @@ private:
                 if (enabled.HasColumnUnit()) {
                     alterEnabled->SetColumnUnit(enabled.GetColumnUnit());
                 }
+                *alterEnabled->MutableTiers() = enabled.GetTiers();
             } else if (tableTtl.HasDisabled()) {
                 alterTtl->MutableDisabled();
-            }
-            if (tableTtl.HasUseTiering()) {
-                alterTtl->SetUseTiering(tableTtl.GetUseTiering());
             }
         }
 
@@ -50,6 +48,12 @@ private:
                 return parse;
             }
         }
+
+        for (auto&& family : dsDescription.GetPartitionConfig().GetColumnFamilies()) {
+            NKikimrSchemeOp::TAlterColumnTableSchema* alterSchema = olapDescription.MutableAlterSchema();
+            alterSchema->AddAddColumnFamily()->CopyFrom(family);
+        }
+
         return TConclusionStatus::Success();
     }
 
@@ -71,11 +75,27 @@ private:
         if (dsColumn.HasDefaultFromSequence()) {
             return TConclusionStatus::Fail("DefaultFromSequence not supported");
         }
-        if (dsColumn.HasFamilyName() || dsColumn.HasFamily()) {
-            return TConclusionStatus::Fail("FamilyName and Family not supported");
+        if (dsColumn.HasFamilyName()) {
+            olapColumn.SetColumnFamilyName(dsColumn.GetFamilyName());
+        } 
+        if (dsColumn.HasFamily()) {
+            olapColumn.SetColumnFamilyId(dsColumn.GetFamily());
         }
         return TConclusionStatus::Success();
     }
+
+    TConclusionStatus ParseFromDSRequest(
+        const NKikimrSchemeOp::TColumnDescription& dsColumn, NKikimrSchemeOp::TOlapColumnDiff& olapColumn) const {
+        olapColumn.SetName(dsColumn.GetName());
+        if (dsColumn.HasDefaultFromSequence()) {
+            return TConclusionStatus::Fail("DefaultFromSequence not supported");
+        }
+        if (dsColumn.HasFamilyName()) {
+            olapColumn.SetColumnFamilyName(dsColumn.GetFamilyName());
+        }
+        return TConclusionStatus::Success();
+    }
+
 public:
     TConclusion<NKikimrSchemeOp::TAlterColumnTable> Convert(const NKikimrSchemeOp::TModifyScheme& modify) {
         NKikimrSchemeOp::TAlterColumnTable result;

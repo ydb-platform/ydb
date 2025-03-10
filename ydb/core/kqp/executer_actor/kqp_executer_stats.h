@@ -195,6 +195,7 @@ public:
         TDuration collectLongTaskStatsTimeout = TDuration::Max()
     );
     void AddDatashardStats(NKikimrQueryStats::TTxStats&& txStats);
+    void AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskStats);
 
     void UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats);
     void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats);

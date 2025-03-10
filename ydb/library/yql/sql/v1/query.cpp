@@ -239,7 +239,17 @@ static INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETab
             auto opts = Y();
 
             opts = L(opts, Q(Y(Q("columnName"), BuildQuotedAtom(ttlSettings.ColumnName.Pos, ttlSettings.ColumnName.Name))));
-            opts = L(opts, Q(Y(Q("expireAfter"), ttlSettings.Expr)));
+
+            auto tiersDesc = Y();
+            for (const auto& tier : ttlSettings.Tiers) {
+                auto tierDesc = Y();
+                tierDesc = L(tierDesc, Q(Y(Q("evictionDelay"), tier.EvictionDelay)));
+                if (tier.StorageName) {
+                    tierDesc = L(tierDesc, Q(Y(Q("storageName"), BuildQuotedAtom(tier.StorageName->Pos, tier.StorageName->Name))));
+                }
+                tiersDesc = L(tiersDesc, Q(tierDesc));
+            }
+            opts = L(opts, Q(Y(Q("tiers"), Q(tiersDesc))));
 
             if (ttlSettings.ColumnUnit) {
                 opts = L(opts, Q(Y(Q("columnUnit"), Q(ToString(*ttlSettings.ColumnUnit)))));
@@ -1072,6 +1082,9 @@ public:
                 if (family.Compression) {
                     familyDesc = L(familyDesc, Q(Y(Q("compression"), family.Compression)));
                 }
+                if (family.CompressionLevel) {
+                    familyDesc = L(familyDesc, Q(Y(Q("compression_level"), family.CompressionLevel)));
+                }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }
             opts = L(opts, Q(Y(Q("columnFamilies"), Q(columnFamilies))));
@@ -1357,6 +1370,9 @@ public:
                 if (family.Compression) {
                     familyDesc = L(familyDesc, Q(Y(Q("compression"), family.Compression)));
                 }
+                if (family.CompressionLevel) {
+                    familyDesc = L(familyDesc, Q(Y(Q("compression_level"), family.CompressionLevel)));
+                }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }
             actions = L(actions, Q(Y(Q("addColumnFamilies"), Q(columnFamilies))));
@@ -1372,6 +1388,9 @@ public:
                 }
                 if (family.Compression) {
                     familyDesc = L(familyDesc, Q(Y(Q("compression"), family.Compression)));
+                }
+                if (family.CompressionLevel) {
+                    familyDesc = L(familyDesc, Q(Y(Q("compression_level"), family.CompressionLevel)));
                 }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }

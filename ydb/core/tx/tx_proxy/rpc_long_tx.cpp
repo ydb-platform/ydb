@@ -2,6 +2,7 @@
 
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/data_events/shard_writer.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -21,7 +22,8 @@ using namespace NLongTxService;
 // Common logic of LongTx Write that takes care of splitting the data according to the sharding scheme,
 // sending it to shards and collecting their responses
 template <class TLongTxWriteImpl>
-class TLongTxWriteBase: public TActorBootstrapped<TLongTxWriteImpl> {
+class TLongTxWriteBase: public TActorBootstrapped<TLongTxWriteImpl>,
+                        NColumnShard::TMonitoringObjectsCounter<TLongTxWriteBase<TLongTxWriteImpl>> {
     using TBase = TActorBootstrapped<TLongTxWriteImpl>;
     static inline TAtomicCounter MemoryInFlight = 0;
 
@@ -37,8 +39,7 @@ public:
         , Path(path)
         , DedupId(dedupId)
         , LongTxId(longTxId)
-        , ActorSpan(0, NWilson::TTraceId::NewTraceId(0, Max<ui32>()), "TLongTxWriteBase")
-    {
+        , ActorSpan(0, NWilson::TTraceId::NewTraceId(0, Max<ui32>()), "TLongTxWriteBase") {
         if (token) {
             UserToken.emplace(token);
         }
@@ -95,7 +96,11 @@ protected:
         accessor.reset();
 
         const auto& splittedData = shardsSplitter->GetSplitData();
-        InternalController = std::make_shared<NEvWrite::TWritersController>(splittedData.GetShardRequestsCount(), this->SelfId(), LongTxId, NoTxWrite);
+        const auto& shardsInRequest = splittedData.GetShardRequestsCount();
+        InternalController =
+            std::make_shared<NEvWrite::TWritersController>(shardsInRequest, this->SelfId(), LongTxId, NoTxWrite);
+
+        InternalController->GetCounters()->OnSplitByShards(shardsInRequest);
         ui32 sumBytes = 0;
         ui32 rowsCount = 0;
         ui32 writeIdx = 0;
@@ -104,9 +109,9 @@ protected:
                 InternalController->GetCounters()->OnRequest(shardInfo->GetRowsCount(), shardInfo->GetBytes());
                 sumBytes += shardInfo->GetBytes();
                 rowsCount += shardInfo->GetRowsCount();
-                this->Register(new NEvWrite::TShardWriter(shard, shardsSplitter->GetTableId(), shardsSplitter->GetSchemaVersion(), DedupId, shardInfo,
-                    ActorSpan, InternalController,
-                    ++writeIdx, NEvWrite::EModificationType::Replace, NoTxWrite));
+                this->Register(
+                    new NEvWrite::TShardWriter(shard, shardsSplitter->GetTableId(), shardsSplitter->GetSchemaVersion(), DedupId, shardInfo,
+                        ActorSpan, InternalController, ++writeIdx, NEvWrite::EModificationType::Replace, NoTxWrite, TDuration::Seconds(20)));
             }
         }
         pSpan.Attribute("affected_shards_count", (long)splittedData.GetShardsInfo().size());
@@ -235,8 +240,7 @@ public:
         , ReplyTo(replyTo)
         , NavigateResult(navigateResult)
         , Batch(batch)
-        , Issues(issues)
-    {
+        , Issues(issues) {
         Y_ABORT_UNLESS(Issues);
         DataAccessor = std::make_unique<TParsedBatchData>(Batch);
     }

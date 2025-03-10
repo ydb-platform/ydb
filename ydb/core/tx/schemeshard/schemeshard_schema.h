@@ -1750,7 +1750,7 @@ struct Schema : NIceDb::Schema {
         struct Location : Column<5, NScheme::NTypeIds::Utf8> {};
         struct Installation : Column<6, NScheme::NTypeIds::Utf8> {};
         struct Auth : Column<7, NScheme::NTypeIds::String> {};
-        struct ExternalTableReferences : Column<8, NScheme::NTypeIds::String> {};
+        struct ExternalTableReferences : Column<8, NScheme::NTypeIds::String> {};  // references from any scheme objects
         struct Properties : Column<9, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;

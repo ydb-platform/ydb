@@ -21,29 +21,6 @@ using namespace Aws::S3;
 using namespace Aws::S3::Model;
 using namespace Aws::Utils::Stream;
 
-namespace {
-
-static bool TryParseRange(const TString& str, std::pair<ui64, ui64>& range) {
-    TStringBuf buf(str);
-    if (!buf.SkipPrefix("bytes=")) {
-        return false;
-    }
-
-    ui64 start;
-    if (!TryFromString(buf.NextTok('-'), start)) {
-        return false;
-    }
-
-    ui64 end;
-    if (!TryFromString(buf, end)) {
-        return false;
-    }
-
-    range = std::make_pair(start, end);
-    return true;
-}
-}
-
 TEvListObjectsResponse::TResult TFakeExternalStorage::BuildListObjectsResult(const TEvListObjectsRequest::TRequest& request) const {
     auto& bucket = GetBucket(AwsToString(request.GetBucket()));
     auto& awsPrefix = request.GetPrefix();
@@ -82,7 +59,7 @@ void TFakeExternalStorage::Execute(TEvGetObjectRequest::TPtr& ev, const TReplyAd
     auto awsRange = ev->Get()->GetRequest().GetRange();
     Y_ABORT_UNLESS(awsRange.size());
     const TString strRange(awsRange.data(), awsRange.size());
-    AFL_VERIFY(TryParseRange(strRange, range))("original", strRange);
+    AFL_VERIFY(TEvGetObjectResponse::TryParseRange(strRange, range))("original", strRange);
 
     if (!!object) {
         AFL_DEBUG(NKikimrServices::S3_WRAPPER)("method", "GetObject")("id", key)("range", strRange)("object_exists", true);
@@ -184,11 +161,11 @@ void TFakeExternalStorage::Execute(TEvCheckObjectExistsRequest::TPtr& ev, const 
         Aws::S3::Model::HeadObjectResult awsResult;
         awsResult.SetETag(MD5::Calc(*object));
         awsResult.SetContentLength(object->size());
-        result.reset(new TEvCheckObjectExistsResponse(awsResult, ev->Get()->GetRequestContext()));
+        result.reset(new TEvCheckObjectExistsResponse(key, awsResult, ev->Get()->GetRequestContext()));
         Y_DEBUG_ABORT_UNLESS(result->IsSuccess());
     } else {
         Aws::Utils::Outcome<Aws::S3::Model::HeadObjectResult, Aws::S3::S3Error> awsOutcome;
-        result.reset(new TEvCheckObjectExistsResponse(awsOutcome, ev->Get()->GetRequestContext()));
+        result.reset(new TEvCheckObjectExistsResponse(key, awsOutcome, ev->Get()->GetRequestContext()));
         Y_DEBUG_ABORT_UNLESS(!result->IsSuccess());
     }
 

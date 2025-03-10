@@ -97,7 +97,9 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
         exchangerSettings->SetStartDelayMs(10);
         exchangerSettings->SetMaxDelayMs(10);
         AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+        AppConfig.MutableColumnShardConfig()->SetMaxInFlightIntervalsOnRequest(1);
         FeatureFlags.SetEnableSparsedColumns(true);
+        FeatureFlags.SetEnableWritePortionsOnInsert(true);
         FeatureFlags.SetEnableParameterizedDecimal(true);
     }
 
@@ -115,6 +117,10 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings& SetFederatedQuerySetupFactory(NKqp::IKqpFederatedQuerySetupFactory::TPtr value) { FederatedQuerySetupFactory = value; return *this; };
     TKikimrSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; };
     TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };
+    TKikimrSettings& SetColumnShardAlterObjectEnabled(bool enable) {
+            AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(enable);
+            return *this;
+    }
 };
 
 class TKikimrRunner {
@@ -158,9 +164,9 @@ public:
 
     NYdb::TDriverConfig GetDriverConfig() const { return DriverConfig; }
 
-    NYdb::NTable::TTableClient GetTableClient() const {
-        return NYdb::NTable::TTableClient(*Driver, NYdb::NTable::TClientSettings()
-            .UseQueryCache(false));
+    NYdb::NTable::TTableClient GetTableClient(
+        NYdb::NTable::TClientSettings settings = NYdb::NTable::TClientSettings()) const {
+        return NYdb::NTable::TTableClient(*Driver, settings.UseQueryCache(false));
     }
 
     NYdb::NQuery::TQueryClient GetQueryClient(

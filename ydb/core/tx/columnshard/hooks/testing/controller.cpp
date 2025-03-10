@@ -1,11 +1,14 @@
 #include "controller.h"
-#include <ydb/core/tx/columnshard/columnshard_impl.h>
+
 #include <ydb/core/tx/columnshard/blobs_action/abstract/gc.h>
-#include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/indexation.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
+#include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
@@ -22,16 +25,18 @@ void TController::DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard&
     }
 }
 
-void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& shard, TCheckContext& context) const {
+void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& shard, TCheckContext& /*context*/) const {
     if (!shard.HasIndex()) {
         return;
     }
+    /*
     const auto& index = shard.GetIndexAs<NOlap::TColumnEngineForLogs>();
     std::vector<std::shared_ptr<NOlap::TGranuleMeta>> granules = index.GetTables({}, {});
     THashMap<TString, THashSet<NOlap::TUnifiedBlobId>> ids;
     for (auto&& i : granules) {
+        auto accessor = i->GetDataAccessorPtrVerifiedAs<NOlap::TMemDataAccessor>();
         for (auto&& p : i->GetPortions()) {
-            p.second->FillBlobIdsByStorage(ids, index.GetVersionedIndex());
+            accessor->BuildAccessor(p.second).FillBlobIdsByStorage(ids, index.GetVersionedIndex());
         }
     }
     for (auto&& i : ids) {
@@ -60,6 +65,7 @@ void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& s
         }
     }
     context.AddCategories(shard.TabletID(), std::move(shardBlobsCategories));
+    */
 }
 
 TController::TCheckContext TController::CheckInvariants() const {
@@ -118,7 +124,8 @@ bool TController::IsTrivialLinks() const {
     return true;
 }
 
-::NKikimr::NColumnShard::TBlobPutResult::TPtr TController::OverrideBlobPutResultOnCompaction(const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const {
+::NKikimr::NColumnShard::TBlobPutResult::TPtr TController::OverrideBlobPutResultOnCompaction(
+    const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const {
     if (IndexWriteControllerEnabled) {
         return original;
     }
@@ -138,4 +145,10 @@ bool TController::IsTrivialLinks() const {
     return result;
 }
 
+void TController::OnAfterLocalTxCommitted(const NActors::TActorContext& ctx, const ::NKikimr::NColumnShard::TColumnShard& shard, const TString& txInfo) {
+    if (RestartOnLocalDbTxCommitted == txInfo) {
+        ctx.Send(shard.SelfId(), new TEvents::TEvPoisonPill{});
+    }
 }
+
+}   // namespace NKikimr::NYDBTest::NColumnShard

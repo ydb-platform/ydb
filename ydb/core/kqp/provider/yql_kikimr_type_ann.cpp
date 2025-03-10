@@ -998,6 +998,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         family.Compression = TString(
                             familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                         );
+                    } else if (name == "compression_level") {
+                        family.CompressionLevel = FromString<i32>(familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                     } else {
                         ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
                             TStringBuilder() << "Unknown column family setting name: " << name));
@@ -1205,18 +1207,18 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                     "Can't reset TTL settings"));
                 return TStatus::Error;
-            } else if (name == "setTiering") {
-                meta->TableSettings.Tiering.Set(TString(
-                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                ));
-            } else if (name == "resetTiering") {
-                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                    "Can't reset TIERING"));
-                return TStatus::Error;
             } else if (name == "storeType") {
-                TMaybe<TString> storeType = TString(setting.Value().Cast<TCoAtom>().Value());
-                if (storeType && to_lower(storeType.GetRef()) == "column") {
-                    meta->StoreType = EStoreType::Column;
+                if (const TMaybe<TString> storeType = TString(setting.Value().Cast<TCoAtom>().Value())) {
+                    const auto& val = to_lower(storeType.GetRef());
+                    if (val == "column") {
+                        meta->StoreType = EStoreType::Column;
+                    } else if (val == "row") {
+                        //pass
+                    } else {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                            TStringBuilder() << "Unsupported table store type: " << storeType.GetRef()));
+                        return TStatus::Error;
+                    }
                 }
             } else if (name == "partitionByHashFunction") {
                 meta->TableSettings.PartitionByHashFunction = TString(

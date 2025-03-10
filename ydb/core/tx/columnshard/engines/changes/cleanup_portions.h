@@ -1,14 +1,22 @@
 #pragma once
 #include "abstract/abstract.h"
+#include "abstract/remove_portions.h"
 
 namespace NKikimr::NOlap {
 
-class TCleanupPortionsColumnEngineChanges: public TColumnEngineChanges {
+class TCleanupPortionsColumnEngineChanges: public TColumnEngineChanges,
+                                           public NColumnShard::TMonitoringObjectsCounter<TCleanupPortionsColumnEngineChanges> {
 private:
     using TBase = TColumnEngineChanges;
-    THashMap<TString, THashSet<NOlap::TEvictedBlob>> BlobsToForget;
     THashMap<TString, std::vector<std::shared_ptr<TPortionInfo>>> StoragePortions;
+    std::vector<TPortionInfo::TConstPtr> PortionsToDrop;
+    TRemovePortionsChange PortionsToRemove;
+    THashSet<ui64> TablesToDrop;
+
 protected:
+    virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& /*context*/) override {
+    }
+
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
     virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) override;
 
@@ -27,17 +35,41 @@ protected:
     virtual ui64 DoCalcMemoryForUsage() const override {
         return 0;
     }
+    virtual NDataLocks::ELockCategory GetLockCategory() const override {
+        return NDataLocks::ELockCategory::Cleanup;
+    }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override {
-        return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + GetTaskIdentifier(), PortionsToDrop);
+        auto portionsDropLock = std::make_shared<NDataLocks::TListPortionsLock>(
+            TypeString() + "::PORTIONS_DROP::" + GetTaskIdentifier(), PortionsToDrop, NDataLocks::ELockCategory::Cleanup);
+        auto portionsRemoveLock =
+            PortionsToRemove.BuildDataLock(TypeString() + "::REMOVE::" + GetTaskIdentifier(), NDataLocks::ELockCategory::Compaction);
+        auto tablesLock = std::make_shared<NDataLocks::TListTablesLock>(
+            TypeString() + "::TABLES::" + GetTaskIdentifier(), TablesToDrop, NDataLocks::ELockCategory::Tables);
+        return NDataLocks::TCompositeLock::Build(TypeString() + "::COMPOSITE::" + GetTaskIdentifier(), {portionsDropLock, portionsRemoveLock, tablesLock});
     }
 
 public:
     TCleanupPortionsColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager)
         : TBase(storagesManager, NBlobOperations::EConsumer::CLEANUP_PORTIONS) {
-
     }
 
-    std::vector<TPortionInfo> PortionsToDrop;
+    void AddTableToDrop(const ui64 pathId) {
+        TablesToDrop.emplace(pathId);
+    }
+
+    const std::vector<TPortionInfo::TConstPtr>& GetPortionsToDrop() const {
+        return PortionsToDrop;
+    }
+
+    void AddPortionToDrop(const TPortionInfo::TConstPtr& portion) {
+        PortionsToDrop.emplace_back(portion);
+        PortionsToAccess->AddPortion(portion);
+    }
+
+    void AddPortionToRemove(const TPortionInfo::TConstPtr& portion) {
+        PortionsToRemove.AddPortion(portion);
+        PortionsToAccess->AddPortion(portion);
+    }
 
     virtual ui32 GetWritePortionsCount() const override {
         return 0;
@@ -58,4 +90,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap

@@ -1741,6 +1741,10 @@ public:
                     egressRows += egressStats.Rows ? egressStats.Rows : pushStats.Rows;
                     // p.s. sink == sinkInfo.Buffer
                 }
+
+                if (auto* source = sinkInfo.AsyncOutput) {
+                    source->FillExtraStats(protoTask, last, GetMeteringStats());
+                }
             }
 
             protoTask->SetFinishTimeMs(finishTimeMs);

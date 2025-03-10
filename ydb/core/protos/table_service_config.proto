@@ -339,4 +339,5 @@ message TTableServiceConfig {
     }
 
     optional TWriteActorSettings WriteActorSettings = 72;
+    optional bool AllowOlapDataQuery = 74 [default = false];
 };

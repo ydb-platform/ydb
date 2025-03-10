@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 
@@ -121,12 +122,6 @@ private:
     friend class TKqpTransactionContext;
 };
 
-struct TTableInfo {
-    bool IsOlap = false;
-    THashSet<TStringBuf> Pathes;
-};
-
-
 class TShardIdToTableInfo {
 public:
     const TTableInfo& Get(ui64 shardId) const {
@@ -165,6 +160,8 @@ private:
 };
 using TShardIdToTableInfoPtr = std::shared_ptr<TShardIdToTableInfo>;
 
+bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery);
+
 class TKqpTransactionContext : public NYql::TKikimrTransactionContextBase  {
 public:
     explicit TKqpTransactionContext(bool implicit, const NMiniKQL::IFunctionRegistry* funcRegistry,
@@ -202,6 +199,8 @@ public:
     void Finish() final {
         YQL_ENSURE(DeferredEffects.Empty());
         YQL_ENSURE(!Locks.HasLocks());
+        YQL_ENSURE(!TxManager);
+        YQL_ENSURE(!BufferActorId);
 
         FinishTime = TInstant::Now();
 
@@ -232,6 +231,11 @@ public:
         ParamsState = MakeIntrusive<TParamsState>();
         SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
         HasImmediateEffects = false;
+
+        HasOlapTable = false;
+        HasOltpTable = false;
+        HasTableWrite = false;
+        NeedUncommittedChangesFlush = false;
     }
 
     TKqpTransactionInfo GetInfo() const;
@@ -267,7 +271,7 @@ public:
     }
 
     bool ShouldExecuteDeferredEffects() const {
-        if (HasUncommittedChangesRead || HasOlapTable) {
+        if (NeedUncommittedChangesFlush || HasOlapTable) {
             return !DeferredEffects.Empty();
         }
 
@@ -296,11 +300,18 @@ public:
     }
 
     bool CanDeferEffects() const {
-        if (HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution() || HasOlapTable) {
+        if (NeedUncommittedChangesFlush || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution() || HasOlapTable) {
             return false;
         }
 
         return true;
+    }
+
+    void ApplyPhysicalQuery(const NKqpProto::TKqpPhyQuery& phyQuery) {
+        NeedUncommittedChangesFlush = HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery);
+        if (NeedUncommittedChangesFlush) {
+            ModifiedTablesSinceLastFlush.clear();   
+        }
     }
 
 public:
@@ -332,6 +343,12 @@ public:
     bool HasOlapTable = false;
     bool HasOltpTable = false;
     bool HasTableWrite = false;
+
+    bool NeedUncommittedChangesFlush = false;
+    THashSet<NKikimr::TTableId> ModifiedTablesSinceLastFlush;
+
+    TActorId BufferActorId;
+    IKqpTransactionManagerPtr TxManager = nullptr;
 
     TShardIdToTableInfoPtr ShardIdToTableInfo = std::make_shared<TShardIdToTableInfo>();
 };
@@ -490,9 +507,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery);
 
 bool HasOlapTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
-bool HasOlapTableWriteInStage(
-    const NKqpProto::TKqpPhyStage& stage,
-    const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpPhyTable>& tables);
+bool HasOlapTableWriteInStage(const NKqpProto::TKqpPhyStage& stage);
 bool HasOlapTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);

@@ -369,6 +369,26 @@ class ScenarioTestHelper:
         allure.attach(json.dumps(rows), 'result', allure.attachment_type.JSON)
         return ret
 
+    @allure.step('Execute query')
+    def execute_query(
+        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS
+    ):
+        """Run a query on the tested database.
+
+        Args:
+            yql: Query text.
+            expected_status: Expected status or set of database response statuses. If the response status is not in the expected set, an exception is thrown.
+
+        Example:
+            tablename = 'testTable'
+            sth = ScenarioTestHelper(ctx)
+            sth.execute_query(f'INSERT INTO `{sth.get_full_path("tablename") }` (key, c) values(1, 100)')
+        """
+
+        allure.attach(yql, 'request', allure.attachment_type.TEXT)
+        with ydb.QuerySessionPool(YdbCluster.get_ydb_driver()) as pool:
+            self._run_with_expected_status(lambda: pool.execute_with_retries(yql), expected_status)
+
     def drop_if_exist(self, names: List[str], operation) -> None:
         """Erase entities in the tested database, if it exists.
 
@@ -560,15 +580,18 @@ class ScenarioTestHelper:
         """
 
         root_path = self.get_full_path('')
-        result = []
-        self_descr = self._describe_path_impl(os.path.join(root_path, path))
-        if self_descr is not None:
-            self_descr.name = path
-            if self_descr.is_directory():
-                result = self._list_directory_impl(root_path, path)
-            result.append(self_descr)
-        allure.attach('\n'.join([f'{e.name}: {repr(e.type)}' for e in result]), 'result', allure.attachment_type.TEXT)
-        return result
+        try:
+            self_descr = YdbCluster._describe_path_impl(os.path.join(root_path, path))
+        except ydb.issues.SchemeError:
+            return []
+
+        if self_descr is None:
+            return []
+
+        if self_descr.is_directory():
+            return list(reversed(YdbCluster.list_directory(root_path, path))) + [self_descr]
+        else:
+            return self_descr
 
     @allure.step('Remove path {path}')
     def remove_path(self, path: str) -> None:

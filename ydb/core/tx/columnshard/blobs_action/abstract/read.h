@@ -72,7 +72,7 @@ public:
 
     TString Extract(const TBlobRange& bRange) {
         auto it = Blobs.find(bRange);
-        AFL_VERIFY(it != Blobs.end());
+        AFL_VERIFY(it != Blobs.end())("range", bRange.ToString());
         TString result = it->second;
         Blobs.erase(it);
         return result;

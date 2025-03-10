@@ -57,7 +57,8 @@ std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared
     size_t reserve = 0, const std::map<std::string, ui64>& sizeByColumn = {});
 std::vector<std::shared_ptr<arrow::Array>> Finish(std::vector<std::unique_ptr<arrow::ArrayBuilder>>&& builders);
 
-std::shared_ptr<arrow::UInt64Array> MakeUI64Array(ui64 value, i64 size);
+std::shared_ptr<arrow::UInt64Array> MakeUI64Array(const ui64 value, const i64 size);
+std::shared_ptr<arrow::StringArray> MakeStringArray(const TString& value, const i64 size);
 std::vector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema);
 bool ReserveData(arrow::ArrayBuilder& builder, const size_t size);
 bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::shared_ptr<arrow::RecordBatch>& result, const std::vector<std::string>& columnsOrder = {}, const bool orderFieldsAreNecessary = true);

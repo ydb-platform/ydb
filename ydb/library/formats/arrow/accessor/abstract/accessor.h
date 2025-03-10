@@ -253,6 +253,8 @@ protected:
                 if (position < chunkCurrent->GetFinishPosition()) {
                     return accessor.OnArray(
                         chunkCurrent->GetChunkIndex(), chunkCurrent->GetStartPosition());
+                } else if (position == chunkCurrent->GetFinishPosition() && chunkCurrent->GetChunkIndex() + 1 < accessor.GetChunksCount()) {
+                    return accessor.OnArray(chunkCurrent->GetChunkIndex() + 1, position);
                 }
                 AFL_VERIFY(chunkCurrent->GetChunkIndex() < accessor.GetChunksCount());
                 startIndex = chunkCurrent->GetChunkIndex();
@@ -267,6 +269,11 @@ protected:
             }
         } else {
             AFL_VERIFY(chunkCurrent->GetChunkIndex() > 0);
+            if (position + 1 == chunkCurrent->GetStartPosition()) {
+                const ui32 chunkIndex = chunkCurrent->GetChunkIndex() - 1;
+                return accessor.OnArray(chunkIndex, chunkCurrent->GetStartPosition() - accessor.GetChunkLength(chunkIndex));
+            }
+
             ui64 idx = chunkCurrent->GetStartPosition();
             for (i32 i = chunkCurrent->GetChunkIndex() - 1; i >= 0; --i) {
                 AFL_VERIFY(idx >= accessor.GetChunkLength(i))("idx", idx)("length", accessor.GetChunkLength(i));

@@ -2246,7 +2246,7 @@ NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef bu
 
     case NUdf::EDataSlot::JsonDocument: {
         auto binaryJson = NKikimr::NBinaryJson::SerializeToBinaryJson(buf);
-        if (!binaryJson.Defined()) {
+        if (binaryJson.IsFail()) {
             // JSON parse error happened, return NULL
             return NUdf::TUnboxedValuePod();
         }

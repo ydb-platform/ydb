@@ -1,19 +1,28 @@
 #pragma once
 
-#include "blobs_action/abstract/gc.h"
 #include "defs.h"
 
+#include "blobs_action/abstract/gc.h"
+
+#include <ydb/core/formats/arrow/special_keys.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
-#include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
-#include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
+#include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
+#include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/resource_subscriber/container.h>
 #include <ydb/core/tx/data_events/write_data.h>
-#include <ydb/core/formats/arrow/special_keys.h>
+#include <ydb/core/tx/priorities/usage/abstract.h>
 
 namespace NKikimr::NOlap::NReader {
 class IApplyAction;
 }
+
+namespace NKikimr::NOlap {
+class IBlobsWritingAction;
+class TPortionInfo;
+class TPortionInfoConstructor;
+}   // namespace NKikimr::NOlap
 
 namespace NKikimr::NColumnShard {
 
@@ -39,6 +48,8 @@ struct TEvPrivate {
 
         EvWritingAddDataToBuffer,
         EvWritingFlushBuffer,
+        EvWritingPortionsAddDataToBuffer,
+        EvWritingPortionsFlushBuffer,
 
         EvExportWritingFinished,
         EvExportWritingFailed,
@@ -47,11 +58,59 @@ struct TEvPrivate {
 
         EvTaskProcessedResult,
         EvPingSnapshotsUsage,
+        EvWritePortionResult,
+        EvStartCompaction,
+
+        EvRegisterGranuleDataAccessor,
+        EvUnregisterGranuleDataAccessor,
+        EvAskTabletDataAccessors,
+        EvAskServiceDataAccessors,
+        EvAddPortionDataAccessor,
+        EvRemovePortionDataAccessor,
+        EvMetadataAccessorsInfo,
 
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    class TEvMetadataAccessorsInfo: public NActors::TEventLocal<TEvMetadataAccessorsInfo, EvMetadataAccessorsInfo> {
+    private:
+        const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
+        const ui64 Generation;
+        std::optional<NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>> Result;
+
+    public:
+        const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& GetProcessor() const {
+            return Processor;
+        }
+        ui64 GetGeneration() const {
+            return Generation;
+        }
+        NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult> ExtractResult() {
+            AFL_VERIFY(Result);
+            auto result = std::move(*Result);
+            Result.reset();
+            return result;
+        }
+
+        TEvMetadataAccessorsInfo(const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor, const ui64 gen,
+            NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>&& result)
+            : Processor(processor)
+            , Generation(gen)
+            , Result(std::move(result)) {
+        }
+    };
+
+    class TEvStartCompaction: public NActors::TEventLocal<TEvStartCompaction, EvStartCompaction> {
+    private:
+        YDB_READONLY_DEF(std::shared_ptr<NPrioritiesQueue::TAllocationGuard>, Guard);
+
+    public:
+        TEvStartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& g)
+            : Guard(g) {
+        }
+    };
 
     class TEvTaskProcessedResult: public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult> {
     private:
@@ -67,23 +126,22 @@ struct TEvPrivate {
         }
     };
 
-    struct TEvTieringModified: public TEventLocal<TEvTieringModified, EvTieringModified> {
-    };
+    struct TEvTieringModified: public TEventLocal<TEvTieringModified, EvTieringModified> {};
 
     struct TEvWriteDraft: public TEventLocal<TEvWriteDraft, EvWriteDraft> {
         const std::shared_ptr<IWriteController> WriteController;
         TEvWriteDraft(std::shared_ptr<IWriteController> controller)
             : WriteController(controller) {
-
         }
     };
 
     class TEvNormalizerResult: public TEventLocal<TEvNormalizerResult, EvNormalizerResult> {
         NOlap::INormalizerChanges::TPtr Changes;
+
     public:
         TEvNormalizerResult(NOlap::INormalizerChanges::TPtr changes)
-            : Changes(changes)
-        {}
+            : Changes(changes) {
+        }
 
         NOlap::INormalizerChanges::TPtr GetChanges() const {
             Y_ABORT_UNLESS(!!Changes);
@@ -95,27 +153,24 @@ struct TEvPrivate {
         const std::shared_ptr<NOlap::IBlobsGCAction> Action;
         TEvGarbageCollectionFinished(const std::shared_ptr<NOlap::IBlobsGCAction>& action)
             : Action(action) {
-
         }
     };
 
     /// Common event for Indexing and GranuleCompaction: write index data in TTxWriteIndex transaction.
-    struct TEvWriteIndex : public TEventLocal<TEvWriteIndex, EvWriteIndex> {
+    struct TEvWriteIndex: public TEventLocal<TEvWriteIndex, EvWriteIndex> {
         std::shared_ptr<NOlap::TVersionedIndex> IndexInfo;
         std::shared_ptr<NOlap::TColumnEngineChanges> IndexChanges;
-        bool GranuleCompaction{false};
+        bool GranuleCompaction{ false };
         TUsage ResourceUsage;
-        bool CacheData{false};
+        bool CacheData{ false };
         TDuration Duration;
         TBlobPutResult::TPtr PutResult;
 
-        TEvWriteIndex(const std::shared_ptr<NOlap::TVersionedIndex>& indexInfo,
-            std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges,
-            bool cacheData)
+        TEvWriteIndex(
+            const std::shared_ptr<NOlap::TVersionedIndex>& indexInfo, std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges, bool cacheData)
             : IndexInfo(indexInfo)
             , IndexChanges(indexChanges)
-            , CacheData(cacheData)
-        {
+            , CacheData(cacheData) {
             PutResult = std::make_shared<TBlobPutResult>(NKikimrProto::UNKNOWN);
         }
 
@@ -135,13 +190,16 @@ struct TEvPrivate {
         }
     };
 
-    struct TEvScanStats : public TEventLocal<TEvScanStats, EvScanStats> {
-        TEvScanStats(ui64 rows, ui64 bytes) : Rows(rows), Bytes(bytes) {}
+    struct TEvScanStats: public TEventLocal<TEvScanStats, EvScanStats> {
+        TEvScanStats(ui64 rows, ui64 bytes)
+            : Rows(rows)
+            , Bytes(bytes) {
+        }
         ui64 Rows;
         ui64 Bytes;
     };
 
-    struct TEvReadFinished : public TEventLocal<TEvReadFinished, EvReadFinished> {
+    struct TEvReadFinished: public TEventLocal<TEvReadFinished, EvReadFinished> {
         explicit TEvReadFinished(ui64 requestCookie, ui64 txId = 0)
             : RequestCookie(requestCookie)
             , TxId(txId) {
@@ -151,10 +209,10 @@ struct TEvPrivate {
         ui64 TxId;
     };
 
-    struct TEvPeriodicWakeup : public TEventLocal<TEvPeriodicWakeup, EvPeriodicWakeup> {
+    struct TEvPeriodicWakeup: public TEventLocal<TEvPeriodicWakeup, EvPeriodicWakeup> {
         TEvPeriodicWakeup(bool manual = false)
-            : Manual(manual)
-        {}
+            : Manual(manual) {
+        }
 
         bool Manual;
     };
@@ -169,6 +227,7 @@ struct TEvPrivate {
             Internal,
             Request
         };
+
     private:
         NColumnShard::TBlobPutResult::TPtr PutResult;
         NOlap::TWritingBuffer WritesBuffer;
@@ -176,7 +235,6 @@ struct TEvPrivate {
         YDB_ACCESSOR(EErrorClass, ErrorClass, EErrorClass::Internal);
 
     public:
-
         NKikimrDataEvents::TEvWriteResult::EStatus GetWriteResultStatus() const {
             switch (ErrorClass) {
                 case EErrorClass::Internal:
@@ -185,7 +243,7 @@ struct TEvPrivate {
                     return NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST;
             }
         }
-        
+
         static std::unique_ptr<TEvWriteBlobsResult> Error(
             const NKikimrProto::EReplyStatus status, NOlap::TWritingBuffer&& writesBuffer, const TString& error, const EErrorClass errorClass) {
             std::unique_ptr<TEvWriteBlobsResult> result =
@@ -197,8 +255,7 @@ struct TEvPrivate {
 
         TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, NOlap::TWritingBuffer&& writesBuffer)
             : PutResult(putResult)
-            , WritesBuffer(std::move(writesBuffer))
-        {
+            , WritesBuffer(std::move(writesBuffer)) {
             Y_ABORT_UNLESS(PutResult);
         }
 
@@ -216,4 +273,4 @@ struct TEvPrivate {
     };
 };
 
-}
+}   // namespace NKikimr::NColumnShard

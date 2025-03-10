@@ -1668,7 +1668,7 @@ protected:
 
             for (auto&& i: partitions) {
                 const ui64 nodeId = ShardIdToNodeId.at(i.first);
-                nodeShards[nodeId].emplace_back(TShardInfoWithId(i.first,  i.second)));
+                nodeShards[nodeId].emplace_back(TShardInfoWithId(i.first, std::move(i.second)));
             }
 
             if (CollectProfileStats(Request.StatsMode)) {

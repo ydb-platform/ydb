@@ -133,6 +133,8 @@ public:
 
     std::shared_ptr<NAccessor::IChunkedArray> GetAccessorByNameOptional(const std::string& fieldId) const;
     std::shared_ptr<NAccessor::IChunkedArray> GetAccessorByNameVerified(const std::string& fieldId) const;
+
+    NAccessor::IChunkedArray::TRowRange EqualRange(const arrow::RecordBatch& border) const;
 };
 
 }   // namespace NKikimr::NArrow

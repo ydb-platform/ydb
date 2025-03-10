@@ -43,11 +43,23 @@ class TBuildDuplicateFilters: public NConveyor::ITask {
         }
     };
 
+    class TSourceMergingInfo {
+    private:
+        YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Data);
+        YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
+        YDB_READONLY_DEF(std::shared_ptr<IFilterSubscriber>, Callback);
+
+    public:
+        TSourceMergingInfo(const std::shared_ptr<NArrow::TGeneralContainer>& data, const std::shared_ptr<NArrow::TColumnFilter>& filter,
+            const std::shared_ptr<IFilterSubscriber>& callback)
+            : Data(data)
+            , Filter(filter)
+            , Callback(callback) {
+        }
+    };
+
 private:
-    std::vector<std::shared_ptr<NCommon::IDataSource>> Sources;
-    std::vector<std::shared_ptr<IFilterSubscriber>> Callbacks;
-    std::optional<NArrow::TReplaceKey> FromExclusive;
-    NArrow::TReplaceKey ToInclusive;
+    std::vector<TSourceMergingInfo> Sources;
     std::shared_ptr<arrow::Schema> PKSchema;
     std::vector<std::string> VersionColumnNames;
 
@@ -56,23 +68,21 @@ private:
         NArrow::NMerger::TMergePartialStream merger(PKSchema, nullptr, false, VersionColumnNames);
         for (ui64 i = 0; i < Sources.size(); ++i) {
             const auto& source = Sources[i];
-            // Not implemented: find borders, construct TGeneralContainer
-            std::shared_ptr<NArrow::TGeneralContainer> slice(source->GetStageData().GetTable()->ToGeneralContainer());   // Dummy
-            merger.AddSource(slice, source->GetStageData().GetAppliedFilter(), i);
+            merger.AddSource(source.GetData(), source.GetFilter(), i);
         }
         TFiltersBuilder filtersBuilder(Sources.size());
         merger.DrainAll(filtersBuilder);
         std::vector<NArrow::TColumnFilter> filters = std::move(filtersBuilder).ExtractFilters();
-        AFL_VERIFY(filters.size() == Callbacks.size());
+        AFL_VERIFY(filters.size() == Sources.size());
         for (ui64 i = 0; i < filters.size(); ++i) {
-            Callbacks[i]->OnFilterReady(filters[i]);
+            Sources[i].GetCallback()->OnFilterReady(filters[i]);
         }
         return TConclusionStatus::Success();
     }
 
     virtual void DoOnCannotExecute(const TString& reason) override {
-        for (auto& callback : Callbacks) {
-            callback->OnFailure(reason);
+        for (auto& source : Sources) {
+            source.GetCallback()->OnFailure(reason);
         }
     }
 
@@ -81,17 +91,14 @@ private:
     }
 
 public:
-    TBuildDuplicateFilters(const std::optional<NArrow::TReplaceKey>& fromExclusive, const NArrow::TReplaceKey& toInclusive,
-        const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<std::string>& versionColumnNames)
-        : FromExclusive(fromExclusive)
-        , ToInclusive(toInclusive)
-        , PKSchema(pkSchema)
+    TBuildDuplicateFilters(const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<std::string>& versionColumnNames)
+        : PKSchema(pkSchema)
         , VersionColumnNames(versionColumnNames) {
     }
 
-    void AddSource(const std::shared_ptr<NCommon::IDataSource>& source, const std::shared_ptr<IFilterSubscriber>& callback) {
-        Sources.emplace_back(source);
-        Callbacks.emplace_back(callback);
+    void AddSource(const std::shared_ptr<NArrow::TGeneralContainer>& source, const std::shared_ptr<NArrow::TColumnFilter>& filter,
+        const std::shared_ptr<IFilterSubscriber>& callback) {
+        Sources.emplace_back(source, filter, callback);
     }
 };
 

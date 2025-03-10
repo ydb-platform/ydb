@@ -59,6 +59,9 @@ class TestTpch10(TpchSuiteBase):
     }
     scale: int = 10
     check_canonical: bool = CheckCanonicalPolicy.ERROR
+    query_settings = {
+        72: LoadSuiteBase.QuerySettings(query_prefix='pragma ydb.UseGraceJoinCoreForMap = "true";'),
+    }
 
 
 class TestTpch100(TpchSuiteBase):

@@ -6,7 +6,8 @@ TEST_SRCS(
     test_tpch_spilling.py
 )
 
-SIZE(MEDIUM)
+SIZE(LARGE)
+TAG(ya:fat)
 
 REQUIREMENTS(ram:16)
 

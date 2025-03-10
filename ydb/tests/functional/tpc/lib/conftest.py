@@ -17,6 +17,14 @@ class FunctionalTestBase:
                 'max_file_size': 107374182400,
             }
         },
+        'resource_manager': {
+            'verbose_memory_limit_exception': True
+        },
+    }
+
+    memory_controller_config = {
+        'activities_limit_percent': 60,
+        'query_execution_limit_percent': 50,
     }
 
     @classmethod
@@ -24,12 +32,16 @@ class FunctionalTestBase:
         table_service_config = {}
         if with_spilling:
             table_service_config = cls.table_service_config_for_spilling
+        memory_controller_config = {}
+        if with_spilling:
+            memory_controller_config = cls.memory_controller_config
         print('MISHA', table_service_config)
         cls.cluster = KiKiMR(configurator=KikimrConfigGenerator(
             domain_name='local',
             extra_feature_flags=["enable_resource_pools"],
             use_in_memory_pdisks=True,
             table_service_config=table_service_config,
+            memory_controller_config=memory_controller_config,
         ))
         cls.cluster.start()
         node = cls.cluster.nodes[1]

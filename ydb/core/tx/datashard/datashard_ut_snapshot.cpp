@@ -5084,19 +5084,25 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "{ items { int32_value: 2 } items { int32_value: 20 } }");
     }
 
-    Y_UNIT_TEST(UncommittedChangesRenameTable) {
+    Y_UNIT_TEST_TWIN(UncommittedChangesRenameTable, UseSink) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(100)
-            .SetEnableDataShardVolatileTransactions(true);
+            .SetEnableDataShardVolatileTransactions(true)
+            .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
 
         InitRoot(server, sender);
 
@@ -5147,9 +5153,16 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         // The original table was removed
         // We must not be able to commit the transaction
-        UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1"),
-            "ERROR: ABORTED");
+        if (UseSink) {
+            // In case of sinks, we encountered an error while the tablet was rebooting.
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1"),
+                "ERROR: UNAVAILABLE");
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1"),
+                "ERROR: ABORTED");
+        }
 
         runtime.SimulateSleep(TDuration::Seconds(1));
 

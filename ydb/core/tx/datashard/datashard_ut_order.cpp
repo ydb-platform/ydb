@@ -2670,7 +2670,7 @@ void TestLateKqpQueryAfterColumnDrop(bool dataQuery, bool useSink, const TString
         // if (ev->GetRecipientRewrite() == streamSender) {
         //     Cerr << "Stream sender got " << ev->GetTypeRewrite() << " " << ev->GetBase()->ToStringHeader() << Endl;
         // }
-        switch (ev->GetTypeRewrite()) { // TODO:
+        switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvProposeTransaction: {
                 auto &rec = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
                 if (capturePropose && rec.GetTxKind() != NKikimrTxDataShard::TX_KIND_SNAPSHOT) {

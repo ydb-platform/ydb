@@ -143,7 +143,10 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
             Intervals.GetLeftExlusiveBorder(intervalIdx), Intervals.GetRightInclusiveBorder(intervalIdx),
             readContext->GetReadMetadata()->GetReplaceKey(), IIndexInfo::GetSnapshotColumnNames());
         for (const auto& source : sources) {
-            task->AddSource(source, std::make_shared<TInternalFilterSubscriber>(intervalIdx, source->GetSourceId(), SelfId()));
+            // TODO: why table has applied filter and not applied filter?
+            // TODO: make slice
+            task->AddSource({} /*TODO*/, source->GetStageData().GetAppliedFilter(),
+                std::make_shared<TInternalFilterSubscriber>(intervalIdx, source->GetSourceId(), SelfId()));
         }
         NConveyor::TScanServiceOperator::SendTaskToExecute(task, readContext->GetCommonContext()->GetConveyorProcessId());
     }

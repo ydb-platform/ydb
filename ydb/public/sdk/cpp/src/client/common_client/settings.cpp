@@ -2,7 +2,7 @@
 
 #include <src/client/impl/ydb_internal/common/parser.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 TCommonClientSettings& TCommonClientSettings::AuthToken(const std::optional<std::string>& token) {
     return CredentialsProviderFactory(CreateOAuthCredentialsProviderFactory(token.value()));

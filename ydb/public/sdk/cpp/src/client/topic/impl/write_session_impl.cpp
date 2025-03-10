@@ -18,7 +18,7 @@ void Out<NYdb::NTopic::TTransactionId>(IOutputStream& s, const NYdb::NTopic::TTr
     s << "{" << v.SessionId << ", " << v.TxId << "}";
 }
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
 // Error code from file ydb/public/api/protos/persqueue_error_codes_v1.proto

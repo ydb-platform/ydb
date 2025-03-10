@@ -12,7 +12,7 @@
 #include <ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 #include <src/client/federated_topic/impl/federation_observer.h>
 
-namespace NYdb::inline V3::NFederatedTopic {
+namespace NYdb::inline Dev::NFederatedTopic {
 
 class TFederatedTopicClient::TImpl {
 public:
@@ -89,4 +89,4 @@ private:
     TAdaptiveLock Lock;
 };
 
-} // namespace NYdb::V3::NFederatedTopic
+} // namespace NYdb::NFederatedTopic

@@ -11,7 +11,7 @@
 #include <util/stream/buffer.h>
 
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
 

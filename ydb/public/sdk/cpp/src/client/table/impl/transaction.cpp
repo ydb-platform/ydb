@@ -1,7 +1,7 @@
 #include "transaction.h"
 #include "table_client.h"
 
-namespace NYdb::inline V3::NTable {
+namespace NYdb::inline Dev::NTable {
 
 TTransaction::TImpl::TImpl(const TSession& session, const std::string& txId)
     : Session_(session)

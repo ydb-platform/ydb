@@ -10,7 +10,7 @@
 
 #include <src/client/common_client/impl/client.h>
 
-namespace NYdb::inline V3::NDebug {
+namespace NYdb::inline Dev::NDebug {
 
 using namespace Ydb;
 
@@ -99,4 +99,4 @@ TAsyncActorChainPingResult TDebugClient::PingActorChain(const TActorChainPingSet
     return Impl_->PingActorChain(settings);
 }
 
-} // namespace NYdb::V3::NDebug
+} // namespace NYdb::NDebug

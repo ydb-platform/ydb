@@ -10,7 +10,7 @@
 
 #include <util/generic/guid.h>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 static const std::string DRIVER_IS_STOPPING_DESCRIPTION = "Driver is stopping";
 

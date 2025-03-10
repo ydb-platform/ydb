@@ -11,6 +11,14 @@ namespace NYql::NDq {
 
 using namespace NYql::NNodes;
 
+static TString StripAlias(const TString& columnName) {
+    auto pos = columnName.find_last_of('.');
+    if (pos == TString::npos) {
+        return columnName;
+    }
+    return columnName.substr(pos + 1);
+}
+
 /*
  * Collects EquiJoin inputs with statistics for cost based optimization
  */
@@ -91,11 +99,15 @@ std::shared_ptr<TJoinOptimizerNode> ConvertToJoinTree(
 
         auto leftScope = joinTuple.LeftKeys().Item(keyIndex).StringValue();
         auto leftColumn = joinTuple.LeftKeys().Item(keyIndex + 1).StringValue();
-        leftKeys.push_back(TJoinColumn(leftScope, leftColumn));
+        TJoinColumn leftKey(leftScope, StripAlias(leftColumn));
+        leftKey.AttributeNameWithAliases = leftColumn;
+        leftKeys.push_back(leftKey);
 
         auto rightScope = joinTuple.RightKeys().Item(keyIndex).StringValue();
         auto rightColumn = joinTuple.RightKeys().Item(keyIndex + 1).StringValue();
-        rightKeys.push_back(TJoinColumn(rightScope, rightColumn));
+        TJoinColumn rightKey(rightScope, StripAlias(rightColumn));
+        rightKey.AttributeNameWithAliases = rightColumn;
+        rightKeys.push_back(rightKey);
     }
 
     const auto linkSettings = GetEquiJoinLinkSettings(joinTuple.Options().Ref());

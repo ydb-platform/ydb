@@ -1,4 +1,3 @@
-import os
 import ydb.tests.olap.load.lib.tpch as tpch
 from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
 
@@ -8,7 +7,6 @@ class TestTpchS1(tpch.TestTpch1, FunctionalTestBase):
 
     @classmethod
     def setup_class(cls) -> None:
-        os.environ['YDB_HARD_MEMORY_LIMIT_BYTES'] = '107374182400'
         cls.setup_cluster()
         cls.run_cli(['workload', 'tpch', '-p', 'olap_yatests/tpch/s1', 'init', '--store=column'])
         cls.run_cli(['workload', 'tpch', '-p', 'olap_yatests/tpch/s1', 'import', 'generator', '--scale=1'])

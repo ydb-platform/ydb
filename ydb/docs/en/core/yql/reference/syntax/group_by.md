@@ -268,18 +268,18 @@ LIMIT 3;
 
 Group the table by the values of the specified columns or expressions and the time window.
 
-If GROUP BY is present in the query, then when selecting columns (between `SELECT ... FROM`) you can **only** use the following constructs:
+If `GROUP BY` is present in the query, then when selecting columns (between `SELECT ... FROM`), you can **only** use the following constructs:
 
-1. Columns by which grouping is performed (they are included in the `GROUP BY` argument).
-2. Aggregate functions (see the next section). Columns by which **no** grouping is made can only be included as arguments for an aggregate function.
-3. Functions that output the start and end time of the current window (`HOP_START` and `HOP_END`)
-4. Arbitrary calculations combining paragraphs 1-3.
+1. Columns by which grouping is performed (included in the `GROUP BY` argument).
+2. Aggregate functions (see the next section). Columns that **are not** used for grouping can only be included as arguments for an aggregate function.
+3. Functions that return the start and end times of the current window (`HOP_START` and `HOP_END`).
+4. Arbitrary calculations combining items 1–3.
 
-You can group by the result of calculating an arbitrary expression from the source columns. In this case, to access the result of this expression, we recommend you to assign a name to it using `AS`, see the second example.
+You can group by the result of an arbitrary expression computed from the source columns. In this case, to access the result of this expression, we recommend assigning a name to it using `AS`. See the second example.
 
-Aggregate functions automatically skip `NULL` in their arguments.
+Aggregate functions automatically skip `NULL` values in their arguments.
 
-Among the columns by which grouping is performed, make sure to use the `HOP` construct to define the time window for grouping.
+Among the columns used for grouping, make sure to use the `HOP` construct to define the time window for grouping.
 
 ```yql
 HOP(time_extractor, hop, interval, delay)

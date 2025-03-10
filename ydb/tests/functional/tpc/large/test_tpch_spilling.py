@@ -5,6 +5,8 @@ from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
 class TestTpchSpillingS10(tpch.TestTpch10, FunctionalTestBase):
     iterations: int = 1
     query_settings = {i : tpch.TestTpch10.QuerySettings(query_prefix='pragma ydb.UseGraceJoinCoreForMap = "true";') for i in range(1, 23)}
+    # temporary exclude q5: https://github.com/ydb-platform/ydb/issues/15359
+    skip_tests: list = [5]
 
     table_service_config = {
         'enable_spilling_nodes': 'All',

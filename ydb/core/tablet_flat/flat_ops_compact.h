@@ -368,7 +368,8 @@ namespace NTabletFlatExecutor {
                     { },
                     std::move(result.Overlay));
 
-                auto fetch = loader.Run(false);
+                // do not preload index as it may be already offloaded
+                auto fetch = loader.Run(false, false);
 
                 if (Y_UNLIKELY(fetch)) {
                     TStringBuilder error;

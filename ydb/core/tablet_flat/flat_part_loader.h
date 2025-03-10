@@ -128,7 +128,7 @@ namespace NTable {
                 TEpoch epoch = NTable::TEpoch::Max());
         ~TLoader();
 
-        TVector<TAutoPtr<NPageCollection::TFetch>> Run(bool preloadData)
+        TVector<TAutoPtr<NPageCollection::TFetch>> Run(bool preloadIndex, bool preloadData)
         {
             while (Stage < EStage::Result) {
                 TAutoPtr<NPageCollection::TFetch> fetch;
@@ -138,7 +138,7 @@ namespace NTable {
                         StageParseMeta();
                         break;
                     case EStage::PartView:
-                        fetch = StageCreatePartView();
+                        fetch = StageCreatePartView(preloadIndex);
                         break;
                     case EStage::Slice:
                         fetch = StageSliceBounds();
@@ -241,7 +241,7 @@ namespace NTable {
         }
 
         void StageParseMeta() noexcept;
-        TAutoPtr<NPageCollection::TFetch> StageCreatePartView() noexcept;
+        TAutoPtr<NPageCollection::TFetch> StageCreatePartView(bool preloadIndex) noexcept;
         TAutoPtr<NPageCollection::TFetch> StageSliceBounds() noexcept;
         void StageDeltas() noexcept;
         TAutoPtr<NPageCollection::TFetch> StagePreloadData() noexcept;

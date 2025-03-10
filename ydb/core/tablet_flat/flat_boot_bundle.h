@@ -107,7 +107,7 @@ namespace NBoot {
         void TryFinalize()
         {
             if (!LeftReads) {
-                for (auto req : Loader->Run(false)) {
+                for (auto req : Loader->Run(true, false)) {
                     LeftReads += Logic->LoadPages(this, req);
                 }
             }

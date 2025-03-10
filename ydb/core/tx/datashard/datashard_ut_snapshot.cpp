@@ -5870,9 +5870,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranularUpdate(runtime);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 

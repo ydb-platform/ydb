@@ -98,6 +98,10 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
         std::vector<TCpuConsumptionModel> ThreadCpuConsumptions;
         std::vector<TSharedExecutorThreadCtx*> SharedThreads;
 
+        TActorSystem* GetActorSystem() const override {
+            return nullptr;
+        }
+
         i16 GetDefaultFullThreadCount() const override { return Params.DefaultFullThreadCount; }
         i16 GetMinFullThreadCount() const override { return Params.MinFullThreadCount; }
         i16 GetMaxFullThreadCount() const override { return Params.MaxFullThreadCount; }
@@ -229,7 +233,7 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
         harmonizer->Harmonize(currentTs);
 
         auto stats = harmonizer->GetPoolStats(0);
-        
+
         CHECK_CHANGING_THREADS(stats, 1, 0, 0, 0, 0);
         CHECK_IS_NEEDY(stats);
         UNIT_ASSERT_VALUES_EQUAL(mockPools[0]->ThreadCount, 5);
@@ -270,7 +274,7 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
         harmonizer->Harmonize(currentTs);
 
         auto stats = harmonizer->GetPoolStats(0);
-        
+
         CHECK_CHANGING_THREADS(stats, 1, 0, 0, 0, 0);
         CHECK_IS_NEEDY(stats);
         UNIT_ASSERT_VALUES_EQUAL(mockPools[0]->ThreadCount, 5);
@@ -531,7 +535,7 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
         TSharedExecutorPoolConfig sharedConfig;
         sharedConfig.Threads = 2;
         //std::unique_ptr<ISharedExecutorPool> sharedPool(new TMockSharedExecutorPool(sharedConfig, 2, pools));
-        
+
 
         for (auto& pool : mockPools) {
             harmonizer->AddPool(pool.get());

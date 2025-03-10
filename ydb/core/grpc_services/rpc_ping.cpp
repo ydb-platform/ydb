@@ -277,15 +277,15 @@ private:
             }
 
             auto* nextChainActor = new TChainWorkerActor(SelfId(), ChainsLeft - 1, WorkUsec, NoTailChain);
-            if (NoTailChain) {
-                RegisterWithSameMailbox(nextChainActor);
-            } else {
-                // same mailbox + tail
-                TlsActivationContext->ExecutorThread.RegisterActor<ESendingType::Tail>(
-                    nextChainActor,
-                    &TlsActivationContext->Mailbox,
-                    this->SelfId());
-            }
+            RegisterWithSameMailbox(nextChainActor);
+            //if (NoTailChain) {
+            //} else {
+            //    // same mailbox + tail
+            //    TlsActivationContext->ActorSystem()->Register<ESendingType::Tail>(
+            //        nextChainActor,
+            //        TlsActivationContext->Mailbox.Type,
+            //        this->SelfId());
+            //}
         }
 
         void WorkAndDie() {
@@ -376,14 +376,14 @@ private:
 
         auto* nextChainActor = new TChainWorkerActor(this->SelfId(), chainLength, workUsec, noTailChain);
         TActorId nextChainActorId;
-        if (noTailChain) {
+        if (true) {
             nextChainActorId = RegisterWithSameMailbox(nextChainActor);
         } else {
             // same mailbox + tail
-            nextChainActorId = TlsActivationContext->ExecutorThread.RegisterActor<ESendingType::Tail>(
-                nextChainActor,
-                &TlsActivationContext->Mailbox,
-                this->SelfId());
+            //nextChainActorId = TlsActivationContext->ExecutorThread.RegisterActor<ESendingType::Tail>(
+            //    nextChainActor,
+            //    &TlsActivationContext->Mailbox,
+            //    this->SelfId());
         }
 
         if (!nextChainActorId) {

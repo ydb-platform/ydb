@@ -129,7 +129,7 @@ int TCommandConfigFetch::Run(TConfig& config) {
         }
 
         if (!OutDir) {
-            Cout << cfg << "\n";
+            Cout << cfg << Endl;
         } else {
             TFsPath dir(OutDir);
             dir.MkDirs();
@@ -164,14 +164,14 @@ int TCommandConfigFetch::Run(TConfig& config) {
         if (!storageConfig.empty() || DedicatedStorageSection) {
             Cerr << "cluster config: " << Endl;
         }
-        Cout << clusterConfig << "\n";
+        Cout << clusterConfig << Endl;
     }
 
     if (!storageConfig.empty()) {
         if (!clusterConfig.empty() || DedicatedClusterSection) {
             Cerr << "storage config:" << Endl;
         }
-        Cout << storageConfig << "\n";
+        Cout << storageConfig << Endl;
     }
 
     if (clusterConfig.empty() && storageConfig.empty()) {

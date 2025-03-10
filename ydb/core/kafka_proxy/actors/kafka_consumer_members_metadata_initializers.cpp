@@ -19,22 +19,22 @@ void TKafkaConsumerMembersMetaInitializer::DoPrepare(NInitializer::IInitializerI
         {
             auto& column = *request.add_columns();
             column.set_name("database");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
+            column.mutable_type()->set_type_id(Ydb::Type::UTF8);
         }
         {
             auto& column = *request.add_columns();
             column.set_name("consumer_group");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
+            column.mutable_type()->set_type_id(Ydb::Type::UTF8);
         }
         {
             auto& column = *request.add_columns();
             column.set_name("generation");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT64);
+            column.mutable_type()->set_type_id(Ydb::Type::UINT64);
         }
         {
             auto& column = *request.add_columns();
             column.set_name("member_id");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
+            column.mutable_type()->set_type_id(Ydb::Type::UTF8);
         }
         {
             auto& column = *request.add_columns();
@@ -93,7 +93,9 @@ void TKafkaConsumerMembersMetaInitializer::DoPrepare(NInitializer::IInitializerI
             request.set_session_id("");
             request.set_path(tablePath);
             request.mutable_alter_partitioning_settings()->set_min_partitions_count(1);
+            request.mutable_alter_partitioning_settings()->set_max_partitions_count(1000);
             request.mutable_alter_partitioning_settings()->set_partitioning_by_load(::Ydb::FeatureFlag_Status::FeatureFlag_Status_ENABLED);
+            request.mutable_alter_partitioning_settings()->set_partitioning_by_size(::Ydb::FeatureFlag_Status::FeatureFlag_Status_ENABLED);
 
             result.emplace_back(new NInitializer::TGenericTableModifier<NRequest::TDialogAlterTable>(request, "enable_autopartitioning_by_load"));
         }

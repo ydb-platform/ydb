@@ -7,7 +7,7 @@
 
 namespace NKikimr::NGRpcProxy::V1 {
 
-using namespace NKikimr::NGRpcService; // savnik change namespace
+using namespace NKikimr::NGRpcService;
 
 class TKqpTxHelper {
 public:
@@ -18,8 +18,10 @@ public:
     void CloseKqpSession(const TActorContext& ctx);
     void SendRequest(THolder<NKqp::TEvKqp::TEvQueryRequest> request, ui64 cookie, const NActors::TActorContext& ctx);
     void CommitTx(ui64 cookie, const NActors::TActorContext& ctx);
-    void SendYqlRequest(TString yqlRequest, NYdb::TParams sqlParams, ui64 cookie, const NActors::TActorContext& ctx, bool commit = false);
+    void SendYqlRequest(const TString& yqlRequest, NYdb::TParams sqlParams, ui64 cookie, const NActors::TActorContext& ctx, bool commit = false);
     void SendInitTablesRequest(const TActorContext& ctx);
+    void SetTxId(const TString& txId);
+    void ResetTxId();
 
 public:
     TString DataBase;

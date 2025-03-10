@@ -185,7 +185,7 @@ message TFeatureFlags {
     optional bool EnableDataShardInMemoryStateMigrationAcrossGenerations = 160 [default = false];
     optional bool DisableLocalDBEraseCache = 161 [default = false];
     optional bool EnableChecksumsExport = 162 [default = false];
-    optional bool EnableTopicTransfer = 163 [default = false];
+    optional bool EnableTopicTransfer = 163 [default = true];
     optional bool EnableViewExport = 164 [default = false];
     optional bool EnableColumnStore = 165 [default = false];
     optional bool EnableStrictAclCheck = 166 [default = false];
@@ -196,4 +196,5 @@ message TFeatureFlags {
     optional bool EnableChangefeedsImport = 170 [default = false];
     optional bool EnablePermissionsExport = 171 [default = false];
     optional bool EnableDataErasure = 172 [default = false];
+    optional bool EnableKafkaNativeBalancing = 173 [default = false];
 }

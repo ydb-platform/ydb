@@ -240,7 +240,8 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TJoinGroupRequestData>& message, const TActorContext& /*ctx*/) {
-        if (Context->Config.GetEnableNativeBalancing()) {
+        if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
+            HandleKillReadSession();
             Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
         } else {
             if (ReadSessionActorId) {
@@ -253,7 +254,8 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TSyncGroupRequestData>& message, const TActorContext& /*ctx*/) {
-        if (Context->Config.GetEnableNativeBalancing()) {
+        if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
+            HandleKillReadSession();
             Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
         } else {
             if (ReadSessionActorId) {
@@ -266,7 +268,8 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<THeartbeatRequestData>& message, const TActorContext& /*ctx*/) {
-        if (Context->Config.GetEnableNativeBalancing()) {
+        if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
+            HandleKillReadSession();
             Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
         } else {
             if (ReadSessionActorId) {
@@ -279,7 +282,8 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TLeaveGroupRequestData>& message, const TActorContext& /*ctx*/) {
-        if (Context->Config.GetEnableNativeBalancing()) {
+        if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
+            HandleKillReadSession();
             Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
         } else {
             if (ReadSessionActorId) {

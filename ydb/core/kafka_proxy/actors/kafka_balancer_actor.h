@@ -21,12 +21,12 @@
 namespace NKafka {
 using namespace NKikimr;
 
-constexpr ui32 DEFAULT_REBALANCE_TIMEOUT_MS = 3000;
-constexpr ui32 MIN_REBALANCE_TIMEOUT_MS = 3000;
+constexpr ui32 DEFAULT_REBALANCE_TIMEOUT_MS = 5000;
+constexpr ui32 MIN_REBALANCE_TIMEOUT_MS = 5000;
 constexpr ui32 MAX_REBALANCE_TIMEOUT_MS = 300000;
 
 constexpr ui32 DEFAULT_SESSION_TIMEOUT_MS = 45000;
-constexpr ui32 MIN_SESSION_TIMEOUT_MS = 3000;
+constexpr ui32 MIN_SESSION_TIMEOUT_MS = 5000;
 constexpr ui32 MAX_SESSION_TIMEOUT_MS = 300000;
 
 constexpr ui32 MAX_GROUPS_COUNT = 1000;
@@ -34,8 +34,8 @@ constexpr ui32 LIMIT_MEMBERS_PER_REQUEST = 999;
 
 constexpr ui32 MASTER_WAIT_JOINS_DELAY_SECONDS = 3;
 constexpr ui32 WAIT_MASTER_ASSIGNMENTS_PER_RETRY_SECONDS = 2;
-constexpr ui32 WAIT_FOR_MASTER_ASSIGNMENTS_MAX_RETRY_COUNT = 5;
-constexpr ui32 FULL_REQUEST_RETRY_MAX_COUNT = 5;
+constexpr ui32 WAIT_FOR_MASTER_ASSIGNMENTS_MAX_RETRY_COUNT = 15;
+constexpr ui32 TX_ABORT_RETRY_MAX_COUNT = 3;
 constexpr ui32 TABLES_TO_INIT_COUNT = 2;
 
 constexpr TKafkaUint16 ASSIGNMENT_VERSION = 3;
@@ -52,10 +52,13 @@ extern const TString UPSERT_ASSIGNMENTS_AND_SET_WORKING_STATE;
 extern const TString CHECK_GROUP_STATE;
 extern const TString FETCH_ASSIGNMENTS;
 extern const TString CHECK_DEAD_MEMBERS;
-extern const TString UPDATE_LAST_HEARTBEATS;
-extern const TString UPDATE_LASTHEARTBEAT_TO_LEAVE_GROUP;
+extern const TString UPDATE_LAST_MEMBER_AND_GROUP_HEARTBEATS;
+extern const TString UPDATE_LAST_MEMBER_HEARTBEAT;
+extern const TString UPDATE_LAST_HEARTBEAT_AND_STATE_TO_LEAVE_GROUP;
+extern const TString GET_GENERATION_BY_MEMBER;
 extern const TString CHECK_GROUPS_COUNT;
 extern const TString UPDATE_GROUP_STATE;
+extern const TString CHECK_MASTER_ALIVE;
 
 struct TGroupStatus {
     bool Exists;
@@ -75,53 +78,47 @@ public:
     enum EBalancerStep : ui8 {
         STEP_NONE = 0,
 
-        JOIN_TX0_0_BEGIN_TX,
-        JOIN_TX0_1_CHECK_STATE_AND_GENERATION,
-        JOIN_TX0_2_CHECK_GROUPS_COUNT,
-        JOIN_TX0_3_ADD_GROUP_OR_UPDATE_EXISTS,
-        JOIN_TX0_4_SKIP,
-        JOIN_TX0_5_INSERT_MEMBER,
-        JOIN_TX0_6_COMMIT_TX,
-        JOIN_TX0_7_WAIT_JOINS,
+        JOIN_CHECK_STATE_AND_GENERATION,
+        JOIN_CHECK_GROUPS_COUNT,
+        JOIN_GROUP_OR_UPDATE_EXISTS,
+        JOIN_INSERT_MEMBER,
+        JOIN_WAIT_JOINS,
 
-        JOIN_TX1_0_BEGIN_TX,
-        JOIN_TX1_1_CHECK_STATE_AND_GENERATION,
-        JOIN_TX1_2_SET_MASTER_DEAD,
-        JOIN_TX1_3_GET_PREV_MEMBERS,
-        JOIN_TX1_4_GET_CUR_MEMBERS,
-        JOIN_TX1_5_UPDATE_MASTER_HEARTBEAT_AND_WAIT_JOINS,
-        JOIN_TX1_6_COMMIT_TX,
+        JOIN_BEGIN_TX,
+        JOIN_RE_CHECK_STATE_AND_GENERATION,
+        JOIN_SET_MASTER_DEAD,
+        JOIN_GET_PREV_MEMBERS,
+        JOIN_GET_CUR_MEMBERS,
+        JOIN_UPDATE_MASTER_HEARTBEAT_AND_WAIT_JOINS,
+        JOIN_UPDATE_GROUP_STATE_AND_PROTOCOL,
 
-        SYNC_TX0_0_BEGIN_TX,
-        SYNC_TX0_1_SELECT_MASTER,
-        SYNC_TX0_2_CHECK_STATE_AND_GENERATION,
-        SYNC_TX0_3_SET_ASSIGNMENTS_AND_SET_WORKING_STATE,
-        SYNC_TX0_4_COMMIT_TX,
+        SYNC_SELECT_MASTER, // 13
+        SYNC_CHECK_STATE_AND_GENERATION,
+        SYNC_SET_ASSIGNMENTS_AND_SET_WORKING_STATE,
+        SYNC_WAIT_ASSIGNMENTS,
+        SYNC_COMMIT_TX,
 
-        SYNC_TX1_0_BEGIN_TX,
-        SYNC_TX1_1_CHECK_STATE,
-        SYNC_TX1_2_FETCH_ASSIGNMENTS,
-        SYNC_TX1_3_COMMIT_TX,
+        SYNC_BEGIN_TX,
+        SYNC_RE_CHECK_STATE_AND_GENERATION,
+        SYNC_FETCH_ASSIGNMENTS,
+        SYNC_COMMIT_FINAL_TX,
 
-        HEARTBEAT_TX0_0_BEGIN_TX,
-        HEARTBEAT_TX0_1_CHECK_DEAD_MEMBERS,
-        HEARTBEAT_TX0_2_COMMIT_TX,
+        HEARTBEAT_CHECK_DEAD_MEMBERS,
+        HEARTBEAT_COMMIT_TX,
 
-        HEARTBEAT_TX1_0_BEGIN_TX,
-        HEARTBEAT_TX1_1_CHECK_GEN_AND_STATE,
-        HEARTBEAT_TX1_2_UPDATE_TTL,
-        HEARTBEAT_TX1_3_COMMIT_TX,
+        HEARTBEAT_BEGIN_TX,
+        HEARTBEAT_CHECK_STATE_AND_GENERATION,
+        HEARTBEAT_UPDATE_DEADLINES,
 
-        LEAVE_TX0_0_BEGIN_TX,
-        LEAVE_TX0_1_UPDATE_TTL,
-        LEAVE_TX0_2_COMMIT_TX,
+        LEAVE_GET_LAST_GENERATION,
+        LEAVE_SET_DEAD
     };
 
     TKafkaBalancerActor(const TContext::TPtr context, ui64 cookie, ui64 corellationId, TMessagePtr<TJoinGroupRequestData> message, ui8 retryNum = 0)
         : Context(context)
         , CorrelationId(corellationId)
         , Cookie(cookie)
-        , CurrentRetryNumber(retryNum)
+        , CurrentTxAbortRetryNumber(retryNum)
         , JoinGroupRequestData(message)
         , SyncGroupRequestData(
             std::shared_ptr<TBuffer>(),
@@ -133,14 +130,15 @@ public:
             std::shared_ptr<TBuffer>(),
         std::shared_ptr<TApiMessage>())
     {
-        KAFKA_LOG_D("HandleJoinGroup request");
-
         RequestType = JOIN_GROUP;
         CurrentStep = STEP_NONE;
 
-        GroupId  = JoinGroupRequestData->GroupId.value_or(""); // savnik
-        ProtocolType = JoinGroupRequestData->ProtocolType.value_or(""); // savnik
+        GroupId = JoinGroupRequestData->GroupId.value_or("");
+        ProtocolType = JoinGroupRequestData->ProtocolType.value_or("");
         InstanceId = JoinGroupRequestData->GroupInstanceId.value_or("");
+        MemberId = JoinGroupRequestData->MemberId.value_or("");
+
+        KAFKA_LOG_ERROR(TStringBuilder() << "JOIN_GROUP request. MemberId# " << MemberId);
 
         if (JoinGroupRequestData->SessionTimeoutMs) {
             SessionTimeoutMs = JoinGroupRequestData->SessionTimeoutMs;
@@ -149,13 +147,17 @@ public:
         if (JoinGroupRequestData->RebalanceTimeoutMs) {
             RebalanceTimeoutMs = JoinGroupRequestData->RebalanceTimeoutMs;
         }
+
+        if (RebalanceTimeoutMs > MAX_REBALANCE_TIMEOUT_MS || RebalanceTimeoutMs < MIN_REBALANCE_TIMEOUT_MS) {
+            RebalanceTimeoutMs = DEFAULT_REBALANCE_TIMEOUT_MS;
+        }
     }
 
     TKafkaBalancerActor(const TContext::TPtr context, ui64 cookie, ui64 corellationId, TMessagePtr<TSyncGroupRequestData> message, ui8 retryNum = 0)
         : Context(context)
         , CorrelationId(corellationId)
         , Cookie(cookie)
-        , CurrentRetryNumber(retryNum)
+        , CurrentTxAbortRetryNumber(retryNum)
         , JoinGroupRequestData(
             std::shared_ptr<TBuffer>(),
         std::shared_ptr<TApiMessage>())
@@ -167,12 +169,10 @@ public:
             std::shared_ptr<TBuffer>(),
         std::shared_ptr<TApiMessage>())
     {
-        KAFKA_LOG_D("HandleSyncGroup request");
-
         RequestType = SYNC_GROUP;
         CurrentStep = STEP_NONE;
 
-        GroupId  = SyncGroupRequestData->GroupId.value_or("");
+        GroupId = SyncGroupRequestData->GroupId.value_or("");
         MemberId = SyncGroupRequestData->MemberId.value_or("");
         GenerationId = SyncGroupRequestData->GenerationId;
     }
@@ -181,7 +181,7 @@ public:
         : Context(context)
         , CorrelationId(corellationId)
         , Cookie(cookie)
-        , CurrentRetryNumber(retryNum)
+        , CurrentTxAbortRetryNumber(retryNum)
         , JoinGroupRequestData(
             std::shared_ptr<TBuffer>(),
         std::shared_ptr<TApiMessage>())
@@ -193,12 +193,10 @@ public:
             std::shared_ptr<TBuffer>(),
         std::shared_ptr<TApiMessage>())
     {
-        KAFKA_LOG_D("HandleHeartbeat request");
-
         RequestType = HEARTBEAT;
         CurrentStep = STEP_NONE;
 
-        GroupId  = HeartbeatGroupRequestData->GroupId.value_or("");
+        GroupId = HeartbeatGroupRequestData->GroupId.value_or("");
         MemberId = HeartbeatGroupRequestData->MemberId.value_or("");
         GenerationId = HeartbeatGroupRequestData->GenerationId;
     }
@@ -207,7 +205,7 @@ public:
         : Context(context)
         , CorrelationId(corellationId)
         , Cookie(cookie)
-        , CurrentRetryNumber(retryNum)
+        , CurrentTxAbortRetryNumber(retryNum)
         , JoinGroupRequestData(
             std::shared_ptr<TBuffer>(),
         std::shared_ptr<TApiMessage>())
@@ -219,11 +217,10 @@ public:
         std::shared_ptr<TApiMessage>())
         , LeaveGroupRequestData(message)
     {
-        KAFKA_LOG_D("HandleLeaveGroup request");
         RequestType = LEAVE_GROUP;
         CurrentStep = STEP_NONE;
 
-        GroupId  = LeaveGroupRequestData->GroupId.value_or("");
+        GroupId = LeaveGroupRequestData->GroupId.value_or("");
         MemberId = LeaveGroupRequestData->MemberId.value_or("");
     }
 
@@ -261,41 +258,35 @@ private:
     void LeaveGroupStep(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void HeartbeatNextStep(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
 
-    void JoinStepBeginTx(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void JoinStepCheckGroupState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void JoinStepCreateNewOrJoinGroup(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void JoinStepCheckGroupsCount(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void JoinStepInsertNewMember(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
-    void JoinStepCommitTx(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void JoinStepWaitJoinsIfMaster(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
-    void JoinStepBeginTx2(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
-    void JoinCheckGroupState2(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void JoinStepCheckMasterAlive(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void JoinStepReCheckGroupState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void JoinStepSelectWorkerStates(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void JoinStepSelectPrevMembers(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void JoinStepWaitProtocolChoosing(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void JoinStepCheckPrevGenerationMembers(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
-    void JoinStepChooseAndSetProtocol(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void JoinStepWaitMembersAndChooseProtocol(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
 
-    void SyncStepBeginTx(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void SyncStepCheckGroupState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void SyncStepBuildAssignmentsIfMaster(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void SyncStepCommitTx(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
-    void SyncStepBeginTx2(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
-    void SyncStepCheckGroupState2(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void SyncStepReCheckGroupState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void SyncStepWaitAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void SyncStepGetAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
 
-    void LeaveStepBeginTx(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void LeaveStepGetMemberGeneration(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void LeaveStepLeaveGroup(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void LeaveStepCommitTx(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
 
-    void HeartbeatStepBeginTx(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
-    void HeartbeatStepChechDeadMembers(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void HeartbeatStepCheckDeadMembers(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void HeartbeatStepCommitTx(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
-    void HeartbeatStepBeginTx2(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
-    void HeartbeatStepChechGroupState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void HeartbeatStepBeginTx(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
+    void HeartbeatStepCheckGroupState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
     void HeartbeatStepUpdateHeartbeatDeadlines(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
-    void HeartbeatStepCommitTx2(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx);
 
     void Die(const TActorContext& ctx) override;
 
@@ -317,10 +308,12 @@ private:
 
     std::optional<TGroupStatus> ParseGroupState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev);
     bool ParseAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, TString& assignments);
-    bool ParseWorkerStates(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::unordered_map<TString, NKafka::TWorkerState>& workerStates, TString& outLastMemberId, bool& outDuplicateInstanceId);
-    bool ParseMembers(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::unordered_map<TString, ui32>& membersAndRebalanceTimeouts, TString& lastMemberId);
-    bool ParseDeadsAndSessionTimeout(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, bool& outDeadsFound, ui32& outSessionTimeoutMs);
+    bool ParseWorkerStates(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::unordered_map<TString, NKafka::TWorkerState>& workerStates, TString& outLastMemberId);
+    bool ParseMembersAndRebalanceTimeouts(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::unordered_map<TString, ui32>& membersAndRebalanceTimeouts, TString& lastMemberId);
+    bool ParseDeadsAndSessionTimeout(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, ui64& deadsCount, ui32& outSessionTimeoutMs);
     bool ParseGroupsCount(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, ui64& groupsCount);
+    bool ParseMemberGeneration(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, ui64& generation);
+    bool ParseMasterAlive(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, bool& alive);
     bool ChooseProtocolAndFillStates();
 
     NYdb::TParamsBuilder BuildCheckGroupStateParams();
@@ -334,6 +327,9 @@ private:
     NYdb::TParamsBuilder BuildUpdateLastHeartbeatsParams();
     NYdb::TParamsBuilder BuildCheckDeadsParams();
     NYdb::TParamsBuilder BuildSetMasterDeadParams();
+    NYdb::TParamsBuilder BuildGetMemberParams();
+    NYdb::TParamsBuilder BuildCheckMasterAlive();
+    NYdb::TParamsBuilder BuildCheckGroupsCountParams();
 
 private:
     enum EGroupState : ui32 {
@@ -346,39 +342,35 @@ private:
 private:
     const TContext::TPtr Context;
     NKafka::EApiKey RequestType;
+    EBalancerStep CurrentStep = STEP_NONE;
 
     ui8 TablesInited = 0;
     TString GroupId;
     TString MemberId;
     TString InstanceId;
-    ui32 SessionTimeoutMs = DEFAULT_SESSION_TIMEOUT_MS;
-    ui32 RebalanceTimeoutMs = DEFAULT_REBALANCE_TIMEOUT_MS;
-
     ui64 GenerationId = 0;
     ui64 CorrelationId = 0;
     ui64 Cookie = 0;
     ui64 KqpReqCookie = 0;
 
+    ui32 SessionTimeoutMs = DEFAULT_SESSION_TIMEOUT_MS;
+    ui32 RebalanceTimeoutMs = DEFAULT_REBALANCE_TIMEOUT_MS;
+
     ui8 WaitingMasterRetryCount = 0;
-
     ui64 LastSuccessGeneration = 0;
-
     TString WorkerStatesPaginationMemberId = "";
 
     TString Assignments;
     std::unordered_map<TString, TString> WorkerStates;
     std::unordered_map<TString, NKafka::TWorkerState> AllWorkerStates;
-    std::unordered_map<TString, ui32> PrevGenerationInstanceIdsAndTimeouts;
-    std::unordered_set<TString> CurrentGenerationInstanceIds;
+    std::unordered_map<TString, ui32> WaitedMemberIdsAndTimeouts;
     TInstant RebalanceStartTime = TInstant::Now();
     TString Protocol;
     TString ProtocolType;
     TString Master;
-    ui8 CurrentRetryNumber;
+    ui8 CurrentTxAbortRetryNumber;
 
     bool IsMaster = false;
-
-    EBalancerStep CurrentStep = STEP_NONE;
 
     std::unique_ptr<NKikimr::NGRpcProxy::V1::TKqpTxHelper> Kqp;
 

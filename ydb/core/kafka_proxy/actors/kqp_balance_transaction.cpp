@@ -63,7 +63,7 @@ void TKqpTxHelper::SendRequest(THolder<NKqp::TEvKqp::TEvQueryRequest> request, u
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), request.Release(), 0, cookie);
 }
 
-void TKqpTxHelper::SendYqlRequest(TString yqlRequest, NYdb::TParams sqlParams, ui64 cookie, const NActors::TActorContext& ctx, bool commit) {
+void TKqpTxHelper::SendYqlRequest(const TString& yqlRequest, NYdb::TParams sqlParams, ui64 cookie, const NActors::TActorContext& ctx, bool commit) {
     auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
 
     ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
@@ -106,6 +106,14 @@ void TKqpTxHelper::SendInitTablesRequest(const TActorContext& ctx) {
         NMetadata::NProvider::MakeServiceId(ctx.SelfID.NodeId()),
         new NMetadata::NProvider::TEvPrepareManager(NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant())
     );
+}
+
+void TKqpTxHelper::SetTxId(const TString& txId) {
+    TxId = txId;
+}
+
+void TKqpTxHelper::ResetTxId() {
+    TxId = "";
 }
 
 }  // namespace NKikimr::NGRpcProxy::V1

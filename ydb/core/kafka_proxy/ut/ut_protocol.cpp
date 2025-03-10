@@ -111,10 +111,6 @@ public:
             appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetPort(FAKE_SERVERLESS_KAFKA_PROXY_PORT);
         }
 
-        if (enableNativeKafkaBalancing) {
-           appConfig.MutableKafkaProxyConfig()->SetEnableNativeBalancing(true);
-        }
-
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(true);
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(true);
@@ -154,6 +150,10 @@ public:
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, NLog::PRI_TRACE);
+
+        if (enableNativeKafkaBalancing) {
+            KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaNativeBalancing(true);
+        }
 
         TClient client(*(KikimrServer->ServerSettings));
         if (secure) {
@@ -2514,6 +2514,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         std::vector<TString> topics = {topicName};
         i32 heartbeatTimeout = 15000;
+        i32 rebalanceTimeout = 5000;
 
         // CHECK THREE READERS GETS 1/3 OF PARTITIONS
 
@@ -2525,6 +2526,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         joinReq.GroupId = groupId;
         joinReq.ProtocolType = protocolType;
         joinReq.SessionTimeoutMs = heartbeatTimeout;
+        joinReq.RebalanceTimeoutMs = rebalanceTimeout;
 
         NKafka::TJoinGroupRequestData::TJoinGroupRequestProtocol protocol;
         protocol.Name = protocolName;
@@ -2543,8 +2545,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         joinReq.Protocols.push_back(protocol);
 
         TJoinGroupRequestData joinReqA = joinReq;
+        joinReqA.GroupInstanceId = "instanceA";
         TJoinGroupRequestData joinReqB = joinReq;
+        joinReqB.GroupInstanceId = "instanceB";
         TJoinGroupRequestData joinReqC = joinReq;
+        joinReqC.GroupInstanceId = "instanceC";
 
         clientA.WriteToSocket(headerAJoin, joinReqA);
         clientB.WriteToSocket(headerBJoin, joinReqB);
@@ -2648,8 +2653,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TRequestHeaderData headerAJoin2 = clientA.Header(NKafka::EApiKey::JOIN_GROUP, 9);
         TRequestHeaderData headerBJoin2 = clientB.Header(NKafka::EApiKey::JOIN_GROUP, 9);
 
-        TJoinGroupRequestData joinReqA2 = joinReq;
-        TJoinGroupRequestData joinReqB2 = joinReq;
+        joinReqA.MemberId = joinRespA->MemberId.value();
+        joinReqB.MemberId = joinRespB->MemberId.value();
+
+        TJoinGroupRequestData joinReqA2 = joinReqA;
+        TJoinGroupRequestData joinReqB2 = joinReqB;
 
         clientA.WriteToSocket(headerAJoin2, joinReqA2);
         clientB.WriteToSocket(headerBJoin2, joinReqB2);
@@ -2736,8 +2744,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TRequestHeaderData headerAJoin3 = clientA.Header(NKafka::EApiKey::JOIN_GROUP, 9);
         TRequestHeaderData headerBJoin3 = clientB.Header(NKafka::EApiKey::JOIN_GROUP, 9);
 
-        TJoinGroupRequestData joinReqA3 = joinReq;
-        TJoinGroupRequestData joinReqB3 = joinReq;
+        TJoinGroupRequestData joinReqA3 = joinReqA;
+        TJoinGroupRequestData joinReqB3 = joinReqB;
 
         clientA.WriteToSocket(headerAJoin2, joinReqA2);
         clientB.WriteToSocket(headerBJoin2, joinReqB2);
@@ -2762,14 +2770,14 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             syncHeaderNotMaster = clientB.Header(NKafka::EApiKey::SYNC_GROUP, 5);
             clientB.WriteToSocket(syncHeaderNotMaster, syncReqNotMaster);
             auto noMasterSyncResponse = clientB.ReadResponse<TSyncGroupResponseData>(syncHeaderNotMaster);
-            UNIT_ASSERT_VALUES_EQUAL(noMasterSyncResponse->ErrorCode, (TKafkaInt16)EKafkaErrors::LEADER_NOT_AVAILABLE);
+            UNIT_ASSERT_VALUES_EQUAL(noMasterSyncResponse->ErrorCode, (TKafkaInt16)EKafkaErrors::REBALANCE_IN_PROGRESS);
         } else {
             syncReqNotMaster.GenerationId = joinRespA3->GenerationId;
             syncReqNotMaster.MemberId = joinRespA3->MemberId.value();
             syncHeaderNotMaster = clientA.Header(NKafka::EApiKey::SYNC_GROUP, 5);
             clientA.WriteToSocket(syncHeaderNotMaster, syncReqNotMaster);
             auto noMasterSyncResponse = clientA.ReadResponse<TSyncGroupResponseData>(syncHeaderNotMaster);
-            UNIT_ASSERT_VALUES_EQUAL(noMasterSyncResponse->ErrorCode, (TKafkaInt16)EKafkaErrors::LEADER_NOT_AVAILABLE);
+            UNIT_ASSERT_VALUES_EQUAL(noMasterSyncResponse->ErrorCode, (TKafkaInt16)EKafkaErrors::REBALANCE_IN_PROGRESS);
         }
 
     }

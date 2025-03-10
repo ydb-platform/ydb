@@ -58,12 +58,14 @@ const TString UPDATE_GROUP_STATE = R"sql(
     DECLARE $ConsumerGroup AS Utf8;
     DECLARE $Database AS Utf8;
     DECLARE $State AS Uint64;
+    DECLARE $Generation AS Uint64;
 
     UPDATE `%s`
     SET
         state = $State
     WHERE database = $Database
-      AND consumer_group = $ConsumerGroup;
+      AND consumer_group = $ConsumerGroup
+      AND generation = $Generation;
 )sql";
 
 const TString UPDATE_GROUP_STATE_AND_PROTOCOL = R"sql(
@@ -93,6 +95,7 @@ const TString INSERT_MEMBER = R"sql(
     DECLARE $Database            AS Utf8;
     DECLARE $HeartbeatDeadline AS Datetime;
     DECLARE $SessionTimeoutMs AS Uint32;
+    DECLARE $RebalanceTimeoutMs AS Uint32;
 
     INSERT INTO `%s`
     (
@@ -103,7 +106,8 @@ const TString INSERT_MEMBER = R"sql(
         heartbeat_deadline,
         worker_state_proto,
         database,
-        session_timeout_ms
+        session_timeout_ms,
+        rebalance_timeout_ms
     )
     VALUES (
         $ConsumerGroup,
@@ -113,7 +117,8 @@ const TString INSERT_MEMBER = R"sql(
         $HeartbeatDeadline,
         $WorkerStateProto,
         $Database,
-        $SessionTimeoutMs
+        $SessionTimeoutMs,
+        $RebalanceTimeoutMs
     );
 )sql";
 
@@ -217,15 +222,15 @@ const TString CHECK_DEAD_MEMBERS = R"sql(
     DECLARE $Generation AS Uint64;
     DECLARE $Database AS Utf8;
     DECLARE $MemberId AS Utf8;
+    DECLARE $Now AS Datetime;
 
-    SELECT heartbeat_deadline
+    SELECT COUNT(1) deads_cnt
     FROM `%s`
     VIEW idx_group_generation_db_hb
     WHERE database = $Database
     AND consumer_group = $ConsumerGroup
     AND generation = $Generation
-    ORDER BY heartbeat_deadline
-    LIMIT 1;
+    AND heartbeat_deadline < $Now;
 
     SELECT session_timeout_ms
     FROM `%s`
@@ -237,7 +242,7 @@ const TString CHECK_DEAD_MEMBERS = R"sql(
 
 )sql";
 
-const TString UPDATE_LAST_HEARTBEATS = R"sql(
+const TString UPDATE_LAST_MEMBER_AND_GROUP_HEARTBEATS = R"sql(
     --!syntax_v1
     DECLARE $ConsumerGroup AS Utf8;
     DECLARE $Generation AS Uint64;
@@ -262,20 +267,80 @@ const TString UPDATE_LAST_HEARTBEATS = R"sql(
       AND database = $Database;
 )sql";
 
+const TString UPDATE_LAST_MEMBER_HEARTBEAT = R"sql(
+    --!syntax_v1
+    DECLARE $ConsumerGroup AS Utf8;
+    DECLARE $Generation AS Uint64;
+    DECLARE $MemberId AS Utf8;
+    DECLARE $Database AS Utf8;
+    DECLARE $HeartbeatDeadline AS Datetime;
 
-const TString UPDATE_LASTHEARTBEAT_TO_LEAVE_GROUP = R"sql(
+    UPDATE `%s`
+    SET heartbeat_deadline = $HeartbeatDeadline
+    WHERE consumer_group = $ConsumerGroup
+      AND generation = $Generation
+      AND member_id = $MemberId
+      AND database = $Database;
+)sql";
+
+const TString CHECK_MASTER_ALIVE = R"sql(
+    --!syntax_v1
+    DECLARE $ConsumerGroup AS Utf8;
+    DECLARE $MasterId AS Utf8;
+    DECLARE $Database AS Utf8;
+    DECLARE $Generation AS Uint64;
+    DECLARE $Now AS Datetime;
+
+    SELECT COUNT(1) allive,
+    FROM `%s`
+    VIEW PRIMARY KEY
+    WHERE database = $Database
+     AND consumer_group = $ConsumerGroup
+     AND generation = $Generation
+     AND member_id = $MasterId
+     AND heartbeat_deadline > $Now;
+)sql";
+
+const TString GET_GENERATION_BY_MEMBER = R"sql(
     --!syntax_v1
     DECLARE $ConsumerGroup AS Utf8;
     DECLARE $MemberId AS Utf8;
     DECLARE $Database AS Utf8;
+
+    SELECT generation
+    FROM `%s`
+    VIEW PRIMARY KEY
+    WHERE database = $Database
+     AND consumer_group = $ConsumerGroup
+     AND member_id = $MemberId
+     ORDER BY generation DESC
+     LIMIT 1;
+)sql";
+
+const TString UPDATE_LAST_HEARTBEAT_AND_STATE_TO_LEAVE_GROUP = R"sql(
+    --!syntax_v1
+    DECLARE $ConsumerGroup AS Utf8;
+    DECLARE $MemberId AS Utf8;
+    DECLARE $Database AS Utf8;
+    DECLARE $Generation AS Uint64;
     DECLARE $LastMasterHeartbeat AS Datetime;
+    DECLARE $State AS Uint64;
+    DECLARE $UpdateState AS Bool;
 
     UPDATE `%s`
     SET heartbeat_deadline = $LastMasterHeartbeat,
         leaved = True
-    WHERE consumer_group = $ConsumerGroup
-    AND member_id = $MemberId
-    AND database = $Database;
+    WHERE database = $Database
+     AND consumer_group = $ConsumerGroup
+     AND generation = $Generation
+     AND member_id = $MemberId;
+
+    UPDATE `%s`
+    SET
+        state = $State
+    WHERE database = $Database
+      AND consumer_group = $ConsumerGroup
+      AND $UpdateState = True;
 )sql";
 
 const TString CHECK_GROUPS_COUNT = R"sql(

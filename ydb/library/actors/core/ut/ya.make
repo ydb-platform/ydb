@@ -21,6 +21,7 @@ PEERDIR(
 SRCS(
     actor_basic_ut.cpp
     actor_coroutine_ut.cpp
+    actor_exception_ut.cpp
     actor_shared_threads.cpp
     benchmark_ut.cpp
     actor_ut.cpp

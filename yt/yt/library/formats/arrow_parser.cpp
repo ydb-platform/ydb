@@ -1,14 +1,16 @@
 #include "arrow_parser.h"
 
+#include <yt/yt/client/formats/parser.h>
+
 #include <yt/yt/client/table_client/helpers.h>
 #include <yt/yt/client/table_client/logical_type.h>
 #include <yt/yt/client/table_client/table_consumer.h>
 #include <yt/yt/client/table_client/unversioned_row.h>
 #include <yt/yt/client/table_client/validate_logical_type.h>
 
-#include <yt/yt/client/formats/parser.h>
-
 #include <yt/yt/library/decimal/decimal.h>
+
+#include <yt/yt/library/numeric/util.h>
 
 #include <library/cpp/yt/memory/chunked_output_stream.h>
 
@@ -42,32 +44,6 @@ static constexpr i64 MicroToNanoCoefficient = 1'000;
 static constexpr i64 SecondsToMilliCoefficient = 1'000;
 
 ////////////////////////////////////////////////////////////////////////////////
-
-i64 SignedSaturationArithmeticMultiply(i64 lhs, i64 rhs)
-{
-    if (lhs == 0 || rhs == 0) {
-        return 0;
-    }
-
-    i64 sign = 1;
-    if (lhs < 0) {
-        sign = -sign;
-    }
-    if (rhs < 0) {
-        sign = -sign;
-    }
-
-    i64 result;
-    if (__builtin_mul_overflow(lhs, rhs, &result)) {
-        if (sign < 0) {
-            return std::numeric_limits<i64>::min();
-        } else {
-            return std::numeric_limits<i64>::max();
-        }
-    } else {
-        return result;
-    }
-}
 
 void ThrowOnError(const arrow::Status& status)
 {

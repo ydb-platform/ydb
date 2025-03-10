@@ -14,6 +14,7 @@ struct TChunkStripeStatistics
     i64 RowCount = 0;
     i64 ValueCount = 0;
     i64 MaxBlockSize = 0;
+    i64 CompressedDataSize = 0;
 
     void Persist(const TPersistenceContext& context);
 };

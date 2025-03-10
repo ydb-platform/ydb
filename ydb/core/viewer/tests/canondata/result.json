@@ -2181,7 +2181,7 @@
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "UptimeSeconds": "number",
                     "VDisks": [
@@ -2526,7 +2526,7 @@
                         "Tenants": [
                             "/Root/dedicated_db"
                         ],
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "Tablets": [
                         {
@@ -2726,7 +2726,7 @@
                         "Tenants": [
                             "/Root/shared_db"
                         ],
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "Tablets": [
                         {
@@ -2926,7 +2926,7 @@
                         "Tenants": [
                             "/Root/shared_db"
                         ],
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "Tablets": [
                         {
@@ -3041,7 +3041,7 @@
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "UptimeSeconds": "number"
                 },
@@ -3111,7 +3111,7 @@
                         "Tenants": [
                             "/Root/shared_db"
                         ],
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "UptimeSeconds": "number"
                 },
@@ -3181,7 +3181,7 @@
                         "Tenants": [
                             "/Root/dedicated_db"
                         ],
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "UptimeSeconds": "number"
                 }
@@ -3529,7 +3529,7 @@
                 "Tenants": [
                     "/Root/shared_db"
                 ],
-                "TotalSessions": 0
+                "TotalSessions": "number"
             },
             {
                 "ChangeTime": "not-zero-number-text",
@@ -3595,7 +3595,7 @@
                 "Tenants": [
                     "/Root/dedicated_db"
                 ],
-                "TotalSessions": 0
+                "TotalSessions": "number"
             },
             {
                 "ChangeTime": "not-zero-number-text",
@@ -3659,7 +3659,7 @@
                 "Roles": "not-empty-array",
                 "StartTime": "not-zero-number-text",
                 "SystemState": 1,
-                "TotalSessions": 0
+                "TotalSessions": "number"
             }
         ]
     },

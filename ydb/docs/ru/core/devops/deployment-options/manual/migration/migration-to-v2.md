@@ -15,6 +15,7 @@
 ## Переход на управление конфигурацией с помощью {{ ydb-short-name }} CLI {#migration-to-cli}
 
 В конфигурации v1 существовало два различных механизма применения конфигурационных файлов:
+
 - [статическая конфигурация](../before-v25.1/configuration-management/config-overview.md#static-config) требовала ручного размещения файлов на каждом узле кластера;
 - [динамическая конфигурация](../before-v25.1/configuration-management/config-overview.md#dynamic-config) загружалась на кластер централизованно, с помощью команд {{ ydb-short-name }} CLI.
 
@@ -67,6 +68,7 @@ http://<node.ydb.tech>:8765/actors/configs_dispatcher
 1. Перезапустить все узлы кластера с помощью процедуры [rolling-restart](../../../../maintenance/manual/node_restarting.md), добавив опцию `ydbd --config-dir` при запуске узла с указанием пути до директории, а также убрав опцию `ydbd --yaml-config`.
 
 {% list tabs group=manual-systemd %}
+
 - Вручную
 
   При ручном запуске добавьте опцию `--config-dir`, к команде `ydbd server`, не указывая опцию `--yaml-config`:

@@ -534,6 +534,16 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                     }
                 }
             }
+
+            DIV_CLASS("alert alert-info") {
+                str << "<strong>Configuration version: </strong>";
+                if (Labels.contains("config_version")) {
+                    str << Labels.at("config_version");
+                } else {
+                    str << "unknown";
+                }
+            }
+
             DIV_CLASS("tab-left") {
                 COLLAPSED_REF_CONTENT("node-labels", "Node labels") {
                     PRE() {

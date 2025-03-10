@@ -918,29 +918,31 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         ? GenYdbScheme(Columns, Task.GetTable())
         : Nothing();
 
-    const auto& persQueues = Task.GetChangefeedUnderlyingTopics();
-    const auto& cdcStreams = Task.GetTable().GetTable().GetCdcStreams();
-    Y_ASSERT(persQueues.size() == cdcStreams.size());
-
-    const int changefeedsCount = cdcStreams.size();
     TVector <TChangefeedExportDescriptions> changefeeds;
-    changefeeds.reserve(changefeedsCount);
+    if (AppData()->FeatureFlags.GetEnableChangefeedsExport()) {
+        const auto& persQueues = Task.GetChangefeedUnderlyingTopics();
+        const auto& cdcStreams = Task.GetTable().GetTable().GetCdcStreams();
+        Y_ASSERT(persQueues.size() == cdcStreams.size());
 
-    for (int i = 0; i < changefeedsCount; ++i) {
-        Ydb::Table::ChangefeedDescription changefeed;
-        const auto& cdcStream = cdcStreams.at(i);
-        FillChangefeedDescription(changefeed, cdcStream);
+        const int changefeedsCount = cdcStreams.size();
+        changefeeds.reserve(changefeedsCount);
 
-        Ydb::Topic::DescribeTopicResult topic;
-        const auto& pq = persQueues.at(i);
-        Ydb::StatusIds::StatusCode status;
-        TString error;
-        FillTopicDescription(topic, pq.GetPersQueueGroup(), pq.GetSelf(), cdcStream.GetName(), status, error);
-        // Unnecessary fields
-        topic.clear_self();
-        topic.clear_topic_stats();
-        
-        changefeeds.emplace_back(changefeed, topic);
+        for (int i = 0; i < changefeedsCount; ++i) {
+            Ydb::Table::ChangefeedDescription changefeed;
+            const auto& cdcStream = cdcStreams.at(i);
+            FillChangefeedDescription(changefeed, cdcStream);
+
+            Ydb::Topic::DescribeTopicResult topic;
+            const auto& pq = persQueues.at(i);
+            Ydb::StatusIds::StatusCode status;
+            TString error;
+            FillTopicDescription(topic, pq.GetPersQueueGroup(), pq.GetSelf(), cdcStream.GetName(), status, error);
+            // Unnecessary fields
+            topic.clear_self();
+            topic.clear_topic_stats();
+            
+            changefeeds.emplace_back(changefeed, topic);
+        }
     }
 
     auto permissions = (Task.GetEnablePermissions() && Task.GetShardNum() == 0)

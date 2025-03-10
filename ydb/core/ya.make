@@ -63,6 +63,7 @@ RECURSE(
     ydb_convert
     ymq
     yql_testlib
+    yt
 )
 
 RECURSE_FOR_TESTS(

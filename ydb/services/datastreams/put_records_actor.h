@@ -286,7 +286,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         if (this->Request_->GetSerializedToken().empty()) {
-            if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+            if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                 return this->ReplyWithError(Ydb::StatusIds::UNAUTHORIZED,
                                             Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
                                             TStringBuilder() << "Access to stream "
@@ -324,7 +324,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.begin();
-        if (AppData(this->ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(this->ActorContext())->EnforceUserTokenRequirement || AppData(this->ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
             if (!topicInfo->SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, token)) {
                 return this->ReplyWithError(Ydb::StatusIds::UNAUTHORIZED,

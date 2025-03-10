@@ -602,7 +602,7 @@ struct Schema : NIceDb::Schema {
         NScheme::TTypeInfo _ColumnTypeInfo;
         TString _ColumnName;
         PgColumn(NIceDb::TColumnId columnId, TStringBuf columnTypeName, TStringBuf columnName) 
-            : _ColumnId(columnId), _ColumnTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeName(columnTypeName)), _ColumnName(columnName)
+            : _ColumnId(columnId), _ColumnTypeInfo(NPg::TypeDescFromPgTypeName(columnTypeName)), _ColumnName(columnName)
         {}
     };
 

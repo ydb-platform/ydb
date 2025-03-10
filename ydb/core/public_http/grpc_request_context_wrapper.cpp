@@ -82,4 +82,6 @@ namespace NKikimr::NPublicHttp {
        return RequestContext.GetPeer();
     }
 
+    TString TGrpcRequestContextWrapper::GetEndpointId() const { return {}; }
+
 } // namespace NKikimr::NPublicHttp

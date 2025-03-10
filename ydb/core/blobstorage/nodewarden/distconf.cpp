@@ -253,6 +253,7 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::StartDistributedConfigKeeper() {
+        return; // distconf is disabled until 25.1
         auto *appData = AppData();
         const bool isSelfStatic = !appData->DynamicNameserviceConfig || SelfId().NodeId() <= appData->DynamicNameserviceConfig->MaxStaticNodeId;
         DistributedConfigKeeperId = Register(new TDistributedConfigKeeper(Cfg, StorageConfig, isSelfStatic));

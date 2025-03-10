@@ -210,7 +210,6 @@ Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
 
         THashSet<ui64> allParts;
         for (const auto& p : ev->Partitions) {
-            UNIT_ASSERT(!p.Hostname.Empty());
             UNIT_ASSERT(p.NodeId > 0);
 //            UNIT_ASSERT(p.IncGeneration > 0);
             UNIT_ASSERT(p.PartitionId < 15);

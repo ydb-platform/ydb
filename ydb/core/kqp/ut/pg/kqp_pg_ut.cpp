@@ -729,7 +729,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         ui16 rowCount = 10,
         TVector<TString> colNames = {"key", "value"}
     ) {
-        auto* typeDesc = NPg::TypeDescFromPgTypeId(typeId);
+        auto typeDesc = NPg::TypeDescFromPgTypeId(typeId);
         auto typeName = NPg::PgTypeNameFromTypeDesc(typeDesc);
 
         TTableBuilder builder;
@@ -793,7 +793,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         std::function<TString()> textIn,
         size_t rowCount = 1
     ) {
-        auto* typeDesc = NPg::TypeDescFromPgTypeId(typeId);
+        auto typeDesc = NPg::TypeDescFromPgTypeId(typeId);
         auto typeName = NPg::PgTypeNameFromTypeDesc(typeDesc);
 
         auto paramsHash = THash<TString>()(typeMod);
@@ -3097,7 +3097,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             auto tableClient = kikimr.GetTableClient();
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto tableName = createTable(tableClient, session, spec.TypeId, spec.IsKey, true, spec.TextIn, "", 0);
-            auto* typeDesc = NPg::TypeDescFromPgTypeId(spec.TypeId);
+            auto typeDesc = NPg::TypeDescFromPgTypeId(spec.TypeId);
             auto typeName = NPg::PgTypeNameFromTypeDesc(typeDesc);
             auto keyType = spec.IsKey ? typeName : "pgint2";
             auto req = Sprintf("\

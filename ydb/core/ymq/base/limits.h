@@ -29,6 +29,8 @@ namespace TLimits {
     static constexpr size_t MinMaxReceiveCount = 1;
 
     static constexpr size_t MaxMaxReceiveCount = 1000;
+
+    static constexpr size_t MaxTagCount = 50;
 };
 
 } // namespace NKikimr::NSQS

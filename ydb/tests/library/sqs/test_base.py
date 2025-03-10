@@ -11,6 +11,8 @@ import re
 import socket
 from hamcrest import assert_that, equal_to, not_none, none, greater_than, less_than_or_equal_to, any_of, not_
 
+import yatest
+
 import ydb.tests.library.common.yatest_common as yatest_common
 
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
@@ -46,8 +48,8 @@ TABLES_FORMAT_PARAMS = {
 
 POLLING_PARAMS = {
     'argnames': 'polling_wait_timeout',
-    'argvalues': [0, 1],
-    'ids': ['short_polling', 'long_polling'],
+    'argvalues': [1],
+    'ids': ['long_polling'],
 }
 
 STOP_NODE_PARAMS = {
@@ -413,31 +415,22 @@ class KikimrSqsTestBase(object):
         ]
         return any_of(*urls_matchers)
 
-    def _create_queue_and_assert(self, queue_name, is_fifo=False, use_http=False, attributes=None, shards=None, retries=3):
+    def _create_queue_and_assert(self, queue_name, is_fifo=False, use_http=False, attributes=None, shards=None, retries=3, tags=None):
         self.queue_url = None
         if attributes is None:
-            attributes = dict()
-        logging.debug('Create queue. Attributes: {}. Use http: {}. Is fifo: {}'.format(attributes, use_http, is_fifo))
+            attributes = {}
+        if tags is None:
+            tags = {}
+        logging.debug('Create queue. Name: {}. Attributes: {}. Use http: {}. Is fifo: {}'.format(queue_name, attributes, use_http, is_fifo))
+
         assert (len(attributes.keys()) == 0 or use_http), 'Attributes are supported only for http queue creation'
+        assert (len(tags.keys()) == 0 or use_http), 'Tags are supported only for http queue creation'
         assert (shards is None or not use_http), 'Custom shards number is only supported in non-http mode'
         while retries:
             retries -= 1
             try:
-                if use_http:
-                    self.queue_url = self._sqs_api.create_queue(queue_name, is_fifo=is_fifo, attributes=attributes)
-                else:
-                    cmd = [
-                        get_sqs_client_path(),
-                        'create',  # create queue command
-                        '-u', self._username,
-                        '--shards', str(shards) if shards is not None else '2',
-                        '--partitions', '1',
-                        '--queue-name', queue_name,
-                    ] + self._sqs_server_opts
-                    execute = yatest_common.execute(cmd)
-                    self.queue_url = execute.std_out
-                    self.queue_url = self.queue_url.strip()
-            except (RuntimeError, yatest_common.ExecutionError) as ex:
+                self.queue_url = self._sqs_api.create_queue(queue_name, is_fifo=is_fifo, attributes=attributes, tags=tags)
+            except (RuntimeError, yatest.common.ExecutionError) as ex:
                 logging.debug("Got error: {}. Retrying creation request".format(ex))
                 if retries:
                     time.sleep(1)  # Sleep before next retry

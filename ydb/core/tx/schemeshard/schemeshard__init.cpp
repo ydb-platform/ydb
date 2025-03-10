@@ -21,6 +21,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     TVector<ui64> ExportsToResume;
     TVector<ui64> ImportsToResume;
     THashMap<TPathId, TVector<TPathId>> CdcStreamScansToResume;
+    TVector<TPathId> RestoreTablesToUnmark;
     bool Broken = false;
 
     explicit TTxInit(TSelf *self)
@@ -307,7 +308,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString> TTableRec;
+    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString, bool> TTableRec;
     typedef TDeque<TTableRec> TTableRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -323,7 +324,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::IsBackup>(false),
             rowSet.template GetValueOrDefault<typename SchemaTable::ReplicationConfig>(),
             rowSet.template GetValueOrDefault<typename SchemaTable::IsTemporary>(false),
-            rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>("")
+            rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>(""),
+            rowSet.template GetValueOrDefault<typename SchemaTable::IsRestore>(false)
         );
     }
 
@@ -376,7 +378,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(protoType, typeData));
             typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(typeId, &protoType);
         } else {
-            typeInfoMod.TypeInfo = NScheme::TTypeInfo(typeId);
+            // Decimal column was created before SchemaTable::ColTypeData was filled with decimal params
+            // So, it's default
+            if (typeId == NScheme::NTypeIds::Decimal) {
+                typeInfoMod.TypeInfo = NScheme::TTypeInfo(NScheme::TDecimalType::Default());
+            } else {
+                typeInfoMod.TypeInfo = NScheme::TTypeInfo(typeId);
+            }
         }
 
         return std::make_tuple(pathId,
@@ -1500,7 +1508,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 TSubDomainInfo::TPtr rootDomainInfo = new TSubDomainInfo(version, Self->RootPathId());
-                rootDomainInfo->SetSchemeLimits(rootLimits);
+                rootDomainInfo->SetSchemeLimits(rootLimits, Self);
                 rootDomainInfo->SetSecurityStateVersion(row.GetValueOrDefault<Schema::SubDomains::SecurityStateVersion>());
 
                 rootDomainInfo->InitializeAsGlobal(Self->CreateRootProcessingParams(ctx));
@@ -1540,7 +1548,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TTabletId sharedHiveId = rowset.GetValue<Schema::SubDomains::SharedHiveId>();
                     domainInfo->SetSharedHive(sharedHiveId);
 
-                    domainInfo->SetSchemeLimits(LoadSchemeLimits(rootLimits, rowset));
+                    domainInfo->SetSchemeLimits(LoadSchemeLimits(rootLimits, rowset), !Self->IsDomainSchemeShard ? Self : nullptr);
 
                     if (rowset.HaveValue<Schema::SubDomains::DeclaredSchemeQuotas>()) {
                         NKikimrSubDomains::TSchemeQuotas declaredSchemeQuotas;
@@ -1831,6 +1839,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 tableInfo->IsBackup = std::get<8>(rec);
+                tableInfo->IsRestore = std::get<12>(rec);
 
                 Self->Tables[pathId] = tableInfo;
                 Self->IncrementPathDbRefCount(pathId);
@@ -3883,6 +3892,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                              << ", read records: " << history.size()
                              << ", at schemeshard: " << Self->TabletID());
 
+            RestoreTablesToUnmark.clear();
+
             for (auto& rec: history) {
                 auto pathId = std::get<0>(rec);
                 auto txId = std::get<1>(rec);
@@ -3929,6 +3940,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     break;
                 case TTableInfo::TBackupRestoreResult::EKind::Restore:
                     tableInfo->RestoreHistory[txId] = std::move(info);
+                    if (tableInfo->IsRestore) {
+                        RestoreTablesToUnmark.push_back(pathId);
+                    }
                     break;
                 }
 
@@ -3951,7 +3965,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             path->IncShardsInside();
 
             auto domainInfo = Self->ResolveDomainInfo(pathId); //domain should't be dropped?
-            domainInfo->AddInternalShard(shardIdx, Self->IsBackupTable(pathId));
+            domainInfo->AddInternalShard(shardIdx, Self, Self->IsBackupTable(pathId));
 
             switch (si.second.TabletType) {
             case ETabletType::DataShard:
@@ -4059,7 +4073,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             if (!path->IsRoot()) {
                 const bool isBackupTable = Self->IsBackupTable(item.first);
                 parent->IncAliveChildren(1, isBackupTable);
-                inclusiveDomainInfo->IncPathsInside(1, isBackupTable);
+                inclusiveDomainInfo->IncPathsInside(Self, 1, isBackupTable);
             }
 
             Self->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Add(path->UserAttrs->Size());
@@ -4928,6 +4942,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             .CdcStreamScans = std::move(cdcStreamScansToResume),
             .TablesToClean = std::move(TablesToClean),
             .BlockStoreVolumesToClean = std::move(BlockStoreVolumesToClean),
+            .RestoreTablesToUnmark = std::move(RestoreTablesToUnmark),
         });
     }
 };

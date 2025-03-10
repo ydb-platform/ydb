@@ -123,8 +123,11 @@ public:
 
         if (Database.empty()) {
             ListTenantsResponse = MakeRequestConsoleListTenants();
+            NavigateKeySetResult[DomainPath] = MakeRequestSchemeCacheNavigate(DomainPath);
         } else {
-            TenantStatusResponses[Database] = MakeRequestConsoleGetTenantStatus(Database);
+            if (Database != DomainPath) {
+                TenantStatusResponses[Database] = MakeRequestConsoleGetTenantStatus(Database);
+            }
             NavigateKeySetResult[Database] = MakeRequestSchemeCacheNavigate(Database);
         }
 
@@ -134,7 +137,6 @@ public:
             tenant.SetState(Ydb::Cms::GetDatabaseStatusResult::RUNNING);
             tenant.SetType(NKikimrViewer::Domain);
             tenant.SetName(DomainPath);
-            NavigateKeySetResult[DomainPath] = MakeRequestSchemeCacheNavigate(DomainPath);
             RequestMetadataCacheHealthCheck(DomainPath);
         }
 

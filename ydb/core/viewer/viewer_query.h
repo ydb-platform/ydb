@@ -20,7 +20,7 @@ class TJsonQuery : public TViewerPipeClient {
     using TThis = TJsonQuery;
     using TBase = TViewerPipeClient;
     TJsonSettings JsonSettings;
-    ui32 Timeout = 0;
+    ui32 Timeout = 60000;
     std::vector<std::vector<Ydb::ResultSet>> ResultSets;
     TString Query;
     TString Action;
@@ -64,7 +64,7 @@ public:
     void ParseCgiParameters(const TCgiParameters& params) {
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 60000);
+        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), Timeout);
         if (params.Has("query")) {
             Query = params.Get("query");
         }
@@ -103,6 +103,12 @@ public:
         NJson::TJsonValue requestData;
         bool success = NJson::ReadJsonTree(content, &JsonConfig, &requestData);
         if (success) {
+            if (requestData.Has("timeout")) {
+                Timeout = requestData["timeout"].GetUIntegerRobust();
+                if (Timeout == 0) {
+                    return false;
+                }
+            }
             if (requestData.Has("query")) {
                 Query = requestData["query"].GetStringRobust();
             }
@@ -407,22 +413,36 @@ private:
                 return ColumnPrimitiveValueToJsonValue(valueParser);
 
             case NYdb::TTypeParser::ETypeKind::Optional:
-                valueParser.OpenOptional();
-                if (valueParser.IsNull()) {
-                    return NJson::JSON_NULL;
-                }
-                switch(valueParser.GetKind()) {
-                    case NYdb::TTypeParser::ETypeKind::Primitive:
-                        return ColumnPrimitiveValueToJsonValue(valueParser);
-                    case NYdb::TTypeParser::ETypeKind::Decimal:
-                        return valueParser.GetDecimal().ToString();
-                    default:
-                        return NJson::JSON_UNDEFINED;
+                {
+                    NJson::TJsonValue jsonOptional;
+                    valueParser.OpenOptional();
+                    if (valueParser.IsNull()) {
+                        jsonOptional = NJson::JSON_NULL;
+                    } else {
+                        switch(valueParser.GetKind()) {
+                            case NYdb::TTypeParser::ETypeKind::Primitive:
+                                jsonOptional = ColumnPrimitiveValueToJsonValue(valueParser);
+                                break;
+                            case NYdb::TTypeParser::ETypeKind::Decimal:
+                                jsonOptional = valueParser.GetDecimal().ToString();
+                                break;
+                            default:
+                                jsonOptional = NJson::JSON_UNDEFINED;
+                                break;
+                        }
+                    }
+                    valueParser.CloseOptional();
+                    return jsonOptional;
                 }
 
             case NYdb::TTypeParser::ETypeKind::Tagged:
-                valueParser.OpenTagged();
-                return ColumnValueToJsonValue(valueParser);
+                {
+                    NJson::TJsonValue jsonTagged;
+                    valueParser.OpenTagged();
+                    jsonTagged = ColumnValueToJsonValue(valueParser);
+                    valueParser.CloseTagged();
+                    return jsonTagged;
+                }
 
             case NYdb::TTypeParser::ETypeKind::Pg:
                 return valueParser.GetPg().Content_;
@@ -438,6 +458,7 @@ private:
                     while (valueParser.TryNextListItem()) {
                         jsonList.AppendValue(ColumnValueToJsonValue(valueParser));
                     }
+                    valueParser.CloseList();
                     return jsonList;
                 }
 
@@ -449,6 +470,7 @@ private:
                     while (valueParser.TryNextElement()) {
                         jsonTuple.AppendValue(ColumnValueToJsonValue(valueParser));
                     }
+                    valueParser.CloseTuple();
                     return jsonTuple;
                 }
 
@@ -460,6 +482,7 @@ private:
                     while (valueParser.TryNextMember()) {
                         jsonStruct[valueParser.GetMemberName()] = ColumnValueToJsonValue(valueParser);
                     }
+                    valueParser.CloseStruct();
                     return jsonStruct;
                 }
 
@@ -470,16 +493,21 @@ private:
                     valueParser.OpenDict();
                     while (valueParser.TryNextDictItem()) {
                         valueParser.DictKey();
-                        TString key = valueParser.GetString();
+                        NJson::TJsonValue jsonDictKey = ColumnValueToJsonValue(valueParser);
                         valueParser.DictPayload();
-                        jsonDict[key] = ColumnValueToJsonValue(valueParser);
+                        jsonDict[jsonDictKey.GetStringRobust()] = ColumnValueToJsonValue(valueParser);
                     }
+                    valueParser.CloseDict();
                     return jsonDict;
                 }
 
             case NYdb::TTypeParser::ETypeKind::Variant:
-                valueParser.OpenVariant();
-                return ColumnValueToJsonValue(valueParser);
+                {
+                    valueParser.OpenVariant();
+                    NJson::TJsonValue jsonVariant = ColumnValueToJsonValue(valueParser);
+                    valueParser.CloseVariant();
+                    return jsonVariant;
+                }
 
             case NYdb::TTypeParser::ETypeKind::EmptyList:
                 return NJson::JSON_ARRAY;
@@ -567,8 +595,7 @@ private:
             ResultSets[data.GetQueryResultIndex()].emplace_back() = std::move(*data.MutableResultSet());
         }
 
-        THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-        ack->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         if (TotalRows >= LimitRows) {
             ack->Record.SetEnough(true);
         }

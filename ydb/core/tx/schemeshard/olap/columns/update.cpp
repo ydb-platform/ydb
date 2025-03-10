@@ -1,4 +1,5 @@
 #include "update.h"
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
@@ -85,36 +86,32 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
         return false;
     }
 
-    if (const auto& typeName = NMiniKQL::AdaptLegacyYqlType(TypeName); typeName.StartsWith("pg")) {
-        const auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
-        if (!(typeDesc && TOlapColumnAdd::IsAllowedPgType(NPg::PgTypeIdFromTypeDesc(typeDesc)))) {
-            errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
+    TString errStr;
+    Y_ABORT_UNLESS(AppData()->TypeRegistry);
+    if (!GetTypeInfo(AppData()->TypeRegistry->GetType(TypeName), columnSchema.GetTypeInfo(), TypeName, Name, Type, errStr)) {
+        errors.AddError(errStr);
+        return false;
+    }
+
+    if (Type.GetTypeId() == NScheme::NTypeIds::Pg) {
+        if (!TOlapColumnAdd::IsAllowedPgType(NPg::PgTypeIdFromTypeDesc(Type.GetPgTypeDesc()))) {
+            errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported");
             return false;
         }
-        Type = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
     } else {
-        Y_ABORT_UNLESS(AppData()->TypeRegistry);
-        const NScheme::IType* type = AppData()->TypeRegistry->GetType(typeName);
-        if (!type) {
-            errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
-            return false;
-        }
-        if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
-            errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
-            return false;;
-        }
-        Type = NScheme::TTypeInfo(type->GetTypeId());
-        if (!IsAllowedType(type->GetTypeId())){
-            errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
+        if (!IsAllowedType(Type.GetTypeId())){
+            errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported");
             return false;
         }
     }
+
     auto arrowTypeResult = NArrow::GetArrowType(Type);
     const auto arrowTypeStatus = arrowTypeResult.status();
     if (!arrowTypeStatus.ok()) {
         errors.AddError(TStringBuilder() << "Column '" << Name << "': " << arrowTypeStatus.ToString());
         return false;
     }
+
     if (columnSchema.HasDefaultValue()) {
         auto conclusion = DefaultValue.DeserializeFromProto(columnSchema.GetDefaultValue());
         if (conclusion.IsFail()) {

@@ -41,7 +41,8 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
                                                      const bool isCloudMode,
                                                      const bool enableQueueAttributesValidation,
                                                      TIntrusivePtr<TUserCounters> userCounters,
-                                                     TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResources)
+                                                     TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResources,
+                                                     const TString& tagsJson)
     : QueuePath_(path)
     , Request_(req)
     , Sender_(sender)
@@ -54,6 +55,7 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
     , EnableQueueAttributesValidation_(enableQueueAttributesValidation)
     , UserCounters_(std::move(userCounters))
     , QuoterResources_(std::move(quoterResources))
+    , TagsJson_(tagsJson)
 {
     IsFifo_ = AsciiHasSuffixIgnoreCase(IsCloudMode_ ? CustomQueueName_ : QueuePath_.QueueName, ".fifo");
 
@@ -433,13 +435,13 @@ static const char* const GetTablesFormatQuery = R"__(
             '('Name (Utf8String '"CreateQueuesWithTabletFormat"))))
         (let tablesFormatSettingSelect '('Value))
         (let tablesFormatSettingRead (SelectRow settingsTable tablesFormatSettingRow tablesFormatSettingSelect))
-        (let tablesFormatSetting 
-            (If (Exists tablesFormatSettingRead) 
+        (let tablesFormatSetting
+            (If (Exists tablesFormatSettingRead)
                 (Cast (Member tablesFormatSettingRead 'Value) 'Uint32)
                 defaultTablesFormat
             )
         )
-        
+
         (return (AsList
             (SetResult 'tablesFormat tablesFormatSetting)
                 )
@@ -624,7 +626,7 @@ void TCreateQueueSchemaActorV2::OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
                 TablesFormat_ = static_cast<ui32>(formatValue);
             }
             if (!formatValue.HaveValue() || TablesFormat_ > 1) {
-                RLOG_SQS_WARN("Incorrect TablesFormat settings for account " 
+                RLOG_SQS_WARN("Incorrect TablesFormat settings for account "
                     << QueuePath_.UserName << ", responce:" << record);
 
                 auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE);
@@ -635,7 +637,7 @@ void TCreateQueueSchemaActorV2::OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
                 PassAway();
                 return;
             }
-            RLOG_SQS_DEBUG("Got table format '" << TablesFormat_ << "' for " 
+            RLOG_SQS_DEBUG("Got table format '" << TablesFormat_ << "' for "
                 << QueuePath_.UserName << record);
         }
 
@@ -732,6 +734,7 @@ static const char* const CommitQueueParamsQuery = R"__(
         (let maxReceiveCount        (Parameter 'MAX_RECEIVE_COUNT (DataType 'Uint64)))
         (let defaultMaxQueuesCount  (Parameter 'DEFAULT_MAX_QUEUES_COUNT (DataType 'Uint64)))
         (let userName               (Parameter 'USER_NAME         (DataType 'Utf8String)))
+        (let tags                   (Parameter 'TAGS              (DataType 'Utf8String)))
 
         (let attrsTable '%1$s/Attributes)
         (let stateTable '%1$s/State)
@@ -832,12 +835,14 @@ static const char* const CommitQueueParamsQuery = R"__(
             '('Version queueIdNumber)
             '('DlqName dlqName)
             '('MasterTabletId masterTabletId)
-            '('TablesFormat tablesFormat)))
+            '('TablesFormat tablesFormat)
+            '('Tags tags)))
 
         (let eventsUpdate '(
             '('CustomQueueName customName)
             '('EventTimestamp now)
-            '('FolderId folderId)))
+            '('FolderId folderId)
+            '('Labels tags)))
 
         (let attrRow '(%3$s))
 
@@ -885,12 +890,10 @@ static const char* const CommitQueueParamsQuery = R"__(
             (ListIf willCommit (UpdateRow queuesTable queuesRow queuesUpdate))
             (ListIf willCommit (UpdateRow eventsTable eventsRow eventsUpdate))
             (ListIf willCommit (UpdateRow attrsTable attrRow attrUpdate))
-            
-            
+
             (If (Not willCommit) (AsList (Void))
                 (Map (ListFromRange (Uint64 '0) shards) (lambda '(shardOriginal) (block '(
                     (let shard (Cast shardOriginal 'Uint32))
-                        
                     (let row '(%5$s))
                     (let update '(
                         '('CleanupTimestamp now)
@@ -920,7 +923,7 @@ TString GetStateTableKeys(ui32 tablesFormat, bool isFifo) {
             '('QueueIdNumber queueIdNumber)
             '('Shard shard)
         )__";
-        
+
     }
     return "'('State shardOriginal)";
 }
@@ -965,7 +968,7 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
     auto ev = MakeExecuteEvent(query);
     auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
     Y_ABORT_UNLESS(TablesFormat_ == 1 || LeaderTabletId_ != 0);
-    TInstant createdTimestamp = Request_.HasCreatedTimestamp() ? TInstant::Seconds(Request_.GetCreatedTimestamp()) : QueueCreationTimestamp_; 
+    TInstant createdTimestamp = Request_.HasCreatedTimestamp() ? TInstant::Seconds(Request_.GetCreatedTimestamp()) : QueueCreationTimestamp_;
     TParameters(trans->MutableParams()->MutableProto())
         .Utf8("NAME", QueuePath_.QueueName)
         .Utf8("CUSTOMNAME", CustomQueueName_)
@@ -990,7 +993,8 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
         .Utf8("DLQ_TARGET_NAME", ValidatedAttributes_.RedrivePolicy.TargetQueueName ? *ValidatedAttributes_.RedrivePolicy.TargetQueueName :  "")
         .Uint64("MAX_RECEIVE_COUNT", ValidatedAttributes_.RedrivePolicy.MaxReceiveCount ? *ValidatedAttributes_.RedrivePolicy.MaxReceiveCount : 0)
         .Uint64("DEFAULT_MAX_QUEUES_COUNT", Cfg().GetAccountSettingsDefaults().GetMaxQueuesCount())
-        .Utf8("USER_NAME", QueuePath_.UserName);
+        .Utf8("USER_NAME", QueuePath_.UserName)
+        .Utf8("TAGS", TagsJson_);
 
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
 }
@@ -1078,7 +1082,8 @@ void TCreateQueueSchemaActorV2::MatchQueueAttributes(
         .Uint64("RETENTION", SecondsToMs(*ValidatedAttributes_.MessageRetentionPeriod))
         .Utf8("DLQ_TARGET_NAME", ValidatedAttributes_.RedrivePolicy.TargetQueueName ? *ValidatedAttributes_.RedrivePolicy.TargetQueueName : "")
         .Uint64("MAX_RECEIVE_COUNT", ValidatedAttributes_.RedrivePolicy.MaxReceiveCount ? *ValidatedAttributes_.RedrivePolicy.MaxReceiveCount : 0)
-        .Utf8("USER_NAME", QueuePath_.UserName);
+        .Utf8("USER_NAME", QueuePath_.UserName)
+        .Utf8("TAGS", TagsJson_);
 
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
 }
@@ -1239,7 +1244,8 @@ static const char* EraseQueueRecordQuery = R"__(
             'CustomQueueName
             'CreatedTimestamp
             'FolderId
-            'TablesFormat))
+            'TablesFormat
+            'Tags))
         (let queuesRead (SelectRow queuesTable queuesRow queuesSelect))
 
         (let currentVersion
@@ -1283,7 +1289,7 @@ static const char* EraseQueueRecordQuery = R"__(
                 (Utf8String '"")
             )
         )
-        
+
         (let tablesFormat
             (Coalesce
                 (Member queuesRead 'TablesFormat)
@@ -1291,10 +1297,17 @@ static const char* EraseQueueRecordQuery = R"__(
             )
         )
 
+        (let queueTags
+            (Coalesce
+                (Member queuesRead 'Tags)
+                (Utf8String '"{}")
+            )
+        )
+
         (let removedQueueRow '(
             '('RemoveTimestamp now)
             '('QueueIdNumber currentVersion)))
-        
+
         (let removedQueueUpdate '(
             '('Account userName)
             '('QueueName name)
@@ -1320,7 +1333,8 @@ static const char* EraseQueueRecordQuery = R"__(
         (let eventsUpdate '(
             '('CustomQueueName customName)
             '('EventTimestamp eventTs)
-            '('FolderId folderId)))
+            '('FolderId folderId)
+            '('Labels queueTags)))
 
         (return (Extend
             (AsList
@@ -1331,11 +1345,11 @@ static const char* EraseQueueRecordQuery = R"__(
                 (If queueExists (UpdateRow removedQueuesTable removedQueueRow removedQueueUpdate) (Void))
                 (If queueExists (EraseRow queuesTable queuesRow) (Void))
             )
-            
+
                 (If queueExists
                     (Map (ListFromRange (Uint64 '0) shards) (lambda '(shardOriginal) (block '(
                         (let shard (Cast shardOriginal 'Uint32))
-                            
+
                         (let stateRow '(%4$s))
                         (return (EraseRow stateTable stateRow))
                     ))))
@@ -1352,7 +1366,7 @@ void TDeleteQueueSchemaActorV2::NextAction() {
             if (TablesFormat_ == 1) {
                 queueStateDir = Join("/", Cfg().GetRoot(), IsFifo_ ? FIFO_TABLES_DIR : STD_TABLES_DIR);
             }
-            
+
             auto ev = MakeExecuteEvent(Sprintf(
                 EraseQueueRecordQuery,
                 QueuePath_.GetUserPath().c_str(),

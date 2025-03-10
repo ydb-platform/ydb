@@ -263,14 +263,29 @@ namespace {
         return columnTypeError;
     }
 
-    TString GetColumnTypeName(const TTypeAnnotationNode* type) {
-        if (type->GetKind() == ETypeAnnotationKind::Data) {
+    TString GetColumnTypeName(const TTypeAnnotationNode* type, const NKikimr::NScheme::TTypeInfo& typeInfo) {
+        if (type->GetKind() == ETypeAnnotationKind::Data &&
+            type->Cast<TDataExprType>()->GetSlot() != EDataSlot::Decimal) {
             return ToString(type->Cast<TDataExprType>()->GetName());
         } else {
-            auto pgTypeId = type->Cast<TPgExprType>()->GetId();
-            auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId);
-            return NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc);
+            return NKikimr::NScheme::TypeName(typeInfo);;
         }
+    }
+    
+    NKikimr::NScheme::TTypeInfo GetColumnTypeInfo(const TTypeAnnotationNode* type) {
+        if (type->GetKind() == ETypeAnnotationKind::Pg) {
+            auto pgTypeId = type->Cast<TPgExprType>()->GetId();
+            return NKikimr::NScheme::TTypeInfo(NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId));
+        } else if (type->Cast<TDataExprType>()->GetSlot() == EDataSlot::Decimal) {
+            if (const auto dataExprParamsType = dynamic_cast<const TDataExprParamsType*>(type)) {
+                ui32 precision = FromString<ui32>(dataExprParamsType->GetParamOne());
+                ui32 scale = FromString<ui32>(dataExprParamsType->GetParamTwo());
+                return NKikimr::NScheme::TDecimalType(precision, scale);
+            }
+        }
+
+        auto typeId = NKikimr::NUdf::GetDataTypeInfo(type->Cast<TDataExprType>()->GetSlot()).TypeId;
+        return NKikimr::NScheme::TTypeInfo(typeId);
     }
 
     bool ValidateColumnDataType(const TDataExprType* type, const TExprBase& typeNode, const TString& columnName,
@@ -279,16 +294,16 @@ namespace {
         switch (type->GetSlot()) {
         case EDataSlot::Decimal:
             if (const auto dataExprParamsType = dynamic_cast<const TDataExprParamsType*>(type)) {
-                if (dataExprParamsType->GetParamOne() != "22") {
-                    columnTypeError(typeNode.Pos(), columnName, TStringBuilder() << "Bad decimal precision \""
-                        << dataExprParamsType->GetParamOne() << "\". Only Decimal(22,9) is supported for table columns");
+                ui32 precision = FromString<ui32>(dataExprParamsType->GetParamOne());
+                ui32 scale = FromString<ui32>(dataExprParamsType->GetParamTwo());
+                TString error;
+                if (!NKikimr::NScheme::TDecimalType::Validate(precision, scale, error)) {
+                    columnTypeError(typeNode.Pos(), columnName, error);
                     return false;
                 }
-                if (dataExprParamsType->GetParamTwo() != "9") {
-                    columnTypeError(typeNode.Pos(), columnName, TStringBuilder() << "Bad decimal scale \""
-                        << dataExprParamsType->GetParamTwo() << "\". Only Decimal(22,9) is supported for table columns");
-                    return false;
-                }
+            } else {
+                Y_ABORT("Error dynamic_cast decimal type");
+                return false;
             }
             break;
 
@@ -876,15 +891,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
             TKikimrColumnMetadata columnMeta;
             columnMeta.Name = columnName;
-            columnMeta.Type = GetColumnTypeName(actualType);
 
-            if (actualType->GetKind() == ETypeAnnotationKind::Pg) {
-                auto pgTypeId = actualType->Cast<TPgExprType>()->GetId();
-                columnMeta.TypeInfo = NKikimr::NScheme::TTypeInfo(
-                    NKikimr::NScheme::NTypeIds::Pg,
-                    NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId)
-                );
-            }
+            columnMeta.TypeInfo = GetColumnTypeInfo(actualType);
+            columnMeta.Type = GetColumnTypeName(actualType, columnMeta.TypeInfo);
 
             if (columnTuple.Size() > 2) {
                 const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
@@ -1308,7 +1317,6 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
                     TKikimrColumnMetadata columnMeta;
                     // columnMeta.Name = columnName;
-                    columnMeta.Type = GetColumnTypeName(actualType);
                     if (columnTuple.Size() > 2) {
                         const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                         for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
@@ -1323,6 +1331,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                             }
                         }
                     }
+
+                    columnMeta.TypeInfo = GetColumnTypeInfo(actualType);
+                    columnMeta.Type = GetColumnTypeName(actualType, columnMeta.TypeInfo);
 
                     if (columnTuple.Size() > 3) {
                         auto families = columnTuple.Item(3);

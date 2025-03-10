@@ -49,6 +49,8 @@ message TEvCreateRequest {
     optional uint64 TxId = 2;
     optional string DatabaseName = 3;
     optional TIndexBuildSettings Settings = 4;
+    // Internal flag is true for system-generated operations and is false for those initiated directly by the user.
+    optional bool Internal = 5 [default = false];
 }
 
 message TEvCreateResponse {

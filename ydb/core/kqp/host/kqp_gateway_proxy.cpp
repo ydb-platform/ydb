@@ -334,6 +334,10 @@ void FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
             columnDesc.MutableDefaultFromLiteral()->CopyFrom(
                 cMeta.DefaultFromLiteral);
         }
+
+        if (NScheme::NTypeIds::IsParametrizedType(columnIt->second.TypeInfo.GetTypeId())) {
+            ProtoFromTypeInfo(columnIt->second.TypeInfo, columnIt->second.TypeMod, *columnDesc.MutableTypeInfo());
+        }
     }
 
     for (TString& keyColumn : metadata->KeyColumnNames) {
@@ -442,7 +446,6 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         if (columnType.TypeInfo) {
             *columnDesc.MutableTypeInfo() = *columnType.TypeInfo;
         }
-
         if (!columnFamiliesByName.empty()) {
             TString columnFamilyName = "default";
             ui32 columnFamilyId = 0;
@@ -2303,6 +2306,12 @@ public:
         const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) override
     {
         return Gateway->ExecuteLiteral(program, resultType, txAlloc);
+    }
+
+    TExecuteLiteralResult ExecuteLiteralInstant(const TString& program,
+        const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) override
+    {
+        return Gateway->ExecuteLiteralInstant(program, resultType, txAlloc);
     }
 
 private:

@@ -40,6 +40,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     auto* indexedTable = modifyScheme.MutableCreateIndexedTable();
     auto& tableDesc = *(indexedTable->MutableTableDescription());
     tableDesc.SetName(wdAndPath.second);
+    tableDesc.SetIsRestore(true);
 
     Y_ABORT_UNLESS(ss->TableProfilesLoaded);
     Ydb::StatusIds::StatusCode status;
@@ -227,7 +228,9 @@ THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
 
     const TPath domainPath = TPath::Init(importInfo->DomainPathId, ss);
     auto propose = MakeHolder<TEvIndexBuilder::TEvCreateRequest>(ui64(txId), domainPath.PathString(), std::move(settings));
-    (*propose->Record.MutableOperationParams()->mutable_labels())["uid"] = uid;
+    auto& request = propose->Record;
+    (*request.MutableOperationParams()->mutable_labels())["uid"] = uid;
+    request.SetInternal(true);
 
     return propose;
 }

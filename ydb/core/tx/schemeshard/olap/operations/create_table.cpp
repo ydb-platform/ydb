@@ -860,9 +860,9 @@ public:
         context.SS->ClearDescribePathCaches(dstPath.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath.Base()->PathId);
 
-        dstPath.DomainInfo()->IncPathsInside();
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
         if (!storeInfo) {
-            dstPath.DomainInfo()->AddInternalShards(txState);
+            dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
             dstPath.Base()->IncShardsInside(tableInfo->GetOwnedColumnShardsVerified().size());
         }
         parentPath.Base()->IncAliveChildren();

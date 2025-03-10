@@ -41,6 +41,9 @@ static const std::pair<EAction, TStringBuf> Action2Permission[] = {
     {EAction::SendMessageBatch, "ymq.messages.send"},
     {EAction::SetQueueAttributes, "ymq.queues.setAttributes"},
     {EAction::ListDeadLetterSourceQueues, "ymq.queues.listDeadLetterSourceQueues"},
+    {EAction::ListQueueTags, "ymq.queues.getAttributes"},
+    {EAction::TagQueue, "ymq.queues.setAttributes"},
+    {EAction::UntagQueue, "ymq.queues.setAttributes"},
 };
 
 TString const ActionToPermissionName(const EAction action) {
@@ -494,10 +497,10 @@ void TCloudAuthRequestProxy::ChangeCounters(std::function<void()> func) {
 }
 
 void THttpProxyAuthRequestProxy::DoReply() {
-    auto response = Error_.Empty() 
+    auto response = Error_.Empty()
         ? MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(CloudId_, FolderId_, UserSID_)
         : MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(Error_.GetRef());
-    
+
     Send(Requester_, response.Release());
 }
 

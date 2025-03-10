@@ -394,6 +394,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         THashMap<ui32, TColumn> Columns;
         TVector<ui32> KeyColumnIds;
         bool IsBackup = false;
+        bool IsRestore = false;
 
         NKikimrSchemeOp::TTableDescription TableDescriptionDiff;
         TMaybeFail<NKikimrSchemeOp::TTableDescription> TableDescriptionFull;
@@ -437,6 +438,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     THashMap<ui32, TColumn> Columns;
     TVector<ui32> KeyColumnIds;
     bool IsBackup = false;
+    bool IsRestore = false;
     bool IsTemporary = false;
     TActorId OwnerActorId;
 
@@ -549,6 +551,7 @@ public:
         , Columns(std::move(alterData.Columns))
         , KeyColumnIds(std::move(alterData.KeyColumnIds))
         , IsBackup(alterData.IsBackup)
+        , IsRestore(alterData.IsRestore)
     {
         TableDescription.Swap(alterData.TableDescriptionFull.Get());
     }
@@ -564,13 +567,18 @@ public:
         return copy;
     }
 
+    struct TCreateAlterDataFeatureFlags {
+        bool EnableTablePgTypes;
+        bool EnableTableDatetime64;
+        bool EnableParameterizedDecimal;
+    };
+
     static TAlterDataPtr CreateAlterData(
         TPtr source,
         NKikimrSchemeOp::TTableDescription& descr,
         const NScheme::TTypeRegistry& typeRegistry,
         const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
-        bool pgTypesEnabled,
-        bool datetime64TypesEnabled,
+        const TCreateAlterDataFeatureFlags& featureFlags,
         TString& errStr, const THashSet<TString>& localSequences = {});
 
     static ui32 ShardsToCreate(const NKikimrSchemeOp::TTableDescription& descr) {
@@ -1357,6 +1365,10 @@ struct IQuotaCounters {
     virtual void ChangeDiskSpaceHardQuotaBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceSoftQuotaBytes(i64 delta) = 0;
     virtual void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) = 0;
+    virtual void ChangePathCount(i64 delta) = 0;
+    virtual void SetPathsQuota(ui64 value) = 0;
+    virtual void ChangeShardCount(i64 delta) = 0;
+    virtual void SetShardsQuota(ui64 value) = 0;
 };
 
 struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
@@ -1438,8 +1450,12 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         }
     }
 
-    void SetSchemeLimits(const TSchemeLimits& limits) {
+    void SetSchemeLimits(const TSchemeLimits& limits, IQuotaCounters* counters = nullptr) {
         SchemeLimits = limits;
+        if (counters) {
+            counters->SetPathsQuota(limits.MaxPaths);
+            counters->SetShardsQuota(limits.MaxShards);
+        }
     }
 
     const TSchemeLimits& GetSchemeLimits() const {
@@ -1557,23 +1573,27 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return BackupPathsCount;
     }
 
-    void IncPathsInside(ui64 delta = 1, bool isBackup = false) {
+    void IncPathsInside(IQuotaCounters* counters, ui64 delta = 1, bool isBackup = false) {
         Y_ABORT_UNLESS(Max<ui64>() - PathsInsideCount >= delta);
         PathsInsideCount += delta;
 
         if (isBackup) {
             Y_ABORT_UNLESS(Max<ui64>() - BackupPathsCount >= delta);
             BackupPathsCount += delta;
+        } else {
+            counters->ChangePathCount(delta);
         }
     }
 
-    void DecPathsInside(ui64 delta = 1, bool isBackup = false) {
+    void DecPathsInside(IQuotaCounters* counters, ui64 delta = 1, bool isBackup = false) {
         Y_VERIFY_S(PathsInsideCount >= delta, "PathsInsideCount: " << PathsInsideCount << " delta: " << delta);
         PathsInsideCount -= delta;
 
         if (isBackup) {
             Y_VERIFY_S(BackupPathsCount >= delta, "BackupPathsCount: " << BackupPathsCount << " delta: " << delta);
             BackupPathsCount -= delta;
+        } else {
+            counters->ChangePathCount(-delta);
         }
     }
 
@@ -1756,10 +1776,12 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return PrivateShards;
     }
 
-    void AddInternalShard(TShardIdx shardId, bool isBackup = false) {
+    void AddInternalShard(TShardIdx shardId, IQuotaCounters* counters, bool isBackup = false) {
         InternalShards.insert(shardId);
         if (isBackup) {
             BackupShards.insert(shardId);
+        } else {
+            counters->ChangeShardCount(1);
         }
     }
 
@@ -1767,20 +1789,25 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return InternalShards;
     }
 
-    void AddInternalShards(const TTxState& txState, bool isBackup = false) {
+    void AddInternalShards(const TTxState& txState, IQuotaCounters* counters, bool isBackup = false) {
         for (auto txShard: txState.Shards) {
             if (txShard.Operation != TTxState::CreateParts) {
                 continue;
             }
-            AddInternalShard(txShard.Idx, isBackup);
+            AddInternalShard(txShard.Idx, counters, isBackup);
         }
     }
 
-    void RemoveInternalShard(TShardIdx shardIdx) {
+    void RemoveInternalShard(TShardIdx shardIdx, IQuotaCounters* counters) {
         auto it = InternalShards.find(shardIdx);
         Y_VERIFY_S(it != InternalShards.end(), "shardIdx: " << shardIdx);
         InternalShards.erase(it);
-        BackupShards.erase(shardIdx);
+
+        if (BackupShards.contains(shardIdx)) {
+            BackupShards.erase(shardIdx);
+        } else {
+            counters->ChangeShardCount(-1);
+        }
     }
 
     const THashSet<TShardIdx>& GetSequenceShards() const {
@@ -2301,6 +2328,7 @@ struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> {
             const auto alterSpace = GetFileStoreSpace(*AlterConfig);
             space.SSD = Max(space.SSD, alterSpace.SSD);
             space.HDD = Max(space.HDD, alterSpace.HDD);
+            space.SSDSystem = Max(space.SSDSystem, alterSpace.SSDSystem);
         }
 
         return space;
@@ -2314,7 +2342,11 @@ private:
         TFileStoreSpace space;
         switch (config.GetStorageMediaKind()) {
             case 1: // STORAGE_MEDIA_SSD
-                space.SSD += blockCount * blockSize;
+                if (config.GetIsSystem()) {
+                    space.SSDSystem += blockCount * blockSize;
+                } else {
+                    space.SSD += blockCount * blockSize;
+                }
                 break;
             case 2: // STORAGE_MEDIA_HYBRID
             case 3: // STORAGE_MEDIA_HDD

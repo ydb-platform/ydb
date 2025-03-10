@@ -21,6 +21,7 @@ PEERDIR(
 
 SRCS(
     ../http_proxy_ut.cpp
+    ../ymq_ut.cpp
     inside_ydb_ut.cpp
 )
 

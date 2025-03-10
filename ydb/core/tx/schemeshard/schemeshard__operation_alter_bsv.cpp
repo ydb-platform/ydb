@@ -617,7 +617,7 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
 
         TSubDomainInfo::TPtr domainInfo = path.DomainInfo();
-        domainInfo->AddInternalShards(txState);
+        domainInfo->AddInternalShards(txState, context.SS);
 
         path.Base()->IncShardsInside(shardsToCreate);
 

@@ -215,8 +215,8 @@ class TCreateExternalDataSource : public TSubOperation {
         context.SS->PersistTxState(db, OperationId);
     }
 
-    static void UpdatePathSizeCounts(const TPath& parentPath, const TPath& dstPath) {
-        dstPath.DomainInfo()->IncPathsInside();
+    static void UpdatePathSizeCounts(const TPath& parentPath, const TPath& dstPath, IQuotaCounters* counters) {
+        dstPath.DomainInfo()->IncPathsInside(counters);
         parentPath.Base()->IncAliveChildren();
     }
 
@@ -282,7 +282,7 @@ public:
                                                           context.SS,
                                                           context.OnComplete);
 
-        UpdatePathSizeCounts(parentPath, dstPath);
+        UpdatePathSizeCounts(parentPath, dstPath, context.SS);
 
         SetState(NextState());
         return result;

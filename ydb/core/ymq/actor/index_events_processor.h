@@ -59,6 +59,7 @@ private:
         TString CustomName;
         TString CloudId;
         TString FolderId;
+        TString Labels;
     };
     struct TQueueTableKey {
         TString Account;

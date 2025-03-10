@@ -314,7 +314,7 @@ public:
         context.SS->CdcStreams[pathId] = stream;
         context.SS->IncrementPathDbRefCount(pathId);
 
-        streamPath.DomainInfo()->IncPathsInside();
+        streamPath.DomainInfo()->IncPathsInside(context.SS);
         tablePath.Base()->IncAliveChildren();
 
         context.OnComplete.ActivateTx(OperationId);
@@ -407,10 +407,25 @@ public:
 
 class TDoneWithInitialScan: public TDone {
 public:
-    using TDone::TDone;
+    explicit TDoneWithInitialScan(const TOperationId& id)
+        : TDone(id)
+    {
+        auto events = AllIncomingEvents();
+        events.erase(TEvPrivate::TEvCompleteBarrier::EventType);
+        IgnoreMessages(DebugHint(), events);
+    }
 
     bool ProgressState(TOperationContext& context) override {
-        if (!TDone::ProgressState(context)) {
+        LOG_I(DebugHint() << "ProgressState");
+
+        context.OnComplete.Barrier(OperationId, "DoneBarrier");
+        return false;
+    }
+
+    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr&, TOperationContext& context) override {
+        LOG_I(DebugHint() << "HandleReply TEvCompleteBarrier");
+
+        if (!TDone::Process(context)) {
             return false;
         }
 

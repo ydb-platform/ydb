@@ -126,6 +126,7 @@ struct Schema : NIceDb::Schema {
         struct PartitioningVersion : Column<7, NScheme::NTypeIds::Uint64> {};
         struct TTLSettings : Column<8, NScheme::NTypeIds::String> {};
         struct IsBackup : Column<9, NScheme::NTypeIds::Bool> {};
+        struct IsRestore : Column<14, NScheme::NTypeIds::Bool> {};
         struct ReplicationConfig : Column<10, NScheme::NTypeIds::String> {};
         struct IsTemporary : Column<11, NScheme::NTypeIds::Bool> {};
         struct OwnerActorId : Column<12, NScheme::NTypeIds::String> {}; // deprecated
@@ -141,6 +142,7 @@ struct Schema : NIceDb::Schema {
             PartitioningVersion,
             TTLSettings,
             IsBackup,
+            IsRestore,
             ReplicationConfig,
             IsTemporary,
             OwnerActorId
@@ -159,6 +161,7 @@ struct Schema : NIceDb::Schema {
         struct PartitioningVersion : Column<8, NScheme::NTypeIds::Uint64> {};
         struct TTLSettings :         Column<9, NScheme::NTypeIds::String> {};
         struct IsBackup :            Column<10, NScheme::NTypeIds::Bool> {};
+        struct IsRestore :           Column<15, NScheme::NTypeIds::Bool> {};
         struct ReplicationConfig :   Column<11, NScheme::NTypeIds::String> {};
         struct IsTemporary :         Column<12, NScheme::NTypeIds::Bool> {};
         struct OwnerActorId :        Column<13, NScheme::NTypeIds::String> {}; // deprecated
@@ -175,6 +178,7 @@ struct Schema : NIceDb::Schema {
             PartitioningVersion,
             TTLSettings,
             IsBackup,
+            IsRestore,
             ReplicationConfig,
             IsTemporary,
             OwnerActorId

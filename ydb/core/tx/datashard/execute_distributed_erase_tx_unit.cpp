@@ -153,9 +153,9 @@ public:
 
             TVector<TRawTypeValue> key;
             for (size_t ki : xrange(tableInfo.KeyColumnTypes.size())) {
-                const auto& kt = tableInfo.KeyColumnTypes[ki];
+                const NScheme::TTypeId vtype = tableInfo.KeyColumnTypes[ki].GetTypeId();
                 const TCell& cell = keyCells.GetCells()[ki];
-                key.emplace_back(TRawTypeValue(cell.AsRef(), kt));
+                key.emplace_back(TRawTypeValue(cell.AsRef(), vtype));
             }
 
             if (breakWriteConflicts || checkVolatileDependencies) {

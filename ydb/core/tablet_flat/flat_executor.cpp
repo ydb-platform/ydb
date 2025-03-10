@@ -1319,6 +1319,10 @@ void TExecutor::AdvancePendingPartSwitches() {
     if (PendingPartSwitches.empty()) {
         PlanTransactionActivation();
         MaybeRelaxRejectProbability();
+
+        if (NeedFollowerSnapshot) {
+            MakeLogSnapshot();
+        }
     }
 }
 

@@ -235,31 +235,49 @@ EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {
     }
 }
 
-void SetColumnType(Ydb::Type& protoType, const TString& typeName, bool notNull) {
-    auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
-    if (typeDesc) {
-        Y_ABORT_UNLESS(!notNull, "It is not allowed to create NOT NULL pg columns");
-        auto* pg = protoType.mutable_pg_type();
-        pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
-        pg->set_type_modifier(NKikimr::NPg::TypeModFromPgTypeName(typeName));
-        pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
-        pg->set_typlen(0);
-        pg->set_typmod(0);
-        return;
+bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, Ydb::Type& protoType, TString& error) {
+    switch (typeNode->GetKind()) {
+    case ETypeAnnotationKind::Pg: {
+        const auto pgTypeNode = typeNode->Cast<TPgExprType>();
+        const TString typeName = pgTypeNode->GetName();
+        const auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
+        if (typeDesc) {
+            Y_ABORT_UNLESS(!notNull, "It is not allowed to create NOT NULL pg columns");
+            auto* pg = protoType.mutable_pg_type();
+            pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
+            pg->set_type_modifier(NKikimr::NPg::TypeModFromPgTypeName(typeName));
+            pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
+            pg->set_typlen(0);
+            pg->set_typmod(0);
+            return true;
+        }
     }
-
-    NUdf::EDataSlot dataSlot = NUdf::GetDataSlot(typeName);
-    if (dataSlot == NUdf::EDataSlot::Decimal) {
-        auto decimal = notNull ? protoType.mutable_decimal_type() :
-            protoType.mutable_optional_type()->mutable_item()->mutable_decimal_type();
-        // We have no params right now
-        // TODO: Fix decimal params support for kikimr
-        decimal->set_precision(22);
-        decimal->set_scale(9);
-    } else {
-        auto& primitive = notNull ? protoType : *protoType.mutable_optional_type()->mutable_item();
-        auto id = NUdf::GetDataTypeInfo(dataSlot).TypeId;
-        primitive.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
+    case ETypeAnnotationKind::Data: {
+        const auto dataTypeNode = typeNode->Cast<TDataExprType>();
+        const TStringBuf typeName = dataTypeNode->GetName();
+        NUdf::EDataSlot dataSlot = NUdf::GetDataSlot(typeName);
+        if (dataSlot == NUdf::EDataSlot::Decimal) {
+            auto dataExprTypeNode = typeNode->Cast<TDataExprParamsType>();  
+            ui32 precision = FromString(dataExprTypeNode->GetParamOne());
+            ui32 scale = FromString(dataExprTypeNode->GetParamTwo());
+            if (!NKikimr::NScheme::TDecimalType::Validate(precision, scale, error)) {
+                return false;
+            }
+            auto decimal = notNull ? protoType.mutable_decimal_type() :
+                protoType.mutable_optional_type()->mutable_item()->mutable_decimal_type();
+            decimal->set_precision(precision);
+            decimal->set_scale(scale);
+        } else {
+            auto& primitive = notNull ? protoType : *protoType.mutable_optional_type()->mutable_item();
+            auto id = NUdf::GetDataTypeInfo(dataSlot).TypeId;
+            primitive.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
+        }
+        return true;
+    }
+    default: {
+        error = TStringBuilder() << "Unexpected node kind: " << typeNode->GetKind();
+        return false;
+    }
     }
 }
 

@@ -298,6 +298,7 @@ message TAccountingConfig {
         string ResourceId = 8;
         string SourceId = 9;
         map<string, string> Tags = 10;
+        map<string, string> Labels = 11;
     }
 
     // Consumption within provisioned limit.

@@ -31,7 +31,7 @@ inline bool IsAllowedKeyType(NScheme::TTypeInfo typeInfo) {
         case NScheme::NTypeIds::JsonDocument:
             return false;
         case NScheme::NTypeIds::Pg:
-            return NPg::TypeDescIsComparable(typeInfo.GetTypeDesc());
+            return NPg::TypeDescIsComparable(typeInfo.GetPgTypeDesc());
         default:
             return true;
     }

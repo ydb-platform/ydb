@@ -23,12 +23,12 @@ void ConvertTableKeys(const TScheme& scheme, const TScheme::TTableInfo* tableInf
     for (size_t keyIdx = 0; keyIdx < row.size(); keyIdx++) {
         const TCell& cell = row[keyIdx];
         ui32 keyCol = tableInfo->KeyColumns[keyIdx];
-        NScheme::TTypeInfo vtypeInfo = scheme.GetColumnInfo(tableInfo, keyCol)->PType;
+        NScheme::TTypeId vtypeId = scheme.GetColumnInfo(tableInfo, keyCol)->PType.GetTypeId();
         if (cell.IsNull()) {
             key.emplace_back();
             bytes += 1;
         } else {
-            key.emplace_back(cell.Data(), cell.Size(), vtypeInfo);
+            key.emplace_back(cell.Data(), cell.Size(), vtypeId);
             bytes += cell.Size();
         }
     }
@@ -42,8 +42,8 @@ void ConvertTableValues(const TScheme& scheme, const TScheme::TTableInfo* tableI
     for (size_t i = 0; i < commands.size(); i++) {
         const IEngineFlatHost::TUpdateCommand& upd = commands[i];
         Y_ABORT_UNLESS(upd.Operation == TKeyDesc::EColumnOperation::Set);
-        auto vtypeinfo = scheme.GetColumnInfo(tableInfo, upd.Column)->PType;
-        ops.emplace_back(upd.Column, NTable::ECellOp::Set, upd.Value.IsNull() ? TRawTypeValue() : TRawTypeValue(upd.Value.Data(), upd.Value.Size(), vtypeinfo));
+        NScheme::TTypeId vtypeId = scheme.GetColumnInfo(tableInfo, upd.Column)->PType.GetTypeId();
+        ops.emplace_back(upd.Column, NTable::ECellOp::Set, upd.Value.IsNull() ? TRawTypeValue() : TRawTypeValue(upd.Value.Data(), upd.Value.Size(), vtypeId));
         bytes += upd.Value.IsNull() ? 1 : upd.Value.Size();
     }
     if (valueBytes)
@@ -1087,7 +1087,7 @@ NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type) {
     }
 
     if (type.GetTypeId() == NScheme::NTypeIds::Pg) {
-        return NYql::NCommon::PgValueFromNativeBinary(cell.AsBuf(), NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc()));
+        return NYql::NCommon::PgValueFromNativeBinary(cell.AsBuf(), NPg::PgTypeIdFromTypeDesc(type.GetPgTypeDesc()));
     }
 
     Y_DEBUG_ABORT("Unsupported type: %" PRIu16, type.GetTypeId());

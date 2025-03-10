@@ -240,6 +240,7 @@ private:
     void ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, const TActorContext& ctx);
     void ProcessChangeOwnerRequests(const TActorContext& ctx);
     void ProcessHasDataRequests(const TActorContext& ctx);
+    bool ProcessHasDataRequest(const THasDataReq& request, const TActorContext& ctx);
     void ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription);
     void ProcessReserveRequests(const TActorContext& ctx);
     void ProcessTimestampRead(const TActorContext& ctx);
@@ -423,7 +424,6 @@ private:
 
     void ChangePlanStepAndTxId(ui64 step, ui64 txId);
 
-    void ResendPendingEvents(const TActorContext& ctx);
     void SendReadPreparedProxyResponse(const TReadAnswer& answer, const TReadInfo& readInfo, TUserInfo& user);
 
     void CheckIfSessionExists(TUserInfoBase& userInfo, const TActorId& newPipe);
@@ -926,7 +926,24 @@ private:
 
     TInstant LastUsedStorageMeterTimestamp;
 
-    TDeque<std::unique_ptr<IEventBase>> PendingEvents;
+    using TPendingEvent = std::variant<
+        std::unique_ptr<TEvPQ::TEvTxCalcPredicate>,
+        std::unique_ptr<TEvPQ::TEvTxCommit>,
+        std::unique_ptr<TEvPQ::TEvTxRollback>,
+        std::unique_ptr<TEvPQ::TEvProposePartitionConfig>,
+        std::unique_ptr<TEvPQ::TEvGetWriteInfoRequest>,
+        std::unique_ptr<TEvPQ::TEvGetWriteInfoResponse>,
+        std::unique_ptr<TEvPQ::TEvGetWriteInfoError>,
+        std::unique_ptr<TEvPQ::TEvDeletePartition>
+    >;
+
+    TDeque<TPendingEvent> PendingEvents;
+
+    template <class T> void AddPendingEvent(TAutoPtr<TEventHandle<T>>& ev);
+    template <class T> void ProcessPendingEvent(std::unique_ptr<T> ev, const TActorContext& ctx);
+    template <class T> void ProcessPendingEvent(TAutoPtr<TEventHandle<T>>& ev, const TActorContext& ctx);
+    void ProcessPendingEvents(const TActorContext& ctx);
+
     TRowVersion LastEmittedHeartbeat;
 
     TLastCounter SourceIdCounter;

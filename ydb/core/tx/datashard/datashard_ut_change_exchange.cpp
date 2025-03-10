@@ -837,7 +837,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableChangefeedDebeziumJsonFormat(true)
                 .SetEnableTopicMessageMeta(true)
                 .SetEnableChangefeedInitialScan(true)
-                .SetEnableUuidAsPrimaryKey(true);
+                .SetEnableUuidAsPrimaryKey(true)
+                .SetEnableParameterizedDecimal(true);
 
             Server = new TServer(settings);
             if (useRealThreads) {
@@ -1942,6 +1943,90 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .RetentionPeriodHours(48)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
         }
+    }
+
+    Y_UNIT_TEST(SupportedTypes) {
+        const auto table = TShardedTableOptions()
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"int32_value", "Int32", false, false},
+                {"uint32_value", "Uint32", false, false},
+                {"int64_value", "Int64", false, false},
+                {"uint64_value", "Uint64", false, false},
+                {"uint8_value", "Uint8", false, false},
+                {"bool_value", "Bool", false, false},
+                {"double_value", "Double", false, false},
+                {"float_value", "Float", false, false},
+                {"date_value", "Date", false, false},
+                {"datetime_value", "Datetime", false, false},
+                {"timestamp_value", "Timestamp", false, false},
+                {"interval_value", "Interval", false, false},
+                {"decimal_value", "Decimal", false, false},
+                {"decimal35_value", "Decimal(35, 10)", false, false},
+                {"dynumber_value", "DyNumber", false, false},
+                {"string_value", "String", false, false},
+                {"utf8_value", "Utf8", false, false},
+                {"json_value", "Json", false, false},
+                {"jsondoc_value", "JsonDocument", false, false},
+                {"uuid_value", "Uuid", false, false},
+            });
+        TopicRunner::Read(table, Updates(NKikimrSchemeOp::ECdcStreamFormatJson), {
+            R"(UPSERT INTO `/Root/Table` (key, int32_value) VALUES (1, -100500);)",
+            R"(UPSERT INTO `/Root/Table` (key, uint32_value) VALUES (2, 100500);)",
+            R"(UPSERT INTO `/Root/Table` (key, int64_value) VALUES (3, -200500);)",
+            R"(UPSERT INTO `/Root/Table` (key, uint64_value) VALUES (4, 200500);)",
+            R"(UPSERT INTO `/Root/Table` (key, uint8_value) VALUES (5, 255);)",
+            R"(UPSERT INTO `/Root/Table` (key, bool_value) VALUES (6, true);)",
+            R"(UPSERT INTO `/Root/Table` (key, double_value) VALUES (7, 1.1234);)",
+            R"(UPSERT INTO `/Root/Table` (key, float_value) VALUES (8, -1.123f);)",
+            R"(UPSERT INTO `/Root/Table` (key, date_value) VALUES (9, CAST("2020-08-12" AS Date));)",
+            R"(UPSERT INTO `/Root/Table` (key, datetime_value) VALUES (10, CAST("2020-08-12T12:34:56Z" AS Datetime));)",
+            R"(UPSERT INTO `/Root/Table` (key, timestamp_value) VALUES (11, CAST("2020-08-12T12:34:56.123456Z" AS Timestamp));)",
+            R"(UPSERT INTO `/Root/Table` (key, interval_value) VALUES (12, CAST(-300500 AS Interval));)",
+            R"(UPSERT INTO `/Root/Table` (key, decimal_value) VALUES (13, CAST("3.321" AS Decimal(22, 9)));)",
+            R"(UPSERT INTO `/Root/Table` (key, decimal35_value) VALUES (13, CAST("355555555555555.321" AS Decimal(35, 10)));)",
+            R"(UPSERT INTO `/Root/Table` (key, dynumber_value) VALUES (14, CAST(".3321e1" AS DyNumber));)",
+            R"(UPSERT INTO `/Root/Table` (key, string_value) VALUES (15, CAST("lorem ipsum" AS String));)",
+            R"(UPSERT INTO `/Root/Table` (key, utf8_value) VALUES (16, CAST("lorem ipsum" AS Utf8));)",
+            R"(UPSERT INTO `/Root/Table` (key, json_value) VALUES (17, CAST(@@{"key": "value"}@@ AS Json));)",
+            R"(UPSERT INTO `/Root/Table` (key, jsondoc_value) VALUES (18, CAST(@@{"key": "value"}@@ AS JsonDocument));)",
+            R"(UPSERT INTO `/Root/Table` (key, uuid_value) VALUES (19, CAST("65df1ec1-a97d-47b2-ae56-3c023da6ee8c" AS Uuid));)",
+        }, {
+            R"({"key":[1],"update":{"int32_value":-100500}})",
+            R"({"key":[2],"update":{"uint32_value":100500}})",
+            R"({"key":[3],"update":{"int64_value":-200500}})",
+            R"({"key":[4],"update":{"uint64_value":200500}})",
+            R"({"key":[5],"update":{"uint8_value":255}})",
+            R"({"key":[6],"update":{"bool_value":true}})",
+            R"({"key":[7],"update":{"double_value":1.1234}})",
+            R"({"key":[8],"update":{"float_value":-1.123}})",
+            R"({"key":[9],"update":{"date_value":"2020-08-12T00:00:00.000000Z"}})",
+            R"({"key":[10],"update":{"datetime_value":"2020-08-12T12:34:56.000000Z"}})",
+            R"({"key":[11],"update":{"timestamp_value":"2020-08-12T12:34:56.123456Z"}})",
+            R"({"key":[12],"update":{"interval_value":-300500}})",
+            R"({"key":[13],"update":{"decimal_value":"3.321"}})",
+            R"({"key":[13],"update":{"decimal35_value":"355555555555555.321"}})",
+            R"({"key":[14],"update":{"dynumber_value":".3321e1"}})",
+            Sprintf(R"({"key":[15],"update":{"string_value":"%s"}})", Base64Encode("lorem ipsum").c_str()),
+            R"({"key":[16],"update":{"utf8_value":"lorem ipsum"}})",
+            R"({"key":[17],"update":{"json_value":{"key": "value"}}})",
+            R"({"key":[18],"update":{"jsondoc_value":{"key": "value"}}})",
+            R"({"key":[19],"update":{"uuid_value":"65df1ec1-a97d-47b2-ae56-3c023da6ee8c"}})",
+        });
+    }
+
+    Y_UNIT_TEST(DecimalKey) {
+        const auto table = TShardedTableOptions()
+            .Columns({
+                {"decimal1_key", "Decimal(1, 0)", true, false},
+                {"decimal35_key", "Decimal(35, 10)", true, false},
+                {"decimal_value", "Decimal", false , false},
+            });
+        TopicRunner::Read(table, Updates(NKikimrSchemeOp::ECdcStreamFormatJson), {
+            R"(UPSERT INTO `/Root/Table` (decimal1_key, decimal35_key, decimal_value) VALUES (CAST("5.0" AS Decimal(1, 0)), CAST("355555555555555.321" AS Decimal(35, 10)), CAST("4.321" AS Decimal(22, 9)));)",
+        }, {
+            R"({"update":{"decimal_value":"4.321"},"key":["5","355555555555555.321"]})",
+        });
     }
 
     // Schema snapshots

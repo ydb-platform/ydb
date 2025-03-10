@@ -409,6 +409,7 @@ void TDataShard::SwitchToWork(const TActorContext &ctx) {
     NotifySchemeshard(ctx);
     CheckInitiateBorrowedPartsReturn(ctx);
     CheckStateChange(ctx);
+    CleanupUncommitted(ctx);
 }
 
 void TDataShard::SyncConfig() {
@@ -3681,12 +3682,13 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvSubscribeReadStepResult::TPtr& e
     auto it = CoordinatorSubscriptionById.find(msg->CoordinatorId);
     Y_VERIFY_S(it != CoordinatorSubscriptionById.end(),
         "Unexpected TEvSubscribeReadStepResult for coordinator " << msg->CoordinatorId);
-    size_t index = it->second;
-    auto& subscription = CoordinatorSubscriptions.at(index);
-    subscription.ReadStep = msg->ReadStep;
     CoordinatorPrevReadStepMin = Max(CoordinatorPrevReadStepMin, msg->LastReadStep);
     CoordinatorPrevReadStepMax = Min(CoordinatorPrevReadStepMax, msg->NextReadStep);
     --CoordinatorSubscriptionsPending;
+
+    // Note: we don't use the subscription and unsubscribe immediately
+    ctx.Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvUnsubscribeReadStep(msg->CoordinatorId));
+
     CheckMediatorStateRestored();
 }
 

@@ -323,12 +323,54 @@ struct TNodeFilter {
     TSubDomainKey ObjectDomain;
     TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
 
-    const THive& Hive;
+    const THive* Hive;
 
     explicit TNodeFilter(const THive& hive);
 
     TArrayRef<const TSubDomainKey> GetEffectiveAllowedDomains() const;
+
+    bool IsAllowedDataCenter(TDataCenterId dc) const;
 };
+
+struct TFollowerUpdates {
+    enum class EAction {
+        Create,
+        Update,
+        Delete,
+    };
+
+    struct TUpdate {
+        EAction Action;
+        TFullTabletId TabletId;
+        TFollowerGroupId GroupId;
+        TDataCenterId DataCenter;
+    };
+
+    std::deque<TUpdate> Updates;
+
+    bool Empty() const {
+        return Updates.empty();
+    }
+
+    void Create(TFullTabletId leaderTablet, TFollowerGroupId group, TDataCenterId dc) {
+        Updates.emplace_back(EAction::Create, leaderTablet, group, dc);
+    }
+
+    void Update(TFullTabletId tablet, TDataCenterId dc) {
+        Updates.emplace_back(EAction::Update, tablet, 0, dc);
+    }
+
+    void Delete(TFullTabletId tablet, TFollowerGroupId group, TDataCenterId dc) {
+        Updates.emplace_back(EAction::Delete, tablet, group, dc);
+    }
+
+    TUpdate Pop() {
+        TUpdate update = Updates.front();
+        Updates.pop_front();
+        return update;
+    }
+};
+
 
 } // NHive
 } // NKikimr

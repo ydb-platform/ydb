@@ -21,29 +21,32 @@ using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 
 struct TDataRow {
-    static const constexpr TTypeInfo Types[20] = {
-        TTypeInfo(NTypeIds::Bool),
-        TTypeInfo(NTypeIds::Int8),
-        TTypeInfo(NTypeIds::Int16),
-        TTypeInfo(NTypeIds::Int32),
-        TTypeInfo(NTypeIds::Int64),
-        TTypeInfo(NTypeIds::Uint8),
-        TTypeInfo(NTypeIds::Uint16),
-        TTypeInfo(NTypeIds::Uint32),
-        TTypeInfo(NTypeIds::Uint64),
-        TTypeInfo(NTypeIds::Float),
-        TTypeInfo(NTypeIds::Double),
-        TTypeInfo(NTypeIds::String),
-        TTypeInfo(NTypeIds::Utf8),
-        TTypeInfo(NTypeIds::Json),
-        TTypeInfo(NTypeIds::Yson),
-        TTypeInfo(NTypeIds::Date),
-        TTypeInfo(NTypeIds::Datetime),
-        TTypeInfo(NTypeIds::Timestamp),
-        TTypeInfo(NTypeIds::Interval),
-        TTypeInfo(NTypeIds::JsonDocument),
-        // TODO: DyNumber, Decimal
-    };
+    static const TTypeInfo* MakeTypeInfos() {
+        static const TTypeInfo types[20] = {
+            TTypeInfo(NTypeIds::Bool),
+            TTypeInfo(NTypeIds::Int8),
+            TTypeInfo(NTypeIds::Int16),
+            TTypeInfo(NTypeIds::Int32),
+            TTypeInfo(NTypeIds::Int64),
+            TTypeInfo(NTypeIds::Uint8),
+            TTypeInfo(NTypeIds::Uint16),
+            TTypeInfo(NTypeIds::Uint32),
+            TTypeInfo(NTypeIds::Uint64),
+            TTypeInfo(NTypeIds::Float),
+            TTypeInfo(NTypeIds::Double),
+            TTypeInfo(NTypeIds::String),
+            TTypeInfo(NTypeIds::Utf8),
+            TTypeInfo(NTypeIds::Json),
+            TTypeInfo(NTypeIds::Yson),
+            TTypeInfo(NTypeIds::Date),
+            TTypeInfo(NTypeIds::Datetime),
+            TTypeInfo(NTypeIds::Timestamp),
+            TTypeInfo(NTypeIds::Interval),
+            TTypeInfo(NTypeIds::JsonDocument),
+            // TODO: DyNumber, Decimal
+        };
+        return types;
+    }
 
     bool Bool;
     i8 Int8;
@@ -170,7 +173,7 @@ struct TDataRow {
         Cells[19] = TCell(JsonDocument.data(), JsonDocument.size());
         //Cells[19] = TCell((const char *)&Decimal[0], 16);
 
-        return NKikimr::TDbTupleRef(Types, Cells, 20);
+        return NKikimr::TDbTupleRef(MakeTypeInfos(), Cells, 20);
     }
 
     TOwnedCellVec SerializedCells() const {
@@ -575,7 +578,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         for (size_t i = 0; i < rows.size(); ++i) {
             UNIT_ASSERT(0 == CompareTypedCellVectors(
                             cellRows[i].data(), rowWriter.Rows[i].data(),
-                            TDataRow::Types,
+                            TDataRow::MakeTypeInfos(),
                             cellRows[i].size(), rowWriter.Rows[i].size()));
         }
     }

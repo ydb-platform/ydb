@@ -220,6 +220,11 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxCreateResourcePool = 174         [(CounterOpts) = {Name: "InFlightOps/CreateResourcePool"}];
     COUNTER_IN_FLIGHT_OPS_TxDropResourcePool = 175           [(CounterOpts) = {Name: "InFlightOps/DropResourcePool"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterResourcePool = 176          [(CounterOpts) = {Name: "InFlightOps/AlterResourcePool"}];
+
+    COUNTER_PATHS_QUOTA = 177  [(CounterOpts) = {Name: "PathsQuota"}];
+    COUNTER_PATHS = 178        [(CounterOpts) = {Name: "Paths"}];
+    COUNTER_SHARDS_QUOTA = 179 [(CounterOpts) = {Name: "ShardsQuota"}];
+    COUNTER_SHARDS = 180       [(CounterOpts) = {Name: "Shards"}];
 }
 
 enum ECumulativeCounters {
@@ -574,4 +579,6 @@ enum ETxTypes {
     TXTYPE_UPDATE_DOMAIN_REPLY = 85                       [(TxTypeOpts) = {Name: "TxUpdateDomainReply"}];
 
     TXTYPE_SEQUENCESHARD_GET_SEQUENCE_RESULT = 86    [(TxTypeOpts) = {Name: "TxSequenceShardGetSequenceResult"}];
+
+    TXTYPE_UNMARK_RESTORE_TABLES = 87                     [(TxTypeOpts) = {Name: "TxUnmarkRestoreTables"}];
 }

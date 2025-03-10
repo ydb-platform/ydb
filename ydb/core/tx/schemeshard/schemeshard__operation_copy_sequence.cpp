@@ -731,7 +731,7 @@ public:
         context.SS->ClearDescribePathCaches(dstPath.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath->PathId);
 
-        domainInfo->IncPathsInside();
+        domainInfo->IncPathsInside(context.SS);
         parentPath->IncAliveChildren();
 
         SetState(NextState());

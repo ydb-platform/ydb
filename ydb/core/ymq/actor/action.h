@@ -56,6 +56,10 @@ public:
         return false;
     }
 
+    static constexpr bool NeedQueueTags() { // override it in TDerived if needed
+        return false;
+    }
+
     // For queue requests
     static constexpr bool NeedExistingQueue() {
         return true;
@@ -73,6 +77,9 @@ public:
         ui64 configurationFlags = 0;
         if (TDerived::NeedQueueAttributes()) {
             configurationFlags |= TSqsEvents::TEvGetConfiguration::EFlags::NeedQueueAttributes;
+        }
+        if (TDerived::NeedQueueTags()) {
+            configurationFlags |= TSqsEvents::TEvGetConfiguration::EFlags::NeedQueueTags;
         }
         if (TProxyActor::NeedCreateProxyActor(Action_)) {
             configurationFlags |= TSqsEvents::TEvGetConfiguration::EFlags::NeedQueueLeader;
@@ -302,6 +309,13 @@ protected:
             Response_.SetFolderId(FolderId_);
             Response_.SetIsFifo(IsFifo_ ? *IsFifo_ : false);
             Response_.SetResourceId(GetQueueName());
+            if (QueueTags_.Defined()) {
+                for (const auto& [k, v] : QueueTags_->GetMapSafe()) {
+                    auto* tag = Response_.AddQueueTags();
+                    tag->SetKey(k);
+                    tag->SetValue(v.GetStringSafe());
+                }
+            }
         }
 
         AuditLog();
@@ -351,6 +365,9 @@ protected:
                 RESPONSE_CASE(SetQueueAttributes)
                 RESPONSE_CASE(ListDeadLetterSourceQueues)
                 RESPONSE_CASE(CountQueues)
+                RESPONSE_CASE(ListQueueTags)
+                RESPONSE_CASE(TagQueue)
+                RESPONSE_CASE(UntagQueue)
             case NKikimrClient::TSqsResponse::kDeleteQueueBatch:
             case NKikimrClient::TSqsResponse::kGetQueueAttributesBatch:
             case NKikimrClient::TSqsResponse::kPurgeQueueBatch:
@@ -607,6 +624,7 @@ private:
         Shards_   = ev->Get()->Shards;
         IsFifo_ = ev->Get()->Fifo;
         QueueAttributes_ = std::move(ev->Get()->QueueAttributes);
+        QueueTags_ = std::move(ev->Get()->QueueTags);
         SchemeCache_ = ev->Get()->SchemeCache;
         SqsCoreCounters_ = std::move(ev->Get()->SqsCoreCounters);
         QueueCounters_ = std::move(ev->Get()->QueueCounters);
@@ -871,6 +889,7 @@ protected:
     TIntrusivePtr<TUserCounters> UserCounters_;
     TIntrusivePtr<TQueueCounters> QueueCounters_;
     TMaybe<TSqsEvents::TQueueAttributes> QueueAttributes_;
+    TMaybe<NJson::TJsonMap> QueueTags_;
     NKikimrClient::TSqsResponse Response_;
     TActorId SchemeCache_;
     TActorId QueueLeader_;

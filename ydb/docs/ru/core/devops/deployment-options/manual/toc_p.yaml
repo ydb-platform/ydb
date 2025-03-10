@@ -3,6 +3,10 @@ items:
   href: initial-deployment.md
 - name: Обновление конфигурации
   href: update-config.md
+- name: Обслуживание кластера
+  href: maintenance.md
+- name: Обновление исполняемого файла
+  href: update-executable.md
 - name: Управление дисковой подсистемой кластера
   include:
     mode: link

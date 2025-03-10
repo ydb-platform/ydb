@@ -304,6 +304,7 @@ class ClusterDetailsProvider(object):
         self.table_profiles_config = self.__cluster_description.get("table_profiles_config")
         self.http_proxy_config = self.__cluster_description.get("http_proxy_config")
         self.blob_storage_config = self.__cluster_description.get("blob_storage_config")
+        self.bootstrap_config = self.__cluster_description.get("bootstrap_config")
         self.memory_controller_config = self.__cluster_description.get("memory_controller_config")
         self.s3_proxy_resolver_config = self.__cluster_description.get("s3_proxy_resolver_config")
         self.channel_profile_config = self.__cluster_description.get("channel_profile_config")

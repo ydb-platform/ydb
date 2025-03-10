@@ -488,7 +488,7 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.s3_proxy_resolver_config is not None:
             normalized_config["s3_proxy_resolver_config"] = self.__cluster_details.s3_proxy_resolver_config
 
-        if self.__cluster_details.blob_storage_config is not None:
+        if not utils.need_generate_bs_config(self.__cluster_details.blob_storage_config):
             normalized_config["blob_storage_config"] = self.__cluster_details.blob_storage_config
         else:
             blobstorage_config_service_set = normalized_config["blob_storage_config"]["service_set"]
@@ -807,17 +807,24 @@ class StaticConfigGenerator(object):
     def __generate_boot_txt(self):
         self.__proto_configs["boot.txt"] = bootstrap_pb2.TBootstrap()
 
+        # New style `config.yaml`, allow specifying bootstrap_config
+        if self.__cluster_details.bootstrap_config is not None:
+            template_proto = bootstrap_pb2.TBootstrap()
+            utils.wrap_parse_dict(self.__cluster_details.bootstrap_config, template_proto)
+            self.__proto_configs["boot.txt"].MergeFrom(template_proto)
+        else:
+            # Old style `template.yaml`, just get random fields from top-level of `template.yaml`
+            if self.__cluster_details.shared_cache_memory_limit is not None:
+                boot_txt = self.__proto_configs["boot.txt"]
+                boot_txt.SharedCacheConfig.MemoryLimit = self.__cluster_details.shared_cache_memory_limit
+            shared_cache_size = self.__cluster_details.pq_shared_cache_size
+            if shared_cache_size is not None:
+                boot_txt = self.__proto_configs["boot.txt"]
+                boot_txt.NodeLimits.PersQueueNodeConfig.SharedCacheSizeMb = shared_cache_size
+
         for tablet_type, tablet_count in self.__system_tablets:
             for index in range(int(tablet_count)):
                 self.__add_tablet(tablet_type, index, self.__cluster_details.system_tablets_node_ids)
-
-        if self.__cluster_details.shared_cache_memory_limit is not None:
-            boot_txt = self.__proto_configs["boot.txt"]
-            boot_txt.SharedCacheConfig.MemoryLimit = self.__cluster_details.shared_cache_memory_limit
-        shared_cache_size = self.__cluster_details.pq_shared_cache_size
-        if shared_cache_size is not None:
-            boot_txt = self.__proto_configs["boot.txt"]
-            boot_txt.NodeLimits.PersQueueNodeConfig.SharedCacheSizeMb = shared_cache_size
 
     def __generate_bs_txt(self):
         self.__proto_configs["bs.txt"] = config_pb2.TBlobStorageConfig()
@@ -864,7 +871,7 @@ class StaticConfigGenerator(object):
         dc_enumeration = {}
 
         if not self.__cluster_details.get_service("static_groups"):
-            if self.__cluster_details.blob_storage_config:
+            if not utils.need_generate_bs_config(self.__cluster_details.blob_storage_config):
                 return
             self.__proto_configs["bs.txt"] = self._read_generated_bs_config(
                 str(self.__cluster_details.static_erasure),
@@ -873,6 +880,13 @@ class StaticConfigGenerator(object):
                 str(self.__cluster_details.fail_domain_type),
                 bs_format_config,
             )
+
+            # Merging generated static group config with other keys
+            if self.__cluster_details.blob_storage_config is not None:
+                template_proto = config_pb2.TBlobStorageConfig()
+                utils.wrap_parse_dict(self.__cluster_details.blob_storage_config, template_proto)
+                self.__proto_configs["bs.txt"].MergeFrom(template_proto)
+
             if self.__cluster_details.nw_cache_file_path is not None:
                 self.__proto_configs["bs.txt"].CacheFilePath = self.__cluster_details.nw_cache_file_path
             return

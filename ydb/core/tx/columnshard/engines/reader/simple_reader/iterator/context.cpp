@@ -84,6 +84,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         if (partialUsageByPredicate) {
             acc.AddFetchingStep(*GetPredicateColumns(), EStageFeaturesIndexes::Filter);
         }
+        // TODO: make sure sources are processed in PK l-border order
         // TODO: don't fetch and assemble merge columns for exclusive source
         acc.AddFetchingStep(*GetMergeColumns(), EStageFeaturesIndexes::Filter);
 

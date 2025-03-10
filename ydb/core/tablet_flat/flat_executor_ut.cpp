@@ -6289,13 +6289,15 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env->Send(MakeSharedPageCacheId(), TActorId{}, new TKikimrEvents::TEvWakeup(1 /*DO_GC_TAG*/ ));
     }
 
-    void SetupEnvironment(TMyEnvBase &env, bool bTreeIndex = true) {
+    void SetupEnvironment(TMyEnvBase &env, std::optional<bool> bTreeIndex = {}) {
         env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
         env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
 
-        auto &appData = env->GetAppData();
-        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(bTreeIndex);
-        appData.FeatureFlags.SetEnableLocalDBFlatIndex(!bTreeIndex);
+        if (bTreeIndex.has_value()) {
+            auto &appData = env->GetAppData();
+            appData.FeatureFlags.SetEnableLocalDBBtreeIndex(bTreeIndex.value());
+            appData.FeatureFlags.SetEnableLocalDBFlatIndex(!bTreeIndex.value());
+        }
     }
 
     Y_UNIT_TEST(TestNonSticky_FlatIndex) {

@@ -1572,8 +1572,8 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 }
             }
 
-            if (self.Input().Ref().IsCallable(TCoGroupingCore::CallableName())) {
-                auto groupingCore = self.Input().Cast<TCoGroupingCore>();
+            if (const auto maybeGroupingCore = TMaybeNode<TCoGroupingCore>(&SkipCallables(self.Input().Ref(), {"ToFlow"}))) {
+                auto groupingCore = maybeGroupingCore.Cast();
                 const TExprNode* extract = nullptr;
                 // Find pattern: (FlatMap (GroupingCore ...) (lambda (x) ( ... (ExtractMembers (Nth x '1) ...))))
                 const auto arg = self.Lambda().Args().Arg(0).Raw();
@@ -1606,11 +1606,18 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                                 .Build()
                             .Build()
                             .Done();
+                        TExprBase flatMapInput = groupingCore;
+                        if (auto toFlow = self.Input().Maybe<TCoToFlow>()) {
+                            flatMapInput = Build<TCoToFlow>(ctx, self.Input().Pos())
+                                .InitFrom(toFlow.Cast())
+                                .Input(flatMapInput)
+                                .Done();
+                        }
 
                         YQL_CLOG(DEBUG, Core) << "Pull out " << extract->Content() << " from " << node->Content() << " to " << groupingCore.Ref().Content() << " handler";
                         return Build<TCoFlatMapBase>(ctx, node->Pos())
                             .CallableName(node->Content())
-                            .Input(groupingCore)
+                            .Input(flatMapInput)
                             .Lambda(ctx.DeepCopyLambda(self.Lambda().Ref()))
                             .Done().Ptr();
                     }

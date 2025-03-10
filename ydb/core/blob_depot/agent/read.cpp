@@ -182,8 +182,15 @@ namespace NKikimr::NBlobDepot {
                 TString QueryId;
                 ui64 ReadId;
 
+                NMonitoring::TDynamicCounters::TCounterPtr GetBytesOk;
+                NMonitoring::TDynamicCounters::TCounterPtr GetsOk;
+                NMonitoring::TDynamicCounters::TCounterPtr GetsError;
+
             public:
-                TGetActor(size_t outputOffset, std::shared_ptr<TReadContext> readContext, TQuery *query)
+                TGetActor(size_t outputOffset, std::shared_ptr<TReadContext> readContext, TQuery *query,
+                        NMonitoring::TDynamicCounters::TCounterPtr getBytesOk,
+                        NMonitoring::TDynamicCounters::TCounterPtr getsOk,
+                        NMonitoring::TDynamicCounters::TCounterPtr getsError)
                     : TActor(&TThis::StateFunc)
                     , OutputOffset(outputOffset)
                     , ReadContext(std::move(readContext))
@@ -191,6 +198,9 @@ namespace NKikimr::NBlobDepot {
                     , AgentLogId(query->Agent.LogId)
                     , QueryId(query->GetQueryId())
                     , ReadId(ReadContext->GetTag())
+                    , GetBytesOk(std::move(getBytesOk))
+                    , GetsOk(std::move(getsOk))
+                    , GetsError(std::move(getsError))
                 {}
 
                 void Handle(NWrappers::TEvExternalStorage::TEvGetObjectResponse::TPtr ev) {
@@ -199,6 +209,13 @@ namespace NKikimr::NBlobDepot {
                     STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA55, "received TEvGetObjectResponse",
                         (AgentId, AgentLogId), (QueryId, QueryId), (ReadId, ReadId),
                         (Response, msg.Result), (BodyLen, std::size(msg.Body)));
+
+                    if (msg.IsSuccess()) {
+                        ++*GetsOk;
+                        *GetBytesOk += msg.Body.size();
+                    } else {
+                        ++*GetsError;
+                    }
 
                     if (msg.IsSuccess()) {
                         Finish(std::move(msg.Body), "");
@@ -240,7 +257,8 @@ namespace NKikimr::NBlobDepot {
             STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA57, "starting S3 read", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
                 (ReadId, context->GetTag()), (Key, item.Key), (Offset, item.Offset), (Size, item.Size),
                 (OutputOffset, item.OutputOffset));
-            const TActorId actorId = Agent.RegisterWithSameMailbox(new TGetActor(item.OutputOffset, context, this));
+            const TActorId actorId = Agent.RegisterWithSameMailbox(new TGetActor(item.OutputOffset, context, this,
+                Agent.S3GetBytesOk, Agent.S3GetsOk, Agent.S3GetsError));
             auto request = std::make_unique<NWrappers::TEvExternalStorage::TEvGetObjectRequest>(
                 Aws::S3::Model::GetObjectRequest()
                     .WithBucket(Agent.S3BackendSettings->GetSettings().GetBucket())

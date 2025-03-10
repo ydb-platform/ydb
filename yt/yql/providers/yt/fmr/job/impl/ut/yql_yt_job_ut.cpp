@@ -1,18 +1,18 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/local/table_data_service.h>
+#include <yt/yql/providers/yt/fmr/utils/table_data_service_key.h>
 #include <yt/yql/providers/yt/fmr/yt_service/mock/yql_yt_yt_service_mock.h>
 
 namespace NYql::NFmr {
 
-Y_UNIT_TEST_SUITE(FmrJobTests) {
-    Y_UNIT_TEST(DownloadTable) {
-        TString tableContent =
-        "{\"key\"=\"075\";\"subkey\"=\"1\";\"value\"=\"abc\"};"
+TString TableContent = "{\"key\"=\"075\";\"subkey\"=\"1\";\"value\"=\"abc\"};"
         "{\"key\"=\"800\";\"subkey\"=\"2\";\"value\"=\"ddd\"};"
         "{\"key\"=\"020\";\"subkey\"=\"3\";\"value\"=\"q\"};"
         "{\"key\"=\"150\";\"subkey\"=\"4\";\"value\"=\"qzz\"};";
 
+Y_UNIT_TEST_SUITE(FmrJobTests) {
+    Y_UNIT_TEST(DownloadTable) {
         ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
         TYtUploadedTablesMock::TPtr ytUploadedTablesMock = MakeYtUploadedTablesMock();
         NYql::NFmr::IYtService::TPtr ytService = MakeYtServiceMock(ytUploadedTablesMock);
@@ -20,24 +20,26 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         IFmrJob::TPtr job = MakeFmrJob(tableDataServicePtr, ytService, cancelFlag);
 
         TYtTableRef input = TYtTableRef("test_cluster", "test_path");
-        TFmrTableRef output = TFmrTableRef("test_table_id");
+        TFmrTableOutputRef output = TFmrTableOutputRef("test_table_id", "test_part_id");
         TDownloadTaskParams params = TDownloadTaskParams(input, output);
+        auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
 
-        ytUploadedTablesMock->AddTable(input, tableContent);
+        ytUploadedTablesMock->AddTable(input, TableContent);
 
-        auto err = job->Download(params);
+        auto res = job->Download(params);
 
-        UNIT_ASSERT_C(!err,err.GetRef());
-        UNIT_ASSERT_NO_DIFF(tableDataServicePtr->Get("test_table_id").GetValueSync().GetRef(), tableContent);
+        auto err = std::get_if<TError>(&res);
+        auto statistics = std::get_if<TStatistics>(&res);
+
+        UNIT_ASSERT_C(!err,err->ErrorMessage);
+        UNIT_ASSERT_EQUAL(statistics->OutputTables.at(output).Rows, 4);
+        auto resultTableContent = tableDataServicePtr->Get(tableDataServiceExpectedOutputKey).GetValueSync();
+        UNIT_ASSERT_C(resultTableContent, "Result table content is empty");
+        UNIT_ASSERT_NO_DIFF(*resultTableContent, TableContent);
     }
 
     Y_UNIT_TEST(UploadTable) {
-        TString ytTableContent =
-        "{\"key\"=\"075\";\"subkey\"=\"1\";\"value\"=\"abc\"};"
-        "{\"key\"=\"800\";\"subkey\"=\"2\";\"value\"=\"ddd\"};"
-        "{\"key\"=\"020\";\"subkey\"=\"3\";\"value\"=\"q\"};"
-        "{\"key\"=\"150\";\"subkey\"=\"4\";\"value\"=\"qzz\"};";
-
+        TString ytTableContent = TableContent;
         ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
         TYtUploadedTablesMock::TPtr ytUploadedTablesMock = MakeYtUploadedTablesMock();
         NYql::NFmr::IYtService::TPtr ytService = MakeYtServiceMock(ytUploadedTablesMock);
@@ -45,14 +47,16 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         IFmrJob::TPtr job = MakeFmrJob(tableDataServicePtr, ytService, cancelFlag);
 
         TYtTableRef output = TYtTableRef("test_cluster", "test_path");
-        TFmrTableRef input = TFmrTableRef("test_table_id");
-        TUploadTaskParams params = TUploadTaskParams(input, output);
+        TFmrTableInputRef input = TFmrTableInputRef{.TableId = "test_table_id"};
+        auto params = TUploadTaskParams(input, output);
 
         tableDataServicePtr->Put(input.TableId, ytTableContent);
 
-        auto err = job->Upload(params);
+        auto res = job->Upload(params);
 
-        UNIT_ASSERT_C(!err,err.GetRef());
+        auto err = std::get_if<TError>(&res);
+
+        UNIT_ASSERT_C(!err,err->ErrorMessage);
         UNIT_ASSERT_NO_DIFF(ytUploadedTablesMock->GetTableContent(output), ytTableContent);
     }
 
@@ -79,24 +83,29 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
         IFmrJob::TPtr job = MakeFmrJob(tableDataServicePtr, ytService, cancelFlag);
 
-        TFmrTableRef input_1 = TFmrTableRef("test_table_id_1");
-        TFmrTableRef input_2 = TFmrTableRef("test_table_id_2");
-        TFmrTableRef input_3 = TFmrTableRef("test_table_id_3");
-        TTableRef input_table_ref_1 = {input_1};
-        TTableRef input_table_ref_2 = {input_2};
-        TTableRef input_table_ref_3 = {input_3};
-        TFmrTableRef output = TFmrTableRef("test_table_id_output");
-        std::vector<TTableRef> inputs = {input_table_ref_1, input_table_ref_2, input_table_ref_3};
-        TMergeTaskParams params = TMergeTaskParams(inputs, output);
+        TFmrTableInputRef input_1 = TFmrTableInputRef{.TableId = "test_table_id_1"};
+        TFmrTableInputRef input_2 = TFmrTableInputRef{.TableId = "test_table_id_2"};
+        TFmrTableInputRef input_3 = TFmrTableInputRef{.TableId = "test_table_id_3"};
+        TTaskTableRef input_table_ref_1 = {input_1};
+        TTaskTableRef input_table_ref_2 = {input_2};
+        TTaskTableRef input_table_ref_3 = {input_3};
+        TFmrTableOutputRef output = TFmrTableOutputRef("test_table_id_output", "test_part_id");
+        std::vector<TTaskTableRef> inputs = {input_table_ref_1, input_table_ref_2, input_table_ref_3};
+        auto params = TMergeTaskParams(inputs, output);
+        auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
 
         tableDataServicePtr->Put(input_1.TableId, TableContent_1);
         tableDataServicePtr->Put(input_2.TableId, TableContent_2);
         tableDataServicePtr->Put(input_3.TableId, TableContent_3);
 
-        auto err = job->Merge(params);
+        auto res = job->Merge(params);
 
-        UNIT_ASSERT_C(!err,err.GetRef());
-        UNIT_ASSERT_NO_DIFF(tableDataServicePtr->Get(output.TableId).GetValueSync().GetRef(), TableContent_1 + TableContent_2 + TableContent_3);
+        auto err = std::get_if<TError>(&res);
+
+        UNIT_ASSERT_C(!err,err->ErrorMessage);
+        auto resultTableContent = tableDataServicePtr->Get(tableDataServiceExpectedOutputKey).GetValueSync();
+        UNIT_ASSERT_C(resultTableContent, "Result table content is empty");
+        UNIT_ASSERT_NO_DIFF(*resultTableContent, TableContent_1 + TableContent_2 + TableContent_3);
     }
 
     Y_UNIT_TEST(MergeMixedTables) {
@@ -122,24 +131,29 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
         IFmrJob::TPtr job = MakeFmrJob(tableDataServicePtr, ytService, cancelFlag);
 
-        TFmrTableRef input_1 = TFmrTableRef("test_table_id_1");
+        TFmrTableInputRef input_1 = TFmrTableInputRef{.TableId = "test_table_id_1"};
         TYtTableRef input_2 = TYtTableRef("test_path", "test_cluster");
-        TFmrTableRef input_3 = TFmrTableRef("test_table_id_3");
-        TTableRef input_table_ref_1 = {input_1};
-        TTableRef input_table_ref_2 = {input_2};
-        TTableRef input_table_ref_3 = {input_3};
-        TFmrTableRef output = TFmrTableRef("test_table_id_output");
-        std::vector<TTableRef> inputs = {input_table_ref_1, input_table_ref_2, input_table_ref_3};
-        TMergeTaskParams params = TMergeTaskParams(inputs, output);
+        TFmrTableInputRef input_3 = TFmrTableInputRef{.TableId = "test_table_id_3"};
+        TTaskTableRef input_table_ref_1 = {input_1};
+        TTaskTableRef input_table_ref_2 = {input_2};
+        TTaskTableRef input_table_ref_3 = {input_3};
+        TFmrTableOutputRef output = TFmrTableOutputRef("test_table_id_output", "test_part_id");
+        std::vector<TTaskTableRef> inputs = {input_table_ref_1, input_table_ref_2, input_table_ref_3};
+        auto params = TMergeTaskParams(inputs, output);
+        auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
 
         tableDataServicePtr->Put(input_1.TableId, TableContent_1);
         ytUploadedTablesMock->AddTable(input_2, TableContent_2);
         tableDataServicePtr->Put(input_3.TableId, TableContent_3);
 
-        auto err = job->Merge(params);
+        auto res = job->Merge(params);
 
-        UNIT_ASSERT_C(!err,err.GetRef());
-        UNIT_ASSERT_NO_DIFF(tableDataServicePtr->Get(output.TableId).GetValueSync().GetRef(), TableContent_1 + TableContent_2 + TableContent_3);
+        auto err = std::get_if<TError>(&res);
+
+        UNIT_ASSERT_C(!err,err->ErrorMessage);
+        auto resultTableContent = tableDataServicePtr->Get(tableDataServiceExpectedOutputKey).GetValueSync();
+        UNIT_ASSERT_C(resultTableContent, "Result table content is empty");
+        UNIT_ASSERT_NO_DIFF(*resultTableContent, TableContent_1 + TableContent_2 + TableContent_3);
     }
 }
 
@@ -157,17 +171,19 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
 
         TYtTableRef input = TYtTableRef("test_cluster", "test_path");
-        TFmrTableRef output = TFmrTableRef("test_table_id");
+        TFmrTableOutputRef output = TFmrTableOutputRef("test_table_id", "test_part_id");
+        auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
 
         ytUploadedTablesMock->AddTable(input, ytTableContent);
         TDownloadTaskParams params = TDownloadTaskParams(input, output);
         TTask::TPtr task = MakeTask(ETaskType::Download, "test_task_id", params, "test_session_id");
 
-
-        ETaskStatus status = RunJob(task, tableDataServicePtr, ytService, cancelFlag);
+        ETaskStatus status = RunJob(task, tableDataServicePtr, ytService, cancelFlag).TaskStatus;
 
         UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
-        UNIT_ASSERT_NO_DIFF(tableDataServicePtr->Get("test_table_id").GetValueSync().GetRef(), ytTableContent);
+        auto resultTableContent = tableDataServicePtr->Get(tableDataServiceExpectedOutputKey).GetValueSync();
+        UNIT_ASSERT_C(resultTableContent, "Result table content is empty");
+        UNIT_ASSERT_NO_DIFF(*resultTableContent, ytTableContent);
     }
 
     Y_UNIT_TEST(RunUploadTask) {
@@ -182,7 +198,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         NYql::NFmr::IYtService::TPtr ytService = MakeYtServiceMock(ytUploadedTablesMock);
         std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
 
-        TFmrTableRef input = TFmrTableRef("test_table_id");
+        TFmrTableInputRef input = TFmrTableInputRef{.TableId = "test_table_id"};
         TYtTableRef output = TYtTableRef("test_cluster", "test_path");
 
         TUploadTaskParams params = TUploadTaskParams(input, output);
@@ -190,7 +206,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
 
         tableDataServicePtr->Put(input.TableId, ytTableContent);
 
-        ETaskStatus status = RunJob(task, tableDataServicePtr, ytService, cancelFlag);
+        ETaskStatus status = RunJob(task, tableDataServicePtr, ytService, cancelFlag).TaskStatus;
 
         UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
         UNIT_ASSERT_NO_DIFF(ytUploadedTablesMock->GetTableContent(output), ytTableContent);
@@ -208,7 +224,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         NYql::NFmr::IYtService::TPtr ytService = MakeYtServiceMock(ytUploadedTablesMock);
         std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
 
-        TFmrTableRef input = TFmrTableRef("test_table_id");
+        TFmrTableInputRef input = TFmrTableInputRef{.TableId = "test_table_id"};
         TYtTableRef output = TYtTableRef("test_cluster", "test_path");
 
         TUploadTaskParams params = TUploadTaskParams(input, output);
@@ -217,7 +233,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         // No table in tableDataServicePtr
         // tableDataServicePtr->Put(input.TableId, ytTableContent);
 
-        ETaskStatus status = RunJob(task, tableDataServicePtr, ytService, cancelFlag);
+        ETaskStatus status = RunJob(task, tableDataServicePtr, ytService, cancelFlag).TaskStatus;
 
         UNIT_ASSERT_EQUAL(status, ETaskStatus::Failed);
         UNIT_ASSERT(ytUploadedTablesMock->IsEmpty());
@@ -245,15 +261,16 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         NYql::NFmr::IYtService::TPtr ytService = MakeYtServiceMock(ytUploadedTablesMock);
         std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
 
-        TFmrTableRef input_1 = TFmrTableRef("test_table_id_1");
+        TFmrTableInputRef input_1 = TFmrTableInputRef{.TableId = "test_table_id_1"};
         TYtTableRef input_2 = TYtTableRef("test_path", "test_cluster");
-        TFmrTableRef input_3 = TFmrTableRef("test_table_id_3");
-        TTableRef input_table_ref_1 = {input_1};
-        TTableRef input_table_ref_2 = {input_2};
-        TTableRef input_table_ref_3 = {input_3};
-        TFmrTableRef output = TFmrTableRef("test_table_id_output");
-        std::vector<TTableRef> inputs = {input_table_ref_1, input_table_ref_2, input_table_ref_3};
-        TMergeTaskParams params = TMergeTaskParams(inputs, output);
+        TFmrTableInputRef input_3 = TFmrTableInputRef{.TableId = "test_table_id_3"};
+        TTaskTableRef input_table_ref_1 = {input_1};
+        TTaskTableRef input_table_ref_2 = {input_2};
+        TTaskTableRef input_table_ref_3 = {input_3};
+        TFmrTableOutputRef output = TFmrTableOutputRef("test_table_id_output", "test_part_id");
+        std::vector<TTaskTableRef> inputs = {input_table_ref_1, input_table_ref_2, input_table_ref_3};
+        auto params = TMergeTaskParams(inputs, output);
+        auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
 
         TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id");
 
@@ -261,13 +278,12 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         ytUploadedTablesMock->AddTable(input_2, TableContent_2);
         tableDataServicePtr->Put(input_3.TableId, TableContent_3);
 
-        ETaskStatus status = RunJob(task, tableDataServicePtr, ytService, cancelFlag);
+        ETaskStatus status = RunJob(task, tableDataServicePtr, ytService, cancelFlag).TaskStatus;
 
         UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
-        UNIT_ASSERT_NO_DIFF(tableDataServicePtr->Get(
-            output.TableId).GetValueSync().GetRef(),
-            TableContent_1 + TableContent_2 + TableContent_3
-        );
+        auto resultTableContent = tableDataServicePtr->Get(tableDataServiceExpectedOutputKey).GetValueSync();
+        UNIT_ASSERT_C(resultTableContent, "Result table content is empty");
+        UNIT_ASSERT_NO_DIFF(*resultTableContent, TableContent_1 + TableContent_2 + TableContent_3);
     }
 
     Y_UNIT_TEST(RunMergeTaskWithNoTable) {
@@ -292,15 +308,16 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         NYql::NFmr::IYtService::TPtr ytService = MakeYtServiceMock(ytUploadedTablesMock);
         std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
 
-        TFmrTableRef input_1 = TFmrTableRef("test_table_id_1");
+        TFmrTableInputRef input_1 = TFmrTableInputRef{.TableId = "test_table_id_1"};
         TYtTableRef input_2 = TYtTableRef("test_path", "test_cluster");
-        TFmrTableRef input_3 = TFmrTableRef("test_table_id_3");
-        TTableRef input_table_ref_1 = {input_1};
-        TTableRef input_table_ref_2 = {input_2};
-        TTableRef input_table_ref_3 = {input_3};
-        TFmrTableRef output = TFmrTableRef("test_table_id_output");
-        std::vector<TTableRef> inputs = {input_table_ref_1, input_table_ref_2, input_table_ref_3};
-        TMergeTaskParams params = TMergeTaskParams(inputs, output);
+        TFmrTableInputRef input_3 = TFmrTableInputRef{.TableId = "test_table_id_3"};
+        TTaskTableRef input_table_ref_1 = {input_1};
+        TTaskTableRef input_table_ref_2 = {input_2};
+        TTaskTableRef input_table_ref_3 = {input_3};
+        TFmrTableOutputRef output = TFmrTableOutputRef("test_table_id_output", "test_part_id");
+        std::vector<TTaskTableRef> inputs = {input_table_ref_1, input_table_ref_2, input_table_ref_3};
+        auto params = TMergeTaskParams(inputs, output);
+        auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
 
         TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id");
 
@@ -309,9 +326,11 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         // ytUploadedTablesMock->AddTable(input_2, TableContent_2);
         tableDataServicePtr->Put(input_3.TableId, TableContent_3);
 
-        ETaskStatus status = RunJob(task, tableDataServicePtr, ytService, cancelFlag);
+        ETaskStatus status = RunJob(task, tableDataServicePtr, ytService, cancelFlag).TaskStatus;
+
         UNIT_ASSERT_EQUAL(status, ETaskStatus::Failed);
-        UNIT_ASSERT(!tableDataServicePtr->Get(output.TableId).GetValueSync());
+        auto resultTableContent = tableDataServicePtr->Get(tableDataServiceExpectedOutputKey).GetValueSync();
+        UNIT_ASSERT(!resultTableContent);
     }
 }
 

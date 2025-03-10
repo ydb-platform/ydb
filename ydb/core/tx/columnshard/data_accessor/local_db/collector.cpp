@@ -11,7 +11,7 @@ void TCollector::DoAskData(
     }
 }
 
-TDataCategorized TCollector::DoAnalyzeData(const std::vector<TPortionInfo::TConstPtr>& portions, const TString& /* consumer */) {
+TDataCategorized TCollector::DoAnalyzeData(const std::vector<TPortionInfo::TConstPtr>& portions, const TString& /*consumer*/) {
     TDataCategorized result;
     for (auto&& p : portions) {
         auto it = AccessorsCache.Find(p->GetPortionId());

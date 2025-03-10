@@ -218,6 +218,76 @@ void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
     }
 }
 
+bool TBlobStorageController::HostConfigEquals(const THostConfigInfo& left, const NKikimrBlobStorage::TDefineHostConfig& right) const {
+    if (left.Name != right.GetName()) {
+        return false;
+    }
+
+    THashMap<TStringBuf, const THostConfigInfo::TDriveInfo*> driveMap;
+    for (const auto& [key, info] : left.Drives) {
+        driveMap.emplace(key.Path, &info);
+    }
+
+    TMaybe<TString> defaultPDiskConfig;
+    if (right.HasDefaultHostPDiskConfig()) {
+        const bool success = right.GetDefaultHostPDiskConfig().SerializeToString(&defaultPDiskConfig.ConstructInPlace());
+        Y_ABORT_UNLESS(success);
+    }
+
+    auto checkDrive = [&](const auto& drive) {
+        const auto it = driveMap.find(drive.GetPath());
+        if (it == driveMap.end()) {
+            return false;
+        }
+
+        if (drive.GetType() != it->second->Type ||
+                drive.GetSharedWithOs() != it->second->SharedWithOs ||
+                drive.GetReadCentric() != it->second->ReadCentric ||
+                drive.GetKind() != it->second->Kind) {
+            return false;
+        }
+
+        TMaybe<TString> pdiskConfig;
+        if (drive.HasPDiskConfig()) {
+            const bool success = drive.GetPDiskConfig().SerializeToString(&pdiskConfig.ConstructInPlace());
+            Y_ABORT_UNLESS(success);
+        } else {
+            pdiskConfig = defaultPDiskConfig;
+        }
+
+        if (pdiskConfig != it->second->PDiskConfig) {
+            return false;
+        }
+
+        driveMap.erase(it);
+        return true;
+    };
+
+    for (const auto& drive : right.GetDrive()) {
+        if (!checkDrive(drive)) {
+            return false;
+        }
+    }
+
+    auto addDrives = [&](const auto& field, NKikimrBlobStorage::EPDiskType type) {
+        NKikimrBlobStorage::THostConfigDrive drive;
+        drive.SetType(type);
+        for (const auto& path : field) {
+            if (drive.SetPath(path); !checkDrive(drive)) {
+                return false;
+            }
+        }
+        return true;
+    };
+    if (!addDrives(right.GetRot(), NKikimrBlobStorage::EPDiskType::ROT) ||
+            !addDrives(right.GetSsd(), NKikimrBlobStorage::EPDiskType::SSD) ||
+            !addDrives(right.GetNvme(), NKikimrBlobStorage::EPDiskType::NVME)) {
+        return false;
+    }
+
+    return driveMap.empty();
+}
+
 void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
     if (!StorageConfig.HasBlobStorageConfig()) {
         return;
@@ -232,74 +302,101 @@ void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
         return; // not expected to be managed by BSC
     }
 
+    ui64 expectedBoxId = 1;
     std::optional<ui64> generation;
+    bool needToDefineBox = true;
     if (!Boxes.empty()) {
         const auto& [boxId, box] = *Boxes.begin();
 
-        THashSet<THostConfigId> unusedHostConfigs;
-        for (const auto& [hostConfigId, _] : HostConfigs) {
-            unusedHostConfigs.insert(hostConfigId);
+        expectedBoxId = boxId;
+        generation = box.Generation.GetOrElse(1);
+        needToDefineBox = false;
+
+        // put all existing hosts of a singular box into the set
+        THashSet<std::tuple<TString, ui32, ui64, TMaybe<ui32>>> hosts;
+        for (const auto& [key, value] : box.Hosts) {
+            hosts.emplace(key.Fqdn, key.IcPort, value.HostConfigId, value.EnforcedNodeId);
         }
-        for (const auto& [_, host] : box.Hosts) {
-            if (!HostConfigs.contains(host.HostConfigId)) {
-                return;
+
+        // drop matching entries from the new set
+        for (const auto& host : bsConfig.GetDefineBox().GetHost()) {
+            const auto& resolved = HostRecords->GetHostId(host.GetEnforcedNodeId());
+            Y_ABORT_UNLESS(resolved);
+            const auto& [fqdn, port] = *resolved;
+
+            if (!hosts.erase(std::make_tuple(fqdn, port, host.GetHostConfigId(), Nothing()))) {
+                needToDefineBox = true;
+                break;
             }
-            unusedHostConfigs.erase(host.HostConfigId);
         }
 
-        if (!unusedHostConfigs.empty()) {
-            return;
+        if (!hosts.empty()) {
+            needToDefineBox = true;
         }
-
-        generation = box.Generation.GetOrElse(0);
     }
 
     auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
     auto& r = ev->Record;
     auto *request = r.MutableRequest();
     for (const auto& hostConfig : bsConfig.GetDefineHostConfig()) {
+        const auto it = HostConfigs.find(hostConfig.GetHostConfigId());
+        if (it != HostConfigs.end() && HostConfigEquals(it->second, hostConfig)) {
+            continue;
+        }
+
         auto *cmd = request->AddCommand();
-        cmd->MutableDefineHostConfig()->CopyFrom(hostConfig);
-    }
-    auto *cmd = request->AddCommand();
-    auto *defineBox = cmd->MutableDefineBox();
-    defineBox->CopyFrom(bsConfig.GetDefineBox());
-    defineBox->SetBoxId(1);
-    for (auto& host : *defineBox->MutableHost()) {
-        const ui32 nodeId = host.GetEnforcedNodeId();
-        host.ClearEnforcedNodeId();
-        auto *key = host.MutableKey();
-        const auto& resolved = HostRecords->GetHostId(nodeId);
-        Y_ABORT_UNLESS(resolved);
-        const auto& [fqdn, port] = *resolved;
-        key->SetFqdn(fqdn);
-        key->SetIcPort(port);
-    }
-    if (generation) {
-        defineBox->SetItemConfigGeneration(*generation);
+        auto *defineHostConfig = cmd->MutableDefineHostConfig();
+        defineHostConfig->CopyFrom(hostConfig);
+        if (it != HostConfigs.end()) {
+            defineHostConfig->SetItemConfigGeneration(it->second.Generation.GetOrElse(1));
+        }
     }
 
-    THashSet<THostConfigId> unusedHostConfigs;
-    for (const auto& [hostConfigId, _] : HostConfigs) {
-        unusedHostConfigs.insert(hostConfigId);
+    if (needToDefineBox) {
+        auto *cmd = request->AddCommand();
+        auto *defineBox = cmd->MutableDefineBox();
+        defineBox->CopyFrom(bsConfig.GetDefineBox());
+        defineBox->SetBoxId(expectedBoxId);
+        for (auto& host : *defineBox->MutableHost()) {
+            const ui32 nodeId = host.GetEnforcedNodeId();
+            host.ClearEnforcedNodeId();
+            auto *key = host.MutableKey();
+            const auto& resolved = HostRecords->GetHostId(nodeId);
+            Y_ABORT_UNLESS(resolved);
+            const auto& [fqdn, port] = *resolved;
+            key->SetFqdn(fqdn);
+            key->SetIcPort(port);
+        }
+        if (generation) {
+            defineBox->SetItemConfigGeneration(*generation);
+        }
     }
-    for (const auto& host : defineBox->GetHost()) {
-        unusedHostConfigs.erase(host.GetHostConfigId());
+
+    THashMap<THostConfigId, ui64> unusedHostConfigs;
+    for (const auto& [hostConfigId, value] : HostConfigs) {
+        unusedHostConfigs.emplace(hostConfigId, value.Generation.GetOrElse(1));
     }
-    for (const THostConfigId hostConfigId : unusedHostConfigs) {
+    for (const auto& hostConfig : bsConfig.GetDefineHostConfig()) {
+        unusedHostConfigs.erase(hostConfig.GetHostConfigId());
+    }
+    for (const auto& [hostConfigId, generation] : unusedHostConfigs) {
         auto *cmd = request->AddCommand();
         auto *del = cmd->MutableDeleteHostConfig();
         del->SetHostConfigId(hostConfigId);
-        del->SetItemConfigGeneration(HostConfigs[hostConfigId].Generation.GetOrElse(0));
+        del->SetItemConfigGeneration(generation);
     }
 
-    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC14, "ApplyStorageConfig", (Request, r));
-
-    Send(SelfId(), ev.release());
+    if (request->CommandSize()) {
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC14, "ApplyStorageConfig", (Request, r));
+        Send(SelfId(), ev.release());
+    }
 }
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
-    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC15, "TEvControllerConfigResponse", (Response, ev->Get()->Record));
+    auto& record = ev->Get()->Record;
+    auto& response = record.GetResponse();
+    STLOG(response.GetSuccess() ? PRI_DEBUG : PRI_ERROR, BS_CONTROLLER, BSC15, "TEvControllerConfigResponse",
+        (Response, response));
 }
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateGroupStat::TPtr& ev) {

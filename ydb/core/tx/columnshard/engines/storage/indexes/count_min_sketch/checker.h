@@ -21,7 +21,7 @@ protected:
 public:
     TCountMinSketchChecker() = default;
     TCountMinSketchChecker(const ui32 indexId)
-        : TBase(indexId)
+        : TBase(TIndexDataAddress(indexId))
     {}
 
     virtual TString GetClassName() const override {

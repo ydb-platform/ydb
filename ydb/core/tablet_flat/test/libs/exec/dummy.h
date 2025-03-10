@@ -48,8 +48,11 @@ namespace NFake {
             if (auto *ev = eh->CastAsLocal<NFake::TEvExecute>()) {
                 Y_ABORT_UNLESS(State == EState::Work, "Cannot handle TX now");
 
-                for (auto& f : ev->Funcs) {
-                    Execute(f.Release(), this->ActorContext());
+                for (auto& tx : ev->Txs) {
+                    Execute(tx.Release(), this->ActorContext());
+                }
+                for (auto& lambda : ev->Lambdas) {
+                    std::move(lambda)(Executor(), this->ActorContext());
                 }
             } else if (auto *ev = eh->CastAsLocal<NFake::TEvCompact>()) {
                 Y_ABORT_UNLESS(State == EState::Work, "Cannot handle compaction now");

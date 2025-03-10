@@ -302,7 +302,7 @@ void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
         return; // not expected to be managed by BSC
     }
 
-    ui64 expectedBoxId;
+    ui64 expectedBoxId = 1;
     std::optional<ui64> generation;
     bool needToDefineBox = true;
     if (!Boxes.empty()) {

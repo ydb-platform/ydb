@@ -1,7 +1,9 @@
 #pragma once
 #include "predicate.h"
 
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/common/container.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>
@@ -115,11 +117,21 @@ public:
     static TConclusion<TPredicateContainer> BuildPredicateTo(
         std::shared_ptr<NOlap::TPredicate> object, const std::shared_ptr<arrow::Schema>& pkSchema);
 
-    NKikimr::NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const {
+    NArrow::NAccessor::IChunkedArray::TRowRange BuildFilterRange(const NArrow::TGeneralContainer& data) const {
         if (!Object) {
-            return NArrow::TColumnFilter::BuildAllowFilter();
+            return NArrow::NAccessor::IChunkedArray::TRowRange(data.GetRecordsCount());
         }
-        return NArrow::TColumnFilter::MakePredicateFilter(data, Object->Batch, CompareType);
+        const auto range = data.EqualRange(*Object->Batch);
+        switch (CompareType) {
+            case NArrow::ECompareType::LESS:
+                return {0, range.GetBegin()};
+            case NArrow::ECompareType::LESS_OR_EQUAL:
+                return {0, range.GetEnd()};
+            case NArrow::ECompareType::GREATER:
+                return {range.GetEnd(), data.GetRecordsCount()};
+            case NArrow::ECompareType::GREATER_OR_EQUAL:
+                return {range.GetBegin(), data.GetRecordsCount()};
+        }
     }
 };
 

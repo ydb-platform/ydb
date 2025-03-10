@@ -267,6 +267,7 @@ namespace NActors {
         }
 
         void Bootstrap() {
+            Cerr << (TStringBuilder() << "PollerActorId" << SelfId().ToString() << Endl);
             PollerThread = std::make_shared<TPollerThread>(TActivationContext::ActorSystem());
             Become(&TPollerActor::StateFunc);
         }

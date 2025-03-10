@@ -226,6 +226,9 @@ namespace NActors {
 
         Y_DEBUG_ABORT_UNLESS(recipient == ev->GetRecipientRewrite());
         const ui32 recpPool = recipient.PoolID();
+        if (recipient.IsService()) {
+            Cerr << "actorid# " << recipient.ToString() << " recipient pool# " << recpPool << Endl;
+        }
         if (recipient && recpPool < ExecutorPoolCount) {
             if ((CpuManager->GetExecutorPool(recpPool)->*EPSpecificSend)(ev)) {
                 return true;

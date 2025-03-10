@@ -115,15 +115,19 @@ namespace NActors {
     }
 
     void TActivationContext::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
-        TlsActivationContext->ActorSystem()->Schedule(deadline, ev, cookie);
+        TlsActivationContext->ExecutorPool_->Schedule(deadline, ev, cookie, 0);
     }
 
     void TActivationContext::Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
-        TlsActivationContext->ActorSystem()->Schedule(deadline, ev, cookie);
+        TlsActivationContext->ExecutorPool_->Schedule(deadline, ev, cookie, 0);
     }
 
     void TActivationContext::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
-        TlsActivationContext->ActorSystem()->Schedule(delta, ev, cookie);
+        if (TlsActivationContext->ExecutorPool_) {
+            TlsActivationContext->ExecutorPool_->Schedule(delta, ev, cookie, 0);
+        } else if (TlsActivationContext->ExecutorThread_) {
+            TlsActivationContext->ExecutorThread_->Schedule(delta, ev, cookie);
+        }
     }
 
     bool TActivationContext::Send(const TActorId& recipient, std::unique_ptr<IEventBase> ev, ui32 flags, ui64 cookie) {
@@ -186,8 +190,9 @@ namespace NActors {
             x->ExecutorPool_->UnregisterAlias(&TlsActivationContext->Mailbox, actorId);
         } else if (x->ExecutorThread_) {
             x->ExecutorThread_->UnregisterAlias(&TlsActivationContext->Mailbox, actorId);
+        } else {
+            Y_ABORT();
         }
-        Y_ABORT();
     }
 
     TActorId TActivationContext::InterconnectProxy(ui32 destinationNodeId) {
@@ -225,39 +230,63 @@ namespace NActors {
     }
 
     void TActorContext::Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie) const {
-        ActorSystem()->Schedule(deadline, new IEventHandle(SelfID, TActorId(), ev), cookie);
+        if (ExecutorPool_) {
+            ExecutorPool_->Schedule(deadline, new IEventHandle(SelfID, TActorId(), ev), cookie, 0);
+        } else if (ExecutorThread_) {
+            ExecutorThread_->Schedule(deadline, new IEventHandle(SelfID, TActorId(), ev), cookie);
+        }
     }
 
     void TActorContext::Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie) const {
-        ActorSystem()->Schedule(deadline, new IEventHandle(SelfID, TActorId(), ev), cookie);
+        if (ExecutorPool_) {
+            ExecutorPool_->Schedule(deadline, new IEventHandle(SelfID, TActorId(), ev), cookie, 0);
+        } else if (ExecutorThread_) {
+            ExecutorThread_->Schedule(deadline, new IEventHandle(SelfID, TActorId(), ev), cookie);
+        }
     }
 
     void TActorContext::Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie) const {
-        ActorSystem()->Schedule(delta, new IEventHandle(SelfID, TActorId(), ev), cookie);
+        if (ExecutorPool_) {
+            ExecutorPool_->Schedule(delta, new IEventHandle(SelfID, TActorId(), ev), cookie, 0);
+        } else if (ExecutorThread_) {
+            ExecutorThread_->Schedule(delta, new IEventHandle(SelfID, TActorId(), ev), cookie);
+        }
     }
 
     void TActorContext::Schedule(TInstant deadline, std::unique_ptr<IEventHandle> ev, ISchedulerCookie* cookie) const {
-        ActorSystem()->Schedule(deadline, ev.release(), cookie);
+        if (ExecutorPool_) {
+            ExecutorPool_->Schedule(deadline, ev.release(), cookie, 0);
+        } else if (ExecutorThread_) {
+            ExecutorThread_->Schedule(deadline, ev.release(), cookie);
+        }
     }
 
     void TActorContext::Schedule(TMonotonic deadline, std::unique_ptr<IEventHandle> ev, ISchedulerCookie* cookie) const {
-        ActorSystem()->Schedule(deadline, ev.release(), cookie);
+        if (ExecutorPool_) {
+            ExecutorPool_->Schedule(deadline, ev.release(), cookie, 0);
+        } else if (ExecutorThread_) {
+            ExecutorThread_->Schedule(deadline, ev.release(), cookie);
+        }
     }
 
     void TActorContext::Schedule(TDuration delta, std::unique_ptr<IEventHandle> ev, ISchedulerCookie* cookie) const {
-        ActorSystem()->Schedule(delta, ev.release(), cookie);
+        if (ExecutorPool_) {
+            ExecutorPool_->Schedule(delta, ev.release(), cookie, 0);
+        } else if (ExecutorThread_) {
+            ExecutorThread_->Schedule(delta, ev.release(), cookie);
+        }
     }
 
     void IActor::Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie) const noexcept {
-        TlsActivationContext->ActorSystem()->Schedule(deadline, new IEventHandle(SelfActorId, TActorId(), ev), cookie);
+        TlsActivationContext->Schedule(deadline, new IEventHandle(SelfActorId, TActorId(), ev), cookie);
     }
 
     void IActor::Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie) const noexcept {
-        TlsActivationContext->ActorSystem()->Schedule(deadline, new IEventHandle(SelfActorId, TActorId(), ev), cookie);
+        TlsActivationContext->Schedule(deadline, new IEventHandle(SelfActorId, TActorId(), ev), cookie);
     }
 
     void IActor::Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie) const noexcept {
-        TlsActivationContext->ActorSystem()->Schedule(delta, new IEventHandle(SelfActorId, TActorId(), ev), cookie);
+        TlsActivationContext->Schedule(delta, new IEventHandle(SelfActorId, TActorId(), ev), cookie);
     }
 
     TInstant TActivationContext::Now() {
@@ -502,7 +531,6 @@ namespace NActors {
     TActorId TActivationContext::Register(IActor* actor, TActorId , TMailboxType::EType mailboxType, ui32 poolId) {
         auto ctx = AsActorContext();
         if (poolId == Max<ui32>()) {
-            Y_ASSERT(ctx.ExecutorPool_);
             poolId = ctx.ExecutorPool_ ? ctx.ExecutorPool_->PoolId : 0;
         }
         return TlsActivationContext->ActorSystem()->Register(actor, mailboxType, poolId);

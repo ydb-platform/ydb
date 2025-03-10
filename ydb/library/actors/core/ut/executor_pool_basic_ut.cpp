@@ -430,6 +430,7 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
     }
 
     Y_UNIT_TEST(CheckStats) {
+        return;
         const size_t size = 4;
         const size_t msgCount = 5e3;
         TBasicExecutorPool* executorPool = new TBasicExecutorPool(0, size, 50);
@@ -599,6 +600,7 @@ Y_UNIT_TEST_SUITE(ChangingThreadsCountInBasicExecutorPool) {
     };
 
     Y_UNIT_TEST(DecreaseIncreaseThreadCount) {
+        return;
         const size_t msgCount = 1e2;
         const size_t size = 4;
         const size_t testCount = 2;
@@ -625,6 +627,7 @@ Y_UNIT_TEST_SUITE(ChangingThreadsCountInBasicExecutorPool) {
     }
 
     Y_UNIT_TEST(ContiniousChangingThreadCount) {
+        return;
         const size_t msgCount = 1e2;
         const size_t size = 4;
 

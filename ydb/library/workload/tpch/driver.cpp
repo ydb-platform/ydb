@@ -24,7 +24,7 @@ extern "C" void ReadDistFromResource(const char* name, distribution* target) {
                 if (to_lower(TString(line.substr(0, prefix.length()))) == prefix) {
                     const auto pos = line.find_first_of("\t ");
                     if (pos != TStringBuf::npos) {
-                        dist = &result[line.substr(pos + 1)];
+                        dist = &result.emplace(line.substr(pos + 1), TDist()).first->second;
                     }
                 }
             } else {

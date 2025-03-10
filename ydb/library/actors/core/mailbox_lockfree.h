@@ -33,13 +33,14 @@ namespace NActors {
         TSimpleQueue() {
         }
 
-        void Push(IEventHandle* ev) {
+        size_t Push(IEventHandle* ev) {
             //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " ev# " << (void*)ev << Endl);
             std::unique_lock<std::mutex> g(Mutex);
             Queue.push_back(ev);
             //if (Queue.size() == 1) {
                 CondVar.notify_one();
             //}
+            return Queue.size();
         }
 
         void Notify() {
@@ -72,8 +73,9 @@ namespace NActors {
                     Queue.pop_front();
                     // Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " " << (void*)this << " event# " << (void*)x << Endl);
                     return x;
+                } else {
+                    return nullptr;
                 }
-                CondVar.wait_for(g, std::chrono::milliseconds(1000)); //, [&]() {return Queue.size();});
                 // Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " " << (void*)this << " nullptr" << Endl);
             }
         }
@@ -289,7 +291,7 @@ namespace NActors {
         //std::atomic<uintptr_t> NextRunPtr{ 0 };
 
         // An atomic stack of new events in reverse order
-        std::atomic<uintptr_t> NextEventPtr{ MarkerFree };
+        std::atomic<uintptr_t> Status{ MarkerFree };
 
         // Preprocessed events ready for consumption
         IEventHandle* EventHead{ nullptr };

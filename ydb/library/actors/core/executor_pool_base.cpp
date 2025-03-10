@@ -110,8 +110,8 @@ namespace NActors {
                 case EMailboxPush::Pushed:
                     return true;
                 case EMailboxPush::Locked:
-                    mailbox->ScheduleMoment = GetCycleCountFast();
-                    ScheduleActivation(mailbox);
+                    //mailbox->ScheduleMoment = GetCycleCountFast();
+                    //ScheduleActivation(mailbox);
                     return true;
                 case EMailboxPush::Free:
                     // message cannot be delivered
@@ -138,11 +138,13 @@ namespace NActors {
                 case EMailboxPush::Pushed:
                     return true;
                 case EMailboxPush::Locked:
-                    mailbox->ScheduleMoment = GetCycleCountFast();
-                    SpecificScheduleActivation(mailbox);
+                    //mailbox->ScheduleMoment = GetCycleCountFast();
+                    //SpecificScheduleActivation(mailbox);
                     return true;
                 case EMailboxPush::Free:
                     // message cannot be delivered
+                    Y_ABORT();
+
                     break;
             }
         }

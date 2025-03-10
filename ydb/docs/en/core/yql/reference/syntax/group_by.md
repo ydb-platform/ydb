@@ -285,17 +285,17 @@ Among the columns used for grouping, make sure to use the `HOP` construct to def
 HOP(time_extractor, hop, interval, delay)
 ```
 
-The implemented version of the time window is called the **hopping window**. This is a window that moves forward in discrete intervals (the `hop` parameter). The total duration of the window is set by the `interval` parameter. To determine the time of each input event, the `time_extractor` parameter is used. This expression depends only on the input values of the stream's columns and must have the `Timestamp` type. It indicates where exactly to get the time value from input events.
+The implemented version of the time window is called the **hopping window**. This is a window that moves forward in discrete intervals (the `hop` parameter). The total duration of the window is set by the `interval` parameter. To determine the time of each input event, the `time_extractor` parameter is used. This expression depends only on the input values of the stream's columns and must have the `Timestamp` type. It specifies where to extract the time value from input events.
 
-In each stream defined by the values of all the grouping columns, the window moves forward independently of other streams. Advancement of the window is totally dependent on the latest event of the stream. Since records in streams get somewhat mixed in time, the `delay` parameter has been added so you can delay the closing of the window by a specified period. Events arriving before the current window are ignored.
+In each stream defined by the values of all the grouping columns, the window moves forward independently of other streams. The advancement of the window depends entirely on the latest event in the stream. Since records in streams can be somewhat out of order, the `delay` parameter allows you to delay the closing of the window by a specified period. Events arriving before the current window are ignored.
 
-The `interval` and `delay` parameters must be multiples of the `hop` parameter. Non-multiple intervals will be rounded down.
+The `interval` and `delay` parameters must be multiples of the `hop` parameter. Non-multiple intervals are rounded down.
 
-To set `hop`, `interval` and `delay`, use a string expression compliant with [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601). This is the format that is used to construct the built-in type `Interval` [from a string](../builtins/basic.md#data-type-literals).
+To set `hop`, `interval`, and `delay`, use a string expression compliant with [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601). This format is used to construct the built-in `Interval` type [from a string](../builtins/basic.md#data-type-literals).
 
-Functions with omitted `HOP_START` and `HOP_END` parameters, return a value of the `Timestamp` type and correspond to the start and end of the current window.
+Functions with omitted `HOP_START` and `HOP_END` parameters return a value of the `Timestamp` type, corresponding to the start and end of the current window.
 
-The **tumbling window** known in other systems is a special case of a **hopping window** when `interval` == `hop`.
+The **tumbling window**, known in other systems, is a special case of a **hopping window** where `interval` == `hop`.
 
 ## Examples
 

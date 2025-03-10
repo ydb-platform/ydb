@@ -1,7 +1,11 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/mind/bscontroller/layout_helpers.h>
 
 Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
+    using NBsController::TPDiskId;
+    using NKikimrBlobStorage::EDriveStatus;
+
     bool CatchSanitizeRequests(ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
         if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
             const auto& request = ev->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record.GetRequest();
@@ -237,5 +241,123 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
 
     Y_UNIT_TEST(ForbidMultipleRealmsOccupation) {
         TestMultipleRealmsOccupation(false);
+    }
+
+    void StressTest(TBlobStorageGroupType groupType, ui32 dcs, ui32 racks, ui32 units) {
+        const ui32 steps = 100;
+        std::vector<TNodeLocation> locations;
+
+        MakeLocations(locations, dcs, racks, units, LocationGenerator);
+        std::unique_ptr<TEnvironmentSetup> env;
+
+        CreateEnv(env, locations, groupType);
+        env->Sim(TDuration::Minutes(3));
+        env->UpdateSettings(false, false, false);
+
+        std::vector<TPDiskId> pdisks;
+
+        {
+            auto cfg = env->FetchBaseConfig();
+            for (const auto& pdisk : cfg.GetPDisk()) {
+                pdisks.emplace_back(pdisk.GetNodeId(), pdisk.GetPDiskId());
+            }
+        }
+
+        auto shuffleLocations = [&]() {
+            TString error;
+            env->Cleanup();
+            std::random_shuffle(locations.begin(), locations.end());
+            env->Initialize();
+            env->Sim(TDuration::Seconds(100));
+        };
+
+        auto updateDriveStatus = [&](ui32 drives) {
+            NKikimrBlobStorage::TConfigRequest request;
+            request.SetIgnoreGroupFailModelChecks(true);
+            request.SetIgnoreGroupSanityChecks(true);
+            request.SetIgnoreDegradedGroupsChecks(true);
+            request.SetIgnoreDisintegratedGroupsChecks(true);
+            for (ui32 i = 0; i < drives; ++i) {
+                auto* cmd = request.AddCommand();
+                auto* drive = cmd->MutableUpdateDriveStatus();
+                TPDiskId pdiskId = pdisks[RandomNumber<ui32>(pdisks.size())];
+                drive->MutableHostKey()->SetNodeId(pdiskId.NodeId);
+                drive->SetPDiskId(pdiskId.PDiskId);
+                switch (RandomNumber<ui32>(7)) {
+                    case 0:
+                        drive->SetStatus(EDriveStatus::INACTIVE);
+                        break;
+                    case 1:
+                        drive->SetStatus(EDriveStatus::BROKEN);
+                        break;
+                    case 2:
+                        drive->SetStatus(EDriveStatus::FAULTY);
+                        break;
+                    default:
+                        drive->SetStatus(EDriveStatus::ACTIVE);
+                }
+            }
+
+            env->Invoke(request);
+        };
+
+        enum class EActions {
+            SHUFFLE_LOCATIONS = 0,
+            UPDATE_STATUS,
+            ENABLE_SANITIZER,
+            DISABLE_SANITIZER,
+            ENABLE_SELF_HEAL,
+            DISABLE_SELF_HEAL,
+        };
+        TWeightedRandom<EActions> act;
+    
+        act.AddValue(EActions::SHUFFLE_LOCATIONS, 1);
+        act.AddValue(EActions::UPDATE_STATUS, 5);
+        act.AddValue(EActions::ENABLE_SANITIZER, 1);
+        act.AddValue(EActions::DISABLE_SANITIZER, 1);
+        act.AddValue(EActions::ENABLE_SELF_HEAL, 1);
+        act.AddValue(EActions::DISABLE_SELF_HEAL, 1);
+
+        bool selfHeal = false;
+        bool groupLayoutSanitizer = false;
+
+        for (ui32 i = 0; i < steps; ++i) {
+            switch (act.GetRandom()) {
+                case EActions::SHUFFLE_LOCATIONS:
+                    shuffleLocations();
+                    break;
+                case EActions::UPDATE_STATUS:
+                    updateDriveStatus(RandomNumber<ui32>(5) + 1);
+                    break;
+                case EActions::ENABLE_SANITIZER:
+                    groupLayoutSanitizer = true;
+                    env->UpdateSettings(selfHeal, false, groupLayoutSanitizer);
+                    break;
+                case EActions::DISABLE_SANITIZER:
+                    groupLayoutSanitizer = false;
+                    env->UpdateSettings(selfHeal, false, groupLayoutSanitizer);
+                    break;
+                case EActions::ENABLE_SELF_HEAL:
+                    selfHeal = true;
+                    env->UpdateSettings(selfHeal, false, groupLayoutSanitizer);
+                    break;
+                case EActions::DISABLE_SELF_HEAL:
+                    selfHeal = false;
+                    env->UpdateSettings(selfHeal, false, groupLayoutSanitizer);
+                    break;
+            }
+        }
+    }
+
+    Y_UNIT_TEST(StressMirror3dc) {
+        StressTest(TBlobStorageGroupType::ErasureMirror3dc, 3, 5, 1);
+    }
+
+    Y_UNIT_TEST(StressBlock4Plus2) {
+        StressTest(TBlobStorageGroupType::Erasure4Plus2Block, 1, 10, 2);
+    }
+
+    Y_UNIT_TEST(StressMirror3of4) {
+        StressTest(TBlobStorageGroupType::ErasureMirror3of4, 1, 10, 2);
     }
 }

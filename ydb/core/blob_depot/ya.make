@@ -1,5 +1,11 @@
 LIBRARY()
 
+    IF (OS_WINDOWS)
+        CFLAGS(
+            -DKIKIMR_DISABLE_S3_OPS
+        )
+    ENDIF()
+
     SRCS(
         blob_depot.cpp
         blob_depot.h

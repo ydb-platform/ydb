@@ -4,6 +4,8 @@ namespace NKikimr::NBlobDepot {
 
     using TS3Manager = TBlobDepot::TS3Manager;
 
+#ifndef KIKIMR_DISABLE_S3_OPS
+
     struct TS3Manager::TEvScanFound : TEventLocal<TEvScanFound, TEvPrivate::EvScanFound> {
         std::vector<std::tuple<TString, ui64>> KeysWithoutPrefix;
         bool IsFinal;
@@ -158,12 +160,19 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
+#endif
+
     void TS3Manager::RunScannerActor() {
+#ifndef KIKIMR_DISABLE_S3_OPS
         Y_ABORT_UNLESS(!ScannerActorId);
         ScannerActorId = Self->Register(new TScannerActor(Self->SelfId(), WrapperId, BasePath, Bucket, Self->GetLogId()));
+#else
+        Y_ABORT("S3 is not supported");
+#endif
     }
 
     void TS3Manager::HandleScanner(TAutoPtr<IEventHandle> ev) {
+#ifndef KIKIMR_DISABLE_S3_OPS
         STRICT_STFUNC_BODY(
             hFunc(TEvScanFound, [&](TEvScanFound::TPtr ev) {
                 auto& msg = *ev->Get();
@@ -211,6 +220,9 @@ namespace NKikimr::NBlobDepot {
                 }
             })
         )
+#else
+        Y_ABORT("S3 is not supported");
+#endif
     }
 
 } // NKikimr::NBlobDepot

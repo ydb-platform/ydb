@@ -4,6 +4,8 @@ namespace NKikimr::NBlobDepot {
 
     using TS3Manager = TBlobDepot::TS3Manager;
 
+#ifndef KIKIMR_DISABLE_S3_OPS
+
     struct TS3Manager::TEvUploadResult : TEventLocal<TEvUploadResult, TEvPrivate::EvUploadResult> {
     };
 
@@ -85,10 +87,16 @@ namespace NKikimr::NBlobDepot {
         )
     };
 
+#endif
+
     void TS3Manager::OnKeyWritten(const TData::TKey& key, const TValueChain& valueChain) {
         if (AsyncMode) {
+#ifndef KIKIMR_DISABLE_S3_OPS
             ActiveUploaders.insert(Self->Register(new TUploaderActor(WrapperId, BasePath, Bucket, Self->Info(), key,
                 valueChain)));
+#else
+            Y_ABORT("S3 is not supported");
+#endif
         }
     }
 

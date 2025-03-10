@@ -5,7 +5,9 @@
 
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
+#ifndef KIKIMR_DISABLE_S3_OPS
 #include <ydb/core/wrappers/abstract.h>
+#endif
 
 namespace NKikimr::NBlobDepot {
 
@@ -360,7 +362,9 @@ namespace NKikimr::NBlobDepot {
         NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColor = {};
         float ApproximateFreeSpaceShare = 0.0f;
 
+#ifndef KIKIMR_DISABLE_S3_OPS
         NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
+#endif
         std::optional<NKikimrBlobDepot::TS3BackendSettings> S3BackendSettings;
         TActorId S3WrapperId;
         TString S3BasePath;

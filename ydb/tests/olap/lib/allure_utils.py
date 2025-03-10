@@ -57,13 +57,13 @@ def _set_logs_command(test_info: dict[str, str], start_time: float, end_time: fl
             hosts.append(node.host)
     hosts_cmd = ' '.join([f'-H {h}' for h in hosts])
     tz = timezone('Europe/Moscow')
-    start = datetime.fromtimestamp(start_time).replace(microsecond=0)
-    end = datetime.fromtimestamp(end_time).replace(microsecond=0)
-    start_tz = datetime.fromtimestamp(start_time, tz)
-    end_tz = datetime.fromtimestamp(end_time, tz)
-    start_iso = start_tz.isoformat()
-    end_iso = end_tz.isoformat()
-    time_cmd = f'-S "{start}" -U "{end}"'
+    start = datetime.fromtimestamp(start_time, tz)
+    end = datetime.fromtimestamp(end_time, tz)
+    start_short = start.strftime('%Y-%m-%d %H:%M:%S')
+    end_short = end.strftime('%Y-%m-%d %H:%M:%S')
+    start_iso = start.isoformat()
+    end_iso = end.isoformat()
+    time_cmd = f'-S "{start_short}" -U "{end_short}"'
     time_cmd_iso = f'-S "{start_iso}" -U "{end_iso}"'
     not_ask_for_key = '-x \"-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no\"'
 

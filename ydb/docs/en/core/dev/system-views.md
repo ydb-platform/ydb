@@ -370,27 +370,27 @@ Table Structure:
 
 #### Example queries
 
-All the directly assigned permissions for the table located at the path `/Root/my_table`:
+All the directly assigned permissions for the table located at the path `my_table`:
 
 ```yql
 SELECT *
-    FROM `/Root/.sys/auth_permissions`
-    WHERE Path = "/Root/my_table"
+    FROM `.sys/auth_permissions`
+    WHERE Path = "my_table"
 ```
 
-All the effective permissions for the table located at the path `/Root/my_table`, including inherited permissions:
+All the effective permissions for the table located at the path `my_table`, including inherited permissions:
 
 ```yql
 SELECT *
-    FROM `/Root/.sys/auth_effective_permissions`
-    WHERE Path = "/Root/my_table"
+    FROM `.sys/auth_effective_permissions`
+    WHERE Path = "my_table"
 ```
 
 All permissions directly assigned to the user identified as `user3`:
 
 ```yql
 SELECT *
-    FROM `/Root/.sys/auth_permissions`
+    FROM `.sys/auth_permissions`
     WHERE Sid = "user3"
 ```
 

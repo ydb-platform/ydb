@@ -71,6 +71,7 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/minikql/jsonpath/parser
     yql/essentials/core/minsketch
+    yql/essentials/core/histogram
     yql/essentials/protos
     yql/essentials/public/udf
     yql/essentials/public/udf/tz

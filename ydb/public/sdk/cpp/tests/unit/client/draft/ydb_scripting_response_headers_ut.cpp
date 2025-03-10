@@ -6,11 +6,10 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NYdb;
-using namespace NYdb::V3::NScripting;
 
 Y_UNIT_TEST_SUITE(ResponseHeaders) {
     Y_UNIT_TEST(PassHeader) {
-        TMockSlyDbProxy slyDbProxy;
+        NScripting::TMockSlyDbProxy slyDbProxy;
 
         std::string addr = "localhost:10000";
 
@@ -19,7 +18,7 @@ Y_UNIT_TEST_SUITE(ResponseHeaders) {
         auto config = TDriverConfig()
             .SetEndpoint(addr);
         TDriver driver(config);
-        TScriptingClient client(driver);
+        NScripting::TScriptingClient client(driver);
 
         auto result = client.ExecuteYqlScript("SMTH").GetValueSync();
         auto metadata = result.GetResponseMetadata();

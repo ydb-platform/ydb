@@ -7,6 +7,8 @@
 
 #include <optional>
 
+namespace NYdb {
+inline namespace Dev {
 namespace NUtils {
 
 template <class TContainer, class T>
@@ -58,4 +60,6 @@ void GetNext(std::string_view& s, D delim, std::optional<std::string_view>& para
     }
 }
 
+}
+}
 }

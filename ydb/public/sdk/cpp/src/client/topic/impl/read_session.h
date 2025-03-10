@@ -6,7 +6,7 @@
 
 #include <src/client/topic/common/callback_context.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 class TReadSession : public IReadSession {
 public:

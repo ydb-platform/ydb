@@ -4,7 +4,7 @@
 
 #include <util/generic/function.h>
 
-namespace NYdb::inline V3::NRetry::Async {
+namespace NYdb::inline Dev::NRetry::Async {
 
 template <typename TClient, typename TAsyncStatusType>
 class TRetryContext : public TThrRefBase, public TRetryContextBase {

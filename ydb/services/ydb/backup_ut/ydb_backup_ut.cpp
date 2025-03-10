@@ -1306,7 +1306,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
 
         auto opts = NDump::TRestoreSettings().Mode(NDump::TRestoreSettings::EMode::ImportData);
-        using TYdbErrorException = V3::NStatusHelpers::TYdbErrorException;
+        using TYdbErrorException = ::NYdb::Dev::NStatusHelpers::TYdbErrorException;
 
         ExecuteDataDefinitionQuery(session, Sprintf(R"(
                 DROP TABLE `%s`;

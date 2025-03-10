@@ -11,7 +11,7 @@
 #include <library/cpp/threading/future/future.h>
 #include <util/generic/guid.h>
 
-namespace NYdb::inline V3::NFederatedTopic {
+namespace NYdb::inline Dev::NFederatedTopic {
 
 NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& settings);
 
@@ -288,4 +288,4 @@ bool TFederatedReadSessionImpl::Close(TDuration timeout) {
     return result;
 }
 
-}  // namespace NYdb::V3::NFederatedTopic
+}  // namespace NYdb::NFederatedTopic

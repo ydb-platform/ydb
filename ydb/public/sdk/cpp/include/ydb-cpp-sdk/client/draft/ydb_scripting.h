@@ -3,7 +3,7 @@
 #include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NScripting {
 
 class TExecuteYqlResult : public TStatus {

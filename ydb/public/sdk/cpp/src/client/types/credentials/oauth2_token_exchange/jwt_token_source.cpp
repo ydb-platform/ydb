@@ -6,7 +6,7 @@
 
 #define INV_ARG "Invalid argument for JWT token source: "
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 #ifdef YDB_SDK_USE_NEW_JWT
     using TJwtCppStorage = std::vector<picojson::value>;

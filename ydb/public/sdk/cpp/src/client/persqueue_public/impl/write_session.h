@@ -8,7 +8,7 @@
 
 #include <util/generic/buffer.h>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 namespace NTests {
     class TSimpleWriteSessionTestAdapter;

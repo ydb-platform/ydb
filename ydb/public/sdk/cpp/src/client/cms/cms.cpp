@@ -8,7 +8,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-namespace NYdb::inline V3::NCms {
+namespace NYdb::inline Dev::NCms {
 
 namespace {
     EState ConvertState(Ydb::Cms::GetDatabaseStatusResult_State protoState) {

@@ -96,7 +96,6 @@ ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
 ydb/tests/fq/multi_plane [test_retry.py] chunk chunk
 ydb/tests/fq/multi_plane [test_retry_high_rate.py] chunk chunk
-ydb/tests/fq/s3 [test_format_setting.py] chunk chunk
 ydb/tests/fq/yds [*/*] chunk chunk
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_same[v1]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_sequence[v1]

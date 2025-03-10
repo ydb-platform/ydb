@@ -37,9 +37,9 @@ namespace NActors {
             //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " ev# " << (void*)ev << Endl);
             std::unique_lock<std::mutex> g(Mutex);
             Queue.push_back(ev);
-            //if (Queue.size() == 1) {
+            if (Queue.size() == 1) {
                 CondVar.notify_one();
-            //}
+            }
             return Queue.size();
         }
 

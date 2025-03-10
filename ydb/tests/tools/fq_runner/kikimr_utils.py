@@ -142,6 +142,12 @@ class DefaultConfigExtension(ExtensionPoint):
         if solomon_endpoint is not None:
             kikimr.compute_plane.fq_config['common']['monitoring_endpoint'] = solomon_endpoint
         kikimr.control_plane.fq_config['common']['show_query_timeline'] = True
+        enable_external_data_sources(kikimr.compute_plane.qs_config)
+
+        if 's3' not in kikimr.compute_plane.qs_config:
+            kikimr.compute_plane.qs_config['s3'] = {} 
+        kikimr.compute_plane.qs_config['s3']['generator_paths_limit'] = 50000
+
 
 
 class YQv2Extension(ExtensionPoint):

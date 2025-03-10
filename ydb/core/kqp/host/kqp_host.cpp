@@ -1164,8 +1164,9 @@ public:
         }
 
         if (FederatedQuerySetup) {
+            const auto& hostnamePatterns = QueryServiceConfig.GetHostnamePatterns();
             const auto& availableExternalDataSources = QueryServiceConfig.GetAvailableExternalDataSources();
-            ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory({},
+            ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
                                                                                  ActorSystem,
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetGeneratorPathsLimit(),
                                                                                  FederatedQuerySetup ? FederatedQuerySetup->CredentialsFactory : nullptr,

@@ -177,10 +177,6 @@ bool TOlapColumnsDescription::ValidateForStore(const NKikimrSchemeOp::TColumnTab
             return false;
         }
         const TString& colName = colProto.GetName();
-        if (!IsValidColumnName(colName, false)) {
-            errors.AddError(Sprintf("Invalid name for column '%s'", colName.data()));
-            return false;
-        }
         auto* col = GetByName(colName);
         if (!col) {
             errors.AddError("Column '" + colName + "' does not match schema preset");

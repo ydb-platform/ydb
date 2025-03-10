@@ -11,6 +11,7 @@ class TpchSuiteBase(LoadSuiteBase):
     workload_type: WorkloadType = WorkloadType.TPC_H
     iterations: int = 3
     tables_size: dict[str, int] = {}
+    skip_tests: list = []
 
     @classmethod
     def _get_tables_size(cls) -> dict[str, int]:
@@ -42,6 +43,8 @@ class TpchSuiteBase(LoadSuiteBase):
 
     @pytest.mark.parametrize('query_num', [i for i in range(1, 23)])
     def test_tpch(self, query_num: int):
+        if query_num in self.skip_tests:
+            return
         self.run_workload_test(self._get_path(), query_num)
 
 

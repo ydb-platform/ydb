@@ -244,12 +244,10 @@ protected:
             HandleKillReadSession();
             Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
         } else {
-            if (ReadSessionActorId) {
-                Send(ReadSessionActorId, new TEvKafka::TEvJoinGroupRequest(header->CorrelationId, message));
-            } else {
+            if (!ReadSessionActorId) {
                 ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
-                Send(ReadSessionActorId, new TEvKafka::TEvJoinGroupRequest(header->CorrelationId, message));
             }
+            Send(ReadSessionActorId, new TEvKafka::TEvJoinGroupRequest(header->CorrelationId, message));
         }
     }
 
@@ -258,12 +256,10 @@ protected:
             HandleKillReadSession();
             Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
         } else {
-            if (ReadSessionActorId) {
-                Send(ReadSessionActorId, new TEvKafka::TEvSyncGroupRequest(header->CorrelationId, message));
-            } else {
+            if (!ReadSessionActorId) {
                 ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
-                Send(ReadSessionActorId, new TEvKafka::TEvSyncGroupRequest(header->CorrelationId, message));
             }
+            Send(ReadSessionActorId, new TEvKafka::TEvSyncGroupRequest(header->CorrelationId, message));
         }
     }
 
@@ -272,12 +268,10 @@ protected:
             HandleKillReadSession();
             Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
         } else {
-            if (ReadSessionActorId) {
-                Send(ReadSessionActorId, new TEvKafka::TEvHeartbeatRequest(header->CorrelationId, message));
-            } else {
+            if (!ReadSessionActorId) {
                 ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
-                Send(ReadSessionActorId, new TEvKafka::TEvHeartbeatRequest(header->CorrelationId, message));
             }
+            Send(ReadSessionActorId, new TEvKafka::TEvHeartbeatRequest(header->CorrelationId, message));
         }
     }
 
@@ -286,12 +280,10 @@ protected:
             HandleKillReadSession();
             Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
         } else {
-            if (ReadSessionActorId) {
-                Send(ReadSessionActorId, new TEvKafka::TEvLeaveGroupRequest(header->CorrelationId, message));
-            } else {
+            if (!ReadSessionActorId) {
                 ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
-                Send(ReadSessionActorId, new TEvKafka::TEvLeaveGroupRequest(header->CorrelationId, message));
             }
+            Send(ReadSessionActorId, new TEvKafka::TEvLeaveGroupRequest(header->CorrelationId, message));
         }
     }
 

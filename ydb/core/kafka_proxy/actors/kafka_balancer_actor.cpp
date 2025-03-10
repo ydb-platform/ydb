@@ -50,7 +50,7 @@ static EKafkaErrors KqpStatusToKafkaError(Ydb::StatusIds::StatusCode status) {
     } else if (status == Ydb::StatusIds::PRECONDITION_FAILED) {
         return EKafkaErrors::REBALANCE_IN_PROGRESS;
     }
-    return EKafkaErrors::UNKNOWN_SERVER_ERROR;
+    return EKafkaErrors::INVALID_REQUEST;
 }
 
 void TKafkaBalancerActor::Handle(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {

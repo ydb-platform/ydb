@@ -14,6 +14,7 @@ PEERDIR(
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
+
 )
 
 ADDINCL(

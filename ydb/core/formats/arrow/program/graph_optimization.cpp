@@ -140,6 +140,37 @@ TConclusion<bool> TGraph::OptimizeConditionsForStream(TGraphNode* condNode) {
     return true;
 }
 
+TConclusion<bool> TGraph::OptimizeIndexesToApply(TGraphNode* condNode) {
+    if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::CheckIndexData) {
+        return false;
+    }
+    if (condNode->GetProcessorAs<TIndexCheckerProcessor>()->GetApplyToFilter()) {
+        return false;
+    }
+    if (condNode->GetProcessor()->GetOutput().size() != 1) {
+        return false;
+    }
+    if (condNode->GetOutputEdges().size() != 1) {
+        return false;
+    }
+    const auto* dest = condNode->GetOutputEdges().begin()->second;
+    if (dest->GetProcessor()->GetProcessorType() != EProcessorType::StreamLogic) {
+        return false;
+    }
+    if (dest->GetProcessorAs<TStreamLogicProcessor>()->GetOperation() != NKernels::EOperation::And) {
+        return false;
+    }
+    if (dest->GetOutputEdges().size() != 1) {
+        return false;
+    }
+    const auto* destDest = dest->GetOutputEdges().begin()->second;
+    if (destDest->GetProcessor()->GetProcessorType() == EProcessorType::Filter) {
+        condNode->GetProcessorAs<TIndexCheckerProcessor>()->SetApplyToFilter();
+        return true;
+    }
+    return false;
+}
+
 TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
         return false;
@@ -174,15 +205,32 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
         }
         RemoveEdge(condNode, dest, destResourceId);
 
+        const EIndexCheckOperation indexOperation = [&]() {
+            if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::Equals) {
+                return EIndexCheckOperation::Equals;
+            }
+            if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::StartsWith) {
+                return EIndexCheckOperation::StartsWith;
+            }
+            if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::EndsWith) {
+                return EIndexCheckOperation::EndsWith;
+            }
+            if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::StringContains) {
+                return EIndexCheckOperation::Contains;
+            }
+            return EIndexCheckOperation::Contains;
+            AFL_VERIFY(false);
+        }();
+
         const ui32 resourceIdxFetch = BuildNextResourceId();
-        auto indexFetchProc =
-            std::make_shared<TOriginalIndexDataProcessor>(resourceIdxFetch, dataProc->GetColumnId(), dataProc->GetSubColumnName());
+        IDataSource::TFetchIndexContext indexContext(dataProc->GetColumnId(), dataProc->GetSubColumnName(), indexOperation);
+        auto indexFetchProc = std::make_shared<TOriginalIndexDataProcessor>(resourceIdxFetch, indexContext);
         auto indexFetchNode = AddNode(indexFetchProc);
         RegisterProducer(resourceIdxFetch, indexFetchNode.get());
 
         const ui32 resourceIdIndexToAnd = BuildNextResourceId();
-        auto indexCheckProc =
-            std::make_shared<TIndexCheckerProcessor>(resourceIdxFetch, constNode->GetProcessor()->GetOutputColumnIdOnce(), resourceIdIndexToAnd);
+        auto indexCheckProc = std::make_shared<TIndexCheckerProcessor>(
+            resourceIdxFetch, constNode->GetProcessor()->GetOutputColumnIdOnce(), indexContext, resourceIdIndexToAnd);
         auto indexProcNode = AddNode(indexCheckProc);
         RegisterProducer(resourceIdIndexToAnd, indexProcNode.get());
         AddEdge(indexFetchNode.get(), indexProcNode.get(), resourceIdxFetch);
@@ -200,8 +248,9 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
         AddEdge(indexProcNode.get(), andNode.get(), resourceIdIndexToAnd);
         AddEdge(condNode, andNode.get(), resourceIdEqToAnd);
         ResetProducer(destResourceId, andNode.get());
+        return true;
     }
-    return true;
+    return false;
 }
 
 TConclusion<bool> TGraph::OptimizeFilterWithCoalesce(TGraphNode* cNode) {
@@ -292,6 +341,7 @@ TConclusionStatus TGraph::Collapse() {
                     break;
                 }
             }
+
             {
                 auto conclusion = OptimizeConditionsForIndexes(n.get());
                 if (conclusion.IsFail()) {
@@ -302,6 +352,7 @@ TConclusionStatus TGraph::Collapse() {
                     break;
                 }
             }
+
             {
                 auto conclusion = OptimizeConditionsForStream(n.get());
                 if (conclusion.IsFail()) {

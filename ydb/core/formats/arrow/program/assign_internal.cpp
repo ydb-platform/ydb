@@ -12,7 +12,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TCalculationProcessor::DoExecu
         if (resultKernel.IsFail()) {
             return resultKernel;
         } else if (*resultKernel) {
-            return TConclusionStatus::Success();
+            return IResourceProcessor::EExecutionResult::Success;
         } else {
         }
     }

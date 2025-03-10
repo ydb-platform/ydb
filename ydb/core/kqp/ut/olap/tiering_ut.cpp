@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto it = tableClient.StreamExecuteScanQuery(selectQuery, NYdb::NTable::TStreamExecScanQuerySettings()).GetValueSync();
             auto streamPart = it.ReadNext().GetValueSync();
             UNIT_ASSERT(!streamPart.IsSuccess());
-            UNIT_ASSERT_STRING_CONTAINS(streamPart.GetIssues().ToString(), "reading blob range for data");
+            UNIT_ASSERT_STRING_CONTAINS(streamPart.GetIssues().ToString(), "Error reading blob range");
         }
 
         testHelper.CreateTier("tier1");

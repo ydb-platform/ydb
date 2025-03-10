@@ -111,6 +111,11 @@ public:
         return "";
     }
 
+    virtual TString GetEntityStorageId(const ui32 /*entityId*/) const {
+        AFL_VERIFY(false);
+        return "";
+    }
+
     virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) const {
         AFL_VERIFY(false);
         return TBlobRange();

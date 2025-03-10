@@ -36,12 +36,16 @@ private:
     YDB_READONLY(ui32, IndexId, 0);
     YDB_READONLY(TString, StorageId, IStoragesManager::DefaultStorageId);
 
-    virtual std::shared_ptr<NReader::NCommon::IKernelFetchLogic> DoBuildFetchTask(const TIndexDataAddress& dataAddress,
-        const std::vector<TChunkOriginalData>& chunks, const TIndexesCollection& collection, const std::shared_ptr<IIndexMeta>& selfPtr,
+    virtual std::shared_ptr<NReader::NCommon::IKernelFetchLogic> DoBuildFetchTask(const NRequest::TOriginalDataAddress& dataAddress,
+        const TIndexDataAddress& indexAddress, const std::shared_ptr<IIndexMeta>& selfPtr,
         const std::shared_ptr<IStoragesManager>& storagesManager) const;
 
     virtual TConclusion<std::shared_ptr<IIndexHeader>> DoBuildHeader(const TChunkOriginalData& data) const {
         return std::make_shared<TDefaultHeader>(data.GetSize());
+    }
+
+    virtual std::optional<ui64> DoCalcCategory(const TString& /*subColumnName*/) const {
+        return std::nullopt;
     }
 
 protected:
@@ -61,14 +65,22 @@ public:
     using TFactory = NObjectFactory::TObjectFactory<IIndexMeta, TString>;
     using TProto = NKikimrSchemeOp::TOlapIndexDescription;
 
+    virtual bool IsSkipIndex() const {
+        return false;
+    }
+
+    std::optional<ui64> CalcCategory(const TString& subColumnName) const {
+        return DoCalcCategory(subColumnName);
+    }
+
     TConclusion<std::shared_ptr<IIndexHeader>> BuildHeader(const TChunkOriginalData& data) const {
         return DoBuildHeader(data);
     }
 
-    std::shared_ptr<NReader::NCommon::IKernelFetchLogic> BuildFetchTask(const TIndexDataAddress& dataAddress,
-        const std::vector<TChunkOriginalData>& chunks, const TIndexesCollection& collection, const std::shared_ptr<IIndexMeta>& meta,
+    std::shared_ptr<NReader::NCommon::IKernelFetchLogic> BuildFetchTask(const NRequest::TOriginalDataAddress& dataAddress,
+        const TIndexDataAddress& indexAddress, const std::shared_ptr<IIndexMeta>& meta,
         const std::shared_ptr<IStoragesManager>& storagesManager) const {
-        return DoBuildFetchTask(dataAddress, chunks, collection, meta, storagesManager);
+        return DoBuildFetchTask(dataAddress, indexAddress, meta, storagesManager);
     }
 
     bool IsInplaceData() const {

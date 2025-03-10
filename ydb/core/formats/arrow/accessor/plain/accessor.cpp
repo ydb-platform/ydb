@@ -44,6 +44,14 @@ std::shared_ptr<arrow::Array> TTrivialArray::BuildArrayFromOptionalScalar(
     }
 }
 
+std::optional<bool> TTrivialArray::DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
+    if (Array->length() == 1) {
+        value = TStatusValidator::GetValid(Array->GetScalar(0));
+        return true;
+    }
+    return {};
+}
+
 namespace {
 class TChunkAccessor {
 private:

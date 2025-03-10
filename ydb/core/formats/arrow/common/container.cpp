@@ -6,6 +6,7 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/common/vector_operations.h>
+#include <ydb/library/formats/arrow/replace_key.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NArrow {
@@ -264,6 +265,27 @@ TConclusion<std::shared_ptr<arrow::Scalar>> IFieldsConstructor::GetDefaultColumn
         return NArrow::DefaultScalar(field->type());
     }
     return TConclusionStatus::Fail("have not default value for column " + field->name());
+}
+
+NAccessor::IChunkedArray::TRowRange TGeneralContainer::EqualRange(const arrow::RecordBatch& border) const {
+    AFL_VERIFY(border.num_columns());
+    AFL_VERIFY(border.num_columns() <= (i64)Columns.size())("expected", Columns.size())("actual", border.num_columns());
+    AFL_VERIFY(border.num_rows() == 1)("rows", border.num_rows());
+
+    NAccessor::IChunkedArray::TRowRange range(GetRecordsCount());
+    for (ui64 i = 0; (i64)i < border.num_columns(); ++i) {
+        AFL_VERIFY(border.schema()->field(i)->Equals(Schema->field(i)))("expected", Schema->field(i)->ToString())(
+            "actual", border.schema()->field(i)->ToString());
+        const auto column = GetColumnVerified(i);
+        const NAccessor::IChunkedArray::TReader reader(column);
+        auto array = NAccessor::TTrivialArray::BuildArrayFromScalar(NArrow::TStatusValidator::GetValid(border.column(i)->GetScalar(0)));
+        range = reader.EqualRange(NAccessor::IChunkedArray::TAddress(array, 0), range);
+        if (range.Empty()) {
+            return range;
+        }
+    }
+
+    return range;
 }
 
 }   // namespace NKikimr::NArrow

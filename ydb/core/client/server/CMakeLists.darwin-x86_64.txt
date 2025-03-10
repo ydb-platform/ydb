@@ -80,14 +80,11 @@ target_sources(core-client-server PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_pq_read_session_info.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_resolve_node.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_ic_debug.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_local_minikql.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_local_scheme_tx.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_node_registration.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_proxy.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_scheme_initroot.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_scheme_request.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_tablet_counters.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_tablet_kill.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_tablet_state.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_test_shard_request.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/client/server/msgbus_server_tx_request.cpp

@@ -349,11 +349,14 @@ class TPrefixKMeansScan final: public TPrefixKMeansScanBase, private TCalculatio
             return false;
         }
         Parent = Child + K;
-        ++Child;
+        Child = Parent + 1;
         Round = 0;
         K = InitK;
         State = EState::SAMPLE;
-        Lead.To(Key.GetCells(), NTable::ESeek::Upper);
+        // TODO(mbkkt) Upper or Lower doesn't matter here, because we seek to (prefix, inf)
+        // so we can choose Lower if it's faster.
+        // Exact seek with Lower also possible but needs to rewrite some code in Feed
+        Lead.To(Key.GetCells().subspan(0, PrefixColulmns), NTable::ESeek::Upper);
         Key = {};
         MaxProbability = std::numeric_limits<ui64>::max();
         MaxRows.clear();
@@ -379,6 +382,7 @@ public:
     EScan Seek(TLead& lead, ui64 seq) noexcept final
     {
         LOG_D("Seek " << Debug());
+        ui64 zeroSeq = 0;
         while (true) {
             if (State == UploadState) {
                 if (!WriteBuf.IsEmpty()) {
@@ -390,6 +394,7 @@ public:
                     return EScan::Sleep;
                 }
                 if (MoveToNextKey()) {
+                    zeroSeq = seq;
                     continue;
                 }
                 return EScan::Final;
@@ -398,7 +403,7 @@ public:
             lead = Lead;
             if (State == EState::SAMPLE) {
                 lead.SetTags({&KMeansScan, 1});
-                if (seq == 0 && !HasNextKey) {
+                if (seq == zeroSeq && !HasNextKey) {
                     return EScan::Feed;
                 }
                 State = EState::KMEANS;
@@ -406,6 +411,7 @@ public:
                     // We don't need to do anything,
                     // because this datashard doesn't have valid embeddings for this parent
                     if (MoveToNextKey()) {
+                        zeroSeq = seq;
                         continue;
                     }
                     return EScan::Final;

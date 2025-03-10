@@ -286,6 +286,13 @@ private:
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) override;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) override;
 
+    std::shared_ptr<NIndexes::TSkipIndex> SelectOptimalIndex(
+        const std::vector<std::shared_ptr<NIndexes::TSkipIndex>>& indexes, const NArrow::NSSA::EIndexCheckOperation op) const;
+
+    virtual TConclusion<bool> DoStartFetchIndex(const NArrow::NSSA::TProcessorContext& context, const TFetchIndexContext& fetchContext) override;
+    virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const NArrow::NSSA::TProcessorContext& context,
+        const TFetchIndexContext& fetchContext,
+        const std::shared_ptr<arrow::Scalar>& value) override;
     virtual void DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
     virtual TConclusion<bool> DoStartFetchData(
         const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
@@ -321,6 +328,10 @@ private:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
 
 public:
+    virtual TString GetEntityStorageId(const ui32 entityId) const override {
+        return Portion->GetEntityStorageId(entityId, Schema->GetIndexInfo());
+    }
+
     virtual TString GetColumnStorageId(const ui32 columnId) const override {
         return Portion->GetColumnStorageId(columnId, Schema->GetIndexInfo());
     }

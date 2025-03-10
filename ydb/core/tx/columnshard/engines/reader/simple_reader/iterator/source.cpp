@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/sub_columns_fetching.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
@@ -131,6 +132,91 @@ bool TPortionDataSource::DoStartFetchingColumns(
         std::make_shared<NCommon::TBlobsFetcherTask>(readActions, sourcePtr, step, GetContext(), "CS::READ::" + step.GetName(), "");
     NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
     return true;
+}
+
+std::shared_ptr<NIndexes::TSkipIndex> TPortionDataSource::SelectOptimalIndex(
+    const std::vector<std::shared_ptr<NIndexes::TSkipIndex>>& indexes, const NArrow::NSSA::EIndexCheckOperation /*op*/) const {
+    if (indexes.size() == 0) {
+        return nullptr;
+    }
+    if (indexes.size() == 1) {
+        return indexes.front();
+    }
+    return indexes.front();
+}
+
+TConclusion<bool> TPortionDataSource::DoStartFetchIndex(const NArrow::NSSA::TProcessorContext& context, const TFetchIndexContext& indexContext) {
+    NIndexes::NRequest::TOriginalDataAddress addr(indexContext.GetColumnId(), indexContext.GetSubColumnName());
+    auto indexMeta = MutableStageData().GetIndexes()->FindIndexFor(addr, indexContext.GetOperation());
+    if (!indexMeta) {
+        const auto indexesMeta = GetSourceSchema()->GetIndexInfo().FindSkipIndexes(addr, indexContext.GetOperation());
+        if (indexesMeta.empty()) {
+            MutableStageData().AddRemapDataToIndex(addr, nullptr);
+            return false;
+        }
+        indexMeta = SelectOptimalIndex(indexesMeta, indexContext.GetOperation());
+        if (!indexMeta) {
+            MutableStageData().AddRemapDataToIndex(addr, nullptr);
+            return false;
+        }
+    }
+    MutableStageData().AddRemapDataToIndex(addr, indexMeta);
+    const std::optional<ui32> category = indexMeta->CalcCategory(indexContext.GetSubColumnName());
+    std::shared_ptr<NCommon::IKernelFetchLogic> fetcher = indexMeta->BuildFetchTask(
+        addr, NIndexes::TIndexDataAddress(indexMeta->GetIndexId(), category), indexMeta, GetContext()->GetCommonContext()->GetStoragesManager());
+
+    TReadActionsCollection readActions;
+    auto source = std::static_pointer_cast<IDataSource>(context.GetDataSource());
+    NCommon::TFetchingResultContext contextFetch(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
+    fetcher->Start(readActions, contextFetch);
+
+    if (readActions.IsEmpty()) {
+        NBlobOperations::NRead::TCompositeReadBlobs blobs;
+        fetcher->OnDataReceived(readActions, blobs);
+        MutableStageData().AddFetcher(fetcher);
+        AFL_VERIFY(readActions.IsEmpty());
+        return false;
+    }
+    THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>> fetchers;
+    fetchers.emplace(indexMeta->GetIndexId(), fetcher);
+    NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(
+        std::make_shared<NCommon::TColumnsFetcherTask>(std::move(readActions), fetchers, source, GetCursorStep(), "fetcher", "")));
+    return true;
+}
+
+TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
+    const NArrow::NSSA::TProcessorContext& context, const TFetchIndexContext& fetchContext, const std::shared_ptr<arrow::Scalar>& value) {
+    NIndexes::NRequest::TOriginalDataAddress addr(fetchContext.GetColumnId(), fetchContext.GetSubColumnName());
+    auto meta = MutableStageData().ExtractRemapDataToIndex(addr);
+    if (!meta) {
+        NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed({});
+        return NArrow::TColumnFilter::BuildAllowFilter();
+    }
+    AFL_VERIFY(meta->IsSkipIndex());
+
+    {
+        auto fetcher = MutableStageData().ExtractFetcherVerified(meta->GetIndexId());
+        auto source = std::static_pointer_cast<IDataSource>(context.GetDataSource());
+        NCommon::TFetchingResultContext fetchContext(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
+        fetcher->OnDataCollected(fetchContext);
+    }
+
+    const std::optional<ui64> cat = meta->CalcCategory(fetchContext.GetSubColumnName());
+    const NIndexes::TIndexColumnChunked& info = GetStageData().GetIndexes()->GetIndexDataVerified(meta->GetIndexId());
+    NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
+    for (auto&& i : info.GetChunks()) {
+        const TString data = i.GetData(cat);
+        if (std::static_pointer_cast<NIndexes::TSkipIndex>(meta)->CheckValue(data, cat, value, fetchContext.GetOperation())) {
+            filter.Add(true, i.GetRecordsCount());
+            NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed(true);
+            GetContext()->GetCommonContext()->GetCounters().OnAcceptedByIndex(i.GetRecordsCount());
+        } else {
+            filter.Add(false, i.GetRecordsCount());
+            NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed(false);
+            GetContext()->GetCommonContext()->GetCounters().OnDeniedByIndex(i.GetRecordsCount());
+        }
+    }
+    return filter.And(GetStageData().GetTable()->GetFilter());
 }
 
 bool TPortionDataSource::DoStartFetchingIndexes(

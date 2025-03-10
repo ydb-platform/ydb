@@ -106,6 +106,7 @@ private:
     }
     TConclusion<bool> OptimizeConditionsForStream(TGraphNode* condNode);
     TConclusion<bool> OptimizeConditionsForIndexes(TGraphNode* condNode);
+    TConclusion<bool> OptimizeIndexesToApply(TGraphNode* condNode);
     TConclusion<bool> OptimizeFilterWithCoalesce(TGraphNode* cNode);
     TConclusion<bool> OptimizeFilterWithAnd(TGraphNode* filterNode, TGraphNode* filterArg, const std::shared_ptr<TCalculationProcessor>& calc);
 

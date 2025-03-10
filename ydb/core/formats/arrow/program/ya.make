@@ -5,6 +5,13 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/services
     ydb/core/formats/arrow/accessor/sub_columns
+
+    yql/essentials/core/arrow_kernels/registry
+    yql/essentials/core/arrow_kernels/request
+    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/minikql/computation
+    yql/essentials/minikql/invoke_builtins/llvm16
+
 )
 
 IF (OS_WINDOWS)
@@ -44,6 +51,7 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(abstract.h)
 GENERATE_ENUM_SERIALIZATION(aggr_common.h)
+GENERATE_ENUM_SERIALIZATION(execution.h)
 
 YQL_LAST_ABI_VERSION()
 

@@ -255,6 +255,40 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 rec
     return TFixStringBitsStorage(bitMap).GetData();
 }
 
+bool TIndexMeta::DoCheckValue(
+    const TString& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
+    TFixStringBitsStorage bits(data);
+    AFL_VERIFY(!category);
+    AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());
+    bool result = true;
+    const auto predSet = [&](const ui64 hashSecondary) {
+        if (!bits.Get(hashSecondary % bits.GetSizeBits())) {
+            result = false;
+        }
+    };
+    TNGrammBuilder builder(HashesCount);
+
+    NRequest::TLikePart::EOperation opLike;
+    switch (op) {
+        case TSkipIndex::EOperation::Equals:
+            opLike = NRequest::TLikePart::EOperation::Equals;
+            break;
+        case TSkipIndex::EOperation::Contains:
+            opLike = NRequest::TLikePart::EOperation::Contains;
+            break;
+        case TSkipIndex::EOperation::StartsWith:
+            opLike = NRequest::TLikePart::EOperation::StartsWith;
+            break;
+        case TSkipIndex::EOperation::EndsWith:
+            opLike = NRequest::TLikePart::EOperation::EndsWith;
+            break;
+    }
+    auto strVal = std::static_pointer_cast<arrow::BinaryScalar>(value);
+    const TString valString((const char*)strVal->value->data(), strVal->value->size());
+    builder.FillNGrammHashes(NGrammSize, opLike, valString, predSet);
+    return result;
+}
+
 void TIndexMeta::DoFillIndexCheckers(
     const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& /*schema*/) const {
     for (auto&& branch : info->GetBranches()) {

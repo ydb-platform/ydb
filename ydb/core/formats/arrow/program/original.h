@@ -19,6 +19,10 @@ private:
         return false;
     }
 
+    virtual ui64 DoGetWeight() const override {
+        return 10;
+    }
+
 public:
     TOriginalColumnDataProcessor(const ui32 outputId, const ui32 columnId, const TString& columnName, const TString& subColumnName)
         : TBase({}, { outputId }, EProcessorType::FetchOriginalData)
@@ -38,6 +42,10 @@ private:
 
     virtual bool IsAggregation() const override {
         return false;
+    }
+
+    virtual ui64 DoGetWeight() const override {
+        return 5;
     }
 
 public:

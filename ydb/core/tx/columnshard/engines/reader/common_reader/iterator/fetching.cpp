@@ -198,7 +198,7 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
     const bool started = !source->HasProgramIterator();
     auto readMeta = source->GetContext()->GetCommonContext()->GetReadMetadata();
     if (!source->HasProgramIterator()) {
-        Cerr << Program->DebugDOT() << Endl;
+//        Cerr << Program->DebugDOT() << Endl;
         NArrow::NSSA::TProcessorContext context(
             source, source->GetStageData().GetTable(), readMeta->GetLimitRobustOptional(), readMeta->IsDescSorted());
         auto visitor = std::make_shared<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>(context);
@@ -221,8 +221,11 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
             return conclusion;
         }
         if (source->GetExecutionVisitorVerified()->GetInBackgroundMarker()) {
-            source->GetExecutionVisitorVerified()->ResetInBackgroundMarker();
             return false;
+        }
+        if (resources->GetRecordsCountActualOptional() == 0) {
+            resources->Clear();
+            break;
         }
     }
     return true;

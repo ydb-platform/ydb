@@ -55,12 +55,13 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
     for (auto&& n : Nodes) {
         if (n.second->GetInputEdges().empty()) {
             currentNodes.emplace_back(n.second.get());
-            n.second->CalcWeight(resolver);
+            n.second->CalcWeight(resolver, 0);
         }
     }
     ui32 nodesCount = currentNodes.size();
     while (currentNodes.size()) {
         std::vector<TNode*> nextNodes;
+        THashMap<ui32, ui64> weightByNode;
         THashSet<ui32> nextNodeIds;
         for (auto&& i : currentNodes) {
             for (auto&& near : i->GetOutputEdges()) {
@@ -69,20 +70,25 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
                 }
                 AFL_VERIFY(!near->HasWeight());
                 bool hasWeight = true;
+                ui64 sumWeight = 0;
                 for (auto&& test : near->GetInputEdges()) {
                     if (!test->HasWeight()) {
                         hasWeight = false;
                         break;
                     }
+                    sumWeight += test->GetWeight();
                 }
                 if (hasWeight) {
+                    weightByNode[near->GetIdentifier()] = sumWeight;
                     nextNodes.emplace_back(near);
                 }
             }
         }
         for (auto&& i : nextNodes) {
             ++nodesCount;
-            i->CalcWeight(resolver);
+            auto it = weightByNode.find(i->GetIdentifier());
+            AFL_VERIFY(it != weightByNode.end());
+            i->CalcWeight(resolver, it->second);
         }
         currentNodes = std::move(nextNodes);
     }
@@ -106,7 +112,6 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
         auto it = BuildIterator(nullptr);
         for (; it->IsValid(); it->Next()) {
             it->MutableCurrentNode().SetSequentialIdx(currentIndex);
-            Cerr << DebugDOT() << Endl;
             for (auto&& i : it->GetProcessorVerified()->GetInput()) {
                 if (resolver.HasColumn(i.GetColumnId())) {
                     if (IsFilterRoot(it->GetCurrentGraphNode()->GetIdentifier())) {
@@ -137,6 +142,7 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
             node->SetRemoveResourceIds(i.second.GetLastUsageResources());
         }
     }
+//    Cerr << DebugDOT() << Endl;
 }
 
 TConclusionStatus TCompiledGraph::ApplyImpl(const std::shared_ptr<TCompiledGraph::TNode>& rootNode, const std::shared_ptr<TIterator>& it) const {
@@ -212,7 +218,7 @@ TString TCompiledGraph::DebugDOT() const {
         quote.AppendValue(i.second->GetProcessor()->DebugJson().GetStringRobust());
         const TString data = quote.GetStringRobust();
         TStringBuilder label;
-        label << "N" << i.second->GetSequentialIdx(-1) << ":" << data.substr(2, data.size() - 4) << Endl;
+        label << "N" << i.second->GetSequentialIdx(-1) << "(" << i.second->GetWeight() << ")" << ":" << data.substr(2, data.size() - 4) << Endl;
         if (i.second->GetRemoveResourceIds().size()) {
             label << "REMOVE:" << JoinSeq(",", i.second->GetRemoveResourceIds());
         }
@@ -223,7 +229,7 @@ TString TCompiledGraph::DebugDOT() const {
                    i.second->GetProcessor()->GetProcessorType() == EProcessorType::FetchOriginalData) {
             result << ",style=filled,color=\"0.5, 0.9, 0.5\"";
         }
-        result << "];";
+        result << "];" << Endl;
         ui32 idx = 1;
         for (auto&& input : i.second->GetInputEdges()) {
             result << "N" << input->GetIdentifier() << " -> " << "N" << i.second->GetIdentifier() << "[label=\"" + ::ToString(idx) + "\"];"
@@ -240,7 +246,7 @@ TString TCompiledGraph::DebugDOT() const {
             seq << "N" << i.second;
         }
         seq << "[color=red];";
-        result << seq;
+        result << seq << Endl;
     }
     result << "}";
     return result;
@@ -345,6 +351,20 @@ TConclusion<bool> TCompiledGraph::TIterator::Reset(const std::vector<std::shared
 TConclusion<bool> TCompiledGraph::TIterator::Next() {
     AFL_VERIFY(CurrentNode);
     AFL_VERIFY(NodesStack.size());
+    bool skipFlag = false;
+    if (Visitor) {
+        AFL_VERIFY(NodesStack.back());
+        auto conclusion = Visitor->OnExit(*NodesStack.back());
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+        if (*conclusion == IResourceProcessor::EExecutionResult::InBackground) {
+            return true;
+        }
+        if (*conclusion == IResourceProcessor::EExecutionResult::Skipped) {
+            skipFlag = true;
+        }
+    }
     TNode* nextNode = nullptr;
     if (NodesStack.size() > 1) {
         auto owner = NodesStack[NodesStack.size() - 2];
@@ -379,18 +399,15 @@ TConclusion<bool> TCompiledGraph::TIterator::Next() {
         AFL_VERIFY(found);
     }
     AFL_VERIFY(NodesStack.size());
-    if (Visitor) {
-        AFL_VERIFY(NodesStack.back());
-        auto conclusion = Visitor->OnExit(*NodesStack.back());
-        if (conclusion.IsFail()) {
-            return conclusion;
-        }
-    }
     NodesStack.pop_back();
     auto itStatus = Statuses.find(CurrentNode->GetIdentifier());
     AFL_VERIFY(itStatus != Statuses.end());
     AFL_VERIFY(itStatus->second == ENodeStatus::InProgress);
-    itStatus->second = ENodeStatus::Finished;
+    if (skipFlag) {
+        Statuses.erase(itStatus);
+    } else {
+        itStatus->second = ENodeStatus::Finished;
+    }
     if (!!nextNode) {
         CurrentNode = nextNode;
         auto conclusion = ProvideCurrentToExecute();
@@ -405,6 +422,26 @@ TConclusion<bool> TCompiledGraph::TIterator::Next() {
         }
     }
     return GlobalInitialize();
+}
+
+TConclusion<IResourceProcessor::EExecutionResult> TCompiledGraph::IVisitor::OnExit(
+    const TCompiledGraph::TNode& node) {
+    AFL_VERIFY(node.GetProcessor());
+    auto conclusion = DoOnExit(node);
+    if (conclusion.IsFail()) {
+        return conclusion;
+    }
+    if (*conclusion == IResourceProcessor::EExecutionResult::Success) {
+        AFL_VERIFY(Current.erase(node.GetIdentifier()))("id", node.GetIdentifier());
+    } else if (*conclusion == IResourceProcessor::EExecutionResult::Skipped) {
+        AFL_VERIFY(Current.erase(node.GetIdentifier()))("id", node.GetIdentifier());
+        AFL_VERIFY(Visited.erase(node.GetIdentifier()))("id", node.GetIdentifier());
+    }
+    return conclusion;
+}
+
+void TCompiledGraph::TNode::CalcWeight(const IColumnResolver& /*resolver*/, const ui64 sumChildren) {
+    Weight = Processor->GetWeight() + sumChildren;
 }
 
 }   // namespace NKikimr::NArrow::NSSA::NGraph::NExecution

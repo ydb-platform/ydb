@@ -12,7 +12,8 @@ public:
     enum class EOperation {
         StartsWith,
         EndsWith,
-        Contains
+        Contains,
+        Equals
     };
 
 private:

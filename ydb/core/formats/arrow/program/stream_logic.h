@@ -14,6 +14,7 @@ private:
     const NKernels::EOperation Operation;
     std::shared_ptr<IStepFunction> Function;
 
+    virtual NJson::TJsonValue DoDebugJson() const override;
     virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 
     virtual bool IsAggregation() const override {
@@ -29,11 +30,7 @@ public:
 
     TConclusion<bool> OnInputReady(const ui32 inputId, const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const;
 
-    TStreamLogicProcessor(std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output, const NKernels::EOperation op)
-        : TBase(std::move(input), { output }, EProcessorType::StreamLogic)
-        , Operation(op) {
-        Function = std::make_shared<TSimpleFunction>(op);
-    }
+    TStreamLogicProcessor(std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output, const NKernels::EOperation op);
 };
 
 }   // namespace NKikimr::NArrow::NSSA

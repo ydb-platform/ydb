@@ -125,7 +125,7 @@ std::shared_ptr<IChunkedArray> TAccessorsCollection::GetConstantVerified(const u
 
 std::shared_ptr<arrow::Scalar> TAccessorsCollection::GetConstantScalarVerified(const ui32 columnId) const {
     auto it = Constants.find(columnId);
-    AFL_VERIFY(it != Constants.end());
+    AFL_VERIFY(it != Constants.end())("id", columnId);
     return it->second;
 }
 

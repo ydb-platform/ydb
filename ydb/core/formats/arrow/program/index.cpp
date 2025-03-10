@@ -7,7 +7,7 @@ namespace NKikimr::NArrow::NSSA {
 
 TConclusion<IResourceProcessor::EExecutionResult> TOriginalIndexDataProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    auto conclusion = context.GetDataSource()->StartFetchIndex(context, GetOutputColumnIdOnce(), ColumnId, SubColumnName);
+    auto conclusion = context.GetDataSource()->StartFetchIndex(context, IndexContext);
     if (conclusion.IsFail()) {
         return conclusion;
     } else if (*conclusion) {
@@ -19,25 +19,36 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalIndexDataProcessor::D
 
 NJson::TJsonValue TOriginalIndexDataProcessor::DoDebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
-    result.InsertValue("c_id", ColumnId);
-    if (SubColumnName) {
-        result.InsertValue("sub_id", SubColumnName);
+    result.InsertValue("c_id", IndexContext.GetColumnId());
+    if (IndexContext.GetSubColumnName()) {
+        result.InsertValue("sub_id", IndexContext.GetSubColumnName());
     }
+    result.InsertValue("op", ::ToString(IndexContext.GetOperation()));
     return result;
 }
 
 TConclusion<IResourceProcessor::EExecutionResult> TIndexCheckerProcessor::DoExecute(
-    const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const {
-    IDataSource::TCheckIndexContext checkContext(columnId, );
+    const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
+    auto scalarConst = context.GetResources()->GetConstantScalarVerified(GetInput().back().GetColumnId());
 
-    context.GetDataSource()->CheckIndex(context, GetOutputColumnIdOnce(), );
-    context.GetResources()->AddVerified(GetOutputColumnIdOnce(),
-        std::make_shared<NAccessor::TSparsedArray>(
-            std::make_shared<arrow::BooleanScalar>(true), arrow::boolean(), context.GetResources()->GetRecordsCountActualVerified()),
-        false);
-    Y_UNUSED(ColumnId);
-    return EExecutionResult::Success;
-    return EExecutionResult::Success;
+    auto conclusion = context.GetDataSource()->CheckIndex(context, IndexContext, scalarConst);
+    if (conclusion.IsFail()) {
+        return conclusion;
+    }
+    if (conclusion->IsTotalDenyFilter()) {
+        context.GetResources()->AddVerified(GetOutputColumnIdOnce(),
+            std::make_shared<NAccessor::TSparsedArray>(
+                std::make_shared<arrow::UInt8Scalar>(0), arrow::uint8(), context.GetResources()->GetRecordsCountActualVerified()),
+            false);
+    } else if (conclusion->IsTotalAllowFilter() || !ApplyToFilterFlag) {
+        context.GetResources()->AddVerified(GetOutputColumnIdOnce(),
+            std::make_shared<NAccessor::TSparsedArray>(
+                std::make_shared<arrow::UInt8Scalar>(1), arrow::uint8(), context.GetResources()->GetRecordsCountActualVerified()),
+            false);
+    } else {
+        context.GetResources()->AddFilter(*conclusion);
+    }
+    return IResourceProcessor::EExecutionResult::Success;
 }
 
 }   // namespace NKikimr::NArrow::NSSA

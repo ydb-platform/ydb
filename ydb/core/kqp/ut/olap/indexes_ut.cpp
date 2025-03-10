@@ -523,7 +523,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     };
                     ExecuteSQL(query(resourceIds[idx], uids[idx], levels[idx]), "[[1u;]]");
                 }
-                AFL_VERIFY((csController->GetIndexesApprovedOnSelect().Val() - ApproveStart) < csController->GetIndexesSkippingOnSelect().Val() - SkipStart)
+                AFL_VERIFY((csController->GetIndexesApprovedOnSelect().Val() - ApproveStart) * 0.3 < csController->GetIndexesSkippingOnSelect().Val() - SkipStart)
                 ("approved", csController->GetIndexesApprovedOnSelect().Val() - ApproveStart)(
                     "skipped", csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
             }

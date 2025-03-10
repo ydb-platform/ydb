@@ -64,31 +64,30 @@ TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui3
 }
 
 void TBloomIndexMeta::DoFillIndexCheckers(
-    const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& /*schema*/) const {
-    for (auto&& branch : info->GetBranches()) {
-        for (auto&& i : branch->GetEquals()) {
-            if (i.first.GetColumnId() != GetColumnId()) {
-                continue;
+    const std::shared_ptr<NRequest::TDataForIndexesCheckers>& /*info*/, const NSchemeShard::TOlapSchema& /*schema*/) const {
+}
+
+bool TBloomIndexMeta::DoCheckValue(
+    const TString& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
+    std::set<ui64> hashes;
+    AFL_VERIFY(op == EOperation::Equals)("op", op);
+    TFixStringBitsStorage bits(data);
+    if (!!category) {
+        for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
+            const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(value, hashSeed);
+            if (!bits.Get(CombineHashes(*category, hash) % bits.GetSizeBits())) {
+                return false;
             }
-            ui64 hashBase = 0;
-            if (!GetDataExtractor()->CheckForIndex(i.first, hashBase)) {
-                continue;
+        }
+    } else {
+        for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
+            const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(value, hashSeed);
+            if (!bits.Get(hash % bits.GetSizeBits())) {
+                return false;
             }
-            std::set<ui64> hashes;
-            if (hashBase) {
-                for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
-                    const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(i.second, hashSeed);
-                    hashes.emplace(CombineHashes(hashBase, hash));
-                }
-            } else {
-                for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
-                    const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(i.second, hashSeed);
-                    hashes.emplace(hash);
-                }
-            }
-            branch->MutableIndexes().emplace_back(std::make_shared<TBloomFilterChecker>(GetIndexId(), std::move(hashes)));
         }
     }
+    return true;
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

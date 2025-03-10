@@ -10,16 +10,11 @@ private:
     YDB_READONLY(bool, InBackgroundMarker, false);
 
 public:
-    void ResetInBackgroundMarker() {
-        AFL_VERIFY(InBackgroundMarker);
-        InBackgroundMarker = false;
-    }
-
     TExecutionVisitor(const TProcessorContext& context)
         : Context(context) {
     }
 
-    virtual TConclusionStatus DoOnExit(const TCompiledGraph::TNode& node) override;
+    virtual TConclusion<IResourceProcessor::EExecutionResult> DoOnExit(const TCompiledGraph::TNode& node) override;
     virtual TConclusionStatus DoOnEnter(const TCompiledGraph::TNode& /*node*/) override {
         return TConclusionStatus::Success();
     }

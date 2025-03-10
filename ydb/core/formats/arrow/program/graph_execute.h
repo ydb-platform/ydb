@@ -29,9 +29,7 @@ public:
         std::optional<ui64> Weight;
         std::optional<ui32> SequentialIdx;
 
-        void CalcWeight(const IColumnResolver& /*resolver*/) {
-            Weight = 0;
-        }
+        void CalcWeight(const IColumnResolver& resolver, const ui64 sumChildren);
 
         void ConnectTo(TNode* to) {
             for (auto&& i : to->InputEdges) {
@@ -99,18 +97,14 @@ public:
         THashSet<ui32> Visited;
         THashSet<ui32> Current;
 
-        virtual TConclusionStatus DoOnExit(const TCompiledGraph::TNode& node) = 0;
+        virtual TConclusion<IResourceProcessor::EExecutionResult> DoOnExit(const TCompiledGraph::TNode& node) = 0;
         virtual TConclusionStatus DoOnEnter(const TCompiledGraph::TNode& node) = 0;
         virtual TConclusionStatus DoOnComeback(const TCompiledGraph::TNode& node, const std::vector<TColumnChainInfo>& readyInputs) = 0;
 
     public:
         virtual ~IVisitor() = default;
 
-        [[nodiscard]] TConclusionStatus OnExit(const TCompiledGraph::TNode& node) {
-            AFL_VERIFY(node.GetProcessor());
-            AFL_VERIFY(Current.erase(node.GetIdentifier()));
-            return DoOnExit(node);
-        }
+        [[nodiscard]] TConclusion<IResourceProcessor::EExecutionResult> OnExit(const TCompiledGraph::TNode& node);
         [[nodiscard]] TConclusionStatus OnEnter(const TCompiledGraph::TNode& node) {
             AFL_VERIFY(node.GetProcessor());
             AFL_VERIFY(Visited.emplace(node.GetIdentifier()).second);

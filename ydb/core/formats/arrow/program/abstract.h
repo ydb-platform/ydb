@@ -205,6 +205,7 @@ class IResourceProcessor {
 public:
     enum class EExecutionResult {
         Success,
+        Skipped,
         InBackground
     };
 

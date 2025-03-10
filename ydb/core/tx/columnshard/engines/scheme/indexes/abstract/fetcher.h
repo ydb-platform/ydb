@@ -51,6 +51,7 @@ private:
     TIndexDataAddress Address;
     TChunkOriginalData OriginalData;
     TRangeFetchingState Result;
+    const ui32 RecordsCount;
 
     static TRangeFetchingState BuildResult(const TString& storageId, const TChunkOriginalData& originalData,
         const std::shared_ptr<IIndexHeader>& header, const TIndexDataAddress& address) {
@@ -81,6 +82,10 @@ private:
     }
 
 public:
+    ui32 GetRecordsCount() const {
+        return RecordsCount;
+    }
+
     const std::shared_ptr<IIndexHeader>& GetHeader() const {
         AFL_VERIFY(Header);
         return Header;
@@ -124,63 +129,37 @@ public:
     }
 
     TIndexChunkFetching(const TString& storageId, const TIndexDataAddress& address, const TChunkOriginalData& originalData,
-        const std::shared_ptr<IIndexHeader>& header)
+        const std::shared_ptr<IIndexHeader>& header, const ui32 recordsCount)
         : Header(header)
         , Address(address)
         , OriginalData(std::move(originalData))
-        , Result(BuildResult(storageId, originalData, Header, address)) {
+        , Result(BuildResult(storageId, OriginalData, Header, address))
+        , RecordsCount(recordsCount)
+    {
     }
 };
 
 class TIndexFetcherLogic: public NReader::NCommon::IKernelFetchLogic {
 private:
     using TBase = NReader::NCommon::IKernelFetchLogic;
-    const TIndexDataAddress DataAddress;
-    const TString StorageId;
+    const NRequest::TOriginalDataAddress DataAddress;
+    const TIndexDataAddress IndexAddress;
+    TString StorageId;
     std::shared_ptr<IIndexMeta> IndexMeta;
     std::vector<TIndexChunkFetching> Fetching;
 
-    virtual void DoStart(TReadActionsCollection& nextRead, NReader::NCommon::TFetchingResultContext& /*context*/) override {
-        TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
-        auto reading = blobsAction.GetReading(StorageId);
-        for (auto&& i : Fetching) {
-            if (!i.GetResult().HasData()) {
-                reading->AddRange(i.GetResult().GetRangeVerified());
-            }
-        }
-        nextRead.Add(reading);
-    }
-
-    virtual void DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override {
-        TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
-        auto reading = blobsAction.GetReading(StorageId);
-        for (auto&& r : Fetching) {
-            r.FetchFrom(IndexMeta, *reading, blobs);
-        }
-        nextRead.Add(reading);
-    }
-    virtual void DoOnDataCollected(NReader::NCommon::TFetchingResultContext& context) override {
-        std::vector<TString> data;
-        const bool hasIndex = context.GetIndexes().HasIndex(DataAddress.GetIndexId());
-
-        for (auto&& i : Fetching) {
-            data.emplace_back(i.GetResult().GetBlobData());
-            if (!hasIndex) {
-                context.GetIndexes().StartChunk(DataAddress.GetIndexId(), i.GetHeader());
-            }
-        }
-        context.GetIndexes().AddData(DataAddress.GetIndexId(), DataAddress.GetCategory(), data);
-    }
+    virtual void DoStart(TReadActionsCollection& nextRead, NReader::NCommon::TFetchingResultContext& context) override;
+    virtual void DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override;
+    virtual void DoOnDataCollected(NReader::NCommon::TFetchingResultContext& context) override;
 
 public:
-    TIndexFetcherLogic(const TIndexDataAddress& address, std::vector<TIndexChunkFetching>&& fetching,
+    TIndexFetcherLogic(const NRequest::TOriginalDataAddress& dataAddress, const TIndexDataAddress& indexAddress,
         const std::shared_ptr<IIndexMeta>& indexMeta, const std::shared_ptr<IStoragesManager>& storagesManager)
-        : TBase(address.GetIndexId(), storagesManager)
-        , DataAddress(address)
-        , IndexMeta(indexMeta)
-        , Fetching(std::move(fetching)) {
+        : TBase(indexAddress.GetIndexId(), storagesManager)
+        , DataAddress(dataAddress)
+        , IndexAddress(indexAddress)
+        , IndexMeta(indexMeta) {
         AFL_VERIFY(IndexMeta);
-        AFL_VERIFY(Fetching.size());
     }
 };
 

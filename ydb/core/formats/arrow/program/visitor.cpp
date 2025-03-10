@@ -3,13 +3,19 @@
 
 namespace NKikimr::NArrow::NSSA::NGraph::NExecution {
 
-TConclusionStatus TExecutionVisitor::DoOnExit(const TCompiledGraph::TNode& node) {
+TConclusion<IResourceProcessor::EExecutionResult> TExecutionVisitor::DoOnExit(const TCompiledGraph::TNode& node) {
+    if (InBackgroundMarker) {
+        InBackgroundMarker = false;
+        return IResourceProcessor::EExecutionResult::Success;
+    }
     AFL_VERIFY(!InBackgroundMarker);
+    IResourceProcessor::EExecutionResult result = IResourceProcessor::EExecutionResult::Skipped;
     if (!SkipActivity.size()) {
         auto conclusion = node.GetProcessor()->Execute(Context, node);
         if (conclusion.IsFail()) {
             return conclusion;
         }
+        result = *conclusion;
         if (*conclusion == IResourceProcessor::EExecutionResult::InBackground) {
             InBackgroundMarker = true;
         }
@@ -18,12 +24,12 @@ TConclusionStatus TExecutionVisitor::DoOnExit(const TCompiledGraph::TNode& node)
     for (auto&& i : node.GetRemoveResourceIds()) {
         Context.GetResources()->Remove(i, true);
     }
-    return TConclusionStatus::Success();
+    return result;
 }
 
 TConclusionStatus TExecutionVisitor::DoOnComeback(const TCompiledGraph::TNode& node, const std::vector<TColumnChainInfo>& readyInputs) {
-    AFL_VERIFY(!InBackgroundMarker);
-    if (node.GetProcessor()->GetProcessorType() == EProcessorType::StreamLogic) {
+    AFL_VERIFY(!InBackgroundMarker)("id", node.GetIdentifier())("ready", JoinSeq(",", TColumnChainInfo::ExtractColumnIds(readyInputs)));
+    if (SkipActivity.empty() && node.GetProcessor()->GetProcessorType() == EProcessorType::StreamLogic) {
         const TStreamLogicProcessor* streamProc = static_cast<const TStreamLogicProcessor*>(node.GetProcessor().get());
         for (auto&& i : readyInputs) {
             auto conclusion = streamProc->OnInputReady(i.GetColumnId(), Context, node);

@@ -43,8 +43,21 @@ private:
     std::shared_ptr<TColumnFilter> Filter = std::make_shared<TColumnFilter>(TColumnFilter::BuildAllowFilter());
     bool UseFilter = true;
     std::optional<ui32> RecordsCountActual;
+    THashSet<i64> Markers;
 
 public:
+    bool HasMarker(const i64 marker) const {
+        return Markers.contains(marker);
+    }
+
+    void AddMarker(const i64 marker) {
+        AFL_VERIFY(Markers.emplace(marker).second);
+    }
+
+    void RemoveMarker(const i64 marker) {
+        AFL_VERIFY(Markers.erase(marker));
+    }
+
     bool IsEmptyFiltered() const {
         return Filter->IsTotalDenyFilter();
     }
@@ -55,6 +68,11 @@ public:
 
     std::optional<ui32> GetRecordsCountActualOptional() const {
         return RecordsCountActual;
+    }
+
+    ui32 GetRecordsCountActualVerified() const {
+        AFL_VERIFY(!!RecordsCountActual);
+        return *RecordsCountActual;
     }
 
     TAccessorsCollection() = default;
@@ -305,6 +323,8 @@ public:
     TChunkedArguments GetArguments(const std::vector<ui32>& columnIds, const bool concatenate) const;
     std::vector<std::shared_ptr<IChunkedArray>> GetAccessors(const std::vector<ui32>& columnIds) const;
     std::vector<std::shared_ptr<IChunkedArray>> ExtractAccessors(const std::vector<ui32>& columnIds);
+    std::shared_ptr<IChunkedArray> ExtractAccessorOptional(const ui32 columnId);
+
 
     std::shared_ptr<arrow::Table> GetTable(const std::vector<ui32>& columnIds) const;
 
@@ -339,22 +359,15 @@ public:
     }
 
     void CutFilter(const ui32 recordsCount, const ui32 limit, const bool reverse) {
-        auto filter = std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter());
         const ui32 recordsCountImpl = Filter->GetFilteredCount().value_or(recordsCount);
         if (recordsCountImpl < limit) {
             return;
         }
-        if (reverse) {
-            filter->Add(false, recordsCountImpl - limit);
-            filter->Add(true, limit);
-        } else {
-            filter->Add(true, limit);
-            filter->Add(false, recordsCountImpl - limit);
-        }
         if (UseFilter) {
-            AddFilter(*filter);
+            auto filter = NArrow::TColumnFilter::BuildAllowFilter().Cut(recordsCountImpl, limit, reverse);
+            AddFilter(filter);
         } else {
-            AddFilter(Filter->CombineSequentialAnd(*filter));
+            *Filter = Filter->Cut(recordsCountImpl, limit, reverse);
         }
     }
 

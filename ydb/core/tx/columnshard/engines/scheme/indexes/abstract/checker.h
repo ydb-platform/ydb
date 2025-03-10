@@ -16,6 +16,14 @@ private:
     YDB_READONLY_DEF(std::optional<ui64>, Category);
 
 public:
+    TString DebugString() const {
+        if (Category) {
+            return TStringBuilder() << "[" << IndexId << "," << *Category << "]";
+        } else {
+            return TStringBuilder() << "[" << IndexId << "]";
+        }
+    }
+
     template <class TContainer>
     static std::set<ui32> ExtractIndexIds(const TContainer& addresses) {
         std::set<ui32> result;
@@ -32,7 +40,7 @@ public:
         AFL_VERIFY(IndexId);
     }
 
-    explicit TIndexDataAddress(const ui32 indexId, const ui64 category)
+    explicit TIndexDataAddress(const ui32 indexId, const std::optional<ui64> category)
         : IndexId(indexId)
         , Category(category) {
         AFL_VERIFY(IndexId);

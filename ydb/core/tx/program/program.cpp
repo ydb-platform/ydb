@@ -3,6 +3,7 @@
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/program/collection.h>
+#include <ydb/core/formats/arrow/program/execution.h>
 
 namespace NKikimr::NOlap {
 
@@ -106,8 +107,8 @@ TConclusionStatus TProgramContainer::ParseProgram(const NArrow::NSSA::IColumnRes
     using TId = NKikimrSSA::TProgram::TCommand;
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("parse_proto_program", program.DebugString());
-
-    NArrow::NSSA::TProgramBuilder programBuilder(columnResolver, KernelsRegistry);
+//    Cerr << program.DebugString() << Endl;
+    NArrow::NSSA::TProgramBuilder programBuilder(columnResolver, KernelsRegistry, Limit);
     for (auto& cmd : program.GetCommand()) {
         switch (cmd.GetLineCase()) {
             case TId::kAssign: {
@@ -160,9 +161,10 @@ const THashSet<ui32>& TProgramContainer::GetProcessingColumns() const {
     return Program->GetSourceColumns();
 }
 
-TConclusionStatus TProgramContainer::ApplyProgram(const std::shared_ptr<NArrow::NAccessor::TAccessorsCollection>& collection) const {
+TConclusionStatus TProgramContainer::ApplyProgram(
+    const std::shared_ptr<NArrow::NAccessor::TAccessorsCollection>& collection, const std::shared_ptr<NArrow::NSSA::IDataSource>& source) const {
     if (Program) {
-        return Program->Apply(collection);
+        return Program->Apply(source, collection);
     } else if (OverrideProcessingColumnsVector) {
         collection->RemainOnly(*OverrideProcessingColumnsVector, true);
     }
@@ -172,7 +174,7 @@ TConclusionStatus TProgramContainer::ApplyProgram(const std::shared_ptr<NArrow::
 TConclusion<std::shared_ptr<arrow::RecordBatch>> TProgramContainer::ApplyProgram(
     const std::shared_ptr<arrow::RecordBatch>& batch, const NArrow::NSSA::IColumnResolver& resolver) const {
     auto resources = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(batch, resolver);
-    auto status = ApplyProgram(resources);
+    auto status = ApplyProgram(resources, std::make_shared<NArrow::NSSA::TFakeDataSource>());
     if (status.IsFail()) {
         return status;
     }

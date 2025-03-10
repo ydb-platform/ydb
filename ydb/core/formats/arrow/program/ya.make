@@ -5,6 +5,13 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/services
     ydb/core/formats/arrow/accessor/sub_columns
+
+    yql/essentials/core/arrow_kernels/registry
+    yql/essentials/core/arrow_kernels/request
+    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/minikql/computation
+    yql/essentials/minikql/invoke_builtins/llvm16
+
 )
 
 IF (OS_WINDOWS)
@@ -23,7 +30,12 @@ ENDIF()
 
 SRCS(
     abstract.cpp
-    graph.cpp
+    stream_logic.cpp
+    visitor.cpp
+    index.cpp
+    execution.cpp
+    graph_optimization.cpp
+    graph_execute.cpp
     original.cpp
     collection.cpp
     functions.cpp
@@ -33,13 +45,13 @@ SRCS(
     projection.cpp
     assign_const.cpp
     assign_internal.cpp
-    chain.cpp
     custom_registry.cpp
     GLOBAL kernel_logic.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(abstract.h)
 GENERATE_ENUM_SERIALIZATION(aggr_common.h)
+GENERATE_ENUM_SERIALIZATION(execution.h)
 
 YQL_LAST_ABI_VERSION()
 

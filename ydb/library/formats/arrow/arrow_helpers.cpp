@@ -829,4 +829,55 @@ std::shared_ptr<arrow::Table> DeepCopy(const std::shared_ptr<arrow::Table>& tabl
     return arrow::Table::Make(table->schema(), arrays);
 }
 
+TConclusion<bool> ScalarIsTrue(const arrow::Scalar& x) {
+    std::optional<bool> result;
+    if (!SwitchTypeImpl<bool, false>(x.type->id(), [&](const auto& type) {
+            using TWrap = std::decay_t<decltype(type)>;
+            using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
+            using TValue = std::decay_t<decltype(static_cast<const TScalar&>(x).value)>;
+
+            if constexpr (std::is_arithmetic_v<TValue>) {
+                result = ((int)static_cast<const TScalar&>(x).value == 1);
+                return true;
+            }
+            return false;
+        })) {
+        return TConclusionStatus::Fail("not appropriate scalar type for bool interpretation");
+    }
+    Y_ABORT_UNLESS(result);
+    return *result;
+}
+
+TConclusion<bool> ScalarIsFalse(const arrow::Scalar& x) {
+    std::optional<bool> result;
+    if (!SwitchTypeImpl<bool, false>(x.type->id(), [&](const auto& type) {
+            using TWrap = std::decay_t<decltype(type)>;
+            using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
+            using TValue = std::decay_t<decltype(static_cast<const TScalar&>(x).value)>;
+
+            if constexpr (std::is_arithmetic_v<TValue>) {
+                result = ((int)static_cast<const TScalar&>(x).value == 0);
+                return true;
+            }
+            return false;
+        })) {
+        return TConclusionStatus::Fail("not appropriate scalar type for bool interpretation");
+    }
+    Y_ABORT_UNLESS(result);
+    return *result;
+}
+
+TConclusion<bool> ScalarIsFalse(const std::shared_ptr<arrow::Scalar>& x) {
+    if (!x) {
+        return true;
+    }
+    return ScalarIsFalse(*x);
+}
+TConclusion<bool> ScalarIsTrue(const std::shared_ptr<arrow::Scalar>& x) {
+    if (!x) {
+        return false;
+    }
+    return ScalarIsTrue(*x);
+}
+
 }   // namespace NKikimr::NArrow

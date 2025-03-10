@@ -289,6 +289,10 @@ public:
         Batcher->AddData(data);
     }
 
+    i64 BatchSize() const {
+        return Batcher->GetMemory();
+    }
+
     virtual NKqp::IDataBatcherPtr CreateDataBatcher() = 0;
     virtual bool Flush() = 0;
 
@@ -322,6 +326,10 @@ public:
     }
 
     bool Flush() override {
+        if (!Batcher) {
+            return false;
+        }
+
         NKqp::IDataBatchPtr batch = Batcher->Build();
         auto data = batch->ExtractBatch();
 
@@ -378,6 +386,7 @@ private:
 
 } // anonymous namespace
 
+constexpr TDuration FlushInterval = TDuration::Seconds(60);
 
 class TTransferWriter
     : public TActorBootstrapped<TTransferWriter>
@@ -503,7 +512,6 @@ private:
 
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, HoldHandle);
-            //sFunc(TEvents::TEvWakeup, SendS3Request);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -549,6 +557,11 @@ private:
             ProcessData(PendingPartitionId, *PendingRecords);
             PendingRecords.reset();
         }
+
+        if (!WakeupScheduled) {
+            WakeupScheduled = true;
+            Schedule(FlushInterval, new TEvents::TEvWakeup());
+        }
     }
 
     STFUNC(StateWork) {
@@ -557,6 +570,7 @@ private:
             hFunc(TEvWorker::TEvData, Handle);
 
             sFunc(TEvents::TEvPoison, PassAway);
+            sFunc(TEvents::TEvWakeup, TryFlush);
         }
     }
 
@@ -590,6 +604,9 @@ private:
         }
 
         TableState->EnshureDataBatch();
+        if (!LastWriteTime) {
+            LastWriteTime = TInstant::Now();
+        }
 
         for (auto& message : records) {
             NYdb::NTopic::NPurecalc::TMessage input;
@@ -611,10 +628,26 @@ private:
             }
         }
 
-        if (TableState->Flush()) {
-            Become(&TThis::StateWrite);
-        } else if (ProcessingError) {
-            LogCritAndLeave(*ProcessingError);
+        if (ProcessingError || TableState->BatchSize() > i64(64_MB) || *LastWriteTime < TInstant::Now() - FlushInterval) {
+            if (TableState->Flush()) {
+                LastWriteTime.reset();
+                Become(&TThis::StateWrite);
+            } else if (ProcessingError) {
+                LogCritAndLeave(*ProcessingError);
+            }
+        } else {
+            Send(Worker, new TEvWorker::TEvPoll(false));
+        }
+    }
+
+    void TryFlush() {
+        if (LastWriteTime && LastWriteTime < TInstant::Now() - FlushInterval) {
+            if (TableState->Flush()) {
+                LastWriteTime.reset();
+                Become(&TThis::StateWrite);
+            }
+        } else {
+            Schedule(FlushInterval, new TEvents::TEvWakeup());
         }
     }
 
@@ -626,6 +659,7 @@ private:
             hFunc(TEvWorker::TEvData, HoldHandle);
 
             sFunc(TEvents::TEvPoison, PassAway);
+            sFunc(TEvents::TEvWakeup, StopWakeup);
         }
     }
 
@@ -645,6 +679,10 @@ private:
 
         Send(Worker, new TEvWorker::TEvPoll());
         return StartWork();
+    }
+
+    void StopWakeup() {
+        WakeupScheduled = false;
     }
 
 private:
@@ -718,6 +756,9 @@ private:
 
     size_t InFlightCompilationId = 0;
     TProgramHolder::TPtr ProgramHolder;
+
+    mutable bool WakeupScheduled = false;
+    mutable std::optional<TInstant> LastWriteTime;
 
     mutable TMaybe<TString> LogPrefix;
 

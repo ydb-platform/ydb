@@ -6285,13 +6285,24 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
     }
 
+    void WakeupSharedCache(TMyEnvBase &env) {
+        env->Send(MakeSharedPageCacheId(), TActorId{}, new TKikimrEvents::TEvWakeup(1 /*DO_GC_TAG*/ ));
+    }
+
+    void SetupEnvironment(TMyEnvBase &env, bool bTreeIndex = true) {
+        env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(bTreeIndex);
+        appData.FeatureFlags.SetEnableLocalDBFlatIndex(!bTreeIndex);
+    }
+
     Y_UNIT_TEST(TestNonSticky_FlatIndex) {
         TMyEnvBase env;
         TRowsModel rows;
 
-        auto &appData = env->GetAppData();
-        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
-        appData.FeatureFlags.SetEnableLocalDBFlatIndex(true);
+        SetupEnvironment(env, false);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
@@ -6326,9 +6337,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         TMyEnvBase env;
         TRowsModel rows;
 
-        auto &appData = env->GetAppData();
-        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
-        appData.FeatureFlags.SetEnableLocalDBFlatIndex(false);
+        SetupEnvironment(env, true);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
@@ -6352,6 +6361,10 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
+        // as there is no touched pages on part load, passive pages won't be evicted without this call
+        // (they become non-passive after loader finishes, but Shared Cache GC isn't triggered)
+        WakeupSharedCache(env);
+
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 22); // 20 data pages, 2 index nodes
 
@@ -6362,6 +6375,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
     Y_UNIT_TEST(TestSticky) {
         TMyEnvBase env;
         TRowsModel rows;
+
+        SetupEnvironment(env, true);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
@@ -6395,9 +6410,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         TMyEnvBase env;
         TRowsModel rows;
 
-        auto &appData = env->GetAppData();
-        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
-        appData.FeatureFlags.SetEnableLocalDBFlatIndex(true);
+        SetupEnvironment(env, false);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
@@ -6432,9 +6445,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         TMyEnvBase env;
         TRowsModel rows;
 
-        auto &appData = env->GetAppData();
-        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
-        appData.FeatureFlags.SetEnableLocalDBFlatIndex(false);
+        SetupEnvironment(env, true);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
@@ -6469,6 +6480,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         TMyEnvBase env;
         TRowsModel rows;
 
+        SetupEnvironment(env, true);
+
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
 
@@ -6501,9 +6514,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         TMyEnvBase env;
         TRowsModel rows;
 
-        auto &appData = env->GetAppData();
-        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
-        appData.FeatureFlags.SetEnableLocalDBFlatIndex(true);
+        SetupEnvironment(env, false);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
@@ -6540,9 +6551,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         TMyEnvBase env;
         TRowsModel rows;
 
-        auto &appData = env->GetAppData();
-        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
-        appData.FeatureFlags.SetEnableLocalDBFlatIndex(false);
+        SetupEnvironment(env, true);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
@@ -6579,6 +6588,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         TMyEnvBase env;
         TRowsModel rows;
 
+        SetupEnvironment(env);
+
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
 
@@ -6611,6 +6622,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
     Y_UNIT_TEST(TestAlterAddFamilySticky) {
         TMyEnvBase env;
         TRowsModel rows;
+
+        SetupEnvironment(env);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
@@ -6646,6 +6659,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
     Y_UNIT_TEST(TestAlterAddFamilyPartiallySticky) {
         TMyEnvBase env;
         TRowsModel rows;
+
+        SetupEnvironment(env);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);

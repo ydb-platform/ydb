@@ -22,16 +22,88 @@ public:
 
 class TIntervalCounter {
 private:
-    // NOTE: This is a placeholder implementation: unoptimized
-    // TODO: O(log(N)) updates, O(log(N)) queries (option: segment tree)
-    THashMap<ui32, ui32> Count;
-    // Segment tree: Count[i] has nodes Count[i * 2 + 1], Count[i * 2 + 2]
-    // std::vector<ui64> Count;
-    // std::vector<i64> PropagateDelta;
+    class TModification {
+    private:
+        YDB_READONLY_DEF(ui32, Left);
+        YDB_READONLY_DEF(ui32, Right);
+        YDB_READONLY_DEF(i64, Delta);
+
+    public:
+        TModification(const ui32 l, const ui32 r, const i64 delta)
+            : Left(l)
+            , Right(r)
+            , Delta(delta) {
+        }
+    };
+
+    class TPosition {
+    private:
+        YDB_READONLY_DEF(ui32, Index);
+        YDB_READONLY_DEF(ui32, Left);
+        YDB_READONLY_DEF(ui32, Right);
+
+        TPosition(const ui32 i, const ui32 l, const ui32 r)
+            : Index(i)
+            , Left(l)
+            , Right(r) {
+        }
+
+    public:
+        TPosition(const ui32 maxIndex)
+            : Index(0)
+            , Left(0)
+            , Right(maxIndex) {
+        }
+
+        TPosition LeftChild() const {
+            AFL_VERIFY(Right > Left);
+            return TPosition(Index * 2 + 1, Left, (Left + Right - 1) / 2);
+        }
+
+        TPosition RightChild() const {
+            AFL_VERIFY(Right > Left);
+            return TPosition(Index * 2 + 2, (Left + Right + 1) / 2, Right);
+        }
+
+        ui32 IntervalSize() const {
+            return Right - Left + 1;
+        }
+    };
+
+    class TZerosCollector {
+    private:
+        std::vector<ui32> FormerOnes;
+
+    public:
+        void OnUpdate(const ui32 l, const ui32 r, const ui64 formerValue, const i64 delta) {
+            AFL_VERIFY(delta == -1);
+            if (formerValue == 1) {
+                for (ui32 i = l; i <= r; ++i) {
+                    FormerOnes.emplace_back(i);
+                }
+            }
+        }
+
+        std::vector<ui32> ExtractValues() {
+            return std::move(FormerOnes);
+        }
+    };
+
+    // Segment tree: Count[i] = Count[i * 2 + 1] + PropagatedDeltas[i * 2 + 1] * intervalSize(i) + Count[i * 2 + 2] + PropagateDelta[i * 2 + 2] * intervalSize(i)
+    std::vector<ui64> Count;
+    std::vector<i64> PropagatedDeltas;
+    ui32 MaxIndex = 0;
 
 private:
-    std::vector<ui32> UpdateAndGetFormerOnes(const ui32 l, const ui32 r, const ui32 lSeg, const ui32 rSeg);
+    void PropagateDelta(const TPosition& node);
+    void Update(const TPosition& node, const TModification& modification, TZerosCollector* callback);
     void Inc(const ui32 l, const ui32 r);
+    ui64 GetCount(const TPosition& node) const {
+        AFL_VERIFY(Count.size() == PropagatedDeltas.size());
+        AFL_VERIFY(node.GetIndex() < Count.size());
+        AFL_VERIFY(PropagatedDeltas[node.GetIndex()] * node.IntervalSize() >= (i64)Count[node.GetIndex()]);
+        return Count[node.GetIndex()] + PropagatedDeltas[node.GetIndex()] * node.IntervalSize();
+    }
 
 public:
     TIntervalCounter(const std::vector<std::pair<ui32, ui32>>& intervals);

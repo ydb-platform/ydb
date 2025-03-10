@@ -577,7 +577,7 @@ def main():
                         '--client-timeout', '1800000',
                         '--threads', '1',
                         '--seconds', '86400',
-                        '_', f'log_workload_{store_type}',
+                        '--path', f'log_workload_{store_type}',
                         '; done"'
                         ],
                         raise_on_error=True

@@ -29,6 +29,7 @@ SRCS(
     sys_view_ut.cpp
     tiering_ut.cpp
     write_ut.cpp
+    column_name_validation_ut.cpp
 )
 
 PEERDIR(

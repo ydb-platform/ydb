@@ -11,22 +11,26 @@ using namespace NKikimrSchemeOp;
 namespace NSchemeShardUT_Private {
 namespace NExportReboots {
 
-using TCreateHandler = std::function<void(TTestActorRuntime&, ui64&, const TString&, const TString&)>;
+using TTestCreate = ui64(*)(TTestActorRuntime&, ui64, const TString&, const TString&, 
+    const TVector<TExpectedResult>&, const TApplyIf&);
 
-#define GEN_CREATE_HANDLER(func) \
-    TCreateHandler([](TTestActorRuntime& runtime, ui64& txId, const TString& parentPath, const TString& scheme) { \
-        func(runtime, txId, parentPath, scheme); \
-    })
+using TCreateHandler = std::function<void(TTestActorRuntime&, ui64, const TString&, const TString&)>;
 
-THashMap<NKikimrSchemeOp::EPathType, TCreateHandler> CreateHandlers = {
-    {EPathTypeTable, GEN_CREATE_HANDLER(TestCreateTable)},
-    {EPathTypeView, GEN_CREATE_HANDLER(TestCreateView)},
-    {EPathTypeCdcStream, GEN_CREATE_HANDLER(TestCreateCdcStream)},
+THashMap<NKikimrSchemeOp::EPathType, TTestCreate> TestCreates = {
+    {EPathTypeTable, TestSimpleCreateTable},
+    {EPathTypeView, TestCreateView},
+    {EPathTypeCdcStream, TestCreateCdcStream},
 };
 
+TCreateHandler GenerateCreateHandler(TTestCreate func) {
+    return [func](TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme) {
+        func(runtime, txId, parentPath, scheme, {{NKikimrScheme::StatusAccepted}}, {});
+    };
+}
+
 void TestCreate(TTestActorRuntime& runtime, ui64 txId, const TString& scheme, NKikimrSchemeOp::EPathType pathType) {
-    if (CreateHandlers.contains(pathType)) {
-        CreateHandlers[pathType](runtime, txId, "/MyRoot", scheme);
+    if (TestCreates.contains(pathType)) {
+        GenerateCreateHandler(TestCreates[pathType])(runtime, txId, "/MyRoot", scheme);
     } else {
         UNIT_FAIL("export is not implemented for the scheme object type: " << pathType);
     }

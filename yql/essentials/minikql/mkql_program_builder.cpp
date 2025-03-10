@@ -5875,6 +5875,63 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntime
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::BlockGraceJoinCore(TRuntimeNode leftStream, TRuntimeNode rightStream, EJoinKind joinKind,
+    const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& leftKeyDrops,
+    const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& rightKeyDrops, [[maybe_unused]] bool rightAny, TType* returnType
+) {
+    if constexpr (RuntimeVersion < 53U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(joinKind == EJoinKind::Inner, "Unsupported join kind");
+    MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
+    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+
+    ValidateBlockStreamType(leftStream.GetStaticType());
+    ValidateBlockStreamType(rightStream.GetStaticType());
+    ValidateBlockStreamType(returnType);
+
+    TRuntimeNode::TList leftKeyColumnsNodes;
+    leftKeyColumnsNodes.reserve(leftKeyColumns.size());
+    std::transform(leftKeyColumns.cbegin(), leftKeyColumns.cend(),
+        std::back_inserter(leftKeyColumnsNodes), [this](const ui32 idx) {
+            return NewDataLiteral(idx);
+        });
+
+    TRuntimeNode::TList leftKeyDropsNodes;
+    leftKeyDropsNodes.reserve(leftKeyDrops.size());
+    std::transform(leftKeyDrops.cbegin(), leftKeyDrops.cend(),
+        std::back_inserter(leftKeyDropsNodes), [this](const ui32 idx) {
+            return NewDataLiteral(idx);
+        });
+
+    TRuntimeNode::TList rightKeyColumnsNodes;
+    rightKeyColumnsNodes.reserve(rightKeyColumns.size());
+    std::transform(rightKeyColumns.cbegin(), rightKeyColumns.cend(),
+        std::back_inserter(rightKeyColumnsNodes), [this](const ui32 idx) {
+            return NewDataLiteral(idx);
+        });
+
+    TRuntimeNode::TList rightKeyDropsNodes;
+    rightKeyDropsNodes.reserve(leftKeyDrops.size());
+    std::transform(rightKeyDrops.cbegin(), rightKeyDrops.cend(),
+        std::back_inserter(rightKeyDropsNodes), [this](const ui32 idx) {
+            return NewDataLiteral(idx);
+        });
+
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(leftStream);
+    callableBuilder.Add(rightStream);
+    callableBuilder.Add(NewDataLiteral((ui32)joinKind));
+    callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
+    callableBuilder.Add(NewTuple(leftKeyDropsNodes));
+    callableBuilder.Add(NewTuple(rightKeyColumnsNodes));
+    callableBuilder.Add(NewTuple(rightKeyDropsNodes));
+    callableBuilder.Add(NewDataLiteral((bool)rightAny));
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 namespace {
 using namespace NYql::NMatchRecognize;
 TRuntimeNode PatternToRuntimeNode(const TRowPattern& pattern, const TProgramBuilder& programBuilder) {

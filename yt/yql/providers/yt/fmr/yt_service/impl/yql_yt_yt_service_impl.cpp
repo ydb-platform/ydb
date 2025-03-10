@@ -117,7 +117,7 @@ private:
 class TFmrYtService: public NYql::NFmr::IYtService {
 public:
 
-    std::variant<THolder<TTempFileHandle>, TError> Download(const TYtTableRef& ytTable, const TClusterConnection& clusterConnection) override {
+    std::variant<THolder<TTempFileHandle>, TError> Download(const TYtTableRef& ytTable, ui64& rowsCount, const TClusterConnection& clusterConnection) override {
         try {
             if (!ClusterConnections_.contains(ytTable.Cluster)) {
                 ClusterConnections_[ytTable.Cluster] = clusterConnection;
@@ -134,6 +134,7 @@ public:
                 auto& row = reader->GetRow();
                 writer.OnListItem();
                 visitor.Visit(row);
+                rowsCount++;
             }
             downloadStream.Flush();
             return tmpFile;

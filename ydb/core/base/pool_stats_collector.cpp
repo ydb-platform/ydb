@@ -8,6 +8,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/helpers/pool_stats_collector.h>
+#include <ydb/library/actors/helpers/collector_counters.h>
 
 #include <ydb/core/graph/api/service.h>
 #include <ydb/core/graph/api/events.h>
@@ -23,7 +24,7 @@ public:
         ::NMonitoring::TDynamicCounterPtr counters)
         : NActors::TStatsCollectingActor(intervalSec, setup, GetServiceCounters(counters, "utils"))
     {
-        MiniKQLPoolStats.Init(Counters.Get());
+        MiniKQLPoolStats.Init(counters.Get());
     }
 
 private:
@@ -57,7 +58,7 @@ private:
         auto systemUpdate = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate>();
         ui32 coresTotal = 0;
         double coresUsed = 0;
-        for (const auto& pool : PoolCounters) {
+        for (const auto& pool : GetPoolCounters()) {
             auto& pb = *systemUpdate->Record.AddPoolStats();
             pb.SetName(pool.Name);
             pb.SetUsage(pool.Usage);

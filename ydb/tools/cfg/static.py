@@ -91,6 +91,7 @@ class StaticConfigGenerator(object):
             "sys.txt": self.__generate_sys_txt,
             "tracing.txt": self.__generate_tracing_txt,
             # files with default implementation
+            "actor_system_config.txt": None,
             "sqs.txt": None,
             "vdisks.txt": None,
             "ic.txt": None,
@@ -110,6 +111,7 @@ class StaticConfigGenerator(object):
             "pdisk_key.txt": None,
             "immediate_controls_config.txt": None,
             "cms_config.txt": None,
+            "audit_config.txt": None,
         }
         self.__optional_config_files = set(
             (
@@ -163,6 +165,10 @@ class StaticConfigGenerator(object):
     @property
     def feature_flags_txt(self):
         return self.__proto_config("feature_flags.txt", feature_flags_pb2.TFeatureFlags, self.__cluster_details.get_service("features"))
+
+    @property
+    def feature_flags_new_txt(self):
+        return self.__proto_config("feature_flags_new.txt", feature_flags_pb2.TFeatureFlags, self.__cluster_details.get_service("feature_flags"))
 
     @property
     def failure_injection_txt(self):
@@ -249,6 +255,14 @@ class StaticConfigGenerator(object):
         return self.__proto_config("audit.txt").ByteSize() > 0
 
     @property
+    def audit_config_txt(self):
+        return self.__proto_config("audit_config.txt", config_pb2.TAuditConfig, self.__cluster_details.get_service("audit_config"))
+
+    @property
+    def audit_config_txt_enabled(self):
+        return self.__proto_config("audit_config.txt").ByteSize() > 0
+
+    @property
     def fq_txt(self):
         return self.__proto_config("fq.txt", TFederatedQueryConfig, self.__cluster_details.get_service("yq"))
 
@@ -285,6 +299,16 @@ class StaticConfigGenerator(object):
     @property
     def cms_config_txt_enabled(self):
         return self.__proto_config("cms_config.txt").ByteSize() > 0
+
+    @property
+    def actor_system_config_txt(self):
+        return self.__proto_config("actor_system_config.txt",
+                                   config_pb2.TActorSystemConfig,
+                                   self.__cluster_details.get_service("actor_system_config"))
+
+    @property
+    def actor_system_config_txt_enabled(self):
+        return self.__proto_config("actor_system_config.txt").ByteSize() > 0
 
     @property
     def mbus_enabled(self):
@@ -533,16 +557,16 @@ class StaticConfigGenerator(object):
         if "hive_config" in normalized_config["domains_config"]:
             del normalized_config["domains_config"]["hive_config"]
 
-        hostname_to_host_config_id = {node.hostname: node.host_config_id for node in self.__cluster_details.hosts}
+        node_to_host_config_id = {(node.hostname, node.port): node.host_config_id for node in self.__cluster_details.hosts}
         normalized_config["hosts"] = []
         for node in normalized_config["nameservice_config"]["node"]:
-            if "port" in node and int(node.get("port")) == 19001:
+            if "port" in node and int(node.get("port")) == base.DEFAULT_INTERCONNECT_PORT:
                 del node["port"]
 
             if "interconnect_host" in node and node["interconnect_host"] == node["host"]:
                 del node["interconnect_host"]
 
-            host_config_id = hostname_to_host_config_id[node["host"]]
+            host_config_id = node_to_host_config_id[(node["host"], node.get("port", base.DEFAULT_INTERCONNECT_PORT))]
             if host_config_id is not None:
                 node["host_config_id"] = host_config_id
             normalized_config["hosts"].append(node)
@@ -576,6 +600,9 @@ class StaticConfigGenerator(object):
 
         if self._yaml_config_enabled:
             normalized_config['yaml_config_enabled'] = True
+
+        if self.__cluster_details.storage_config_generation is not None:
+            normalized_config["storage_config_generation"] = int(self.__cluster_details.storage_config_generation)
 
         return normalized_config
 
@@ -628,21 +655,24 @@ class StaticConfigGenerator(object):
         app_config.BlobStorageConfig.CopyFrom(self.bs_txt)
         app_config.ChannelProfileConfig.CopyFrom(self.channels_txt)
         app_config.DomainsConfig.CopyFrom(self.domains_txt)
+
+        # Old template style:
         if self.feature_flags_txt.ByteSize() > 0:
             app_config.FeatureFlags.CopyFrom(self.feature_flags_txt)
+        # New config.yaml style:
+        if self.feature_flags_new_txt.ByteSize() > 0:
+            app_config.FeatureFlags.CopyFrom(self.feature_flags_new_txt)
+
         app_config.LogConfig.CopyFrom(self.log_txt)
         if self.auth_txt.ByteSize() > 0:
             app_config.AuthConfig.CopyFrom(self.auth_txt)
         app_config.KQPConfig.CopyFrom(self.kqp_txt)
         app_config.NameserviceConfig.CopyFrom(self.names_txt)
-        app_config.ActorSystemConfig.CopyFrom(self.sys_txt)
         app_config.GRpcConfig.CopyFrom(self.grpc_txt)
         app_config.InterconnectConfig.CopyFrom(self.ic_txt)
         app_config.VDiskConfig.CopyFrom(self.vdisks_txt)
         app_config.PQConfig.CopyFrom(self.pq_txt)
 
-        if self.cms_txt.ByteSize() > 0:
-            app_config.CmsConfig.CopyFrom(self.cms_txt)
         if self.dyn_ns_txt.ByteSize() > 0:
             app_config.DynamicNameserviceConfig.CopyFrom(self.dyn_ns_txt)
         if self.pqcd_txt.ByteSize() > 0:
@@ -653,8 +683,6 @@ class StaticConfigGenerator(object):
             app_config.ResourceBrokerConfig.CopyFrom(self.rb_txt)
         if self.metering_txt_enabled:
             app_config.MeteringConfig.CopyFrom(self.metering_txt)
-        if self.audit_txt_enabled:
-            app_config.AuditConfig.CopyFrom(self.audit_txt)
         if self.fq_txt_enabled:
             app_config.FederatedQueryConfig.CopyFrom(self.fq_txt)
         if self.failure_injection_txt_enabled:
@@ -668,8 +696,26 @@ class StaticConfigGenerator(object):
             app_config.PDiskKeyConfig.CopyFrom(self.pdisk_key_txt)
         if self.immediate_controls_config_txt_enabled:
             app_config.ImmediateControlsConfig.CopyFrom(self.immediate_controls_config_txt)
+
+        # Old template style:
+        app_config.ActorSystemConfig.CopyFrom(self.sys_txt)
+        # New config.yaml style:
+        if self.actor_system_config_txt_enabled:
+            app_config.ActorSystemConfig.CopyFrom(self.actor_system_config_txt)
+
+        # Old template style:
+        if self.cms_txt.ByteSize() > 0:
+            app_config.CmsConfig.CopyFrom(self.cms_txt)
+        # New config.yaml style:
         if self.cms_config_txt_enabled:
             app_config.CmsConfig.CopyFrom(self.cms_config_txt)
+
+        # Old template style:
+        if self.audit_txt_enabled:
+            app_config.AuditConfig.CopyFrom(self.audit_txt)
+        # New config.yaml style:
+        if self.audit_config_txt_enabled:
+            app_config.AuditConfig.CopyFrom(self.audit_config_txt)
         return app_config
 
     def __proto_config(self, config_file, config_class=None, cluster_details_for_field=None):
@@ -803,6 +849,11 @@ class StaticConfigGenerator(object):
 
                 if drive.expected_slot_count is not None:
                     drive_pb.PDiskConfig.ExpectedSlotCount = drive.expected_slot_count
+
+                # Full support of `pdisk_config`, not just copying selected fields manually
+                # from other non-typed locations
+                if drive.pdisk_config is not None:
+                    utils.wrap_parse_dict(drive.pdisk_config, drive_pb.PDiskConfig)
 
                 assert drive_pb.Guid not in all_guids, "All Guids must be unique!"
                 all_guids.add(drive_pb.Guid)
@@ -1263,9 +1314,12 @@ class StaticConfigGenerator(object):
             utils.wrap_parse_dict(self.__cluster_details.nameservice_config, self.names_txt)
 
         for host in self.__cluster_details.hosts:
+            port = host.port
+            if port is base.DEFAULT_INTERCONNECT_PORT:
+                port = host.ic_port
             node = self.names_txt.Node.add(
                 NodeId=host.node_id,
-                Port=host.ic_port,
+                Port=port,
                 Host=host.hostname,
                 InterconnectHost=host.hostname,
             )
@@ -1293,10 +1347,17 @@ class StaticConfigGenerator(object):
             if len(cluster_uuid) == 0:
                 cluster_uuid = self.__cluster_details.cluster_uuid  # fall back to `cluster_uuid: ...`
 
+            # fall back to generated if no cluster uuid is specified at all
             cluster_uuid = "ydb:{}".format(utils.uuid()) if cluster_uuid is None else cluster_uuid
+
             self.names_txt.ClusterUUID = cluster_uuid
-            self.names_txt.AcceptUUID.append(cluster_uuid)
-            self.names_txt.AcceptUUID.extend(accepted_uuids)
+            accepted_uuids.append(cluster_uuid)
+
+            # combine accept uuids from all possible sources: old format, new format, and filter unique
+            existing_set = set(self.names_txt.AcceptUUID)
+            new_set = set(accepted_uuids)
+            unique_elements = existing_set.union(new_set)
+            self.names_txt.AcceptUUID[:] = unique_elements
 
     def __generate_sys_txt(self):
         self.__proto_configs["sys.txt"] = config_pb2.TActorSystemConfig()

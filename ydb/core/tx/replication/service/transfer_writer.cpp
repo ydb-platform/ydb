@@ -2,17 +2,17 @@
 #include "transfer_writer.h"
 #include "worker.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/services/services.pb.h>
-
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 #include <ydb/core/kqp/runtime/kqp_write_table.h>
-#include <ydb/core/persqueue/purecalc/purecalc.h>
+#include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
+#include <ydb/core/persqueue/purecalc/purecalc.h> // should be after topic_message
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
 #include <yql/essentials/public/purecalc/helpers/stream/stream_from_vector.h>
@@ -402,7 +402,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
 
-            hFunc(TEvWorker::TEvHandshake, HoldHandle);
+            hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, HoldHandle);
             sFunc(TEvents::TEvWakeup, GetTableScheme);
             sFunc(TEvents::TEvPoison, PassAway);
@@ -501,7 +501,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(NFq::TEvRowDispatcher::TEvPurecalcCompileResponse, Handle);
 
-            hFunc(TEvWorker::TEvHandshake, HoldHandle);
+            hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, HoldHandle);
             //sFunc(TEvents::TEvWakeup, SendS3Request);
             sFunc(TEvents::TEvPoison, PassAway);
@@ -545,11 +545,6 @@ private:
     void StartWork() {
         Become(&TThis::StateWork);
 
-        if (PendingWorker) {
-            ProcessWorker(*PendingWorker);
-            PendingWorker.reset();
-        }
-
         if (PendingRecords) {
             ProcessData(PendingPartitionId, *PendingRecords);
             PendingRecords.reset();
@@ -565,21 +560,16 @@ private:
         }
     }
 
-    void HoldHandle(TEvWorker::TEvHandshake::TPtr& ev) {
-        Y_ABORT_UNLESS(!PendingWorker);
-        PendingWorker = ev->Sender;
-    }
-
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
-        ProcessWorker(ev->Sender);
-    }
-
-    void ProcessWorker(const TActorId& worker) {
-        Worker = worker;
+        Worker = ev->Sender;
         LOG_D("Handshake"
             << ": worker# " << Worker);
 
-        Send(Worker, new TEvWorker::TEvHandshake());
+        if (ProcessingError) {
+            Leave(ProcessingErrorStatus, *ProcessingError);
+        } else {
+            Send(Worker, new TEvWorker::TEvHandshake());
+        }
     }
 
     void HoldHandle(TEvWorker::TEvData::TPtr& ev) {
@@ -593,7 +583,7 @@ private:
         ProcessData(ev->Get()->PartitionId, ev->Get()->Records);
     }
 
-    void ProcessData(const ui32 partitionId, const TVector<TEvWorker::TEvData::TRecord>& records) {
+    void ProcessData(const ui32 partitionId, const TVector<TTopicMessage>& records) {
         if (!records) {
             Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::DONE));
             return;
@@ -603,12 +593,12 @@ private:
 
         for (auto& message : records) {
             NYdb::NTopic::NPurecalc::TMessage input;
-            input.Data = std::move(message.Data);
-            input.MessageGroupId = std::move(message.MessageGroupId);
+            input.Data = std::move(message.GetData());
+            input.MessageGroupId = std::move(message.GetMessageGroupId());
             input.Partition = partitionId;
-            input.ProducerId = std::move(message.ProducerId);
-            input.Offset = message.Offset;
-            input.SeqNo = message.SeqNo;
+            input.ProducerId = std::move(message.GetProducerId());
+            input.Offset = message.GetOffset();
+            input.SeqNo = message.GetSeqNo();
 
             try {
                 auto result = ProgramHolder->GetProgram()->Apply(NYql::NPureCalc::StreamFromVector(TVector{input}));
@@ -616,7 +606,7 @@ private:
                     TableState->AddData(m->Data);
                 }
             } catch (const yexception& e) {
-                ProcessingError = TStringBuilder() << "Error transform message: '" << message.Data << "': " << e.what();
+                ProcessingError = TStringBuilder() << "Error transform message: " << e.what();
                 break;
             }
         }
@@ -632,7 +622,7 @@ private:
     STFUNC(StateWrite) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvCompleted, Handle);
-            hFunc(TEvWorker::TEvHandshake, HoldHandle);
+            hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, HoldHandle);
 
             sFunc(TEvents::TEvPoison, PassAway);
@@ -688,12 +678,16 @@ private:
         this->Schedule(Delay + random, new TEvents::TEvWakeup());
     }
 
-    template <typename... Args>
-    void Leave(Args&&... args) {
+    void Leave(TEvWorker::TEvGone::EStatus status, const TString& message) {
         LOG_I("Leave");
 
-        Send(Worker, new TEvWorker::TEvGone(std::forward<Args>(args)...));
-        PassAway();
+        if (Worker) {
+            Send(Worker, new TEvWorker::TEvGone(status, message));
+            PassAway();
+        } else {
+            ProcessingErrorStatus = status;
+            ProcessingError = message;
+        }
     }
 
     void PassAway() override {
@@ -726,11 +720,12 @@ private:
     TProgramHolder::TPtr ProgramHolder;
 
     mutable TMaybe<TString> LogPrefix;
+
+    mutable TEvWorker::TEvGone::EStatus ProcessingErrorStatus;
     mutable TMaybe<TString> ProcessingError;
 
-    std::optional<TActorId> PendingWorker;
     ui32 PendingPartitionId = 0;
-    std::optional<TVector<TEvWorker::TEvData::TRecord>> PendingRecords;
+    std::optional<TVector<TTopicMessage>> PendingRecords;
 
     ui32 Attempt = 0;
     TDuration Delay = TDuration::Minutes(1);

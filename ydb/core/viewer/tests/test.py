@@ -338,6 +338,7 @@ def normalize_result_nodes(result):
                                            'SendThroughput',
                                            'UptimeSeconds',
                                            'Usage',
+                                           'TotalSessions',
                                            ])
     return replace_values_by_key(result, ['CpuUsage',
                                           'DiskSpaceUsage',

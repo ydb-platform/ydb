@@ -50,12 +50,13 @@ public:
     {
     }
 
-    std::variant<THolder<TTempFileHandle>, TError> Download(const TYtTableRef& ytTable, const TClusterConnection& /*clusterConnection*/) override {
+    std::variant<THolder<TTempFileHandle>, TError> Download(const TYtTableRef& ytTable, ui64& rowsCount, const TClusterConnection& /*clusterConnection*/) override {
         if (!YtUploadedTablesMock_->Contains(ytTable)) {
             return TError("Table not found");
         }
         auto tmpFile = MakeHolder<TTempFileHandle>();
         TString tableContent = YtUploadedTablesMock_->GetTableContent(ytTable);
+        rowsCount = RowsCount(tableContent);
         tmpFile->Write(tableContent.data(), tableContent.size());
         return tmpFile;
     }
@@ -63,6 +64,17 @@ public:
     TMaybe<TError> Upload(const TYtTableRef& ytTable, IInputStream& tableContent, const TClusterConnection& /*clusterConnection*/) override {
         YtUploadedTablesMock_->AddTable(ytTable, tableContent.ReadAll());
         return Nothing();
+    }
+
+private:
+    ui64 RowsCount(const TString& tableContent) {
+        ui64 rowsCount = 0;
+        for (auto ch : tableContent) {
+            if (ch == '}') {
+                rowsCount++;
+            }
+        }
+        return rowsCount;
     }
 
 private:

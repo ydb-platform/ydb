@@ -15,6 +15,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb-cpp-sdk/library/operation_id/operation_id.h>
 #include <ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/core/cms/console/console.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -349,6 +350,37 @@ protected:
         auto *self = Self();
         self->Reply(Ydb::StatusIds::UNAVAILABLE, "Connection to BSC tablet was lost",
             NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, self->ActorContext());
+    }
+
+    TActorId ConsolePipe;
+
+    STFUNC(StateConsoleFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NConsole::TEvConsole::TEvGenericError, HandleConsole);
+            hFunc(TEvTabletPipe::TEvClientDestroyed, HandleConsole);
+            hFunc(TEvTabletPipe::TEvClientConnected, HandleConsole);
+            default:
+                return TBase::StateFuncBase(ev);
+        }
+    }
+
+    void HandleConsole(NConsole::TEvConsole::TEvGenericError::TPtr& ev) {
+        auto *self = Self();
+        self->Reply(ev->Get()->Record.GetYdbStatus(), ev->Get()->Record.GetIssues(), self->ActorContext());
+    }
+    
+    void HandleConsole(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
+        auto *self = Self();
+        self->Reply(Ydb::StatusIds::UNAVAILABLE, "Connection to Console was lost",
+                   NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, self->ActorContext());
+    }
+
+    void HandleConsole(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            auto *self = Self();
+            self->Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to connect to Console",
+                       NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, self->ActorContext());
+        }
     }
 
     virtual bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) = 0;

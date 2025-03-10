@@ -179,13 +179,12 @@ void CommonInitialize(TGuard<TMutex>& g)
 
     auto logPath = TConfig::Get()->LogPath;
     if (logPath.empty()) {
-        auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateStderrLogger(ToCoreLogLevel(logLevel));
-        for (const auto& rule : coreLoggingConfig->Rules) {
-            rule->ExcludeCategories = TConfig::Get()->LogExcludeCategories;
-        }
-        NLogging::TLogManager::Get()->Configure(coreLoggingConfig);
-
         if (TConfig::Get()->LogUseCore) {
+            auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateStderrLogger(ToCoreLogLevel(logLevel));
+            for (const auto& rule : coreLoggingConfig->Rules) {
+                rule->ExcludeCategories = TConfig::Get()->LogExcludeCategories;
+            }
+            NLogging::TLogManager::Get()->Configure(coreLoggingConfig);
             SetUseCoreLog();
         } else {
             auto logger = CreateStdErrLogger(logLevel);

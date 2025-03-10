@@ -51,6 +51,8 @@ constexpr TStringBuf PgClassName = "pg_class";
 
 constexpr TStringBuf ResourcePoolClassifiersName = "resource_pool_classifiers";
 
+constexpr TStringBuf ShowCreateName = "show_create";
+
 namespace NAuth {
     constexpr TStringBuf UsersName = "auth_users";
     constexpr TStringBuf GroupsName = "auth_groups";
@@ -716,6 +718,19 @@ struct Schema : NIceDb::Schema {
             Name,
             Rank,
             Config>;
+    };
+
+    struct ShowCreate: Table<21> {
+        struct Path: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Statement: Column<2, NScheme::NTypeIds::Utf8> {};
+        struct PathType: Column<3, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Path, PathType>;
+        using TColumns = TableColumns<
+            Path,
+            Statement,
+            PathType
+        >;
     };
 };
 

@@ -2,6 +2,7 @@
 #include "source.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
+#include <ydb/core/tx/columnshard/engines/reader/duplicates/manager.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
@@ -85,6 +86,9 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         if (partialUsageByPredicate) {
             acc.AddFetchingStep(*GetPredicateColumns(), EStageFeaturesIndexes::Filter);
         }
+        // TODO: make sure sources are processed in PK l-border order
+        // TODO: don't fetch and assemble merge columns for exclusive source
+        acc.AddFetchingStep(*GetMergeColumns(), EStageFeaturesIndexes::Filter);
 
         if (needFilterDeletion) {
             acc.AddAssembleStep(*GetDeletionColumns(), "SPEC_DELETION", EStageFeaturesIndexes::Filter, false);
@@ -98,6 +102,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             acc.AddAssembleStep(*GetSpecColumns(), "SPEC", EStageFeaturesIndexes::Filter, false);
             acc.AddStep(std::make_shared<TSnapshotFilter>());
         }
+        acc.AddAssembleStep(*GetMergeColumns(), "DUPLICATE", EStageFeaturesIndexes::Filter, false);
+        acc.AddStep(std::make_shared<TDuplicateFilter>());
         const auto& chainProgram = GetReadMetadata()->GetProgram().GetChainVerified();
         for (ui32 stepIdx = 0; stepIdx < chainProgram->GetProcessors().size(); ++stepIdx) {
             auto& step = chainProgram->GetProcessors()[stepIdx];
@@ -120,7 +126,9 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 }
 
 TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
-    : TBase(commonContext) {
+    : TBase(commonContext)
+    , DuplicatesManager(NActors::TActivationContext::Register(
+          new TDuplicateFilterConstructor(commonContext->GetReadMetadataPtrVerifiedAs<TReadMetadata>()->SelectInfo->Portions))) {
 }
 
 TString TSpecialReadContext::ProfileDebugString() const {

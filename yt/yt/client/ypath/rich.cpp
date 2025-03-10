@@ -690,6 +690,11 @@ TVersionedWriteOptions TRichYPath::GetVersionedWriteOptions() const
     return GetAttribute(*this, "versioned_write_options", TVersionedWriteOptions());
 }
 
+std::optional<TString> TRichYPath::GetAccessMethod() const
+{
+    return FindAttribute<TString>(*this, "access_method");
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TString ConvertToString(const TRichYPath& path, EYsonFormat ysonFormat)

@@ -241,6 +241,12 @@ namespace NYql::NDq::NWorker {
         NYql::NTaskRunnerProxy::TPipeFactoryOptions pfOptions;
         pfOptions.ExecPath = GetExecPath();
         pfOptions.FileCache = fileCache;
+
+        auto localLDLibraryPath = IsTrue(GetEnv(TString("YT_SECURE_VAULT_") + NCommonJobVars::YT_LOCAL_LD_LIBRARY_PATH, ""));
+        if (localLDLibraryPath) {
+            pfOptions.Env["LD_LIBRARY_PATH"] = std::filesystem::current_path().string();
+        }
+
         if (deterministicMode) {
             YQL_LOG(DEBUG) << "deterministicMode On";
             pfOptions.Env["YQL_DETERMINISTIC_MODE"] = "1";

@@ -15,7 +15,6 @@ namespace NKqp {
     using namespace NYdb;
 
     TTestHelper::TTestHelper(const TKikimrSettings& settings) {
-        NKikimrConfig::TAppConfig appCfg;
         TKikimrSettings kikimrSettings(settings);
         if (!kikimrSettings.FeatureFlags.HasEnableTieringInColumnShard()) {
             kikimrSettings.SetEnableTieringInColumnShard(true);
@@ -24,6 +23,7 @@ namespace NKqp {
             kikimrSettings.SetEnableExternalDataSources(true);
             kikimrSettings.AppConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         }
+
         Kikimr = std::make_unique<TKikimrRunner>(kikimrSettings);
         TableClient =
             std::make_unique<NYdb::NTable::TTableClient>(Kikimr->GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin")));

@@ -860,6 +860,11 @@ struct IsTxResultComplete {
             if (status == NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE)
                 return true;
         }
+        if (ev.GetTypeRewrite() == NKikimr::NEvents::TDataEvents::EvWriteResult) {
+            auto status = ev.Get<NKikimr::NEvents::TDataEvents::TEvWriteResult>()->GetStatus();
+            if (status == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED)
+                return true;
+        }
         return false;
     }
 };

@@ -2022,11 +2022,14 @@ Y_UNIT_TEST(TestPlannedTimeoutSplit) {
     }
 }
 
-Y_UNIT_TEST(TestPlannedHalfOverloadedSplit) {
+Y_UNIT_TEST_TWIN(TestPlannedHalfOverloadedSplit, UseSink) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
     serverSettings.SetDomainName("Root")
-        .SetUseRealThreads(false);
+        .SetUseRealThreads(false)
+        .SetAppConfig(app);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
     auto &runtime = *server->GetRuntime();
@@ -2057,7 +2060,8 @@ Y_UNIT_TEST(TestPlannedHalfOverloadedSplit) {
     TVector<THolder<IEventHandle>> txProposeResults;
     auto captureMessages = [&](TAutoPtr<IEventHandle> &event) -> auto {
         switch (event->GetTypeRewrite()) {
-            case TEvDataShard::EvProposeTransaction: {
+            case TEvDataShard::EvProposeTransaction:
+            case NKikimr::NEvents::TDataEvents::EvWrite: {
                 Cerr << "---- observed EvProposeTransactionResult ----" << Endl;
                 if (txProposes.size() == 0) {
                     // Capture the first propose
@@ -2066,7 +2070,8 @@ Y_UNIT_TEST(TestPlannedHalfOverloadedSplit) {
                 }
                 break;
             }
-            case TEvDataShard::EvProposeTransactionResult: {
+            case TEvDataShard::EvProposeTransactionResult:
+            case NKikimr::NEvents::TDataEvents::EvWriteResult: {
                 Cerr << "---- observed EvProposeTransactionResult ----" << Endl;
                 if (txProposes.size() > 0) {
                     // Capture all propose results
@@ -2454,11 +2459,14 @@ Y_UNIT_TEST(TestReadTableSingleShardImmediate) {
     UNIT_ASSERT_VALUES_EQUAL(seenPlanSteps, 0u);
 }
 
-Y_UNIT_TEST(TestImmediateQueueThenSplit) {
+Y_UNIT_TEST_TWIN(TestImmediateQueueThenSplit, UseSink) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
     serverSettings.SetDomainName("Root")
-        .SetUseRealThreads(false);
+        .SetUseRealThreads(false)
+        .SetAppConfig(app);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
     auto &runtime = *server->GetRuntime();
@@ -2501,6 +2509,7 @@ Y_UNIT_TEST(TestImmediateQueueThenSplit) {
                 }
                 break;
             case TEvDataShard::EvProposeTransaction:
+            case NKikimr::NEvents::TDataEvents::EvWrite:
                 if (capturePropose) {
                     Cerr << "---- capture EvProposeTransaction ----" << Endl;
                     eventsPropose.emplace_back(event.Release());
@@ -2622,10 +2631,11 @@ Y_UNIT_TEST(TestImmediateQueueThenSplit) {
         << failures << " failures");
 }
 
-void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query) {
+void TestLateKqpQueryAfterColumnDrop(bool dataQuery, bool useSink, const TString& query) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(false);
+    app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false)
@@ -2667,6 +2677,15 @@ void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query) {
                 auto &rec = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
                 if (capturePropose && rec.GetTxKind() != NKikimrTxDataShard::TX_KIND_SNAPSHOT) {
                     Cerr << "---- capture EvProposeTransaction ---- type=" << rec.GetTxKind() << Endl;
+                    eventsPropose.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                break;
+            }
+
+            case NKikimr::NEvents::TDataEvents::EvWrite: {
+                if (capturePropose) {
+                    Cerr << "---- capture EvWrite ----" << Endl;
                     eventsPropose.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
                 }
@@ -2737,8 +2756,8 @@ void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query) {
     }
 }
 
-Y_UNIT_TEST(TestLateKqpScanAfterColumnDrop) {
-    TestLateKqpQueryAfterColumnDrop(false, "SELECT SUM(value2) FROM `/Root/table-1`");
+Y_UNIT_TEST_TWIN(TestLateKqpScanAfterColumnDrop, UseSink) {
+    TestLateKqpQueryAfterColumnDrop(false, UseSink, "SELECT SUM(value2) FROM `/Root/table-1`");
 }
 
 Y_UNIT_TEST(TestSecondaryClearanceAfterShardRestartRace) {

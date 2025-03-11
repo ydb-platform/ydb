@@ -4192,13 +4192,15 @@ bool TSqlTranslation::DefineActionOrSubqueryBody(TSqlQuery& query, TBlocks& bloc
         Y_DEFER {
             Ctx.PopCurrentBlocks();
         };
-        if (!query.Statement(blocks, body.GetBlock2().GetRule_sql_stmt_core1())) {
+
+        size_t statementNumber = 0;
+        if (!query.Statement(blocks, body.GetBlock2().GetRule_sql_stmt_core1(), statementNumber++)) {
             return false;
         }
 
         for (const auto& nestedStmtItem : body.GetBlock2().GetBlock2()) {
             const auto& nestedStmt = nestedStmtItem.GetRule_sql_stmt_core2();
-            if (!query.Statement(blocks, nestedStmt)) {
+            if (!query.Statement(blocks, nestedStmt, statementNumber++)) {
                 return false;
             }
         }

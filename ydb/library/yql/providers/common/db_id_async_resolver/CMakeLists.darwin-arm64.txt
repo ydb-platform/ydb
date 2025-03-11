@@ -36,13 +36,15 @@ target_link_libraries(providers-common-db_id_async_resolver PUBLIC
 )
 
 target_sources(providers-common-db_id_async_resolver PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/db_id_async_resolver/database_type.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/db_id_async_resolver/database_type.h
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/db_id_async_resolver/mdb_endpoint_generator.h
 )
 
 
 generate_enum_serilization(providers-common-db_id_async_resolver
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/db_id_async_resolver/database_type.h
   INCLUDE_HEADERS
-  ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h
+  ydb/library/yql/providers/common/db_id_async_resolver/database_type.h
 )

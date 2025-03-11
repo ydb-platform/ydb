@@ -783,7 +783,7 @@ Only connections with matching [producer and message group](../../concepts/topic
   await writer.WriteAsync("Hello Example YDB Topics!");
   ```
 
-  If the server is unavailable, messages may accumulate while waiting to be sent. In this case, you can pass a cancellation token (`CancellationToken`), to control waiting, but if the user cancels the recorded message, it will be cancelled.
+  If the server is unavailable, messages may accumulate while waiting to be sent. In this case, you can pass a cancellation token (`CancellationToken`) to control waiting. However, if the user cancels the recorded message, it will still be canceled.
 
   ```c#
   var writeCts = new CancellationTokenSource();

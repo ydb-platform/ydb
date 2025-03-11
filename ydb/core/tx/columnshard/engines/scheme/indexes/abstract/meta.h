@@ -69,9 +69,7 @@ public:
         return false;
     }
 
-    std::optional<ui64> CalcCategory(const TString& subColumnName) const {
-        return DoCalcCategory(subColumnName);
-    }
+    std::optional<ui64> CalcCategory(const TString& subColumnName) const;
 
     TConclusion<std::shared_ptr<IIndexHeader>> BuildHeader(const TChunkOriginalData& data) const {
         return DoBuildHeader(data);

@@ -90,4 +90,15 @@ bool TBloomIndexMeta::DoCheckValue(
     return true;
 }
 
+std::optional<ui64> TBloomIndexMeta::DoCalcCategory(const TString& subColumnName) const {
+    ui64 result;
+    const NRequest::TOriginalDataAddress addr(Max<ui32>(), subColumnName);
+    AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, result));
+    if (subColumnName) {
+        return result;
+    } else {
+        return std::nullopt;
+    }
+}
+
 }   // namespace NKikimr::NOlap::NIndexes

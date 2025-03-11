@@ -17,25 +17,39 @@ void TIndexFetcherLogic::DoStart(TReadActionsCollection& nextRead, NReader::NCom
                 StorageId, IndexAddress, originalData, IndexMeta->BuildHeader(originalData).DetachResult(), i->GetRecordsCount()));
         }
     }
-    auto reading = blobsAction.GetReading(StorageId);
+    std::shared_ptr<IBlobsReadingAction> reading;
     for (auto&& i : Fetching) {
         if (!i.GetResult().HasData()) {
+            if (!reading) {
+                reading = blobsAction.GetReading(StorageId);
+            }
             reading->AddRange(i.GetResult().GetRangeVerified());
         }
     }
-    nextRead.Add(reading);
+    if (reading) {
+        nextRead.Add(reading);
+    }
 }
 
 void TIndexFetcherLogic::DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) {
-    TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
-    auto reading = blobsAction.GetReading(StorageId);
-    for (auto&& r : Fetching) {
-        r.FetchFrom(IndexMeta, *reading, blobs);
+    if (blobs.IsEmpty()) {
+        return;
     }
-    nextRead.Add(reading);
+    TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
+    std::vector<TBlobRange> ranges;
+    for (auto&& r : Fetching) {
+        r.FetchFrom(IndexMeta, StorageId, ranges, blobs);
+    }
+    if (ranges.size()) {
+        auto reading = blobsAction.GetReading(StorageId);
+        nextRead.Add(reading);
+    }
 }
 
 void TIndexFetcherLogic::DoOnDataCollected(NReader::NCommon::TFetchingResultContext& context) {
+    if (Fetching.empty()) {
+        return;
+    }
     std::vector<TString> data;
     const bool hasIndex = context.GetIndexes().HasIndex(IndexAddress.GetIndexId());
 

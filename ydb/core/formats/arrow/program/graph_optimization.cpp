@@ -9,6 +9,7 @@
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 
+#include <util/string/builder.h>
 #include <yql/essentials/core/arrow_kernels/request/request.h>
 
 namespace NKikimr::NArrow::NSSA::NGraph::NOptimization {
@@ -78,10 +79,8 @@ TGraph::TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, co
         }
     }
     ++NextResourceId;
-
     for (auto&& i : processors) {
-        auto node = std::make_shared<TGraphNode>(i);
-        Nodes.emplace(node->GetIdentifier(), node);
+        auto node = AddNode(i);
         for (auto&& output : i->GetOutput()) {
             AFL_VERIFY(Producers.emplace(output.GetColumnId(), node.get()).second);
         }
@@ -91,14 +90,12 @@ TGraph::TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, co
             }
             const TString name = resolver.GetColumnName(input.GetColumnId(), true);
 
-            auto inputFetcher = std::make_shared<TGraphNode>(std::make_shared<TOriginalColumnDataProcessor>(
+            auto inputFetcher = AddNode(std::make_shared<TOriginalColumnDataProcessor>(
                 input.GetColumnId(), input.GetColumnId(), resolver.GetColumnName(input.GetColumnId()), ""));
-            Nodes.emplace(inputFetcher->GetIdentifier(), inputFetcher);
             //            AFL_VERIFY(Producers.emplace(input.GetColumnId(), inputFetcher.get()).second);
 
-            auto nodeInputAssembler = std::make_shared<TGraphNode>(
-                std::make_shared<TOriginalColumnAccessorProcessor>(input.GetColumnId(), input.GetColumnId(), input.GetColumnId(), ""));
-            Nodes.emplace(nodeInputAssembler->GetIdentifier(), nodeInputAssembler);
+            auto nodeInputAssembler =
+                AddNode(std::make_shared<TOriginalColumnAccessorProcessor>(input.GetColumnId(), input.GetColumnId(), input.GetColumnId(), ""));
             AFL_VERIFY(Producers.emplace(input.GetColumnId(), nodeInputAssembler.get()).second);
             AddEdge(inputFetcher.get(), nodeInputAssembler.get(), input.GetColumnId());
         }
@@ -171,6 +168,58 @@ TConclusion<bool> TGraph::OptimizeIndexesToApply(TGraphNode* condNode) {
     return false;
 }
 
+std::optional<TResourceAddress> TGraph::GetOriginalAddress(TGraphNode* condNode) const {
+    if (condNode->GetProcessor()->GetProcessorType() == EProcessorType::AssembleOriginalData) {
+        const auto proc = condNode->GetProcessorAs<TOriginalColumnAccessorProcessor>();
+        return TResourceAddress(proc->GetColumnId(), proc->GetSubColumnName());
+    } else if (condNode->GetProcessor()->GetProcessorType() == EProcessorType::Calculation) {
+        const auto proc = condNode->GetProcessorAs<TCalculationProcessor>();
+        if (!proc->GetKernelLogic()) {
+            return std::nullopt;
+        }
+        if (proc->GetKernelLogic()->GetClassName() != TGetJsonPath::GetClassNameStatic()) {
+            return std::nullopt;
+        }
+        if (proc->GetInput().size() != 2) {
+            return std::nullopt;
+        }
+        auto nodeData = GetProducerVerified(proc->GetInput()[0].GetColumnId());
+        auto nodePath = GetProducerVerified(proc->GetInput()[1].GetColumnId());
+        if (nodeData->GetProcessor()->GetOutput().size() != 1) {
+            return std::nullopt;
+        }
+        if (!nodeData->Is(EProcessorType::AssembleOriginalData)) {
+            return std::nullopt;
+        }
+        if (!nodePath->Is(EProcessorType::Const)) {
+            return std::nullopt;
+        }
+        auto constProc = nodePath->GetProcessorAs<TConstProcessor>();
+        TString path;
+        if (constProc->GetScalarConstant()->type->id() == arrow::utf8()->id() ||
+            constProc->GetScalarConstant()->type->id() == arrow::binary()->id()) {
+            path = constProc->GetScalarConstant()->ToString();
+            if (path.StartsWith("$.")) {
+                path = path.substr(2);
+            }
+            if (path.StartsWith("\"") && path.EndsWith("\"")) {
+                if (path.size() < 2) {
+                    return std::nullopt;
+                }
+                path = path.substr(1, path.size() - 2);
+            }
+            if (!path) {
+                return std::nullopt;
+            }
+        } else {
+            return std::nullopt;
+        }
+        return TResourceAddress(nodeData->GetProcessor()->GetOutput()[0].GetColumnId(), path);
+    } else {
+        return std::nullopt;
+    }
+}
+
 TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
         return false;
@@ -190,10 +239,10 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     if (constNode->GetProcessor()->GetProcessorType() != EProcessorType::Const) {
         return false;
     }
-    if (dataNode->GetProcessor()->GetProcessorType() != EProcessorType::AssembleOriginalData) {
+    std::optional<TResourceAddress> dataAddr = GetOriginalAddress(dataNode);
+    if (!dataAddr) {
         return false;
     }
-    auto dataProc = dataNode->GetProcessorAs<TOriginalColumnAccessorProcessor>();
     auto* dest = condNode->GetOutputEdges().begin()->second;
     const ui32 destResourceId = condNode->GetOutputEdges().begin()->first.GetResourceId();
     if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::Equals ||
@@ -223,7 +272,7 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
         }();
 
         const ui32 resourceIdxFetch = BuildNextResourceId();
-        IDataSource::TFetchIndexContext indexContext(dataProc->GetColumnId(), dataProc->GetSubColumnName(), indexOperation);
+        IDataSource::TFetchIndexContext indexContext(dataAddr->GetColumnId(), dataAddr->GetSubColumnName(), indexOperation);
         auto indexFetchProc = std::make_shared<TOriginalIndexDataProcessor>(resourceIdxFetch, indexContext);
         auto indexFetchNode = AddNode(indexFetchProc);
         RegisterProducer(resourceIdxFetch, indexFetchNode.get());
@@ -258,6 +307,9 @@ TConclusion<bool> TGraph::OptimizeFilterWithCoalesce(TGraphNode* cNode) {
         return false;
     }
     const auto calc = cNode->GetProcessorAs<TCalculationProcessor>();
+    if (!calc->GetYqlOperationId()) {
+        return false;
+    }
     if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() != NYql::TKernelRequestBuilder::EBinaryOp::Coalesce) {
         return false;
     }
@@ -388,6 +440,14 @@ public:
 
 std::shared_ptr<NExecution::TCompiledGraph> TGraph::Compile() {
     return std::make_shared<NExecution::TCompiledGraph>(*this, Resolver);
+}
+
+TString TResourceAddress::DebugString() const {
+    if (SubColumnName) {
+        return TStringBuilder() << "[" << ColumnId << "," << SubColumnName << "]";
+    } else {
+        return TStringBuilder() << "[" << ColumnId << "]";
+    }
 }
 
 }   // namespace NKikimr::NArrow::NSSA::NGraph::NOptimization

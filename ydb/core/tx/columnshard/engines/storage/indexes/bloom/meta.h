@@ -23,10 +23,9 @@ private:
         HashesCount = -1 * std::log(FalsePositiveProbability) / std::log(2);
     }
 
-    virtual bool DoIsAppropriateFor(const TString& subColumnName, const EOperation op) const override {
-        if (!!subColumnName) {
-            return false;
-        }
+    virtual std::optional<ui64> DoCalcCategory(const TString& subColumnName) const override;
+
+    virtual bool DoIsAppropriateFor(const TString& /*subColumnName*/, const EOperation op) const override {
         return op == EOperation::Equals;
     }
 

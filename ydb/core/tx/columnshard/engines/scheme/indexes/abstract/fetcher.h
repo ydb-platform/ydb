@@ -71,7 +71,8 @@ private:
         } else {
             const TString& data = originalData.GetDataVerified();
             AFL_VERIFY(header);
-            auto addressRange = header->GetAddressRangeOptional(address, TBlobRange(TUnifiedBlobId(), 0, data.size()));
+            auto addressRange =
+                header->GetAddressRangeOptional(address, TBlobRange(TUnifiedBlobId(0, 0, 0, 0, 0, 0, data.size()), 0, data.size()));
             if (!addressRange) {
                 return TRangeFetchingState("");
             }
@@ -92,7 +93,7 @@ public:
     }
 
     void FetchFrom(
-        const std::shared_ptr<IIndexMeta>& indexMeta, IBlobsReadingAction& nextReadAction, NBlobOperations::NRead::TCompositeReadBlobs& blobs) {
+        const std::shared_ptr<IIndexMeta>& indexMeta, const TString& storageId, std::vector<TBlobRange>& nextReads, NBlobOperations::NRead::TCompositeReadBlobs& blobs) {
         Result.FillDataFrom(blobs);
         bool wasHeader = !!Header;
         if (!Header) {
@@ -100,8 +101,8 @@ public:
             if (size <= Result.GetBlobData().size()) {
                 Header = indexMeta->BuildHeader(TChunkOriginalData(Result.GetBlobData())).DetachResult();
             } else {
-                Result = TRangeFetchingState(nextReadAction.GetStorageId(), OriginalData.GetBlobRangeVerified().BuildSubset(0, size));
-                nextReadAction.AddRange(Result.GetRangeVerified());
+                Result = TRangeFetchingState(storageId, OriginalData.GetBlobRangeVerified().BuildSubset(0, size));
+                nextReads.emplace_back(Result.GetRangeVerified());
             }
         }
         if (!wasHeader && !!Header) {
@@ -109,9 +110,10 @@ public:
             if (!indexRange) {
                 Result = TRangeFetchingState("");
             } else {
-                Result = TRangeFetchingState(nextReadAction.GetStorageId(),
+                Result = TRangeFetchingState(
+                    storageId,
                     OriginalData.GetBlobRangeVerified().BuildSubset(indexRange->GetOffset(), indexRange->GetSize()));
-                nextReadAction.AddRange(Result.GetRangeVerified());
+                nextReads.emplace_back(Result.GetRangeVerified());
             }
         }
     }
@@ -134,8 +136,7 @@ public:
         , Address(address)
         , OriginalData(std::move(originalData))
         , Result(BuildResult(storageId, OriginalData, Header, address))
-        , RecordsCount(recordsCount)
-    {
+        , RecordsCount(recordsCount) {
     }
 };
 

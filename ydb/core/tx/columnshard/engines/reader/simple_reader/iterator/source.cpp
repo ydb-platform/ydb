@@ -161,7 +161,7 @@ TConclusion<bool> TPortionDataSource::DoStartFetchIndex(const NArrow::NSSA::TPro
         }
     }
     MutableStageData().AddRemapDataToIndex(addr, indexMeta);
-    const std::optional<ui32> category = indexMeta->CalcCategory(indexContext.GetSubColumnName());
+    const std::optional<ui64> category = indexMeta->CalcCategory(indexContext.GetSubColumnName());
     std::shared_ptr<NCommon::IKernelFetchLogic> fetcher = indexMeta->BuildFetchTask(
         addr, NIndexes::TIndexDataAddress(indexMeta->GetIndexId(), category), indexMeta, GetContext()->GetCommonContext()->GetStoragesManager());
 
@@ -201,9 +201,14 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
         fetcher->OnDataCollected(fetchContext);
     }
 
-    const std::optional<ui64> cat = meta->CalcCategory(fetchContext.GetSubColumnName());
-    const NIndexes::TIndexColumnChunked& info = GetStageData().GetIndexes()->GetIndexDataVerified(meta->GetIndexId());
     NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
+
+    const std::optional<ui64> cat = meta->CalcCategory(fetchContext.GetSubColumnName());
+    const NIndexes::TIndexColumnChunked* infoPointer = GetStageData().GetIndexes()->GetIndexDataOptional(meta->GetIndexId());
+    if (!infoPointer) {
+        return filter;
+    }
+    const auto info = *infoPointer;
     for (auto&& i : info.GetChunks()) {
         const TString data = i.GetData(cat);
         if (std::static_pointer_cast<NIndexes::TSkipIndex>(meta)->CheckValue(data, cat, value, fetchContext.GetOperation())) {

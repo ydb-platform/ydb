@@ -3,6 +3,8 @@
 #include "graph_execute.h"
 
 #include <library/cpp/json/writer/json_value.h>
+#include <util/digest/fnv.h>
+#include <util/digest/numeric.h>
 
 namespace NKikimr::NArrow::NSSA {
 class TCalculationProcessor;
@@ -14,10 +16,39 @@ class TCompiledGraph;
 
 namespace NKikimr::NArrow::NSSA::NGraph::NOptimization {
 
+class TResourceAddress {
+private:
+    YDB_READONLY(ui32, ColumnId, 0);
+    YDB_READONLY_DEF(TString, SubColumnName);
+
+public:
+    TResourceAddress(const ui32 columnId, const TString& subColumnName = "")
+        : ColumnId(columnId)
+        , SubColumnName(subColumnName) {
+    }
+
+    bool operator<(const TResourceAddress& item) const {
+        return std::tie(ColumnId, SubColumnName) < std::tie(item.ColumnId, item.SubColumnName);
+    }
+
+    bool operator==(const TResourceAddress& item) const {
+        return std::tie(ColumnId, SubColumnName) == std::tie(item.ColumnId, item.SubColumnName);
+    }
+
+    explicit operator size_t() const {
+        if (SubColumnName) {
+            return CombineHashes<ui64>(ColumnId, FnvHash<ui64>(SubColumnName.data(), SubColumnName.size()));
+        } else {
+            return ColumnId;
+        }
+    }
+
+    TString DebugString() const;
+};
+
 class TGraphNode {
 private:
-    static inline TAtomicCounter Counter = 0;
-    YDB_READONLY(i64, Identifier, Counter.Inc());
+    YDB_READONLY(i64, Identifier, 0);
     YDB_READONLY_DEF(std::shared_ptr<IResourceProcessor>, Processor);
     class TAddress {
     private:
@@ -59,6 +90,10 @@ public:
         return InputEdges.empty() && OutputEdges.empty();
     }
 
+    bool Is(const EProcessorType type) const {
+        return GetProcessor()->GetProcessorType() == type;
+    }
+
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("id", Identifier);
@@ -81,8 +116,9 @@ public:
         return OutputEdges;
     }
 
-    TGraphNode(const std::shared_ptr<IResourceProcessor>& processor)
-        : Processor(processor) {
+    TGraphNode(const ui32 id, const std::shared_ptr<IResourceProcessor>& processor)
+        : Identifier(id)
+        , Processor(processor) {
         AFL_VERIFY(Processor);
     }
 
@@ -97,13 +133,15 @@ private:
     ui32 NextResourceId = 0;
     const IColumnResolver& Resolver;
     std::map<ui64, std::shared_ptr<TGraphNode>> Nodes;
-    THashMap<ui32, TGraphNode*> Producers;
+    THashMap<TResourceAddress, TGraphNode*> Producers;
     THashSet<ui32> IndexesConstructed;
-    TGraphNode* GetProducerVerified(const ui32 columnId) {
-        auto it = Producers.find(columnId);
+    ui32 NodeId = 0;
+    TGraphNode* GetProducerVerified(const TResourceAddress& resourceId) const {
+        auto it = Producers.find(resourceId);
         AFL_VERIFY(it != Producers.end());
         return it->second;
     }
+    std::optional<TResourceAddress> GetOriginalAddress(TGraphNode* condNode) const;
     TConclusion<bool> OptimizeConditionsForStream(TGraphNode* condNode);
     TConclusion<bool> OptimizeConditionsForIndexes(TGraphNode* condNode);
     TConclusion<bool> OptimizeIndexesToApply(TGraphNode* condNode);
@@ -115,7 +153,7 @@ private:
     void RemoveEdge(TGraphNode* from, TGraphNode* to, const ui32 resourceId);
     void RemoveNode(const ui32 idenitifier);
     [[nodiscard]] std::shared_ptr<TGraphNode> AddNode(const std::shared_ptr<IResourceProcessor>& processor) {
-        auto result = std::make_shared<TGraphNode>(processor);
+        auto result = std::make_shared<TGraphNode>(NodeId++, processor);
         Nodes.emplace(result->GetIdentifier(), result);
         return result;
     }
@@ -133,11 +171,11 @@ private:
 
     TConclusionStatus Collapse();
 
-    void RegisterProducer(const ui32 resourceId, TGraphNode* node) {
+    void RegisterProducer(const TResourceAddress& resourceId, TGraphNode* node) {
         AFL_VERIFY(Producers.emplace(resourceId, node).second);
     }
 
-    void ResetProducer(const ui32 resourceId, TGraphNode* node) {
+    void ResetProducer(const TResourceAddress& resourceId, TGraphNode* node) {
         auto it = Producers.find(resourceId);
         AFL_VERIFY(it != Producers.end());
         it->second = node;

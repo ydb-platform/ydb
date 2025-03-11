@@ -142,7 +142,7 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
             node->SetRemoveResourceIds(i.second.GetLastUsageResources());
         }
     }
-//    Cerr << DebugDOT() << Endl;
+    Cerr << DebugDOT() << Endl;
 }
 
 TConclusionStatus TCompiledGraph::ApplyImpl(const std::shared_ptr<TCompiledGraph::TNode>& rootNode, const std::shared_ptr<TIterator>& it) const {
@@ -224,10 +224,13 @@ TString TCompiledGraph::DebugDOT() const {
         }
         result << "N" << i.second->GetIdentifier() << "[shape=box, label=\"" << label << "\"" << Endl;
         if (i.second->GetOutputEdges().empty()) {
-            result << ",style=filled,color=\"0.9, 0.5, 0.5\"";
+            result << ",style=filled,color=\"#FFAAAA\"";
         } else if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::AssembleOriginalData ||
                    i.second->GetProcessor()->GetProcessorType() == EProcessorType::FetchOriginalData) {
-            result << ",style=filled,color=\"0.5, 0.9, 0.5\"";
+            result << ",style=filled,color=\"green\"";
+        } else if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::CheckIndexData ||
+                   i.second->GetProcessor()->GetProcessorType() == EProcessorType::FetchIndexData) {
+            result << ",style=filled,color=\"lightgreen\"";
         }
         result << "];" << Endl;
         ui32 idx = 1;

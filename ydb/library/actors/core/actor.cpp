@@ -1,6 +1,5 @@
 #include "actor.h"
 #include "debug.h"
-#include "actor_virtual.h"
 #include "actorsystem.h"
 #include "executor_thread.h"
 #include <ydb/library/actors/util/datetime.h>
@@ -266,15 +265,6 @@ namespace NActors {
 
     double IActor::GetElapsedTicksAsSeconds() const {
         return NHPTimer::GetSeconds(ElapsedTicks);
-    }
-
-    void TActorCallbackBehaviour::Receive(IActor* actor, TAutoPtr<IEventHandle>& ev) {
-        (actor->*StateFunc)(ev);
-    }
-
-    void TActorVirtualBehaviour::Receive(IActor* actor, std::unique_ptr<IEventHandle> ev) {
-        Y_ABORT_UNLESS(!!ev && ev->GetBase());
-        ev->GetBase()->Execute(actor, std::move(ev));
     }
 
     void IActor::Registered(TActorSystem* sys, const TActorId& owner) {

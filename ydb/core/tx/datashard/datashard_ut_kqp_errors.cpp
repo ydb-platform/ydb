@@ -42,11 +42,13 @@ bool HasIssueContains(const TIssues& issues, ui32 code, TStringBuf message, std:
 
 class TLocalFixture {
 public:
-    TLocalFixture(bool enableResourcePools = true, bool enableOltpSink = false) {
+    TLocalFixture(bool enableResourcePools = true, std::optional<bool> enableOltpSink = std::nullopt) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
         app.MutableFeatureFlags()->SetEnableResourcePools(enableResourcePools);
-        app.MutableTableServiceConfig()->SetEnableOltpSink(enableOltpSink);
+        if (enableOltpSink) {
+            app.MutableTableServiceConfig()->SetEnableOltpSink(*enableOltpSink);
+        }
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetNodeCount(2)

@@ -780,7 +780,7 @@ Only connections with matching [producer and message group](../../concepts/topic
   Asynchronous writing of a message to a topic. If the internal buffer overflows, it waits for the buffer to be released before resending.
 
   ```c#
-  await writer.WriteAsync("Hello Example YDB Topics!");
+  await writer.WriteAsync("Hello, Example YDB Topics!");
   ```
 
   If the server is unavailable, messages may accumulate while waiting to be sent. In this case, you can pass a cancellation token (`CancellationToken`) to control waiting. However, if the user cancels the recorded message, it will still be canceled.

@@ -36,7 +36,7 @@
     Пример команды для запуска узла базы данных с опциями, указывающими пути к ключам и сертификатам TLS для протокола gRPC:
 
     ```bash
-    /opt/ydb/bin/ydbd server --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb \
+    /opt/ydb/bin/ydbd server --config-dir /opt/ydb/cfg --tenant /Root/testdb \
         --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
         --grpc-cert /opt/ydb/certs/node.crt --grpc-key /opt/ydb/certs/node.key \
         --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
@@ -48,7 +48,7 @@
 
 ## Включение режима аутентификации и авторизации узлов
 
-Для включения обязательной авторизации узлов баз данных в файл [статической конфигурации кластера](../../reference/configuration/index.md) необходимо добавить следующие блоки настроек:
+Для включения обязательной авторизации узлов баз данных в файл [конфигурации кластера](../../reference/configuration/index.md) необходимо добавить следующие блоки настроек:
 
 1. На корневом уровне конфигурации добавьте блок `client_certificate_authorization`, в котором укажите требования к заполнению поля "Subject" доверенных сертификатов подключаемых узлов, например:
 
@@ -69,14 +69,12 @@
 1. В блок настроек аутентификации кластера `security_config` добавьте элемент `register_dynamic_node_allowed_sids`, указав список субъектов доступа, которым разрешена регистрация узлов баз данных. По техническим причинам в этом списке также должен присутствовать субъект доступа `root@builtin`. Пример:
 
     ```yaml
-    domains_config:
-        ...
-        security_config:
-            enforce_user_token_requirement: true
-            ...
-            register_dynamic_node_allowed_sids:
-            - "root@builtin" # требуется по техническим причинам
-            - "registerNode@cert"
+    security_config:
+      enforce_user_token_requirement: true
+      ...
+      register_dynamic_node_allowed_sids:
+      - "root@builtin" # требуется по техническим причинам
+      - "registerNode@cert"
     ```
 
     Более подробная информация по настройке параметров аутентификации кластера приведена в [соответствующем разделе документации](../../reference/configuration/index.md#security-access-levels).

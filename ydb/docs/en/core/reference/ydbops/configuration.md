@@ -44,12 +44,14 @@ For the invocation above, the following `config.yaml` is assumed to be present:
 
 ```yaml
 current-profile: my-profile
-my-profile:
-  endpoint: grpc://<hostname>:2135
-  user: admin
-  password-file: ~/<password-file>
-  k8s-namespace: <k8s-namespace>
-  kubeconfig: ~/.kube/config
+profiles:
+  my-profile:
+    endpoint: grpcs://<hostname>:2135
+    ca-file: ~/<ca-certificate-file>
+    user: <username>
+    password-file: ~/<password-file>
+    k8s-namespace: <k8s-namespace>
+    kubeconfig: ~/.kube/config
 ```
 
 ### Profile management commands
@@ -67,22 +69,24 @@ Here is an example of a configuration file with all possible options that can be
 # be used as the default active profile in the CLI invocation
 current-profile: my-profile
 
-my-profile:
-  endpoint: grpc://your.ydb.cluster.fqdn:2135
+# profile definitions are added as subkeys to the `profiles` key
+profiles:
+  my-profile:
+    endpoint: grpcs://your.ydb.cluster.fqdn:2135
 
-  # CA file location if using grpcs to the endpoint
-  ca-file: /path/to/custom/ca/file
+    # CA file location if using grpcs to the endpoint
+    ca-file: /path/to/custom/ca/file
 
-  # a username and password file if static credentials are used:
-  user: your-ydb-user-name
-  password-file: /path/to/password-file
+    # a username and password file if static credentials are used:
+    user: your-ydb-user-name
+    password-file: /path/to/password-file
 
-  # when using access token
-  token-file: /path/to/ydb/token
+    # when using access token
+    token-file: /path/to/ydb/token
 
-  # if working with YDB clusters in Kubernetes, kubeconfig path can be specified:
-  kubeconfig: /path/to/kube/config
-  k8s-namespace: <k8s-namespace>
+    # if working with YDB clusters in Kubernetes, kubeconfig path can be specified:
+    kubeconfig: /path/to/kube/config
+    k8s-namespace: <k8s-namespace>
 ```
 
 ## Environment variables {#environment-variables}

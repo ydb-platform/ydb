@@ -100,7 +100,7 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
 
   To interact with {{ ydb-short-name }} Topics, create an instance of the {{ ydb-short-name }} driver and topic client.
 
-  The {{ ydb-short-name }} transport lets the app and {{ ydb-short-name }} interact at the transport layer. The transport must exist during the {{ ydb-short-name }} access lifecycle and be initialized before creating a client.
+  The {{ ydb-short-name }} transport allows the app and {{ ydb-short-name }} to interact at the transport layer. The transport must exist during the {{ ydb-short-name }} access lifecycle and be initialized before creating a client.
 
   App code snippet for transport initialization:
 

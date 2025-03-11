@@ -2570,16 +2570,19 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         });
     }
 
-    Y_UNIT_TEST(ShouldReadFromHeadWithConflict) {
+    Y_UNIT_TEST_TWIN(ShouldReadFromHeadWithConflict, UseSink) {
         // Similar to ShouldReadFromHead, but there is conflicting hanged operation.
         // We will read all at once thus should not block
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             // Blocked volatile transactions block reads, disable
-            .SetEnableDataShardVolatileTransactions(false);
+            .SetEnableDataShardVolatileTransactions(false)
+            .SetAppConfig(app);
 
         const ui64 shardCount = 1;
         TTestHelper helper(serverSettings, shardCount);
@@ -2624,7 +2627,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         }
     }
 
-    Y_UNIT_TEST(ShouldReadFromHeadToMvccWithConflict) {
+    Y_UNIT_TEST_TWIN(ShouldReadFromHeadToMvccWithConflict, UseSink) {
         // Similar to ShouldProperlyOrderConflictingTransactionsMvcc, but we read HEAD
         //
         // In this test HEAD read waits conflicting transaction: first time we read from HEAD and
@@ -2632,8 +2635,11 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
 
         const ui64 shardCount = 1;
         TTestHelper helper(serverSettings, shardCount);
@@ -2714,7 +2720,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         }
     }
 
-    Y_UNIT_TEST(ShouldProperlyOrderConflictingTransactionsMvcc) {
+    Y_UNIT_TEST_TWIN(ShouldProperlyOrderConflictingTransactionsMvcc, UseSink) {
         // 1. Start read-write multishard transaction: readset will be blocked
         // to hang transaction. Write is the key we want to read.
         // 2a. Check that we can read prior blocked step.
@@ -2727,8 +2733,11 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
 
         const ui64 shardCount = 1;
         TTestHelper helper(serverSettings, shardCount);

@@ -1747,7 +1747,7 @@
           }
           catch (ReaderException e)
           {
-              logger.LogError(e, "Failed commit message");
+              logger.LogError(e, "Failed to commit a message");
           }
       }
   }

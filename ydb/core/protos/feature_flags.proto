@@ -185,7 +185,7 @@ message TFeatureFlags {
     optional bool EnableDataShardInMemoryStateMigrationAcrossGenerations = 160 [default = false];
     optional bool DisableLocalDBEraseCache = 161 [default = false];
     optional bool EnableChecksumsExport = 162 [default = false];
-    optional bool EnableTopicTransfer = 163 [default = true];
+    optional bool EnableTopicTransfer = 163 [default = false];
     optional bool EnableViewExport = 164 [default = false];
     optional bool EnableColumnStore = 165 [default = false];
     optional bool EnableStrictAclCheck = 166 [default = false];

@@ -262,19 +262,6 @@ roaring64_bitmap_t *roaring64_bitmap_of_ptr(size_t n_args,
     return r;
 }
 
-roaring64_bitmap_t *roaring64_bitmap_of(size_t n_args, ...) {
-    roaring64_bitmap_t *r = roaring64_bitmap_create();
-    roaring64_bulk_context_t context = CROARING_ZERO_INITIALIZER;
-    va_list ap;
-    va_start(ap, n_args);
-    for (size_t i = 0; i < n_args; i++) {
-        uint64_t val = va_arg(ap, uint64_t);
-        roaring64_bitmap_add_bulk(r, &context, val);
-    }
-    va_end(ap);
-    return r;
-}
-
 static inline leaf_t *containerptr_roaring64_bitmap_add(roaring64_bitmap_t *r,
                                                         uint8_t *high48,
                                                         uint16_t low16,

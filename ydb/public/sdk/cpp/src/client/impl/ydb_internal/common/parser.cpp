@@ -2,7 +2,7 @@
 
 #include <ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 TConnectionInfo ParseConnectionString(const std::string& connectionString) {
     if (connectionString.length() == 0) {

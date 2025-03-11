@@ -10,7 +10,7 @@
 #include <src/client/common_client/impl/client.h>
 #include <ydb-cpp-sdk/client/proto/accessor.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NImport {
 
 using namespace NThreading;

@@ -6,6 +6,7 @@
 #include <util/string/builder.h>
 
 namespace NYdb {
+inline namespace Dev {
 
 std::string MakeSignedJwt(const TJwtParams& params, const TDuration& lifetime) {
     // this constant works on all envs (internal IAM, preprod cloud, prod cloud)
@@ -53,5 +54,5 @@ TJwtParams ParseJwtParams(const std::string& jsonParamsStr) {
     return result;
 }
 
-} // namespace NYdb
-
+}
+}

@@ -5,7 +5,7 @@
 
 #include <util/datetime/base.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 //! Partition session.
 struct TPartitionSession: public TThrRefBase, public TPrintable<TPartitionSession> {

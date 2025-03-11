@@ -9,7 +9,7 @@
 
 #include <google/protobuf/util/json_util.h>
 
-namespace NYdb::inline V3::NRateLimiter {
+namespace NYdb::inline Dev::NRateLimiter {
 
 TReplicatedBucketSettings::TReplicatedBucketSettings(const Ydb::RateLimiter::ReplicatedBucketSettings& proto) {
     if (proto.has_report_interval_ms()) {

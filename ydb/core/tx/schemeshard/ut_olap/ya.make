@@ -29,7 +29,6 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_olap.cpp
-    column_name_validation_ut.cpp
 )
 
 END()

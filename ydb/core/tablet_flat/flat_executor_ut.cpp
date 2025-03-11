@@ -6285,10 +6285,6 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
     }
 
-    void WakeupSharedCache(TMyEnvBase &env) {
-        env->Send(MakeSharedPageCacheId(), TActorId{}, new TKikimrEvents::TEvWakeup(1 /*DO_GC_TAG*/ ));
-    }
-
     void SetupEnvironment(TMyEnvBase &env, std::optional<bool> bTreeIndex = {}) {
         env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
         env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
@@ -6362,10 +6358,6 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
-
-        // as there is no touched pages on part load, passive pages won't be evicted without this call
-        // (they become non-passive after loader finishes, but Shared Cache GC isn't triggered)
-        WakeupSharedCache(env);
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 22); // 20 data pages, 2 index nodes

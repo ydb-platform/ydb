@@ -938,6 +938,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         for (auto& kv : toSend) {
             auto msg = MakeHolder<NSharedCache::TEvUpdated>();
             msg->Actions = std::move(kv.second);
+            for (auto& action : msg->Actions) {
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Dropping " << action.first
+                    << " pages " << action.second.Dropped
+                    << " owner " << kv.first);
+            }
             Send(kv.first, msg.Release());
         }
     }

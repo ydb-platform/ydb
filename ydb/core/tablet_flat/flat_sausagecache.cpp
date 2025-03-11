@@ -58,6 +58,8 @@ void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
             Stats.TotalPinnedBody += page->Size;
 
         TryUnload(page);
+        // notify shared cache that we have a page handle
+        ToTouchShared[page->Info->Id].insert(page->Id);
         Y_DEBUG_ABORT_UNLESS(!page->IsUnnecessary());
     }
 

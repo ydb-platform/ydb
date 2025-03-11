@@ -46,7 +46,8 @@ class KqpRun(object):
 
         self.queries.append(query_path)
 
-    def yql_exec(self, verbose: bool = False, check_error: bool = True, var_templates: Optional[List[str]] = None, yql_program: Optional[str] = None, yql_tables: List[yql_utils.Table] = []) -> yql_utils.YQLExecResult:
+    def yql_exec(self, verbose: bool = False, check_error: bool = True, var_templates: Optional[List[str]] = None,
+                 yql_program: Optional[str] = None, yql_tables: List[yql_utils.Table] = []) -> yql_utils.YQLExecResult:
         udfs_dir = self.udfs_dir
 
         config_file = self.config_file

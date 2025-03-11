@@ -3,32 +3,30 @@
 
 namespace NKikimr::NArrow::NSSA::NGraph::NExecution {
 
-TConclusion<IResourceProcessor::EExecutionResult> TExecutionVisitor::DoOnExit(const TCompiledGraph::TNode& node) {
-    if (InBackgroundMarker) {
-        InBackgroundMarker = false;
-        return IResourceProcessor::EExecutionResult::Success;
-    }
-    AFL_VERIFY(!InBackgroundMarker);
-    IResourceProcessor::EExecutionResult result = IResourceProcessor::EExecutionResult::Skipped;
+TConclusion<TCompiledGraph::IVisitor::EVisitStatus> TExecutionVisitor::DoOnExit(const TCompiledGraph::TNode& node) {
     if (!SkipActivity.size()) {
-        auto conclusion = node.GetProcessor()->Execute(Context, node);
-        if (conclusion.IsFail()) {
-            return conclusion;
+        if (ExecutionNode) {
+            AFL_VERIFY(Executed);
+            AFL_VERIFY(ExecutionNode->GetIdentifier() == node.GetIdentifier());
+            ExecutionNode = nullptr;
+            for (auto&& i : node.GetRemoveResourceIds()) {
+                Context.GetResources()->Remove(i, true);
+            }
+            return EVisitStatus::Finished;
+        } else {
+            Executed = false;
+            ExecutionNode = &node;
+            return EVisitStatus::NeedExecute;
         }
-        result = *conclusion;
-        if (*conclusion == IResourceProcessor::EExecutionResult::InBackground) {
-            InBackgroundMarker = true;
-        }
+    } else {
+        AFL_VERIFY(!ExecutionNode);
+        SkipActivity.erase(node.GetIdentifier());
+        return EVisitStatus::Skipped;
     }
-    SkipActivity.erase(node.GetIdentifier());
-    for (auto&& i : node.GetRemoveResourceIds()) {
-        Context.GetResources()->Remove(i, true);
-    }
-    return result;
 }
 
 TConclusionStatus TExecutionVisitor::DoOnComeback(const TCompiledGraph::TNode& node, const std::vector<TColumnChainInfo>& readyInputs) {
-    AFL_VERIFY(!InBackgroundMarker)("id", node.GetIdentifier())("ready", JoinSeq(",", TColumnChainInfo::ExtractColumnIds(readyInputs)));
+    AFL_VERIFY(!ExecutionNode)("id", node.GetIdentifier())("ready", JoinSeq(",", TColumnChainInfo::ExtractColumnIds(readyInputs)));
     if (SkipActivity.empty() && node.GetProcessor()->GetProcessorType() == EProcessorType::StreamLogic) {
         const TStreamLogicProcessor* streamProc = static_cast<const TStreamLogicProcessor*>(node.GetProcessor().get());
         for (auto&& i : readyInputs) {

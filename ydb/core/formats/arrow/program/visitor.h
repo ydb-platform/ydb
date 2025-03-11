@@ -7,14 +7,24 @@ class TExecutionVisitor: public TCompiledGraph::IVisitor {
 private:
     const TProcessorContext Context;
     THashSet<ui32> SkipActivity;
-    YDB_READONLY(bool, InBackgroundMarker, false);
+    const TCompiledGraph::TNode* ExecutionNode = nullptr;
+    bool Executed = false;
 
 public:
+    TConclusion<IResourceProcessor::EExecutionResult> Execute() {
+        if (ExecutionNode) {
+            Executed = true;
+            return ExecutionNode->GetProcessor()->Execute(Context, *ExecutionNode);
+        } else {
+            return IResourceProcessor::EExecutionResult::Success;
+        }
+    }
+
     TExecutionVisitor(const TProcessorContext& context)
         : Context(context) {
     }
 
-    virtual TConclusion<IResourceProcessor::EExecutionResult> DoOnExit(const TCompiledGraph::TNode& node) override;
+    virtual TConclusion<IVisitor::EVisitStatus> DoOnExit(const TCompiledGraph::TNode& node) override;
     virtual TConclusionStatus DoOnEnter(const TCompiledGraph::TNode& /*node*/) override {
         return TConclusionStatus::Success();
     }

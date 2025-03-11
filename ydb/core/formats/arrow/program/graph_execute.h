@@ -93,18 +93,25 @@ public:
     class TIterator;
 
     class IVisitor {
+    public:
+        enum class EVisitStatus {
+            NeedExecute,
+            Skipped,
+            Finished
+        };
+
     private:
         THashSet<ui32> Visited;
         THashSet<ui32> Current;
 
-        virtual TConclusion<IResourceProcessor::EExecutionResult> DoOnExit(const TCompiledGraph::TNode& node) = 0;
+        virtual TConclusion<EVisitStatus> DoOnExit(const TCompiledGraph::TNode& node) = 0;
         virtual TConclusionStatus DoOnEnter(const TCompiledGraph::TNode& node) = 0;
         virtual TConclusionStatus DoOnComeback(const TCompiledGraph::TNode& node, const std::vector<TColumnChainInfo>& readyInputs) = 0;
 
     public:
         virtual ~IVisitor() = default;
 
-        [[nodiscard]] TConclusion<IResourceProcessor::EExecutionResult> OnExit(const TCompiledGraph::TNode& node);
+        [[nodiscard]] TConclusion<EVisitStatus> OnExit(const TCompiledGraph::TNode& node);
         [[nodiscard]] TConclusionStatus OnEnter(const TCompiledGraph::TNode& node) {
             AFL_VERIFY(node.GetProcessor());
             AFL_VERIFY(Visited.emplace(node.GetIdentifier()).second);
@@ -125,7 +132,6 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TNode>, ResultRoot);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<TNode>>, FilterRoot);
     bool IsFilterRoot(const ui32 identifier) const;
-    TConclusionStatus ApplyImpl(const std::shared_ptr<TCompiledGraph::TNode>& rootNode, const std::shared_ptr<TIterator>& it) const;
 
 public:
     bool IsGenerated(const ui32 resourceId) const {

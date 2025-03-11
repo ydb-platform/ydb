@@ -154,43 +154,28 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
     Cerr << DebugDOT() << Endl;
 }
 
-TConclusionStatus TCompiledGraph::ApplyImpl(const std::shared_ptr<TCompiledGraph::TNode>& rootNode, const std::shared_ptr<TIterator>& it) const {
-    AFL_VERIFY(rootNode);
-    {
-        auto conclusion = it->Reset({ rootNode });
-        if (conclusion.IsFail()) {
-            return conclusion;
-        }
-    }
-    while (it->IsValid()) {
-        auto conclusion = it->Next();
-        if (conclusion.IsFail()) {
-            return conclusion;
-        }
-    }
-    return TConclusionStatus::Success();
-}
-
 TConclusionStatus TCompiledGraph::Apply(
     const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TAccessorsCollection>& resources) const {
-    AFL_VERIFY(FilterRoot.size() || !!ResultRoot);
     TProcessorContext context(source, resources, std::nullopt, false);
     std::shared_ptr<TExecutionVisitor> visitor = std::make_shared<TExecutionVisitor>(context);
-    auto it = std::make_shared<TIterator>(visitor);
-    for (auto&& i : FilterRoot) {
-        auto conclusion = ApplyImpl(i, it);
-        if (conclusion.IsFail()) {
-            return conclusion;
+    for (auto it = BuildIterator(visitor); it->IsValid();) {
+        {
+            auto conclusion = visitor->Execute();
+            if (conclusion.IsFail()) {
+                return conclusion;
+            } else {
+                AFL_VERIFY(*conclusion != IResourceProcessor::EExecutionResult::InBackground);
+            }
         }
         if (resources->IsEmptyFiltered()) {
             resources->Clear();
             return TConclusionStatus::Success();
         }
-    }
-    if (ResultRoot) {
-        auto conclusion = ApplyImpl(ResultRoot, it);
-        if (conclusion.IsFail()) {
-            return conclusion;
+        {
+            auto conclusion = it->Next();
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
         }
     }
     return TConclusionStatus::Success();
@@ -395,10 +380,10 @@ TConclusion<bool> TCompiledGraph::TIterator::Next() {
         if (conclusion.IsFail()) {
             return conclusion;
         }
-        if (*conclusion == IResourceProcessor::EExecutionResult::InBackground) {
+        if (*conclusion == IVisitor::EVisitStatus::NeedExecute) {
             return true;
         }
-        if (*conclusion == IResourceProcessor::EExecutionResult::Skipped) {
+        if (*conclusion == IVisitor::EVisitStatus::Skipped) {
             skipFlag = true;
         }
     }
@@ -461,16 +446,16 @@ TConclusion<bool> TCompiledGraph::TIterator::Next() {
     return GlobalInitialize();
 }
 
-TConclusion<IResourceProcessor::EExecutionResult> TCompiledGraph::IVisitor::OnExit(
+TConclusion<TCompiledGraph::IVisitor::EVisitStatus> TCompiledGraph::IVisitor::OnExit(
     const TCompiledGraph::TNode& node) {
     AFL_VERIFY(node.GetProcessor());
     auto conclusion = DoOnExit(node);
     if (conclusion.IsFail()) {
         return conclusion;
     }
-    if (*conclusion == IResourceProcessor::EExecutionResult::Success) {
+    if (*conclusion == EVisitStatus::Finished) {
         AFL_VERIFY(Current.erase(node.GetIdentifier()))("id", node.GetIdentifier());
-    } else if (*conclusion == IResourceProcessor::EExecutionResult::Skipped) {
+    } else if (*conclusion == EVisitStatus::Skipped) {
         AFL_VERIFY(Current.erase(node.GetIdentifier()))("id", node.GetIdentifier());
         AFL_VERIFY(Visited.erase(node.GetIdentifier()))("id", node.GetIdentifier());
     }

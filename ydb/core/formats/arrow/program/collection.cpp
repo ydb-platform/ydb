@@ -22,7 +22,7 @@ void TAccessorsCollection::AddVerified(const ui32 columnId, const TAccessorColle
     if (UseFilter && withFilter && !Filter->IsTotalAllowFilter()) {
         auto filtered = Filter->Apply(data.GetData());
         RecordsCountActual = filtered->GetRecordsCount();
-        AFL_VERIFY(Accessors.emplace(columnId, filtered).second);
+        AFL_VERIFY(Accessors.emplace(columnId, filtered).second)("id", columnId);
     } else {
         if (Filter->IsTotalAllowFilter()) {
             if (!data.GetItWasScalar()) {

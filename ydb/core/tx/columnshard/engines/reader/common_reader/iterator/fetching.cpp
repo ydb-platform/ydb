@@ -208,21 +208,26 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
     auto iterator = source->GetProgramIteratorVerified();
     const auto& resources = source->GetStageData().GetTable();
     if (!started) {
-        for (auto&& i : iterator->GetCurrentNode().GetRemoveResourceIds()) {
-            resources->Remove(i, true);
-        }
         iterator->Next();
     }
     NArrow::NSSA::TProcessorContext context(
         source, source->GetStageData().GetTable(), readMeta->GetLimitRobustOptional(), readMeta->IsDescSorted());
     for (; iterator->IsValid();) {
-        auto conclusion = iterator->Next();
-        if (conclusion.IsFail()) {
-            return conclusion;
+        {
+            auto conclusion = iterator->Next();
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
         }
-        if (source->GetExecutionVisitorVerified()->GetInBackgroundMarker()) {
-            return false;
+        {
+            auto conclusion = source->GetExecutionVisitorVerified()->Execute();
+            if (conclusion.IsFail()) {
+                return conclusion;
+            } else if (*conclusion == NArrow::NSSA::IResourceProcessor::EExecutionResult::InBackground) {
+                return false;
+            }
         }
+
         if (resources->GetRecordsCountActualOptional() == 0) {
             resources->Clear();
             break;

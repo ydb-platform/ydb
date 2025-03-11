@@ -23,7 +23,7 @@ private:
     }
 
     virtual ui64 DoGetWeight() const override {
-        return 2;
+        return IndexContext.GetSubColumnName() ? 2 : 3;
     }
 
 public:
@@ -53,7 +53,7 @@ private:
     }
 
     virtual ui64 DoGetWeight() const override {
-        return 1;
+        return IndexContext.GetSubColumnName() ? 1 : 2;
     }
 
     bool ApplyToFilterFlag = false;

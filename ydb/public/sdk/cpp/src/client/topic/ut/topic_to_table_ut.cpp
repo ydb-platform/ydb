@@ -3207,6 +3207,18 @@ Y_UNIT_TEST_F(Transactions_Conflict_On_SeqNo, TFixture)
     UNIT_ASSERT_VALUES_UNEQUAL(successCount, TXS_COUNT);
 }
 
+Y_UNIT_TEST_F(PQ_Cache_L2, TFixture)
+{
+    CreateTopic("topic_A");
+
+    SetPartitionWriteSpeed("topic_A", 50'000'000);
+
+    for (size_t i = 0; i < 1000; ++i) {
+        const TString message(1'400, 'x');
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, message);
+    }
+}
+
 }
 
 }

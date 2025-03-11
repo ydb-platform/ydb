@@ -75,7 +75,6 @@ static const TString tableSchemaFormat = R"(
     }
 )";
 
-<<<<<<< HEAD
 #define DEBUG_HINT (TStringBuilder() << "at line " << __LINE__)
 
 NLs::TCheckFunc LsCheckDiskQuotaExceeded(
@@ -128,9 +127,7 @@ NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runt
 
     return stats;
 }
-=======
 }}
->>>>>>> moved naming tests
 
 Y_UNIT_TEST_SUITE(TOlap) {
     Y_UNIT_TEST(CreateStore) {

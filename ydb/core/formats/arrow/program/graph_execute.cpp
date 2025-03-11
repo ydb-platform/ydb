@@ -93,16 +93,25 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
         currentNodes = std::move(nextNodes);
     }
     AFL_VERIFY(nodesCount == Nodes.size())("init", nodesCount)("nodes", Nodes.size());
-    for (auto&& i : Nodes) {
-        i.second->SortInputs();
-        if (!i.second->GetOutputEdges().size()) {
-            if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::Filter) {
-                AFL_VERIFY(!IsFilterRoot(i.second->GetIdentifier()));
-                FilterRoot.emplace_back(i.second);
-            } else if (i.second->GetProcessor()->GetProcessorType() != EProcessorType::Const) {
-                AFL_VERIFY(!ResultRoot)("debug", DebugDOT());
-                ResultRoot = i.second;
+
+    {
+        std::vector<ui32> toRemoveConst;
+        for (auto&& i : Nodes) {
+            i.second->SortInputs();
+            if (!i.second->GetOutputEdges().size()) {
+                if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::Filter) {
+                    AFL_VERIFY(!IsFilterRoot(i.second->GetIdentifier()));
+                    FilterRoot.emplace_back(i.second);
+                } else if (i.second->GetProcessor()->GetProcessorType() != EProcessorType::Const) {
+                    AFL_VERIFY(!ResultRoot)("debug", DebugDOT());
+                    ResultRoot = i.second;
+                } else {
+                    toRemoveConst.emplace_back(i.first);
+                }
             }
+        }
+        for (auto&& i : toRemoveConst) {
+            Nodes.erase(i);
         }
     }
     THashMap<ui32, TResourceUsageInfo> usage;
@@ -128,7 +137,7 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
             ++currentIndex;
         }
     }
-    AFL_VERIFY(sortedNodes.size() == Nodes.size());
+    AFL_VERIFY(sortedNodes.size() == Nodes.size())("debug", DebugDOT());
     THashMap<ui32, TStepResourcesUsage> stepInfo;
     for (auto&& u : usage) {
         if (u.second.GetLastUsage()) {

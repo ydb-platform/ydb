@@ -5,8 +5,6 @@
 #include "kafka_consumer_members_metadata_initializers.h"
 #include "kqp_balance_transaction.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/actor.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/kqp/common/events/events.h>
@@ -14,6 +12,8 @@
 #include <ydb/core/persqueue/fetch_request_actor.h>
 #include <ydb/core/protos/kafka.pb.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/persqueue_v1/actors/read_init_auth_actor.h>
 #include <util/datetime/base.h>
@@ -372,7 +372,7 @@ private:
 
     bool IsMaster = false;
 
-    std::unique_ptr<NKikimr::NGRpcProxy::V1::TKqpTxHelper> Kqp;
+    std::unique_ptr<NKafka::TKqpTxHelper> Kqp;
 
     TMessagePtr<TJoinGroupRequestData> JoinGroupRequestData;
     TMessagePtr<TSyncGroupRequestData> SyncGroupRequestData;

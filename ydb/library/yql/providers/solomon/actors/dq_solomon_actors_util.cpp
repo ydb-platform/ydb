@@ -1,8 +1,8 @@
-#include "metrics_encoder.h"
+#include "dq_solomon_actors_util.h"
 
-#include <yql/essentials/public/udf/udf_data_type.h>
-
+#include <library/cpp/monlib/encode/json/json.h>
 #include <util/datetime/base.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 using namespace NYql;
 
@@ -96,11 +96,12 @@ void EncodeSensorValue(
             Y_ENSURE(false, "Bad type for sensor " << scheme.GetDataTypeId());
     }
 }
-}
+
+} // namespace
 
 namespace NYql::NDq {
 
-TMetricsEncoder::TMetricsEncoder(const NSo::NProto::TDqSolomonShardScheme& scheme, bool useCloudFormat)
+    TMetricsEncoder::TMetricsEncoder(const NSo::NProto::TDqSolomonShardScheme& scheme, bool useCloudFormat)
     : Scheme(scheme)
     , UseCloudFormat(useCloudFormat)
 {
@@ -154,4 +155,4 @@ TString TMetricsEncoder::Encode() {
     return res;
 }
 
-}
+} // namespace NYql::NDq

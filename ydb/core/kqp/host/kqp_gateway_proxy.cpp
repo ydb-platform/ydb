@@ -650,7 +650,7 @@ public:
             schemeTx.MutableModifyACL()->SetName(basename);
 
             auto condition = schemeTx.AddApplyIf();
-            condition->SetCheckTypeOfPath(NKikimrSchemeOp::TApplyIf::ExtSubDomain);
+            condition->SetCheckTypeOfPath(NKikimrSchemeOp::TApplyIf::SubDomainOrExtSubDomain);
 
             auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
             auto& phyTx = *phyQuery.AddTransactions();

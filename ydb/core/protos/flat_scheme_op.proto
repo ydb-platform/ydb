@@ -1536,7 +1536,7 @@ message TApplyIf {
     optional ETypeOfPath CheckTypeOfPath = 5;
 
     enum ETypeOfPath {
-        ExtSubDomain = 1;
+        SubDomainOrExtSubDomain = 1;
     }
 }
 

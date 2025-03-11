@@ -194,11 +194,24 @@ namespace NSchemeShardUT_Private {
         }
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction* CreateModifyACLRequest(ui64 txId, ui64 schemeshard, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner) {
+    TEvSchemeShard::TEvModifySchemeTransaction* CreateModifyACLRequest(ui64 txId, ui64 schemeshard, TString parentPath, TString name, 
+                                                                       const TString& diffAcl, const TString& newOwner, ETypeOfPath typeOfPath = ETypeOfPath::Any)
+    {
         auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, schemeshard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetWorkingDir(parentPath);
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
+
+        switch (typeOfPath) {
+            case ETypeOfPath::SubDomainOrExtSubDomain: {
+                auto condition = transaction->AddApplyIf();
+                condition->SetCheckTypeOfPath(NKikimrSchemeOp::TApplyIf::SubDomainOrExtSubDomain);
+                break;
+            }
+            case ETypeOfPath::Any: {
+                break;
+            }
+        }
 
         auto op = transaction->MutableModifyACL();
         op->SetName(name);
@@ -212,25 +225,29 @@ namespace NSchemeShardUT_Private {
         return evTx;
     }
 
-    void AsyncModifyACL(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner) {
-        AsyncSend(runtime, schemeShardId, CreateModifyACLRequest(txId, schemeShardId, parentPath, name, diffAcl, newOwner));
+    void AsyncModifyACL(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner, ETypeOfPath typeOfPath) {
+        AsyncSend(runtime, schemeShardId, CreateModifyACLRequest(txId, schemeShardId, parentPath, name, diffAcl, newOwner, typeOfPath));
     }
 
-    void AsyncModifyACL(TTestActorRuntime& runtime, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner) {
-        return AsyncModifyACL(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, diffAcl, newOwner);
+    void AsyncModifyACL(TTestActorRuntime& runtime, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner, ETypeOfPath typeOfPath) {
+        return AsyncModifyACL(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, diffAcl, newOwner, typeOfPath);
     }
 
     void TestModifyACL(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, TString parentPath, TString name,
                        const TString& diffAcl, const TString& newOwner,
-                       TEvSchemeShard::EStatus expectedResult) {
-        AsyncModifyACL(runtime, schemeShardId, txId, parentPath, name, diffAcl, newOwner);
+                       TEvSchemeShard::EStatus expectedResult,
+                       ETypeOfPath typeOfPath
+    ) {
+        AsyncModifyACL(runtime, schemeShardId, txId, parentPath, name, diffAcl, newOwner, typeOfPath);
         TestModificationResult(runtime, txId, expectedResult);
     }
 
     void TestModifyACL(TTestActorRuntime& runtime, ui64 txId, TString parentPath, TString name,
-                       const TString& diffAcl, const TString& newOwner,
-                       TEvSchemeShard::EStatus expectedResult) {
-        TestModifyACL(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, diffAcl, newOwner, expectedResult);
+        const TString& diffAcl, const TString& newOwner,
+        TEvSchemeShard::EStatus expectedResult,
+        ETypeOfPath typeOfPath
+    ) {
+        TestModifyACL(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, diffAcl, newOwner, expectedResult, typeOfPath);
     }
 
 

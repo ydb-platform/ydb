@@ -3115,7 +3115,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         TString ToStr() const {
             return TStringBuilder()
-                << "{ K = " << K << ", ParentBegin = " << ParentBegin << ", ChildBegin = " << ChildBegin
+                << "{ K = " << K
                 << ", Level = " << Level << " / " << Levels
                 << ", Parent = [" << ParentBegin << ".." << Parent << ".." << ParentEnd()
                 << "], Child = [" << ChildBegin << ".." << Child << ".." << ChildEnd()

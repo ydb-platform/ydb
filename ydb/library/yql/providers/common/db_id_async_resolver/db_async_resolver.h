@@ -1,5 +1,7 @@
 #pragma once
 
+#include "database_type.h"
+
 #include <library/cpp/threading/future/future.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
@@ -7,67 +9,6 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
 namespace NYql {
-
-enum class EDatabaseType {
-    Ydb,
-    ClickHouse,
-    DataStreams,
-    ObjectStorage,
-    PostgreSQL,
-    YT,
-    MySQL,
-    Greenplum,
-    MsSQLServer
-};
-
-inline EDatabaseType DatabaseTypeFromDataSourceKind(NConnector::NApi::EDataSourceKind dataSourceKind) {
-    switch (dataSourceKind) {
-        case NConnector::NApi::EDataSourceKind::POSTGRESQL:
-            return EDatabaseType::PostgreSQL;
-        case NConnector::NApi::EDataSourceKind::CLICKHOUSE:
-            return EDatabaseType::ClickHouse;
-        case NConnector::NApi::EDataSourceKind::YDB:
-            return EDatabaseType::Ydb;
-        case NConnector::NApi::EDataSourceKind::MYSQL:
-            return EDatabaseType::MySQL;
-        case NConnector::NApi::EDataSourceKind::GREENPLUM:
-            return EDatabaseType::Greenplum;
-        case NConnector::NApi::EDataSourceKind::MS_SQL_SERVER:
-          return EDatabaseType::MsSQLServer;
-        default:
-            ythrow yexception() << "Unknown data source kind: " << NConnector::NApi::EDataSourceKind_Name(dataSourceKind);
-    }
-}
-
-inline NConnector::NApi::EDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseType databaseType) {
-    switch (databaseType) {
-        case EDatabaseType::PostgreSQL:
-            return  NConnector::NApi::EDataSourceKind::POSTGRESQL;
-        case EDatabaseType::ClickHouse:
-            return  NConnector::NApi::EDataSourceKind::CLICKHOUSE;
-        case EDatabaseType::Ydb:
-            return  NConnector::NApi::EDataSourceKind::YDB;
-        case EDatabaseType::MySQL:
-            return NConnector::NApi::EDataSourceKind::MYSQL;
-        case EDatabaseType::Greenplum:
-            return  NConnector::NApi::EDataSourceKind::GREENPLUM;
-        case EDatabaseType::MsSQLServer:
-            return NConnector::NApi::EDataSourceKind::MS_SQL_SERVER;
-        default:
-            ythrow yexception() << "Unknown database type: " << ToString(databaseType);
-    }
-}
-
-inline TString DatabaseTypeLowercase(EDatabaseType databaseType) {
-    auto dump = ToString(databaseType);
-    dump.to_lower();
-    return dump;
-}
-
-// TODO: remove this function after /kikimr/yq/tests/control_plane_storage is moved to /ydb.
-inline TString DatabaseTypeToMdbUrlPath(EDatabaseType databaseType) {
-    return DatabaseTypeLowercase(databaseType);
-}
 
 struct TDatabaseAuth {
     // Serialized token value used to access MDB API

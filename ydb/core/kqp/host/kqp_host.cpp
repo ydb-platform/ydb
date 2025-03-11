@@ -1070,11 +1070,14 @@ public:
         }
 
         if (FederatedQuerySetup) {
-            ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory({},
+            const auto& hostnamePatterns = QueryServiceConfig.GetHostnamePatterns();
+            const auto& availableExternalDataSources = QueryServiceConfig.GetAvailableExternalDataSources();
+            ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
                                                                                  ActorSystem,
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetGeneratorPathsLimit(),
                                                                                  FederatedQuerySetup ? FederatedQuerySetup->CredentialsFactory : nullptr,
-                                                                                 Config->FeatureFlags.GetEnableExternalSourceSchemaInference());
+                                                                                 Config->FeatureFlags.GetEnableExternalSourceSchemaInference(),
+                                                                                 std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend()));
         }
     }
 

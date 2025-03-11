@@ -276,7 +276,7 @@ class TestStress(object):
             "workload",
             "tpcds",
             "-p",
-            "olap_yatests/tpcds/s1",
+            "tpcds/s1",
             "import",
             "generator",
             "--scale=1",

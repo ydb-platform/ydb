@@ -12,12 +12,8 @@ ui64 NonZeroMin(ui64 a, ui64 b) {
     return (b == 0) ? a : ((a == 0 || a > b) ? b : a);
 }
 
-void TTimeSeriesStats::ExportAggStats(NYql::NDqProto::TDqStatsAggr& stats) {
-    NKikimr::NKqp::ExportAggStats(Values, stats);
-}
-
 void TTimeSeriesStats::ExportAggStats(ui64 baseTimeMs, NYql::NDqProto::TDqStatsAggr& stats) {
-    ExportAggStats(stats);
+    NKikimr::NKqp::ExportAggStats(Values, stats);
     ExportHistory(baseTimeMs, stats);
 }
 
@@ -32,20 +28,16 @@ void TTimeSeriesStats::ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStatsAg
     }
 }
 
-void TTimeSeriesStats::Resize(ui32 count) {
-    Values.resize(count);
+void TTimeSeriesStats::Resize(ui32 taskCount) {
+    Values.resize(taskCount);
 }
 
-void TTimeSeriesStats::SetNonZero(ui32 index, ui64 value) {
+void TTimeSeriesStats::SetNonZero(ui32 taskIndex, ui64 value) {
     if (value) {
         Sum += value;
-        Sum -= Values[index];
-        Values[index] = value;
+        Sum -= Values[taskIndex];
+        Values[taskIndex] = value;
     }
-    AppendHistory();
-}
-
-void TTimeSeriesStats::AppendHistory() {
     if (HistorySampleCount) {
         auto nowMs = Now().MilliSeconds();
 
@@ -105,62 +97,6 @@ void TTimeSeriesStats::Pack() {
     }
 }
 
-void TPartitionedStats::ResizeByTasks(ui32 taskCount) {
-    for (auto& p : Parts) {
-        p.resize(taskCount);
-    }
-}
-
-void TPartitionedStats::ResizeByParts(ui32 partCount, ui32 taskCount) {
-    auto oldPartCount = Parts.size();
-    Parts.resize(partCount);
-    for(auto i = oldPartCount; i < partCount; i++) {
-        Parts[i].resize(taskCount);
-    }
-    Resize(partCount);
-}
-
-void TPartitionedStats::SetNonZero(ui32 taskIndex, ui32 partIndex, ui64 value, bool recordTimeSeries) {
-    auto& part = Parts[partIndex];
-    auto delta = value - part[taskIndex];
-    part[taskIndex] = value;
-    Values[partIndex] += delta;
-    Sum += delta;
-    if (recordTimeSeries) {
-        AppendHistory();
-    }
-}
-
-void TTimeMultiSeriesStats::SetNonZero(TPartitionedStats& stats, ui32 taskIndex, const TString& key, ui64 value, bool recordTimeSeries) {
-    auto [it, inserted] = Indices.try_emplace(key);
-    if (inserted) {
-        it->second = Indices.size() - 1;
-        if (PartCount < Indices.size()) {
-            PartCount += 4;
-        }
-    }
-    if (stats.Parts.size() < PartCount) {
-        stats.ResizeByParts(PartCount, TaskCount);
-    }
-    stats.SetNonZero(taskIndex, it->second, value, recordTimeSeries);
-}
-
-void TExternalStats::Resize(ui32 taskCount) {
-    ExternalRows.ResizeByTasks(taskCount);
-    ExternalBytes.ResizeByTasks(taskCount);
-    TaskCount = taskCount;
-}
-
-void TExternalStats::SetHistorySampleCount(ui32 historySampleCount) {
-    ExternalBytes.HistorySampleCount = historySampleCount;
-}
-
-void TExternalStats::ExportHistory(ui64 baseTimeMs, NDqProto::TDqExternalAggrStats& stats) {
-    if (stats.HasExternalBytes()) {
-        ExternalBytes.ExportHistory(baseTimeMs, *stats.MutableExternalBytes());
-    }
-}
-
 void TAsyncStats::Resize(ui32 taskCount) {
     Bytes.Resize(taskCount);
     DecompressedBytes.resize(taskCount);
@@ -191,7 +127,6 @@ void TAsyncStats::ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqAsyncStatsAg
 }
 
 void TAsyncBufferStats::Resize(ui32 taskCount) {
-    External.Resize(taskCount);
     Ingress.Resize(taskCount);
     Push.Resize(taskCount);
     Pop.Resize(taskCount);
@@ -199,7 +134,6 @@ void TAsyncBufferStats::Resize(ui32 taskCount) {
 }
 
 void TAsyncBufferStats::SetHistorySampleCount(ui32 historySampleCount) {
-    External.SetHistorySampleCount(historySampleCount);
     Ingress.SetHistorySampleCount(historySampleCount);
     Push.SetHistorySampleCount(historySampleCount);
     Pop.SetHistorySampleCount(historySampleCount);
@@ -207,9 +141,6 @@ void TAsyncBufferStats::SetHistorySampleCount(ui32 historySampleCount) {
 }
 
 void TAsyncBufferStats::ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats) {
-    if (stats.HasExternal()) {
-        External.ExportHistory(baseTimeMs, *stats.MutableExternal());
-    }
     if (stats.HasIngress()) {
         Ingress.ExportHistory(baseTimeMs, *stats.MutableIngress());
     }
@@ -472,17 +403,6 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
             baseTimeMs = NonZeroMin(baseTimeMs, UpdateAsyncStats(index, asyncBufferStats.Ingress, sourceStat.GetIngress()));
             baseTimeMs = NonZeroMin(baseTimeMs, UpdateAsyncStats(index, asyncBufferStats.Push, sourceStat.GetPush()));
             baseTimeMs = NonZeroMin(baseTimeMs, UpdateAsyncStats(index, asyncBufferStats.Pop, sourceStat.GetPop()));
-            for (auto& partitionStat : sourceStat.GetExternalPartitions()) {
-                auto key = partitionStat.GetPartitionId();
-                asyncBufferStats.External.SetNonZero(asyncBufferStats.External.ExternalRows,
-                    index, key, partitionStat.GetExternalRows(), false);
-                asyncBufferStats.External.SetNonZero(asyncBufferStats.External.ExternalBytes,
-                    index, key, partitionStat.GetExternalBytes(), true);
-                asyncBufferStats.External.SetNonZero(asyncBufferStats.External.FirstMessageMs,
-                    index, key, partitionStat.GetFirstMessageMs(), false);
-                asyncBufferStats.External.SetNonZero(asyncBufferStats.External.LastMessageMs,
-                    index, key, partitionStat.GetLastMessageMs(), false);
-            }
         }
     }
 
@@ -1154,8 +1074,6 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
     BaseTimeMs = NonZeroMin(BaseTimeMs, it->second.UpdateStats(taskStats, state, stats.GetMaxMemoryUsage(), stats.GetDurationUs()));
 }
 
-// SIMD-friendly aggregations are below. Compiler is able to vectorize sum/count, but needs help with min/max
-
 void ExportAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsMinMax& stats) {
 
     Y_DEBUG_ABORT_UNLESS((data.size() & 3) == 0);
@@ -1297,12 +1215,6 @@ void TQueryExecutionStats::ExportAggAsyncStats(TAsyncStats& data, NYql::NDqProto
 }
 
 void TQueryExecutionStats::ExportAggAsyncBufferStats(TAsyncBufferStats& data, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats) {
-    auto& external = *stats.MutableExternal();
-    data.External.ExternalRows.ExportAggStats(*external.MutableExternalRows());
-    data.External.ExternalBytes.ExportAggStats(BaseTimeMs, *external.MutableExternalBytes());
-    ExportOffsetAggStats(data.External.FirstMessageMs.Values, *external.MutableFirstMessageMs(), BaseTimeMs);
-    ExportOffsetAggStats(data.External.LastMessageMs.Values, *external.MutableLastMessageMs(), BaseTimeMs);
-    external.SetPartitionCount(data.External.Indices.size());
     ExportAggAsyncStats(data.Ingress, *stats.MutableIngress());
     ExportAggAsyncStats(data.Push, *stats.MutablePush());
     ExportAggAsyncStats(data.Pop, *stats.MutablePop());

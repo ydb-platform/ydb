@@ -785,7 +785,7 @@
   var writeCts = new CancellationTokenSource();
   writeCts.CancelAfter(TimeSpan.FromSeconds(3));
   
-  await writer.WriteAsync("Hello Example YDB Topics!", writeCts.Token);
+  await writer.WriteAsync("Hello, Example YDB Topics!", writeCts.Token);
   ```
 
 {% endlist %}

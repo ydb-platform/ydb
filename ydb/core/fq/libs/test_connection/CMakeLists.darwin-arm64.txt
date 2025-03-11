@@ -33,7 +33,7 @@ target_link_libraries(fq-libs-test_connection PUBLIC
   fq-libs-control_plane_storage
   libs-test_connection-events
   providers-pq-cm_client
-  providers-solomon-async_io
+  providers-solomon-actors
 )
 
 target_sources(fq-libs-test_connection PRIVATE

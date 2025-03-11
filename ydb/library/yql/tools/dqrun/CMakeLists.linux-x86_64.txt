@@ -72,7 +72,7 @@ target_link_libraries(dqrun PUBLIC
   providers-pq-provider
   providers-s3-actors
   providers-s3-provider
-  providers-solomon-async_io
+  providers-solomon-actors
   providers-solomon-gateway
   providers-solomon-provider
   providers-ydb-actors

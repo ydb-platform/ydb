@@ -12,37 +12,38 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(events)
 add_subdirectory(ut)
 
-add_library(fq-libs-test_connection)
+add_library(providers-solomon-actors)
 
 
-target_compile_options(fq-libs-test_connection PRIVATE
+target_compile_options(providers-solomon-actors PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
-target_link_libraries(fq-libs-test_connection PUBLIC
+target_link_libraries(providers-solomon-actors PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lwtrace
-  cpp-xml-document
-  fq-libs-actors
-  libs-actors-logging
-  libs-config-protos
-  fq-libs-control_plane_storage
-  libs-test_connection-events
-  providers-pq-cm_client
-  providers-solomon-actors
+  cpp-json-easy_parse
+  monlib-encode-json
+  cpp-protobuf-util
+  dq-actors-compute
+  common-token_accessor-client
+  providers-solomon-events
+  providers-solomon-proto
+  providers-solomon-scheme
+  solomon-solomon_accessor-client
+  client-types-credentials
+  essentials-public-types
+  essentials-public-udf
+  essentials-utils-log
 )
 
-target_sources(fq-libs-test_connection PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/test_connection/counters.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/test_connection/probes.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/test_connection/test_connection.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/test_connection/test_data_streams.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/test_connection/test_monitoring.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/test_connection/test_object_storage.cpp
+target_sources(providers-solomon-actors PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/actors/dq_solomon_actors_util.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/actors/dq_solomon_metrics_queue.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.cpp
 )
 

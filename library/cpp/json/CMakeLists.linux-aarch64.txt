@@ -15,8 +15,8 @@
 add_subdirectory(common)
 add_subdirectory(fast_sax)
 add_subdirectory(writer)
-add_subdirectory(yson)
 add_subdirectory(easy_parse)
+add_subdirectory(yson)
 
 add_library(library-cpp-json)
 

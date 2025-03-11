@@ -33,15 +33,18 @@ target_link_libraries(providers-solomon-proto PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  dq-actors-protos
   contrib-libs-protobuf
 )
 
 target_proto_messages(providers-solomon-proto PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/proto/dq_solomon_shard.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/proto/metrics_queue.proto
 )
 
 target_sources(providers-solomon-proto PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/solomon/proto/metrics_queue.pb.h
 )
 
 

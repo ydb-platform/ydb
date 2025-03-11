@@ -69,7 +69,7 @@ target_link_libraries(fq-libs-init PUBLIC
   providers-s3-actors
   providers-s3-proto
   providers-s3-provider
-  providers-solomon-async_io
+  providers-solomon-actors
   providers-solomon-gateway
   providers-solomon-proto
   providers-solomon-provider

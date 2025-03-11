@@ -24,17 +24,20 @@ target_link_libraries(providers-solomon-provider PUBLIC
   yutil
   library-actors-protos
   yql-dq-expr_nodes
-  essentials-core-dq_integration
   yql-dq-opt
+  common-token_accessor-client
+  providers-dq-expr_nodes
+  providers-solomon-actors
+  providers-solomon-expr_nodes
+  providers-solomon-proto
+  providers-solomon-scheme
+  client-types-credentials
+  essentials-core-dq_integration
   providers-common-config
   providers-common-proto
   providers-common-provider
   providers-common-transform
-  providers-dq-expr_nodes
   providers-result-expr_nodes
-  providers-solomon-expr_nodes
-  providers-solomon-proto
-  providers-solomon-scheme
 )
 
 target_sources(providers-solomon-provider PRIVATE

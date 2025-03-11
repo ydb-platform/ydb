@@ -27,8 +27,8 @@ std::vector<ui64> TRangeIndex::FindIntersections(const ui64 p) const {
 
 void TIntervalCounter::PropagateDelta(const TPosition& node) {
     if (PropagatedDeltas[node.GetIndex()]) {
-        Count[node.GetIndex() * 2 + 1] += PropagatedDeltas[node.GetIndex()] * node.IntervalSize();
-        Count[node.GetIndex() * 2 + 2] += PropagatedDeltas[node.GetIndex()] * node.IntervalSize();
+        Count[node.GetIndex() * 2 + 1] += PropagatedDeltas[node.GetIndex()] * (node.IntervalSize() / 2);
+        Count[node.GetIndex() * 2 + 2] += PropagatedDeltas[node.GetIndex()] * (node.IntervalSize() / 2);
         PropagatedDeltas[node.GetIndex()] = 0;
     }
 }

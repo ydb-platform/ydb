@@ -97,15 +97,22 @@ private:
 };
 
 template <typename TRequestEvent, typename TResponse>
-bool TConfigsManager::CheckSession(TEventHandle<TRequestEvent>& ev, std::unique_ptr<TResponse>& failEvent, typename TResponse::ProtoRecordType::EStatus status) {
-    if (Self.CurrentSenderId != ev.Sender) {
-        failEvent->Record.SetStatus(status);
-        SendInReply(ev.Sender, ev.InterconnectSession, std::move(failEvent));
-        return false;
-    } else if (Self.CurrentPipeServerId != ev.Recipient) {
-        return false;
+bool TConfigsManager::CheckSession(TEventHandle<TRequestEvent>& ev, std::unique_ptr<TResponse>& failEvent,
+        typename TResponse::ProtoRecordType::EStatus status) {
+    for (const auto& [senderId, pipeServerId] : Self.ConfigClients) {
+        if (senderId == ev.Sender && pipeServerId == ev.Recipient) { // same sender and pipe
+            return true;
+        } else if (senderId == ev.Sender) { // pipe differs, same sender (obsolete pipe)
+            return false;
+        } else if (pipeServerId == ev.Recipient) { // different sender, same pipe?
+            Y_DEBUG_ABORT();
+            return false;
+        }
     }
-    return true;
+    // no matching pair found, obsolete event
+    failEvent->Record.SetStatus(status);
+    SendInReply(ev.Sender, ev.InterconnectSession, std::move(failEvent), ev.Cookie);
+    return false;
 }
 
 void TConfigsManager::Handle(TEvBlobStorage::TEvControllerProposeConfigRequest::TPtr &ev, const TActorContext &ctx) {
@@ -113,12 +120,14 @@ void TConfigsManager::Handle(TEvBlobStorage::TEvControllerProposeConfigRequest::
     const auto& proposedConfigHash = record.GetConfigHash();
     const auto& proposedConfigVersion = record.GetConfigVersion();
     ui64 currentConfigHash = NKikimr::NYaml::GetConfigHash(MainYamlConfig);
-    if (Self.CurrentSenderId != ev->Sender) {
-        NTabletPipe::CloseServer(Self.SelfId(), Self.CurrentPipeServerId);
+
+    auto& [senderId, pipeServerId] = Self.ConfigClients[ev->Get()->Record.GetDistconf()];
+    if (pipeServerId != ev->Recipient) {
+        NTabletPipe::CloseServer(Self.SelfId(), pipeServerId);
     }
 
-    Self.CurrentSenderId = ev->Sender;
-    Self.CurrentPipeServerId = ev->Recipient;
+    senderId = ev->Sender;
+    pipeServerId = ev->Recipient;
     auto response = std::make_unique<TEvBlobStorage::TEvControllerProposeConfigResponse>();
     auto& responseRecord = response->Record;
 

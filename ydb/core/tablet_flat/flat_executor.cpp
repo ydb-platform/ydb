@@ -453,7 +453,7 @@ void TExecutor::Active(const TActorContext &ctx) {
     CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(MemTableMemoryConsumersCollection.Get(), Logger.Get(), Broker.Get(), this, loadedState->Comp,
                                                                      Sprintf("tablet-%" PRIu64, Owner->TabletID())));
     DataCleanupLogic = MakeHolder<TDataCleanupLogic>(static_cast<NActors::IActorOps*>(this), this, Owner, Logger.Get(), GcLogic.Get());
-    LogicRedo->InstallCounters(Counters.Get(), nullptr);
+    LogicRedo->InstallCounters(Counters.Get(), AppTxCounters);
 
     ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), 0, Launcher);
 
@@ -567,6 +567,9 @@ void TExecutor::FinishCancellation(TSeat* seat, bool activateMore) {
     Memory->ReleaseMemory(*seat);
     --Stats->TxInFly;
     Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
+    if (AppTxCounters && seat->TxType != UnknownTxType) {
+        AppTxCounters->TxSimple(seat->TxType, COUNTER_TT_INFLY) -= 1;
+    }
     RemoveTransaction(seat->UniqID);
     if (activateMore) {
         PlanTransactionActivation();
@@ -1746,6 +1749,9 @@ ui64 TExecutor::DoExecute(TAutoPtr<ITransaction> self, ETxMode mode) {
 
     ++Stats->TxInFly;
     Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
+    if (AppTxCounters && seat->TxType != UnknownTxType) {
+        AppTxCounters->TxSimple(seat->TxType, COUNTER_TT_INFLY) += 1;
+    }
     Counters->Cumulative()[TExecutorCounters::TX_COUNT_ALL].Increment(1); //Deprecated
     Counters->Cumulative()[TExecutorCounters::TX_QUEUED].Increment(1);
 
@@ -2005,7 +2011,7 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
                                     TAutoPtr<NTable::TChange> change,
                                     THPTimer &bookkeepingTimer)
 {
-    TTxType txType = seat->Self->GetTxType();
+    TTxType txType = seat->TxType;
 
     ui32 touchedPages = 0;
     ui32 newPinnedPages = 0;
@@ -2164,7 +2170,7 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
 void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectionTxEnv &env,
                     TAutoPtr<NTable::TChange> change, THPTimer &bookkeepingTimer) {
     const bool isReadOnly = !(change->HasAny() || env.HasChanges());
-    const TTxType txType = seat->Self->GetTxType();
+    const TTxType txType = seat->TxType;
 
     size_t touchedBlocks = PrivatePageCache->GetStats().CurrentCacheHits;
     Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_TOUCHED_BLOCKS].IncrementFor(touchedBlocks);
@@ -2192,6 +2198,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
     const double currentExecTime = seat->CPUExecTime;
 
     if (isReadOnly) {
+        // Note: per-tx InFly is decremented in txloglogic
         if (Stats->IsFollower()) {
             // todo: extract completion counters from txloglogic
             --Stats->TxInFly;
@@ -3093,6 +3100,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
     switch (cookie) {
     case ECommit::Redo:
         {
+            // Note: per-tx InFly is decrememnted in txloglogic
             const ui64 confirmedTransactions = LogicRedo->Confirm(step, ctx, OwnerActorId);
             Stats->TxInFly -= confirmedTransactions;
             Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
@@ -4387,8 +4395,9 @@ void TExecutor::RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> app
     AppCountersBaseline = MakeHolder<TTabletCountersBase>();
     AppCounters->RememberCurrentStateAsBaseline(*AppCountersBaseline);
 
+    AppTxCounters = dynamic_cast<TTabletCountersWithTxTypes*>(AppCounters.Get());
+
     if (LogicRedo) {
-        AppTxCounters = dynamic_cast<TTabletCountersWithTxTypes*>(AppCounters.Get());
         LogicRedo->InstallCounters(Counters.Get(), AppTxCounters);
     }
 }

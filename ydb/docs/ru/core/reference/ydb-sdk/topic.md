@@ -656,7 +656,7 @@
   Асинхронная запись сообщения в топик.
 
   ```c#
-  var asyncWriteTask = writer.WriteAsync("Hello Example YDB Topics!"); // Task<WriteResult>
+  var asyncWriteTask = writer.WriteAsync("Hello, Example YDB Topics!"); // Task<WriteResult>
   ```
 
 {% endlist %}

@@ -21,7 +21,6 @@ void TTableExistsActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::T
         return;
     }
     auto& entity = request->ResultSet.front();
-
     if (entity.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
         if (entity.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindTable) {
             OutputController->OnPathExistsCheckResult(true, Path);

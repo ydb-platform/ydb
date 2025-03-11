@@ -907,15 +907,12 @@ public:
             auto alterDatabasePromise = NewPromise<TGenericResult>();
 
             auto ev = MakeHolder<TRequest>();
-            // ev->Record.SetDatabaseName(Database);
+
             if (UserToken) {
                 ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }
 
-            const auto& databaseFullPath = settings.DatabasePath;
-            size_t pos = databaseFullPath.rfind('/');
-            TString dirname = databaseFullPath.substr(0, pos);
-            TString basename = databaseFullPath.substr(pos + 1);
+            const auto& [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(settings.DatabasePath);
 
             NKikimrSchemeOp::TModifyScheme* modifyScheme = ev->Record.MutableTransaction()->MutableModifyScheme();
             modifyScheme->SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);

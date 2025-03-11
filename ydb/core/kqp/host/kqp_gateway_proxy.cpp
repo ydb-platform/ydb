@@ -638,10 +638,7 @@ public:
         if (IsPrepare()) {
             auto alterDatabasePromise = NewPromise<TGenericResult>();
 
-            const auto& databaseFullPath = settings.DatabasePath;
-            size_t pos = databaseFullPath.rfind('/');
-            TString dirname = databaseFullPath.substr(0, pos);
-            TString basename = databaseFullPath.substr(pos + 1);
+            const auto& [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(settings.DatabasePath);
 
             NKikimrSchemeOp::TModifyScheme schemeTx;
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);

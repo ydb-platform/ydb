@@ -31,6 +31,7 @@ namespace NTabletFlatExecutor {
         TSeat(ui32 uniqId, TAutoPtr<ITransaction> self)
             : UniqID(uniqId)
             , Self(self)
+            , TxType(Self->GetTxType())
         {
         }
 
@@ -69,6 +70,7 @@ namespace NTabletFlatExecutor {
 
         const ui64 UniqID;
         const TAutoPtr<ITransaction> Self;
+        const TTxType TxType;
         NWilson::TSpan WaitingSpan;
         ui64 Retries = 0;
         TPinned Pinned;

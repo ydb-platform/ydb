@@ -58,7 +58,7 @@ TArrayRef<const NRedo::TUsage> TLogicRedo::GrabLogUsage() const noexcept
 }
 
 void CompleteRoTransaction(std::unique_ptr<TSeat> seat, const TActorContext &ownerCtx, TExecutorCounters *counters, TTabletCountersWithTxTypes *appTxCounters) {
-    const TTxType txType = seat->Self->GetTxType();
+    const TTxType txType = seat->TxType;
 
     const ui64 latencyus = ui64(1000000. * seat->LatencyTimer.Passed());
     counters->Percentile()[TExecutorCounters::TX_PERCENTILE_LATENCY_RO].IncrementFor(latencyus);
@@ -73,11 +73,13 @@ void CompleteRoTransaction(std::unique_ptr<TSeat> seat, const TActorContext &own
     if (Y_UNLIKELY(seat->IsTerminated())) {
         counters->Cumulative()[TExecutorCounters::TX_TERMINATED].Increment(1);
         if (appTxCounters && txType != UnknownTxType) {
+            appTxCounters->TxSimple(txType, COUNTER_TT_INFLY) -= 1;
             appTxCounters->TxCumulative(txType, COUNTER_TT_TERMINATED).Increment(1);
         }
     } else {
         counters->Cumulative()[TExecutorCounters::TX_RO_COMPLETED].Increment(1);
         if (appTxCounters && txType != UnknownTxType) {
+            appTxCounters->TxSimple(txType, COUNTER_TT_INFLY) -= 1;
             appTxCounters->TxCumulative(txType, COUNTER_TT_RO_COMPLETED).Increment(1);
         }
     }
@@ -129,7 +131,7 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
 
     Y_ABORT_UNLESS(force || !(change.Scheme || change.Annex));
 
-    const TTxType txType = seat->Self->GetTxType();
+    const TTxType txType = seat->TxType;
 
     if (auto bytes = change.Redo.size()) {
         Counters->Cumulative()[TMonCo::DB_REDO_WRITTEN_BYTES].Increment(bytes);
@@ -266,7 +268,7 @@ ui64 TLogicRedo::Confirm(ui32 step, const TActorContext &ctx, const TActorId &ow
 
         std::unique_ptr<TSeat> seat{entry.Transactions.PopFront()};
 
-        const TTxType txType = seat->Self->GetTxType();
+        const TTxType txType = seat->TxType;
         const ui64 commitLatencyus = ui64(1000000. * seat->CommitTimer.Passed());
         const ui64 latencyus = ui64(1000000. * seat->LatencyTimer.Passed());
         Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_LATENCY_COMMIT].IncrementFor(commitLatencyus);
@@ -281,8 +283,10 @@ ui64 TLogicRedo::Confirm(ui32 step, const TActorContext &ctx, const TActorId &ow
         const ui64 completeTimeus = ui64(1000000. * completeTimer.Passed());
 
         Counters->Cumulative()[TExecutorCounters::TX_RW_COMPLETED].Increment(1);
-        if (AppTxCounters && txType != UnknownTxType)
+        if (AppTxCounters && txType != UnknownTxType) {
+            AppTxCounters->TxSimple(txType, COUNTER_TT_INFLY) -= 1;
             AppTxCounters->TxCumulative(txType, COUNTER_TT_RW_COMPLETED).Increment(1);
+        }
         Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_COMMITED_CPUTIME].IncrementFor(completeTimeus);
         Counters->Cumulative()[TExecutorCounters::CONSUMED_CPU].Increment(completeTimeus);
         if (AppTxCounters && txType != UnknownTxType)

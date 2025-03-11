@@ -186,15 +186,21 @@ generate_enum_serilization(ydb-core-tablet_flat
 )
 
 generate_enum_serilization(ydb-core-tablet_flat
-  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_loader.h
-  INCLUDE_HEADERS
-  ydb/core/tablet_flat/flat_part_loader.h
-)
-
-generate_enum_serilization(ydb-core-tablet_flat
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_compaction_logic.h
   INCLUDE_HEADERS
   ydb/core/tablet_flat/flat_executor_compaction_logic.h
+)
+
+generate_enum_serilization(ydb-core-tablet_flat
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_page_iface.h
+  INCLUDE_HEADERS
+  ydb/core/tablet_flat/flat_page_iface.h
+)
+
+generate_enum_serilization(ydb-core-tablet_flat
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_part_loader.h
+  INCLUDE_HEADERS
+  ydb/core/tablet_flat/flat_part_loader.h
 )
 
 generate_enum_serilization(ydb-core-tablet_flat

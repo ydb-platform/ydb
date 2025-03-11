@@ -65,7 +65,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
 
         DataShard.IncCounter(COUNTER_WRITE_OUT_OF_SPACE);
 
-        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
+        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE, err);
         op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
         DataShard.SetOverloadSubscribed(writeOp->GetWriteTx()->GetOverloadSubscribe(), writeOp->GetRecipient(), op->GetTarget(), ERejectReasons::YellowChannels, writeOp->GetWriteResult()->Record);

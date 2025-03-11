@@ -390,7 +390,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     Y_UNIT_TEST_TWIN(OutOfSpaceYQLUpsertFail, useSink) {
-        UNIT_ASSERT(!useSink);
         auto app = NKikimrConfig::TAppConfig();
         app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
@@ -422,7 +421,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         auto session = client.CreateSession().GetValueSync().GetSession();
 
-        bool getOutOfSpace = false;
         ui32 batchIdx = 0;
         ui32 cnt = 0;
 
@@ -450,26 +448,38 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 UPSERT INTO `/Root/LargeTable`
                 SELECT * FROM AS_TABLE($rows);
             )"), TTxControl::BeginTx().CommitTx(), paramsBuilder.Build()).ExtractValueSync();
-            if (IsRetryable(result.GetStatus())) {
+ 
+            switch (result.GetStatus()) {
+            case EStatus::SUCCESS:
                 continue;
-            }
-            if (result.GetStatus() != EStatus::SUCCESS) {
-                result.GetIssues().PrintTo(Cerr);
-                UNIT_ASSERT_C(result.GetStatus() == EStatus::UNAVAILABLE, result.GetIssues().ToString());
-                if (result.GetIssues().ToString().contains("OUT_OF_SPACE")
-                        || result.GetIssues().ToString().contains("DISK_SPACE_EXHAUSTED")) {
-                    getOutOfSpace = true;
+            case EStatus::OVERLOADED:
+                if (result.GetIssues().ToString().contains("out of disk space")) {
+                    UNIT_ASSERT(useSink);
+                    Cerr << "Got out of space. Successfully inserted " << rowsPerBatch << " x " << batchIdx << " lines, each of size " << dataTextSize << "bytes";
+                    return;
+                } else {
+                    continue;
+                }
+            case EStatus::UNAVAILABLE:
+                if (result.GetIssues().ToString().contains("out of disk space")) {
+                    UNIT_ASSERT(!useSink);
+                    //TODO Should be also EStatus::OVERLOADED
+                    Cerr << "Got out of space. Successfully inserted " << rowsPerBatch << " x " << batchIdx << " lines, each of size " << dataTextSize << "bytes";
+                    return;
                 } else if (result.GetIssues().ToString().contains("WRONG_SHARD_STATE")
                         || result.GetIssues().ToString().contains("wrong shard state")
                         || result.GetIssues().ToString().contains("can't deliver message to tablet")) {
                     // shards are allowed to split
                     continue;
                 }
-                break;
+                UNIT_ASSERT_C(false, "Unexpected UNAVAILABLE status" << result.GetIssues().ToString());
+            default:
+                UNIT_ASSERT_C(false, "Unexpected status" << result.GetStatus() << result.GetIssues().ToString());
             }
+
             ++batchIdx;
         }
-        UNIT_ASSERT_C(getOutOfSpace, "Successfully inserted " << rowsPerBatch << " x " << batchIdx << " lines, each of size " << dataTextSize << "bytes");
+        UNIT_FAIL("Out of space is expected");
     }
 
     Y_UNIT_TEST_TWIN(TooBigQuery, useSink) {

@@ -2827,9 +2827,9 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
 void TExecutor::Handle(NSharedCache::TEvUpdated::TPtr &ev) {
     const auto *msg = ev->Get();
 
-    for (auto &kv : msg->Actions) {
+    for (auto &kv : msg->DroppedPages) {
         if (auto *info = PrivatePageCache->Info(kv.first)) {
-            for (ui32 pageId : kv.second.Dropped) {
+            for (ui32 pageId : kv.second) {
                 PrivatePageCache->DropSharedBody(info, pageId);
             }
         }

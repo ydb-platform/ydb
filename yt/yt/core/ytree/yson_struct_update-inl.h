@@ -373,7 +373,7 @@ void TSealedConfigurator<TStruct>::Validate(
     TIntrusivePtr<TStruct> oldStruct,
     TIntrusivePtr<TStruct> newStruct) const
 {
-    Do(oldStruct, newStruct, &NDetail::IFieldConfigurator::DoValidate);
+    Do(std::move(oldStruct), std::move(newStruct), &NDetail::IFieldConfigurator::DoValidate);
 }
 
 template <CYsonStructDerived TStruct>
@@ -381,7 +381,7 @@ void TSealedConfigurator<TStruct>::Update(
     TIntrusivePtr<TStruct> oldStruct,
     TIntrusivePtr<TStruct> newStruct) const
 {
-    Do(oldStruct, newStruct, &NDetail::IFieldConfigurator::DoUpdate);
+    Do(std::move(oldStruct), std::move(newStruct), &NDetail::IFieldConfigurator::DoUpdate);
 }
 
 template <CYsonStructDerived TStruct>

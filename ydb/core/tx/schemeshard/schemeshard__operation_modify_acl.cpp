@@ -82,7 +82,7 @@ public:
                 };
 
                 switch (item.GetCheckTypeOfPath()) {
-                    case NKikimrSchemeOp::TApplyIf::ExtSubDomain : {
+                    case NKikimrSchemeOp::TApplyIf::SubDomainOrExtSubDomain : {
                         if (!isSubDomain()) {
                             const auto errStr = TStringBuilder()
                                 << "fail in ApplyIf section:"

@@ -43,6 +43,9 @@ public:
         ui32 count1 = 0;
         ui32 count0 = 0;
         for (ui32 i = 0; i < GetSizeBits(); ++i) {
+//            if (i % 20 == 0 && i) {
+//                sb << i << " ";
+//            }
             if (Get(i)) {
 //                sb << 1 << " ";
                 ++count1;
@@ -50,9 +53,6 @@ public:
 //                sb << 0 << " ";
                 ++count0;
             }
-//            if (i % 20 == 0) {
-//                sb << i << " ";
-//            }
         }
         sb << GetSizeBits() << "=" << count0 << "[0]+" << count1 << "[1]";
         return sb;
@@ -128,7 +128,7 @@ protected:
 public:
     TBloomFilterChecker() = default;
     TBloomFilterChecker(const ui32 indexId, std::set<ui64>&& hashes)
-        : TBase(indexId)
+        : TBase(TIndexDataAddress(indexId))
         , HashValues(std::move(hashes)) {
     }
     virtual TString GetClassName() const override {

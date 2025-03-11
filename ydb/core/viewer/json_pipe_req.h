@@ -204,6 +204,17 @@ protected:
         return response;
     }
 
+    template<typename TResponse>
+    TRequestResponse<TResponse> MakeRequestToTablet(TTabletId tabletId, IEventBase* ev, ui64 cookie = 0) {
+        TActorId pipe = ConnectTabletPipe(tabletId);
+        TRequestResponse<TResponse> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, TypeName(*ev)));
+        if (response.Span) {
+            response.Span.Attribute("tablet_id", "#" + ::ToString(tabletId));
+        }
+        SendRequestToPipe(pipe, ev, cookie, response.Span.GetTraceId());
+        return response;
+    }
+
     template<typename TRequest>
     TRequestResponse<typename NNodeWhiteboard::WhiteboardResponse<TRequest>::Type> MakeWhiteboardRequest(TNodeId nodeId, TRequest* ev, ui32 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession) {
         TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId);
@@ -241,6 +252,9 @@ protected:
     static bool IsSuccess(const std::unique_ptr<TEvStateStorage::TEvBoardInfo>& ev);
     static TString GetError(const std::unique_ptr<TEvStateStorage::TEvBoardInfo>& ev);
 
+    static bool IsSuccess(const std::unique_ptr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>& ev);
+    static TString GetError(const std::unique_ptr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>& ev);
+
     TRequestResponse<TEvHive::TEvResponseHiveDomainStats> MakeRequestHiveDomainStats(TTabletId hiveId);
     TRequestResponse<TEvHive::TEvResponseHiveStorageStats> MakeRequestHiveStorageStats(TTabletId hiveId);
     TRequestResponse<TEvHive::TEvResponseHiveNodeStats> MakeRequestHiveNodeStats(TTabletId hiveId, TEvHive::TEvRequestHiveNodeStats* request);
@@ -270,6 +284,7 @@ protected:
     void RequestSchemeCacheNavigate(const TPathId& pathId);
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(const TString& path, ui64 cookie = 0);
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(TPathId pathId, ui64 cookie = 0);
+    TRequestResponse<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> MakeRequestSchemeShardDescribe(TTabletId schemeShardId, const TString& path, const NKikimrSchemeOp::TDescribeOptions& options = {}, ui64 cookie = 0);
     TRequestResponse<TEvViewer::TEvViewerResponse> MakeRequestViewer(TNodeId nodeId, TEvViewer::TEvViewerRequest* request, ui32 flags = 0);
     void RequestTxProxyDescribe(const TString& path);
     void RequestStateStorageEndpointsLookup(const TString& path);

@@ -249,6 +249,7 @@ message TDomainsConfig {
         optional string AllAuthenticatedUsers = 5;
         repeated string ViewerAllowedSIDs = 6;
         repeated string RegisterDynamicNodeAllowedSIDs = 8;
+        repeated string BootstrapAllowedSIDs = 9;
 
         message TUser {
             optional string Name = 1;
@@ -449,7 +450,7 @@ message TInterconnectConfig {
     optional bool SuppressConnectivityCheck = 39 [default = false];
     optional uint32 PreallocatedBufferSize = 40;
     optional uint32 NumPreallocatedBuffers = 41;
-    optional bool EnableExternalDataChannel = 42;
+    optional bool EnableExternalDataChannel = 42 [default = true];
     optional bool ValidateIncomingPeerViaDirectLookup = 44;
     optional uint32 SocketBacklogSize = 45; // SOMAXCONN if not set or zero
 
@@ -1572,6 +1573,15 @@ message TImmediateControlsConfig {
             DefaultValue: 0 }];
     }
 
+    message TTestShardControls {
+        optional uint64 DisableWrites = 1 [(ControlOptions) = {
+            Description: "Disable write load in all node TestShard tablets",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0
+        }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1584,6 +1594,7 @@ message TImmediateControlsConfig {
     optional TPDiskControls PDiskControls = 10;
     optional TBlobStorageControllerControls BlobStorageControllerControls = 11;
     optional TTableServiceControls TableServiceControls = 12;
+    optional TTestShardControls TestShardControls = 13;
 };
 
 message TMeteringConfig {
@@ -1768,6 +1779,14 @@ message THiveConfig {
     optional uint64 NodeRestartsForPenalty = 85 [default = 3];
 }
 
+message THealthCheckConfig {
+    optional uint32 NodeRestartsPerPeriodYellowThreshold = 1 [default = 10];
+    optional uint32 NodeRestartsPerPeriodOrangeThreshold = 2 [default = 30];
+    optional uint64 NodesTimeDifferenceUsYellowThreshold = 3 [default = 5000];
+    optional uint64 NodesTimeDifferenceUsOrangeThreshold = 4 [default = 25000];
+    optional uint32 TabletsRestartsPerPeriodOrangeThreshold = 5 [default = 30];
+}
+
 message TBlobCacheConfig {
     optional uint64 MaxSizeBytes = 1 [default = 1073741824];
 }
@@ -1811,6 +1830,11 @@ message TColumnShardConfig {
     }
     repeated TRepairInfo Repairs = 15;
 
+    enum EJsonDoubleOutOfRangeHandlingPolicy {
+        REJECT = 0;
+        CAST_TO_INFINITY = 1;
+    }
+
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
     optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
     optional uint32 GCIntervalMs = 19 [default = 30000];
@@ -1834,6 +1858,7 @@ message TColumnShardConfig {
     optional int32 DefaultCompressionLevel = 37;
     optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];
     optional bool AlterObjectEnabled = 39 [default = false];
+    optional EJsonDoubleOutOfRangeHandlingPolicy DoubleOutOfRangeHandling = 40 [default = REJECT];
 }
 
 message TSchemeShardConfig {
@@ -2253,6 +2278,7 @@ message TAppConfig {
     optional TSelfManagementConfig SelfManagementConfig = 86;
     optional NKikimrProto.TDataIntegrityTrailsConfig DataIntegrityTrailsConfig = 87;
     optional TDataErasureConfig DataErasureConfig = 88;
+    optional THealthCheckConfig HealthCheckConfig = 89;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

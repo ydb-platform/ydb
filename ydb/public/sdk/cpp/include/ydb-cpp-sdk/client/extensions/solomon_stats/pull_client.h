@@ -8,7 +8,7 @@
 #include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/monlib/service/monservice.h>
 
-namespace NSolomonStatExtension::inline V3 {
+namespace NSolomonStatExtension::inline Dev {
 
 class TSolomonStatPullExtension: public NYdb::IExtension {
 public:

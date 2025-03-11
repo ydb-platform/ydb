@@ -1452,9 +1452,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto result = CollectStreamResult(it);
         auto ast = result.QueryStats->Getquery_ast();
         UNIT_ASSERT_C(ast.find(R"(('eq '"resource_id")") != std::string::npos,
-                          TStringBuilder() << "Predicate not pushed down. Query: " << query);
-        UNIT_ASSERT_C(ast.find(R"(('gt '"level")") == std::string::npos,
-                          TStringBuilder() << "Predicate pushed down. Query: " << query);
+                          TStringBuilder() << "Subpredicate is not pushed down. Query: " << query);
+        UNIT_ASSERT_C(ast.find(R"(('gt '"level")") != std::string::npos,
+                          TStringBuilder() << "Subpredicate is not pushed down. Query: " << query);
+        //This check is based on an assumpltion, that for pushed down predicates column names are preserved in AST
+        //But for non-pushed down predicates column names are (usually) replaced with a label, started with $. It' not a rule, but a heuristic
+        //So this check may require a correction when some ast optimization rules are changed
+        UNIT_ASSERT_C(ast.find(R"((Unwrap (/ $)") != std::string::npos, 
+                          TStringBuilder() << "Unsafe subpredicate is pushed down. Query: " << query);
+
         UNIT_ASSERT_C(ast.find("NarrowMap") != std::string::npos,
                           TStringBuilder() << "NarrowMap was removed. Query: " << query);
     }
@@ -3200,6 +3206,104 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-}
+    Y_UNIT_TEST(DoubleOutOfRangeInJson) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardDoubleOutOfRangeHandling(
+            NKikimrConfig::TColumnShardConfig_EJsonDoubleOutOfRangeHandlingPolicy_CAST_TO_INFINITY);
+        TKikimrRunner kikimr(settings);
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
+        auto client = kikimr.GetTableClient();
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
+        {
+            auto result = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                CREATE TABLE olapTable (
+                    k Uint32 NOT NULL,
+                    v JsonDocument NOT NULL,
+                    PRIMARY KEY (k)
+                )
+                WITH (
+                    STORE = COLUMN,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4
+                )
+            )",
+                                  NQuery::TTxControl::NoTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+        }
+
+        {
+            TValueBuilder rowsBuilder;
+            rowsBuilder.BeginList();
+            for (ui32 i = 0; i < 10; ++i) {
+                rowsBuilder.AddListItem().BeginStruct().AddMember("k").Uint32(i * 4 + 0).AddMember("v").JsonDocument("-1.797693135e+308").EndStruct();
+                rowsBuilder.AddListItem().BeginStruct().AddMember("k").Uint32(i * 4 + 1).AddMember("v").JsonDocument("1.797693135e+308").EndStruct();
+                rowsBuilder.AddListItem().BeginStruct().AddMember("k").Uint32(i * 4 + 2).AddMember("v").JsonDocument("1e1000000000000").EndStruct();
+                rowsBuilder.AddListItem().BeginStruct().AddMember("k").Uint32(i * 4 + 3).AddMember("v").JsonDocument("-1e1000000000000").EndStruct();
+            }
+            rowsBuilder.EndList();
+            auto result = client.BulkUpsert("/Root/olapTable", rowsBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+        }
+
+        {
+            auto it = client.StreamExecuteScanQuery("SELECT * FROM olapTable WHERE k < 4 ORDER BY k").ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([[0u;"\"-inf\""];[1u;"\"inf\""];[2u;"\"inf\""];[3u;"\"-inf\""]])");
+        }
+    }
+
+    Y_UNIT_TEST(SingleShardRead) {
+        std::unique_ptr<TKikimrRunner> Kikimr;
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto kikimr = std::make_unique<TKikimrRunner>(settings);
+        Tests::NCommon::TLoggerInit(*kikimr).Initialize();
+        auto queryClient = kikimr->GetQueryClient();
+        const auto noTx = NQuery::TTxControl::NoTx();
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                CREATE TABLE Test (
+                    Id Uint32 not null,
+                    Name String not null,
+                    Comment String,
+                    PRIMARY KEY (Name, Id)
+                ) WITH (
+                    STORE = COLUMN,
+                    PARTITION_COUNT = 3
+                );
+
+            )", noTx).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            
+            result = queryClient.ExecuteQuery(R"(
+                UPSERT INTO Test (Id, Name, Comment) VALUES 
+                    (10,  "n1", "aa"),
+                    (20, "n2", "bb"),
+                    (30, "n3", "cc"),
+                    (40, "n4", "dd"),
+                    (50, "n5", "ee")
+            )", noTx).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        auto tableClient = kikimr->GetTableClient();
+        auto tableClientSession = tableClient.GetSession().GetValueSync().GetSession();
+        auto result = tableClientSession.DescribeTable("/Root/Test", NYdb::NTable::TDescribeTableSettings{}.WithKeyShardBoundary(true).WithShardNodesInfo(true).WithPartitionStatistics(true).WithTableStatistics(true)).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        //TODO USE shard ids from the table description. Not avaiable now
+        {
+            auto result = queryClient.ExecuteQuery("SELECT * FROM Test WITH TabletId = '72075186224037888'", noTx).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson("[[[\"bb\"];20u;\"n2\"];[[\"dd\"];40u;\"n4\"]]", FormatResultSetYson(result.GetResultSet(0)));
+            result = queryClient.ExecuteQuery("SELECT * FROM Test WITH TabletId = '72075186224037889'", noTx).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson("[[[\"ee\"];50u;\"n5\"]]", FormatResultSetYson(result.GetResultSet(0)));
+            result = queryClient.ExecuteQuery("SELECT * FROM Test WITH TabletId = '72075186224037890'", noTx).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson("[[[\"aa\"];10u;\"n1\"];[[\"cc\"];30u;\"n3\"]]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+}
 }

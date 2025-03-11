@@ -8,7 +8,7 @@
 
 #include <util/system/spinlock.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 template <bool UseMigrationProtocol>
 class TSingleClusterReadSessionImpl;

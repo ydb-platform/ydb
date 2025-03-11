@@ -8,7 +8,7 @@ For profiling memory allocations build fqrun with ya make flags `-D PROFILE_MEMO
 
 * `flame_graph.sh` - script for collecting flame graphs in svg format, usage:
     ```(bash)
-    ./flame_graph.sh [graph collection time in seconds]
+    ./flame_graph.sh [graph collection time in seconds] [use sudo]
     ```
 
 ## Examples

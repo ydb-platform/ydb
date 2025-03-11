@@ -9,12 +9,19 @@ class FunctionalTestBase:
     cluster = None
 
     @classmethod
-    def setup_cluster(cls) -> None:
-        cls.cluster = KiKiMR(configurator=KikimrConfigGenerator(
+    def setup_cluster(cls, table_service_config: dict = {}, memory_controller_config: dict = {}) -> None:
+        config_generator = KikimrConfigGenerator(
             domain_name='local',
             extra_feature_flags=["enable_resource_pools"],
             use_in_memory_pdisks=True,
-        ))
+        )
+        if table_service_config:
+            config_generator.yaml_config["table_service_config"] = table_service_config
+
+        if memory_controller_config:
+            config_generator.yaml_config["memory_controller_config"] = memory_controller_config
+
+        cls.cluster = KiKiMR(configurator=config_generator)
         cls.cluster.start()
         node = cls.cluster.nodes[1]
         YdbCluster.reset(

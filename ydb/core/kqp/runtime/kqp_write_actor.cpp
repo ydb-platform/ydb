@@ -589,7 +589,7 @@ public:
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE:
             CA_LOG_E("Got WRONG SHARD STATE for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << TableId.PathId.ToString() << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
@@ -600,7 +600,7 @@ public:
                 RetryResolve();
             } else {
                 RuntimeError(
-                    NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                    NYql::NDqProto::StatusIds::UNAVAILABLE,
                     NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
                     TStringBuilder() << "Wrong shard state for table `"
                         << TablePath << "`.",
@@ -637,6 +637,25 @@ public:
                 getIssues());
             return;
         }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE: {
+            CA_LOG_W("Got OUT_OF_SPACE for table `"
+                << TableId.PathId.ToString() << "`."
+                << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                << " Sink=" << this->SelfId() << "."
+                << " Ignored this error."
+                << getIssues().ToOneLineString());
+            // TODO: support waiting
+            if (!InconsistentTx)  {
+                TxManager->SetError(ev->Get()->Record.GetOrigin());
+                RuntimeError(
+                    NYql::NDqProto::StatusIds::OVERLOADED,
+                    NYql::TIssuesIds::KIKIMR_OVERLOADED,
+                    TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is out of space. Table `"
+                        << TablePath << "`.",
+                    getIssues());
+            }
+            return;
+        }        
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
             CA_LOG_W("Got OVERLOADED for table `"
                 << TableId.PathId.ToString() << "`."
@@ -778,19 +797,20 @@ public:
                 return builder;
             }());
 
-        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-            Y_ABORT_UNLESS(Mode == EMode::WRITE);
-            if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
-                YQL_ENSURE(TxManager->BrokenLocks());
-                NYql::TIssues issues;
-                issues.AddIssue(*TxManager->GetLockIssue());
-                RuntimeError(
-                    NYql::NDqProto::StatusIds::ABORTED,
-                    NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
-                    TStringBuilder() << "Transaction locks invalidated. Table `"
-                        << TablePath << "`.",
-                    issues);
-                return;
+        if (Mode == EMode::WRITE) {
+            for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+                if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
+                    YQL_ENSURE(TxManager->BrokenLocks());
+                    NYql::TIssues issues;
+                    issues.AddIssue(*TxManager->GetLockIssue());
+                    RuntimeError(
+                        NYql::NDqProto::StatusIds::ABORTED,
+                        NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
+                        TStringBuilder() << "Transaction locks invalidated. Table `"
+                            << TablePath << "`.",
+                        issues);
+                    return;
+                }
             }
         }
 
@@ -996,15 +1016,16 @@ public:
 
             Schedule(reattachState.ReattachInfo.Delay, new TEvPrivate::TEvReattachToShard(ev->Get()->TabletId));
         } else {
-            TxManager->SetError(ev->Get()->TabletId);
-            if (Mode == EMode::IMMEDIATE_COMMIT || Mode == EMode::COMMIT) {
+            if (TxManager->GetState(ev->Get()->TabletId) == IKqpTransactionManager::EXECUTING) {
+                TxManager->SetError(ev->Get()->TabletId);
                 RuntimeError(
                     NYql::NDqProto::StatusIds::UNDETERMINED,
                     NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
                     TStringBuilder()
                         << "Error writing to table `" << TableId.PathId.ToString() << "`"
-                        << ". Transaction state unknown for shard " << ev->Get()->TabletId << ".");
+                        << ". Transaction state unknown for tablet " << ev->Get()->TabletId << ".");
             } else {
+                TxManager->SetError(ev->Get()->TabletId);
                 RuntimeError(
                     NYql::NDqProto::StatusIds::UNAVAILABLE,
                     NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
@@ -1142,6 +1163,10 @@ public:
         }
 
         Callbacks->OnError(statusCode, std::move(issues));
+    }
+
+    void Unlink() {
+        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
     }
 
     void PassAway() override {;
@@ -1787,12 +1812,13 @@ public:
             || State == EState::COMMITTING
             || State == EState::ROLLINGBACK;
 
-        if (EnableStreamWrite && outOfMemory) {
+        if (!EnableStreamWrite && outOfMemory) {
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                 NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
                 TStringBuilder() << "Stream write queries aren't allowed.",
                 {});
+            return;
         }
 
         if (needToFlush) {
@@ -2363,7 +2389,7 @@ public:
                     << getIssues().ToOneLineString());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
             ReplyErrorAndDie(
-                NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
                 NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
                 TStringBuilder() << "Wrong shard state for tables " << getPathes() << ".",
                 getIssues());
@@ -2394,6 +2420,20 @@ public:
                 TStringBuilder() << "Disk space exhausted for tables " << getPathes() << ".",
                 getIssues());
                 return;
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE: {
+            CA_LOG_W("Got OUT_OF_SPACE for tables."
+                << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                << " Sink=" << this->SelfId() << "."
+                << " Ignored this error."
+                << getIssues().ToOneLineString());
+            TxManager->SetError(ev->Get()->Record.GetOrigin());
+            ReplyErrorAndDie(
+                NYql::NDqProto::StatusIds::OVERLOADED,
+                NYql::TIssuesIds::KIKIMR_OVERLOADED,
+                TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << "(" << getPathes() << ")" << " is out of space.",
+                getIssues());
+            return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
             CA_LOG_W("Got OVERLOADED for tables."
@@ -2459,7 +2499,10 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::ABORTED,
                 NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                TStringBuilder() << "Transaction locks invalidated. Tables: " << getPathes() << ".",
+                TStringBuilder()
+                    << "Transaction locks invalidated. "
+                    << (TxManager->GetShardTableInfo(ev->Get()->Record.GetOrigin()).Pathes.size() == 1 ? "Table: " : "Tables: ")
+                    << getPathes() << ".",
                 getIssues());
             return;
         }
@@ -2639,6 +2682,10 @@ public:
         });
         ExecuterActorId = {};
         Y_ABORT_UNLESS(GetTotalMemory() == 0);
+
+        for (auto& [_, info] : WriteInfos) {
+            info.WriteTableActor->Unlink();
+        }
     }
 
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::EYqlIssueCode id, const TString& message, const NYql::TIssues& subIssues) override {

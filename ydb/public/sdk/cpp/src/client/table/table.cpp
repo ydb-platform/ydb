@@ -33,7 +33,7 @@
 
 #include <map>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NTable {
 
 using namespace NThreading;

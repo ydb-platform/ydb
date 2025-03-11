@@ -90,7 +90,7 @@ bool HasIndexesToWrite(const TKikimrTableDescription& tableData) {
     return hasIndexesToWrite;
 }
 
-TExprBase BuildReadTable(const TCoAtomList& columns, TPositionHandle pos, const TKikimrTableDescription& tableData, bool forcePrimary,
+TExprBase BuildReadTable(const TCoAtomList& columns, TPositionHandle pos, const TKikimrTableDescription& tableData, bool forcePrimary, TMaybe<ui64> tabletId,
     TExprContext& ctx)
 {
     TExprNode::TPtr readTable;
@@ -98,6 +98,7 @@ TExprBase BuildReadTable(const TCoAtomList& columns, TPositionHandle pos, const 
 
     TKqpReadTableSettings settings;
     settings.ForcePrimary = forcePrimary;
+    settings.TabletId = tabletId;
 
     readTable = Build<TKqlReadTableRanges>(ctx, pos)
         .Table(tableMeta)
@@ -117,8 +118,10 @@ TExprBase BuildReadTable(const TKiReadTable& read, const TKikimrTableDescription
     bool withSystemColumns, TExprContext& ctx)
 {
     const auto& columns = read.GetSelectColumns(ctx, tableData, withSystemColumns);
-
-    auto readNode = BuildReadTable(columns, read.Pos(), tableData, forcePrimary, ctx);
+    const auto tabletId =  NYql::HasSetting(read.Settings().Ref(), "tabletid")
+        ? TMaybe<ui64>{FromString<ui64>(NYql::GetSetting(read.Settings().Ref(), "tabletid")->Child(1)->Content())}
+        : TMaybe<ui64>{};
+    auto readNode = BuildReadTable(columns, read.Pos(), tableData, forcePrimary, tabletId, ctx);
 
     return readNode;
 }
@@ -214,11 +217,10 @@ TCoAtomList BuildUpsertInputColumns(const TCoAtomList& inputColumns,
 }
 
 std::pair<TExprBase, TCoAtomList> BuildWriteInput(const TKiWriteTable& write, const TKikimrTableDescription& table,
-    const TCoAtomList& inputColumns, const TCoAtomList& autoIncrement, const bool isSink,
+    const TCoAtomList& inputColumns, const TCoAtomList& autoIncrement, const bool /*isSink*/,
     TPositionHandle pos, TExprContext& ctx)
 {
     auto input = write.Input();
-    const bool isWriteReplace = (GetTableOp(write) == TYdbOperation::Replace) && !isSink;
 
     TCoAtomList inputCols = BuildUpsertInputColumns(inputColumns, autoIncrement, pos, ctx);
 
@@ -226,7 +228,9 @@ std::pair<TExprBase, TCoAtomList> BuildWriteInput(const TKiWriteTable& write, co
         input = BuildKqlSequencer(input, table, inputCols, autoIncrement, pos, ctx);
     }
 
+    const bool isWriteReplace = (GetTableOp(write) == TYdbOperation::Replace);
     if (isWriteReplace) {
+        // TODO: don't need it for sinks (can be disabled when secondary indexes are supported inside write actor)
         std::tie(input, inputCols) = CreateRowsToReplace(input, inputCols, table, write.Pos(), ctx);
     }
 
@@ -429,7 +433,7 @@ TExprBase BuildRowsToDelete(const TKikimrTableDescription& tableData, bool withS
     const auto tableMeta = BuildTableMeta(tableData, pos, ctx);
     const auto tableColumns = BuildColumnsList(tableData, pos, ctx, withSystemColumns, true /*ignoreWriteOnlyColumns*/);
 
-    const auto allRows = BuildReadTable(tableColumns, pos, tableData, false, ctx);
+    const auto allRows = BuildReadTable(tableColumns, pos, tableData, false, {}, ctx);
 
     return Build<TCoFilter>(ctx, pos)
         .Input(allRows)
@@ -508,7 +512,7 @@ TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTabl
 TExprBase BuildRowsToUpdate(const TKikimrTableDescription& tableData, bool withSystemColumns, const TCoLambda& filter,
     const TPositionHandle pos, TExprContext& ctx)
 {
-    auto kqlReadTable = BuildReadTable(BuildColumnsList(tableData, pos, ctx, withSystemColumns, true /*ignoreWriteOnlyColumns*/), pos, tableData, false, ctx);
+    auto kqlReadTable = BuildReadTable(BuildColumnsList(tableData, pos, ctx, withSystemColumns, true /*ignoreWriteOnlyColumns*/), pos, tableData, false, {}, ctx);
 
     return Build<TCoFilter>(ctx, pos)
         .Input(kqlReadTable)

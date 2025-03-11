@@ -2,6 +2,7 @@
 #include "background_controller.h"
 #include "columnshard.h"
 #include "columnshard_private_events.h"
+#include "columnshard_subdomain_path_id.h"
 #include "counters.h"
 #include "defs.h"
 #include "inflight_request_tracker.h"
@@ -39,6 +40,7 @@
 #include <ydb/core/tx/tiering/common.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/service.h>
@@ -182,6 +184,9 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxRemoveSharedBlobs;
     friend class TTxFinishAsyncTransaction;
     friend class TWaitEraseTablesTxSubscriber;
+    friend class TTxPersistSubDomainOutOfSpace;
+    friend class TTxPersistSubDomainPathId;
+    friend class TSpaceWatcher;
 
     friend class NOlap::TCleanupPortionsColumnEngineChanges;
     friend class NOlap::TCleanupTablesColumnEngineChanges;
@@ -295,8 +300,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NOlap::NDataSharing::NEvents::TEvFinishedFromSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishToSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx);
-
     void Handle(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
     void HandleInit(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
 
@@ -463,6 +468,7 @@ protected:
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishToSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator, Handle);
             HFunc(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors, Handle);
+            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -552,6 +558,8 @@ private:
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
     NDataShard::TSysLocks SysLocks;
+    TSpaceWatcher* SpaceWatcher;
+    TActorId SpaceWatcherId;
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();

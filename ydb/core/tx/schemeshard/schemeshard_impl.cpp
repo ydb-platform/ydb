@@ -63,6 +63,7 @@ bool ResolvePoolNames(
 
         result.emplace_back();
         result.back().SetStoragePoolName(poolIt->GetName());
+        result.back().SetStoragePoolKind(poolIt->GetKind());
     }
 
     channelsBinding.swap(result);
@@ -533,8 +534,8 @@ bool TSchemeShard::ApplyStorageConfig(
         return pools.cend();
     };
 
-    auto allocateChannel = [&] (const TString& poolName, bool reuseExisting = true) -> ui32 {
-        auto it = reverseBinding.find(poolName);
+    auto allocateChannel = [&] (const TStoragePool& pool, bool reuseExisting = true) -> ui32 {
+        auto it = reverseBinding.find(pool.GetName());
         if (it != reverseBinding.end()) {
             if (reuseExisting) {
                 return it->second[0];
@@ -543,8 +544,9 @@ bool TSchemeShard::ApplyStorageConfig(
 
         ui32 channel = channelsBinding.size();
         channelsBinding.emplace_back();
-        channelsBinding.back().SetStoragePoolName(poolName);
-        reverseBinding[poolName].emplace_back(channel);
+        channelsBinding.back().SetStoragePoolName(pool.GetName());
+        channelsBinding.back().SetStoragePoolKind(pool.GetKind());
+        reverseBinding[pool.GetName()].emplace_back(channel);
         return channel;
     };
 
@@ -561,6 +563,7 @@ bool TSchemeShard::ApplyStorageConfig(
 
         channelsBinding.emplace_back();
         channelsBinding.back().SetStoragePoolName(sysLogPool->GetName());
+        channelsBinding.back().SetStoragePoolKind(sysLogPool->GetKind());
     }
 
     if (channelsBinding.size() < 2) {
@@ -568,7 +571,7 @@ bool TSchemeShard::ApplyStorageConfig(
         auto logPool = resolve(storagePools, storageConfig.GetLog());
         LOCAL_CHECK(logPool != storagePools.end(), "unable determine pool for log storage");
 
-        ui32 channel = allocateChannel(logPool->GetName());
+        ui32 channel = allocateChannel(*logPool);
         Y_ABORT_UNLESS(channel == 1, "Expected to allocate log channel, not %" PRIu32, channel);
     }
 
@@ -582,7 +585,7 @@ bool TSchemeShard::ApplyStorageConfig(
         auto dataPool = resolve(storagePools, storageConfig.GetData());
         LOCAL_CHECK(dataPool != storagePools.end(), "definition of data storage present but unable determine pool for it");
 
-        ui32 channel = allocateChannel(dataPool->GetName());
+        ui32 channel = allocateChannel(*dataPool);
         room.AssignChannel(NKikimrStorageSettings::TChannelPurpose::Data, channel);
     }
 
@@ -595,7 +598,7 @@ bool TSchemeShard::ApplyStorageConfig(
         LOCAL_CHECK(externalChannelsCount < Max<ui8>(), "more than 255 external channels requested");
         for (ui32 i = 0; i < externalChannelsCount; ++i) {
             // In case if we have 1 external channel, leave old behavior untouched and reuse channel by pool's name
-            ui32 channel = allocateChannel(externalPool->GetName(), externalChannelsCount == 1 ? true : false);
+            ui32 channel = allocateChannel(*externalPool, externalChannelsCount == 1 ? true : false);
             room.AssignChannel(NKikimrStorageSettings::TChannelPurpose::External, channel);
         }
     }
@@ -3359,6 +3362,16 @@ void TSchemeShard::PersistTxShardStatus(NIceDb::TNiceDb& db, TOperationId opId, 
         );
 }
 
+NKikimrSchemeOp::TChangefeedUnderlyingTopics ConvertChangefeedUnderlyingTopics(
+    const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TPathDescription>& changefeedUnderlyingTopics
+) {
+    NKikimrSchemeOp::TChangefeedUnderlyingTopics result;
+    for (const auto& x : changefeedUnderlyingTopics) {
+        *result.AddChangefeedUnderlyingTopics() = x;
+    }
+    return result;
+}
+
 void TSchemeShard::PersistBackupSettings(
         NIceDb::TNiceDb& db,
         TPathId pathId,
@@ -3373,6 +3386,7 @@ void TSchemeShard::PersistBackupSettings(
                 NIceDb::TUpdate<Schema::BackupSettings::ScanSettings>(settings.GetScanSettings().SerializeAsString()), \
                 NIceDb::TUpdate<Schema::BackupSettings::NeedToBill>(settings.GetNeedToBill()), \
                 NIceDb::TUpdate<Schema::BackupSettings::TableDescription>(settings.GetTable().SerializeAsString()), \
+                NIceDb::TUpdate<Schema::BackupSettings::ChangefeedUnderlyingTopics>(ConvertChangefeedUnderlyingTopics(settings.GetChangefeedUnderlyingTopics()).SerializeAsString()), \
                 NIceDb::TUpdate<Schema::BackupSettings::NumberOfRetries>(settings.GetNumberOfRetries()), \
                 NIceDb::TUpdate<Schema::BackupSettings::EnableChecksums>(settings.GetEnableChecksums()), \
                 NIceDb::TUpdate<Schema::BackupSettings::EnablePermissions>(settings.GetEnablePermissions())); \
@@ -3383,6 +3397,7 @@ void TSchemeShard::PersistBackupSettings(
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::ScanSettings>(settings.GetScanSettings().SerializeAsString()), \
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::NeedToBill>(settings.GetNeedToBill()), \
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::TableDescription>(settings.GetTable().SerializeAsString()), \
+                NIceDb::TUpdate<Schema::MigratedBackupSettings::ChangefeedUnderlyingTopics>(ConvertChangefeedUnderlyingTopics(settings.GetChangefeedUnderlyingTopics()).SerializeAsString()), \
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::NumberOfRetries>(settings.GetNumberOfRetries()), \
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::EnableChecksums>(settings.GetEnableChecksums()), \
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::EnablePermissions>(settings.GetEnablePermissions())); \
@@ -7442,7 +7457,6 @@ void TSchemeShard::ConfigureBackgroundCleaningQueue(
                  << ", InflightLimit# " << cleaningConfig.InflightLimit);
 }
 
-// void TScheme
 void TSchemeShard::ConfigureLoginProvider(
         const ::NKikimrProto::TAuthConfig& config,
         const TActorContext &ctx)
@@ -7454,10 +7468,18 @@ void TSchemeShard::ConfigureLoginProvider(
         .MinUpperCaseCount = passwordComplexityConfig.GetMinUpperCaseCount(),
         .MinNumbersCount = passwordComplexityConfig.GetMinNumbersCount(),
         .MinSpecialCharsCount = passwordComplexityConfig.GetMinSpecialCharsCount(),
-        .SpecialChars = (passwordComplexityConfig.GetSpecialChars().empty() ? NLogin::TPasswordComplexity::VALID_SPECIAL_CHARS : passwordComplexityConfig.GetSpecialChars()),
+        .SpecialChars = passwordComplexityConfig.GetSpecialChars(),
         .CanContainUsername = passwordComplexityConfig.GetCanContainUsername()
     });
     LoginProvider.UpdatePasswordCheckParameters(passwordComplexity);
+
+    auto getSpecialChars = [&passwordComplexity] () {
+        TStringBuilder result;
+        for (const auto& ch : passwordComplexity.SpecialChars) {
+            result << ch;
+        }
+        return result;
+    };
 
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "PasswordComplexity for LoginProvider configured: MinLength# " << passwordComplexity.MinLength
@@ -7465,7 +7487,7 @@ void TSchemeShard::ConfigureLoginProvider(
                  << ", MinUpperCaseCount# " << passwordComplexity.MinUpperCaseCount
                  << ", MinNumbersCount# " << passwordComplexity.MinNumbersCount
                  << ", MinSpecialCharsCount# " << passwordComplexity.MinSpecialCharsCount
-                 << ", SpecialChars# " << (passwordComplexityConfig.GetSpecialChars().empty() ? NLogin::TPasswordComplexity::VALID_SPECIAL_CHARS : passwordComplexityConfig.GetSpecialChars())
+                 << ", SpecialChars# " << getSpecialChars()
                  << ", CanContainUsername# " << (passwordComplexity.CanContainUsername ? "true" : "false"));
 }
 

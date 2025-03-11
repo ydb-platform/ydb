@@ -34,6 +34,8 @@ using TWarningRules = TVector<TWarningRule>;
 
 class TWarningPolicy {
 public:
+    TWarningPolicy(bool isReplay = false);
+
     void AddRule(const TWarningRule& rule);
 
     EWarningAction GetAction(TIssueCode code) const;
@@ -43,6 +45,7 @@ public:
     void Clear();
 
 private:
+    const  bool IsReplay;
     TWarningRules Rules;
     EWarningAction BaseAction = EWarningAction::DEFAULT;
     THashMap<TIssueCode, EWarningAction> Overrides;

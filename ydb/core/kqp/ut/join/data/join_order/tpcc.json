@@ -3,12 +3,12 @@
   "args":
     [
       {
-        "op_name":"TableRangeScan",
-        "table":"test\/tpcc\/order_line"
+        "op_name":"TableLookup",
+        "table":"test\/tpcc\/stock"
       },
       {
         "op_name":"TableRangeScan",
-        "table":"test\/tpcc\/stock"
+        "table":"test\/tpcc\/order_line"
       }
     ]
 }

@@ -10,7 +10,11 @@ namespace NKikimr::NArrow::NAccessor {
 class TTrivialArray: public IChunkedArray {
 private:
     using TBase = IChunkedArray;
-    const std::shared_ptr<arrow::Array> Array;
+    std::shared_ptr<arrow::Array> Array;
+
+    virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const override {
+        visitor(Array);
+    }
 
 protected:
     virtual std::optional<ui64> DoGetRawSize() const override;
@@ -32,6 +36,12 @@ protected:
     virtual ui32 DoGetValueRawBytes() const override;
 
 public:
+    virtual void Reallocate() override;
+
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const override {
+        return std::make_shared<arrow::ChunkedArray>(Array);
+    }
+
     const std::shared_ptr<arrow::Array>& GetArray() const {
         return Array;
     }
@@ -49,6 +59,9 @@ public:
         TStatusValidator::Validate(builder->AppendScalar(*scalar));
         return NArrow::FinishBuilder(std::move(builder));
     }
+
+    static std::shared_ptr<arrow::Array> BuildArrayFromOptionalScalar(
+        const std::shared_ptr<arrow::Scalar>& scalar, const std::shared_ptr<arrow::DataType>& type);
 
     TTrivialArray(const std::shared_ptr<arrow::Scalar>& scalar)
         : TBase(1, EType::Array, TValidator::CheckNotNull(scalar)->type)
@@ -98,6 +111,12 @@ private:
     using TBase = IChunkedArray;
     const std::shared_ptr<arrow::ChunkedArray> Array;
 
+    virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const override {
+        for (auto&& i : Array->chunks()) {
+            visitor(i);
+        }
+    }
+
 protected:
     virtual ui32 DoGetValueRawBytes() const override;
     virtual ui32 DoGetNullsCount() const override {
@@ -105,6 +124,7 @@ protected:
     }
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
     virtual std::optional<ui64> DoGetRawSize() const override;
+
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {
         auto chunk = GetChunkSlow(index);
         return NArrow::TStatusValidator::GetValid(chunk.GetArray()->GetScalar(chunk.GetAddress().GetLocalIndex(index)));
@@ -116,6 +136,10 @@ protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
 
 public:
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const override {
+        return Array;
+    }
+
     TTrivialChunkedArray(const std::shared_ptr<arrow::ChunkedArray>& data)
         : TBase(data->length(), EType::ChunkedArray, data->type())
         , Array(data) {

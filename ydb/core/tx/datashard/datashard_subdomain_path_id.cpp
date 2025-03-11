@@ -56,6 +56,7 @@ private:
 };
 
 void TDataShard::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx) {
+    AFL_DEBUG(NKikimrServices::TX_DATASHARD)("event", "subdomain_found");
     const auto* msg = ev->Get();
 
     if (FindSubDomainPathIdActor == ev->Sender) {

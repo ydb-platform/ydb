@@ -18,6 +18,7 @@ YQL_UDF_CONTRIB(stat_udf)
 
 IF (NOT EXPORT_CMAKE)
     RECURSE_FOR_TESTS(
+        test
         ut
     )
 ENDIF()

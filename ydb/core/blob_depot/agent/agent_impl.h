@@ -5,6 +5,8 @@
 
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
+#include <ydb/core/wrappers/abstract.h>
+
 namespace NKikimr::NBlobDepot {
 
 #define ENUMERATE_INCOMING_EVENTS(XX) \
@@ -129,6 +131,7 @@ namespace NKikimr::NBlobDepot {
             TEvBlobDepot::TEvCollectGarbageResult*,
             TEvBlobDepot::TEvCommitBlobSeqResult*,
             TEvBlobDepot::TEvResolveResult*,
+            TEvBlobDepot::TEvPrepareWriteS3Result*,
 
             // underlying DS proxy responses
             TEvBlobStorage::TEvGetResult*,
@@ -191,6 +194,38 @@ namespace NKikimr::NBlobDepot {
         TActorId PipeId;
         TActorId PipeServerId;
         bool IsConnected = false;
+        ui64 ConnectionInstance = 0;
+
+        NMonitoring::TDynamicCounterPtr AgentCounters;
+
+        NMonitoring::TDynamicCounters::TCounterPtr ModeConnectPending;
+        NMonitoring::TDynamicCounters::TCounterPtr ModeRegistering;
+        NMonitoring::TDynamicCounters::TCounterPtr ModeConnected;
+
+        NMonitoring::TDynamicCounters::TCounterPtr PendingEventQueueItems;
+        NMonitoring::TDynamicCounters::TCounterPtr PendingEventQueueBytes;
+
+        THashMap<ui32, NMonitoring::TDynamicCounters::TCounterPtr> RequestsReceived;
+        THashMap<ui32, NMonitoring::THistogramPtr> SuccessResponseTime;
+        THashMap<ui32, NMonitoring::THistogramPtr> ErrorResponseTime;
+
+        NMonitoring::TDynamicCounters::TCounterPtr S3GetBytesOk;
+        NMonitoring::TDynamicCounters::TCounterPtr S3GetsOk;
+        NMonitoring::TDynamicCounters::TCounterPtr S3GetsError;
+        NMonitoring::TDynamicCounters::TCounterPtr S3PutBytesOk;
+        NMonitoring::TDynamicCounters::TCounterPtr S3PutsOk;
+        NMonitoring::TDynamicCounters::TCounterPtr S3PutsError;
+
+        enum class EMode {
+            None,
+            ConnectPending,
+            Registering,
+            Connected
+        };
+
+        EMode Mode = EMode::None;
+
+        void SwitchMode(EMode mode);
 
     private:
         struct TEvPrivate {
@@ -233,6 +268,7 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvBlobDepot::TEvCollectGarbageResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvCommitBlobSeqResult, HandleTabletResponse);
                 hFunc(TEvBlobDepot::TEvResolveResult, HandleTabletResponse);
+                hFunc(TEvBlobDepot::TEvPrepareWriteS3Result, HandleTabletResponse);
 
                 hFunc(TEvBlobStorage::TEvGetResult, HandleOtherResponse);
                 hFunc(TEvBlobStorage::TEvPutResult, HandleOtherResponse);
@@ -254,7 +290,13 @@ namespace NKikimr::NBlobDepot {
 
         void PassAway() override {
             ClearPendingEventQueue("BlobDepot agent destroyed");
+            if (AgentCounters) {
+                GetServiceCounters(AppData()->Counters, "blob_depot_agent")->RemoveSubgroup("group", ::ToString(VirtualGroupId));
+            }
             NTabletPipe::CloseAndForgetClient(SelfId(), PipeId);
+            if (S3WrapperId) {
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, S3WrapperId, SelfId(), nullptr, 0));
+            }
             TActor::PassAway();
         }
 
@@ -318,8 +360,14 @@ namespace NKikimr::NBlobDepot {
         NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColor = {};
         float ApproximateFreeSpaceShare = 0.0f;
 
+        NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
+        std::optional<NKikimrBlobDepot::TS3BackendSettings> S3BackendSettings;
+        TActorId S3WrapperId;
+        TString S3BasePath;
+
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev);
+        void SetupCounters();
         void ConnectToBlobDepot();
         void OnConnect();
         void OnDisconnect();
@@ -349,6 +397,7 @@ namespace NKikimr::NBlobDepot {
         {
         protected:
             std::unique_ptr<IEventHandle> Event; // original query event
+            const TMonotonic Received;
             const ui64 QueryId;
             mutable TString QueryIdString;
             const TMonotonic StartTime;
@@ -361,7 +410,7 @@ namespace NKikimr::NBlobDepot {
             static constexpr TDuration WatchdogDuration = TDuration::Seconds(10);
 
         public:
-            TQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event);
+            TQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event, TMonotonic received);
             virtual ~TQuery();
 
             void CheckQueryExecutionTime(TMonotonic now);
@@ -410,8 +459,8 @@ namespace NKikimr::NBlobDepot {
         template<typename TEvent>
         class TBlobStorageQuery : public TQuery {
         public:
-            TBlobStorageQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event)
-                : TQuery(agent, std::move(event))
+            TBlobStorageQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event, TMonotonic received)
+                : TQuery(agent, std::move(event), received)
                 , Request(*Event->Get<TEvent>())
             {
                 ExecutionRelay = std::move(Request.ExecutionRelay);
@@ -425,6 +474,7 @@ namespace NKikimr::NBlobDepot {
             std::unique_ptr<IEventHandle> Event;
             size_t Size;
             TMonotonic ExpirationTimestamp;
+            TMonotonic Received;
         };
 
         std::deque<TPendingEvent> PendingEventQ;
@@ -436,16 +486,18 @@ namespace NKikimr::NBlobDepot {
         TIntrusiveListWithAutoDelete<TQuery, TQuery::TDeleter, TExecutingQueries> DeletePendingQueries;
         bool ProcessPendingEventInFlight = false;
 
-        template<ui32 EventType> TQuery *CreateQuery(std::unique_ptr<IEventHandle> ev);
+        template<ui32 EventType> TQuery *CreateQuery(std::unique_ptr<IEventHandle> ev, TMonotonic received);
         void HandleStorageProxy(TAutoPtr<IEventHandle> ev);
         void HandleAssimilate(TAutoPtr<IEventHandle> ev);
         void HandlePendingEvent();
         void HandleProcessPendingEvent();
         void ClearPendingEventQueue(const TString& reason);
-        void ProcessStorageEvent(std::unique_ptr<IEventHandle> ev);
+        void ProcessStorageEvent(std::unique_ptr<IEventHandle> ev, TMonotonic received);
         void HandlePendingEventQueueWatchdog();
         void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev);
         void HandleQueryWatchdog();
+
+        void Invoke(std::function<void()> callback) { callback(); }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

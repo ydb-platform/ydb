@@ -4,7 +4,7 @@
 
 #include <library/cpp/logger/log.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 TLogFormatter GetPrefixLogFormatter(const std::string& prefix);
 std::string GetDatabaseLogPrefix(const std::string& database);

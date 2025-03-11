@@ -3819,35 +3819,44 @@ bool TSqlTranslation::RoleNameClause(const TRule_role_name& node, TDeferredAtom&
 }
 
 bool TSqlTranslation::PasswordParameter(const TRule_password_option& passwordOption, TUserParameters& result) {
-    // password_option: ENCRYPTED? PASSWORD expr;
-    TSqlExpression expr(Ctx, Mode);
-    TNodePtr password = expr.Build(passwordOption.GetRule_expr3());
-    if (!password) {
-        Error() << "Couldn't parse the password";
-        return false;
+    // password_option: ENCRYPTED? PASSWORD password_value;
+    // password_value: STRING_VALUE | NULL;
+
+    const auto& token = passwordOption.GetRule_password_value3().GetToken1();
+    TString stringValue(Ctx.Token(token));
+
+    if (to_lower(stringValue) == "null") {
+        result.IsPasswordNull = true;
+    } else {
+        auto password = StringContent(Ctx, Ctx.Pos(), stringValue);
+
+        if (!password) {
+            Error() << "Password should be enclosed into quotation marks.";
+            return false;
+        }
+
+        result.Password = TDeferredAtom(Ctx.Pos(), std::move(password->Content));
     }
 
     result.IsPasswordEncrypted = passwordOption.HasBlock1();
-    if (!password->IsNull()) {
-        result.Password = MakeAtomFromExpression(Ctx.Pos(), Ctx, password);
-    }
 
     return true;
 }
 
 bool TSqlTranslation::HashParameter(const TRule_hash_option& hashOption, TUserParameters& result) {
-    // hash_option: HASH expr;
-    TSqlExpression expr(Ctx, Mode);
-    TNodePtr hash = expr.Build(hashOption.GetRule_expr2());
+    // hash_option: HASH STRING_VALUE;
+
+    const auto& token = hashOption.GetToken2();
+    TString stringValue(Ctx.Token(token));
+
+    auto hash = StringContent(Ctx, Ctx.Pos(), stringValue);
 
     if (!hash) {
-        Error() << "Couldn't parse the hash of password";
+        Error() << "Hash should be enclosed into quotation marks.";
         return false;
     }
 
-    if (!hash->IsNull()) {
-        result.Hash = MakeAtomFromExpression(Ctx.Pos(), Ctx, hash);
-    }
+    result.Hash = TDeferredAtom(Ctx.Pos(), std::move(hash->Content));
 
     return true;
 }
@@ -3935,6 +3944,7 @@ bool TSqlTranslation::UserParameters(const std::vector<TRule_user_option>& optio
 
     if (isCreateUser) {
         result.CanLogin = true;
+        result.IsPasswordNull = true;
     }
 
     for (const auto& option : optionsList) {

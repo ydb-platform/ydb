@@ -76,6 +76,10 @@ void TKqpComputeActor::DoBootstrap() {
         settings.ReadRanges.push_back(readRange);
     }
 
+    if (FederatedQuerySetup && FederatedQuerySetup->DqTaskTransformFactory) {
+        execCtx.FuncProvider = FederatedQuerySetup->DqTaskTransformFactory({settings.TaskParams, settings.ReadRanges}, TBase::FunctionRegistry);
+    }
+
     auto taskRunner = MakeDqTaskRunner(TBase::GetAllocatorPtr(), execCtx, settings, logger);
     SetTaskRunner(taskRunner);
 
@@ -84,7 +88,7 @@ void TKqpComputeActor::DoBootstrap() {
     try {
         PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, ArrayBufferMinFillPercentage, std::move(wakeupCallback), std::move(errorCallback)));
     } catch (const NMiniKQL::TKqpEnsureFail& e) {
-        InternalError((TIssuesIds::EIssueCode) e.GetCode(), e.GetMessage());
+        ErrorFromIssue((TIssuesIds::EIssueCode) e.GetCode(), e.GetMessage());
         return;
     }
 
@@ -120,7 +124,7 @@ void TKqpComputeActor::DoBootstrap() {
         auto scanActor = NSysView::CreateSystemViewScan(SelfId(), 0, ScanData->TableId, ScanData->TablePath, ranges, columns, UserToken, Database, reverse);
 
         if (!scanActor) {
-            InternalError(TIssuesIds::DEFAULT_ERROR, TStringBuilder()
+            ErrorFromIssue(TIssuesIds::DEFAULT_ERROR, TStringBuilder()
                 << "Failed to create system view scan, table id: " << ScanData->TableId);
             return;
         }
@@ -148,9 +152,9 @@ STFUNC(TKqpComputeActor::StateFunc) {
     } catch (const TMemoryLimitExceededException& e) {
         TBase::OnMemoryLimitExceptionHandler();
     } catch (const NMiniKQL::TKqpEnsureFail& e) {
-        InternalError((TIssuesIds::EIssueCode) e.GetCode(), e.GetMessage());
-    } catch (const yexception& e) {
-        InternalError(TIssuesIds::DEFAULT_ERROR, e.what());
+        ErrorFromIssue((TIssuesIds::EIssueCode) e.GetCode(), e.GetMessage());
+    } catch (const std::exception& e) {
+        ErrorFromIssue(TIssuesIds::DEFAULT_ERROR, e.what());
     }
 
     ReportEventElapsedTime();
@@ -283,7 +287,7 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) {
     IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
 
     State = NDqProto::COMPUTE_STATE_FAILURE;
-    ReportStateAndMaybeDie(YdbStatusToDqStatus(status), issues);
+    ReportStateAndMaybeDie(YdbStatusToDqStatus(status, EStatusCompatibilityLevel::WithUnauthorized), issues);
 }
 
 IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask* task,

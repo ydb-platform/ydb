@@ -68,7 +68,13 @@ public:
         if (originalArray->GetType() == GetType()) {
             return originalArray;
         } else {
-            return DoConstruct(originalArray, externalInfo);
+            auto result = DoConstruct(originalArray, externalInfo);
+            if (result.IsFail()) {
+                return result;
+            }
+            AFL_VERIFY(result.GetResult()->GetRecordsCount() == originalArray->GetRecordsCount())("result", result.GetResult()->GetRecordsCount())(
+                                                      "original", originalArray->GetRecordsCount());
+            return result;
         }
     }
 

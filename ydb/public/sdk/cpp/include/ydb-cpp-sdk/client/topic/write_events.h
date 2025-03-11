@@ -7,7 +7,7 @@
 
 #include <util/generic/ptr.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 struct TWriteStat : public TThrRefBase {
     TDuration WriteTime;

@@ -17,7 +17,9 @@
 #include <cstdlib>
 #include <charconv>
 
-namespace NYdb::NIssue {
+namespace NYdb {
+inline namespace Dev {
+namespace NIssue {
 
 std::string SeverityToString(ESeverity severity) {
     switch (severity) {
@@ -272,7 +274,9 @@ std::optional<TPosition> TryParseTerminationMessage(std::string_view& message) {
     return std::nullopt;
 }
 
-} // namspace NYql
+}
+}
+}
 
 template <>
 void Out<NYdb::NIssue::TPosition>(IOutputStream& out, const NYdb::NIssue::TPosition& pos) {

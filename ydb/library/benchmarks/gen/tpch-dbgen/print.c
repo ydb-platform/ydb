@@ -69,7 +69,7 @@ print_prep(int table, int update)
 					this_segment=++insert_orders_segment;
 				else 
 					this_segment=++insert_lineitem_segment;
-				sprintf(upath, "%s%c%s.u%d.%d", 
+				snprintf(upath, 128, "%s%c%s.u%d.%d", 
 					env_config(PATH_TAG, PATH_DFLT),
 					PATH_SEP, tdefs[table].name, update%10000,this_segment);
 				}
@@ -83,13 +83,13 @@ print_prep(int table, int update)
 			if ( delete_segments )
 				{
 				++delete_segment;
-				sprintf(upath, "%s%cdelete.u%d.%d",
+				snprintf(upath, 128, "%s%cdelete.u%d.%d",
 					env_config(PATH_TAG, PATH_DFLT), PATH_SEP, -update%10000,
 					delete_segment);
 				}
 			else
 				{
-				sprintf(upath, "%s%cdelete.%d",
+				snprintf(upath, 128, "%s%cdelete.%d",
 				env_config(PATH_TAG, PATH_DFLT), PATH_SEP, -update);
 				}
 		return(fopen(upath, "w"));

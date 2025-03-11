@@ -1,6 +1,7 @@
 #include "data.h"
 #include "data_uncertain.h"
 #include "mon_main.h"
+#include "s3.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -16,9 +17,13 @@ namespace NKikimr::NBlobDepot {
                     KEYVALUE_TABLE({
                         KEYVALUE_P("Loaded", Loaded ? "true" : "false");
                         KEYVALUE_P("Data size, number of keys", Data.size());
-                        KEYVALUE_P("RefCount size, number of blobs", RefCount.size());
+                        KEYVALUE_P("RefCount size, number of blobs", RefCountBlobs.size());
                         KEYVALUE_P("Total stored data size, bytes", FormatByteSize(TotalStoredDataSize));
                         KEYVALUE_P("Keys made certain, number of keys", KeysMadeCertain.size());
+                        KEYVALUE_P("Total number of useful S3 objects", RefCountS3.size());
+                        KEYVALUE_P("Total bytes in useful S3 objects", FormatByteSize(TotalS3DataSize));
+                        KEYVALUE_P("Total number of trash S3 objects", Self->S3Manager->GetTotalS3TrashObjects());
+                        KEYVALUE_P("Total bytes in trash S3 objects", FormatByteSize(Self->S3Manager->GetTotalS3TrashSize()));
                     })
                 }
             }

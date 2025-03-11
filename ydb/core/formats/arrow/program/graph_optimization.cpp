@@ -380,6 +380,34 @@ TConclusion<bool> TGraph::OptimizeFilterWithCoalesce(TGraphNode* cNode) {
 TConclusionStatus TGraph::Collapse() {
     bool hasChanges = true;
     //    Cerr << DebugJson() << Endl;
+
+    std::vector<TGraphNode*> filters;
+    for (auto&& [_, n] : Nodes) {
+        if (n->Is(EProcessorType::Filter)) {
+            filters.emplace_back(n.get());
+        }
+    }
+    if (filters.size() > 1) {
+        const ui32 finalResourceId = BuildNextResourceId();
+        auto filterNode = AddNode(std::make_shared<TFilterProcessor>(finalResourceId));
+        std::vector<ui32> inputs;
+        std::vector<TGraphNode*> inputNodes;
+        for (auto&& i : filters) {
+            inputs.emplace_back(i->GetProcessor()->GetInputColumnIdOnce());
+            inputNodes.emplace_back(GetProducerVerified(i->GetProcessor()->GetInputColumnIdOnce()));
+            RemoveNode(i->GetIdentifier());
+        }
+        auto mergeNode = AddNode(std::make_shared<TStreamLogicProcessor>(
+            TColumnChainInfo::BuildVector(inputs), TColumnChainInfo(finalResourceId), NKernels::EOperation::And));
+        ui32 idx = 0;
+        for (auto&& i : inputNodes) {
+            AddEdge(i, mergeNode.get(), inputs[idx]);
+            ++idx;
+        }
+        AddEdge(mergeNode.get(), filterNode.get(), finalResourceId);
+        RegisterProducer(finalResourceId, mergeNode.get());
+    }
+
     while (hasChanges) {
         hasChanges = false;
         for (auto&& [_, n] : Nodes) {

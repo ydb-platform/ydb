@@ -13,12 +13,9 @@ private:
         return false;
     }
 
-    std::optional<ui32> Limit;
-
 public:
-    TProjectionProcessor(std::vector<TColumnChainInfo>&& columns, const std::optional<ui32>& limit)
-        : TBase(std::vector<TColumnChainInfo>(columns), {}, EProcessorType::Projection)
-        , Limit(limit) {
+    TProjectionProcessor(std::vector<TColumnChainInfo>&& columns)
+        : TBase(std::vector<TColumnChainInfo>(columns), {}, EProcessorType::Projection) {
     }
 };
 

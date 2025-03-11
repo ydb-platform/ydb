@@ -12,12 +12,9 @@ private:
         return false;
     }
 
-    YDB_READONLY_DEF(std::optional<ui32>, Limit);
-
 public:
-    TFilterProcessor(const TColumnChainInfo& input, const std::optional<ui32> limit)
-        : TBase({ input }, {}, EProcessorType::Filter)
-        , Limit(limit) {
+    TFilterProcessor(const TColumnChainInfo& input)
+        : TBase({ input }, {}, EProcessorType::Filter) {
     }
 };
 

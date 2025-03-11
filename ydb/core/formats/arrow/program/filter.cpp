@@ -88,8 +88,9 @@ TConclusion<IResourceProcessor::EExecutionResult> TFilterProcessor::DoExecute(co
     }
     NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
     filterVisitor.BuildColumnFilter(filter);
-    if (Limit) {
-        context.GetResources()->AddFilter(filter.Cut(context.GetResources()->GetRecordsCountActualVerified(), *Limit, context.GetReverse()));
+    if (context.GetLimit()) {
+        context.GetResources()->AddFilter(
+            filter.Cut(context.GetResources()->GetRecordsCountActualVerified(), *context.GetLimit(), context.GetReverse()));
     } else {
         context.GetResources()->AddFilter(filter);
     }

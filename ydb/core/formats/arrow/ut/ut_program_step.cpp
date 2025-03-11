@@ -45,8 +45,8 @@ size_t FilterTest(const std::vector<std::shared_ptr<arrow::Array>>& args, const 
     NOptimization::TGraph::TBuilder builder(resolver);
     builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1, 2}), TColumnChainInfo(4), std::make_shared<TSimpleFunction>(op1)).DetachResult());
     builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({4, 3}), TColumnChainInfo(5), std::make_shared<TSimpleFunction>(op2)).DetachResult());
-    builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo(5), std::optional<ui32>()));
-    builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 4, 5 }), std::nullopt));
+    builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo(5)));
+    builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 4, 5 })));
     auto chain = builder.Finish().DetachResult();
     auto sds = std::make_shared<TSimpleDataSource>();
 
@@ -76,8 +76,8 @@ size_t FilterTestUnary(std::vector<std::shared_ptr<arrow::Array>> args, const EO
     NOptimization::TGraph::TBuilder builder(resolver);
     builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1}), TColumnChainInfo(4), std::make_shared<TSimpleFunction>(op1)).DetachResult());
     builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({2, 4}), TColumnChainInfo(5), std::make_shared<TSimpleFunction>(op2)).DetachResult());
-    builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo(5), std::optional<ui32>()));
-    builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 4, 5 }), std::nullopt));
+    builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo(5)));
+    builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 4, 5 })));
     auto chain = builder.Finish().DetachResult();
     chain->Apply(sds, sds->GetResources()).Validate();
     UNIT_ASSERT_VALUES_EQUAL(sds->GetResources()->GetColumnsCount(), 2);
@@ -104,7 +104,7 @@ std::vector<bool> LikeTest(const std::vector<std::string>& data, EOperation op, 
     NOptimization::TGraph::TBuilder builder(resolver);
     builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1}), TColumnChainInfo(2), 
         std::make_shared<TSimpleFunction>(op, std::make_shared<arrow::compute::MatchSubstringOptions>(pattern, ignoreCase))).DetachResult());
-    builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 2 }), std::nullopt));
+    builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 2 })));
     auto chain = builder.Finish().DetachResult();
 
     auto sds = std::make_shared<TSimpleDataSource>();
@@ -283,9 +283,9 @@ void GroupByXY(bool nullable, ui32 numKeys, ETest test = ETest::DEFAULT, EAggreg
     }
     builder.Add(aggrBuilder.Finish().DetachResult());
     if (numKeys == 2) {
-        builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 1, 2, 3, 4 }), std::nullopt));
+        builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 1, 2, 3, 4 })));
     } else {
-        builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 1, 3, 4 }), std::nullopt));
+        builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 1, 3, 4 })));
     }
     auto chain = builder.Finish().DetachResult();
 
@@ -506,8 +506,8 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         NOptimization::TGraph::TBuilder builder(resolver);
         builder.Add(std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(56), 3));
         builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1, 3}), TColumnChainInfo(4), std::make_shared<TSimpleFunction>(EOperation::Add)).DetachResult());
-        builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo(2), std::nullopt));
-        builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 2, 4 }), std::nullopt));
+        builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo(2)));
+        builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 2, 4 })));
         auto chain = builder.Finish().DetachResult();
 
         auto sds = std::make_shared<TSimpleDataSource>();
@@ -529,7 +529,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         AFL_VERIFY(arr->Value(0) == 0)("val", arr->Value(0));
     }
 
-    Y_UNIT_TEST(SplitFilterSimple) {
+    Y_UNIT_TEST(MergeFilterSimple) {
         std::vector<std::string> data = { "aa", "aaa", "aaaa", "bbbbb" };
         arrow::StringBuilder sb;
         sb.AppendValues(data).ok();
@@ -575,15 +575,10 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
             builder.Add(proc);
         }
 
-        auto andOperator1 =
-            std::make_shared<TStreamLogicProcessor>(TColumnChainInfo::BuildVector({ 1101, 1102 }), TColumnChainInfo(1104), EOperation::And);
-        builder.Add(andOperator1);
-
-        auto andOperator2 =
-            std::make_shared<TStreamLogicProcessor>(TColumnChainInfo::BuildVector({ 1104, 1103 }), TColumnChainInfo(1105), EOperation::And);
-        builder.Add(andOperator2);
-        builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo(1105), std::nullopt));
-        builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 1, 2 }), std::nullopt));
+        builder.Add(std::make_shared<TFilterProcessor>(1101));
+        builder.Add(std::make_shared<TFilterProcessor>(1102));
+        builder.Add(std::make_shared<TFilterProcessor>(1103));
+        builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 1, 2 })));
         auto chain = builder.Finish().DetachResult();
         Cerr << chain->DebugDOT() << Endl;
         AFL_VERIFY(chain->DebugString() == R"({"processors":[{"processor":{"internal":{},"type":"Const","output":"3"}},{"processor":{"internal":{},"type":"Calculation","input":"1,3","output":"1003"},"fetch":"1","drop":"3"},{"processor":{"internal":{},"type":"Filter","input":"1003"},"drop":"1003"},{"processor":{"internal":{},"type":"Calculation","input":"2","output":"1002"},"fetch":"2"},{"processor":{"internal":{},"type":"Filter","input":"1002"},"drop":"1002"},{"processor":{"internal":{},"type":"Calculation","input":"2","output":"1001"}},{"processor":{"internal":{},"type":"Filter","input":"1001"},"drop":"1001"},{"processor":{"internal":{},"type":"Projection","input":"1,2"}}]})");
@@ -598,7 +593,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
 
         TSchemaColumnResolver resolver(schema);
         NOptimization::TGraph::TBuilder builder(resolver);
-        builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 1 }), std::nullopt));
+        builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 1 })));
         auto chain = builder.Finish().DetachResult();
 
         auto sds = std::make_shared<TSimpleDataSource>();
@@ -627,7 +622,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         NAggregation::TWithKeysAggregationProcessor::TBuilder aggrBuilder;
         builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1}), TColumnChainInfo(3), std::make_shared<NAggregation::TAggregateFunction>(EAggregate::Min)).DetachResult());
         builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({2}), TColumnChainInfo(4), std::make_shared<NAggregation::TAggregateFunction>(EAggregate::Max)).DetachResult());
-        builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 3, 4 }), std::nullopt));
+        builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 3, 4 })));
         auto chain = builder.Finish().DetachResult();
         auto sds = std::make_shared<TSimpleDataSource>();
         ui32 idx = 1;
@@ -656,7 +651,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         NOptimization::TGraph::TBuilder builder(resolver);
         builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1}), TColumnChainInfo(3), std::make_shared<NAggregation::TAggregateFunction>(EAggregate::Sum)).DetachResult());
         builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({2}), TColumnChainInfo(4), std::make_shared<NAggregation::TAggregateFunction>(EAggregate::Sum)).DetachResult());
-        builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 3, 4 }), std::nullopt));
+        builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 3, 4 })));
         auto chain = builder.Finish().DetachResult();
 
         auto sds = std::make_shared<TSimpleDataSource>();

@@ -62,7 +62,7 @@ private:
         static void BuildHashesImpl(
             const ui8* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, TActor& actor) {
             TBuffer fakeString;
-            if (!op || op == NRequest::TLikePart::EOperation::StartsWith) {
+            if (!op || op == NRequest::TLikePart::EOperation::StartsWith || op == NRequest::TLikePart::EOperation::Equals) {
                 for (ui32 c = 1; c <= CharsCount; ++c) {
                     fakeString.Clear();
                     fakeString.Fill('\0', CharsCount - c);
@@ -77,7 +77,7 @@ private:
             for (; c + CharsCount <= dataSize; ++c) {
                 THashesCountSelector<HashesCount, CharsCount>::BuildHashes(data + c, actor);
             }
-            if (!op || op == NRequest::TLikePart::EOperation::EndsWith) {
+            if (!op || op == NRequest::TLikePart::EOperation::EndsWith || op == NRequest::TLikePart::EOperation::Equals) {
                 for (; c < dataSize; ++c) {
                     fakeString.Clear();
                     fakeString.Append((const char*)data + c, dataSize - c);

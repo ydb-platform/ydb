@@ -338,7 +338,7 @@ TConclusionStatus TProgramBuilder::ReadFilter(const NKikimrSSA::TProgram::TFilte
     if (!column.HasId() || !column.GetId()) {
         return TConclusionStatus::Fail("incorrect column in filter predicate");
     }
-    Builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo(column.GetId()), Limit));
+    Builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo(column.GetId())));
     return TConclusionStatus::Success();
 }
 
@@ -350,7 +350,7 @@ TConclusionStatus TProgramBuilder::ReadProjection(const NKikimrSSA::TProgram::TP
     for (auto& col : projection.GetColumns()) {
         columns.emplace_back(col.GetId());
     }
-    Builder.Add(std::make_shared<TProjectionProcessor>(std::move(columns), Limit));
+    Builder.Add(std::make_shared<TProjectionProcessor>(std::move(columns)));
     return TConclusionStatus::Success();
 }
 

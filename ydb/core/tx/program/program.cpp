@@ -108,7 +108,7 @@ TConclusionStatus TProgramContainer::ParseProgram(const NArrow::NSSA::IColumnRes
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("parse_proto_program", program.DebugString());
 //    Cerr << program.DebugString() << Endl;
-    NArrow::NSSA::TProgramBuilder programBuilder(columnResolver, KernelsRegistry, Limit);
+    NArrow::NSSA::TProgramBuilder programBuilder(columnResolver, KernelsRegistry);
     for (auto& cmd : program.GetCommand()) {
         switch (cmd.GetLineCase()) {
             case TId::kAssign: {

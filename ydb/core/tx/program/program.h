@@ -15,7 +15,6 @@ namespace NKikimr::NOlap {
 class TProgramContainer {
 private:
     using TColumnInfo = NArrow::NSSA::TColumnInfo;
-    YDB_READONLY_DEF(std::optional<ui32>, Limit);
     NKikimrSSA::TProgram ProgramProto;
     std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
     std::shared_ptr<arrow::RecordBatch> ProgramParameters;   // TODO
@@ -25,11 +24,6 @@ private:
     YDB_READONLY_DEF(NIndexes::TIndexCheckerContainer, IndexChecker);
 
 public:
-    void SetLimit(const ui32 value) {
-        AFL_VERIFY(!Limit);
-        Limit = value;
-    }
-
     bool IsGenerated(const ui32 columnId) const {
         if (!Program) {
             return false;

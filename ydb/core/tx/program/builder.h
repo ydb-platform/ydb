@@ -23,17 +23,14 @@ private:
     mutable THashMap<ui32, std::shared_ptr<arrow::Scalar>> Constants;
 
     NArrow::NSSA::NGraph::NOptimization::TGraph::TBuilder Builder;
-    std::optional<ui32> Limit;
 
 public:
     mutable THashMap<ui32, TColumnInfo> Sources;
 
-    explicit TProgramBuilder(
-        const NArrow::NSSA::IColumnResolver& columnResolver, const TKernelsRegistry& kernelsRegistry, const std::optional<ui32> limit)
+    explicit TProgramBuilder(const NArrow::NSSA::IColumnResolver& columnResolver, const TKernelsRegistry& kernelsRegistry)
         : ColumnResolver(columnResolver)
         , KernelsRegistry(kernelsRegistry)
-        , Builder(ColumnResolver)
-        , Limit(limit) {
+        , Builder(ColumnResolver) {
     }
 
 private:

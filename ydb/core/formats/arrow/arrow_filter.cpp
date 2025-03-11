@@ -785,24 +785,25 @@ TString TColumnFilter::DebugString() const {
     return sb;
 }
 
-TColumnFilter TColumnFilter::Cut(const ui32 recordsCount, const ui32 limit, const bool reverse) const {
+TColumnFilter TColumnFilter::Cut(const ui32 filteredRecordsCount, const ui32 limit, const bool reverse) const {
     if (IsTotalDenyFilter()) {
         return TColumnFilter::BuildDenyFilter();
     }
     TColumnFilter result = TColumnFilter::BuildAllowFilter();
     if (IsTotalAllowFilter()) {
-        if (recordsCount <= limit) {
+        if (filteredRecordsCount <= limit) {
             return result;
         }
         if (reverse) {
-            result.Add(false, recordsCount - limit);
+            result.Add(false, filteredRecordsCount - limit);
             result.Add(true, limit);
         } else {
             result.Add(true, limit);
-            result.Add(false, recordsCount - limit);
+            result.Add(false, filteredRecordsCount - limit);
         }
     } else {
-        AFL_VERIFY(GetRecordsCountVerified() == recordsCount)("filter", GetRecordsCountVerified())("ext", recordsCount);
+        AFL_VERIFY_DEBUG(GetFilteredCountVerified() == filteredRecordsCount)
+        ("filter", GetFilteredCountVerified())("total", GetRecordsCountVerified())("ext", filteredRecordsCount);
         ui32 cutCount = 0;
         bool currentValue = reverse ? LastValue : GetStartValue();
         const auto scan = [&](auto begin, auto end) {

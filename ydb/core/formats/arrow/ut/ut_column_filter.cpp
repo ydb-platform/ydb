@@ -82,15 +82,15 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
         {
             auto cut = filter.Cut(100, 10, false);
             AFL_VERIFY(cut.DebugString() == "{1}[10,90]")("val", cut.DebugString());
-            auto cut1 = cut.Cut(100, 3, false);
+            auto cut1 = cut.Cut(10, 3, false);
             AFL_VERIFY(cut1.DebugString() == "{1}[3,97]")("val", cut1.DebugString());
-            auto cut2 = cut.Cut(100, 3, true);
+            auto cut2 = cut.Cut(10, 3, true);
             AFL_VERIFY(cut2.DebugString() == "{0}[7,3,90]")("val", cut2.DebugString());
         }
         {
             auto cut = filter.Cut(100, 10, true);
             AFL_VERIFY(cut.DebugString() == "{0}[90,10]")("val", cut.DebugString());
-            auto cut1 = cut.Cut(100, 0, true);
+            auto cut1 = cut.Cut(10, 0, true);
             AFL_VERIFY(cut1.DebugString() == "{0}[100]")("val", cut1.DebugString());
         }
     }

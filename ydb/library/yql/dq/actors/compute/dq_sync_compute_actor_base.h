@@ -30,7 +30,7 @@ protected:
     void DoExecuteImpl() override{
         auto sourcesState = static_cast<TDerived*>(this)->GetSourcesState();
 
-        TBase::PollAsyncInput();
+        auto lastPollResult = TBase::PollAsyncInput();
         ERunStatus status = TaskRunner->Run();
 
         CA_LOG_T("Resume execution, run status: " << status);
@@ -44,6 +44,13 @@ protected:
         }
 
         TBase::ProcessOutputsImpl(status);
+
+        if (lastPollResult && (*lastPollResult != EResumeSource::CAPollAsyncNoSpace || status == ERunStatus::PendingInput)) {
+            // If only reason for continuing was lack on space on all sources,
+            // only continue execution when input was consumed;
+            // otherwise this may result in busy-poll
+            TBase::ContinueExecute(*lastPollResult);
+        }
     }
 
     void DoTerminateImpl() override {

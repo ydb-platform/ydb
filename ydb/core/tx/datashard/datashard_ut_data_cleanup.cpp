@@ -329,6 +329,46 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         CheckTableData(server, proxyDSs, "/Root/table-1");
         CheckTableData(server, proxyDSs, "/Root/table-2");
     }
+
+    Y_UNIT_TEST(BorrowerDataCleanedAfterCopyTable) {
+        auto [server, sender, tableShards, proxyDSs] = SetupWithTable(true);
+        auto& runtime = *server->GetRuntime();
+
+        auto txIdCopy = AsyncCreateCopyTable(server, sender, "/Root", "table-2", "/Root/table-1");
+        WaitTxNotification(server, sender, txIdCopy);
+        auto table2Shards = GetTableShards(server, sender, "/Root/table-2");
+        auto table2Id = ResolveTableId(server, sender, "/Root/table-2");
+
+        ExecSQL(server, sender, "DELETE FROM `/Root/table-1` WHERE key IN (1, 4);");
+        ExecSQL(server, sender, "DELETE FROM `/Root/table-2` WHERE key IN (1, 4);");
+        SimulateSleep(runtime, TDuration::Seconds(2));
+
+        ui64 dataCleanupGeneration = 24;
+        {
+            // cleanup for the first table should not be completed due to borrowed parts
+            auto request = MakeHolder<TEvDataShard::TEvForceDataCleanup>(dataCleanupGeneration);
+            runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender, TDuration::Seconds(10));
+            UNIT_ASSERT(!ev);
+        }
+        {
+            // cleanup for the second table
+            auto request = MakeHolder<TEvDataShard::TEvForceDataCleanup>(dataCleanupGeneration);
+            runtime.SendToPipe(table2Shards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
+            CheckResultEvent(*ev->Get(), table2Shards.at(0), dataCleanupGeneration);
+        }
+        {
+            // cleanup should be continued after compaction of the second table
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
+            CheckResultEvent(*ev->Get(), tableShards.at(0), dataCleanupGeneration);
+        }
+
+        CheckTableData(server, proxyDSs, "/Root/table-1");
+        CheckTableData(server, proxyDSs, "/Root/table-2");
+    }
 }
 
 } // namespace NKikimr

@@ -602,4 +602,17 @@ bool TExecutorBorrowLogic::HasLoanedParts() const {
     return false;
 }
 
+bool TExecutorBorrowLogic::HasLoanedBlobsBefore(ui32 generation, ui32 step) const {
+    for (const auto &xpair : BorrowedInfo) {
+        if (xpair.second.BorrowInfo.FullBorrow) {
+            for (const auto& blobId : xpair.second.BorrowInfo.Keep) {
+                if (std::make_tuple(blobId.Generation(), blobId.Step()) < std::tie(generation, step)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 }}

@@ -10,6 +10,7 @@
 #include <ydb/library/login/password_checker/password_checker.h>
 #include <ydb/library/login/password_checker/hash_checker.h>
 #include <ydb/library/login/account_lockout/account_lockout.h>
+#include <ydb/library/login/cache/lru.h>
 
 namespace NLogin {
 

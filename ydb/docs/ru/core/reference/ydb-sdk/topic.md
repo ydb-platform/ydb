@@ -961,7 +961,7 @@
 
   ```c#
   await writer.WriteAsync(
-      new Ydb.Sdk.Services.Topic.Writer.Message<string>("Hello Example YDB Topics!")
+      new Ydb.Sdk.Services.Topic.Writer.Message<string>("Hello, Example YDB Topics!")
           { Metadata = { new Metadata("meta-key", "meta-value"u8.ToArray()) } }
   );
   ```

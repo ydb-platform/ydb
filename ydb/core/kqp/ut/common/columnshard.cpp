@@ -39,7 +39,10 @@ namespace NKqp {
         if (!kikimrSettings.FeatureFlags.HasEnableTieringInColumnShard()) {
             kikimrSettings.SetEnableTieringInColumnShard(true);
         }
-
+        if (!kikimrSettings.FeatureFlags.HasEnableExternalDataSources()) {
+            kikimrSettings.SetEnableExternalDataSources(true);
+            kikimrSettings.AppConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        }
         Kikimr = std::make_unique<TKikimrRunner>(kikimrSettings);
         TableClient = std::make_unique<NYdb::NTable::TTableClient>(Kikimr->GetTableClient());
         Session = std::make_unique<NYdb::NTable::TSession>(TableClient->CreateSession().GetValueSync().GetSession());

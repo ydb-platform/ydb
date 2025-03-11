@@ -41,7 +41,15 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         if (!appConfig) {
             appConfig.emplace();
         }
+<<<<<<< HEAD
         appConfig->MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+=======
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("ClickHouse");
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("MySQL");
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("Ydb");
+>>>>>>> 3de4a6c7233... YQ-4084 Add available external data sources (#15192)
 
         auto settings = TKikimrSettings();
 

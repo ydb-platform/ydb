@@ -81,7 +81,7 @@ Ensure that text follows proper language rules with no typos, grammar, punctuati
 ## Things to avoid
 
 - Jargon and slang.
-- Using "we."
+- Using "we".
 - Jokes and other emotional content.
 - Excessively long sentences.
 - Unrelated topics and references, such as culture, religion, or politics.

@@ -1259,7 +1259,7 @@ TString TSchemeShard::PathToString(TPathElement::TPtr item) {
 bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme &scheme, TString &errStr) {
     const auto& conditions = scheme.GetApplyIf();
 
-    for(const auto& item: conditions) {
+    for (const auto& item: conditions) {
         if (!item.HasPathId()) {
             continue;
         }

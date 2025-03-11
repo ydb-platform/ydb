@@ -5206,19 +5206,4 @@ TMaybeNode<TExprBase> ExportYtEquiJoin(TYtEquiJoin equiJoin, const TYtJoinNodeOp
     return TExprBase(ctx.ChangeChildren(join.Ref(), std::move(children)));
 }
 
-TString JoinLeafLabel(TExprNode::TPtr label) {
-    if (label->ChildrenSize() == 0) {
-        return TString(label->Content());
-    }
-    TString result;
-    for (ui32 i = 0; i < label->ChildrenSize(); ++i) {
-        result += label->Child(i)->Content();
-        if (i+1 != label->ChildrenSize()) {
-            result += ",";
-        }
-    }
-
-    return result;
-}
-
 }

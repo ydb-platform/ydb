@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
-#include <ydb/library/yql/providers/solomon/async_io/dq_solomon_write_actor.h>
+#include <ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>

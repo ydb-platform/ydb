@@ -795,15 +795,17 @@ namespace NKikimr::NBsController {
                 }
 
                 for (ui32 orderNum = 0; orderNum < group.size(); ++orderNum) {
-                    const TVDiskIdShort vdisk = Topology.GetVDiskId(orderNum);
-                    ui32 pRealm = group[orderNum]->Position.Realm.Index();
-                    ui32 desiredPRealm = RealmNavigator[vdisk.FailRealm];
-                    if (pRealm != desiredPRealm) {
-                        if (realmOccupation[pRealm].size() > 1) {
-                            // disks from different fail realms in one Realm present
-                            failDetected(EFailLevel::REALM_FAIL, orderNum);
-                        } else {
-                            failDetected(EFailLevel::MULTIPLE_REALM_OCCUPATION, orderNum);
+                    if (group[orderNum]) {
+                        const TVDiskIdShort vdisk = Topology.GetVDiskId(orderNum);
+                        ui32 pRealm = group[orderNum]->Position.Realm.Index();
+                        ui32 desiredPRealm = RealmNavigator[vdisk.FailRealm];
+                        if (pRealm != desiredPRealm) {
+                            if (realmOccupation[pRealm].size() > 1) {
+                                // disks from different fail realms in one Realm present
+                                failDetected(EFailLevel::REALM_FAIL, orderNum);
+                            } else {
+                                failDetected(EFailLevel::MULTIPLE_REALM_OCCUPATION, orderNum);
+                            }
                         }
                     }
                 }

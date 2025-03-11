@@ -1407,6 +1407,7 @@ message TEvNodeWardenGroupInfo {
 message TEvControllerProposeConfigRequest {
     optional uint64 ConfigHash = 1;
     optional uint64 ConfigVersion = 2;
+    optional bool Distconf = 3; // is the request originated from distconf?
 }
 
 message TEvControllerProposeConfigResponse {

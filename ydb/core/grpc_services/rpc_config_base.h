@@ -183,21 +183,22 @@ protected:
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         auto *self = Self();
-        if (ev->Get()->Config->GetGeneration() || self->IsDistconfEnableQuery()) { // distconf (will be) enabled
+        if (ev->Get()->SelfManagementEnabled || self->IsDistconfEnableQuery()) { // distconf (will be) enabled
             auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
             self->FillDistconfQuery(*ev);
             self->Send(MakeBlobStorageNodeWardenID(self->SelfId().NodeId()), ev.release());
         } else { // classic BSC
-            BSCTabletId = MakeBSControllerID();
             CreatePipe();
-            SendGetInterfaceVersion();
         }
     }
 
     void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev) {
         auto *self = Self();
         auto& record = ev->Get()->Record;
-        if (record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+        if (auto status = record.GetStatus(); status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::CONTINUE_BSC) {
+            // continue with BSC
+            CreatePipe();
+        } else if (status != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
             self->Reply(Ydb::StatusIds::INTERNAL_ERROR, record.GetErrorReason(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                 self->ActorContext());
         } else {
@@ -217,15 +218,13 @@ protected:
 
     void CreatePipe() {
         auto *self = Self();
-        BSCPipeClient = self->Register(NTabletPipe::CreateClient(self->SelfId(), BSCTabletId, GetPipeConfig()));
-    }
+        BSCPipeClient = self->Register(NTabletPipe::CreateClient(self->SelfId(), MakeBSControllerID(), GetPipeConfig()));
 
-    void SendGetInterfaceVersion() {
         auto req = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         auto& record = req->Record;
         auto *request = record.MutableRequest();
         request->AddCommand()->MutableGetInterfaceVersion();
-        NTabletPipe::SendData(Self()->SelfId(), BSCPipeClient, req.release(), 0, TBase::Span_.GetTraceId());
+        NTabletPipe::SendData(self->SelfId(), BSCPipeClient, req.release(), 0, TBase::Span_.GetTraceId());
         State = EState::GET_INTERFACE_VERSION;
     }
 
@@ -397,7 +396,6 @@ private:
     };
 
     EState State = EState::UNKNOWN;
-    ui64 BSCTabletId = 0;
     TActorId BSCPipeClient;
     ui32 InterfaceVersion = 0;
 };

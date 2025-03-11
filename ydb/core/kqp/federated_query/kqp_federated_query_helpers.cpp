@@ -1,5 +1,8 @@
 #include "kqp_federated_query_helpers.h"
 
+#include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
+
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/protos/auth.pb.h>
@@ -54,6 +57,11 @@ namespace NKikimr::NKqp {
         NHttp::CrackURL(endpoint, scheme, host, uri);
 
         return std::make_pair(ToString(host), scheme == "grpcs");
+    }
+
+    bool IsValidExternalDataSourceType(const TString& type) {
+        static auto allTypes = NYql::GetAllExternalDataSourceTypes();
+        return allTypes.contains(type);
     }
 
     // TKqpFederatedQuerySetupFactoryDefault contains network clients and service actors necessary
@@ -161,6 +169,11 @@ namespace NKikimr::NKqp {
             return std::make_shared<TKqpFederatedQuerySetupFactoryNoop>();
         }
 
+        for (const auto& source : appConfig.GetQueryServiceConfig().GetAvailableExternalDataSources()) {
+            if (!IsValidExternalDataSourceType(source)) {
+                ythrow yexception() << "wrong AvailableExternalDataSources \"" << source << "\"";
+            }
+        }
         return std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryDefault>(setup, appData, appConfig);
     }
 

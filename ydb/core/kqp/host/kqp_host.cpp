@@ -1893,6 +1893,7 @@ private:
         solomonState->Gateway = FederatedQuerySetup->SolomonGateway;
         solomonState->DqIntegration = NYql::CreateSolomonDqIntegration(solomonState);
         solomonState->Configuration->Init(FederatedQuerySetup->SolomonGatewayConfig, TypesCtx);
+        solomonState->ExecutorPoolId = AppData()->UserPoolId;
 
         TypesCtx->AddDataSource(NYql::SolomonProviderName, NYql::CreateSolomonDataSource(solomonState));
         TypesCtx->AddDataSink(NYql::SolomonProviderName, NYql::CreateSolomonDataSink(solomonState));

@@ -637,6 +637,25 @@ public:
                 getIssues());
             return;
         }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE: {
+            CA_LOG_W("Got OUT_OF_SPACE for table `"
+                << TableId.PathId.ToString() << "`."
+                << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                << " Sink=" << this->SelfId() << "."
+                << " Ignored this error."
+                << getIssues().ToOneLineString());
+            // TODO: support waiting
+            if (!InconsistentTx)  {
+                TxManager->SetError(ev->Get()->Record.GetOrigin());
+                RuntimeError(
+                    NYql::NDqProto::StatusIds::OVERLOADED,
+                    NYql::TIssuesIds::KIKIMR_OVERLOADED,
+                    TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is out of space. Table `"
+                        << TablePath << "`.",
+                    getIssues());
+            }
+            return;
+        }        
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
             CA_LOG_W("Got OVERLOADED for table `"
                 << TableId.PathId.ToString() << "`."
@@ -778,19 +797,20 @@ public:
                 return builder;
             }());
 
-        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-            Y_ABORT_UNLESS(Mode == EMode::WRITE);
-            if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
-                YQL_ENSURE(TxManager->BrokenLocks());
-                NYql::TIssues issues;
-                issues.AddIssue(*TxManager->GetLockIssue());
-                RuntimeError(
-                    NYql::NDqProto::StatusIds::ABORTED,
-                    NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
-                    TStringBuilder() << "Transaction locks invalidated. Table `"
-                        << TablePath << "`.",
-                    issues);
-                return;
+        if (Mode == EMode::WRITE) {
+            for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+                if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
+                    YQL_ENSURE(TxManager->BrokenLocks());
+                    NYql::TIssues issues;
+                    issues.AddIssue(*TxManager->GetLockIssue());
+                    RuntimeError(
+                        NYql::NDqProto::StatusIds::ABORTED,
+                        NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
+                        TStringBuilder() << "Transaction locks invalidated. Table `"
+                            << TablePath << "`.",
+                        issues);
+                    return;
+                }
             }
         }
 
@@ -1143,6 +1163,10 @@ public:
         }
 
         Callbacks->OnError(statusCode, std::move(issues));
+    }
+
+    void Unlink() {
+        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
     }
 
     void PassAway() override {;
@@ -2397,6 +2421,20 @@ public:
                 getIssues());
                 return;
         }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE: {
+            CA_LOG_W("Got OUT_OF_SPACE for tables."
+                << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                << " Sink=" << this->SelfId() << "."
+                << " Ignored this error."
+                << getIssues().ToOneLineString());
+            TxManager->SetError(ev->Get()->Record.GetOrigin());
+            ReplyErrorAndDie(
+                NYql::NDqProto::StatusIds::OVERLOADED,
+                NYql::TIssuesIds::KIKIMR_OVERLOADED,
+                TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << "(" << getPathes() << ")" << " is out of space.",
+                getIssues());
+            return;
+        }
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
             CA_LOG_W("Got OVERLOADED for tables."
                 << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
@@ -2644,6 +2682,10 @@ public:
         });
         ExecuterActorId = {};
         Y_ABORT_UNLESS(GetTotalMemory() == 0);
+
+        for (auto& [_, info] : WriteInfos) {
+            info.WriteTableActor->Unlink();
+        }
     }
 
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::EYqlIssueCode id, const TString& message, const NYql::TIssues& subIssues) override {

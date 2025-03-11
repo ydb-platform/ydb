@@ -1745,7 +1745,7 @@ If a commit fails with an error, the application should log it and continue; it 
           }
           catch (ReaderException e)
           {
-              logger.LogError(e, "Failed commit message");
+              logger.LogError(e, "Failed to commit a message");
           }
       }
   }

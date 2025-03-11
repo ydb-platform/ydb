@@ -2,7 +2,6 @@
 #include "abstract.h"
 #include "checker.h"
 #include "collection.h"
-#include "coverage.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/columnshard/splitter/chunks.h>
@@ -29,6 +28,17 @@ class TOlapSchema;
 }
 
 namespace NKikimr::NOlap::NIndexes {
+namespace NRequest {
+class TLikePart {
+public:
+    enum class EOperation {
+        StartsWith,
+        EndsWith,
+        Contains,
+        Equals
+    };
+};
+}   // namespace NRequest
 
 class IIndexMeta {
 private:
@@ -52,8 +62,6 @@ protected:
     virtual TConclusion<std::shared_ptr<IPortionDataChunk>> DoBuildIndexOptional(
         const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount,
         const TIndexInfo& indexInfo) const = 0;
-    virtual void DoFillIndexCheckers(
-        const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) = 0;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const = 0;
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const = 0;
@@ -111,10 +119,6 @@ public:
         const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount,
         const TIndexInfo& indexInfo) const {
         return DoBuildIndexOptional(data, recordsCount, indexInfo);
-    }
-
-    void FillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const {
-        return DoFillIndexCheckers(info, schema);
     }
 
     bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto);

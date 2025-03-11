@@ -181,27 +181,6 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
     return result;
 }
 
-void TIndexMeta::DoFillIndexCheckers(
-    const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& /*schema*/) const {
-    for (auto&& branch : info->GetBranches()) {
-        for (auto&& i : branch->GetEquals()) {
-            if (i.first.GetColumnId() != GetColumnId()) {
-                continue;
-            }
-            ui64 hashBase = 0;
-            if (!GetDataExtractor()->CheckForIndex(i.first, hashBase)) {
-                continue;
-            }
-            std::set<ui64> hashes;
-            for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
-                const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(i.second, hashSeed);
-                hashes.emplace(hash);
-            }
-            branch->MutableIndexes().emplace_back(std::make_shared<TBloomFilterChecker>(GetIndexId(), hashBase, std::move(hashes)));
-        }
-    }
-}
-
 TConclusion<std::shared_ptr<IIndexHeader>> TIndexMeta::DoBuildHeader(const TChunkOriginalData& data) const {
     if (!data.HasData()) {
         return std::shared_ptr<IIndexHeader>();

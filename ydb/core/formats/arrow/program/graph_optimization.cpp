@@ -88,10 +88,10 @@ TGraph::TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, co
             if (Producers.find(input.GetColumnId()) != Producers.end()) {
                 continue;
             }
-            const TString name = resolver.GetColumnName(input.GetColumnId(), true);
+            const TString name = Resolver.GetColumnName(input.GetColumnId(), true);
 
             auto inputFetcher = AddNode(std::make_shared<TOriginalColumnDataProcessor>(
-                input.GetColumnId(), input.GetColumnId(), resolver.GetColumnName(input.GetColumnId()), ""));
+                input.GetColumnId(), input.GetColumnId(), Resolver.GetColumnName(input.GetColumnId()), ""));
             //            AFL_VERIFY(Producers.emplace(input.GetColumnId(), inputFetcher.get()).second);
 
             auto nodeInputAssembler =
@@ -135,6 +135,52 @@ TConclusion<bool> TGraph::OptimizeConditionsForStream(TGraphNode* condNode) {
     nodeOwner->GetProcessor()->RemoveInput(condNode->GetOutputEdges().begin()->first.GetResourceId());
     RemoveNode(condNode->GetIdentifier());
     return true;
+}
+
+TConclusion<bool> TGraph::OptimizeForFetchSubColumns(TGraphNode* condNode) {
+    if (!condNode->Is(EProcessorType::AssembleOriginalData)) {
+        return false;
+    }
+    if (!!condNode->GetProcessorAs<TOriginalColumnAccessorProcessor>()->GetSubColumnName()) {
+        return false;
+    }
+    auto originalAssemble = condNode->GetProcessorAs<TOriginalColumnAccessorProcessor>();
+    std::vector<TGraphNode*> removeTo;
+    std::vector<ui32> removeResourceId;
+    THashMap<TResourceAddress, TGraphNode*> resourceProducers;
+    for (auto&& [_, i] : condNode->GetOutputEdges()) {
+        if (!i->Is(EProcessorType::Calculation)) {
+            continue;
+        }
+        auto addr = GetOriginalAddress(i);
+        if (!addr) {
+            continue;
+        }
+        if (!addr->GetSubColumnName()) {
+            continue;
+        }
+        AFL_VERIFY(addr->GetColumnId() == originalAssemble->GetColumnId());
+        auto it = resourceProducers.find(*addr);
+        if (it == resourceProducers.end()) {
+            auto inputFetcher = AddNode(std::make_shared<TOriginalColumnDataProcessor>(
+                addr->GetColumnId(), addr->GetColumnId(), Resolver.GetColumnName(addr->GetColumnId()), addr->GetSubColumnName()));
+            auto nodeInputAssembler = AddNode(std::make_shared<TOriginalColumnAccessorProcessor>(
+                addr->GetColumnId(), addr->GetColumnId(), addr->GetColumnId(), addr->GetSubColumnName()));
+            AddEdge(inputFetcher.get(), nodeInputAssembler.get(), addr->GetColumnId());
+            it = resourceProducers.emplace(*addr, nodeInputAssembler.get()).first;
+        }
+        AddEdge(it->second, i, addr->GetColumnId());
+        removeTo.emplace_back(i);
+        removeResourceId.emplace_back(addr->GetColumnId());
+    }
+    ui32 idx = 0;
+    for (auto&& i : removeTo) {
+        RemoveEdge(condNode, i, removeResourceId[idx++]);
+    }
+    if (condNode->GetOutputEdges().empty()) {
+        RemoveBranch(condNode);
+    }
+    return (bool)removeTo.size();
 }
 
 TConclusion<bool> TGraph::OptimizeIndexesToApply(TGraphNode* condNode) {
@@ -445,6 +491,20 @@ TConclusionStatus TGraph::Collapse() {
             }
         }
     }
+    hasChanges = true;
+    while (hasChanges) {
+        hasChanges = false;
+        for (auto&& [_, n] : Nodes) {
+            auto conclusion = OptimizeForFetchSubColumns(n.get());
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
+            if (*conclusion) {
+                hasChanges = true;
+                break;
+            }
+        }
+    }
     return TConclusionStatus::Success();
 }
 
@@ -468,6 +528,32 @@ public:
 
 std::shared_ptr<NExecution::TCompiledGraph> TGraph::Compile() {
     return std::make_shared<NExecution::TCompiledGraph>(*this, Resolver);
+}
+
+void TGraph::RemoveBranch(TGraphNode* from) {
+    THashSet<ui32> nodeIdsToRemove;
+    THashMap<ui32, TGraphNode*> current;
+    current.emplace(from->GetIdentifier(), from);
+    nodeIdsToRemove.emplace(from->GetIdentifier());
+    while (current.size()) {
+        THashMap<ui32, TGraphNode*> next;
+        for (auto&& [_, i] : current) {
+            for (auto&& [_, e] : i->GetInputEdges()) {
+                if (nodeIdsToRemove.emplace(e->GetIdentifier()).second) {
+                    next.emplace(e->GetIdentifier(), e);
+                }
+            }
+            for (auto&& [_, e] : i->GetOutputEdges()) {
+                if (nodeIdsToRemove.emplace(e->GetIdentifier()).second) {
+                    next.emplace(e->GetIdentifier(), e);
+                }
+            }
+        }
+        current = next;
+    }
+    for (auto&& i : nodeIdsToRemove) {
+        RemoveNode(i);
+    }
 }
 
 TString TResourceAddress::DebugString() const {

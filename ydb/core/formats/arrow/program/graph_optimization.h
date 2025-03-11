@@ -142,6 +142,8 @@ private:
         return it->second;
     }
     std::optional<TResourceAddress> GetOriginalAddress(TGraphNode* condNode) const;
+    TConclusion<bool> OptimizeForFetchSubColumns(TGraphNode* condNode);
+
     TConclusion<bool> OptimizeConditionsForStream(TGraphNode* condNode);
     TConclusion<bool> OptimizeConditionsForIndexes(TGraphNode* condNode);
     TConclusion<bool> OptimizeIndexesToApply(TGraphNode* condNode);
@@ -152,6 +154,7 @@ private:
     void AddEdge(TGraphNode* from, TGraphNode* to, const ui32 resourceId);
     void RemoveEdge(TGraphNode* from, TGraphNode* to, const ui32 resourceId);
     void RemoveNode(const ui32 idenitifier);
+    void RemoveBranch(TGraphNode* from);
     [[nodiscard]] std::shared_ptr<TGraphNode> AddNode(const std::shared_ptr<IResourceProcessor>& processor) {
         auto result = std::make_shared<TGraphNode>(NodeId++, processor);
         Nodes.emplace(result->GetIdentifier(), result);

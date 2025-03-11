@@ -289,28 +289,4 @@ bool TIndexMeta::DoCheckValue(
     return result;
 }
 
-void TIndexMeta::DoFillIndexCheckers(
-    const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& /*schema*/) const {
-    for (auto&& branch : info->GetBranches()) {
-        for (auto&& i : branch->GetLikes()) {
-            if (i.first.GetColumnId() != GetColumnId()) {
-                continue;
-            }
-            ui64 hashBase;
-            if (!GetDataExtractor()->CheckForIndex(i.first, hashBase)) {
-                continue;
-            }
-            std::set<ui64> hashes;
-            const auto predSet = [&](const ui64 hashSecondary) {
-                hashes.emplace(hashSecondary);
-            };
-            TNGrammBuilder builder(HashesCount);
-            for (auto&& ls : i.second.GetLikeSequences()) {
-                builder.FillNGrammHashes(NGrammSize, ls.second.GetOperation(), ls.second.GetValue(), predSet);
-            }
-            branch->MutableIndexes().emplace_back(std::make_shared<TFilterChecker>(GetIndexId(), std::move(hashes)));
-        }
-    }
-}
-
 }   // namespace NKikimr::NOlap::NIndexes::NBloomNGramm

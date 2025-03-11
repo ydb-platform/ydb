@@ -13,6 +13,15 @@ private:
     YDB_ACCESSOR_DEF(TString, ColumnName);
     YDB_ACCESSOR_DEF(TString, SubColumnName);
 
+    virtual NJson::TJsonValue DoDebugJson() const override {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("col", ColumnName);
+        if (!!SubColumnName) {
+            result.InsertValue("sub", SubColumnName);
+        }
+        return result;
+    }
+
     virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 
     virtual bool IsAggregation() const override {
@@ -20,7 +29,7 @@ private:
     }
 
     virtual ui64 DoGetWeight() const override {
-        return 10;
+        return SubColumnName ? 5 : 10;
     }
 
 public:
@@ -40,12 +49,21 @@ private:
     YDB_READONLY_DEF(TString, SubColumnName);
     virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 
+    virtual NJson::TJsonValue DoDebugJson() const override {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("col", ColumnId);
+        if (!!SubColumnName) {
+            result.InsertValue("sub", SubColumnName);
+        }
+        return result;
+    }
+
     virtual bool IsAggregation() const override {
         return false;
     }
 
     virtual ui64 DoGetWeight() const override {
-        return 5;
+        return SubColumnName ? 2 : 5;
     }
 
 public:

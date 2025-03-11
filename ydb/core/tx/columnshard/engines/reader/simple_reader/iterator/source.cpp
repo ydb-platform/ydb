@@ -310,7 +310,9 @@ TConclusion<bool> TPortionDataSource::DoStartFetchData(
     const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
     std::shared_ptr<NCommon::IKernelFetchLogic> fetcher;
     auto source = std::static_pointer_cast<IDataSource>(context.GetDataSource());
-    if (subColumnName) {
+    if (subColumnName && GetStageData().GetPortionAccessor().GetColumnChunksPointers(columnId).size() &&
+        GetSourceSchema()->GetColumnLoaderVerified(columnId)->GetAccessorConstructor()->GetType() ==
+            NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
         fetcher = std::make_shared<NCommon::TSubColumnsFetchLogic>(columnId, source, std::vector<TString>({ subColumnName }));
     } else {
         fetcher = std::make_shared<NCommon::TDefaultFetchLogic>(columnId, GetContext()->GetCommonContext()->GetStoragesManager());

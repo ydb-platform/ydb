@@ -63,10 +63,6 @@ TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui3
     return TFixStringBitsStorage(filterBits).GetData();
 }
 
-void TBloomIndexMeta::DoFillIndexCheckers(
-    const std::shared_ptr<NRequest::TDataForIndexesCheckers>& /*info*/, const NSchemeShard::TOlapSchema& /*schema*/) const {
-}
-
 bool TBloomIndexMeta::DoCheckValue(
     const TString& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
     std::set<ui64> hashes;

@@ -544,8 +544,14 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         builder.Add(std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(56), 3));
         builder.Add(std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(0), 4));
 
+        builder.Add(std::make_shared<TConstProcessor>(std::make_shared<arrow::StringScalar>("abc"), 10));
         {
-            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({2}), TColumnChainInfo(1001), std::make_shared<TSimpleFunction>(EOperation::MatchSubstring)).DetachResult();
+            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({2, 10}), TColumnChainInfo(10001), 
+                std::make_shared<TSimpleFunction>(EOperation::Add), std::make_shared<TGetJsonPath>()).DetachResult();
+            builder.Add(proc);
+        }
+        {
+            auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({10001}), TColumnChainInfo(1001), std::make_shared<TSimpleFunction>(EOperation::MatchSubstring)).DetachResult();
             proc->SetYqlOperationId((ui32)NYql::TKernelRequestBuilder::EBinaryOp::StringContains);
             builder.Add(proc);
         }

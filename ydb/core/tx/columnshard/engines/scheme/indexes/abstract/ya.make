@@ -1,7 +1,3 @@
-RECURSE_FOR_TESTS(
-    ut
-)
-
 LIBRARY()
 
 SRCS(
@@ -14,9 +10,6 @@ SRCS(
     checker.cpp
     GLOBAL composite.cpp
     simple.cpp
-    tree.cpp
-    coverage.cpp
-    like.cpp
     common.cpp
 )
 

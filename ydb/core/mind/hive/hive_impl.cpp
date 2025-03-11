@@ -581,8 +581,8 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
 
 void THive::Handle(TEvHive::TEvInitMigration::TPtr& ev) {
     BLOG_D("Handle InitMigration " << ev->Get()->Record);
-    Y_DEBUG_ABORT_UNLESS(!AreWeRootHive());
     if (AreWeRootHive()) {
+        Send(ev->Sender, new TEvHive::TEvInitMigrationReply(NKikimrProto::ERROR));
         return;
     }
     if (MigrationState == NKikimrHive::EMigrationState::MIGRATION_READY || MigrationState == NKikimrHive::EMigrationState::MIGRATION_COMPLETE) {

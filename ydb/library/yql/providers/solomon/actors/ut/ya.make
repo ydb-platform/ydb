@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/yql/providers/solomon/async_io)
+UNITTEST_FOR(ydb/library/yql/providers/solomon/actors)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)
 

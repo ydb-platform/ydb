@@ -24,11 +24,6 @@
             "uri": "file://test.test_solomon-Basic-default.txt_/results.txt"
         }
     ],
-    "test.test[solomon-BrokenJsonResponse-]": [
-        {
-            "uri": "file://test.test_solomon-BrokenJsonResponse-_/extracted"
-        }
-    ],
     "test.test[solomon-Downsampling-default.txt]": [
         {
             "uri": "file://test.test_solomon-Downsampling-default.txt_/results.txt"

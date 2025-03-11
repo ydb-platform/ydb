@@ -42,7 +42,7 @@ TVector<TCoAtom> ExtractUserLabels(TPositionHandle pos, TExprContext& ctx, TExpr
 }
 
 const TStructExprType* BuildScheme(TPositionHandle pos, const TVector<TCoAtom>& userLabels, TExprContext& ctx, TVector<TCoAtom>& systemColumns) {
-    auto allSystemColumns = {SOLOMON_SCHEME_KIND, SOLOMON_SCHEME_LABELS, SOLOMON_SCHEME_VALUE, SOLOMON_SCHEME_TS, SOLOMON_SCHEME_TYPE};
+    auto allSystemColumns = {SOLOMON_SCHEME_LABELS, SOLOMON_SCHEME_VALUE, SOLOMON_SCHEME_TS, SOLOMON_SCHEME_TYPE};
     TVector<const TItemExprType*> columnTypes;
     columnTypes.reserve(systemColumns.size() + userLabels.size());
     const TTypeAnnotationNode* stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
@@ -58,7 +58,7 @@ const TStructExprType* BuildScheme(TPositionHandle pos, const TVector<TCoAtom>& 
             type = ctx.MakeType<TDataExprType>(EDataSlot::Double);
         } else if (systemColumn == SOLOMON_SCHEME_LABELS) {
             type = ctx.MakeType<NYql::TDictExprType>(stringType, stringType);
-        } else if (IsIn({ SOLOMON_SCHEME_KIND, SOLOMON_SCHEME_TYPE }, systemColumn)) {
+        } else if (systemColumn = SOLOMON_SCHEME_TYPE) {
             type = stringType;
         } else {
             ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Unknown system column " << systemColumn));

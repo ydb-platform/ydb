@@ -11,12 +11,10 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/http/http_proxy.h>
 
-#include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
-
 namespace NYql::NDq {
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolomonReadActor(
-    NYql::NSo::NProto::TDqSolomonSource&& settings,
+    NYql::NSo::NProto::TDqSolomonSource&& source,
     ui64 inputIndex,
     TCollectStatsLevel statsLevel,
     const TTxId& txId,

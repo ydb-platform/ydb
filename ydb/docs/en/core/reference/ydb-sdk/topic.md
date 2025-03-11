@@ -1385,19 +1385,19 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
 - Go
 
-  {% include "_include/reading_messages_common.md" %}
+  {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
 
 - Python
 
-  {% include "_include/reading_messages_common.md" %}
+  {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
 
 - Java
 
-  {% include "_include/reading_messages_common.md" %}
+  {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
 
 - C#
 
-  {% include "_include/reading_messages_common.md" %}
+  {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
 
 {% endlist %}
 

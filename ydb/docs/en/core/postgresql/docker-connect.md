@@ -1,5 +1,7 @@
 # Connecting via PostgreSQL Protocol
 
+{% include [./_includes/alert.md](./_includes/alert_preview.md) %}
+
 ## Running {{ ydb-short-name }} with PostgreSQL compatibility enabled
 
 Currently, the PostgreSQL compatibility feature is available for testing in the Docker image: `ghcr.io/ydb-platform/local-ydb:nightly`.

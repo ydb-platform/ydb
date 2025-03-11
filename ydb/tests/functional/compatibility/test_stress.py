@@ -36,6 +36,8 @@ class TestStress(object):
         self.cluster = KiKiMR(self.config)
         self.cluster.start()
         self.endpoint = "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port)
+        output_path = yatest.common.test_output_path()
+        self.output_f = open(os.path.join(output_path, "out.log"), "w")
         yield
         self.cluster.stop()
 
@@ -56,9 +58,7 @@ class TestStress(object):
 
     @pytest.mark.parametrize("store_type", ["row"])
     def test_log(self, store_type):
-        timeout_scale = 30
-
-        output_path = yatest.common.test_output_path()
+        timeout_scale = 60
 
         upload_commands = [
             # bulk upsert workload
@@ -74,7 +74,7 @@ class TestStress(object):
 
         # init
         yatest.common.execute(
-            self.get_command_prefix(subcmds=["init"], path=store_type)
+            self.get_command_prefix_log(subcmds=["init"], path=store_type)
             + [
                 "--store",
                 store_type,
@@ -87,17 +87,19 @@ class TestStress(object):
                 "--ttl",
                 "10",
             ],
+            stdout=self.output_f,
+            stderr=self.output_f,
         )
 
         yatest.common.execute(
-            self.get_command_prefix(subcmds=["import", "--bulk-size", "1000", "-t", "1", "generator"], path=store_type),
-            stdout=open(os.path.join(output_path, "import.out"), "w"),
-            stderr=open(os.path.join(output_path, "import.err"), "w"),
+            self.get_command_prefix_log(subcmds=["import", "--bulk-size", "1000", "-t", "1", "generator"], path=store_type),
+            stdout=self.output_f,
+            stderr=self.output_f,
             wait=True,
         )
 
         select = yatest.common.execute(
-            self.get_command_prefix(subcmds=["run", "select"], path=store_type)
+            self.get_command_prefix_log(subcmds=["run", "select"], path=store_type)
             + [
                 "--client-timeout",
                 "10000",
@@ -107,23 +109,23 @@ class TestStress(object):
                 str(timeout_scale * len(upload_commands)),
             ],
             wait=False,
-            stdout=open(os.path.join(output_path, "select.out"), "w"),
-            stderr=open(os.path.join(output_path, "select.err"), "w"),
+            stdout=self.output_f,
+            stderr=self.output_f,
         )
 
         for i, command in enumerate(upload_commands):
             yatest.common.execute(
                 command,
                 wait=True,
-                stdout=open(os.path.join(output_path, "write{}.out".format(i)), "w"),
-                stderr=open(os.path.join(output_path, "write{}.err".format(i)), "w"),
+                stdout=self.output_f,
+                stderr=self.output_f,
             )
 
         select.wait()
 
     @pytest.mark.parametrize("mode", ["row"])
     def test_simple_queue(self, mode: str):
-        with Workload(f"grpc://localhost:{self.cluster.nodes[1].grpc_port}", "/Root", 60, mode) as workload:
+        with Workload(f"grpc://localhost:{self.cluster.nodes[1].grpc_port}", "/Root", 180, mode) as workload:
             for handle in workload.loop():
                 handle()
 
@@ -165,7 +167,7 @@ class TestStress(object):
             "run",
             "mixed",
             "--seconds",
-            "100",
+            "180",
             "--threads",
             "10",
             "--cols",
@@ -194,8 +196,8 @@ class TestStress(object):
                 store_type,
             ]
         )
-        yatest.common.execute(init_command, wait=True)
-        yatest.common.execute(run_command, wait=True)
+        yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
 
     @pytest.mark.parametrize("store_type", ["row"])
     def test_tpch1(self, store_type):
@@ -208,7 +210,7 @@ class TestStress(object):
             "workload",
             "tpch",
             "-p",
-            "olap_yatests/tpch/s1",
+            "tpch/s1",
             "init",
             "--store={}".format(store_type),
             "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
@@ -222,7 +224,7 @@ class TestStress(object):
             "workload",
             "tpch",
             "-p",
-            "olap_yatests/tpch/s1",
+            "tpch/s1",
             "import",
             "generator",
             "--scale=1",
@@ -236,7 +238,7 @@ class TestStress(object):
             "workload",
             "tpch",
             "-p",
-            "olap_yatests/tpch/s1",
+            "tpch/s1",
             "run",
             "--scale=1",
             "--exclude",
@@ -245,13 +247,9 @@ class TestStress(object):
             "--check-canonical",
         ]
 
-        output_path = yatest.common.test_output_path()
-
-        f = open(os.path.join(output_path, "out.log"), "w")
-
-        yatest.common.execute(init_command, wait=True, stdout=f, stderr=f)
-        yatest.common.execute(import_command, wait=True, stdout=f, stderr=f)
-        yatest.common.execute(run_command, wait=True, stdout=f, stderr=f)
+        yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        yatest.common.execute(import_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
 
     @pytest.mark.parametrize("store_type", ["row"])
     def test_tpcds1(self, store_type):
@@ -264,7 +262,7 @@ class TestStress(object):
             "workload",
             "tpcds",
             "-p",
-            "olap_yatests/tpcds/s1",
+            "tpcds/s1",
             "init",
             "--store={}".format(store_type),
             "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
@@ -292,7 +290,7 @@ class TestStress(object):
             "workload",
             "tpcds",
             "-p",
-            "olap_yatests/tpcds/s1",
+            "tpcds/s1",
             "run",
             "--scale=1",
             "--check-canonical",
@@ -301,10 +299,6 @@ class TestStress(object):
             "5,7,14,18,22,23,24,26,27,31,33,39,46,51,54,56,58,60,61,64,66,67,68,72,75,77,78,79,80,93",
         ]
 
-        output_path = yatest.common.test_output_path()
-
-        f = open(os.path.join(output_path, "out.log"), "w")
-
-        yatest.common.execute(init_command, wait=True, stdout=f, stderr=f)
-        yatest.common.execute(import_command, wait=True, stdout=f, stderr=f)
-        yatest.common.execute(run_command, wait=True, stdout=f, stderr=f)
+        yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        yatest.common.execute(import_command, wait=True, stdout=self.output_f, stderr=self.output_f)
+        yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)

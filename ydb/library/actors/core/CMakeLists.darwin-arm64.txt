@@ -52,11 +52,9 @@ target_sources(library-actors-core PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/actor_bootstrapped.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/actor_coroutine.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/actor_virtual.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/actorid.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/actorsystem.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ask.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/av_bootstrapped.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/buffer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/callstack.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/cpu_manager.cpp

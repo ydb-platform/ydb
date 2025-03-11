@@ -321,6 +321,7 @@ bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, bool su
 } // unnamed
 
 bool UpdateUsedCluster(TString& usedCluster, const TString& newCluster, ERuntimeClusterSelectionMode mode) {
+    YQL_ENSURE(newCluster);
     switch (mode) {
         case NYql::ERuntimeClusterSelectionMode::Disable: {
             if (!usedCluster) {

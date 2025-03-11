@@ -198,14 +198,15 @@ private:
                 if (auto maybeTable = path.Table().Maybe<TYtTable>()) {
                     auto table = maybeTable.Cast();
                     auto tableName = table.Name().Value();
+                    TString tableCluster{table.Cluster().Value()};
                     if (!NYql::HasSetting(table.Settings().Ref(), EYtSettingType::UserSchema)) {
                         // Don't validate already substituted anonymous tables
                         if (!TYtTableInfo::HasSubstAnonymousLabel(table)) {
-                            const TYtTableDescription& tableDesc = State_->TablesData->GetTable(clusterName,
+                            const TYtTableDescription& tableDesc = State_->TablesData->GetTable(tableCluster,
                                 TString{tableName},
                                 TEpochInfo::Parse(table.Epoch().Ref()));
 
-                            if (!tableDesc.Validate(ctx.GetPosition(table.Pos()), clusterName, tableName,
+                            if (!tableDesc.Validate(ctx.GetPosition(table.Pos()), tableCluster, tableName,
                                 NYql::HasSetting(table.Settings().Ref(), EYtSettingType::WithQB), State_->AnonymousLabels, ctx)) {
                                 return TStatus::Error;
                             }

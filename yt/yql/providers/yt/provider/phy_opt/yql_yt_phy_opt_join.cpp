@@ -25,10 +25,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
 
     auto equiJoin = node.Cast<TCoEquiJoin>();
 
-    TMaybeNode<TYtDSink> dataSink;
-    TString usedCluster;
+    TString runtimeCluster;
     const ERuntimeClusterSelectionMode selectionMode =
         State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+    TVector<TString> inputClusters(equiJoin.ArgCount() - 2);
+    bool hasYtInput = false;
     for (size_t i = 0; i + 2 < equiJoin.ArgCount(); ++i) {
         auto list = equiJoin.Arg(i).Cast<TCoEquiJoinInput>().List();
         if (auto maybeExtractMembers = list.Maybe<TCoExtractMembers>()) {
@@ -36,31 +37,33 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
         }
         if (auto maybeFlatMap = list.Maybe<TCoFlatMapBase>()) {
             TSyncMap syncList;
-            if (!IsYtCompleteIsolatedLambda(maybeFlatMap.Cast().Lambda().Ref(), syncList, usedCluster, false, selectionMode)) {
+            if (!IsYtCompleteIsolatedLambda(maybeFlatMap.Cast().Lambda().Ref(), syncList, inputClusters[i], false, selectionMode)) {
                 return node;
             }
             list = maybeFlatMap.Cast().Input();
         }
         if (!IsYtProviderInput(list)) {
             TSyncMap syncList;
-            if (!IsYtCompleteIsolatedLambda(list.Ref(), syncList, usedCluster, false, selectionMode)) {
+            if (!IsYtCompleteIsolatedLambda(list.Ref(), syncList, inputClusters[i], false, selectionMode)) {
                 return node;
             }
-            continue;
+        } else {
+            hasYtInput = true;
+            auto cluster = ToString(GetClusterName(list));
+            if (!UpdateUsedCluster(inputClusters[i], cluster, selectionMode)) {
+                return node;
+            }
         }
-
-        if (!dataSink) {
-            dataSink = GetDataSink(list, ctx);
-        }
-        auto cluster = ToString(GetClusterName(list));
-        if (!UpdateUsedCluster(usedCluster, cluster, selectionMode)) {
+        if (inputClusters[i] && !UpdateUsedCluster(runtimeCluster, inputClusters[i], selectionMode)) {
             return node;
         }
     }
 
-    if (!dataSink) {
+    if (!hasYtInput) {
         return node;
     }
+
+    YQL_ENSURE(runtimeCluster);
 
     THashMap<TStringBuf, std::pair<TVector<TStringBuf>, ui32>> tableSortKeysUsage =
         CollectTableSortKeysUsage(State_, equiJoin);
@@ -89,7 +92,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
         if (auto maybeFlatMap = listStepForward.Maybe<TCoFlatMapBase>()) {
             auto flatMap = maybeFlatMap.Cast();
             if (IsLambdaSuitableForPullingIntoEquiJoin(flatMap, joinInput.Scope().Ref(), tableKeysMap, extractedMembers.Get())) {
-                if (!IsYtCompleteIsolatedLambda(flatMap.Lambda().Ref(), worldList, usedCluster, false, selectionMode)) {
+                if (!IsYtCompleteIsolatedLambda(flatMap.Lambda().Ref(), worldList, false)) {
                     return node;
                 }
 
@@ -139,7 +142,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
             }
             else {
                 TSyncMap syncList;
-                if (!IsYtCompleteIsolatedLambda(list.Ref(), syncList, usedCluster, false, selectionMode)) {
+                if (!IsYtCompleteIsolatedLambda(list.Ref(), syncList, false)) {
                     return node;
                 }
 
@@ -165,14 +168,14 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
                     return {};
                 }
 
+                TYtDSink dataSink = MakeDataSink(list.Pos(), inputClusters[i] ? inputClusters[i] : runtimeCluster, ctx);
                 section = newSection = Build<TYtSection>(ctx, list.Pos())
                     .Paths()
                         .Add()
                             .Table<TYtOutput>()
                                 .Operation<TYtFill>()
                                     .World(ApplySyncListToWorld(ctx.NewWorld(list.Pos()), syncList, ctx))
-                                    // FIXME?
-                                    .DataSink(dataSink.Cast())
+                                    .DataSink(dataSink)
                                     .Content(MakeJobLambdaNoArg(cleanup.Cast(), ctx))
                                     .Output()
                                         .Add(outTable.ToExprNode(ctx, list.Pos()).Cast<TYtOutTable>())
@@ -231,9 +234,10 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
                 if (!NPrivate::EnsurePersistableYsonTypes(sectionNode.Pos(), *scheme, ctx, State_)) {
                     return {};
                 }
+                TYtDSink dataSink = MakeDataSink(list.Pos(), inputClusters[i] ? inputClusters[i] : runtimeCluster, ctx);
                 auto path = CopyOrTrivialMap(sectionNode.Pos(),
                     TExprBase(world ? world : ctx.NewWorld(sectionNode.Pos())),
-                    dataSink.Cast(),
+                    dataSink,
                     *scheme,
                     Build<TYtSection>(ctx, sectionNode.Pos())
                         .InitFrom(sectionNode)
@@ -296,7 +300,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
 
     const auto join = Build<TYtEquiJoin>(ctx, node.Pos())
         .World(ApplySyncListToWorld(ctx.NewWorld(node.Pos()), worldList, ctx))
-        .DataSink(dataSink.Cast())
+        .DataSink(MakeDataSink(node.Pos(), runtimeCluster, ctx))
         .Input()
             .Add(sections)
         .Build()

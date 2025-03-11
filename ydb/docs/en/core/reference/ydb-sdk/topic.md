@@ -1385,19 +1385,19 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
 - Go
 
-  The SDK receives data from the server in batches and buffers it. Depending on the task, the client code can read messages from the buffer one by one or in batches.
+  {% include "_include/reading_messages_common.md" %}
 
 - Python
 
-  The SDK receives data from the server in batches and buffers it. Depending on the task, the client code can read messages from the buffer one by one or in batches.
+  {% include "_include/reading_messages_common.md" %}
 
 - Java
 
-  The SDK receives data from the server in batches and buffers it. Depending on the task, the client code can read messages from the buffer one by one or in batches.
+  {% include "_include/reading_messages_common.md" %}
 
 - C#
 
-  The SDK receives data from the server in batches and buffers it. Depending on the task, the client code can read messages from the buffer one by one or in batches.
+  {% include "_include/reading_messages_common.md" %}
 
 {% endlist %}
 

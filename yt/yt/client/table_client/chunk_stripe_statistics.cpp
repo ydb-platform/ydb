@@ -1,27 +1,10 @@
 #include "chunk_stripe_statistics.h"
 
-#include <yt/yt/ytlib/controller_agent/serialize.h>
-
 #include <yt/yt/core/ytree/fluent.h>
 
 namespace NYT::NTableClient {
 
-using namespace NControllerAgent;
-
 ////////////////////////////////////////////////////////////////////////////////
-
-void TChunkStripeStatistics::Persist(const TPersistenceContext& context)
-{
-    using NYT::Persist;
-    Persist(context, ChunkCount);
-    Persist(context, DataWeight);
-    Persist(context, RowCount);
-    Persist(context, ValueCount);
-    Persist(context, MaxBlockSize);
-    if (context.GetVersion() >= static_cast<int>(ESnapshotVersion::MaxCompressedDataSizePerJob)) {
-        Persist(context, CompressedDataSize);
-    }
-}
 
 TChunkStripeStatistics operator + (
     const TChunkStripeStatistics& lhs,

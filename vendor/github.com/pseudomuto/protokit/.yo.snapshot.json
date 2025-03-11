@@ -1,0 +1,68 @@
+{
+	"Version": "v0.2.0",
+	"GoVersion": "",
+	"Sum": "h1:hlnBDcy3YEDXH7kc9gV+NLaN0cDzhDvD1s7Y6FZ8RpM=",
+	"Packages": {
+		"github.com/pseudomuto/protokit": {
+			"Imports": [
+				"bytes",
+				"context",
+				"fmt",
+				"github.com/golang/protobuf/proto",
+				"github.com/golang/protobuf/protoc-gen-go/descriptor",
+				"github.com/golang/protobuf/protoc-gen-go/plugin",
+				"io",
+				"io/ioutil",
+				"os",
+				"strconv",
+				"strings"
+			],
+			"TestImports": [
+				"bytes",
+				"context",
+				"errors",
+				"fmt",
+				"github.com/golang/protobuf/proto",
+				"github.com/golang/protobuf/protoc-gen-go/descriptor",
+				"github.com/golang/protobuf/protoc-gen-go/plugin",
+				"github.com/pseudomuto/protokit",
+				"github.com/pseudomuto/protokit/utils",
+				"github.com/stretchr/testify/suite",
+				"log",
+				"testing"
+			]
+		},
+		"github.com/pseudomuto/protokit/examples/jsonator": {
+			"Imports": [
+				"bytes",
+				"encoding/json",
+				"fmt",
+				"github.com/golang/protobuf/proto",
+				"github.com/golang/protobuf/protoc-gen-go/plugin",
+				"github.com/pseudomuto/protokit",
+				"google.golang.org/genproto/googleapis/api/annotations",
+				"log"
+			],
+			"TestImports": null
+		},
+		"github.com/pseudomuto/protokit/fixtures": {
+			"Imports": null,
+			"TestImports": null
+		},
+		"github.com/pseudomuto/protokit/utils": {
+			"Imports": [
+				"errors",
+				"github.com/golang/protobuf/proto",
+				"github.com/golang/protobuf/protoc-gen-go/descriptor",
+				"github.com/golang/protobuf/protoc-gen-go/plugin",
+				"io/ioutil",
+				"path/filepath"
+			],
+			"TestImports": [
+				"github.com/pseudomuto/protokit/utils",
+				"github.com/stretchr/testify/suite",
+				"testing"
+			]
+		}
+	}
+}

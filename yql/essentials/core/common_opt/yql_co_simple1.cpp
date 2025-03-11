@@ -2103,6 +2103,7 @@ TExprNode::TPtr SimpleFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TO
                 }
             }
             auto res = ctx.NewCallable(inputToCheck.Pos(), GetEmptyCollectionName(node->GetTypeAnn()), {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
+            res = KeepWorld(res, *node, ctx, *optCtx.Types);
             return KeepConstraints(res, *node, ctx);
         }
 
@@ -4840,10 +4841,22 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map["WithWorld"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& /*optCtx*/) {
+    map["WithWorld"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         if (node->Child(1)->IsWorld()) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over pure world";
             return node->HeadPtr();
+        }
+
+        if (node->Child(0)->IsCallable("WithWorld")) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " nested";
+            if (node->Child(0)->Child(1) == node->Child(1)) {
+                return node->ChildPtr(0);
+            } else {
+                return ctx.ChangeChild(*node->Child(0), 1, ctx.NewCallable(node->Pos(), SyncName, {
+                    node->ChildPtr(1),
+                    node->Child(0)->Child(1)
+                }));
+            }
         }
 
         return node;

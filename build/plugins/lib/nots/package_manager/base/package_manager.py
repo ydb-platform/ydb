@@ -127,7 +127,7 @@ class BasePackageManager(object):
         return [p[prefix_len:] for p in pj.get_workspace_map(ignore_self=True).keys()]
 
     @timeit
-    def _exec_command(self, args, cwd: str, include_defaults=True, script_path=None, env=None):
+    def _exec_command(self, args, cwd: str, include_defaults=True, script_path=None, env={}):
         if not self.nodejs_bin_path:
             raise PackageManagerError("Unable to execute command: nodejs_bin_path is not configured")
 

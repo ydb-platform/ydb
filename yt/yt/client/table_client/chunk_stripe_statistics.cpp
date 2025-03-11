@@ -1,12 +1,16 @@
 #include "chunk_stripe_statistics.h"
 
+#include <yt/yt/ytlib/controller_agent/serialize.h>
+
 #include <yt/yt/core/ytree/fluent.h>
 
 namespace NYT::NTableClient {
 
+using namespace NControllerAgent;
+
 ////////////////////////////////////////////////////////////////////////////////
 
-void TChunkStripeStatistics::Persist(const NTableClient::TPersistenceContext& context)
+void TChunkStripeStatistics::Persist(const TPersistenceContext& context)
 {
     using NYT::Persist;
     Persist(context, ChunkCount);
@@ -14,6 +18,9 @@ void TChunkStripeStatistics::Persist(const NTableClient::TPersistenceContext& co
     Persist(context, RowCount);
     Persist(context, ValueCount);
     Persist(context, MaxBlockSize);
+    if (context.GetVersion() >= static_cast<int>(ESnapshotVersion::MaxCompressedDataSizePerJob)) {
+        Persist(context, CompressedDataSize);
+    }
 }
 
 TChunkStripeStatistics operator + (
@@ -26,6 +33,7 @@ TChunkStripeStatistics operator + (
     result.RowCount = lhs.RowCount + rhs.RowCount;
     result.ValueCount = lhs.ValueCount + rhs.ValueCount;
     result.MaxBlockSize = std::max(lhs.MaxBlockSize, rhs.MaxBlockSize);
+    result.CompressedDataSize = lhs.CompressedDataSize + rhs.CompressedDataSize;
     return result;
 }
 
@@ -38,6 +46,7 @@ TChunkStripeStatistics& operator += (
     lhs.RowCount += rhs.RowCount;
     lhs.ValueCount += rhs.ValueCount;
     lhs.MaxBlockSize = std::max(lhs.MaxBlockSize, rhs.MaxBlockSize);
+    lhs.CompressedDataSize += rhs.CompressedDataSize;
     return lhs;
 }
 
@@ -60,6 +69,7 @@ void Serialize(const TChunkStripeStatistics& statistics, NYson::IYsonConsumer* c
             .Item("row_count").Value(statistics.RowCount)
             .OptionalItem("value_count", statistics.ValueCount)
             .OptionalItem("max_block_size", statistics.MaxBlockSize)
+            .OptionalItem("compressed_data_size", statistics.CompressedDataSize)
         .EndMap();
 }
 

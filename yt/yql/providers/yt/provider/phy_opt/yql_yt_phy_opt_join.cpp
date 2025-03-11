@@ -1,6 +1,7 @@
 #include "yql_yt_phy_opt.h"
 #include "yql_yt_phy_opt_helper.h"
 
+#include <yt/yql/providers/yt/common/yql_configuration.h>
 #include <yt/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <yt/yql/providers/yt/provider/yql_yt_cbo_helpers.h>
 #include <yt/yql/providers/yt/provider/yql_yt_join_impl.h>
@@ -26,6 +27,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
 
     TMaybeNode<TYtDSink> dataSink;
     TString usedCluster;
+    const ERuntimeClusterSelectionMode selectionMode =
+        State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
     for (size_t i = 0; i + 2 < equiJoin.ArgCount(); ++i) {
         auto list = equiJoin.Arg(i).Cast<TCoEquiJoinInput>().List();
         if (auto maybeExtractMembers = list.Maybe<TCoExtractMembers>()) {
@@ -33,14 +36,14 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
         }
         if (auto maybeFlatMap = list.Maybe<TCoFlatMapBase>()) {
             TSyncMap syncList;
-            if (!IsYtCompleteIsolatedLambda(maybeFlatMap.Cast().Lambda().Ref(), syncList, usedCluster, false)) {
+            if (!IsYtCompleteIsolatedLambda(maybeFlatMap.Cast().Lambda().Ref(), syncList, usedCluster, false, selectionMode)) {
                 return node;
             }
             list = maybeFlatMap.Cast().Input();
         }
         if (!IsYtProviderInput(list)) {
             TSyncMap syncList;
-            if (!IsYtCompleteIsolatedLambda(list.Ref(), syncList, usedCluster, false)) {
+            if (!IsYtCompleteIsolatedLambda(list.Ref(), syncList, usedCluster, false, selectionMode)) {
                 return node;
             }
             continue;
@@ -50,7 +53,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
             dataSink = GetDataSink(list, ctx);
         }
         auto cluster = ToString(GetClusterName(list));
-        if (!UpdateUsedCluster(usedCluster, cluster)) {
+        if (!UpdateUsedCluster(usedCluster, cluster, selectionMode)) {
             return node;
         }
     }
@@ -86,7 +89,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
         if (auto maybeFlatMap = listStepForward.Maybe<TCoFlatMapBase>()) {
             auto flatMap = maybeFlatMap.Cast();
             if (IsLambdaSuitableForPullingIntoEquiJoin(flatMap, joinInput.Scope().Ref(), tableKeysMap, extractedMembers.Get())) {
-                if (!IsYtCompleteIsolatedLambda(flatMap.Lambda().Ref(), worldList, usedCluster, false)) {
+                if (!IsYtCompleteIsolatedLambda(flatMap.Lambda().Ref(), worldList, usedCluster, false, selectionMode)) {
                     return node;
                 }
 
@@ -136,7 +139,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
             }
             else {
                 TSyncMap syncList;
-                if (!IsYtCompleteIsolatedLambda(list.Ref(), syncList, usedCluster, false)) {
+                if (!IsYtCompleteIsolatedLambda(list.Ref(), syncList, usedCluster, false, selectionMode)) {
                     return node;
                 }
 
@@ -168,6 +171,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
                             .Table<TYtOutput>()
                                 .Operation<TYtFill>()
                                     .World(ApplySyncListToWorld(ctx.NewWorld(list.Pos()), syncList, ctx))
+                                    // FIXME?
                                     .DataSink(dataSink.Cast())
                                     .Content(MakeJobLambdaNoArg(cleanup.Cast(), ctx))
                                     .Output()
@@ -282,6 +286,13 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
     auto parentsMap = getParents();
     YQL_ENSURE(parentsMap);
     auto joinOptions = CollectPreferredSortsForEquiJoinOutput(node, equiJoin.Arg(equiJoin.ArgCount() - 1).Ptr(), ctx, *parentsMap);
+
+    if (sections.size() > 2 && State_->Configuration->ReportEquiJoinStats.Get().GetOrElse(DEFAULT_REPORT_EQUIJOIN_STATS)) {
+        joinOptions = AddSetting(*joinOptions, joinOptions->Pos(), "multiple_joins", {}, ctx);
+        with_lock(State_->StatisticsMutex) {
+            State_->Statistics[Max<ui32>()].Entries.emplace_back("YtEquiJoin_MultipleCount", 0, 0, 0, 0, 1);
+        }
+    }
 
     const auto join = Build<TYtEquiJoin>(ctx, node.Pos())
         .World(ApplySyncListToWorld(ctx.NewWorld(node.Pos()), worldList, ctx))

@@ -1,0 +1,134 @@
+{
+	"Version": "v1.5.1",
+	"GoVersion": "1.17",
+	"Sum": "h1:Ah259kcrio7Ix1Rhb6u8FCaOkzf9qRBqXnvAufg061w=",
+	"Packages": {
+		"github.com/pseudomuto/protoc-gen-doc": {
+			"Imports": [
+				"bytes",
+				"embed",
+				"encoding/json",
+				"errors",
+				"fmt",
+				"github.com/Masterminds/sprig",
+				"github.com/golang/protobuf/proto",
+				"github.com/golang/protobuf/protoc-gen-go/descriptor",
+				"github.com/golang/protobuf/protoc-gen-go/plugin",
+				"github.com/pseudomuto/protoc-gen-doc/extensions",
+				"github.com/pseudomuto/protokit",
+				"html/template",
+				"io/ioutil",
+				"path",
+				"path/filepath",
+				"regexp",
+				"sort",
+				"strings",
+				"text/template"
+			],
+			"TestImports": [
+				"github.com/golang/protobuf/proto",
+				"github.com/golang/protobuf/protoc-gen-go/descriptor",
+				"github.com/golang/protobuf/protoc-gen-go/plugin",
+				"github.com/pseudomuto/protoc-gen-doc",
+				"github.com/pseudomuto/protoc-gen-doc/extensions",
+				"github.com/pseudomuto/protokit",
+				"github.com/pseudomuto/protokit/utils",
+				"github.com/stretchr/testify/require",
+				"html/template",
+				"os",
+				"regexp",
+				"testing"
+			]
+		},
+		"github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc": {
+			"Imports": [
+				"flag",
+				"fmt",
+				"github.com/pseudomuto/protoc-gen-doc",
+				"github.com/pseudomuto/protoc-gen-doc/extensions/google_api_http",
+				"github.com/pseudomuto/protoc-gen-doc/extensions/lyft_validate",
+				"github.com/pseudomuto/protoc-gen-doc/extensions/validator_field",
+				"github.com/pseudomuto/protokit",
+				"io",
+				"log",
+				"os"
+			],
+			"TestImports": [
+				"bytes",
+				"fmt",
+				"github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc",
+				"github.com/stretchr/testify/require",
+				"testing"
+			]
+		},
+		"github.com/pseudomuto/protoc-gen-doc/extensions": {
+			"Imports": null,
+			"TestImports": null
+		},
+		"github.com/pseudomuto/protoc-gen-doc/extensions/envoyproxy_validate": {
+			"Imports": [
+				"encoding/json",
+				"github.com/envoyproxy/protoc-gen-validate/validate",
+				"github.com/pseudomuto/protoc-gen-doc/extensions",
+				"reflect",
+				"strings"
+			],
+			"TestImports": [
+				"github.com/envoyproxy/protoc-gen-validate/validate",
+				"github.com/golang/protobuf/proto",
+				"github.com/pseudomuto/protoc-gen-doc/extensions",
+				"github.com/pseudomuto/protoc-gen-doc/extensions/lyft_validate",
+				"github.com/stretchr/testify/require",
+				"testing"
+			]
+		},
+		"github.com/pseudomuto/protoc-gen-doc/extensions/google_api_http": {
+			"Imports": [
+				"github.com/pseudomuto/protoc-gen-doc/extensions",
+				"google.golang.org/genproto/googleapis/api/annotations",
+				"net/http"
+			],
+			"TestImports": [
+				"github.com/pseudomuto/protoc-gen-doc/extensions",
+				"github.com/pseudomuto/protoc-gen-doc/extensions/google_api_http",
+				"github.com/stretchr/testify/require",
+				"google.golang.org/genproto/googleapis/api/annotations",
+				"net/http",
+				"testing"
+			]
+		},
+		"github.com/pseudomuto/protoc-gen-doc/extensions/lyft_validate": {
+			"Imports": [
+				"github.com/pseudomuto/protoc-gen-doc/extensions/envoyproxy_validate"
+			],
+			"TestImports": null
+		},
+		"github.com/pseudomuto/protoc-gen-doc/extensions/validator_field": {
+			"Imports": [
+				"encoding/json",
+				"github.com/golang/protobuf/proto",
+				"github.com/golang/protobuf/protoc-gen-go/descriptor",
+				"github.com/mwitkow/go-proto-validators",
+				"github.com/pseudomuto/protoc-gen-doc/extensions",
+				"reflect",
+				"strings"
+			],
+			"TestImports": [
+				"github.com/golang/protobuf/proto",
+				"github.com/mwitkow/go-proto-validators",
+				"github.com/pseudomuto/protoc-gen-doc/extensions",
+				"github.com/pseudomuto/protoc-gen-doc/extensions/validator_field",
+				"github.com/stretchr/testify/require",
+				"testing"
+			]
+		},
+		"github.com/pseudomuto/protoc-gen-doc/fixtures": {
+			"Imports": null,
+			"TestImports": null
+		},
+		"github.com/pseudomuto/protoc-gen-doc/thirdparty": {
+			"Imports": null,
+			"TestImports": null
+		}
+	}
+}

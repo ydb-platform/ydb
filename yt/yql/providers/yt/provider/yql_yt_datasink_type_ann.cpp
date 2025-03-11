@@ -239,7 +239,10 @@ private:
         }
 
         auto opInput = input->ChildPtr(TYtTransientOpBase::idx_Input);
-        auto newInput = ValidateAndUpdateTablesMeta(opInput, clusterName, State_->TablesData, State_->Types->UseTableMetaFromGraph, ctx);
+        const ERuntimeClusterSelectionMode selectionMode =
+            State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+        auto newInput = ValidateAndUpdateTablesMeta(opInput, clusterName, State_->TablesData,
+            State_->Types->UseTableMetaFromGraph, selectionMode, ctx);
         if (!newInput) {
             return TStatus::Error;
         }

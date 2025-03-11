@@ -3,6 +3,7 @@
 import os
 import random
 import string
+import yaml
 
 import six
 from google.protobuf import text_format, json_format
@@ -165,6 +166,10 @@ def wrap_parse_dict(dictionary, proto):
             'NtoSelect': 'NToSelect',
             'Ssid': 'SSId',
             'Sids': 'SIDs',
+            'GroupId': 'GroupID',
+            'NodeId': 'NodeID',
+            'DiskId': 'DiskID',
+            'SlotId': 'SlotID',
         }
         for k, v in abbreviations.items():
             camelCased = camelCased.replace(k, v)
@@ -179,3 +184,56 @@ def wrap_parse_dict(dictionary, proto):
             return data
 
     json_format.ParseDict(convert_keys(dictionary), proto)
+
+
+# This function does some extra work, text processing to ensure no extra diff is
+# created when backporting sections like blob_storage_config. If we parse
+# template file and dump it again, there will be a lot of meaningless diff
+# in formatting, which is undesirable.
+def backport(template_path, config_yaml, backported_sections):
+    config_data = yaml.safe_load(config_yaml)
+
+    with open(template_path, 'r') as file:
+        lines = file.readlines()
+
+    for section_key in backported_sections:
+        section = config_data.get(section_key)
+
+        if section is None:
+            raise KeyError(f"The key '{section_key}' was not found in config_yaml")
+
+        new_section_yaml = yaml.safe_dump({section_key: section}, default_flow_style=False).splitlines(True)
+        new_section_yaml.append(os.linesep)
+
+        start_index = None
+        end_index = None
+
+        for i, line in enumerate(lines):
+            if line.startswith(f"{section_key}:"):
+                start_index = i
+                break
+
+        if start_index is not None:
+            end_index = start_index + 1
+            while end_index < len(lines):
+                line = lines[end_index]
+                if line.strip() and not line.startswith(' ') and not line.startswith('#'):  # Check for a top-level key
+                    break
+                end_index += 1
+
+            lines = lines[:start_index] + new_section_yaml + lines[end_index:]
+        else:
+            lines.extend(new_section_yaml)
+
+    with open(template_path, 'w') as file:
+        file.writelines(lines)
+
+
+def need_generate_bs_config(template_bs_config):
+    # We need to generate blob_storage_config if template file does not contain static group:
+    # blob_storage_config.service_set.groups
+
+    if template_bs_config is None:
+        return True
+
+    return template_bs_config.get("service_set", {}).get("groups") is None

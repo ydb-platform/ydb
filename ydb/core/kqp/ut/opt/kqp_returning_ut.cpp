@@ -314,6 +314,64 @@ Y_UNIT_TEST(ReturningSerial) {
     }
 }
 
+
+Y_UNIT_TEST(ReturningWorksQS) {
+    auto kikimr = DefaultKikimrRunner();
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+    CreateSampleTablesWithIndex(session, true);
+
+    auto qdb = kikimr.GetQueryClient();
+    auto qSession = qdb.GetSession().GetValueSync().GetSession();
+    auto result = qSession.ExecuteQuery(R"(
+        UPSERT INTO `/Root/SecondaryKeys`  (Key, Fk, Value) VALUES (1,    1,    "Payload1") RETURNING *;
+    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    CompareYson(R"([
+        [[1];[1];["Payload1"]];
+    ])", FormatResultSetYson(result.GetResultSet(0)));
+}
+
+Y_UNIT_TEST(ReturningWorksIndexedUpsertV2) {
+    auto kikimr = DefaultKikimrRunner();
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+    CreateSampleTablesWithIndex(session, true);
+
+    auto qdb = kikimr.GetQueryClient();
+    auto qSession = qdb.GetSession().GetValueSync().GetSession();
+    auto result = qSession.ExecuteQuery(R"(
+        $v1 = (SELECT Key + 100 as Key, Fk + 100 as Fk, Value FROM `/Root/SecondaryKeys` WHERE Key IS NOT NULL AND Fk IS NOT NULL);
+        $v2 = (SELECT Key + 105 as Key, Fk + 105 as Fk, Value FROM `/Root/SecondaryKeys` WHERE Key IS NOT NULL AND Fk IS NOT NULL);
+        UPSERT INTO `/Root/SecondaryKeys`
+        SELECT * FROM (SELECT * FROM $v1 UNION ALL SELECT * FROM $v2) WHERE Key > 107 RETURNING *;
+    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    CompareYson(R"([
+        [[110];[110];["Payload5"]];
+    ])", FormatResultSetYson(result.GetResultSet(0)));
+}
+
+Y_UNIT_TEST(ReturningWorksIndexedInsertV3) {
+    auto kikimr = DefaultKikimrRunner();
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+    CreateSampleTablesWithIndex(session, true);
+
+    auto qdb = kikimr.GetQueryClient();
+    auto qSession = qdb.GetSession().GetValueSync().GetSession();
+    auto result = qSession.ExecuteQuery(R"(
+        $v1 = (SELECT Key + 100 as Key, Fk + 100 as Fk, Value FROM `/Root/SecondaryKeys` WHERE Key IS NOT NULL AND Fk IS NOT NULL);
+        $v2 = (SELECT Key + 205 as Key, Fk + 205 as Fk, Value FROM `/Root/SecondaryKeys` WHERE Key IS NOT NULL AND Fk IS NOT NULL);
+        INSERT INTO `/Root/SecondaryKeys`
+        SELECT * FROM (SELECT * FROM $v1 UNION ALL SELECT * FROM $v2 ) WHERE Key < 102 RETURNING *;
+    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    CompareYson(R"([
+        [[101];[101];["Payload1"]];
+    ])", FormatResultSetYson(result.GetResultSet(0)));
+}
+
 Y_UNIT_TEST(ReturningColumnsOrder) {
     auto kikimr = DefaultKikimrRunner();
 

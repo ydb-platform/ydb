@@ -21,6 +21,7 @@ namespace NKqp {
         }
         if (!kikimrSettings.FeatureFlags.HasEnableExternalDataSources()) {
             kikimrSettings.SetEnableExternalDataSources(true);
+            kikimrSettings.AppConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         }
 
         Kikimr = std::make_unique<TKikimrRunner>(kikimrSettings);

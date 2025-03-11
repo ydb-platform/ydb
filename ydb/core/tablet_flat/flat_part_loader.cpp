@@ -149,7 +149,7 @@ void TLoader::StageParseMeta() noexcept
     }
 }
 
-TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
+TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView(bool preloadIndex) noexcept
 {
     Y_ABORT_UNLESS(!PartView, "PartView already initialized in CreatePartView stage");
     Y_ABORT_UNLESS(Packs && Packs.front());
@@ -161,12 +161,14 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     };
 
     if (BTreeGroupIndexes) {
-        // Note: preload root nodes only because we don't want to have multiple restarts here
-        for (const auto& meta : BTreeGroupIndexes) {
-            if (meta.LevelCount) getPage(meta.GetPageId());
-        }
-        for (const auto& meta : BTreeHistoricIndexes) {
-            if (meta.LevelCount) getPage(meta.GetPageId());
+        if (preloadIndex) {
+            // Note: preload root nodes only because we don't want to have multiple restarts here
+            for (const auto& meta : BTreeGroupIndexes) {
+                if (meta.LevelCount) getPage(meta.GetPageId());
+            }
+            for (const auto& meta : BTreeHistoricIndexes) {
+                if (meta.LevelCount) getPage(meta.GetPageId());
+            }
         }
     } else if (FlatGroupIndexes) {
         for (auto indexPageId : FlatGroupIndexes) {

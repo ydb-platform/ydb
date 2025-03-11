@@ -55,7 +55,8 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     }
 
     void Handle(TEvYdbProxy::TEvReadTopicResponse::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_D("Handle TEvYdbProxy::TEvReadTopicResponse message count = " << ev->Get()->Result.Messages.size());
+        LOG_T("Handle " << ev->Get()->ToString());
 
         auto& result = ev->Get()->Result;
         TVector<TTopicMessage> records(::Reserve(result.Messages.size()));

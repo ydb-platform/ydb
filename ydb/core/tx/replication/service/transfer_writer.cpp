@@ -326,7 +326,7 @@ public:
     }
 
     bool Flush() override {
-        if (!Batcher) {
+        if (!Batcher || !Batcher->GetMemory()) {
             return false;
         }
 
@@ -593,7 +593,7 @@ private:
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
-        LOG_D("Handle TEvData " << ev->Get()->ToString());
+        LOG_D("Handle TEvData record count: " << ev->Get()->Records.size());
         ProcessData(ev->Get()->PartitionId, ev->Get()->Records);
     }
 
@@ -623,6 +623,7 @@ private:
                     TableState->AddData(m->Data);
                 }
             } catch (const yexception& e) {
+                ProcessingErrorStatus = TEvWorker::TEvGone::EStatus::UNAVAILABLE;
                 ProcessingError = TStringBuilder() << "Error transform message: " << e.what();
                 break;
             }
@@ -641,11 +642,9 @@ private:
     }
 
     void TryFlush() {
-        if (LastWriteTime && LastWriteTime < TInstant::Now() - FlushInterval) {
-            if (TableState->Flush()) {
-                LastWriteTime.reset();
-                Become(&TThis::StateWrite);
-            }
+        if (LastWriteTime && LastWriteTime < TInstant::Now() - FlushInterval && TableState->Flush()) {
+            LastWriteTime.reset();
+            Become(&TThis::StateWrite);
         } else {
             Schedule(FlushInterval, new TEvents::TEvWakeup());
         }
@@ -659,7 +658,7 @@ private:
             hFunc(TEvWorker::TEvData, HoldHandle);
 
             sFunc(TEvents::TEvPoison, PassAway);
-            sFunc(TEvents::TEvWakeup, StopWakeup);
+            hFunc(TEvents::TEvWakeup, StopWakeup);
         }
     }
 
@@ -669,20 +668,29 @@ private:
             << " status# " << ev->Get()->Status);
 
         auto error = TableState->Handle(ev);
-        if (error) {
-            return LogCritAndLeave(error);
+        if (error && !ProcessingError) {
+            ProcessingError = error;
+        }
+        if (ui32(NYdb::EStatus::OVERLOADED) == ev->Get()->Status) {
+            return Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup(1));
         }
 
         if (ProcessingError) {
-            return LogCritAndLeave(*ProcessingError);
+            LOG_C(*ProcessingError);
+            Leave(TEvWorker::TEvGone::UNAVAILABLE, *ProcessingError);
         }
 
         Send(Worker, new TEvWorker::TEvPoll());
         return StartWork();
     }
 
-    void StopWakeup() {
+    void StopWakeup(TEvents::TEvWakeup::TPtr& ev) {
         WakeupScheduled = false;
+
+        if (ProcessingError && ev->Get()->Tag == 1) {
+            LOG_C(*ProcessingError);
+            Leave(TEvWorker::TEvGone::UNAVAILABLE, *ProcessingError);
+        }
     }
 
 private:

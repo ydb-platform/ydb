@@ -19,10 +19,17 @@
 namespace NLogin {
 
 struct TLoginProvider::TImpl {
+    static constexpr size_t SUCCESS_PASSWORDS_CACHE_CAPACITY = 20;
+    static constexpr size_t WRONG_PASSWORDS_CACHE_CAPACITY = 20;
 
     THolder<NArgonish::IArgon2Base> ArgonHasher;
+    TLruCache SuccessPasswordsCache;
+    TLruCache WrongPasswordsCache;
 
-    TImpl() {
+    TImpl()
+        : SuccessPasswordsCache(SUCCESS_PASSWORDS_CACHE_CAPACITY)
+        , WrongPasswordsCache(WRONG_PASSWORDS_CACHE_CAPACITY)
+    {
         ArgonHasher = Default<NArgonish::TArgon2Factory>().Create(
             NArgonish::EArgon2Type::Argon2id, // Mixed version of Argon2
             2, // 2-pass computation
@@ -33,6 +40,7 @@ struct TLoginProvider::TImpl {
     void GenerateKeyPair(TString& publicKey, TString& privateKey);
     TString GenerateHash(const TString& password);
     bool VerifyHash(const TString& password, const TString& hash);
+    bool VerifyHashWithCache(const TLruCache::TKey& key, const TString& hash);
 };
 
 TLoginProvider::TLoginProvider()
@@ -452,7 +460,7 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
         }
 
         sid = &(itUser->second);
-        if (!Impl->VerifyHash(request.Password, itUser->second.PasswordHash)) {
+        if (!Impl->VerifyHashWithCache(std::make_pair(request.User, request.Password), itUser->second.PasswordHash)) {
             response.Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
             response.Error = "Invalid password";
             sid->LastFailedLogin = now;
@@ -731,6 +739,26 @@ bool TLoginProvider::TImpl::VerifyHash(const TString& password, const TString& p
         salt.size(),
         reinterpret_cast<const ui8*>(hash.data()),
         hash.size());
+}
+
+bool TLoginProvider::TImpl::VerifyHashWithCache(const TLruCache::TKey& key, const TString& hash) {
+    const auto successCacheIt = SuccessPasswordsCache.Find(key);
+    if (successCacheIt != SuccessPasswordsCache.End()) {
+        return successCacheIt->second;
+    }
+
+    const auto wrongCacheIt = WrongPasswordsCache.Find(key);
+    if (wrongCacheIt != WrongPasswordsCache.End()) {
+        return wrongCacheIt->second;
+    }
+
+    bool isSuccessVerifying = VerifyHash(key.second, hash);
+    if (isSuccessVerifying) {
+        SuccessPasswordsCache.Insert(key, isSuccessVerifying);
+    } else {
+        WrongPasswordsCache.Insert(key, isSuccessVerifying);
+    }
+    return isSuccessVerifying;
 }
 
 NLoginProto::TSecurityState TLoginProvider::GetSecurityState() const {

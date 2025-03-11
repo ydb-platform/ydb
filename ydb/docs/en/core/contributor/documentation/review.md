@@ -18,7 +18,7 @@ Building on the high-level overview in [{#T}](index.md), this article dives deep
    3. The suggested change builds successfully, and automation has posted a comment with a preview link (instead of errors). The preview shows the changed content as expected.
 
 3. *(optional)* **Author** shares a link to the pull request in a community or documentation-related chat for extra visibility.
-4. A **primary reviewer** picks the pull request from the [inbound list](https://github.com/ydb-platform/ydb/pulls?q=is%3Aopen+is%3Apr+label%3Adocumentation+draft%3Afalse+no%3Aassignee), clicks the "assign yourself" button in the sidebar on the right, and then provides the initial set of feedback and suggestions.
+4. A **primary reviewer** picks the pull request from the [inbound list](https://github.com/ydb-platform/ydb/pulls?q=is%3Aopen+is%3Apr+label%3Adocumentation+draft%3Afalse+no%3Aassignee), clicks the "assign yourself" button in the right sidebar, and then provides the initial set of feedback and suggestions.
 5. The **author** and **primary reviewer** iterate until the suggested change passes the [checklist](#checklist). The **primary reviewer** provides feedback via comments on the pull request, while the **author** addresses them. The expected turnaround time for each review iteration is two business days, up to a few weeks in case of force majeure.
 6. Once the **primary reviewer** confirms that the pull request meets the checklist requirements, they:
 

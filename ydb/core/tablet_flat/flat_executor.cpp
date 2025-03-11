@@ -1225,7 +1225,7 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPart
     }
 
     if (auto* stage = bundle.GetStage<TPendingPartSwitch::TLoaderStage>()) {
-        if (auto fetch = stage->Loader.Run(true, PreloadTablesData.contains(partSwitch.TableId))) {
+        if (auto fetch = stage->Loader.Run({.PreloadIndex = true, .PreloadData = PreloadTablesData.contains(partSwitch.TableId)})) {
             Y_ABORT_UNLESS(fetch.size() == 1, "Cannot handle loads from more than one page collection");
 
             for (auto req : fetch) {

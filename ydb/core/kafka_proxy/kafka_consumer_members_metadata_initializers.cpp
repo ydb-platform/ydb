@@ -1,19 +1,21 @@
-#include "kafka_consumer_groups_metadata_initializers.h"
-#include "kafka_balancer_actor.h"
+#include "kafka_consumer_members_metadata_initializers.h"
+#include "actors/kafka_balancer_actor.h"
 
 namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace NMetadata;
 
-void TKafkaConsumerGroupsMetaInitializer::DoPrepare(NInitializer::IInitializerInput::TPtr controller) const {
+void TKafkaConsumerMembersMetaInitializer::DoPrepare(NInitializer::IInitializerInput::TPtr controller) const {
     TVector<NInitializer::ITableModifier::TPtr> result;
-    auto tablePath = TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath();
+    auto tablePath = TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath();
     {
         Ydb::Table::CreateTableRequest request;
         request.set_session_id("");
         request.set_path(tablePath);
         request.add_primary_key("database");
         request.add_primary_key("consumer_group");
+        request.add_primary_key("generation");
+        request.add_primary_key("member_id");
         {
             auto& column = *request.add_columns();
             column.set_name("database");
@@ -31,48 +33,59 @@ void TKafkaConsumerGroupsMetaInitializer::DoPrepare(NInitializer::IInitializerIn
         }
         {
             auto& column = *request.add_columns();
-            column.set_name("state");
-            column.mutable_type()->set_type_id(Ydb::Type::UINT64);
-        }
-        {
-            auto& column = *request.add_columns();
-            column.set_name("last_heartbeat_time");
-            column.mutable_type()->set_type_id(Ydb::Type::DATETIME);
-        }
-        {
-            auto& column = *request.add_columns();
-            column.set_name("master");
+            column.set_name("member_id");
             column.mutable_type()->set_type_id(Ydb::Type::UTF8);
         }
         {
             auto& column = *request.add_columns();
-            column.set_name("protocol_type");
-            column.mutable_type()->set_type_id(Ydb::Type::UTF8);
-        }
-        {
-            auto& column = *request.add_columns();
-            column.set_name("protocol");
+            column.set_name("instance_id");
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
         }
         {
             auto& column = *request.add_columns();
-            column.set_name("last_success_generation");
-            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT64);
+            column.set_name("leaved");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::BOOL);
+        }
+        {
+            auto& column = *request.add_columns();
+            column.set_name("assignment");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+        }
+        {
+            auto& column = *request.add_columns();
+            column.set_name("worker_state_proto");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+        }
+        {
+            auto& column = *request.add_columns();
+            column.set_name("heartbeat_deadline");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::DATETIME);
+        }
+        {
+            auto& column = *request.add_columns();
+            column.set_name("session_timeout_ms");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT32);
+        }
+        {
+            auto& column = *request.add_columns();
+            column.set_name("rebalance_timeout_ms");
+            column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT32);
         }
         {
             auto* ttlSettings = request.mutable_ttl_settings();
             auto* columnTtl = ttlSettings->mutable_date_type_column();
-            columnTtl->set_column_name("last_heartbeat_time");
-            columnTtl->set_expire_after_seconds(NKafka::MAX_SESSION_TIMEOUT_MS * 10 / 1000);
+            columnTtl->set_column_name("heartbeat_deadline");
+            columnTtl->set_expire_after_seconds(NKafka::MAX_SESSION_TIMEOUT_MS * 5 / 1000);
         }
-
         {
             auto& index = *request.add_indexes();
-            index.set_name("idx_last_hb");
+            index.set_name("idx_group_generation_db_hb");
             *index.mutable_global_index() = Ydb::Table::GlobalIndex();
-            index.add_index_columns("last_heartbeat_time");
+            index.add_index_columns("database");
+            index.add_index_columns("consumer_group");
+            index.add_index_columns("generation");
+            index.add_index_columns("heartbeat_deadline");
         }
-
         result.emplace_back(new NInitializer::TGenericTableModifier<NRequest::TDialogCreateTable>(request, "create"));
 
         {
@@ -87,6 +100,7 @@ void TKafkaConsumerGroupsMetaInitializer::DoPrepare(NInitializer::IInitializerIn
             result.emplace_back(new NInitializer::TGenericTableModifier<NRequest::TDialogAlterTable>(request, "enable_autopartitioning_by_load"));
         }
     }
+
     result.emplace_back(NInitializer::TACLModifierConstructor::GetReadOnlyModifier(tablePath, "acl"));
     controller->OnPreparationFinished(result);
 }

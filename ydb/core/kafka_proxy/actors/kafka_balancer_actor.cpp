@@ -1,5 +1,4 @@
 #include "kafka_balancer_actor.h"
-#include "kqp_balance_transaction.h"
 
 namespace NKafka {
 

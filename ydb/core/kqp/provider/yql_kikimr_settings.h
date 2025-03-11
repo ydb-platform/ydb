@@ -75,8 +75,8 @@ struct TKikimrSettings {
 
     NCommon::TConfSetting<ui32, false> MaxDPHypDPTableSize;
 
-
     NCommon::TConfSetting<ui32, false> MaxTasksPerStage;
+    NCommon::TConfSetting<ui64, false> DataSizePerJob;
     NCommon::TConfSetting<ui32, false> MaxSequentialReadsInFlight;
 
     NCommon::TConfSetting<ui32, false> KMeansTreeSearchTopSize;

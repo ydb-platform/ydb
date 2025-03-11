@@ -5203,6 +5203,20 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestImportChangefeeds(3, AddedSchemeWithPermissions);
     }
 
+    void TestCreateCdcStreams(TTestEnv& env, TTestActorRuntime& runtime, ui64& txId, const TString & dbName, ui64 count) {
+        for (ui64 i = 1; i <= count; ++i) {
+            TestCreateCdcStream(runtime, ++txId, dbName, Sprintf(R"(
+                TableName: "Original"
+                StreamDescription {
+                  Name: "update_feed%d"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatProto
+                }
+            )", i));
+            env.TestWaitNotification(runtime, txId);
+        }
+    }
+
     Y_UNIT_TEST(ChangefeedsExportRestore) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -5228,15 +5242,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
-            TableName: "Original"
-            StreamDescription {
-              Name: "Stream"
-              Mode: ECdcStreamModeKeysOnly
-              Format: ECdcStreamFormatProto
-            }
-        )");
-        env.TestWaitNotification(runtime, txId);
+        TestCreateCdcStreams(env, runtime, ++txId, "/MyRoot", 3);
 
         TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {

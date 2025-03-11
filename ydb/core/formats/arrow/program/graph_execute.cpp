@@ -346,18 +346,20 @@ TConclusion<bool> TCompiledGraph::TIterator::Reset(const std::vector<std::shared
                              return !item;
                          }),
         GraphNodes.end());
-    AFL_VERIFY(GraphNodes.size());
-
-    CurrentGraphNode = GraphNodes.front();
-    CurrentGraphNodeIdx = 0;
-    CurrentNode = CurrentGraphNode.get();
-    {
-        auto conclusion = ProvideCurrentToExecute();
-        if (conclusion.IsFail()) {
-            return conclusion;
+    if (GraphNodes.size()) {
+        CurrentGraphNode = GraphNodes.front();
+        CurrentGraphNodeIdx = 0;
+        CurrentNode = CurrentGraphNode.get();
+        {
+            auto conclusion = ProvideCurrentToExecute();
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
         }
+        return GlobalInitialize();
+    } else {
+        return false;
     }
-    return GlobalInitialize();
 }
 
 TConclusion<bool> TCompiledGraph::TIterator::Next() {

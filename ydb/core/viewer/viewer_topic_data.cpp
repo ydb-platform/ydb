@@ -143,7 +143,10 @@ void TTopicData::FillProtoResponse(ui64 maxSingleMessageSize, ui64 maxTotalSize)
             data.resize(maxSingleMessageSize);
         }
         totalSize += data.size();
-        protoMessage.SetMessage(std::move(data));
+        if (EncodeMessageData)
+            protoMessage.SetMessage(std::move(Base64Encode(data)));
+        else
+            protoMessage.SetMessage(std::move(data));
     };
     ProtoResponse.SetStartOffset(cmdRead.GetStartOffset());
     ProtoResponse.SetEndOffset(cmdRead.GetEndOffset());
@@ -262,7 +265,7 @@ void TTopicData::Bootstrap() {
     }
 
     TopicPath = params.Get("path");
-
+    EncodeMessageData = FromStringWithDefault<bool>(params.Get("encode_data"), true);
     if (!TopicPath.empty()) {
         NavigateResponse = MakeRequestSchemeCacheNavigateWithToken(TopicPath, true, NACLib::DescribeSchema, 1);
     } else {

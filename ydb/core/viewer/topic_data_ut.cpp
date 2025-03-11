@@ -26,7 +26,8 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
     TString GetRequestUrl(TString topic, ui32 partition, ui64 offset = 0, ui32 limit = 10) {
         TStringBuilder url;
         CGIUnescape(topic);
-        url << "/viewer/topic_data" << "?path=" << topic << "&partition=" << partition << "&offset=" << offset << "&limit=" << limit;
+        url << "/viewer/topic_data" << "?path=" << topic << "&partition=" << partition << "&offset=" << offset
+            << "&limit=" << limit << "&encode_data=false";
         return url;
     }
 

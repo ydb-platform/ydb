@@ -60,6 +60,7 @@ private:
     i64 PartitionId;
     i64 Offset;
     i64 Limit;
+    bool EncodeMessageData;
     TMap<ui32, THolder<NYdb::NTopic::ICodec>> Codecs;
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateResponse;
 

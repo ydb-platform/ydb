@@ -639,6 +639,9 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
             MakeSchemeCacheID(),
             new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0 /*flags*/, cookie
     );
+    if (response.Span) {
+        response.Span.Attribute("path", path);
+    }
     return response;
 }
 

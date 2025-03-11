@@ -4999,6 +4999,15 @@
             ],
             "StartOffset": 0,
             "EndOffset": 21
+        },
+        "response_encoded": {
+            "Messages": [
+                {
+                    "Codec": 1, "Size": 38, "SeqNo": 12, "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTA=",  "OriginalSize": 20, "Offset": 11
+                }
+            ],
+            "StartOffset": 0,
+            "EndOffset": 21
         }
     }
 }

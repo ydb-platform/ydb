@@ -696,7 +696,20 @@ private:
     }
 
     void DoExecuteImpl() override {
-        PollAsyncInput();
+        LastPollResult = PollAsyncInput();
+
+        if (LastPollResult && *LastPollResult != EResumeSource::CAPollAsyncNoSpace) {
+            // When (some) source buffers was not full, and (some) was successfully polled,
+            // initiate next DoExecute run immediately;
+            // If only reason for continuing was lack on space on all source
+            // buffers, only continue execution after run completed,
+            // (some) sources was consumed and compute waits for input
+            // (Otherwise we enter busy-poll, and there are especially bad scenario
+            // when compute is delayed by rate-limiter, we enter busy-poll here,
+            // this spends cpu, ratelimiter delays compute execution even more))
+            ContinueExecute(*std::exchange(LastPollResult, {}));
+        }
+
         if (ProcessSourcesState.Inflight == 0) {
             auto req = GetCheckpointRequest();
             CA_LOG_T("DoExecuteImpl: " << (bool) req);
@@ -1194,6 +1207,9 @@ private:
             CA_LOG_T("AsyncCheckRunStatus: TakeInputChannelDataRequests: " << TakeInputChannelDataRequests.size());
             return;
         }
+        if (ProcessOutputsState.LastRunStatus == ERunStatus::PendingInput && LastPollResult) {
+            ContinueExecute(*LastPollResult);
+        }
         TBase::CheckRunStatus();
     }
 
@@ -1242,6 +1258,7 @@ private:
     NMonitoring::THistogramPtr CpuTimeQuotaWaitDelay;
     NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
     NDqProto::TEvComputeActorState ComputeActorState;
+    TMaybe<EResumeSource> LastPollResult;
 };
 
 

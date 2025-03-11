@@ -211,6 +211,7 @@ public:
     }
 
     TString DebugDOT() const;
+    TString DebugStats() const;
 
     TString DebugString() const {
         return DebugJson().GetStringRobust();

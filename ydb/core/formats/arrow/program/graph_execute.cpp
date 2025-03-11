@@ -281,6 +281,29 @@ bool TCompiledGraph::IsFilterRoot(const ui32 identifier) const {
     return false;
 }
 
+TString TCompiledGraph::DebugStats() const {
+    std::map<EProcessorType, ui32> countProcType;
+    std::map<EProcessorType, ui32> countProcTypeWithSub;
+    for (auto&& [_, i] : Nodes) {
+        ++countProcType[i->GetProcessor()->GetProcessorType()];
+        if (i->GetProcessor()->HasSubColumns()) {
+            ++countProcTypeWithSub[i->GetProcessor()->GetProcessorType()];
+        }
+    }
+    TStringBuilder result;
+    result << "[TOTAL:";
+    for (auto&& i : countProcType) {
+        result << i.first << ":" << i.second << ";";
+    }
+    result << "];";
+    result << "SUB:[";
+    for (auto&& i : countProcTypeWithSub) {
+        result << i.first << ":" << i.second << ";";
+    }
+    result << "];";
+    return result;
+}
+
 TConclusionStatus TCompiledGraph::TIterator::ProvideCurrentToExecute() {
     while (true) {
         AFL_VERIFY(CurrentNode);

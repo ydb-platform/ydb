@@ -587,7 +587,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 1, 2 })));
         auto chain = builder.Finish().DetachResult();
         Cerr << chain->DebugDOT() << Endl;
-        AFL_VERIFY(chain->DebugString() == R"({"processors":[{"processor":{"internal":{},"type":"Const","output":"3"}},{"processor":{"internal":{},"type":"Calculation","input":"1,3","output":"1003"},"fetch":"1","drop":"3"},{"processor":{"internal":{},"type":"Filter","input":"1003"},"drop":"1003"},{"processor":{"internal":{},"type":"Calculation","input":"2","output":"1002"},"fetch":"2"},{"processor":{"internal":{},"type":"Filter","input":"1002"},"drop":"1002"},{"processor":{"internal":{},"type":"Calculation","input":"2","output":"1001"}},{"processor":{"internal":{},"type":"Filter","input":"1001"},"drop":"1001"},{"processor":{"internal":{},"type":"Projection","input":"1,2"}}]})");
+        AFL_VERIFY(chain->DebugStats() == "[TOTAL:Const:2;Calculation:4;Projection:1;Filter:1;FetchOriginalData:3;AssembleOriginalData:3;FetchIndexData:1;CheckIndexData:1;StreamLogic:1;];SUB:[FetchOriginalData:1;AssembleOriginalData:1;];")("debug", chain->DebugStats());
     }
 
     Y_UNIT_TEST(Projection) {

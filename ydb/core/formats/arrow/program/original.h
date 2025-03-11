@@ -13,6 +13,10 @@ private:
     YDB_ACCESSOR_DEF(TString, ColumnName);
     YDB_ACCESSOR_DEF(TString, SubColumnName);
 
+    virtual bool HasSubColumns() const override {
+        return !!SubColumnName;
+    }
+
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("col", ColumnName);
@@ -48,6 +52,10 @@ private:
     YDB_READONLY(ui32, ColumnId, 0);
     YDB_READONLY_DEF(TString, SubColumnName);
     virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
+
+    virtual bool HasSubColumns() const override {
+        return !!SubColumnName;
+    }
 
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;

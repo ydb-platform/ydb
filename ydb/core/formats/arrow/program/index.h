@@ -14,6 +14,10 @@ private:
     virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
     virtual NJson::TJsonValue DoDebugJson() const override;
 
+    virtual bool HasSubColumns() const override {
+        return !!IndexContext.GetSubColumnName();
+    }
+
     virtual bool IsAggregation() const override {
         return false;
     }
@@ -37,6 +41,10 @@ class TIndexCheckerProcessor: public IResourceProcessor {
 private:
     IDataSource::TFetchIndexContext IndexContext;
     using TBase = IResourceProcessor;
+
+    virtual bool HasSubColumns() const override {
+        return !!IndexContext.GetSubColumnName();
+    }
 
     virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 

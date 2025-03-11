@@ -224,6 +224,10 @@ private:
     }
 
 public:
+    virtual bool HasSubColumns() const {
+        return false;
+    }
+
     ui64 GetWeight() const {
         return DoGetWeight();
     }

@@ -144,7 +144,7 @@ class DefaultConfigExtension(ExtensionPoint):
         enable_external_data_sources(kikimr.compute_plane.qs_config)
 
         if 's3' not in kikimr.compute_plane.qs_config:
-            kikimr.compute_plane.qs_config['s3'] = {} 
+            kikimr.compute_plane.qs_config['s3'] = {}
         kikimr.compute_plane.qs_config['s3']['generator_paths_limit'] = 50000
 
 

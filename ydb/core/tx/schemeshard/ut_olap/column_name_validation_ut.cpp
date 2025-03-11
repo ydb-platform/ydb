@@ -14,7 +14,6 @@ using namespace NSchemeShardUT_Private;
 namespace NKikimr {
 namespace {
 
-namespace NTypeIds = NScheme::NTypeIds;
 using TTypeInfo = NScheme::TTypeInfo;
 
 static const TString defaultStoreSchema = R"(
@@ -54,10 +53,21 @@ static const TString defaultTableSchema = R"(
     }
 )";
 
-static const TVector<NArrow::NTest::TTestColumn> defaultYdbSchema = {
-    NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)).SetNullable(false),
-    NArrow::NTest::TTestColumn("data", TTypeInfo(NTypeIds::Utf8) )
-};
+static const TString tableSchemaFormat = R"(
+    Name: "TestTable"
+    Schema {
+        Columns {
+            Name: "Id"
+            Type: "Int32"
+            NotNull: True
+        }
+        Columns {
+            Name: "%s"
+            Type: "Utf8"
+        }
+        KeyColumnNames: ["Id"]
+    }
+)";
 
 }}
 
@@ -68,40 +78,9 @@ Y_UNIT_TEST_SUITE(TOlap_Naming) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        // const TString& olapSchema = defaultStoreSchema;
-
-        // TestCreateOlapStore(runtime, ++txId, "/MyRoot", olapSchema);
-        // env.TestWaitNotification(runtime, txId);
-
-        // TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathExist);
-
-        // TestMkDir(runtime, ++txId, "/MyRoot/OlapStore", "MyDir");
-        // env.TestWaitNotification(runtime, txId);
-
-        // TestLs(runtime, "/MyRoot/OlapStore/MyDir", false, NLs::PathExist);
-
-        // TString tableSchema = R"(
-        //     Name: "ColumnTable"
-        //     ColumnShardCount: 1
-        // )";
-
         TString allowedChars = "_-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-        TString tableSchema = Sprintf(R"(
-            Name: "TestTable"
-            Schema {
-                Columns {
-                    Name: "Id"
-                    Type: "Int32"
-                    NotNull: True
-                }
-                Columns {
-                    Name: "%s"
-                    Type: "Utf8"
-                }
-                KeyColumnNames: ["Id"]
-            }
-        )", allowedChars.c_str());
+        TString tableSchema = Sprintf(tableSchemaFormat.c_str(), allowedChars.c_str());
 
         TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
@@ -115,21 +94,7 @@ Y_UNIT_TEST_SUITE(TOlap_Naming) {
         TVector<TString> notAllowedNames = {"mess age", "~!@#$%^&*()+=asdfa"};
         
         for (const auto& colName: notAllowedNames) {
-            TString tableSchema = Sprintf(R"(
-                Name: "TestTable"
-                Schema {
-                    Columns {
-                        Name: "Id"
-                        Type: "Int32"
-                        NotNull: True
-                    }
-                    Columns {
-                        Name: "%s"
-                        Type: "Utf8"
-                    }
-                    KeyColumnNames: ["Id"]
-                }
-            )", colName.c_str());
+            TString tableSchema = Sprintf(tableSchemaFormat.c_str(), colName.c_str());
 
             TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, {NKikimrScheme::StatusSchemeError});
             env.TestWaitNotification(runtime, txId);
@@ -168,21 +133,7 @@ Y_UNIT_TEST_SUITE(TOlap_Naming) {
         TTestEnv env(runtime, options);
         ui64 txId = 100;
 
-        TString tableSchema = R"(
-            Name: "TestTable"
-            Schema {
-                Columns {
-                    Name: "Id"
-                    Type: "Int32"
-                    NotNull: True
-                }
-                Columns {
-                    Name: "message"
-                    Type: "Utf8"
-                }
-                KeyColumnNames: ["Id"]
-            }
-        )";
+        TString tableSchema = Sprintf(tableSchemaFormat.c_str(), "message");
 
         TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
@@ -205,21 +156,7 @@ Y_UNIT_TEST_SUITE(TOlap_Naming) {
         TTestEnv env(runtime, options);
         ui64 txId = 100;
 
-        TString tableSchema = R"(
-            Name: "TestTable"
-            Schema {
-                Columns {
-                    Name: "Id"
-                    Type: "Int32"
-                    NotNull: True
-                }
-                Columns {
-                    Name: "message"
-                    Type: "Utf8"
-                }
-                KeyColumnNames: ["Id"]
-            }
-        )";
+        TString tableSchema = Sprintf(tableSchemaFormat.c_str(), "message");
 
         TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);

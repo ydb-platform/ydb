@@ -16,6 +16,7 @@ SRCS(
     chunked_output_stream.cpp
     memory_tag.cpp
     new.cpp
+    poison.cpp
     ref.cpp
     ref_tracked.cpp
     safe_memory_reader.cpp

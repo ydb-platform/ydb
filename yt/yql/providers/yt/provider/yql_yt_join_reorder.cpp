@@ -1,4 +1,5 @@
 
+#include "yql_yt_cbo_helpers.h"
 #include "yql_yt_provider_context.h"
 #include "yql_yt_join_impl.h"
 #include "yql_yt_helpers.h"
@@ -250,7 +251,7 @@ private:
         }
         TRelSizeInfo leftSizeInfo;
         TRelSizeInfo rightSizeInfo;
-        ExtractMapJoinStats(leftSizeInfo, rightSizeInfo, op);
+        PopulateJoinStrategySizeInfo(leftSizeInfo, rightSizeInfo, State, Cluster, Ctx, op);
 
         auto left = ProcessNode(op->Left, leftSizeInfo);
         auto right = ProcessNode(op->Right, rightSizeInfo);
@@ -331,145 +332,6 @@ private:
 
         stat->Specific = std::move(providerStats);
         return std::make_shared<TYtRelOptimizerNode>(std::move(label), std::move(*stat), leaf);
-    }
-
-    void ExtractInMemorySize(
-        TMaybe<ui64>& leftMemorySize,
-        TMaybe<ui64>& rightMemorySize,
-        ESizeStatCollectMode mode,
-        TYtJoinNodeOp* op,
-        const TJoinLabels& labels,
-        int numLeaves,
-        TYtJoinNodeLeaf* leftLeaf,
-        bool leftTablesReady,
-        const TVector<TYtPathInfo::TPtr>& leftTables,
-        const THashSet<TString>& leftJoinKeys,
-        const TStructExprType* leftItemType,
-        TYtJoinNodeLeaf* rightLeaf,
-        bool rightTablesReady,
-        const TVector<TYtPathInfo::TPtr>& rightTables,
-        const THashSet<TString>& rightJoinKeys,
-        const TStructExprType* rightItemType)
-    {
-        TMapJoinSettings mapSettings;
-        TJoinSideStats leftStats;
-        TJoinSideStats rightStats;
-        bool isCross = false;
-        auto status = CollectStatsAndMapJoinSettings(mode, mapSettings, leftStats, rightStats,
-                                                     leftTablesReady, leftTables, leftJoinKeys, rightTablesReady, rightTables, rightJoinKeys,
-                                                     leftLeaf, rightLeaf, *State, isCross, Cluster, Ctx);
-        if (status != IGraphTransformer::TStatus::Ok) {
-            YQL_CLOG(WARN, ProviderYt) << "Unable to collect paths and labels: " << status;
-            return;
-        }
-        if (leftLeaf) {
-            const bool needPayload = op->JoinKind->IsAtom("Inner") || op->JoinKind->IsAtom("Right");
-            const auto& label = labels.Inputs[0];
-            TVector<TString> leftJoinKeyList(leftJoinKeys.begin(), leftJoinKeys.end());
-            TYtSection inputSection{leftLeaf->Section};
-            const ui64 rows = mapSettings.LeftRows;
-            ui64 size = 0;
-            auto status = CalculateJoinLeafSize(size, mapSettings, inputSection, *op, Ctx, true, leftItemType, leftJoinKeyList, State, Cluster, leftTables);
-            if (status != IGraphTransformer::TStatus::Ok) {
-                YQL_CLOG(WARN, ProviderYt) << "Unable to calculate join leaf size: " << status;
-                return;
-            }
-            if (op->JoinKind->IsAtom("Cross")) {
-                leftMemorySize = size + rows * (1ULL + label.InputType->GetSize()) * sizeof(NKikimr::NUdf::TUnboxedValuePod);
-            } else {
-                leftMemorySize = CalcInMemorySizeNoCrossJoin(
-                    label, *op, mapSettings, true, Ctx, needPayload, size);
-            }
-        }
-
-        if (rightLeaf) {
-            const bool needPayload = op->JoinKind->IsAtom("Inner") || op->JoinKind->IsAtom("Left");
-            const auto& label = labels.Inputs[numLeaves - 1];
-            TVector<TString> rightJoinKeyList(rightJoinKeys.begin(), rightJoinKeys.end());
-            TYtSection inputSection{rightLeaf->Section};
-            const ui64 rows = mapSettings.RightRows;
-            ui64 size = 0;
-
-            auto status = CalculateJoinLeafSize(size, mapSettings, inputSection, *op, Ctx, false, rightItemType, rightJoinKeyList, State, Cluster, rightTables);
-            if (status != IGraphTransformer::TStatus::Ok) {
-                YQL_CLOG(WARN, ProviderYt) << "Unable to calculate join leaf size: " << status;
-                return;
-            }
-            if (op->JoinKind->IsAtom("Cross")) {
-                rightMemorySize = size + rows * (1ULL + label.InputType->GetSize()) * sizeof(NKikimr::NUdf::TUnboxedValuePod);
-            } else {
-                rightMemorySize = CalcInMemorySizeNoCrossJoin(
-                    label, *op, mapSettings, false, Ctx, needPayload, size);
-            }
-        }
-    }
-
-    void ExtractMapJoinStats(TRelSizeInfo& leftSizeInfo, TRelSizeInfo& rightSizeInfo, TYtJoinNodeOp* op) {
-        auto mapJoinUseFlow = State->Configuration->MapJoinUseFlow.Get().GetOrElse(DEFAULT_MAP_JOIN_USE_FLOW);
-        if (!mapJoinUseFlow) {
-            // Only support flow map joins in CBO.
-            return;
-        }
-
-        TYtJoinNodeLeaf* leftLeaf = dynamic_cast<TYtJoinNodeLeaf*>(op->Left.Get());
-        TYtJoinNodeLeaf* rightLeaf = dynamic_cast<TYtJoinNodeLeaf*>(op->Right.Get());
-
-        bool leftTablesReady = false;
-        TVector<TYtPathInfo::TPtr> leftTables;
-        bool rightTablesReady = false;
-        TVector<TYtPathInfo::TPtr> rightTables;
-        THashSet<TString> leftJoinKeys, rightJoinKeys;
-        int numLeaves = 0;
-        TJoinLabels labels;
-        const TStructExprType* leftItemType = nullptr;
-        const TStructExprType* leftItemTypeBeforePremap = nullptr;
-        const TStructExprType* rightItemType = nullptr;
-        const TStructExprType* rightItemTypeBeforePremap = nullptr;
-
-        {
-            if (leftLeaf) {
-                TYtSection section{leftLeaf->Section};
-                if (Y_UNLIKELY(!section.Settings().Empty() && section.Settings().Item(0).Name() == "Test")) {
-                    return;
-                }
-
-                auto status = CollectPathsAndLabelsReady(leftTablesReady, leftTables, labels, leftItemType, leftItemTypeBeforePremap, *leftLeaf, Ctx);
-                if (status != IGraphTransformer::TStatus::Ok) {
-                    YQL_CLOG(WARN, ProviderYt) << "Unable to collect paths and labels: " << status;
-                    return;
-                }
-                if (!labels.Inputs.empty()) {
-                    leftJoinKeys = BuildJoinKeys(labels.Inputs[0], *op->LeftLabel);
-                }
-                ++numLeaves;
-            }
-            if (rightLeaf) {
-                TYtSection section{rightLeaf->Section};
-                if (Y_UNLIKELY(!section.Settings().Empty() && section.Settings().Item(0).Name() == "Test")) {
-                    return;
-                }
-                auto status = CollectPathsAndLabelsReady(rightTablesReady, rightTables, labels, rightItemType, rightItemTypeBeforePremap, *rightLeaf, Ctx);
-                if (status != IGraphTransformer::TStatus::Ok) {
-                    YQL_CLOG(WARN, ProviderYt) << "Unable to collect paths and labels: " << status;
-                    return;
-                }
-                if (labels.Inputs.size() > 1) {
-                    rightJoinKeys = BuildJoinKeys(labels.Inputs[1], *op->RightLabel);
-                }
-                ++numLeaves;
-            }
-        }
-
-        if (numLeaves == 0) {
-            return;
-        }
-
-        ExtractInMemorySize(leftSizeInfo.MapJoinMemSize, rightSizeInfo.MapJoinMemSize, ESizeStatCollectMode::ColumnarSize, op, labels,
-            numLeaves, leftLeaf, leftTablesReady, leftTables, leftJoinKeys, leftItemType,
-            rightLeaf, rightTablesReady, rightTables, rightJoinKeys, rightItemType);
-        ExtractInMemorySize(leftSizeInfo.LookupJoinMemSize, rightSizeInfo.LookupJoinMemSize, ESizeStatCollectMode::RawSize, op, labels,
-            numLeaves, leftLeaf, leftTablesReady, leftTables, leftJoinKeys, leftItemType,
-            rightLeaf, rightTablesReady, rightTables, rightJoinKeys, rightItemType);
     }
 
     TVector<TMaybe<IYtGateway::TPathStatResult::TExtendedResult>> GetStatsFromCache(

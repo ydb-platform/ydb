@@ -65,6 +65,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             nullptr,
             appConfig->GetQueryServiceConfig().GetSolomon(),
             nullptr,
+            nullptr,
+            NYql::NDq::CreateReadActorFactoryConfig(appConfig->GetQueryServiceConfig().GetS3()),
             nullptr);
 
         settings

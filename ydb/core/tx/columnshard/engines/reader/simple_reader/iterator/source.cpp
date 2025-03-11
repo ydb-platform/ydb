@@ -171,8 +171,8 @@ void TPortionDataSource::DoAbort() {
 }
 
 void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) {
-    THashMap<ui32, std::vector<TString>> indexBlobs;
-    std::set<ui32> indexIds = indexChecker->GetIndexIds();
+    THashMap<NIndexes::TIndexDataAddress, std::vector<TString>> indexBlobs;
+    const auto indexIds = NIndexes::TIndexDataAddress::ExtractIndexIds(indexChecker->GetIndexIds());
     //    NActors::TLogContextGuard gLog = NActors::TLogContextBuilder::Build()("records_count", GetRecordsCount())("portion_id", Portion->GetPortionId());
     std::vector<TPortionDataAccessor::TPage> pages = GetStageData().GetPortionAccessor().BuildPages();
     NArrow::TColumnFilter constructor = NArrow::TColumnFilter::BuildAllowFilter();
@@ -182,12 +182,12 @@ void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& in
                 continue;
             }
             if (i->HasBlobData()) {
-                indexBlobs[i->GetIndexId()].emplace_back(i->GetBlobDataVerified());
+                indexBlobs[NIndexes::TIndexDataAddress(i->GetIndexId())].emplace_back(i->GetBlobDataVerified());
             } else {
-                indexBlobs[i->GetIndexId()].emplace_back(StageData->ExtractBlob(i->GetAddress()));
+                indexBlobs[NIndexes::TIndexDataAddress(i->GetIndexId())].emplace_back(StageData->ExtractBlob(i->GetAddress()));
             }
         }
-        for (auto&& i : indexIds) {
+        for (auto&& i : indexChecker->GetIndexIds()) {
             if (!indexBlobs.contains(i)) {
                 GetContext()->GetCommonContext()->GetCounters().OnNotIndexBlobs();
                 return;

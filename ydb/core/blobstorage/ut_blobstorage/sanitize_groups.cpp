@@ -25,8 +25,8 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
         }
     }
 
-    void CreateEnv(std::unique_ptr<TEnvironmentSetup>& env, std::vector<TNodeLocation>& locations) {
-        TBlobStorageGroupType groupType = TBlobStorageGroupType::ErasureMirror3dc;
+    void CreateEnv(std::unique_ptr<TEnvironmentSetup>& env, std::vector<TNodeLocation>& locations,
+            TBlobStorageGroupType groupType) {
         const ui32 numNodes = locations.size();
 
         env.reset(new TEnvironmentSetup({
@@ -37,39 +37,49 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
 
         const ui32 disksPerNode = 1;
         const ui32 slotsPerDisk = 3;
-        env->CreateBoxAndPool(disksPerNode, numNodes * disksPerNode * slotsPerDisk / 9);
-    }
-
-    Y_UNIT_TEST(Test3dc) {
-        std::vector<TNodeLocation> locations;
-        TLocationGenerator locationGenerator = [](ui32 dc, ui32 rack, ui32 unit) {
-            NActorsInterconnect::TNodeLocation proto;
-            proto.SetDataCenter(ToString(dc));
-            proto.SetRack(ToString(rack));
-            proto.SetUnit(ToString(unit));
-            return proto;
-        };
-
-        MakeLocations(locations, 3, 5, 1, locationGenerator);
-        std::unique_ptr<TEnvironmentSetup> env;
-        CreateEnv(env, locations);
-
-        TBlobStorageGroupType groupType = TBlobStorageGroupType::ErasureMirror3dc;
-        TGroupGeometryInfo geom = CreateGroupGeometry(groupType);
 
         env->Runtime->FilterFunction = CatchSanitizeRequests;
+        env->CreateBoxAndPool(disksPerNode, numNodes * disksPerNode * slotsPerDisk / 9);
+        env->Runtime->FilterFunction = {};
+    }
+
+    NActorsInterconnect::TNodeLocation LocationGenerator(ui32 dc, ui32 rack, ui32 unit) {
+        NActorsInterconnect::TNodeLocation proto;
+        proto.SetDataCenter(ToString(dc));
+        proto.SetRack(ToString(rack));
+        proto.SetUnit(ToString(unit));
+        return proto;
+    }
+
+    void Test(TBlobStorageGroupType groupType, ui32 dcs, ui32 racks, ui32 units) {
+        std::vector<TNodeLocation> locations;
+
+        MakeLocations(locations, dcs, racks, units, LocationGenerator);
+        std::unique_ptr<TEnvironmentSetup> env;
+
+        CreateEnv(env, locations, groupType);
+
+
+        // Assure that sanitizer doesn't send request to initially allocated groups
+        env->Runtime->FilterFunction = CatchSanitizeRequests;
+        env->UpdateSettings(true, false, true);
+        env->Sim(TDuration::Minutes(3));
+        env->UpdateSettings(false, false, false);
+
+        TGroupGeometryInfo geom = CreateGroupGeometry(groupType);
 
         TString error;
         auto cfg = env->FetchBaseConfig();
         UNIT_ASSERT_C(CheckBaseConfigLayout(geom, cfg, true, error), error);
-        env->Cleanup();
 
         // Shuffle node locayion, assure that layout error occured
-        std::random_shuffle(locations.begin(), locations.end());
-        env->Initialize();
-        env->Sim(TDuration::Seconds(100));
-        cfg = env->FetchBaseConfig();
-        CheckBaseConfigLayout(geom, cfg, true, error);
+        do {
+            env->Cleanup();
+            std::random_shuffle(locations.begin(), locations.end());
+            env->Initialize();
+            env->Sim(TDuration::Seconds(100));
+            cfg = env->FetchBaseConfig();
+        } while (CheckBaseConfigLayout(geom, cfg, true, error));
         Cerr << error << Endl;
 
         // Sanitize groups
@@ -84,6 +94,18 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
         env->Sim(TDuration::Minutes(3));
         cfg = env->FetchBaseConfig();
         UNIT_ASSERT_C(CheckBaseConfigLayout(geom, cfg, true, error), error);
+    }
+
+    Y_UNIT_TEST(Test3dc) {
+        Test(TBlobStorageGroupType::ErasureMirror3dc, 3, 5, 1);
+    }
+
+    Y_UNIT_TEST(TestBlock4Plus2) {
+        Test(TBlobStorageGroupType::Erasure4Plus2Block, 1, 10, 2);
+    }
+
+    Y_UNIT_TEST(TestMirror3of4) {
+        Test(TBlobStorageGroupType::ErasureMirror3of4, 1, 10, 2);
     }
 
     TString PrintGroups(TBlobStorageGroupType groupType, const NKikimrBlobStorage::TBaseConfig& cfg,
@@ -137,6 +159,7 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
     }
 
     void TestMultipleRealmsOccupation(bool allowMultipleRealmsOccupation) {
+        TBlobStorageGroupType groupType = TBlobStorageGroupType::ErasureMirror3dc;
         std::vector<TNodeLocation> locations;
         TLocationGenerator locationGenerator = [](ui32 dc, ui32 rack, ui32 unit) {
             NActorsInterconnect::TNodeLocation proto;
@@ -152,9 +175,8 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
         };
         MakeLocations(locations, 4, 5, 1, locationGenerator);
         std::unique_ptr<TEnvironmentSetup> env;
-        CreateEnv(env, locations);
+        CreateEnv(env, locations, groupType);
 
-        TBlobStorageGroupType groupType = TBlobStorageGroupType::ErasureMirror3dc;
         TGroupGeometryInfo geom = CreateGroupGeometry(groupType);
 
         env->Runtime->FilterFunction = CatchSanitizeRequests;

@@ -488,7 +488,7 @@ namespace NKikimr::NHttpProxy {
                         }
                         CloudId = cloudIdAndResourceId.first;
                         HttpContext.ResourceId = ResourceId = cloudIdAndResourceId.second;
-                        HttpContext.ResponseData.YmqIsFifo = queueUrl.EndsWith(".fifo");
+                        HttpContext.ResponseData.YmqIsFifo = AsciiHasSuffixIgnoreCase(queueUrl, ".fifo");
                     }
                 } catch (const NKikimr::NSQS::TSQSException& e) {
                     NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;

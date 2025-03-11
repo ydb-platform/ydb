@@ -8,7 +8,9 @@
 
 #include <deque>
 
-namespace NYdb::NIssue {
+namespace NYdb {
+inline namespace Dev {
+namespace NIssue {
 
 TIssue IssueFromMessage(const Ydb::Issue::IssueMessage& issueMessage) {
     TIssue topIssue;
@@ -90,4 +92,6 @@ void IssuesToMessage(const TIssues& issues, ::google::protobuf::RepeatedPtrField
     }
 }
 
+}
+}
 }

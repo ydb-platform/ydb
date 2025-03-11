@@ -5,9 +5,8 @@
 #include "sql_values.h"
 #include "sql_select.h"
 #include "source.h"
+#include "antlr_token.h"
 
-#include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/sql/settings/partitioning.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
 
@@ -1710,9 +1709,9 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
 
                         auto& token = spec.GetBlock2().GetToken1();
                         auto tokenId = token.GetId();
-                        if (IS_TOKEN(tokenId, ASC)) {
+                        if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, ASC)) {
                             return true;
-                        } else if (IS_TOKEN(tokenId, DESC)) {
+                        } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, DESC)) {
                             desc = true;
                             return true;
                         } else {
@@ -3745,9 +3744,9 @@ bool TSqlTranslation::SortSpecification(const TRule_sort_specification& node, TV
         const auto& token = node.GetBlock2().GetToken1();
         Token(token);
         auto tokenId = token.GetId();
-        if (IS_TOKEN(tokenId, ASC)) {
+        if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, ASC)) {
             Ctx.IncrementMonCounter("sql_features", "OrderByAsc");
-        } else if (IS_TOKEN(tokenId, DESC)) {
+        } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, DESC)) {
             asc = false;
             Ctx.IncrementMonCounter("sql_features", "OrderByDesc");
         } else {
@@ -3777,11 +3776,11 @@ bool TSqlTranslation::SortSpecificationList(const TRule_sort_specification_list&
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node) const {
     TPosition pos;
-    return node.HasBlock1() && IS_TOKEN(node.GetBlock1().GetToken1().GetId(), DISTINCT);
+    return node.HasBlock1() && IS_TOKEN(Ctx.Settings.Antlr4Parser, node.GetBlock1().GetToken1().GetId(), DISTINCT);
 }
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPosition& distinctPos) const {
-    if (node.HasBlock1() && IS_TOKEN(node.GetBlock1().GetToken1().GetId(), DISTINCT)) {
+    if (node.HasBlock1() && IS_TOKEN(Ctx.Settings.Antlr4Parser, node.GetBlock1().GetToken1().GetId(), DISTINCT)) {
         distinctPos = Ctx.TokenPosition(node.GetBlock1().GetToken1());
         return true;
     }
@@ -3820,35 +3819,44 @@ bool TSqlTranslation::RoleNameClause(const TRule_role_name& node, TDeferredAtom&
 }
 
 bool TSqlTranslation::PasswordParameter(const TRule_password_option& passwordOption, TUserParameters& result) {
-    // password_option: ENCRYPTED? PASSWORD expr;
-    TSqlExpression expr(Ctx, Mode);
-    TNodePtr password = expr.Build(passwordOption.GetRule_expr3());
-    if (!password) {
-        Error() << "Couldn't parse the password";
-        return false;
+    // password_option: ENCRYPTED? PASSWORD password_value;
+    // password_value: STRING_VALUE | NULL;
+
+    const auto& token = passwordOption.GetRule_password_value3().GetToken1();
+    TString stringValue(Ctx.Token(token));
+
+    if (to_lower(stringValue) == "null") {
+        result.IsPasswordNull = true;
+    } else {
+        auto password = StringContent(Ctx, Ctx.Pos(), stringValue);
+
+        if (!password) {
+            Error() << "Password should be enclosed into quotation marks.";
+            return false;
+        }
+
+        result.Password = TDeferredAtom(Ctx.Pos(), std::move(password->Content));
     }
 
     result.IsPasswordEncrypted = passwordOption.HasBlock1();
-    if (!password->IsNull()) {
-        result.Password = MakeAtomFromExpression(Ctx.Pos(), Ctx, password);
-    }
 
     return true;
 }
 
 bool TSqlTranslation::HashParameter(const TRule_hash_option& hashOption, TUserParameters& result) {
-    // hash_option: HASH expr;
-    TSqlExpression expr(Ctx, Mode);
-    TNodePtr hash = expr.Build(hashOption.GetRule_expr2());
+    // hash_option: HASH STRING_VALUE;
+
+    const auto& token = hashOption.GetToken2();
+    TString stringValue(Ctx.Token(token));
+
+    auto hash = StringContent(Ctx, Ctx.Pos(), stringValue);
 
     if (!hash) {
-        Error() << "Couldn't parse the hash of password";
+        Error() << "Hash should be enclosed into quotation marks.";
         return false;
     }
 
-    if (!hash->IsNull()) {
-        result.Hash = MakeAtomFromExpression(Ctx.Pos(), Ctx, hash);
-    }
+    result.Hash = TDeferredAtom(Ctx.Pos(), std::move(hash->Content));
 
     return true;
 }
@@ -3857,9 +3865,9 @@ void TSqlTranslation::LoginParameter(const TRule_login_option& loginOption, std:
     // login_option: LOGIN | NOLOGIN;
 
     auto token = loginOption.GetToken1().GetId();
-    if (IS_TOKEN(token, LOGIN)) {
+    if (IS_TOKEN(Ctx.Settings.Antlr4Parser, token, LOGIN)) {
         canLogin = true;
-    } else if (IS_TOKEN(token, NOLOGIN)) {
+    } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, token, NOLOGIN)) {
         canLogin = false;
     } else {
         Y_ABORT("You should change implementation according to grammar changes");
@@ -3936,6 +3944,7 @@ bool TSqlTranslation::UserParameters(const std::vector<TRule_user_option>& optio
 
     if (isCreateUser) {
         result.CanLogin = true;
+        result.IsPasswordNull = true;
     }
 
     for (const auto& option : optionsList) {

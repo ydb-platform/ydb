@@ -216,6 +216,24 @@ private:
             HandleUnauthorized(ev, ctx);
         };
 
+        constexpr bool HasBypassAuth = std::is_same_v<
+            std::decay_t<T>, 
+            typename TEvConsole::TEvGetAllConfigsRequest::TPtr
+        > || std::is_same_v<
+            std::decay_t<T>,
+            typename TEvConsole::TEvReplaceYamlConfigRequest::TPtr
+        > || std::is_same_v<
+            std::decay_t<T>,
+            typename TEvConsole::TEvSetYamlConfigRequest::TPtr
+        >;
+
+        if constexpr (HasBypassAuth) {
+            if (ev->Get()->Record.HasBypassAuth() && ev->Get()->Record.GetBypassAuth()) {
+                Handle(ev, ctx);
+                return;
+            }
+        }
+
         if (IsAdministrator(AppData(ctx), ev->Get()->Record.GetUserToken())) {
             Handle(ev, ctx);
         } else {

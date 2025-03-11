@@ -25,26 +25,27 @@ TConclusionStatus TFirstLevelSchemaData::DoAddDataToBuilders(
             //        const NBinaryJson::TBinaryJson* bJsonParsed = &bJson;
             auto reader = NBinaryJson::TBinaryJsonReader::Make(TStringBuf(view.data(), view.size()));
             auto cursor = reader->GetRootCursor();
-            if (cursor.GetType() != NBinaryJson::EContainerType::Object) {
-                return TConclusionStatus::Fail("incorrect json data");
-            }
-            auto it = cursor.GetObjectIterator();
-            while (it.HasNext()) {
-                auto [key, value] = it.Next();
-                if (key.GetType() != NBinaryJson::EEntryType::String) {
-                    continue;
+            if (cursor.GetType() == NBinaryJson::EContainerType::Object) {
+                auto it = cursor.GetObjectIterator();
+                while (it.HasNext()) {
+                    auto [key, value] = it.Next();
+                    if (key.GetType() != NBinaryJson::EEntryType::String) {
+                        continue;
+                    }
+                    if (value.GetType() == NBinaryJson::EEntryType::String) {
+                        dataBuilder.AddKV(key.GetString(), value.GetString());
+                    } else if (value.GetType() == NBinaryJson::EEntryType::Number) {
+                        dataBuilder.AddKVOwn(key.GetString(), ::ToString(value.GetNumber()));
+                    } else if (value.GetType() == NBinaryJson::EEntryType::BoolFalse) {
+                        dataBuilder.AddKVOwn(key.GetString(), "0");
+                    } else if (value.GetType() == NBinaryJson::EEntryType::BoolTrue) {
+                        dataBuilder.AddKVOwn(key.GetString(), "1");
+                    } else {
+                        continue;
+                    }
                 }
-                if (value.GetType() == NBinaryJson::EEntryType::String) {
-                    dataBuilder.AddKV(key.GetString(), value.GetString());
-                } else if (value.GetType() == NBinaryJson::EEntryType::Number) {
-                    dataBuilder.AddKVOwn(key.GetString(), ::ToString(value.GetNumber()));
-                } else if (value.GetType() == NBinaryJson::EEntryType::BoolFalse) {
-                    dataBuilder.AddKVOwn(key.GetString(), "0");
-                } else if (value.GetType() == NBinaryJson::EEntryType::BoolTrue) {
-                    dataBuilder.AddKVOwn(key.GetString(), "1");
-                } else {
-                    continue;
-                }
+            } else {
+            //    return TConclusionStatus::Fail("incorrect json data: " + ::ToString((int)cursor.GetType()));
             }
         }
         dataBuilder.StartNextRecord();

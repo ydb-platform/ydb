@@ -35,9 +35,11 @@ public:
 
     const std::shared_ptr<arrow::Field>& GetField() const;
 
-    TChunkConstructionData BuildAccessorContext(const ui32 recordsCount) const;
-    std::shared_ptr<IChunkedArray> ApplyVerified(const TString& data, const ui32 expectedRecordsCount) const;
-    TConclusion<std::shared_ptr<IChunkedArray>> ApplyConclusion(const TString& data, const ui32 expectedRecordsCount) const;
+    TChunkConstructionData BuildAccessorContext(const ui32 recordsCount, const std::optional<ui32>& notNullCount = std::nullopt) const;
+    std::shared_ptr<IChunkedArray> ApplyVerified(
+        const TString& data, const ui32 expectedRecordsCount, const std::optional<ui32>& notNullCount = std::nullopt) const;
+    TConclusion<std::shared_ptr<IChunkedArray>> ApplyConclusion(
+        const TString& data, const ui32 expectedRecordsCount, const std::optional<ui32>& notNullCount = std::nullopt) const;
 };
 
 }   // namespace NKikimr::NArrow::NAccessor

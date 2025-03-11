@@ -83,7 +83,9 @@ struct Schema : NIceDb::Schema {
         LastCompletedTxId = 14,
         LastNormalizerSequentialId = 15,
         GCBarrierPreparationGen = 16,
-        GCBarrierPreparationStep = 17
+        GCBarrierPreparationStep = 17,
+        SubDomainLocalPathId = 18,
+        SubDomainOutOfSpace = 19
     };
 
     enum class EInsertTableIds : ui8 {

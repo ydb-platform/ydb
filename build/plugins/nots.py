@@ -621,17 +621,18 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     if not test_files:
         return
 
-    tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
-    tsconfig_path = tsconfig_paths[0]
-
-    if len(tsconfig_paths) > 1:
-        tsconfig_path = unit.get("_TS_TYPECHECK_TSCONFIG")
-        if not tsconfig_path:
+    tsconfig_path = unit.get("_TS_TYPECHECK_TSCONFIG")
+    if not tsconfig_path:
+        tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
+        if len(tsconfig_paths) > 1:
             macros = " or ".join([f"TS_TYPECHECK({p})" for p in tsconfig_paths])
             raise Exception(f"Module uses several tsconfig files, specify which one to use for typecheck: {macros}")
-        abs_tsconfig_path = unit.resolve(unit.resolve_arc_path(tsconfig_path))
-        if not abs_tsconfig_path:
-            raise Exception(f"tsconfig for typecheck not found: {tsconfig_path}")
+
+        tsconfig_path = tsconfig_paths[0]
+
+    abs_tsconfig_path = unit.resolve(unit.resolve_arc_path(tsconfig_path))
+    if not abs_tsconfig_path:
+        raise Exception(f"tsconfig for typecheck not found: {tsconfig_path}")
 
     unit.on_peerdir_ts_resource("typescript")
     user_recipes = unit.get("TEST_RECIPES_VALUE")

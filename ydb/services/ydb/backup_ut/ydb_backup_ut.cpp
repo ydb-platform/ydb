@@ -1,5 +1,6 @@
 #include "ydb_common_ut.h"
 
+#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
@@ -27,7 +28,6 @@
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <aws/core/Aws.h>
 #include <google/protobuf/util/message_differencer.h>
 
 using namespace NYdb;
@@ -317,6 +317,12 @@ NTopic::TTopicDescription DescribeTopic(NTopic::TTopicClient& topicClient, const
     const auto describeResult = topicClient.DescribeTopic(path).ExtractValueSync();
     UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
     return describeResult.GetTopicDescription();
+}
+
+std::vector<TChangefeedDescription> DescribeChangefeeds(TSession& session, const TString& tablePath) {
+    auto describeResult = session.DescribeTable(tablePath).ExtractValueSync();
+    UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+    return describeResult.GetTableDescription().GetChangefeedDescriptions();
 }
 
 // note: the storage pool kind must be preconfigured in the server
@@ -788,6 +794,75 @@ void TestViewDependentOnAnotherViewIsRestored(
     CompareResults(GetTableContent(session, dependentView), originalContent);
 }
 
+std::pair<std::vector<TString>, std::vector<TString>> 
+GetChangefeedAndTopicDescriptions(const char* table, TSession& session, NTopic::TTopicClient& topicClient) {
+    auto describeChangefeeds = DescribeChangefeeds(session, table);
+    const auto vectorSize = describeChangefeeds.size();
+
+    std::vector<TString> changefeedsStr(vectorSize);
+    std::transform(describeChangefeeds.begin(), describeChangefeeds.end(), changefeedsStr.begin(), [=](TChangefeedDescription changefeedDesc){
+        return changefeedDesc.ToString();
+    });
+
+    std::vector<TString> topicsStr(vectorSize);
+    std::transform(describeChangefeeds.begin(), describeChangefeeds.end(), topicsStr.begin(), [table, &topicClient](TChangefeedDescription changefeedDesc){
+        TString protoStr;
+        auto proto = TProtoAccessor::GetProto(
+            DescribeTopic(topicClient, TStringBuilder() << table << "/" << changefeedDesc.GetName())
+        );
+        proto.clear_self();
+        proto.clear_topic_stats();
+
+        google::protobuf::TextFormat::PrintToString(
+            proto, &protoStr
+        );
+        return protoStr;
+    });
+    
+    return {changefeedsStr, topicsStr};
+}
+
+void TestChangefeedAndTopicDescriptionsIsPreserved(
+    const char* table, TSession& session, NTopic::TTopicClient& topicClient,
+    TBackupFunction&& backup, TRestoreFunction&& restore, const TVector<TString>& changefeeds
+) {
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            CREATE TABLE `%s` (
+                Key Uint32,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            );
+        )",
+        table
+    ));
+
+    for (const auto& changefeed : changefeeds) {
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                ALTER TABLE `%s` ADD CHANGEFEED `%s` WITH (
+                    FORMAT = 'JSON',
+                    MODE = 'UPDATES'
+                );
+            )",
+            table,
+            changefeed.c_str()
+        ));
+    }
+
+    Cerr << "GetChangefeedAndTopicDescriptions: " << Endl;
+    auto changefeedsAndTopicsBefore = GetChangefeedAndTopicDescriptions(table, session, topicClient);
+    backup();
+
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            DROP TABLE `%s`;
+        )", table
+    ));
+
+    restore();
+    auto changefeedsAndTopicsAfter = GetChangefeedAndTopicDescriptions(table, session, topicClient);
+
+    UNIT_ASSERT_EQUAL(changefeedsAndTopicsBefore, changefeedsAndTopicsAfter);
+}
+
 void TestTopicSettingsArePreserved(
     const char* topic, NQuery::TSession& session, NTopic::TTopicClient& topicClient,
     TBackupFunction&& backup, TRestoreFunction&& restore
@@ -1231,7 +1306,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
 
         auto opts = NDump::TRestoreSettings().Mode(NDump::TRestoreSettings::EMode::ImportData);
-        using TYdbErrorException = V3::NStatusHelpers::TYdbErrorException;
+        using TYdbErrorException = ::NYdb::Dev::NStatusHelpers::TYdbErrorException;
 
         ExecuteDataDefinitionQuery(session, Sprintf(R"(
                 DROP TABLE `%s`;
@@ -1525,6 +1600,27 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    void TestChangefeedBackupRestore() {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        NTopic::TTopicClient topicClient(driver);
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        const auto table = "/Root/table";
+
+        TestChangefeedAndTopicDescriptionsIsPreserved(
+            table,
+            session,
+            topicClient,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup),
+            {"a", "b", "c"}
+        );
+    }
+
     void TestReplicationBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
 
@@ -1688,7 +1784,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeView:
                 return TestViewBackupRestore();
             case EPathTypeCdcStream:
-                break; // https://github.com/ydb-platform/ydb/issues/7054
+                return TestChangefeedBackupRestore();
             case EPathTypeReplication:
                 return TestReplicationBackupRestore();
             case EPathTypeTransfer:
@@ -1738,14 +1834,12 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
 Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
-    Aws::SDKOptions Options;
-
     Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
-        Aws::InitAPI(Options);
+        NKikimr::InitAwsAPI();
     }
 
     Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
-        Aws::ShutdownAPI(Options);
+        NKikimr::ShutdownAwsAPI();
     }
 
     using NKikimr::NWrappers::NTestHelpers::TS3Mock;
@@ -2162,6 +2256,24 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    void TestChangefeedBackupRestore() {
+        TS3TestEnv testEnv;
+        NTopic::TTopicClient topicClient(testEnv.GetDriver());
+
+        constexpr const char* table = "/Root/table";
+        testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
+        testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
+
+        TestChangefeedAndTopicDescriptionsIsPreserved(
+            table,
+            testEnv.GetTableSession(),
+            topicClient,
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" }),
+            {"a", "b", "c"}
+        );
+    }
+
     Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
         using namespace NKikimrSchemeOp;
 
@@ -2186,7 +2298,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                 TestViewBackupRestore();
                 break;
             case EPathTypeCdcStream:
-                break; // https://github.com/ydb-platform/ydb/issues/7054
+                TestChangefeedBackupRestore();
+                break;
             case EPathTypeReplication:
             case EPathTypeTransfer:
                 break; // https://github.com/ydb-platform/ydb/issues/10436

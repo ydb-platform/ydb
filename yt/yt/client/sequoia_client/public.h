@@ -7,9 +7,10 @@ namespace NYT::NSequoiaClient {
 ////////////////////////////////////////////////////////////////////////////////
 
 YT_DEFINE_ERROR_ENUM(
-    ((SequoiaClientNotReady)          (6000))
-    ((SequoiaTableCorrupted)          (6001))
-    ((SequoiaRetriableError)          (6002))
+    ((SequoiaClientNotReady)    (6000))
+    ((SequoiaTableCorrupted)    (6001))
+    ((SequoiaRetriableError)    (6002))
+    ((InvalidSequoiaReign)      (6003))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

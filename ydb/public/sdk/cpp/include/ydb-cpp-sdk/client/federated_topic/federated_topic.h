@@ -8,7 +8,7 @@
 
 #include <unordered_set>
 
-namespace NYdb::inline V3::NFederatedTopic {
+namespace NYdb::inline Dev::NFederatedTopic {
 
 using NTopic::TPrintable;
 using TDbInfo = Ydb::FederationDiscovery::DatabaseInfo;
@@ -525,7 +525,7 @@ private:
 
 } // namespace NYdb::NFederatedTopic
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 using namespace NFederatedTopic;
 

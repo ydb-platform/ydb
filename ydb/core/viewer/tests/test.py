@@ -338,6 +338,7 @@ def normalize_result_nodes(result):
                                            'SendThroughput',
                                            'UptimeSeconds',
                                            'Usage',
+                                           'TotalSessions',
                                            ])
     return replace_values_by_key(result, ['CpuUsage',
                                           'DiskSpaceUsage',
@@ -431,9 +432,6 @@ def test_viewer_nodes():
     result = get_viewer_db_normalized("/viewer/nodes", {
         'fields_required': 'all'
     })
-    for name in databases:
-        for node in result[name]['Nodes']:
-            node['SystemState']['Endpoints'].sort(key=lambda x: x['Name'])
     return result
 
 
@@ -445,8 +443,6 @@ def test_storage_groups():
 
 def test_viewer_sysinfo():
     result = get_viewer_normalized("/viewer/sysinfo")
-    for node in result['SystemStateInfo']:
-        node['Endpoints'].sort(key=lambda x: x['Name'])
     return result
 
 
@@ -560,3 +556,18 @@ def test_pqrb_tablet():
                                           'PathId',
                                           'SchemeShard'
                                           ])
+
+
+def test_viewer_nodes_issue_14992():
+    response_group_by = get_viewer_normalized("/viewer/nodes", {
+        'group': 'Uptime'
+    })
+    response_group = get_viewer_normalized("/viewer/nodes", {
+        'filter_group_by': 'Uptime',
+        'filter_group' : response_group_by['NodeGroups'][0]['GroupName'],
+    })
+    result = {
+        'response_group_by': response_group_by,
+        'response_group': response_group,
+    }
+    return result

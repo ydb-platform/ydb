@@ -8,7 +8,7 @@
 
 #include <util/string/cast.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class TStatus::TImpl {
 public:

@@ -314,7 +314,7 @@ void TMapNodeMixin::ListSelf(
         ? FromProto<TAttributeFilter>(request->attributes())
         : TAttributeFilter();
 
-    auto limit = YT_PROTO_OPTIONAL(*request, limit);
+    auto limit = YT_OPTIONAL_FROM_PROTO(*request, limit);
 
     context->SetRequestInfo("Limit: %v, AttributeFilter: %v",
         limit,

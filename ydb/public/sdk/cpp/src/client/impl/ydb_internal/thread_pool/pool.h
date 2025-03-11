@@ -6,7 +6,7 @@
 
 #include <memory>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 inline std::unique_ptr<IThreadPool> CreateThreadPool(size_t threads) {
     std::unique_ptr<IThreadPool> queue;

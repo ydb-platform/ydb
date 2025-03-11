@@ -20,7 +20,7 @@
 #define INV_ARG "Invalid argument for " PROV_ERR
 #define EXCH_ERR "Exchange token error in " PROV_ERR
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 namespace {
 

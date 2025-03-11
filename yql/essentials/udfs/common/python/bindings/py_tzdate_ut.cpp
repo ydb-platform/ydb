@@ -1,5 +1,5 @@
 #include "py_variant.h"
-#include "ut3/py_test_engine.h"
+#include "py_test_engine.h"
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
 #include <library/cpp/testing/unittest/registar.h>

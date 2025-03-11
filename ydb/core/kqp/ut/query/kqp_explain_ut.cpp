@@ -489,13 +489,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         node = FindPlanNodeByKv(plan, "Name", "TableFullScan");
         UNIT_ASSERT_EQUAL(node.GetMapSafe().at("Table").GetStringSafe(), "KeyValue");
 
-
-        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            node = FindPlanNodeByKv(plan, "Node Type", "TableLookup");
-        } else {
-            node = FindPlanNodeByKv(plan, "Name", "TablePointLookup");
-        }
-
+        node = FindPlanNodeByKv(plan, "Node Type", "TableLookup");
         if (node.IsDefined()) {
             UNIT_ASSERT_EQUAL(node.GetMapSafe().at("Table").GetStringSafe(), "KeyValue");
         }
@@ -894,7 +888,6 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(MultiJoinCteLinks) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(false);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig);
@@ -924,7 +917,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto cteLink1 = FindPlanNodeByKv(
             plan,
             "Subplan Name",
-            "CTE precompute_1_0"
+            "CTE precompute_0_0"
         );
 
         UNIT_ASSERT(cteLink1.IsDefined());

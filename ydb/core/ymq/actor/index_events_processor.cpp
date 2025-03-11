@@ -155,7 +155,7 @@ void TSearchEventsProcessor::OnQueuesListQueryComplete(NKqp::TEvKqp::TEvQueryRes
         auto customName = *parser.ColumnParser(2).GetOptionalUtf8();
         auto createTs = *parser.ColumnParser(3).GetOptionalUint64();
         auto folderId = *parser.ColumnParser(4).GetOptionalUtf8();
-        auto tags = *parser.ColumnParser(5).GetOptionalUtf8();
+        auto tags = parser.ColumnParser(5).GetOptionalUtf8().value_or("{}");
         auto insResult = ExistingQueues.insert(std::make_pair(
                 queueName, TQueueEvent{EQueueEventType::Existed, createTs, customName, cloudId, folderId, tags}
         ));
@@ -197,7 +197,7 @@ void TSearchEventsProcessor::OnEventsListingDone(NKqp::TEvKqp::TEvQueryResponse:
         auto customName = *parser.ColumnParser(3).GetOptionalUtf8();
         auto timestamp = *parser.ColumnParser(4).GetOptionalUint64();
         auto folderId = *parser.ColumnParser(5).GetOptionalUtf8();
-        auto labels = *parser.ColumnParser(6).GetOptionalUtf8();
+        auto labels = parser.ColumnParser(6).GetOptionalUtf8().value_or("{}");
         auto& qEvents = QueuesEvents[queueName];
         auto insResult = qEvents.insert(std::make_pair(
                 timestamp, TQueueEvent{EQueueEventType(evType), timestamp, customName, cloudId, folderId, labels}
@@ -362,20 +362,32 @@ void TSearchEventsProcessor::SaveQueueEvent(
         writer.Write("resource_id", queueName);
         writer.Write("name", event.CustomName);
         writer.Write("service", "message-queue");
-        if (event.Type == EQueueEventType::Deleted)
+        if (event.Type == EQueueEventType::Deleted) {
             writer.Write("deleted",  tsIsoString);
-        if (event.Type == EQueueEventType::Existed)
+        }
+        if (event.Type == EQueueEventType::Existed) {
             writer.Write("reindex_timestamp", nowIsoString);
+        }
         writer.Write("permission", "ymq.queues.list");
         writer.Write("cloud_id", event.CloudId);
         writer.Write("folder_id", event.FolderId);
-        writer.Write("labels", event.Labels);
-        writer.OpenArray("resource_path");
-        writer.OpenMap();
-        writer.Write("resource_type", "resource-manager.folder");
-        writer.Write("resource_id", event.FolderId);
-        writer.CloseMap();
-        writer.CloseArray(); // resource_path
+
+        {
+            writer.OpenArray("resource_path");
+            {
+                writer.OpenMap();
+                writer.Write("resource_type", "resource-manager.folder");
+                writer.Write("resource_id", event.FolderId);
+                writer.CloseMap();
+            }
+            writer.CloseArray();
+        }
+
+        if (!event.Labels.empty() && event.Labels != "{}") {
+            writer.OpenMap("attributes");
+            writer.UnsafeWrite("labels", event.Labels);
+            writer.CloseMap();
+        }
     }
     writer.CloseMap();
     writer.Flush();

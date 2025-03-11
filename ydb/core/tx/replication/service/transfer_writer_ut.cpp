@@ -1,6 +1,7 @@
+#include "common_ut.h"
 #include "service.h"
 #include "transfer_writer.h"
-#include "common_ut.h"
+#include "worker.h"
 
 #include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>

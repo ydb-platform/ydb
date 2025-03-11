@@ -97,6 +97,14 @@ void TTargetBase::SetStreamName(const TString& value) {
     StreamName = value;
 }
 
+const TString& TTargetBase::GetStreamConsumerName() const {
+    return StreamConsumerName;
+}
+
+void TTargetBase::SetStreamConsumerName(const TString& value) {
+    StreamConsumerName = value;
+}
+
 EStreamState TTargetBase::GetStreamState() const {
     return StreamState;
 }

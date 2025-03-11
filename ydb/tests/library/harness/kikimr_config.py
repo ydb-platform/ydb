@@ -146,8 +146,6 @@ class KikimrConfigGenerator(object):
             use_legacy_pq=False,
             dc_mapping={},
             enable_alter_database_create_hive_first=False,
-            disable_iterator_reads=False,
-            disable_iterator_lookups=False,
             overrided_actor_system_config=None,
             default_users=None,  # dict[user]=password
             extra_feature_flags=None,  # list[str]
@@ -261,13 +259,6 @@ class KikimrConfigGenerator(object):
             self.yaml_config["local_pg_wire_config"] = {}
             self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')
 
-        if disable_iterator_reads:
-            self.yaml_config["table_service_config"]["enable_kqp_scan_query_source_read"] = False
-
-        if disable_iterator_lookups:
-            self.yaml_config["table_service_config"]["enable_kqp_scan_query_stream_lookup"] = False
-            self.yaml_config["table_service_config"]["enable_kqp_data_query_stream_lookup"] = False
-
         self.yaml_config["feature_flags"]["enable_public_api_external_blobs"] = enable_public_api_external_blobs
 
         # for faster shutdown: there is no reason to wait while tablets are drained before whole cluster is stopping
@@ -364,6 +355,9 @@ class KikimrConfigGenerator(object):
             self.yaml_config["data_shard_config"] = datashard_config
         if columnshard_config:
             self.yaml_config["column_shard_config"] = columnshard_config
+
+        if column_shard_config:
+            self.yaml_config["column_shard_config"] = column_shard_config
 
         self.__build()
 

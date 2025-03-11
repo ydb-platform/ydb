@@ -613,6 +613,24 @@ public:
     struct TUploadTableResult: public NCommon::TOperationResult {
     };
 
+    struct TClusterConnectionOptions: public TCommonOptions {
+        using TSelf = TClusterConnectionOptions;
+
+        TClusterConnectionOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        OPTION_FIELD(TString, Cluster)
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+    };
+
+    struct TClusterConnectionResult: public NCommon::TOperationResult {
+        TString TransactionId;
+        TString YtServerName;
+        TMaybe<TString> Token;
+    };
+
 public:
     virtual ~IYtGateway() = default;
 
@@ -673,6 +691,8 @@ public:
     virtual TGetTablePartitionsResult GetTablePartitions(TGetTablePartitionsOptions&& options) = 0;
 
     virtual void AddCluster(const TYtClusterConfig& cluster) = 0;
+
+    virtual TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) = 0;
 };
 
 }

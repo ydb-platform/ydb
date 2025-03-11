@@ -1519,7 +1519,7 @@ def main(walle_provider=None):
             parser.print_help()
             return
 
-        if not args.yaml_config:
+        if not hasattr(args, 'yaml_config') or not args.yaml_config:
             warnings.warn(
                 '''
 Using cluster.yaml for cluster configuration is deprecated.

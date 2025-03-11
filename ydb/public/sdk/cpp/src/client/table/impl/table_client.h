@@ -19,7 +19,7 @@
 #include "readers.h"
 
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NTable {
 
 //How ofter run host scan to perform session balancing
@@ -315,7 +315,6 @@ public:
     NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> QuerySizeHistogram;
     NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> ParamsSizeHistogram;
     NSdkStats::TAtomicCounter<::NMonitoring::TRate> SessionRemovedDueBalancing;
-    NSdkStats::TAtomicCounter<::NMonitoring::TRate> RequestMigrated;
 
 private:
     NSessionPool::TSessionPool SessionPool_;

@@ -4,6 +4,6 @@
 
 namespace NYql {
 
-TTaskTransformFactory CreateYtDqTaskTransformFactory();
+TTaskTransformFactory CreateYtDqTaskTransformFactory(bool enableReadRanges = false);
 
 }

@@ -11,7 +11,7 @@
 #include <util/random/entropy.h>
 #include <util/generic/mapfindptr.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NCoordination {
 
 using NThreading::TFuture;

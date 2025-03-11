@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import base64
 import collections
 import copy
 import os
@@ -104,7 +105,7 @@ Domain = collections.namedtuple(
 )
 
 KiKiMRHost = collections.namedtuple(
-    "_KiKiMRHost", ["hostname", "node_id", "drives", "ic_port", "body", "datacenter", "rack", "host_config_id"]
+    "_KiKiMRHost", ["hostname", "node_id", "drives", "ic_port", "body", "datacenter", "rack", "host_config_id", "port"]
 )
 
 DEFAULT_PLAN_RESOLUTION = 10
@@ -220,7 +221,7 @@ class ComputeUnit(object):
 
 
 class Tenant(object):
-    def __init__(self, name, storage_units, compute_units=None, overridden_configs=None, shared=False, plan_resolution=None):
+    def __init__(self, name, storage_units, compute_units=None, overridden_configs=None, shared=False, plan_resolution=None, coordinators=None, mediators=None):
         self.name = name
         self.overridden_configs = overridden_configs
         self.storage_units = tuple(StorageUnit(**storage_unit_template) for storage_unit_template in storage_units)
@@ -229,6 +230,8 @@ class Tenant(object):
             self.compute_units = tuple(ComputeUnit(**compute_unit_template) for compute_unit_template in compute_units)
         self.shared = shared
         self.plan_resolution = plan_resolution
+        self.coordinators = coordinators
+        self.mediators = mediators
 
 
 class HostConfig(object):
@@ -301,6 +304,7 @@ class ClusterDetailsProvider(object):
         self.table_profiles_config = self.__cluster_description.get("table_profiles_config")
         self.http_proxy_config = self.__cluster_description.get("http_proxy_config")
         self.blob_storage_config = self.__cluster_description.get("blob_storage_config")
+        self.bootstrap_config = self.__cluster_description.get("bootstrap_config")
         self.memory_controller_config = self.__cluster_description.get("memory_controller_config")
         self.s3_proxy_resolver_config = self.__cluster_description.get("s3_proxy_resolver_config")
         self.channel_profile_config = self.__cluster_description.get("channel_profile_config")
@@ -425,6 +429,7 @@ class ClusterDetailsProvider(object):
             datacenter=self._get_datacenter(host_description),
             rack=self._get_rack(host_description),
             host_config_id=host_description.get("host_config_id", None),
+            port=host_description.get("port", DEFAULT_INTERCONNECT_PORT),
         )
 
     @property
@@ -682,6 +687,13 @@ class ClusterDetailsProvider(object):
             log_config = config_pb2.TLogConfig()
             if "default_level" not in log_config_dict:
                 log_config["default_level"] = self.default_log_level
+
+            # This little dance is required because 'entry.component' field is `bytes` in
+            # proto specification, attempting to deserialize it from plain text will fail
+            for i, entry in enumerate(log_config_dict.get("entry", [])):
+                entry["component"] = base64.b64encode(entry.get("component").encode('utf-8'))
+                log_config_dict["entry"][i] = entry
+
             utils.wrap_parse_dict(log_config_dict, log_config)
             return log_config
 
@@ -713,7 +725,13 @@ class ClusterDetailsProvider(object):
 
     @property
     def grpc_config(self):
-        return merge_with_default(GRPC_DEFAULT_CONFIG, self.__cluster_description.get("grpc", {}))
+        grpc_config = merge_with_default(GRPC_DEFAULT_CONFIG, self.__cluster_description.get("grpc", {}))
+
+        # specifying `port` equal to `ssl_port` leads to erroneous behavior in ydbd, half of the incoming
+        # connections use tls, half do not, so this is prohibited
+        if grpc_config.get("ssl_port") is not None and int(grpc_config["port"]) == int(grpc_config["ssl_port"]):
+            del grpc_config["port"]
+        return grpc_config
 
     @property
     def dynamicnameservice_config(self):

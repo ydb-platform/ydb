@@ -924,8 +924,15 @@ public:
                     if (interval || isDuration) {
                         attrs["expiration_timeout"] = isDuration ? duration.MilliSeconds() : interval->MilliSeconds();
                     }
-                    if (options.Config()->NightlyCompress.Get(cluster).GetOrElse(false)) {
-                        attrs["force_nightly_compress"] = true;
+                    const TMaybe<bool> nightlyCompress = options.Config()->NightlyCompress.Get(cluster);
+                    if (nightlyCompress.Defined()) {
+                        if (*nightlyCompress) {
+                            attrs["force_nightly_compress"] = true;
+                        } else {
+                            NYT::TNode compressSettings = NYT::TNode::CreateMap();
+                            compressSettings["enabled"] = false;
+                            attrs["nightly_compression_settings"] = compressSettings;
+                        }
                     }
                 }
 
@@ -1581,6 +1588,10 @@ private:
         }
         res.SetSuccess();
         return res;
+    }
+
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& /*options*/) override {
+        ythrow yexception() << "GetClusterConnection should not be called for file gateway";
     }
 
 

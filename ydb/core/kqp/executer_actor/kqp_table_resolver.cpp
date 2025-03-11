@@ -85,9 +85,6 @@ private:
             }
 
             for (auto stageId : stageIds) {
-                const NKikimr::NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo *ptr = entry.ColumnTableInfo.get();
-                intptr_t a = reinterpret_cast<intptr_t>(ptr);
-                Cout << "STAGES: "  << stageId.TxId << ":" << stageId.StageId << " IS " << a << Endl;
                 TasksGraph.GetStageInfo(stageId).Meta.ColumnTableInfoPtr = entry.ColumnTableInfo;
             }
         }

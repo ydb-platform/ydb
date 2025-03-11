@@ -1762,10 +1762,6 @@ protected:
                     "Stage with scan " << "[" << stageInfo.Id.TxId << ":" << stageInfo.Id.StageId << "]"
                     << " has keys: " << columnShardHashV1Params.KeyTypesToString();
                 );
-
-                const NKikimr::NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo *ptr = stageInfo.Meta.ColumnTableInfoPtr.get();
-                intptr_t a = reinterpret_cast<intptr_t>(ptr);
-                Cout << "CONST SHIT: " << a << Endl;
             } else {
                 ui32 metaId = 0;
                 for (auto&& pair : nodeShards) {

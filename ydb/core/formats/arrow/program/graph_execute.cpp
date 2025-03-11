@@ -142,7 +142,7 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
             node->SetRemoveResourceIds(i.second.GetLastUsageResources());
         }
     }
-    Cerr << DebugDOT() << Endl;
+//    Cerr << DebugDOT() << Endl;
 }
 
 TConclusionStatus TCompiledGraph::ApplyImpl(const std::shared_ptr<TCompiledGraph::TNode>& rootNode, const std::shared_ptr<TIterator>& it) const {

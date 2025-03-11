@@ -3,7 +3,6 @@
 #include "node.h"
 #include "convert.h"
 #include "fluent.h"
-#include "ypath_client.h"
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
@@ -489,6 +488,32 @@ void FormatValue(
 {
     if (attributeFilter) {
         builder->AppendFormat("{Keys: %v, Paths: %v}", attributeFilter.Keys, attributeFilter.Paths);
+    } else {
+        builder->AppendString("(universal)");
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+TShrunkAttributeFilterView MakeShrunkFormattableView(
+    const TAttributeFilter& attributeFilter,
+    size_t limit)
+{
+    return {attributeFilter, limit};
+}
+
+void FormatValue(
+    TStringBuilderBase* builder,
+    const TShrunkAttributeFilterView& view,
+    TStringBuf /*spec*/)
+{
+    const auto& attributeFilter = view.AttributeFilter;
+    auto limit = view.Limit;
+    if (attributeFilter) {
+        builder->AppendFormat("{Keys: %v, Paths: %v}",
+            MakeShrunkFormattableView(attributeFilter.Keys, TDefaultFormatter{}, limit),
+            MakeShrunkFormattableView(attributeFilter.Paths, TDefaultFormatter{}, limit));
     } else {
         builder->AppendString("(universal)");
     }

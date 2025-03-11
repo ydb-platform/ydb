@@ -75,7 +75,6 @@ class AddDataInflightExtension(ExtensionPoint):
 
 
 def enable_external_data_sources(qs_config):
-    print("enable_external_data_sources")
     qs_config['available_external_data_sources'] = []
     qs_config['available_external_data_sources'].append("ObjectStorage")
     qs_config['available_external_data_sources'].append("ClickHouse")
@@ -147,7 +146,6 @@ class DefaultConfigExtension(ExtensionPoint):
         if 's3' not in kikimr.compute_plane.qs_config:
             kikimr.compute_plane.qs_config['s3'] = {} 
         kikimr.compute_plane.qs_config['s3']['generator_paths_limit'] = 50000
-
 
 
 class YQv2Extension(ExtensionPoint):

@@ -39,23 +39,6 @@ private:
 
 }
 
-std::set<TString> GetAllExternalDataSourceTypes() {
-    static std::set<TString> allTypes = {
-        ToString(NYql::EDatabaseType::ObjectStorage),
-        ToString(NYql::EDatabaseType::ClickHouse),
-        ToString(NYql::EDatabaseType::PostgreSQL),
-        ToString(NYql::EDatabaseType::MySQL),
-        ToString(NYql::EDatabaseType::Ydb),
-        ToString(NYql::EDatabaseType::YT),
-        ToString(NYql::EDatabaseType::Greenplum),
-        ToString(NYql::EDatabaseType::MsSQLServer),
-        ToString(NYql::EDatabaseType::Oracle),
-        ToString(NYql::EDatabaseType::Logging),
-        ToString(NYql::EDatabaseType::Solomon)
-    };
-    return allTypes;
-}
-
 IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TString>& hostnamePatterns,
                                                          NActors::TActorSystem* actorSystem,
                                                          size_t pathsLimit,

@@ -1,6 +1,7 @@
 #include "kqp_federated_query_helpers.h"
 
 #include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
@@ -58,19 +59,7 @@ namespace NKikimr::NKqp {
     }
 
     bool IsValidExternalDataSourceType(const TString& type) {
-        static TSet<TString> allTypes = {
-            ToString(NYql::EDatabaseType::ObjectStorage),
-            ToString(NYql::EDatabaseType::ClickHouse),
-            ToString(NYql::EDatabaseType::PostgreSQL),
-            ToString(NYql::EDatabaseType::MySQL),
-            ToString(NYql::EDatabaseType::Ydb),
-            ToString(NYql::EDatabaseType::YT),
-            ToString(NYql::EDatabaseType::Greenplum),
-            ToString(NYql::EDatabaseType::MsSQLServer),
-            ToString(NYql::EDatabaseType::Oracle),
-            ToString(NYql::EDatabaseType::Logging),
-            ToString(NYql::EDatabaseType::Solomon)
-        };
+        static auto allTypes = NYql::GetAllExternalDataSourceTypes();
         return allTypes.contains(type);
     }
 

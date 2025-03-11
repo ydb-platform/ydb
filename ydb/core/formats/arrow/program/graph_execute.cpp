@@ -218,11 +218,11 @@ TString TCompiledGraph::DebugDOT() const {
         quote.AppendValue(i.second->GetProcessor()->DebugJson().GetStringRobust());
         const TString data = quote.GetStringRobust();
         TStringBuilder label;
-        label << "N" << i.second->GetSequentialIdx(-1) << "(" << i.second->GetWeight() << ")" << ":" << data.substr(2, data.size() - 4) << Endl;
+        label << "N" << i.second->GetSequentialIdx(-1) << "(" << i.second->GetWeight() << ")" << ":" << data.substr(2, data.size() - 4) << "\\n";
         if (i.second->GetRemoveResourceIds().size()) {
             label << "REMOVE:" << JoinSeq(",", i.second->GetRemoveResourceIds());
         }
-        result << "N" << i.second->GetIdentifier() << "[shape=box, label=\"" << label << "\"" << Endl;
+        result << "N" << i.second->GetIdentifier() << "[shape=box, label=\"" << label << "\"";
         if (i.second->GetOutputEdges().empty()) {
             result << ",style=filled,color=\"#FFAAAA\"";
         } else if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::AssembleOriginalData ||
@@ -230,7 +230,7 @@ TString TCompiledGraph::DebugDOT() const {
             result << ",style=filled,color=\"green\"";
         } else if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::CheckIndexData ||
                    i.second->GetProcessor()->GetProcessorType() == EProcessorType::FetchIndexData) {
-            result << ",style=filled,color=\"lightgreen\"";
+            result << ",style=filled,color=\"#AAFFAA\"";
         }
         result << "];" << Endl;
         ui32 idx = 1;

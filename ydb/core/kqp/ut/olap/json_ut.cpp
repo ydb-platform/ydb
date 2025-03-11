@@ -753,7 +753,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                                                                     (13u, JsonDocument('{"b.c.d" : "1b3"}')), (14u, JsonDocument('{"b.c.d" : "1b4", "a" : "a4"}'))
             ------
             SCHEMA:
-            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=a_index, TYPE=BLOOM_FILTER,
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=a_index, TYPE=$$CATEGORY_BLOOM_FILTER|BLOOM_FILTER$$,
                     FEATURES=`{"column_names" : ["Col2"], "false_positive_probability" : 0.01}`)
             ------
             SCHEMA:

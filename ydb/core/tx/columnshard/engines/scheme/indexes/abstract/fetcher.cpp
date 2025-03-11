@@ -42,6 +42,9 @@ void TIndexFetcherLogic::DoOnDataReceived(TReadActionsCollection& nextRead, NBlo
     }
     if (ranges.size()) {
         auto reading = blobsAction.GetReading(StorageId);
+        for (auto&& i : ranges) {
+            reading->AddRange(i);
+        }
         nextRead.Add(reading);
     }
 }

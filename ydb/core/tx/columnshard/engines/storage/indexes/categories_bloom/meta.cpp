@@ -89,15 +89,15 @@ public:
         auto it = CountByHash.find(hashBase);
         if (it == CountByHash.end()) {
             it = CountByHash.emplace(hashBase, 0).first;
-        } else {
-            it->second += hitsCount;
         }
+        it->second += hitsCount;
     }
 
     [[nodiscard]] TFiltersBuilder Finalize(const ui32 hashesCount, const ui32 hitsLimit) {
         std::map<ui32, std::vector<ui64>> hashesBySize;
         for (auto&& i : CountByHash) {
             hashesBySize[i.second].emplace_back(i.first);
+            AFL_VERIFY(i.second);
         }
         TFiltersBuilder result;
         ui32 currentCount = 0;
@@ -221,6 +221,9 @@ bool TIndexMeta::DoCheckValue(
     const TString& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
     AFL_VERIFY(!!category);
     AFL_VERIFY(op == EOperation::Equals)("op", op);
+    if (data.empty()) {
+        return false;
+    }
     TFixStringBitsStorage bits(data);
     for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
         const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(value, hashSeed);

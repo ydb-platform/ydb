@@ -49,7 +49,7 @@ class TIndexChunkFetching {
 private:
     std::shared_ptr<IIndexHeader> Header;
     TIndexDataAddress Address;
-    TChunkOriginalData OriginalData;
+    const TChunkOriginalData OriginalData;
     TRangeFetchingState Result;
     const ui32 RecordsCount;
 
@@ -110,9 +110,7 @@ public:
             if (!indexRange) {
                 Result = TRangeFetchingState("");
             } else {
-                Result = TRangeFetchingState(
-                    storageId,
-                    OriginalData.GetBlobRangeVerified().BuildSubset(indexRange->GetOffset(), indexRange->GetSize()));
+                Result = TRangeFetchingState(storageId, *indexRange);
                 nextReads.emplace_back(Result.GetRangeVerified());
             }
         }

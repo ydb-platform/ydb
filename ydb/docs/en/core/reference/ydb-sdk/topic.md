@@ -648,7 +648,7 @@ Only connections with matching [producer and message group](../../concepts/topic
   Asynchronous writing of a message to a topic.
 
   ```c#
-  var asyncWriteTask = writer.WriteAsync("Hello Example YDB Topics!"); // Task<WriteResult>
+  var asyncWriteTask = writer.WriteAsync("Hello, Example YDB Topics!"); // Task<WriteResult>
   ```
 
 {% endlist %}

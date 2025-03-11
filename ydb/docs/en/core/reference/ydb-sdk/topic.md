@@ -777,7 +777,7 @@ Only connections with matching [producer and message group](../../concepts/topic
 
 - С#
 
-  Asynchronous writing of a message to a topic. In case of an overflow of the internal buffer, it will wait for the buffer to be released before resending.
+  Asynchronous writing of a message to a topic. If the internal buffer overflows, it waits for the buffer to be released before resending.
 
   ```c#
   await writer.WriteAsync("Hello Example YDB Topics!");

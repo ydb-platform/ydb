@@ -923,6 +923,9 @@ public:
             modifyScheme->MutableModifyACL()->SetNewOwner(settings.Owner.value());
             modifyScheme->MutableModifyACL()->SetName(basename);
 
+            auto condition = modifyScheme->AddApplyIf();
+            condition->SetCheckTypeOfPath(NKikimrSchemeOp::TApplyIf::ExtSubDomain);;
+
             SendSchemeRequest(ev.Release()).Apply(
                 [alterDatabasePromise](const TFuture<TGenericResult>& future) mutable {
                     alterDatabasePromise.SetValue(future.GetValue());

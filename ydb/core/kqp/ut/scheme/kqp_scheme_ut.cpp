@@ -3869,16 +3869,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ALTER DATABASE `/Root/Test/table` OWNER TO superuser;
             )";
 
-            std::cerr << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << std::endl;
             auto result = session.ExecuteSchemeQuery(alterDatabaseSql).GetValueSync();
-            std::cerr << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << std::endl;
-
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-
-            std::cerr << "??????????????????????????" << std::endl;
-            std::cerr << result.GetIssues().ToString() << std::endl;
-            std::cerr << "??????????????????????????" << std::endl;
-            // UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unexpected token 'ROW'");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Error: fail in ApplyIf section: path is not database");
         }
         {
             auto alterDatabaseSql = TStringBuilder() << R"(

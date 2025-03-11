@@ -53,6 +53,51 @@ public:
             }
         }
 
+        const auto& conditions = Transaction.GetApplyIf();
+        for (const auto& item: conditions) {
+            if (item.HasCheckTypeOfPath()) {
+                if (!op.HasNewOwner()) {
+                    const auto errStr = TStringBuilder()
+                        << "fail in ApplyIf section:"
+                        << " Tx message has field CheckTypeOfPath, but transaction's type is not `SetNewOwner`;"
+                        << " probably, it is bug in the YDB's code;"
+                        << " if you see this message, please contact with us";
+
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+                    return result;
+                }
+
+                auto isSubDomain = [&]() -> bool {
+                    const auto checkSubDomain = path.Check();
+                    checkSubDomain.IsSubDomain();
+
+                    const auto checkExtSubDomain = path.Check();
+                    checkExtSubDomain.IsExternalSubDomain();
+
+                    if (!checkSubDomain && !checkExtSubDomain) {
+                        return false;
+                    }
+
+                    return true;
+                };
+
+                switch (item.GetCheckTypeOfPath()) {
+                    case NKikimrSchemeOp::TApplyIf::ExtSubDomain : {
+                        if (!isSubDomain()) {
+                            const auto errStr = TStringBuilder()
+                                << "fail in ApplyIf section:"
+                                << " path is not database";
+
+                            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+                            return result;
+                        }
+
+                        break;
+                    }
+                }
+            }
+        }
+
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);

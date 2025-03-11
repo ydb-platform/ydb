@@ -649,6 +649,9 @@ public:
             schemeTx.MutableModifyACL()->SetNewOwner(settings.Owner.value());
             schemeTx.MutableModifyACL()->SetName(basename);
 
+            auto condition = schemeTx.AddApplyIf();
+            condition->SetCheckTypeOfPath(NKikimrSchemeOp::TApplyIf::ExtSubDomain);
+
             auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
             auto& phyTx = *phyQuery.AddTransactions();
             phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);

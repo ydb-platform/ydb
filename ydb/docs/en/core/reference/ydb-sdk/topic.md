@@ -116,7 +116,7 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
   );
   ```
 
-  In this example uses anonymous authentication. For details see [Connecting to a database](../../concepts/connect.md) and [Authentication](../../security/authentication.md) pages.
+  This example uses anonymous authentication. For details, see [Connecting to a database](../../concepts/connect.md) and [Authentication](../../security/authentication.md).
 
   App code snippet for creating various clients:
 

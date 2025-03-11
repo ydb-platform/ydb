@@ -80,6 +80,7 @@ public:
         , OutputController(controller)
         , Path(path)
     {
+
     }
 };
 

@@ -14,9 +14,9 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
-#include <ydb-cpp-sdk/client/params/params.h>
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>

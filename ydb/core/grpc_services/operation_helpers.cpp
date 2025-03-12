@@ -15,7 +15,7 @@
 
 #include <ydb/core/protos/index_builder.pb.h>
 
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 

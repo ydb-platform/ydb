@@ -9,7 +9,7 @@
 #include <ydb/library/workload/stock/stock.h>
 #include <ydb/library/workload/kv/kv.h>
 
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/histogram/hdr/histogram.h>

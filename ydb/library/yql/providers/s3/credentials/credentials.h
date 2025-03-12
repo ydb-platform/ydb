@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 namespace NYql {
 

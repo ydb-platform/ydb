@@ -37,7 +37,7 @@
 #include <ydb/library/ycloud/impl/iam_token_service.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 
-#include <ydb-cpp-sdk/client/datastreams/datastreams.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 
 #include <ydb/services/datastreams/datastreams_proxy.h>

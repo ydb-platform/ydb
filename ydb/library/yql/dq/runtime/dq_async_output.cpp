@@ -144,7 +144,7 @@ public:
             if (std::holds_alternative<NUdf::TUnboxedValue>(value)) {
                 batch.emplace_back(std::move(std::get<NUdf::TUnboxedValue>(value)));
             } else if (std::holds_alternative<NKikimr::NMiniKQL::TUnboxedValueVector>(value)) {
-                Cerr << TString(TStringBuilder() << "-------------------------------- TDqAsyncOutputBuffer::Pop, pop multi value\n");
+                // Cerr << TString(TStringBuilder() << "-------------------------------- TDqAsyncOutputBuffer::Pop, pop multi value\n");
                 auto multiValue = std::get<NKikimr::NMiniKQL::TUnboxedValueVector>(value);
                 batch.PushRow(multiValue.data(), multiValue.size());
             } else {

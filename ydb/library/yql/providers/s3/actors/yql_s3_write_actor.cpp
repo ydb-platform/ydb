@@ -489,7 +489,7 @@ class TS3WriteActor : public TActorBootstrapped<TS3WriteActor>, public IDqComput
 
         arrow::Status Write(const void* data, int64_t nbytes) override {
             Y_UNUSED(data);
-            Cerr << TString(TStringBuilder() << "-------------------------------- TWriteBuffer::Write, nbytes: " << nbytes << "\n");
+            // Cerr << TString(TStringBuilder() << "-------------------------------- TWriteBuffer::Write, nbytes: " << nbytes << "\n");
             Pos += nbytes;
             Self.BatchSize += nbytes;
             Self.FileSize += nbytes;
@@ -498,7 +498,7 @@ class TS3WriteActor : public TActorBootstrapped<TS3WriteActor>, public IDqComput
         }
 
         arrow::Status Close() override {
-            Cerr << TString(TStringBuilder() << "-------------------------------- TWriteBuffer::Close\n");
+            // Cerr << TString(TStringBuilder() << "-------------------------------- TWriteBuffer::Close\n");
             Self.BatchSize = 0;
             Self.FileSize = 0;
             Closed = true;
@@ -506,12 +506,12 @@ class TS3WriteActor : public TActorBootstrapped<TS3WriteActor>, public IDqComput
         }
 
         arrow::Result<int64_t> Tell() const override {
-            Cerr << TString(TStringBuilder() << "-------------------------------- TWriteBuffer::Tell, Pos: " << Pos << "\n");
+            // Cerr << TString(TStringBuilder() << "-------------------------------- TWriteBuffer::Tell, Pos: " << Pos << "\n");
             return Pos;
         }
 
         bool closed() const override {
-            Cerr << TString(TStringBuilder() << "-------------------------------- TWriteBuffer::closed: " << Closed << "\n");
+            // Cerr << TString(TStringBuilder() << "-------------------------------- TWriteBuffer::closed: " << Closed << "\n");
             return Closed;
         }
 
@@ -633,9 +633,9 @@ private:
 
         if (data.IsWide()) {
             auto doFlushFile = [&](bool closeWriter) {
-                Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, flush file\n");
+                // Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, flush file\n");
                 if (closeWriter) {
-                    Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, finish writing\n");
+                    // Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, finish writing\n");
                     ARROW_OK(Writer->Close());
                     Writer.reset();
                     FileSize = 0;
@@ -659,6 +659,7 @@ private:
                 actor->AddData(std::move(ArrowData));
                 TStringBuilder b;
                 ArrowData.swap(b);
+                ArrowData.reserve(1_MB);
                 BatchSize = 0;
                 if (closeWriter) {
                     actor->Seal();
@@ -666,31 +667,31 @@ private:
                 processedActors.insert(actor);
             };
 
-            Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, send wide data, FileSize: " << FileSize << ", BatchSize: " << BatchSize << ", Multipart: " << Multipart << ", width: " << data.Width() << ", number batches: " << data.RowCount() << "\n");
+            // Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, send wide data, FileSize: " << FileSize << ", BatchSize: " << BatchSize << ", Multipart: " << Multipart << ", width: " << data.Width() << ", number batches: " << data.RowCount() << "\n");
             data.ForEachRowWide([&](NYql::NUdf::TUnboxedValue* values, ui32 width) {
-                Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, handle row\n");
+                // Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, handle row\n");
                 std::vector<std::shared_ptr<arrow::Array>> columns;
                 for (ui32 i = 0; i + 1 < width; ++i) {
                     auto datum = TArrowBlock::From(values[i]).GetDatum();
-                    Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, make array [" << i << "], is array: " << datum.is_array() << "\n");
+                    // Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, make array [" << i << "], is array: " << datum.is_array() << "\n");
                     auto arr = datum.make_array();
-                    Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, push array [" << i << "]\n");
+                    // Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, push array [" << i << "]\n");
                     columns.emplace_back(arr);
                 }
 
-                Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, create batch\n");
+                // Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, create batch\n");
                 auto batch = arrow::RecordBatch::Make(ArrowSchema, TArrowBlock::From(values[width - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value, std::move(columns));
                 auto res = arrow::Table::FromRecordBatches(batch->schema(), {batch});
                 ARROW_OK(res.status());
                 std::shared_ptr<arrow::Table> arrowTable = std::move(res).ValueOrDie();
 
-                Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, create writer\n");
+                // Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, create writer\n");
                 if (!Writer) {
                     OpenWriter();
                 }
                 ARROW_OK(Writer->WriteTable(*arrowTable.get(), batch->num_rows()));
 
-                Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, perform write\n");
+                // Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, perform write\n");
                 bool finishFile = FileSize > 50_MB || finished || !Multipart;
                 if (BatchSize > 1_MB || finishFile) {
                     doFlushFile(finishFile);

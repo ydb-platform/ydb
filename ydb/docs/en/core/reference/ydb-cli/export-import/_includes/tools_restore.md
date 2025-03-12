@@ -2,7 +2,7 @@
 
 ## Cluster
 
-The `admin cluster restore` command restores a cluster from a backup on the file system. The backup must have been previously exported with the or prepared manually as described in the [File structure](../file-structure.md) article:
+The `admin cluster restore` command restores a cluster from a backup on the file system. The backup must have been previously exported or prepared manually as described in the [{#T}](../file-structure.md) article:
 
 ```bash
 {{ ydb-cli }} [connection options] admin cluster restore -i <PATH> [options]
@@ -10,30 +10,30 @@ The `admin cluster restore` command restores a cluster from a backup on the file
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
-The destination cluster must be [running and initialized](../../../../devops/manual/initial-deployment.md) before it can be restored.
+The destination cluster must be [running and initialized](../../../../devops/index.md) before it can be restored.
 
-When restoring a cluster, databases and their administrators are created. Refer to [Database](#db) for further details on restoring databases.
+When restoring a cluster' metadata, databases and their administrators are created. Refer to [Database](#db) for further details on restoring databases.
 
-Databases restoration requires running dynamic nodes. You can start dynamic nodes before running the restore command or while the restore operation is waiting for available nodes. If you encounter problems with available dynamic nodes, you can restart the cluster restore operation.
+{% include [restore-database-nodes.md](./restore-database-nodes.md) %}
 
 A [cluster configuration](../../../../maintenance/manual/config-overview.md) is restored separately using the following steps:
 
-1) Load the saved configuration using the `{{{ ydb-cli }} admin cluster config replace` command.
+1) Load the saved configuration using the `{{ ydb-cli }} admin cluster config replace` command.
 2) Restart the cluster nodes.
 
 ### Required parameters {#mandatory}
 
-`-i <PATH>` or `--input <PATH>`: Path to the directory in the client system, from which the data will be imported.
+`-i <PATH>` or `--input <PATH>`: Path to the directory in the client system from which the data will be imported.
 
 ### Optional parameters {#optional}
 
 `[options]` – optional parameters of the command:
 
-`--wait-nodes-duration <DURATION>`: The period of time that the restore command waits for available dynamic nodes. Example values: `10s`, `5m`, `1h`. If the duration is `0`, the restore command does not wait for available nodes.
+`--wait-nodes-duration <DURATION>`: The period of time that the restore command waits for available database nodes. Example: `10s`, `5m`, `1h`, `1.5d`, `30`. Duration can be expressed in weeks, days, hours, minutes, seconds, microseconds, nanoseconds. If no suffix is specified, the duration is seconds. The duration can be fractional. Combined duration like `1h30m` is not supported. If the duration is `0`, the restore command does not wait for available nodes.
 
 ## Database {#db}
 
-The `admin database restore` command restores the database from a backup on the file system. The backup must have been previously exported with the `admin database dump` command or prepared manually as described in the [File structure](../file-structure.md) article:
+The `admin database restore` command restores the database from a backup on the file system. The backup must have been previously exported with the `admin database dump` command or prepared manually as described in the [{#T}](../file-structure.md) article:
 
 ```bash
 {{ ydb-cli }} [connection options] admin database restore -i <PATH> [options]
@@ -41,28 +41,28 @@ The `admin database restore` command restores the database from a backup on the 
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
-Database restoration requires running dynamic nodes. You can start dynamic nodes before running the restore command or while the restore operation is waiting for available nodes. If you encounter problems with available dynamic nodes, you can restart the cluster restore operation.
+{% include [restore-database-nodes.md](./restore-database-nodes.md) %}
 
-Restoring database schema objects is the same as described in [Schema objects](#schema-objects).
+Restoring database schema objects follows the same process described in [Schema objects](#schema-objects).
 
 [Database configuration](../../../../maintenance/manual/config-overview.md) is restored separately using the following steps:
 
-1) Load the saved configuration using the `{{{ ydb-cli }} admin database config replace` command.
+1) Load the saved configuration using the `{{ ydb-cli }} admin database config replace` command.
 2) Restart the database nodes.
 
 ### Required parameters {#mandatory}
 
-`-i <PATH>` or `--input <PATH>`: Path to the directory in the client system, from which the data will be imported.
+`-i <PATH>` or `--input <PATH>`: Path to the directory in the client system from which the data will be imported.
 
 ### Optional parameters {#optional}
 
 `[options]` – optional parameters of the command:
 
-`--wait-nodes-duration <DURATION>`: The period of time that the restore command waits for available dynamic nodes. Example values: `10s`, `5m`, `1h`. If the duration is `0`, the restore command does not wait for available nodes.
+`--wait-nodes-duration <DURATION>`: The period of time that the restore command waits for available database nodes. Example: `10s`, `5m`, `1h`, `1.5d`, `30`. Duration can be expressed in weeks, days, hours, minutes, seconds, microseconds, nanoseconds. If no suffix is specified, the duration is seconds. The duration can be fractional. Combined duration like `1h30m` is not supported. If the duration is `0`, the restore command does not wait for available nodes.
 
 ## Schema objets {#schema-objects}
 
-The `tools restore` command creates the items of the database schema in the database, and populates them with the data previously exported there with the `tools dump` command or prepared manually as per the rules from the [File structure](../file-structure.md) article:
+The `tools restore` command creates the items of the database schema in the database, and populates them with the data previously exported there with the `tools dump` command or prepared manually as per the rules from the [{#T}](../file-structure.md) article:
 
 ```bash
 {{ ydb-cli }} [connection options] tools restore -p <PATH> -i <PATH> [options]
@@ -78,7 +78,7 @@ To import data to the table, use the [YQL `REPLACE` command](../../../../yql/ref
 
 - `-p <PATH>` or `--path <PATH>`: Path to the database directory the data will be imported to. To import data to the root directory, specify `.`. All the missing directories along the path will be created.
 
-- `-i <PATH>` or `--input <PATH>`: Path to the directory in the client system, from which the data will be imported.
+- `-i <PATH>` or `--input <PATH>`: Path to the directory in the client system from which the data will be imported.
 
 ### Optional parameters {#optional}
 
@@ -97,7 +97,7 @@ To import data to the table, use the [YQL `REPLACE` command](../../../../yql/ref
 
 - `--save-partial-result`: Save the partial import result. If disabled, an import error results in reverting to the database state before the import.
 
-- `--import-data`: Use ImportData – a more efficient way to upload data than the default one. This method sends data to the server partitioned by client and in a lighter format. However, it will return an error when attempting to import the exported data into an existing table that already has secondary indexes or is in the process of building them. Therefore, if you need to restore a table with secondary indexes, make sure they're not already present in the scheme (for example, using the [`ydb scheme ls`](https://ydb.tech/docs/en/reference/ydb-cli/commands/scheme-ls) command). By default ImportData is disabled.
+- `--import-data`: Use ImportData, a more efficient method for uploading data than the default approach. This method sends data to the server partitioned by the client and in a lighter format. However, it returns an error when attempting to import exported data into an existing table that already has secondary indexes or is in the process of building them. To restore a table with secondary indexes, ensure they are not already present in the schema (for example, using the [`ydb scheme ls`](../../../../reference/ydb-cli/commands/scheme-ls.md) command). By default, ImportData is disabled.
 
 ### Workload restriction parameters {#limiters}
 
@@ -128,7 +128,7 @@ From the current file system directory:
 {{ ydb-cli }} -e <endpoint> admin cluster restore -i .
 ```
 
-From the current file system directory:
+From the specified file system directory:
 
 ```bash
 {{ ydb-cli }} -e <endpoint> admin cluster restore -i ~/backup_cluster
@@ -142,7 +142,7 @@ From the current file system directory:
 {{ ydb-cli }} -e <endpoint> -d <database> admin database restore -i .
 ```
 
-From the current file system directory:
+From the specified file system directory:
 
 ```bash
 {{ ydb-cli }} -e <endpoint> -d <database> admin database restore -i ~/backup_db

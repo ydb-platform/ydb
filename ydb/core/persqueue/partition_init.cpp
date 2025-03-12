@@ -200,6 +200,11 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
         Y_ABORT("bad status");
     };
 
+    // There should be no consumers in the configuration of the background partition. When creating a partition,
+    // the PQ tablet specifically removes all consumer settings from the config.
+    Y_ABORT_UNLESS(!Partition()->IsSupportive() ||
+                   (Partition()->Config.GetConsumers().empty() && Partition()->TabletConfig.GetConsumers().empty()));
+
     Partition()->PartitionConfig = GetPartitionConfig(Partition()->Config, Partition()->Partition.OriginalPartitionId);
     Partition()->PartitionGraph = MakePartitionGraph(Partition()->Config);
 

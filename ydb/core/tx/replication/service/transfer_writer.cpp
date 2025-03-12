@@ -684,7 +684,7 @@ private:
             hFunc(TEvWorker::TEvData, HoldHandle);
 
             sFunc(TEvents::TEvPoison, PassAway);
-            hFunc(TEvents::TEvWakeup, StopWakeup);
+            hFunc(TEvents::TEvWakeup, WriteWakeup);
         }
     }
 
@@ -718,7 +718,7 @@ private:
         return StartWork();
     }
 
-    void StopWakeup(TEvents::TEvWakeup::TPtr& ev) {
+    void WriteWakeup(TEvents::TEvWakeup::TPtr& ev) {
         switch(ETag(ev->Get()->Tag)) {
             case ETag::FlushTimeout:
                 WakeupScheduled = false;

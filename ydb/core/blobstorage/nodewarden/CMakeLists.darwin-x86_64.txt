@@ -43,7 +43,10 @@ target_sources(core-blobstorage-nodewarden PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_dynamic.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_generate.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_fsm.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_invoke.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_invoke_common.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_invoke_state_storage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_invoke_static_group.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_invoke_storage_config.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_mon.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_persistent_storage.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_scatter_gather.cpp
@@ -62,6 +65,7 @@ target_sources(core-blobstorage-nodewarden PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_vdisk.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/group_stat_aggregator.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_invoke.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_events.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_impl.h

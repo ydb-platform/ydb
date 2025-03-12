@@ -466,7 +466,7 @@ TConclusion<TCompiledGraph::IVisitor::EVisitStatus> TCompiledGraph::IVisitor::On
         AFL_VERIFY(Current.erase(node.GetIdentifier()))("id", node.GetIdentifier());
         AFL_VERIFY(Visited.erase(node.GetIdentifier()))("id", node.GetIdentifier());
     } else {
-        AFL_VERIFY(Executed.emplace(node.GetIdentifier()))("id", node.GetIdentifier());
+        AFL_VERIFY(Executed.emplace(node.GetIdentifier()).second)("id", node.GetIdentifier());
     }
     return conclusion;
 }

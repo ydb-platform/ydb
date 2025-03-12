@@ -8,8 +8,6 @@ SRCS(
     abstract.cpp
     meta.cpp
     checker.cpp
-    GLOBAL composite.cpp
-    simple.cpp
     common.cpp
 )
 

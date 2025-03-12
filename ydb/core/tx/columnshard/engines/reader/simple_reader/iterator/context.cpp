@@ -33,7 +33,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
         }
     }();
 
-    const bool useIndexes = (IndexChecker ? source->HasIndexes(NIndexes::TIndexDataAddress::ExtractIndexIds(IndexChecker->GetIndexIds())) : false);
+    const bool useIndexes = false;
     const bool hasDeletions = source->GetHasDeletions();
     bool needShardingFilter = false;
     if (!!GetReadMetadata()->GetRequestShardingInfo()) {

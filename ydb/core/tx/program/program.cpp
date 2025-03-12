@@ -72,13 +72,6 @@ TConclusionStatus TProgramContainer::Init(
     if (initStatus.IsFail()) {
         return initStatus;
     }
-    if (olapProgramProto.HasIndexChecker()) {
-        if (!IndexChecker.DeserializeFromProto(olapProgramProto.GetIndexChecker())) {
-            AFL_VERIFY_DEBUG(false);
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "cannot_parse_index_checker")(
-                "data", olapProgramProto.GetIndexChecker().DebugString());
-        }
-    }
     return TConclusionStatus::Success();
 }
 

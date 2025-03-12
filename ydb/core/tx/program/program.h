@@ -21,7 +21,6 @@ private:
     NArrow::NSSA::TKernelsRegistry KernelsRegistry;
     std::optional<THashSet<ui32>> OverrideProcessingColumnsSet;
     std::optional<std::vector<ui32>> OverrideProcessingColumnsVector;
-    YDB_READONLY_DEF(NIndexes::TIndexCheckerContainer, IndexChecker);
 
 public:
     bool IsGenerated(const ui32 columnId) const {

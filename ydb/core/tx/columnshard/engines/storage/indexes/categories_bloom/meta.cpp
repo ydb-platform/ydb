@@ -1,10 +1,9 @@
-#include "checker.h"
 #include "header.h"
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/hash/calcer.h>
 #include <ydb/core/tx/columnshard/engines/protos/index.pb.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom/checker.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom/bits_storage.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 

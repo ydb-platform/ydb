@@ -5208,7 +5208,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             TestCreateCdcStream(runtime, ++txId, dbName, Sprintf(R"(
                 TableName: "Original"
                 StreamDescription {
-                  Name: "update_feed%d"
+                  Name: "Stream_%d"
                   Mode: ECdcStreamModeKeysOnly
                   Format: ECdcStreamFormatJson
                 }

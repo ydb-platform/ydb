@@ -15,10 +15,6 @@ struct TPrivatePageCachePinPad : public TAtomicRefCount<TPrivatePageCachePinPad>
     // no internal state
 };
 
-struct TPrivatePageCacheWaitPad : public TExplicitSimpleCounter {
-    // no internal state
-};
-
 class TPrivatePageCache {
     using TPageId = NTable::NPage::TPageId;
     using TPinned = THashMap<TLogoBlobID, THashMap<TPageId, TIntrusivePtr<TPrivatePageCachePinPad>>>;
@@ -40,14 +36,10 @@ public:
     };
 
     struct TPage : public TIntrusiveListItem<TPage> {
-        using TWaitQueue = TOneOneQueueInplace<TPrivatePageCacheWaitPad *, 64>;
-        using TWaitQueuePtr = TAutoPtr<TWaitQueue, TWaitQueue::TCleanDestructor>;
-
         enum ELoadState {
             LoadStateNo,
             LoadStateLoaded,
             LoadStateRequested,
-            LoadStateRequestedAsync,
         };
 
         ui32 LoadState : 2;
@@ -57,7 +49,6 @@ public:
 
         TInfo* const Info;
         TIntrusivePtr<TPrivatePageCachePinPad> PinPad;
-        TWaitQueuePtr WaitQueue;
         TSharedPageRef SharedBody;
         TSharedData PinnedBody;
 
@@ -70,7 +61,6 @@ public:
             return (
                 LoadState == LoadStateNo &&
                 !PinPad &&
-                !WaitQueue &&
                 !SharedBody);
         }
 
@@ -164,7 +154,7 @@ public:
 public:
     TIntrusivePtr<TInfo> GetPageCollection(TLogoBlobID id) const;
     void RegisterPageCollection(TIntrusivePtr<TInfo> info);
-    TPage::TWaitQueuePtr ForgetPageCollection(TIntrusivePtr<TInfo> info);
+    // TPage::TWaitQueuePtr ForgetPageCollection(TIntrusivePtr<TInfo> info);
 
     void LockPageCollection(TLogoBlobID id);
     // Return true for page collections removed after unlock.
@@ -174,7 +164,7 @@ public:
 
     const TStats& GetStats() const { return Stats; }
 
-    std::pair<ui32, ui64> Request(TVector<ui32> &pages, TPrivatePageCacheWaitPad *waitPad, TInfo *info); // blocks to load, bytes to load
+    std::pair<ui32, ui64> Request(TVector<ui32> &pages, TInfo *info); // blocks to load, bytes to load
 
     const TSharedData* Lookup(TPageId pageId, TInfo *collection);
 
@@ -187,7 +177,7 @@ public:
 
     void DropSharedBody(TInfo *collectionInfo, TPageId pageId);
 
-    TPage::TWaitQueuePtr ProvideBlock(NSharedCache::TEvResult::TLoaded&& loaded, TInfo *collectionInfo);
+    void ProvideBlock(NSharedCache::TEvResult::TLoaded&& loaded, TInfo *collectionInfo);
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> DetachPrivatePageCache();
     THashMap<TLogoBlobID, THashSet<TPageId>> GetPrepareSharedTouched();
 

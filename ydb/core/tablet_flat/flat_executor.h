@@ -292,7 +292,7 @@ struct TExecutorStatsImpl : public TExecutorStats {
     ui64 PacksMetaBytes = 0;    /* Memory occupied by NPageCollection::TMeta */
 };
 
-struct TTransactionWaitPad : public TPrivatePageCacheWaitPad {
+struct TTransactionWaitPad : public NPageCollection::TPagesWaitPad {
     TSeat* Seat;
     NWilson::TSpan WaitingSpan;
 
@@ -460,7 +460,7 @@ class TExecutor
 
     TActorId Launcher;
 
-    THashMap<TPrivatePageCacheWaitPad*, THolder<TTransactionWaitPad>> TransactionWaitPads;
+    THashMap<NPageCollection::TPagesWaitPad*, TIntrusivePtr<TTransactionWaitPad>> TransactionWaitPads;
 
     ui64 TransactionUniqCounter = 0;
 
@@ -528,7 +528,7 @@ class TExecutor
     void EnqueueActivation(TSeat* seat, bool activate);
     void PlanTransactionActivation();
     void MakeLogSnapshot();
-    void ActivateWaitingTransactions(TPrivatePageCache::TPage::TWaitQueuePtr waitPadsQueue);
+    void ActivateWaitingTransactions(const TVector<TIntrusivePtr<NPageCollection::TPagesWaitPad>>& waitPads);
     void AddCachesOfBundle(const NTable::TPartView &partView) noexcept;
     void AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info) noexcept;
     void DropCachesOfBundle(const NTable::TPart &part) noexcept;

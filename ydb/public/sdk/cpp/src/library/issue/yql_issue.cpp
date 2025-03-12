@@ -1,8 +1,8 @@
 #include "utf8.h"
 
-#include <ydb-cpp-sdk/library/issue/yql_issue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/issue/yql_issue.h>
 
-#include <ydb-cpp-sdk/library/string_utils/misc/misc.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/string_utils/misc/misc.h>
 
 #include <library/cpp/colorizer/output.h>
 

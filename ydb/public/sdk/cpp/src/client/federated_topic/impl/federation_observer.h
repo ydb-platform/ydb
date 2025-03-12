@@ -1,15 +1,15 @@
 #pragma once
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/make_request/make.h>
-#include <src/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/protos/ydb_federation_discovery.pb.h>
 
-#include <src/client/topic/common/callback_context.h>
-#include <src/client/common_client/impl/client.h>
-#include <ydb-cpp-sdk/client/federated_topic/federated_topic.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 
 #include <util/system/spinlock.h>
 

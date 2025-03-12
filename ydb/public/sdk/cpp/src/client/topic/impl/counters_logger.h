@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/topic/counters.h>
-#include <src/client/topic/common/callback_context.h>
-#include <src/client/topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/counters.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 
-#include <src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
 #include <util/system/spinlock.h>
 

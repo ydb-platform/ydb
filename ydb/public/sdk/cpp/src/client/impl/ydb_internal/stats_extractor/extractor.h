@@ -1,10 +1,10 @@
 #pragma once
 
-#include <src/client/impl/ydb_internal/internal_header.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/internal_header.h>
 
-#include <src/client/impl/ydb_internal/internal_client/client.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/internal_client/client.h>
 
-#include <ydb-cpp-sdk/client/extension_common/extension.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extension_common/extension.h>
 
 #include <library/cpp/monlib/metrics/metric_registry.h>
 

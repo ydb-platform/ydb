@@ -1,8 +1,8 @@
 #pragma once
 
-#include <src/client/topic/common/callback_context.h>
-#include <src/client/topic/impl/write_session_impl.h>
-#include <src/client/topic/impl/topic_impl.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/write_session_impl.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h>
 
 #include <util/generic/buffer.h>
 

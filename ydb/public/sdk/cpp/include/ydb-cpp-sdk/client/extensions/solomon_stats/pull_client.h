@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/extension_common/extension.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extension_common/extension.h>
 
 #include <library/cpp/monlib/metrics/metric_consumer.h>
 #include <library/cpp/monlib/encode/json/json.h>

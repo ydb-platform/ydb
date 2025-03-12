@@ -2,7 +2,7 @@
 
 #include "common/types.h"
 
-#include <ydb-cpp-sdk/client/iam/common/types.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/common/types.h>
 
 namespace NYdb::inline Dev {
 

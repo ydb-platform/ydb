@@ -1,14 +1,14 @@
-#include <ydb-cpp-sdk/client/draft/ydb_replication.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <ydb-cpp-sdk/library/issue/yql_issue.h>
-#include <src/library/issue/yql_issue_message.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/issue/yql_issue.h>
+#include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 #include <ydb/public/api/grpc/draft/ydb_replication_v1.grpc.pb.h>
-#include <src/client/common_client/impl/client.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <google/protobuf/util/time_util.h>
 #include <google/protobuf/repeated_field.h>

@@ -3,7 +3,7 @@
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/resource_quota.h>
 
-#include <ydb-cpp-sdk/type_switcher.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/common/constants.h>
 
 #include <util/datetime/base.h>

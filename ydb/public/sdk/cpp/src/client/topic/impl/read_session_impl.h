@@ -9,14 +9,14 @@
 #include "offsets_collector.h"
 #include "transaction.h"
 
-#include <ydb-cpp-sdk/client/topic/read_session.h>
-#include <src/client/persqueue_public/include/read_session.h>
-#include <src/client/topic/common/callback_context.h>
-#include <src/client/topic/impl/topic_impl.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_session.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/include/read_session.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h>
 
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
-#include <src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>

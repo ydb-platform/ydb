@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 #include <util/datetime/base.h>
 
 namespace NYdb::inline Dev::NRetry {

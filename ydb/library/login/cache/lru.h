@@ -11,8 +11,6 @@ namespace NLogin {
 
 class TLruCache {
 public:
-    // using TKey = std::pair<const TString, const TString>;
-
     struct TKey {
         TString User;
         TString Password;

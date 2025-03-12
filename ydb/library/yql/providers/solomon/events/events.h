@@ -12,16 +12,36 @@ struct TEvSolomonProvider {
         EvBegin = EventSpaceBegin(NKikimr::TKikimrEvents::ES_SOLOMON_PROVIDER),
 
         // lister events
-        EvGetNextBatch = EvBegin,
+        EvUpdateConsumersCount = EvBegin,
+        EvAck,
+        EvGetNextBatch,
         EvMetricsBatch,
         EvMetricsReadError,
 
         // read actor events
+        EvPointsCountBatch,
         EvNewDataBatch,
 
         EvEnd
     };
-    static_assert(EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_SOLOMON_PROVIDER), "expect EvEnd < EventSpaceEnd(TEvents::ES_S3_PROVIDER)");
+    static_assert(EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_SOLOMON_PROVIDER), "expect EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_SOLOMON_PROVIDER)");
+
+    struct TEvUpdateConsumersCount :
+        public NActors::TEventPB<TEvUpdateConsumersCount, NSo::MetricQueue::TEvUpdateConsumersCount, EvUpdateConsumersCount> {
+        
+        explicit TEvUpdateConsumersCount(ui64 consumersCountDelta = 0) {
+            Record.SetConsumersCountDelta(consumersCountDelta);
+        }
+    };
+
+    struct TEvAck :
+        public NActors::TEventPB<TEvAck, NSo::MetricQueue::TEvAck, EvAck> {
+        
+        TEvAck() = default;
+        explicit TEvAck(const NDqProto::TMessageTransportMeta& transportMeta) {
+            Record.MutableTransportMeta()->CopyFrom(transportMeta);
+        }
+    };
 
     struct TEvGetNextBatch :
         public NActors::TEventPB<TEvGetNextBatch, NSo::MetricQueue::TEvGetNextBatch, EvGetNextBatch> {
@@ -31,7 +51,7 @@ struct TEvSolomonProvider {
         public NActors::TEventPB<TEvMetricsBatch, NSo::MetricQueue::TEvMetricsBatch, EvMetricsBatch> {
 
         TEvMetricsBatch() = default;
-        TEvMetricsBatch(std::vector<NSo::MetricQueue::TMetricLabels> metrics, bool noMoreMetrics, const NDqProto::TMessageTransportMeta& transportMeta) {
+        TEvMetricsBatch(std::vector<NSo::MetricQueue::TMetric> metrics, bool noMoreMetrics, const NDqProto::TMessageTransportMeta& transportMeta) {
             Record.MutableMetrics()->Assign(
                 metrics.begin(), 
                 metrics.end());
@@ -50,12 +70,24 @@ struct TEvSolomonProvider {
         }
     };
 
+    struct TEvPointsCountBatch : public NActors::TEventLocal<TEvPointsCountBatch, EvPointsCountBatch> {
+        std::vector<NSo::TMetric> Metrics;
+        NSo::TGetPointsCountResponse Response;
+        TEvPointsCountBatch(std::vector<NSo::TMetric>&& metrics, const NSo::TGetPointsCountResponse& response)
+            : Metrics(std::move(metrics))
+            , Response(response)
+        {}
+    };
+    
     struct TEvNewDataBatch: public NActors::TEventLocal<TEvNewDataBatch, EvNewDataBatch> {
-        ui64 SelectorsCount;
-        NSo::ISolomonAccessorClient::TGetDataResult Result;
-        TEvNewDataBatch(ui64 selectorsCount, NSo::ISolomonAccessorClient::TGetDataResult result)
-            : SelectorsCount(selectorsCount)
-            , Result(std::move(result))
+        NSo::TMetric Metric;
+        TInstant From, To;
+        NSo::TGetDataResponse Response;
+        TEvNewDataBatch(NSo::TMetric metric, TInstant from, TInstant to, const NSo::TGetDataResponse& response)
+            : Metric(metric)
+            , From(from)
+            , To(to)
+            , Response(response)
         {}
     };
 };

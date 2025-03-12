@@ -83,7 +83,7 @@ namespace NFake {
             }
         }
 
-        void Start(const TActorContext &ctx) noexcept
+        void Start(const TActorContext &ctx)
         {
             Y_ABORT_UNLESS(!Agent, "Tablet actor is already started");
 
@@ -106,7 +106,7 @@ namespace NFake {
             Borns += 1;
         }
 
-        void DoSuicide() noexcept
+        void DoSuicide()
         {
             Send(std::exchange(Owner, { }), new TEvents::TEvGone);
             Send(std::exchange(User, { }), new TEvents::TEvGone);

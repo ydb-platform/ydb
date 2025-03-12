@@ -27,7 +27,7 @@ namespace NFwd {
 
         }
 
-        ui32 Total() const noexcept
+        ui32 Total() const
         {
             if (!Blobs) {
                 return 0;
@@ -47,12 +47,12 @@ namespace NFwd {
             return total;
         }
 
-        ui32 Removed() const noexcept
+        ui32 Removed() const
         {
             return TScreen::Sum(Holes);
         }
 
-        void MaterializeTo(TVector<TLogoBlobID> &vec) const noexcept
+        void MaterializeTo(TVector<TLogoBlobID> &vec) const
         {
             const auto limit = Blobs ? Blobs->Total() : 0;
 

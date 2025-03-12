@@ -44,7 +44,7 @@ namespace NTest {
             return std::move(Row);
         }
 
-        TSchemedCookRow& To(TPos to) noexcept
+        TSchemedCookRow& To(TPos to)
         {
             if (to < On || to >= Scheme.Cols.size()) {
                 Y_ABORT("TSchemedCookRow row builder skip position is out of range");

@@ -36,12 +36,12 @@ namespace NTest {
             return Remap_;
         }
 
-        void Make(IPages *env) noexcept
+        void Make(IPages *env)
         {
             Iter = nullptr, Env = env; /* Have to make on each Seek(...) */
         }
 
-        EReady Seek(TRawVals key_, ESeek seek) noexcept
+        EReady Seek(TRawVals key_, ESeek seek)
         {
             const TCelled key(key_, *Scheme->Keys, false);
 
@@ -50,7 +50,7 @@ namespace NTest {
             return RollUp();
         }
 
-        EReady Next() noexcept
+        EReady Next()
         {
             if constexpr (Direction == EDirection::Reverse) {
                 Iter->Prev();
@@ -61,7 +61,7 @@ namespace NTest {
             return RollUp();
         }
 
-        const TRowState& Apply() noexcept
+        const TRowState& Apply()
         {
             Y_ABORT_UNLESS(*this, "Iterator isn't ready");
 

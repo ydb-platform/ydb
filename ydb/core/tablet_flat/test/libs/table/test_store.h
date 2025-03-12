@@ -53,7 +53,7 @@ namespace NTest {
             return Groups + 1;
         }
 
-        const TSharedData* GetPage(ui32 room, ui32 page) const noexcept
+        const TSharedData* GetPage(ui32 room, ui32 page) const
         {
             Y_ABORT_UNLESS(room < PageCollections.size(), "Room is out of bounds");
 
@@ -62,40 +62,40 @@ namespace NTest {
             return &PageCollections.at(room).at(page);
         }
 
-        size_t GetPageSize(ui32 room, ui32 page) const noexcept
+        size_t GetPageSize(ui32 room, ui32 page) const
         {
             Y_ABORT_UNLESS(room < PageCollections.size(), "Room is out of bounds");
 
             return PageCollections.at(room).at(page).size();
         }
 
-        NPage::EPage GetPageType(ui32 room, ui32 page) const noexcept
+        NPage::EPage GetPageType(ui32 room, ui32 page) const
         {
             Y_ABORT_UNLESS(room < PageCollections.size(), "Room is out of bounds");
 
             return PageTypes.at(room).at(page);
         }
 
-        TArrayRef<const TSharedData> PageCollectionArray(ui32 room) const noexcept
+        TArrayRef<const TSharedData> PageCollectionArray(ui32 room) const
         {
             Y_ABORT_UNLESS(room < PageCollections.size(), "Only regular rooms can be used as arr");
 
             return PageCollections[room];
         }
 
-        NPageCollection::TGlobId GlobForBlob(ui64 ref) const noexcept
+        NPageCollection::TGlobId GlobForBlob(ui64 ref) const
         {
             const auto& blob = PageCollections[GetExternRoom()].at(ref);
 
             return { TLogoBlobID(1, 2, 3, 7, blob.size(), GlobOffset + ref), /* fake group */ 123 };
         }
 
-        ui32 PageCollectionPagesCount(ui32 room) const noexcept
+        ui32 PageCollectionPagesCount(ui32 room) const
         {
             return PageCollections.at(room).size();
         }
 
-        ui64 PageCollectionBytes(ui32 room) const noexcept
+        ui64 PageCollectionBytes(ui32 room) const
         {
             auto &pages = PageCollections.at(room);
 
@@ -119,7 +119,7 @@ namespace NTest {
         /**
          * Used for legacy part from a binary file
          */
-        TEggs LegacyEggs() const noexcept
+        TEggs LegacyEggs() const
         {
             if (PageCollectionPagesCount(MainPageCollection) == 0) {
                 Y_ABORT("Cannot construct an empty part");
@@ -146,7 +146,7 @@ namespace NTest {
             };
         }
 
-        void Dump(IOutputStream &stream) const noexcept
+        void Dump(IOutputStream &stream) const
         {
             NUtil::NBin::TOut out(stream);
 
@@ -206,7 +206,7 @@ namespace NTest {
             return storage;
         }
 
-        TPageId WriteOuter(TSharedData page) noexcept
+        TPageId WriteOuter(TSharedData page)
         {
             Y_ABORT_UNLESS(!Finished, "This store is already finished");
 
@@ -219,7 +219,7 @@ namespace NTest {
             return pageId;
         }
 
-        TPageId Write(TSharedData page, EPage type, ui32 group) noexcept
+        TPageId Write(TSharedData page, EPage type, ui32 group)
         {
             Y_ABORT_UNLESS(group < PageCollections.size() - 1, "Invalid column group");
             Y_ABORT_UNLESS(!Finished, "This store is already finished");
@@ -259,14 +259,14 @@ namespace NTest {
             return pageId;
         }
 
-        void WriteInplace(TPageId page, TArrayRef<const char> body) noexcept
+        void WriteInplace(TPageId page, TArrayRef<const char> body)
         {
             Y_ABORT_UNLESS(page == Scheme);
 
             Meta = TSharedData::Copy(body.data(), body.size());
         }
 
-        NPageCollection::TGlobId WriteLarge(TSharedData data) noexcept
+        NPageCollection::TGlobId WriteLarge(TSharedData data)
         {
             Y_ABORT_UNLESS(!Finished, "This store is already finished");
 
@@ -279,7 +279,7 @@ namespace NTest {
             return GlobForBlob(pageId);
         }
 
-        void Finish() noexcept
+        void Finish()
         {
             Y_ABORT_UNLESS(!Finished, "Cannot finish test store more than once");
             Finished = true;

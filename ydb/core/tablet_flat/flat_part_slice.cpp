@@ -10,7 +10,7 @@ namespace NTable {
 
 namespace {
 
-void PrintCells(IOutputStream& out, TArrayRef<const TCell> cells, const TCellDefaults& cellDefaults) noexcept
+void PrintCells(IOutputStream& out, TArrayRef<const TCell> cells, const TCellDefaults& cellDefaults)
 {
     out << '{';
     size_t pos = 0;
@@ -44,7 +44,7 @@ bool ValidateSlices(TConstArrayRef<TSlice> slices) noexcept
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int ComparePartKeys(TCellsRef left, TCellsRef right, const TKeyCellDefaults &keyDefaults) noexcept {
+int ComparePartKeys(TCellsRef left, TCellsRef right, const TKeyCellDefaults &keyDefaults) {
     size_t end = Max(left.size(), right.size());
     Y_DEBUG_ABORT_UNLESS(end <= keyDefaults.Size(), "Key schema is smaller than compared keys");
 
@@ -61,7 +61,7 @@ int ComparePartKeys(TCellsRef left, TCellsRef right, const TKeyCellDefaults &key
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TBounds::Describe(IOutputStream& out, const TKeyCellDefaults& keyDefaults) const noexcept
+void TBounds::Describe(IOutputStream& out, const TKeyCellDefaults& keyDefaults) const
 {
     auto left = FirstKey.GetCells();
     auto right = LastKey.GetCells();
@@ -80,7 +80,7 @@ void TBounds::Describe(IOutputStream& out, const TKeyCellDefaults& keyDefaults) 
     out << (LastInclusive ? ']' : ')');
 }
 
-bool TBounds::LessByKey(const TBounds& a, const TBounds& b, const TKeyCellDefaults& keyDefaults) noexcept
+bool TBounds::LessByKey(const TBounds& a, const TBounds& b, const TKeyCellDefaults& keyDefaults)
 {
     auto left = a.LastKey.GetCells();
     auto right = b.FirstKey.GetCells();
@@ -112,7 +112,7 @@ bool TBounds::LessByKey(const TBounds& a, const TBounds& b, const TKeyCellDefaul
 int TBounds::CompareSearchKeyFirstKey(
         TArrayRef<const TCell> key,
         const TBounds& bounds,
-        const TKeyCellDefaults& keyDefaults) noexcept
+        const TKeyCellDefaults& keyDefaults)
 {
     if (!key) {
         // Search key is +inf => +inf > any
@@ -145,7 +145,7 @@ int TBounds::CompareSearchKeyFirstKey(
 int TBounds::CompareLastKeySearchKey(
         const TBounds& bounds,
         TArrayRef<const TCell> key,
-        const TKeyCellDefaults& keyDefaults) noexcept
+        const TKeyCellDefaults& keyDefaults)
 {
     auto left = bounds.LastKey.GetCells();
     if (Y_UNLIKELY(!left)) {
@@ -179,7 +179,7 @@ int TBounds::CompareLastKeySearchKey(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TSlice::Describe(IOutputStream& out) const noexcept
+void TSlice::Describe(IOutputStream& out) const
 {
     out << (FirstInclusive ? '[' : '(');
     out << FirstRowId;
@@ -192,7 +192,7 @@ void TSlice::Describe(IOutputStream& out) const noexcept
     out << (LastInclusive ? ']' : ')');
 }
 
-void TSlices::Describe(IOutputStream& out) const noexcept
+void TSlices::Describe(IOutputStream& out) const
 {
     bool first = true;
     out << "{ ";
@@ -206,7 +206,7 @@ void TSlices::Describe(IOutputStream& out) const noexcept
     out << (first ? "}" : " }");
 }
 
-void TSlices::Validate() const noexcept
+void TSlices::Validate() const
 {
     TRowId lastEnd = 0;
     for (const auto& bounds : *this) {
@@ -230,7 +230,7 @@ void TSlices::Validate() const noexcept
     }
 }
 
-TIntrusiveConstPtr<TScreen> TSlices::ToScreen() const noexcept
+TIntrusiveConstPtr<TScreen> TSlices::ToScreen() const
 {
     TVector<TScreen::THole> holes;
     auto it = IterateRowRanges();
@@ -290,7 +290,7 @@ bool TSlices::SupersetByRowId(const TIntrusiveConstPtr<TSlices>& a, const TIntru
 
 TIntrusiveConstPtr<TSlices> TSlices::Subtract(
         const TIntrusiveConstPtr<TSlices>& a,
-        const TIntrusiveConstPtr<TSlices>& b) noexcept
+        const TIntrusiveConstPtr<TSlices>& b)
 {
     if (!a || a->empty() || !b || b->empty()) {
         return a; // there's nothing to remove
@@ -377,7 +377,7 @@ TIntrusiveConstPtr<TSlices> TSlices::Subtract(
 
 TIntrusiveConstPtr<TSlices> TSlices::Merge(
         const TIntrusiveConstPtr<TSlices>& a,
-        const TIntrusiveConstPtr<TSlices>& b) noexcept
+        const TIntrusiveConstPtr<TSlices>& b)
 {
     if (!b || b->empty()) {
         return a;
@@ -430,7 +430,7 @@ TIntrusiveConstPtr<TSlices> TSlices::Cut(
         TRowId beginRowId,
         TRowId endRowId,
         TConstArrayRef<TCell> beginKey,
-        TConstArrayRef<TCell> endKey) noexcept
+        TConstArrayRef<TCell> endKey)
 {
     if (!run || run->empty()) {
         return run;
@@ -491,7 +491,7 @@ TIntrusiveConstPtr<TSlices> TSlices::Cut(
     return result;
 }
 
-TIntrusiveConstPtr<TSlices> TSlices::Replace(TIntrusiveConstPtr<TSlices> run, TConstArrayRef<TSlice> slices) noexcept
+TIntrusiveConstPtr<TSlices> TSlices::Replace(TIntrusiveConstPtr<TSlices> run, TConstArrayRef<TSlice> slices)
 {
     Y_ABORT_UNLESS(run && !run->empty());
     Y_ABORT_UNLESS(slices);

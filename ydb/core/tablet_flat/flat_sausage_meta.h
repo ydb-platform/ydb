@@ -14,7 +14,7 @@ namespace NPageCollection {
         TMeta(TSharedData blob, ui32 group);
         ~TMeta();
 
-        ui32 TotalPages() const { return Header->Pages; }
+        ui32 TotalPages() const noexcept { return Header->Pages; }
 
         inline TArrayRef<const TLogoBlobID> Blobs() const noexcept
         {
@@ -23,23 +23,23 @@ namespace NPageCollection {
             return TArrayRef<const TLogoBlobID>(blobs,  Header->Blobs);
         }
 
-        inline TBorder Bounds(ui32 page) const noexcept
+        inline TBorder Bounds(ui32 page) const
         {
             return Bounds(page, page);
         }
 
-        inline TGlobId Glob(ui32 blob) const noexcept
+        inline TGlobId Glob(ui32 blob) const
         {
             return { Blobs()[blob], Group };
         }
 
         size_t BackingSize() const noexcept;
-        TBorder Bounds(ui32 begin, ui32 end) const noexcept;
-        TInfo Page(ui32 page) const noexcept;
-        ui32 GetPageType(ui32 pageId) const noexcept;
-        ui32 GetPageChecksum(ui32 pageId) const noexcept;
-        ui64 GetPageSize(ui32 pageId) const noexcept;
-        TStringBuf GetPageInplaceData(ui32 pageId) const noexcept;
+        TBorder Bounds(ui32 begin, ui32 end) const;
+        TInfo Page(ui32 page) const;
+        ui32 GetPageType(ui32 pageId) const;
+        ui32 GetPageChecksum(ui32 pageId) const;
+        ui64 GetPageSize(ui32 pageId) const;
+        TStringBuf GetPageInplaceData(ui32 pageId) const;
 
     public:
         const TSharedData Raw;  /* Page collection serialized meta blob */

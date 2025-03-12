@@ -80,11 +80,11 @@ public:
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister);
     }
 
-    TResult Locate(const TMemTable*, ui64, ui32) noexcept override {
+    TResult Locate(const TMemTable*, ui64, ui32) override {
         Y_ABORT("IPages::Locate(TMemTable*, ...) shouldn't be used here");
     }
 
-    TResult Locate(const TPart*, ui64, ELargeObj) noexcept override {
+    TResult Locate(const TPart*, ui64, ELargeObj) override {
         Y_ABORT("IPages::Locate(TPart*, ...) shouldn't be used here");
     }
 

@@ -19,18 +19,18 @@ public:
         SwitchGen();
     }
 
-    NIceDb::TNiceDb Begin() noexcept {
+    NIceDb::TNiceDb Begin() {
         Annex->Switch(++Step, /* require step switch */ true);
         DB.Begin({ Gen, Step }, Env.emplace());
         return DB;
     }
 
-    void Commit() noexcept {
+    void Commit() {
         DB.Commit({ Gen, Step }, true, Annex.Get());
         Env.reset();
     }
 
-    TSnapEdge SnapshotTable(ui32 table) noexcept {
+    TSnapEdge SnapshotTable(ui32 table) {
         const auto scn = DB.Head().Serial + 1;
         TTxStamp txStamp(Gen, ++Step);
         DB.SnapshotToLog(table, txStamp);
@@ -372,7 +372,7 @@ private:
 };
 
 struct TSimpleLogger : public NUtil::ILogger {
-    NUtil::TLogLn Log(NUtil::ELnLev level) const noexcept override {
+    NUtil::TLogLn Log(NUtil::ELnLev level) const override {
         return { nullptr, level };
     }
 };

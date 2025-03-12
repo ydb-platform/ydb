@@ -61,7 +61,7 @@ namespace NTest {
     struct TSlicer {
         TSlicer(const TRowScheme &scheme) : Scheme(scheme) { }
 
-        TIntrusiveConstPtr<TSlices> Cut(const TPartStore &partStore, const TScreen &screen) noexcept
+        TIntrusiveConstPtr<TSlices> Cut(const TPartStore &partStore, const TScreen &screen)
         {
             TTestEnv env;
             TPartIter first(&partStore, { }, Scheme.Keys, &env);

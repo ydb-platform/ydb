@@ -840,14 +840,14 @@ public:
         , Locker(self)
     {}
 
-    void SetupUpdate(TLocksUpdate* update, ILocksDb* db = nullptr) noexcept {
+    void SetupUpdate(TLocksUpdate* update, ILocksDb* db = nullptr) {
         Y_ABORT_UNLESS(!Update, "Cannot setup a recursive update");
         Y_ABORT_UNLESS(update, "Cannot setup a nullptr update");
         Update = update;
         Db = db;
     }
 
-    void ResetUpdate() noexcept {
+    void ResetUpdate() {
         if (Y_LIKELY(Update)) {
             if (Update->Lock && Update->Lock->Empty()) {
                 Locker.RemoveLock(Update->LockTxId, nullptr);

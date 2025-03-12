@@ -22,7 +22,7 @@ namespace NBoot {
         }
 
     private: /* IStep, boot logic DSL actor interface   */
-        void Start() noexcept override
+        void Start() override
         {
             for (auto slot: xrange(Back->Switches.size()))
                 if (const auto &largeGlobId = Back->Switches[slot].LargeGlobId)
@@ -31,7 +31,7 @@ namespace NBoot {
             Flush();
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
+        void HandleStep(TIntrusivePtr<IStep> step) override
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(Pending);
 
@@ -40,14 +40,14 @@ namespace NBoot {
         }
 
     private:
-        void Flush() noexcept
+        void Flush()
         {
             Process();
 
             if (!Pending && Handled >= Back->Switches.size()) Env->Finish(this);
         }
 
-        void Assign(ui32 slot, TArrayRef<const char> body) noexcept
+        void Assign(ui32 slot, TArrayRef<const char> body)
         {
             Y_ABORT_UNLESS(slot < Back->Switches.size(), "Invalid switch index");
 
@@ -63,7 +63,7 @@ namespace NBoot {
             }
         }
 
-        void Apply(TSwitch &entry, TArrayRef<const char> body) noexcept
+        void Apply(TSwitch &entry, TArrayRef<const char> body)
         {
             TProtoBox<NKikimrExecutorFlat::TTablePartSwitch> proto(body);
 
@@ -96,7 +96,7 @@ namespace NBoot {
                 Back->SetTableEdge(proto.GetTableSnapshoted());
         }
 
-        void Process() noexcept
+        void Process()
         {
             for (; Handled < Back->Switches.size(); Handled++) {
                 auto &front = Back->Switches[Handled];

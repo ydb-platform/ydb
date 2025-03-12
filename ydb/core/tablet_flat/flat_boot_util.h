@@ -36,7 +36,7 @@ namespace NBoot {
             return Value;
         }
 
-        TLeft& operator +=(const TSpawned& spawned) noexcept
+        TLeft& operator +=(const TSpawned& spawned)
         {
             if (spawned) {
                 *this += size_t(1);
@@ -45,7 +45,7 @@ namespace NBoot {
             return *this;
         }
 
-        TLeft& operator +=(size_t inc) noexcept
+        TLeft& operator +=(size_t inc)
         {
             if (Value > Max<decltype(Value)>() - inc) {
 
@@ -57,7 +57,7 @@ namespace NBoot {
             return *this;
         }
 
-        TLeft& operator -=(size_t dec) noexcept
+        TLeft& operator -=(size_t dec)
         {
             Y_ABORT_UNLESS(Value >= dec, "TLeft counter is underflowed");
 

@@ -860,5 +860,6 @@ message TTopicDataResponse {
     uint64 StartOffset = 1;
     uint64 EndOffset = 2;
     repeated TMessage Messages = 3;
+    bool Truncated = 4;
 }
 

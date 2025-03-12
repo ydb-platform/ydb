@@ -143,12 +143,10 @@ void TTopicData::FillProtoResponse(ui64 maxSingleMessageSize, ui64 maxTotalSize)
             data.resize(maxSingleMessageSize);
         }
         totalSize += data.size();
-        if (EncodeMessageData)
-            protoMessage.SetMessage(std::move(Base64Encode(data)));
-        else
-            protoMessage.SetMessage(std::move(data));
+        protoMessage.SetMessage(std::move(Base64Encode(data)));
     };
     ProtoResponse.SetStartOffset(cmdRead.GetStartOffset());
+    bool truncated = true;
     ProtoResponse.SetEndOffset(cmdRead.GetEndOffset());
 
     for (auto& r : cmdRead.GetResult()) {
@@ -158,6 +156,10 @@ void TTopicData::FillProtoResponse(ui64 maxSingleMessageSize, ui64 maxTotalSize)
         auto dataChunk = (NKikimr::GetDeserializedData(r.GetData()));
         auto* messageProto = ProtoResponse.AddMessages();
         messageProto->SetOffset(r.GetOffset());
+
+        if (r.GetOffset() == cmdRead.GetEndOffset() - 1)
+            truncated = false;
+
         messageProto->SetCreateTimestamp(r.GetCreateTimestampMS());
         messageProto->SetWriteTimestamp(r.GetWriteTimestampMS());
         i64 diff = r.GetWriteTimestampMS() - r.GetCreateTimestampMS();
@@ -189,6 +191,7 @@ void TTopicData::FillProtoResponse(ui64 maxSingleMessageSize, ui64 maxTotalSize)
             }
         }
     }
+    ProtoResponse.SetTruncated(truncated);
 }
 
 void TTopicData::ReplyAndPassAway() {
@@ -265,7 +268,6 @@ void TTopicData::Bootstrap() {
     }
 
     TopicPath = params.Get("path");
-    EncodeMessageData = FromStringWithDefault<bool>(params.Get("encode_data"), true);
     if (!TopicPath.empty()) {
         NavigateResponse = MakeRequestSchemeCacheNavigateWithToken(TopicPath, true, NACLib::DescribeSchema, 1);
     } else {

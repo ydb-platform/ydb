@@ -613,8 +613,7 @@ def test_topic_data():
         'path': '{}/topic2'.format(dedicated_db),
         'partition': '0',
         'offset': '0',
-        'limit': '5',
-        'encode_data': 'false'
+        'limit': '5'
     })
 
     response_w_meta = call_viewer("/viewer/topic_data", {
@@ -622,24 +621,22 @@ def test_topic_data():
         'path': '{}/topic2'.format(dedicated_db),
         'partition': '0',
         'offset': '10',
-        'limit': '1',
-        'encode_data': 'false'
+        'limit': '1'
     })
     response_compressed = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
         'path': '{}/topic2'.format(dedicated_db),
         'partition': '0',
         'offset': '11',
-        'limit': '5',
-        'encode_data': 'false'
+        'limit': '5'
     })
 
-    response_encoded = call_viewer("/viewer/topic_data", {
+    response_last = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
         'path': '{}/topic2'.format(dedicated_db),
         'partition': '0',
-        'offset': '11',
-        'limit': '1'
+        'offset': '20',
+        'limit': '5'
     })
 
     def strip_non_canonized(resp):
@@ -658,6 +655,6 @@ def test_topic_data():
         'response_read': strip_non_canonized(response),
         'response_metadata': strip_non_canonized(response_w_meta),
         'response_compressed': strip_non_canonized(response_compressed),
-        'response_encoded': strip_non_canonized(response_encoded)
+        'response_not_truncated': strip_non_canonized(response_last)
     }
     return result

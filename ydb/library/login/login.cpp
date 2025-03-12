@@ -40,7 +40,7 @@ struct TLoginProvider::TImpl {
     void GenerateKeyPair(TString& publicKey, TString& privateKey);
     TString GenerateHash(const TString& password);
     bool VerifyHash(const TString& password, const TString& hash);
-    bool VerifyHashWithCache(const TLruCache::TKey& key, const TString& hash);
+    bool VerifyHashWithCache(const TLruCache::TKey& key);
 };
 
 TLoginProvider::TLoginProvider()
@@ -460,7 +460,7 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
         }
 
         sid = &(itUser->second);
-        if (!Impl->VerifyHashWithCache(std::make_pair(request.User, request.Password), itUser->second.PasswordHash)) {
+        if (!Impl->VerifyHashWithCache({.User = request.User, .Password = request.Password, .Hash = itUser->second.PasswordHash})) {
             response.Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
             response.Error = "Invalid password";
             sid->LastFailedLogin = now;
@@ -741,7 +741,7 @@ bool TLoginProvider::TImpl::VerifyHash(const TString& password, const TString& p
         hash.size());
 }
 
-bool TLoginProvider::TImpl::VerifyHashWithCache(const TLruCache::TKey& key, const TString& hash) {
+bool TLoginProvider::TImpl::VerifyHashWithCache(const TLruCache::TKey& key) {
     const auto successCacheIt = SuccessPasswordsCache.Find(key);
     if (successCacheIt != SuccessPasswordsCache.End()) {
         return successCacheIt->second;
@@ -752,7 +752,7 @@ bool TLoginProvider::TImpl::VerifyHashWithCache(const TLruCache::TKey& key, cons
         return wrongCacheIt->second;
     }
 
-    bool isSuccessVerifying = VerifyHash(key.second, hash);
+    bool isSuccessVerifying = VerifyHash(key.Password, key.Hash);
     if (isSuccessVerifying) {
         SuccessPasswordsCache.Insert(key, isSuccessVerifying);
     } else {

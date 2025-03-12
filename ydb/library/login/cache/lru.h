@@ -4,17 +4,35 @@
 #include <unordered_map>
 
 #include <util/generic/string.h>
+#include <util/string/builder.h>
 #include <util/str_stl.h>
 
 namespace NLogin {
 
 class TLruCache {
 public:
-    using TKey = std::pair<const TString, const TString>;
+    // using TKey = std::pair<const TString, const TString>;
+
+    struct TKey {
+        TString User;
+        TString Password;
+        TString Hash;
+
+        bool operator == (const TKey& other) const {
+            return ((this->User == other.User) && (this->Password == other.Password) && (this->Hash == other.Hash));
+        }
+    };
+
+    struct TKeyHash {
+        size_t operator() (const TKey& key) const {
+            return THash<TString>()(TStringBuilder() << key.User << key.Password << key.Hash);
+        }
+    };
+
     using TItem = std::pair<const TKey, bool>;
     using TDataContainer = std::list<TItem>;
     using TIterator = TDataContainer::iterator;
-    using TIndexContainer = std::unordered_map<TKey, const TIterator, THash<TKey>>;
+    using TIndexContainer = std::unordered_map<TKey, const TIterator, TKeyHash>;
 
     TLruCache(std::size_t capacity);
 

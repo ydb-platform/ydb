@@ -86,7 +86,6 @@ namespace NActors {
         if (const auto& callback = ProxyCommonCtx->InitWhiteboard) {
             callback(Port, TActivationContext::ActorSystem());
         }
-        Sleep(TDuration::MicroSeconds(100));
         const bool success = ctx.Send(MakePollerActorId(), new TEvPollerRegister(Listener, SelfId(), {}));
         Y_ABORT_UNLESS(success);
         Become(&TThis::Listen);

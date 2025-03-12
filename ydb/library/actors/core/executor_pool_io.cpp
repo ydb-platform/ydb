@@ -128,6 +128,8 @@ namespace NActors {
 
         for (i16 i = 0; i != PoolThreads; ++i)
             Threads[i].Thread->Start();
+
+        TExecutorPoolBaseMailboxed::Start();
     }
 
     void TIOExecutorPool::PrepareStop() {

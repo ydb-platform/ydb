@@ -9,7 +9,7 @@
 #include <ydb/library/actors/util/unordered_cache.h>
 #include <ydb/library/actors/util/threadparkpad.h>
 
-//#define RING_ACTIVATION_QUEUE 
+//#define RING_ACTIVATION_QUEUE
 
 namespace NActors {
     class TActorSystem;
@@ -19,6 +19,8 @@ namespace NActors {
         TActorSystem* ActorSystem;
         THolder<TMailboxTable> MailboxTableHolder;
         TMailboxTable* MailboxTable;
+        TMailboxCache MailboxCache;
+        std::atomic<bool> ActorSystemStarted{ false };
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         // Need to have per pool object to collect stats like actor registrations (because
         // registrations might be done in threads from other pools)
@@ -47,6 +49,12 @@ namespace NActors {
         void UnregisterAlias(TMailbox* mailbox, const TActorId& actorId) override;
         bool Cleanup() override;
         TMailboxTable* GetMailboxTable() const override;
+        TMailboxCache* GetMailboxCache() override;
+
+        void Start() override {
+            ActorSystemStarted = true;
+            ActorSystemStarted.notify_all();
+        };
     };
 
     class TExecutorPoolBase: public TExecutorPoolBaseMailboxed {

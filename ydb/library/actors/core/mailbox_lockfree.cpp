@@ -3,6 +3,11 @@
 #include "events.h"
 #include "executor_pool.h"
 
+const int DebugLevel = 0;
+#define MY_DEBUG(x, y) if (x <= DebugLevel) { \
+    Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " " << y << Endl); \
+}
+
 namespace NActors {
 
     namespace {
@@ -24,16 +29,22 @@ namespace NActors {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     void TMailbox::Work() noexcept {
-        //Cerr << "Created new worker\n";
+        Y_ASSERT(ActorSystemStarted); // not set for testactorsystem!
+        ActorSystemStarted->wait(false);
         while (true) {
             auto vec = SimpleQueue->PopAll();
             for (auto evExt : vec) {
-                //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " Pop, mailbox# " << (void*)this << " event " << (evExt ? evExt->GetTypeName() : "nullptr") << " evPtr# " << (void*)evExt << Endl);
+                MY_DEBUG(2, " Pop, mailbox# " << (void*)this << " event " << (evExt ? evExt->GetTypeName() : "nullptr") << " evPtr# " << (void*)evExt);
                 if (!evExt) {
+                    MY_DEBUG(1, " Pop returned nullptr, mailbox# " << (void*)this << " status# " << (int)Status.load());
                     if (Status.load() == 0) {
                         continue;
                     } else {
-                        //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " Pop, mailbox# " << (void*)this << " event# 0, return" << Endl);
+                        if (IsEmpty()) {
+                            if (Status.exchange(MarkerFree) != MarkerFree) {
+                                ExecutorPool->GetMailboxCache()->Free(this);
+                            }
+                        }
                         return;
                     }
                 }
@@ -50,17 +61,12 @@ namespace NActors {
                         recipient = evExt->GetRecipientRewrite();
                     }
                 }
-                //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << "after rewrite mailbox# " << (void*)this
-                //    << " actor# " << TypeName(actor) << " event " << (evExt ? evExt->GetTypeName() : "nullptr") << Endl);
                 NHPTimer::STime eventStart = 0;// = NHPTimer::HPNow();
                 TActorContext ctx(*this, *ExecutorPool, eventStart, recipient);
-                //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " 8" << Endl);
                 TlsActivationContext = &ctx; // ensure dtor (if any) is called within actor system
                 // move for destruct before ctx;
                 auto ev = std::move(evExt);
 
-                //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " receive mailbox# " << (void*)this
-                    //<< " actor# " << (void*)actor << " event " << (ev ? ev->GetTypeName() : "nullptr") << Endl);
                 if (actor) {
                     Y_ASSERT(ev);
                     TAutoPtr<IEventHandle> evHandle(ev);
@@ -75,7 +81,16 @@ namespace NActors {
                     }
                 }
             }
+            if (IsEmpty()) {
+                // there are no more alive actors on that mailbox
+                if (Status.exchange(MarkerFree) != MarkerFree) {
+                    ExecutorPool->GetMailboxCache()->Free(this);
+                }
+            }
+            TActorContext ctx(*this, *ExecutorPool, 0, {});
+            TlsActivationContext = &ctx;
             DyingActors.clear();
+            TlsActivationContext = nullptr;
         }
     }
 
@@ -83,8 +98,7 @@ namespace NActors {
         std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
 
         IActor* actor = DetachActor(localActorId);
-        //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__  << " local_actor# " <<  localActorId
-        //    << " mailbox " << (void*)this << Endl);
+        MY_DEBUG(1, " local_actor# " <<  localActorId << " mailbox " << (void*)this << " actor# " << TypeName(*actor));
 
         DyingActors.push_back(THolder(actor));
     }
@@ -93,28 +107,42 @@ namespace NActors {
         std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
         switch (ActorPack) {
             case EActorPack::Empty:
+                ///Cerr << (TStringBuilder() << __PRETTY_FUNCTION__  << " local_actor# " <<  localActorId
+                ///    << " mailbox " << (void*)this << " empty " << Endl);
                 return nullptr;
 
             case EActorPack::Simple:
                 if (ActorsInfo.Simple.ActorId == localActorId) {
+                    ///Cerr << (TStringBuilder() << __PRETTY_FUNCTION__  << " local_actor# " <<  localActorId
+                    ///    << " mailbox " << (void*)this << " simple found " << Endl);
                     return ActorsInfo.Simple.Actor;
                 }
+                ///Cerr << (TStringBuilder() << __PRETTY_FUNCTION__  << " local_actor# " <<  localActorId
+                ///    << " mailbox " << (void*)this << " simple not found " << Endl);
                 return nullptr;
 
             case EActorPack::Array:
                 for (ui64 i = 0; i < ActorsInfo.Array.ActorsCount; ++i) {
                     auto& entry = ActorsInfo.Array.ActorsArray->Actors[i];
                     if (entry.ActorId == localActorId) {
+                        ///Cerr << (TStringBuilder() << __PRETTY_FUNCTION__  << " local_actor# " <<  localActorId
+                        ///    << " mailbox " << (void*)this << " array found " << Endl);
                         return entry.Actor;
                     }
                 }
+                ///Cerr << (TStringBuilder() << __PRETTY_FUNCTION__  << " local_actor# " <<  localActorId
+                ///    << " mailbox " << (void*)this << " array not found " << Endl);
                 return nullptr;
 
             case EActorPack::Map: {
                 auto it = ActorsInfo.Map.ActorsMap->find(localActorId);
                 if (it != ActorsInfo.Map.ActorsMap->end()) {
+                    ///Cerr << (TStringBuilder() << __PRETTY_FUNCTION__  << " local_actor# " <<  localActorId
+                    ///    << " mailbox " << (void*)this << " map found " << Endl);
                     return it->second;
                 }
+                ///Cerr << (TStringBuilder() << __PRETTY_FUNCTION__  << " local_actor# " <<  localActorId
+                ///    << " mailbox " << (void*)this << " map not found " << Endl);
                 return nullptr;
             }
         }
@@ -145,8 +173,8 @@ namespace NActors {
 
     void TMailbox::AttachActor(ui64 localActorId, IActor* actor) noexcept {
         std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
-        ///Cerr << (TStringBuilder() << __PRETTY_FUNCTION__  << " local_actor# " <<  localActorId
-        ///    << " mailbox " << (void*)this << Endl);
+        MY_DEBUG(1, "Status# " << Status.load() << " local_actor# " <<  localActorId
+            << " mailbox " << (void*)this << " actor# " << TypeName(*actor));
         switch (ActorPack) {
             case EActorPack::Empty:
                 ActorsInfo.Simple = { actor, localActorId };
@@ -203,7 +231,6 @@ namespace NActors {
 
     IActor* TMailbox::DetachActor(ui64 localActorId) noexcept {
         std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
-        //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << Endl);
         switch (ActorPack) {
             case EActorPack::Empty:
                 Y_ABORT("DetachActor(%" PRIu64 ") called for an empty mailbox", localActorId);
@@ -407,37 +434,36 @@ namespace NActors {
     }
 
     size_t TMailbox::CleanupEvents() noexcept {
-        return SimpleQueue->Cleanup(Status.load() != MarkerFree);
+        return SimpleQueue->Cleanup(false);
     }
 
     bool TMailbox::Cleanup() noexcept {
+        MY_DEBUG(1, " mailbox# " << (void*)this << " current status# " << (int)Status.load());
         Status.store(MarkerFree);
-        CleanupEvents();
         bool doneActors = CleanupActors();
         size_t eventsInQueue = CleanupEvents();
         if (!(doneActors && eventsInQueue == 0)) {
-            //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " mailbox# " << (void*)this << " doneActors# " << doneActors << " eventsInQueue# " << eventsInQueue << Endl);
+            MY_DEBUG(1, " mailbox# " << (void*)this << " doneActors# " << doneActors << " eventsInQueue# " << eventsInQueue);
+        }
+        if (Worker) {
+            if (ActorSystemStarted) {
+                *ActorSystemStarted = true;
+                ActorSystemStarted->notify_all();
+            }
+
+            SimpleQueue->Cleanup(true);
+            MY_DEBUG(1, " mailbox# " << (void*)this << " wait for worker to finish");
+            Worker->join();
+            Worker.reset();
         }
         return doneActors && eventsInQueue == 0;
     }
 
     TMailbox::TMailbox() {
-        if (!Worker) {
-            //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " new worker" << Endl);
-            Worker = std::thread(std::bind(&TMailbox::Work, this));
-        } else {
-            Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " existing worker" << Endl);
-        }
     }
 
     TMailbox::~TMailbox() noexcept {
         Cleanup();
-        if (Worker) {
-            SimpleQueue->Cleanup(true);
-            //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__  << " mailbox# " << (void*)this << Endl);
-            Worker->join();
-            Worker.reset();
-        }
     }
 
     void TMailbox::OnPreProcessed(IEventHandle* , IEventHandle* ) noexcept {
@@ -453,7 +479,11 @@ namespace NActors {
         uintptr_t current = Status.load(std::memory_order_relaxed);
         IEventHandle* ev = evPtr.Release();
         for (;;) {
-            //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__  << " " << current << " event " << (void*)ev << Endl);
+            TStringStream s;
+            if (ev) {
+                s << " for actor# " << ev->GetRecipientRewrite() << " ev_type# " << ev->GetTypeName();
+            }
+            MY_DEBUG(1, "Status# " << Status.load() << " mailbox# " << (void*)this << " push event " << (void*)ev << s.Str());
             if (current == MarkerFree) {
                 evPtr.Reset(ev);
                 return EMailboxPush::Free;
@@ -506,22 +536,28 @@ namespace NActors {
 
     void TMailbox::LockToFree() noexcept {
         uintptr_t current = Status.exchange(MarkerFree, std::memory_order_acquire);
+        MY_DEBUG(1, " mailbox# " << (void*)this << " current status# " << (int)current);
         if (current) {
-            Y_DEBUG_ABORT_UNLESS(current != MarkerUnlocked, "LockToFree called on an unlocked mailbox");
-            Y_DEBUG_ABORT_UNLESS(current != MarkerFree, "LockToFree called on a mailbox that is already free");
+            Y_DEBUG_ABORT_UNLESS(current != MarkerUnlocked, "LockToFree called on an unlocked mailbox, status# %d, mailbox# %p", current, this);
+            Y_DEBUG_ABORT_UNLESS(current != MarkerFree, "LockToFree called on a mailbox that is already free, status# %d, mailbox# %p", current, this);
         }
-        SimpleQueue->Notify();
     }
 
     void TMailbox::LockFromFree() noexcept {
         uintptr_t current = MarkerFree;
+        MY_DEBUG(1, " mailbox# " << (void*)this);
         if (!Status.compare_exchange_strong(current, 0, std::memory_order_relaxed)) {
-            Y_ABORT("LockFromFree called on a mailbox that is not free");
+            Y_ABORT("LockFromFree called on a mailbox that is not free, %p", this);
         }
     }
 
     void TMailbox::Unlock(IExecutorPool* , NHPTimer::STime , ui64& ) {
-        // TODO
+        if (!Worker) {
+            MY_DEBUG(1, " new worker");
+            Worker = std::thread(std::bind(&TMailbox::Work, this));
+        } else {
+            MY_DEBUG(1, " reuse existing worker");
+        }
     }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1102,6 +1138,7 @@ namespace NActors {
     {}
 
     TMailboxCache::~TMailboxCache() {
+        std::lock_guard<std::mutex> g(Mutex);
         if (BackupBlock) {
             Table->FreeBlock(BackupBlock, BackupSize);
             BackupBlock = nullptr;
@@ -1116,6 +1153,7 @@ namespace NActors {
     }
 
     void TMailboxCache::Switch(TMailboxTable* table) {
+        std::lock_guard<std::mutex> g(Mutex);
         if (Table != table) {
             if (BackupBlock) {
                 Table->FreeBlock(BackupBlock, BackupSize);
@@ -1132,6 +1170,7 @@ namespace NActors {
     }
 
     TMailbox* TMailboxCache::Allocate() {
+        std::unique_lock<std::mutex> g(Mutex);
         Y_ABORT_UNLESS(Table);
 
         if (!CurrentBlock) {
@@ -1157,11 +1196,15 @@ namespace NActors {
         Y_DEBUG_ABORT_UNLESS(CurrentBlock ? CurrentSize > 0 : CurrentSize == 0);
 
         mailbox->ActorsInfo.Empty.NextFree = nullptr;
+        MY_DEBUG(1, "mailbox# " << (void*)mailbox)
         return mailbox;
     }
 
     void TMailboxCache::Free(TMailbox* mailbox) {
+        std::unique_lock<std::mutex> g(Mutex);
+        MY_DEBUG(1, "mailbox# " << (void*)mailbox)
         Y_ABORT_UNLESS(Table);
+        Y_ABORT_UNLESS(mailbox != CurrentBlock, "double free");
 
         if (CurrentSize >= TMailboxTable::BlockSize) {
             if (BackupBlock) {
@@ -1178,7 +1221,9 @@ namespace NActors {
         CurrentSize++;
     }
 
-    TMailboxTable::TMailboxTable() {}
+    TMailboxTable::TMailboxTable(std::atomic<bool>* actorSystemStarted)
+        : ActorSystemStarted(actorSystemStarted)
+    {}
 
     TMailboxTable::~TMailboxTable() {
         ui32 lineCount = GetAllocatedLinesCountSlow();
@@ -1296,7 +1341,7 @@ namespace NActors {
         Y_DEBUG_ABORT_UNLESS(FreeMailboxesCount < BlockSize);
 
         while (head) {
-            Y_DEBUG_ABORT_UNLESS(count > 0);
+            Y_DEBUG_ABORT_UNLESS(count > 0, "count# %zu", count);
             TMailbox* mailbox = head;
             head = head->ActorsInfo.Empty.NextFree;
             count--;
@@ -1311,7 +1356,7 @@ namespace NActors {
             }
         }
 
-        Y_DEBUG_ABORT_UNLESS(count == 0);
+        Y_DEBUG_ABORT_UNLESS(count == 0, "count# %zu", count);
     }
 
     void TMailboxTable::FreeFullBlock(TMailbox* head) noexcept {
@@ -1349,6 +1394,7 @@ namespace NActors {
             for (ui32 i = 0; i < MailboxesPerLine; ++i) {
                 TMailbox* mailbox = &line->Mailboxes[i];
                 mailbox->Hint = base + i;
+                mailbox->ActorSystemStarted = ActorSystemStarted;
                 if (i > 0) {
                     if ((i & (BlockSize - 1)) == 0) {
                         // This is the first mailbox is the next block

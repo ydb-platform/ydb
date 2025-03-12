@@ -21,12 +21,12 @@ namespace NActors {
     TExecutorPoolBaseMailboxed::TExecutorPoolBaseMailboxed(ui32 poolId)
         : IExecutorPool(poolId)
         , ActorSystem(nullptr)
-        , MailboxTableHolder(new TMailboxTable)
+        , MailboxTableHolder(new TMailboxTable(&ActorSystemStarted))
         , MailboxTable(MailboxTableHolder.Get())
+        , MailboxCache(MailboxTable)
     {}
 
     TExecutorPoolBaseMailboxed::~TExecutorPoolBaseMailboxed() {
-        MailboxTableHolder.Destroy();
     }
 
 #if defined(ACTORSLIB_COLLECT_EXEC_STATS)
@@ -143,8 +143,6 @@ namespace NActors {
                     return true;
                 case EMailboxPush::Free:
                     // message cannot be delivered
-                    Y_ABORT();
-
                     break;
             }
         }
@@ -183,8 +181,7 @@ namespace NActors {
     }
 
     TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailboxType::EType, ui64 revolvingWriteCounter, const TActorId& parentId) {
-        TMailboxCache empty;
-        return Register(actor, empty, revolvingWriteCounter, parentId);
+        return Register(actor, MailboxCache, revolvingWriteCounter, parentId);
     }
 
     TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailboxCache& cache, ui64 revolvingWriteCounter, const TActorId& parentId) {
@@ -309,5 +306,9 @@ namespace NActors {
 
     TMailboxTable* TExecutorPoolBaseMailboxed::GetMailboxTable() const {
         return MailboxTable;
+    }
+
+    TMailboxCache* TExecutorPoolBaseMailboxed::GetMailboxCache() {
+        return &MailboxCache;
     }
 }

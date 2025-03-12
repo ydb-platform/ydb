@@ -49,7 +49,7 @@ namespace NActors {
 
     constexpr TDuration TBasicExecutorPool::DEFAULT_TIME_PER_MAILBOX;
 
-    TString GetCurrentThreadKind() { 
+    TString GetCurrentThreadKind() {
         if (TlsThreadContext) {
             return TlsThreadContext->WorkerId() >= 0 ? "[common]" : "[shared]";
         }
@@ -322,7 +322,7 @@ namespace NActors {
                 return;
             }
             semaphore = TSemaphore::GetSemaphore(x);
-        }    
+        }
 
         i16 sleepThreads = 0;
         Y_UNUSED(sleepThreads);
@@ -480,6 +480,7 @@ namespace NActors {
         if constexpr (DebugMode) {
             Sanitizer->Start();
         }
+        TExecutorPoolBaseMailboxed::Start();
         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "started");
     }
 
@@ -601,7 +602,7 @@ namespace NActors {
     i16 TBasicExecutorPool::GetMaxFullThreadCount() const {
         return MaxFullThreadCount;
     }
-    
+
     ui32 TBasicExecutorPool::GetThreads() const {
         return MaxFullThreadCount;
     }

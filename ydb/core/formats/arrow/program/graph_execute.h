@@ -102,6 +102,7 @@ public:
 
     private:
         THashSet<ui32> Visited;
+        THashSet<ui32> Executed;
         THashSet<ui32> Current;
 
         virtual TConclusion<EVisitStatus> DoOnExit(const TCompiledGraph::TNode& node) = 0;
@@ -111,6 +112,9 @@ public:
     public:
         virtual ~IVisitor() = default;
 
+        const THashSet<ui32>& GetExecutedIds() const {
+            return Executed;
+        }
         [[nodiscard]] TConclusion<EVisitStatus> OnExit(const TCompiledGraph::TNode& node);
         [[nodiscard]] TConclusionStatus OnEnter(const TCompiledGraph::TNode& node) {
             AFL_VERIFY(node.GetProcessor());
@@ -216,7 +220,7 @@ public:
         return false;
     }
 
-    TString DebugDOT() const;
+    TString DebugDOT(const THashSet<ui32>& special = Default<THashSet<ui32>>()) const;
     TString DebugStats() const;
 
     TString DebugString() const {

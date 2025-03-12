@@ -233,6 +233,8 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
             break;
         }
     }
+    AFL_DEBUG(NKikimrServices::SSA_GRAPH_EXECUTION)("graph_constructed", Program->DebugDOT(source->GetExecutionVisitorVerified()->GetExecutedIds()));
+
     return true;
 }
 

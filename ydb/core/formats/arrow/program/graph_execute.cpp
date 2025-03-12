@@ -151,7 +151,7 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
             node->SetRemoveResourceIds(i.second.GetLastUsageResources());
         }
     }
-    Cerr << DebugDOT() << Endl;
+    AFL_TRACE(NKikimrServices::SSA_GRAPH_EXECUTION)("graph_constructed", DebugDOT());
 }
 
 TConclusionStatus TCompiledGraph::Apply(
@@ -200,7 +200,7 @@ NJson::TJsonValue TCompiledGraph::DebugJson() const {
     return result;
 }
 
-TString TCompiledGraph::DebugDOT() const {
+TString TCompiledGraph::DebugDOT(const THashSet<ui32>& special) const {
     TStringBuilder result;
     result << "digraph program {";
     std::map<ui32, ui32> remapSeqToId;
@@ -217,14 +217,22 @@ TString TCompiledGraph::DebugDOT() const {
             label << "REMOVE:" << JoinSeq(",", i.second->GetRemoveResourceIds());
         }
         result << "N" << i.second->GetIdentifier() << "[shape=box, label=\"" << label << "\"";
-        if (i.second->GetOutputEdges().empty()) {
-            result << ",style=filled,color=\"#FFAAAA\"";
-        } else if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::AssembleOriginalData ||
-                   i.second->GetProcessor()->GetProcessorType() == EProcessorType::FetchOriginalData) {
-            result << ",style=filled,color=\"green\"";
-        } else if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::CheckIndexData ||
-                   i.second->GetProcessor()->GetProcessorType() == EProcessorType::FetchIndexData) {
-            result << ",style=filled,color=\"#AAFFAA\"";
+        if (special.size()) {
+            if (special.contains(i.second->GetIdentifier())) {
+                result << ",style=filled,color=\"#99FF99\"";
+            } else {
+                result << ",style=filled,color=\"#777777\"";
+            }
+        } else {
+            if (i.second->GetOutputEdges().empty()) {
+                result << ",style=filled,color=\"#FFAAAA\"";
+            } else if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::AssembleOriginalData ||
+                       i.second->GetProcessor()->GetProcessorType() == EProcessorType::FetchOriginalData) {
+                result << ",style=filled,color=\"green\"";
+            } else if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::CheckIndexData ||
+                       i.second->GetProcessor()->GetProcessorType() == EProcessorType::FetchIndexData) {
+                result << ",style=filled,color=\"#AAFFAA\"";
+            }
         }
         result << "];" << Endl;
         ui32 idx = 1;
@@ -446,8 +454,7 @@ TConclusion<bool> TCompiledGraph::TIterator::Next() {
     return GlobalInitialize();
 }
 
-TConclusion<TCompiledGraph::IVisitor::EVisitStatus> TCompiledGraph::IVisitor::OnExit(
-    const TCompiledGraph::TNode& node) {
+TConclusion<TCompiledGraph::IVisitor::EVisitStatus> TCompiledGraph::IVisitor::OnExit(const TCompiledGraph::TNode& node) {
     AFL_VERIFY(node.GetProcessor());
     auto conclusion = DoOnExit(node);
     if (conclusion.IsFail()) {
@@ -458,6 +465,8 @@ TConclusion<TCompiledGraph::IVisitor::EVisitStatus> TCompiledGraph::IVisitor::On
     } else if (*conclusion == EVisitStatus::Skipped) {
         AFL_VERIFY(Current.erase(node.GetIdentifier()))("id", node.GetIdentifier());
         AFL_VERIFY(Visited.erase(node.GetIdentifier()))("id", node.GetIdentifier());
+    } else {
+        AFL_VERIFY(Executed.emplace(node.GetIdentifier()))("id", node.GetIdentifier());
     }
     return conclusion;
 }

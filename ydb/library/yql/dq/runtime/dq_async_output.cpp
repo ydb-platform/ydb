@@ -2,6 +2,7 @@
 #include "dq_transport.h"
 
 #include <yql/essentials/utils/yql_panic.h>
+#include "arrow/array.h"
 
 #include <deque>
 #include <variant>
@@ -11,11 +12,17 @@ namespace {
 
 class TDqAsyncOutputBuffer : public IDqAsyncOutputBuffer {
     struct TValueDesc {
-        std::variant<NUdf::TUnboxedValue, NDqProto::TWatermark, NDqProto::TCheckpoint> Value;
+        std::variant<NUdf::TUnboxedValue, NDqProto::TWatermark, NDqProto::TCheckpoint, NKikimr::NMiniKQL::TUnboxedValueVector> Value;
         ui64 EstimatedSize;
 
         TValueDesc(NUdf::TUnboxedValue&& value, ui64 size)
             : Value(std::move(value))
+            , EstimatedSize(size)
+        {
+        }
+
+        TValueDesc(NKikimr::NMiniKQL::TUnboxedValueVector&& values, ui64 size)
+            : Value(std::move(values))
             , EstimatedSize(size)
         {
         }
@@ -78,9 +85,18 @@ public:
     }
 
     void WidePush(NUdf::TUnboxedValue* values, ui32 count) override {
-        Y_UNUSED(values);
-        Y_UNUSED(count);
-        YQL_ENSURE(false, "Wide stream is not supported");
+        if (ValuesPushed++ % 1000 == 0) {
+            ReestimateRowBytes(values, count);
+        }
+        Y_ABORT_UNLESS(EstimatedRowBytes > 0);
+        NKikimr::NMiniKQL::TUnboxedValueVector valuesVector;
+        for (ui32 i = 0; i < count; ++i) {
+            valuesVector.emplace_back(values[i]);
+        }
+        Values.emplace_back(std::move(valuesVector), EstimatedRowBytes);
+        EstimatedStoredBytes += EstimatedRowBytes;
+
+        ReportChunkIn(1, EstimatedRowBytes);
     }
 
     void Push(NDqProto::TWatermark&& watermark) override {
@@ -115,7 +131,7 @@ public:
 
         // Calc values count.
         for (auto iter = Values.cbegin(), end = Values.cend();
-            usedBytes < bytes && iter != end && std::holds_alternative<NUdf::TUnboxedValue>(iter->Value);
+            usedBytes < bytes && iter != end && (std::holds_alternative<NUdf::TUnboxedValue>(iter->Value) || std::holds_alternative<NKikimr::NMiniKQL::TUnboxedValueVector>(iter->Value));
             ++iter)
         {
             ++valuesCount;
@@ -124,7 +140,16 @@ public:
 
         // Reserve size and return data.
         while (valuesCount--) {
-            batch.emplace_back(std::move(std::get<NUdf::TUnboxedValue>(Values.front().Value)));
+            const auto& value = Values.front().Value;
+            if (std::holds_alternative<NUdf::TUnboxedValue>(value)) {
+                batch.emplace_back(std::move(std::get<NUdf::TUnboxedValue>(value)));
+            } else if (std::holds_alternative<NKikimr::NMiniKQL::TUnboxedValueVector>(value)) {
+                Cerr << TString(TStringBuilder() << "-------------------------------- TDqAsyncOutputBuffer::Pop, pop multi value\n");
+                auto multiValue = std::get<NKikimr::NMiniKQL::TUnboxedValueVector>(value);
+                batch.PushRow(multiValue.data(), multiValue.size());
+            } else {
+                YQL_ENSURE(false, "Unsupported output value");
+            }
             Values.pop_front();
         }
         Y_ABORT_UNLESS(EstimatedStoredBytes >= usedBytes);
@@ -184,6 +209,9 @@ public:
             if (std::holds_alternative<NUdf::TUnboxedValue>(v.Value)) {
                 return false;
             }
+            if (std::holds_alternative<NKikimr::NMiniKQL::TUnboxedValueVector>(v.Value)) {
+                return false;
+            }
         }
         // Finished and no data values.
         return true;
@@ -195,7 +223,21 @@ public:
 
 private:
     void ReestimateRowBytes(const NUdf::TUnboxedValue& value) {
-        const ui64 valueSize = TDqDataSerializer::EstimateSize(value, OutputType);
+        ReestimateRowBytes(TDqDataSerializer::EstimateSize(value, OutputType));
+    }
+
+    void ReestimateRowBytes(const NUdf::TUnboxedValue* values, ui32 count) {
+        const auto* multiType = static_cast<NKikimr::NMiniKQL::TMultiType* const>(OutputType);
+        YQL_ENSURE(multiType, "Expected multi type for wide output");
+
+        ui64 valueSize = 0;
+        for (ui32 i = 0; i < count; ++i) {
+            valueSize += TDqDataSerializer::EstimateSize(values[i], multiType->GetElementType(i));
+        }
+        ReestimateRowBytes(valueSize);
+    }
+
+    void ReestimateRowBytes(ui64 valueSize) {
         if (EstimatedRowBytes) {
             EstimatedRowBytes = static_cast<ui64>(0.6 * valueSize + 0.4 * EstimatedRowBytes);
         } else {

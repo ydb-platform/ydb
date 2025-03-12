@@ -596,6 +596,12 @@ public:
             sinkDesc.SetMultipart(GetMultipart(settings.Settings().Ref()));
             sinkDesc.SetAtomicUploadCommit(State_->Configuration->AllowAtomicUploadCommit && State_->Configuration->AtomicUploadCommit.Get().GetOrElse(false));
 
+            const TStructExprType* fullRowType = settings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+            // exclude extra columns to get actual row type we need to read from input
+            auto rowTypeItems = fullRowType->GetItems();
+            TExprContext ctx;
+            sinkDesc.SetRowType(NCommon::WriteTypeToYson(ctx.MakeType<TStructExprType>(rowTypeItems), NYT::NYson::EYsonFormat::Text));
+
             protoSettings.PackFrom(sinkDesc);
             sinkType = "S3Sink";
         }

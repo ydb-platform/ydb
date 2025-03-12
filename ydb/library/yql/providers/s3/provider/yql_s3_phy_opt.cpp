@@ -201,6 +201,13 @@ public:
             }
         }
 
+        if (format == "parquet" && keys.empty()) {
+            TExprNode::TListType pair;
+            pair.push_back(ctx.NewAtom(target.Pos(), "block_output"));
+            pair.push_back(ctx.NewAtom(target.Pos(), "true"));
+            sinkSettingsBuilder.Add(ctx.NewList(target.Pos(), std::move(pair)));
+        }
+
         if (IsDqPureExpr(input)) {
             YQL_CLOG(INFO, ProviderS3) << "Rewrite pure S3WriteObject `" << cluster << "`.`" << target.Path().StringValue() << "` as stage with sink.";
             return keys.empty() ?
@@ -209,9 +216,7 @@ public:
                     .Program<TCoLambda>()
                         .Args({})
                         .Body<TS3SinkOutput>()
-                            .Input<TCoToFlow>()
-                                .Input(input)
-                                .Build()
+                            .Input(input)
                             .Format(target.Format())
                             .KeyColumns().Build()
                             .Settings(sinkOutputSettingsBuilder.Done())
@@ -304,6 +309,7 @@ public:
                     .Name().Build(token)
                     .Build()
                 .Extension().Value(extension).Build()
+                .RowType(ExpandType(writePos, *input.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx))
                 .Build()
             .Done();
 
@@ -311,24 +317,72 @@ public:
             .Add(sink);
 
         if (keys.empty()) {
+            const auto* structType = input.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    
+            TVector<TString> columns;
+            columns.reserve(structType->GetSize());
+            for (const auto& item : structType->GetItems()) {
+                columns.emplace_back(item->GetName());
+            }
+
+            // TCoWideToBlocks
+
+            // auto wideToBlocks = ctx.Builder(writePos)
+            //     .Callable("WideToBlocks")
+            //         .Callable(0, "FromFlow")
+            //             .Add(0, std::move(expandMap))
+            //         .Seal()
+            //     .Seal()
+            //     .Build();
+
+            auto toFlow = Build<TCoLambda>(ctx, writePos)
+                .Args({"in"})
+                .Body<TCoToFlow>()
+                    .Input("in")
+                    .Build()
+                .Done();
+
+            auto expandMap = MakeExpandMap(writePos, columns, toFlow.Body().Ptr(), ctx);
+
+            auto wideToBlocks = ctx.Builder(writePos)
+                .Callable("WideToBlocks")
+                    .Callable(0, "FromFlow")
+                        .Add(0, std::move(expandMap))
+                    .Seal()
+                .Seal()
+                .Build();
+
             return Build<TDqStage>(ctx, writePos)
                 .Inputs()
                     .Add<TDqCnMap>()
                         .Output(dqUnion.Output())
                         .Build()
                     .Build()
-                .Program<TCoLambda>()
-                    .Args({"in"})
-                    .Body<TS3SinkOutput>()
-                        .Input("in")
-                        .Format(target.Format())
-                        .KeyColumns().Add(std::move(keys)).Build()
-                        .Settings(sinkOutputSettingsBuilder.Done())
-                        .Build()
+                .Program()
+                    .Args(toFlow.Args())
+                    .Body(wideToBlocks)
                     .Build()
                 .Settings().Build()
                 .Outputs(outputsBuilder.Done())
                 .Done();
+            // return Build<TDqStage>(ctx, writePos)
+            //     .Inputs()
+            //         .Add<TDqCnMap>()
+            //             .Output(dqUnion.Output())
+            //             .Build()
+            //         .Build()
+            //     .Program<TCoLambda>()
+            //         .Args({"in"})
+            //         .Body<TS3SinkOutput>()
+            //             .Input("in")
+            //             .Format(target.Format())
+            //             .KeyColumns().Add(std::move(keys)).Build()
+            //             .Settings(sinkOutputSettingsBuilder.Done())
+            //             .Build()
+            //         .Build()
+            //     .Settings().Build()
+            //     .Outputs(outputsBuilder.Done())
+            //     .Done();
         } else {
             return Build<TDqStage>(ctx, writePos)
                 .Inputs()
@@ -392,6 +446,31 @@ public:
         } else {
             return node;
         }
+    }
+
+    TMaybeNode<TExprBase> S3RewriteBlockWrite(TExprBase node, TExprContext& ctx) {
+        auto sinkOutput = node.Cast<TS3SinkOutput>();
+        // if (sinkOutput.Format() != "parquet" || !sinkOutput.KeyColumns().Empty()) {
+            return node;
+        // }
+
+        const auto input = sinkOutput.Input();
+        const auto* structType = input.Ref().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TStructExprType>();
+
+        TVector<TString> columns;
+        columns.reserve(structType->GetSize());
+        for (const auto& item : structType->GetItems()) {
+            columns.emplace_back(item->GetName());
+        }
+
+        auto expandMap = MakeExpandMap(node.Pos(), columns, input.Ptr(), ctx);
+        return ctx.Builder(node.Pos())
+            .Callable("WideToBlocks")
+                .Callable(0, "FromFlow")
+                    .Add(0, std::move(expandMap))
+                .Seal()
+            .Seal()
+            .Build();
     }
 
 private:

@@ -1,4 +1,11 @@
 #include "yql_s3_write_actor.h"
+#include "arrow/result.h"
+#include "arrow/table.h"
+#include "parquet/arrow/writer.h"
+#include "arrow/util/type_fwd.h"
+#include "arrow/record_batch.h"
+#include "yql/essentials/minikql/mkql_program_builder.h"
+#include "yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h"
 #include "yql_s3_actors_util.h"
 
 #include <ydb/library/services/services.pb.h>
@@ -472,6 +479,48 @@ private:
 };
 
 class TS3WriteActor : public TActorBootstrapped<TS3WriteActor>, public IDqComputeActorAsyncOutput {
+    class TWriteBuffer : public arrow::io::OutputStream {
+    public:
+        TWriteBuffer(TS3WriteActor& self)
+            : Self(self)
+        {
+            Y_UNUSED(Self);
+        }
+
+        arrow::Status Write(const void* data, int64_t nbytes) override {
+            Y_UNUSED(data);
+            Cerr << TString(TStringBuilder() << "-------------------------------- TWriteBuffer::Write, nbytes: " << nbytes << "\n");
+            Pos += nbytes;
+            Self.BatchSize += nbytes;
+            Self.FileSize += nbytes;
+            Self.ArrowData << TStringBuf(reinterpret_cast<const char*>(data), nbytes);
+            return arrow::Status::OK();
+        }
+
+        arrow::Status Close() override {
+            Cerr << TString(TStringBuilder() << "-------------------------------- TWriteBuffer::Close\n");
+            Self.BatchSize = 0;
+            Self.FileSize = 0;
+            Closed = true;
+            return arrow::Status::OK();
+        }
+
+        arrow::Result<int64_t> Tell() const override {
+            Cerr << TString(TStringBuilder() << "-------------------------------- TWriteBuffer::Tell, Pos: " << Pos << "\n");
+            return Pos;
+        }
+
+        bool closed() const override {
+            Cerr << TString(TStringBuilder() << "-------------------------------- TWriteBuffer::closed: " << Closed << "\n");
+            return Closed;
+        }
+
+    private:
+        TS3WriteActor& Self;
+        int64_t Pos = 0;
+        bool Closed = false;
+    };
+
 public:
     TS3WriteActor(ui64 outputIndex,
         TCollectStatsLevel statsLevel,
@@ -490,11 +539,12 @@ public:
         IDqComputeActorAsyncOutput::ICallbacks* callbacks,
         const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         bool dirtyWrite,
-        const TString& token)
+        const TString& token, std::shared_ptr<arrow::Schema> arrowSchema)
         : Gateway(std::move(gateway))
         , Credentials(std::move(credentials))
         , RandomProvider(randomProvider)
         , RetryPolicy(retryPolicy)
+        , ArrowSchema(arrowSchema)
         , OutputIndex(outputIndex)
         , TxId(txId)
         , Prefix(prefix)
@@ -514,6 +564,18 @@ public:
             RandomProvider = DefaultRandomProvider.Get();
         }
         EgressStats.Level = statsLevel;
+    }
+
+    void OpenWriter() {
+        // Choose compression
+        std::shared_ptr<parquet::WriterProperties> props =
+        parquet::WriterProperties::Builder().compression(arrow::Compression::SNAPPY)->build();
+
+        // Opt to store Arrow schema for easier reads back into Arrow
+        std::shared_ptr<parquet::ArrowWriterProperties> arrow_props =
+        parquet::ArrowWriterProperties::Builder().store_schema()->build();
+
+        ARROW_OK(parquet::arrow::FileWriter::Open(*ArrowSchema, arrow::default_memory_pool(), std::make_shared<TWriteBuffer>(*this), props, arrow_props, &Writer));
     }
 
     void Bootstrap() {
@@ -567,34 +629,105 @@ private:
 
     void SendData(TUnboxedValueBatch&& data, i64, const TMaybe<NDqProto::TCheckpoint>&, bool finished) final {
         std::unordered_set<TS3FileWriteActor*> processedActors;
-        YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
         EgressStats.Resume();
-        data.ForEachRow([&](const auto& row) {
-            const auto& key = MakePartitionKey(row);
-            const auto [keyIt, insertedNew] = FileWriteActors.emplace(key, std::vector<TS3FileWriteActor*>());
-            if (insertedNew || keyIt->second.empty() || keyIt->second.back()->IsFinishing()) {
-                auto fileWrite = std::make_unique<TS3FileWriteActor>(
-                    TxId,
-                    Gateway,
-                    Credentials,
-                    key,
-                    NS3Util::UrlEscapeRet(Url + Path + key + MakeOutputName() + Extension),
-                    Compression,
-                    RetryPolicy, DirtyWrite, Token);
-                keyIt->second.emplace_back(fileWrite.get());
-                RegisterWithSameMailbox(fileWrite.release());
-            }
 
-            const NUdf::TUnboxedValue& value = Keys.empty() ? row : *row.GetElements();
-            TS3FileWriteActor* actor = keyIt->second.back();
-            if (value) {
-                actor->AddData(TString(value.AsStringRef()));
+        if (data.IsWide()) {
+            auto doFlushFile = [&](bool closeWriter) {
+                Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, flush file\n");
+                if (closeWriter) {
+                    Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, finish writing\n");
+                    ARROW_OK(Writer->Close());
+                    Writer.reset();
+                    FileSize = 0;
+                }
+
+                const auto [keyIt, insertedNew] = FileWriteActors.emplace("", std::vector<TS3FileWriteActor*>());
+                if (insertedNew || keyIt->second.empty() || keyIt->second.back()->IsFinishing()) {
+                    auto fileWrite = std::make_unique<TS3FileWriteActor>(
+                        TxId,
+                        Gateway,
+                        Credentials,
+                        "",
+                        NS3Util::UrlEscapeRet(Url + Path + MakeOutputName() + Extension),
+                        Compression,
+                        RetryPolicy, DirtyWrite, Token);
+                    keyIt->second.emplace_back(fileWrite.get());
+                    RegisterWithSameMailbox(fileWrite.release());
+                }
+    
+                TS3FileWriteActor* actor = keyIt->second.back();
+                actor->AddData(std::move(ArrowData));
+                TStringBuilder b;
+                ArrowData.swap(b);
+                BatchSize = 0;
+                if (closeWriter) {
+                    actor->Seal();
+                }
+                processedActors.insert(actor);
+            };
+
+            Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, send wide data, FileSize: " << FileSize << ", BatchSize: " << BatchSize << ", Multipart: " << Multipart << ", width: " << data.Width() << ", number batches: " << data.RowCount() << "\n");
+            data.ForEachRowWide([&](NYql::NUdf::TUnboxedValue* values, ui32 width) {
+                Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, handle row\n");
+                std::vector<std::shared_ptr<arrow::Array>> columns;
+                for (ui32 i = 0; i + 1 < width; ++i) {
+                    auto datum = TArrowBlock::From(values[i]).GetDatum();
+                    Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, make array [" << i << "], is array: " << datum.is_array() << "\n");
+                    auto arr = datum.make_array();
+                    Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, push array [" << i << "]\n");
+                    columns.emplace_back(arr);
+                }
+
+                Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, create batch\n");
+                auto batch = arrow::RecordBatch::Make(ArrowSchema, TArrowBlock::From(values[width - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value, std::move(columns));
+                auto res = arrow::Table::FromRecordBatches(batch->schema(), {batch});
+                ARROW_OK(res.status());
+                std::shared_ptr<arrow::Table> arrowTable = std::move(res).ValueOrDie();
+
+                Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, create writer\n");
+                if (!Writer) {
+                    OpenWriter();
+                }
+                ARROW_OK(Writer->WriteTable(*arrowTable.get(), batch->num_rows()));
+
+                Cerr << TString(TStringBuilder() << "-------------------------------- TS3WriteActor::SendData, perform write\n");
+                bool finishFile = FileSize > 50_MB || finished || !Multipart;
+                if (BatchSize > 1_MB || finishFile) {
+                    doFlushFile(finishFile);
+                }
+            });
+
+            if (finished && FileSize) {
+                doFlushFile(true);
             }
-            if (!Multipart || !value) {
-                actor->Seal();
-            }
-            processedActors.insert(actor);
-        });
+        } else {
+            data.ForEachRow([&](const auto& row) {
+                const auto& key = MakePartitionKey(row);
+                const auto [keyIt, insertedNew] = FileWriteActors.emplace(key, std::vector<TS3FileWriteActor*>());
+                if (insertedNew || keyIt->second.empty() || keyIt->second.back()->IsFinishing()) {
+                    auto fileWrite = std::make_unique<TS3FileWriteActor>(
+                        TxId,
+                        Gateway,
+                        Credentials,
+                        key,
+                        NS3Util::UrlEscapeRet(Url + Path + key + MakeOutputName() + Extension),
+                        Compression,
+                        RetryPolicy, DirtyWrite, Token);
+                    keyIt->second.emplace_back(fileWrite.get());
+                    RegisterWithSameMailbox(fileWrite.release());
+                }
+    
+                const NUdf::TUnboxedValue& value = Keys.empty() ? row : *row.GetElements();
+                TS3FileWriteActor* actor = keyIt->second.back();
+                if (value) {
+                    actor->AddData(TString(value.AsStringRef()));
+                }
+                if (!Multipart || !value) {
+                    actor->Seal();
+                }
+                processedActors.insert(actor);
+            });
+        }
 
         for (TS3FileWriteActor* actor : processedActors) {
             actor->Go();
@@ -681,6 +814,7 @@ private:
     IRandomProvider* RandomProvider;
     TIntrusivePtr<IRandomProvider> DefaultRandomProvider;
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
+    std::shared_ptr<arrow::Schema> ArrowSchema;
 
     const ui64 OutputIndex;
     TDqAsyncStats EgressStats;
@@ -701,13 +835,18 @@ private:
     std::unordered_map<TString, std::vector<TS3FileWriteActor*>> FileWriteActors;
     bool DirtyWrite;
     TString Token;
+
+    ui64 BatchSize = 0;
+    ui64 FileSize = 0;
+    TStringBuilder ArrowData;
+    std::unique_ptr<parquet::arrow::FileWriter> Writer;
 };
 
 } // namespace
 
 std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
-    const NKikimr::NMiniKQL::TTypeEnvironment&,
-    const NKikimr::NMiniKQL::IFunctionRegistry&,
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
+    const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     IRandomProvider* randomProvider,
     IHTTPGateway::TPtr gateway,
     NS3::TSink&& params,
@@ -720,6 +859,28 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy)
 {
+    const auto pb = std::make_unique<TProgramBuilder>(typeEnv, functionRegistry);
+
+    const auto outputItemType = NCommon::ParseTypeFromYson(TStringBuf(params.GetRowType()), *pb, Cerr);
+    YQL_ENSURE(outputItemType->IsStruct(), "Row type is not struct");
+    const auto structType = static_cast<TStructType*>(outputItemType);
+
+    arrow::SchemaBuilder builder;
+
+    for (ui32 i = 0U; i < structType->GetMembersCount(); ++i) {
+        TStringBuf memberName = structType->GetMemberName(i);
+
+        auto memberType = structType->GetMemberType(i);
+        std::shared_ptr<arrow::DataType> dataType;
+
+        YQL_ENSURE(ConvertArrowType(memberType, dataType), "Unsupported arrow type");
+        ARROW_OK(builder.AddField(std::make_shared<arrow::Field>(std::string(memberName), dataType, memberType->IsOptional())));
+    }
+
+    auto res = builder.Finish();
+    ARROW_OK(res.status());
+    std::shared_ptr<arrow::Schema> arrowSchema = std::move(res).ValueOrDie();
+
     const auto token = secureParams.Value(params.GetToken(), TString{});
     const auto actor = new TS3WriteActor(
         outputIndex,
@@ -738,7 +899,8 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
         callbacks,
         retryPolicy,
         !params.GetAtomicUploadCommit(),
-        token);
+        token,
+        arrowSchema);
     return {actor, actor};
 }
 

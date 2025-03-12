@@ -179,10 +179,18 @@ private:
 
         const auto format = tgt.Format();
 
-        auto baseTargeType = AnnotateTargetBase(format, keys, structType, ctx);
-        if (!baseTargeType) {
-            return TStatus::Error;
+        TTypeAnnotationNode::TListType items;
+        for (const auto& x : structType->GetItems()) {
+            items.push_back(ctx.MakeType<TBlockExprType>(x->GetItemType()));
         }
+        items.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+
+        auto baseTargeType = ctx.MakeType<TMultiExprType>(items);
+
+        // auto baseTargeType = AnnotateTargetBase(format, keys, structType, ctx);
+        // if (!baseTargeType) {
+        //     return TStatus::Error;
+        // }
 
         auto t = ctx.MakeType<TTupleExprType>(
                     TTypeAnnotationNode::TListType{
@@ -357,7 +365,7 @@ private:
     }
 
     TStatus HandleSink(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 4, ctx)) {
+        if (!EnsureArgsCount(*input, 5, ctx)) {
             return TStatus::Error;
         }
         input->SetTypeAnn(ctx.MakeType<TVoidExprType>());

@@ -34,7 +34,7 @@ namespace NActors::NFeatures {
     };
 
     struct TUnitedFlags {
-        static constexpr bool UseUnited = true;
+        static constexpr bool UseUnited = false;
     };
 
     using TFeatureFlags = TCommonFeatureFlags;

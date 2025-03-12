@@ -162,20 +162,16 @@ def test_create_tenant_then_exec_yql_empty_database_header(ydb_cluster, ydb_endp
 
     table_path = '%s/table-1' % database
     with ydb.Driver(driver_config2) as driver:
-        with ydb.SessionPool(driver, size=1) as pool:
-            with pool.checkout() as session:
-                session.execute_scheme(
-                    "create table `{}` (key Int32, value String, primary key(key));".format(
-                        table_path
-                    )
-                )
+        with ydb.QuerySessionPool(driver, size=1) as pool:
+            pool.execute_with_retries(
+                "create table `{}` (key Int32, value String, primary key(key));".format(
+                    table_path
+                ),
+            )
 
-                session.transaction().execute(
-                    "upsert into `{}` (key) values (101);".format(table_path),
-                    commit_tx=True
-                )
+            pool.execute_with_retries("upsert into `{}` (key) values (101);".format(table_path))
 
-                session.transaction().execute("select key from `{}`;".format(table_path), commit_tx=True)
+            pool.execute_with_retries("select key from `{}`;".format(table_path))
 
     ydb_cluster.remove_database(database)
     ydb_cluster.unregister_and_stop_slots(database_nodes)
@@ -189,11 +185,6 @@ def test_create_tenant_then_exec_yql(ydb_cluster):
         database
     )
 
-    driver_config2 = ydb.DriverConfig(
-        "%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
-        database + "/"
-    )
-
     ydb_cluster.create_database(
         database,
         storage_pool_units_count={
@@ -203,24 +194,18 @@ def test_create_tenant_then_exec_yql(ydb_cluster):
     database_nodes = ydb_cluster.register_and_start_slots(database, count=1)
     ydb_cluster.wait_tenant_up(database)
 
-    d_configs = [driver_config, driver_config2]
-    for d_config in d_configs:
-        table_path = '%s/table-1' % database
-        with ydb.Driver(d_config) as driver:
-            with ydb.SessionPool(driver, size=1) as pool:
-                with pool.checkout() as session:
-                    session.execute_scheme(
-                        "create table `{}` (key Int32, value String, primary key(key));".format(
-                            table_path
-                        )
-                    )
+    table_path = '%s/table-1' % database
+    with ydb.Driver(driver_config) as driver:
+        with ydb.QuerySessionPool(driver, size=1) as pool:
+            pool.execute_with_retries(
+                "create table `{}` (key Int32, value String, primary key(key));".format(
+                    table_path
+                )
+            )
 
-                    session.transaction().execute(
-                        "upsert into `{}` (key) values (101);".format(table_path),
-                        commit_tx=True
-                    )
+            pool.execute_with_retries("upsert into `{}` (key) values (101);".format(table_path),)
 
-                    session.transaction().execute("select key from `{}`;".format(table_path), commit_tx=True)
+            pool.execute_with_retries("select key from `{}`;".format(table_path))
 
     ydb_cluster.remove_database(database)
     ydb_cluster.unregister_and_stop_slots(database_nodes)
@@ -245,42 +230,46 @@ def test_create_and_drop_tenants(ydb_cluster, robust_retries):
         ydb_cluster.wait_tenant_up(database)
 
         with ydb.Driver(driver_config) as driver:
-            with ydb.SessionPool(driver) as pool:
-                def create_table(session, table):
-                    session.create_table(
-                        os.path.join(database, table),
-                        ydb.TableDescription()
-                        .with_column(ydb.Column('id', ydb.OptionalType(ydb.DataType.Uint64)))
-                        .with_column(ydb.Column('value', ydb.OptionalType(ydb.DataType.Utf8)))
-                        .with_primary_key('id')
+            with ydb.QuerySessionPool(driver) as pool:
+                def create_table(pool, table, retry_settings):
+                    pool.execute_with_retries(
+                        f"""
+                        CREATE TABLE `{os.path.join(database, table)}`
+                        (
+                        id Uint64,
+                        value Utf8,
+                        PRIMARY KEY (id)
+                        );
+                        """,
+                        retry_settings=retry_settings,
                     )
 
-                pool.retry_operation_sync(create_table, robust_retries, "table")
-                pool.retry_operation_sync(create_table, robust_retries, "table_for_rm")
+                create_table(pool, "table", robust_retries)
+                create_table(pool, "table_for_rm", robust_retries)
 
-                def write_some_data(session, table_one, table_two, value):
-                    session.transaction().execute(
-                        fr'''
+                def write_some_data(pool, table_one, table_two, value, retry_settings):
+                    pool.execute_with_retries(
+                        f"""
                         upsert into {table_one} (id, value)
                         values (1u, "{value}");
                         upsert into {table_two} (id, value)
                         values (2u, "{value}");
-                        ''',
-                        commit_tx=True,
+                        """,
+                        retry_settings=retry_settings,
                     )
-                pool.retry_operation_sync(write_some_data, robust_retries, "table", "table_for_rm", database)
+                write_some_data(pool, "table", "table_for_rm", database, robust_retries)
 
-                def read_some_data(session, table_one, table_two):
-                    result = session.transaction().execute(
-                        fr'''
+                def read_some_data(pool, table_one, table_two, retry_settings):
+                    result = pool.execute_with_retries(
+                        f"""
                         select id, value FROM {table_one};
                         select id, value FROM {table_two};
-                        ''',
-                        commit_tx=True,
+                        """,
+                        retry_settings=retry_settings,
                     )
                     return result
 
-                result = pool.retry_operation_sync(read_some_data, robust_retries, "table", "table_for_rm")
+                result = read_some_data(pool, "table", "table_for_rm", robust_retries)
 
                 assert len(result) == 2
 
@@ -292,11 +281,12 @@ def test_create_and_drop_tenants(ydb_cluster, robust_retries):
                         )
                     )
 
-                def drop_table(session, table):
-                    session.drop_table(
-                        os.path.join(database, table)
+                def drop_table(pool, table, retry_settings):
+                    pool.execute_with_retries(
+                        f"DROP TABLE `{os.path.join(database, table)}`",
+                        retry_settings=retry_settings,
                     )
-                pool.retry_operation_sync(drop_table, robust_retries, "table_for_rm")
+                drop_table(pool, "table_for_rm", robust_retries)
 
         ydb_cluster.remove_database(database)
         ydb_cluster.unregister_and_stop_slots(database_nodes)
@@ -321,46 +311,51 @@ def test_create_and_drop_the_same_tenant2(ydb_cluster, ydb_endpoint, robust_retr
         database_nodes = ydb_cluster.register_and_start_slots(database, count=1)
 
         with ydb.Driver(driver_config) as driver:
-            with ydb.SessionPool(driver, size=1) as pool:
-                def create_table(session, table):
-                    session.create_table(
-                        os.path.join(database, table),
-                        ydb.TableDescription()
-                        .with_column(ydb.Column('id', ydb.OptionalType(ydb.DataType.Uint64)))
-                        .with_column(ydb.Column('value', ydb.OptionalType(ydb.DataType.Utf8)))
-                        .with_primary_key('id')
+            with ydb.QuerySessionPool(driver, size=1) as pool:
+                def create_table(pool, table, retry_settings):
+                    pool.execute_with_retries(
+                        f"""
+                        CREATE TABLE `{os.path.join(database, table)}`
+                        (
+                        id Uint64,
+                        value Utf8,
+                        PRIMARY KEY (id)
+                        );
+                        """,
+                        retry_settings=retry_settings,
                     )
 
                 logger.debug("create table one")
-                pool.retry_operation_sync(create_table, robust_retries, "table")
+                create_table(pool, "table", robust_retries)
                 logger.debug("create table two")
-                pool.retry_operation_sync(create_table, None, "table_for_rm")
+                create_table(pool, "table_for_rm", None)
 
-                def write_some_data(session, table_one, table_two, value):
-                    session.transaction().execute(
-                        fr'''
+                def write_some_data(pool, table_one, table_two, value, retry_settings):
+                    pool.execute_with_retries(
+                        f"""
                         upsert into {table_one} (id, value)
                         values (1u, "{value}");
                         upsert into {table_two} (id, value)
                         values (2u, "{value}");
-                        ''',
-                        commit_tx=True,
+                        """,
+                        retry_settings=retry_settings,
                     )
-                logger.debug("write_some_data")
-                pool.retry_operation_sync(write_some_data, None, "table", "table_for_rm", value)
 
-                def read_some_data(session, table_one, table_two):
-                    result = session.transaction().execute(
-                        fr'''
+                logger.debug("write_some_data")
+                write_some_data(pool, "table", "table_for_rm", value, None)
+
+                def read_some_data(pool, table_one, table_two, retry_settings):
+                    result = pool.execute_with_retries(
+                        f"""
                         select id, value FROM {table_one};
                         select id, value FROM {table_two};
-                        ''',
-                        commit_tx=True,
+                        """,
+                        retry_settings=retry_settings,
                     )
                     return result
 
                 logger.debug("read_some_data")
-                result = pool.retry_operation_sync(read_some_data, None, "table", "table_for_rm")
+                result = read_some_data(pool, "table", "table_for_rm", None)
 
                 assert len(result) == 2
 
@@ -372,13 +367,14 @@ def test_create_and_drop_the_same_tenant2(ydb_cluster, ydb_endpoint, robust_retr
                         )
                     )
 
-                def drop_table(session, table):
-                    session.drop_table(
-                        os.path.join(database, table)
+                def drop_table(pool, table, retry_settings):
+                    pool.execute_with_retries(
+                        f"DROP TABLE {os.path.join(database, table)}",
+                        retry_settings=retry_settings,
                     )
 
                 logger.debug("drop table two")
-                pool.retry_operation_sync(drop_table, None, "table_for_rm")
+                drop_table(pool, "table_for_rm", None)
 
         logger.debug("remove_database")
         ydb_cluster.remove_database(database)
@@ -471,21 +467,20 @@ def test_check_access(ydb_cluster):
             raises(ydb.BadRequest)
         )
 
-        with ydb.SessionPool(driver, size=1) as pool:
-            with pool.checkout() as session:
-                session.execute_scheme(
+        with ydb.QuerySessionPool(driver, size=1) as pool:
+            pool.execute_with_retries(
+                "create table `{}` (id Int64, primary key(id));".format(
+                    os.path.join(user_1['path'], 'q/w/table')
+                )
+            )
+            assert_that(
+                calling(pool.execute_with_retries).with_args(
                     "create table `{}` (id Int64, primary key(id));".format(
-                        os.path.join(user_1['path'], 'q/w/table')
+                        os.path.join(user_2['path'], 'q/w/table')
                     )
-                )
-                assert_that(
-                    calling(session.execute_scheme).with_args(
-                        "create table `{}` (id Int64, primary key(id));".format(
-                            os.path.join(user_2['path'], 'q/w/table')
-                        )
-                    ),
-                    any_of(raises(ydb.GenericError), raises(ydb.Unauthorized))
-                )
+                ),
+                any_of(raises(ydb.GenericError), raises(ydb.Unauthorized))
+            )
 
         assert_that(
             calling(client.list_directory).with_args(

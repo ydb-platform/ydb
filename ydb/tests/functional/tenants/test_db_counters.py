@@ -74,13 +74,10 @@ class BaseDbCounters(object):
         self.database = None
 
     def create_table(self, driver, table):
-        with ydb.SessionPool(driver, size=1) as pool:
-            with pool.checkout() as session:
-                session.execute_scheme(
-                    "create table `{}` (key Int32, value String, primary key(key));".format(
-                        table
-                    )
-                )
+        with ydb.QuerySessionPool(driver, size=1) as pool:
+            pool.execute_with_retries(
+                f"create table `{table}` (key Int32, value String, primary key(key));"
+            )
 
     def check_db_counters(self, sensors_to_check, group):
         table = os.path.join(self.database, 'table')
@@ -93,11 +90,10 @@ class BaseDbCounters(object):
         with ydb.Driver(driver_config) as driver:
             self.create_table(driver, table)
 
-            with ydb.SessionPool(driver, size=1) as pool:
-                with pool.checkout() as session:
-                    query = "select * from `{}`".format(table)
-                    session.transaction().execute(query, commit_tx=True)
-
+            with ydb.QuerySessionPool(driver, size=1) as pool:
+                pool.execute_with_retries(
+                    f"select * from `{table}`"
+                )
             for i in range(30):
                 checked = 0
 

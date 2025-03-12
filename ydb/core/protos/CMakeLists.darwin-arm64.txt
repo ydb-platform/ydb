@@ -166,6 +166,7 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/import.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/index_builder.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/kesus.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/protos/kafka.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/key.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/kqp.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/kqp_physical.proto
@@ -467,6 +468,9 @@ target_sources(ydb-core-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/protos/kesus.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/kesus.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/kesus.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/kafka.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/kafka.deps.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/kafka.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/key.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/key.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/key.grpc.pb.h

@@ -20,6 +20,8 @@ private:
 
     virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 
+    virtual TString DoGetSignalCategoryName() const override;
+
     TCalculationProcessor(std::vector<TColumnChainInfo>&& input, std::vector<TColumnChainInfo>&& output,
         const std::shared_ptr<IStepFunction>& function, const std::shared_ptr<IKernelLogic>& kernelLogic)
         : TBase(std::move(input), std::move(output), EProcessorType::Calculation)

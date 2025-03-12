@@ -222,8 +222,15 @@ private:
     virtual ui64 DoGetWeight() const {
         return 0;
     }
+    virtual TString DoGetSignalCategoryName() const {
+        return ::ToString(ProcessorType);
+    }
 
 public:
+    TString GetSignalCategoryName() const {
+        return DoGetSignalCategoryName();
+    }
+
     virtual bool HasSubColumns() const {
         return false;
     }

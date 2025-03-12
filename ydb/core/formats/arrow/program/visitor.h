@@ -11,6 +11,10 @@ private:
     bool Executed = false;
 
 public:
+    const TCompiledGraph::TNode* GetExecutionNode() const {
+        return ExecutionNode;
+    }
+
     TConclusion<IResourceProcessor::EExecutionResult> Execute() {
         if (ExecutionNode) {
             Executed = true;

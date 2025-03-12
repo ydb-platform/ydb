@@ -26,6 +26,10 @@ private:
         return IndexContext.GetSubColumnName() ? 2 : 3;
     }
 
+    virtual TString DoGetSignalCategoryName() const override {
+        return ::ToString(GetProcessorType()) + "::" + ::ToString(IndexContext.GetOperation());
+    }
+
 public:
     const IDataSource::TFetchIndexContext& GetIndexContext() const {
         return IndexContext;
@@ -57,6 +61,10 @@ private:
     }
 
     bool ApplyToFilterFlag = false;
+
+    virtual TString DoGetSignalCategoryName() const override {
+        return ::ToString(GetProcessorType()) + "::" + ::ToString(IndexContext.GetOperation());
+    }
 
 public:
     void SetApplyToFilter() {

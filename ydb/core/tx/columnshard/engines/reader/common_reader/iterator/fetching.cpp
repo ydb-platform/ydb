@@ -55,15 +55,10 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
         TMemoryProfileGuard mGuard("SCAN_PROFILE::FETCHING::" + step->GetName() + "::" + Script->GetBranchName(),
             IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx);
-        if (!CurrentStartInstant) {
-            AFL_VERIFY(!CurrentStartDataSize);
-            CurrentStartInstant = TMonotonic::Now();
-            CurrentStartDataSize = step->GetProcessingDataSize(source);
-        } else {
-            AFL_VERIFY(!!CurrentStartDataSize);
-        }
+
+        const TMonotonic startInstant = TMonotonic::Now();
         const TConclusion<bool> resultStep = step->ExecuteInplace(source, *this);
-        FlushDuration();
+        FlushDuration(TMonotonic::Now() - startInstant);
         if (!resultStep) {
             return resultStep;
         }
@@ -195,23 +190,16 @@ void TFetchingScriptBuilder::AddAssembleStep(
 }
 
 TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
-    const bool started = !source->HasProgramIterator();
-    auto readMeta = source->GetContext()->GetCommonContext()->GetReadMetadata();
-    if (!source->HasProgramIterator()) {
-//        Cerr << Program->DebugDOT() << Endl;
-        NArrow::NSSA::TProcessorContext context(
-            source, source->GetStageData().GetTable(), readMeta->GetLimitRobustOptional(), readMeta->IsDescSorted());
-        auto visitor = std::make_shared<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>(context);
-        source->SetProgramIterator(Program->BuildIterator(visitor), visitor);
-        source->SetCursorStep(step);
+    const bool started = !source->GetExecutionContext().HasProgramIterator();
+    if (!source->GetExecutionContext().HasProgramIterator()) {
+        source->MutableExecutionContext().Start(source, Program, step);
     }
-    auto iterator = source->GetProgramIteratorVerified();
+    auto iterator = source->GetExecutionContext().GetProgramIteratorVerified();
     const auto& resources = source->GetStageData().GetTable();
     if (!started) {
         iterator->Next();
+        source->MutableExecutionContext().OnFinishProgramStepExecution();
     }
-    NArrow::NSSA::TProcessorContext context(
-        source, source->GetStageData().GetTable(), readMeta->GetLimitRobustOptional(), readMeta->IsDescSorted());
     for (; iterator->IsValid();) {
         {
             auto conclusion = iterator->Next();
@@ -219,23 +207,37 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
                 return conclusion;
             }
         }
-        {
-            auto conclusion = source->GetExecutionVisitorVerified()->Execute();
-            if (conclusion.IsFail()) {
-                return conclusion;
-            } else if (*conclusion == NArrow::NSSA::IResourceProcessor::EExecutionResult::InBackground) {
-                return false;
-            }
+        if (!source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutionNode()) {
+            continue;
         }
-
+        AFL_VERIFY(source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutionNode()->GetIdentifier() == iterator->GetCurrentNodeId());
+        source->MutableExecutionContext().OnStartProgramStepExecution(iterator->GetCurrentNodeId(), GetSignals(iterator->GetCurrentNodeId()));
+        auto signals = GetSignals(iterator->GetCurrentNodeId());
+        const TMonotonic start = TMonotonic::Now();
+        auto conclusion = source->GetExecutionContext().GetExecutionVisitorVerified()->Execute();
+        signals->AddExecutionDuration(TMonotonic::Now() - start);
+        if (conclusion.IsFail()) {
+            source->MutableExecutionContext().OnFailedProgramStepExecution();
+            return conclusion;
+        } else if (*conclusion == NArrow::NSSA::IResourceProcessor::EExecutionResult::InBackground) {
+            return false;
+        }
+        source->MutableExecutionContext().OnFinishProgramStepExecution();
         if (resources->GetRecordsCountActualOptional() == 0) {
             resources->Clear();
             break;
         }
     }
-    AFL_DEBUG(NKikimrServices::SSA_GRAPH_EXECUTION)("graph_constructed", Program->DebugDOT(source->GetExecutionVisitorVerified()->GetExecutedIds()));
+    AFL_DEBUG(NKikimrServices::SSA_GRAPH_EXECUTION)(
+        "graph_constructed", Program->DebugDOT(source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutedIds()));
 
     return true;
+}
+
+const std::shared_ptr<TFetchingStepSignals>& TProgramStep::GetSignals(const ui32 nodeId) const {
+    auto it = Signals.find(nodeId);
+    AFL_VERIFY(it != Signals.end())("node_id", nodeId);
+    return it->second;
 }
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

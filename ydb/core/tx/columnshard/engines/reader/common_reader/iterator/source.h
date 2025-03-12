@@ -27,49 +27,60 @@ namespace NKikimr::NOlap::NReader::NCommon {
 
 class TFetchingScriptCursor;
 
-class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource {
+class TExecutionContext {
 private:
-    YDB_READONLY(ui64, SourceId, 0);
-    YDB_READONLY(ui32, SourceIdx, 0);
-    YDB_READONLY(TSnapshot, RecordSnapshotMin, TSnapshot::Zero());
-    YDB_READONLY(TSnapshot, RecordSnapshotMax, TSnapshot::Zero());
-    YDB_READONLY_DEF(std::shared_ptr<TSpecialReadContext>, Context);
-    YDB_READONLY(ui32, RecordsCount, 0);
-    YDB_READONLY_DEF(std::optional<ui64>, ShardingVersionOptional);
-    YDB_READONLY(bool, HasDeletions, false);
-    std::optional<ui64> MemoryGroupId;
     std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator> ProgramIterator;
     std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor> ExecutionVisitor;
 
-    virtual bool DoAddTxConflict() = 0;
-
-    virtual ui64 DoGetEntityId() const override {
-        return SourceId;
-    }
-
-    virtual ui64 DoGetEntityRecordsCount() const override {
-        return RecordsCount;
-    }
-
-    std::optional<bool> IsSourceInMemoryFlag;
-    TAtomic SourceFinishedSafeFlag = 0;
-    TAtomic StageResultBuiltFlag = 0;
-    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) = 0;
-    virtual void DoBuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr) = 0;
-    virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) = 0;
-
-    virtual bool DoStartFetchingColumns(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
-    virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
+    std::optional<ui32> CurrentProgramNodeId;
+    std::shared_ptr<TFetchingStepSignals> CurrentStepSignals;
+    std::optional<TMonotonic> CurrentNodeStart;
 
     std::optional<TFetchingScriptCursor> CursorStep;
 
-protected:
-    std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
-    std::unique_ptr<TFetchedData> StageData;
-    std::unique_ptr<TFetchedResult> StageResult;
-
 public:
+    void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals) {
+        if (!CurrentProgramNodeId) {
+            CurrentNodeStart = TMonotonic::Now();
+            CurrentProgramNodeId = nodeId;
+            AFL_VERIFY(!CurrentStepSignals);
+            CurrentStepSignals = signals;
+        } else {
+            AFL_VERIFY(CurrentProgramNodeId == nodeId);
+            AFL_VERIFY(!!CurrentStepSignals);
+            AFL_VERIFY(!!CurrentNodeStart);
+        }
+    }
+
+    void OnFinishProgramStepExecution() {
+        AFL_VERIFY(!!CurrentProgramNodeId);
+        AFL_VERIFY(!!CurrentStepSignals);
+        AFL_VERIFY(!!CurrentNodeStart);
+        CurrentStepSignals->AddTotalDuration(TMonotonic::Now() - *CurrentNodeStart);
+        CurrentProgramNodeId.reset();
+        CurrentStepSignals = nullptr;
+        CurrentNodeStart.reset();
+    }
+
+    void OnFailedProgramStepExecution() {
+        OnFinishProgramStepExecution();
+    }
+
+    void Start(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program,
+        const TFetchingScriptCursor& step);
+
+    const TFetchingStepSignals& GetCurrentStepSignalsVerified() const {
+        AFL_VERIFY(!!CurrentStepSignals);
+        return *CurrentStepSignals;
+    }
+
+    const TFetchingStepSignals* GetCurrentStepSignalsOptional() const {
+        if (!CurrentStepSignals) {
+            return nullptr;
+        }
+        return &*CurrentStepSignals;
+    }
+
     bool HasProgramIterator() const {
         return !!ProgramIterator;
     }
@@ -99,6 +110,54 @@ public:
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& GetExecutionVisitorVerified() const {
         AFL_VERIFY(!!ExecutionVisitor);
         return ExecutionVisitor;
+    }
+};
+
+class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource {
+private:
+    YDB_READONLY(ui64, SourceId, 0);
+    YDB_READONLY(ui32, SourceIdx, 0);
+    YDB_READONLY(TSnapshot, RecordSnapshotMin, TSnapshot::Zero());
+    YDB_READONLY(TSnapshot, RecordSnapshotMax, TSnapshot::Zero());
+    YDB_READONLY_DEF(std::shared_ptr<TSpecialReadContext>, Context);
+    YDB_READONLY(ui32, RecordsCount, 0);
+    YDB_READONLY_DEF(std::optional<ui64>, ShardingVersionOptional);
+    YDB_READONLY(bool, HasDeletions, false);
+    std::optional<ui64> MemoryGroupId;
+    TExecutionContext ExecutionContext;
+    virtual bool DoAddTxConflict() = 0;
+
+    virtual ui64 DoGetEntityId() const override {
+        return SourceId;
+    }
+
+    virtual ui64 DoGetEntityRecordsCount() const override {
+        return RecordsCount;
+    }
+
+    std::optional<bool> IsSourceInMemoryFlag;
+    TAtomic SourceFinishedSafeFlag = 0;
+    TAtomic StageResultBuiltFlag = 0;
+    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) = 0;
+    virtual void DoBuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr) = 0;
+    virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) = 0;
+
+    virtual bool DoStartFetchingColumns(
+        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
+    virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
+
+protected:
+    std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
+    std::unique_ptr<TFetchedData> StageData;
+    std::unique_ptr<TFetchedResult> StageResult;
+
+public:
+    TExecutionContext& MutableExecutionContext() {
+        return ExecutionContext;
+    }
+
+    const TExecutionContext& GetExecutionContext() const {
+        return ExecutionContext;
     }
 
     virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const {

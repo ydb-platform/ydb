@@ -52,6 +52,10 @@ public:
         }
 
     public:
+        TString GetSignalCategoryName() const {
+            return Processor->GetSignalCategoryName();
+        }
+
         void SetSequentialIdx(const ui32 idx) {
             AFL_VERIFY(!SequentialIdx);
             SequentialIdx = idx;
@@ -138,6 +142,10 @@ private:
     bool IsFilterRoot(const ui32 identifier) const;
 
 public:
+    const THashMap<ui64, std::shared_ptr<TNode>>& GetNodes() const {
+        return Nodes;
+    }
+
     bool IsGenerated(const ui32 resourceId) const {
         return !SourceColumns.contains(resourceId);
     }
@@ -172,6 +180,10 @@ public:
     public:
         TIterator(const std::shared_ptr<IVisitor>& visitor)
             : Visitor(visitor) {
+        }
+
+        ui32 GetCurrentNodeId() const {
+            return CurrentNode->GetIdentifier();
         }
 
         const std::shared_ptr<TCompiledGraph::TNode>& GetCurrentGraphNode() const {

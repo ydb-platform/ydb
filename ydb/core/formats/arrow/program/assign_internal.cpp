@@ -66,4 +66,14 @@ ui64 TCalculationProcessor::DoGetWeight() const {
     return 0;
 }
 
+TString TCalculationProcessor::DoGetSignalCategoryName() const {
+    if (KernelLogic) {
+        return ::ToString(GetProcessorType()) + "::" + KernelLogic->GetClassName();
+    } else if (YqlOperationId) {
+        return ::ToString(GetProcessorType()) + "::" + ::ToString((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId);
+    } else {
+        return ::ToString(GetProcessorType());
+    }
+}
+
 }   // namespace NKikimr::NArrow::NSSA

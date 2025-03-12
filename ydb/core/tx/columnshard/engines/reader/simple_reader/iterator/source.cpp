@@ -180,7 +180,7 @@ TConclusion<bool> TPortionDataSource::DoStartFetchIndex(const NArrow::NSSA::TPro
     THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>> fetchers;
     fetchers.emplace(indexMeta->GetIndexId(), fetcher);
     NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(
-        std::make_shared<NCommon::TColumnsFetcherTask>(std::move(readActions), fetchers, source, GetCursorStep(), "fetcher", "")));
+        std::make_shared<NCommon::TColumnsFetcherTask>(std::move(readActions), fetchers, source, GetExecutionContext().GetCursorStep(), "fetcher", "")));
     return true;
 }
 
@@ -252,8 +252,8 @@ TConclusion<bool> TPortionDataSource::DoStartFetchData(
     }
     THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>> fetchers;
     fetchers.emplace(columnId, fetcher);
-    NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(
-        std::make_shared<NCommon::TColumnsFetcherTask>(std::move(readActions), fetchers, source, GetCursorStep(), "fetcher", "")));
+    NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(std::make_shared<NCommon::TColumnsFetcherTask>(
+            std::move(readActions), fetchers, source, GetExecutionContext().GetCursorStep(), "fetcher", "")));
     return true;
 }
 

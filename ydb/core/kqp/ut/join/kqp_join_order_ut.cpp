@@ -15,19 +15,6 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-#define Y_UNIT_TEST_XOR_OR_BOTH_FALSE(N, OPT1, OPT2)                                                                                              \
-    template<bool OPT1, bool OPT2> void N(NUnitTest::TTestContext&);                                                                 \
-    struct TTestRegistration##N {                                                                                                    \
-        TTestRegistration##N() {                                                                                                     \
-            TCurrentTest::AddTest(#N "-" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, false>), false); \
-            TCurrentTest::AddTest(#N "+" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, false>), false);  \
-            TCurrentTest::AddTest(#N "-" #OPT1 "+" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, true>), false);  \
-        }                                                                                                                            \
-    };                                                                                                                               \
-    static TTestRegistration##N testRegistration##N;                                                                                 \
-    template<bool OPT1, bool OPT2>                                                                                                   \
-    void N(NUnitTest::TTestContext&)
-
 TString GetStatic(const TString& filePath) {
     TString fullPath = SRC_("data/" + filePath);
 
@@ -141,7 +128,11 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
 
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
     serverSettings.SetKqpSettings(settings);
+
     serverSettings.SetNodeCount(4);
+    #if defined(_asan_enabled_)
+        serverSettings.SetNodeCount(1);
+    #endif
 
     serverSettings.WithSampleTables = false;
 
@@ -396,7 +387,10 @@ void ExplainJoinOrderTestDataQueryWithStats(const TString& queryPath, const TStr
     auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO, useColumnStore);
     kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
     auto db = kikimr.GetQueryClient();
-    auto session = db.GetSession().GetValueSync().GetSession();
+    auto result = db.GetSession().GetValueSync();
+    NStatusHelpers::ThrowOnError(result);
+    auto session = result.GetSession();
+
 
     CreateSampleTable(session, useColumnStore);
 
@@ -420,7 +414,10 @@ void TestOlapEstimationRowsCorrectness(const TString& queryPath, const TString& 
     auto kikimr = GetKikimrWithJoinSettings(false, GetStatic(statsPath));
     kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
     auto db = kikimr.GetQueryClient();
-    auto session = db.GetSession().GetValueSync().GetSession();
+    auto result = db.GetSession().GetValueSync();
+    NStatusHelpers::ThrowOnError(result);
+    auto session = result.GetSession();
+
 
     CreateSampleTable(session, true);
 
@@ -550,7 +547,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO, useColumnStore);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
         auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
+        auto result = db.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session = result.GetSession();
+
 
         CreateSampleTable(session, useColumnStore);
 
@@ -583,7 +583,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), true, useColumnStore);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
         auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
+        auto result = db.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session = result.GetSession();
+
 
         CreateSampleTable(session, useColumnStore);
 
@@ -611,104 +614,104 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(FiveWayJoin, StreamLookupJoin, ColumnStore) {
+    Y_UNIT_TEST_TWIN(FiveWayJoin, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats(
-            "queries/five_way_join.sql", "stats/basic.json", StreamLookupJoin, ColumnStore
+            "queries/five_way_join.sql", "stats/basic.json", false, ColumnStore
         );
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(FiveWayJoinStatsOverride, StreamLookupJoin, ColumnStore) {
+    Y_UNIT_TEST_TWIN(FiveWayJoinStatsOverride, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats(
-            "queries/five_way_join_stats_override.sql", "stats/basic.json", StreamLookupJoin, ColumnStore
+            "queries/five_way_join_stats_override.sql", "stats/basic.json", false, ColumnStore
         );
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(FourWayJoinLeftFirst, StreamLookupJoin, ColumnStore) {
+    Y_UNIT_TEST_TWIN(FourWayJoinLeftFirst, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats(
-            "queries/four_way_join_left_first.sql", "stats/basic.json", StreamLookupJoin, ColumnStore
+            "queries/four_way_join_left_first.sql", "stats/basic.json", false, ColumnStore
         );
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(FiveWayJoinWithPreds, StreamLookupJoin, ColumnStore) {
+    Y_UNIT_TEST_TWIN(FiveWayJoinWithPreds, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats(
-            "queries/five_way_join_with_preds.sql", "stats/basic.json", StreamLookupJoin, ColumnStore
+            "queries/five_way_join_with_preds.sql", "stats/basic.json", false, ColumnStore
         );
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(FiveWayJoinWithComplexPreds, StreamLookupJoin, ColumnStore) {
+    Y_UNIT_TEST_TWIN(FiveWayJoinWithComplexPreds, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats(
-            "queries/five_way_join_with_complex_preds.sql", "stats/basic.json", StreamLookupJoin, ColumnStore
+            "queries/five_way_join_with_complex_preds.sql", "stats/basic.json", false, ColumnStore
         );
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(FiveWayJoinWithComplexPreds2, StreamLookupJoin, ColumnStore) {
+    Y_UNIT_TEST_TWIN(FiveWayJoinWithComplexPreds2, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats(
-            "queries/five_way_join_with_complex_preds2.sql", "stats/basic.json", StreamLookupJoin, ColumnStore
+            "queries/five_way_join_with_complex_preds2.sql", "stats/basic.json", false, ColumnStore
         );
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(FiveWayJoinWithPredsAndEquiv, StreamLookupJoin, ColumnStore) {
+    Y_UNIT_TEST_TWIN(FiveWayJoinWithPredsAndEquiv, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats(
-            "queries/four_way_join_with_preds_and_equiv.sql", "stats/basic.json", StreamLookupJoin, ColumnStore
+            "queries/four_way_join_with_preds_and_equiv.sql", "stats/basic.json", false, ColumnStore
         );
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(FourWayJoinWithPredsAndEquivAndLeft, StreamLookupJoin, ColumnStore) {
+    Y_UNIT_TEST_TWIN(FourWayJoinWithPredsAndEquivAndLeft, ColumnStore) {
        ExecuteJoinOrderTestGenericQueryWithStats(
-        "queries/four_way_join_with_preds_and_equiv_and_left.sql", "stats/basic.json", StreamLookupJoin, ColumnStore
+        "queries/four_way_join_with_preds_and_equiv_and_left.sql", "stats/basic.json", false, ColumnStore
         );
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(FiveWayJoinWithConstantFold, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/five_way_join_with_constant_fold.sql", "stats/basic.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(FiveWayJoinWithConstantFold, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/five_way_join_with_constant_fold.sql", "stats/basic.json", false, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(FiveWayJoinWithConstantFoldOpt, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/five_way_join_with_constant_fold_opt.sql", "stats/basic.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(FiveWayJoinWithConstantFoldOpt, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/five_way_join_with_constant_fold_opt.sql", "stats/basic.json", false, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(DatetimeConstantFold, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/datetime_constant_fold.sql", "stats/basic.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(DatetimeConstantFold, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/datetime_constant_fold.sql", "stats/basic.json", false, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCHRandomJoinViewJustWorks, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch_random_join_view_just_works.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TPCHRandomJoinViewJustWorks, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch_random_join_view_just_works.sql", "stats/tpch1000s.json", false, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCH3, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch3.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TPCH3, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch3.sql", "stats/tpch1000s.json", false, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCH5, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch5.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TPCH5, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch5.sql", "stats/tpch1000s.json", false, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCH8, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch8.sql", "stats/tpch100s.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TPCH8, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch8.sql", "stats/tpch100s.json", false, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCH10, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch10.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TPCH10, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch10.sql", "stats/tpch1000s.json", false, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCH11, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch11.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TPCH11, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch11.sql", "stats/tpch1000s.json", false, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCH20, StreamLookupJoin, ColumnStore) {
+    Y_UNIT_TEST_TWIN(TPCH20, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch20.sql", "stats/tpch1000s.json", false, true);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCH21, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch21.sql", "stats/tpch1000s.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TPCH21, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch21.sql", "stats/tpch1000s.json", false, ColumnStore);
     }
 
     Y_UNIT_TEST(TPCH22) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch22.sql", "stats/tpch100s.json", false, true);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS16, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds16.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TPCDS16, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds16.sql", "stats/tpcds1000s.json", false, ColumnStore);
     }
 
     Y_UNIT_TEST(TPCDS64kal) {
@@ -716,9 +719,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     /* tpcds23 has > 1 result sets */
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS23, StreamLookupJoin, ColumnStore) {
+    Y_UNIT_TEST_TWIN(TPCDS23, ColumnStore) {
         ExplainJoinOrderTestDataQueryWithStats(
-            "queries/tpcds23.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore
+            "queries/tpcds23.sql", "stats/tpcds1000s.json", false, ColumnStore
         );
     }
 
@@ -746,48 +749,48 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT(CheckLimitOnlyNotTopSort(plan));
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS34, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds34.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TPCDS34, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds34.sql", "stats/tpcds1000s.json", false, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS61, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds61.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TPCDS61, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds61.sql", "stats/tpcds1000s.json", false, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS87, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds87.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TPCDS87, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds87.sql", "stats/tpcds1000s.json", false, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS88, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds88.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TPCDS88, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds88.sql", "stats/tpcds1000s.json", false, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS90, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds90.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TPCDS90, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds90.sql", "stats/tpcds1000s.json", false, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS92, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds92.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TPCDS92, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds92.sql", "stats/tpcds1000s.json", false, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS94, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds94.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TPCDS94, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds94.sql", "stats/tpcds1000s.json", false, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS95, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds95.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TPCDS95, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds95.sql", "stats/tpcds1000s.json", false, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS96, StreamLookupJoin, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds96.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TPCDS96, ColumnStore) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds96.sql", "stats/tpcds1000s.json", false, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinHint1, StreamLookupJoin, ColumnStore) {
-        CheckJoinCardinality("queries/test_join_hint1.sql", "stats/basic.json", "InnerJoin (Grace)", 10e6, StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TestJoinHint1, ColumnStore) {
+        CheckJoinCardinality("queries/test_join_hint1.sql", "stats/basic.json", "InnerJoin (Grace)", 10e6, false, ColumnStore);
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinHint2, StreamLookupJoin, ColumnStore) {
-        CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (MapJoin)", 1, StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TestJoinHint2, ColumnStore) {
+        CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (MapJoin)", 1, false, ColumnStore);
     }
 
     Y_UNIT_TEST(ShuffleEliminationOneJoin) {
@@ -894,13 +897,13 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U", "V"}).Join == "InnerJoin (MapJoin)");
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinOrderHintsSimple, StreamLookupJoin, ColumnStore) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/join_order_hints_simple.sql", "stats/basic.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TestJoinOrderHintsSimple, ColumnStore) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/join_order_hints_simple.sql", "stats/basic.json", false, ColumnStore);
         UNIT_ASSERT_VALUES_EQUAL(GetJoinOrder(plan).GetStringRobust(), R"(["T",["R","S"]])") ;
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinOrderHintsComplex, StreamLookupJoin, ColumnStore) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/join_order_hints_complex.sql", "stats/basic.json", StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_TWIN(TestJoinOrderHintsComplex, ColumnStore) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/join_order_hints_complex.sql", "stats/basic.json", false, ColumnStore);
         auto joinOrder = GetJoinOrder(plan).GetStringRobust();
         UNIT_ASSERT_C(joinOrder.find(R"([["R","S"],["T","U"]])") != TString::npos, joinOrder);
     }
@@ -917,7 +920,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), true, useColumnStore);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
         auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
+        auto result = db.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session = result.GetSession();
+
 
         CreateSampleTable(session, useColumnStore);
 
@@ -966,33 +972,33 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(CanonizedJoinOrderTPCH2, StreamLookupJoin, ColumnStore) {
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH2, ColumnStore) {
         CanonizedJoinOrderTest(
-            "queries/tpch2.sql", "stats/tpch1000s.json", "join_order/tpch2_1000s.json", StreamLookupJoin, ColumnStore
+            "queries/tpch2.sql", "stats/tpch1000s.json", "join_order/tpch2_1000s.json", false, ColumnStore
         );
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(CanonizedJoinOrderTPCH9, StreamLookupJoin, ColumnStore) {
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH9, ColumnStore) {
         CanonizedJoinOrderTest(
-            "queries/tpch9.sql", "stats/tpch1000s.json", "join_order/tpch9_1000s.json", StreamLookupJoin, ColumnStore
+            "queries/tpch9.sql", "stats/tpch1000s.json", "join_order/tpch9_1000s.json", false, ColumnStore
         );
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(CanonizedJoinOrderTPCDS64, StreamLookupJoin, ColumnStore) {
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCDS64, ColumnStore) {
         CanonizedJoinOrderTest(
-            "queries/tpcds64.sql", "stats/tpcds1000s.json", "join_order/tpcds64_1000s.json", StreamLookupJoin, ColumnStore
+            "queries/tpcds64.sql", "stats/tpcds1000s.json", "join_order/tpcds64_1000s.json", false, ColumnStore
         );
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(CanonizedJoinOrderTPCDS64_small, StreamLookupJoin, ColumnStore) {
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCDS64_small, ColumnStore) {
         CanonizedJoinOrderTest(
-            "queries/tpcds64_small.sql", "stats/tpcds1000s.json", "join_order/tpcds64_small_1000s.json", StreamLookupJoin, ColumnStore
+            "queries/tpcds64_small.sql", "stats/tpcds1000s.json", "join_order/tpcds64_small_1000s.json", false, ColumnStore
         );
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(CanonizedJoinOrderTPCDS78, StreamLookupJoin, ColumnStore) {
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCDS78, ColumnStore) {
         CanonizedJoinOrderTest(
-            "queries/tpcds78.sql", "stats/tpcds1000s.json", "join_order/tpcds78_1000s.json", StreamLookupJoin, ColumnStore
+            "queries/tpcds78.sql", "stats/tpcds1000s.json", "join_order/tpcds78_1000s.json", false, ColumnStore
         );
     }
 

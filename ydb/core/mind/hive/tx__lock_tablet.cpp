@@ -86,7 +86,7 @@ public:
         ui32 flags = 0;
         if (PreviousOwner && PreviousOwner != OwnerActor) {
             // Notify previous owner that its lock ownership has been lost
-            SideEffects.Send(PreviousOwner, new TEvHive::TEvLockTabletExecutionLost(TabletId));
+            SideEffects.Send(PreviousOwner, new TEvHive::TEvLockTabletExecutionLost(TabletId, NKikimrHive::LOCK_LOST_REASON_NEW_LOCK));
         }
 
         if (tablet->IsLockedToActor()) {

@@ -52,7 +52,7 @@ public:
                 TActorId unlockedFromActor = tablet->ClearLockedToActor();
                 if (unlockedFromActor) {
                     // Notify lock owner that lock has been lost
-                    SideEffects.Send(unlockedFromActor, new TEvHive::TEvLockTabletExecutionLost(TabletId));
+                    SideEffects.Send(unlockedFromActor, new TEvHive::TEvLockTabletExecutionLost(TabletId, NKikimrHive::LOCK_LOST_REASON_TABLET_DELETED));
                 }
                 Self->PendingCreateTablets.erase({tablet->Owner.first, tablet->Owner.second});
                 Self->DeleteTablet(tablet->Id);

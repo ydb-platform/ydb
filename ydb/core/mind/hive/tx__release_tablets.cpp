@@ -82,7 +82,7 @@ public:
         SideEffects.Complete(ctx);
         for (const auto& unlockedFromActor : UnlockedFromActor) {
             // Notify lock owner that lock has been lost
-            ctx.Send(unlockedFromActor.second, new TEvHive::TEvLockTabletExecutionLost(unlockedFromActor.first));
+            ctx.Send(unlockedFromActor.second, new TEvHive::TEvLockTabletExecutionLost(unlockedFromActor.first, NKikimrHive::LOCK_LOST_REASON_TABLET_RELEASED));
         }
         ctx.Send(Request->Sender, Response.Release());
         if (NeedToProcessPendingOperations) {

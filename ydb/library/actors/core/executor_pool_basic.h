@@ -234,6 +234,7 @@ namespace NActors {
         TMailbox* GetReadyActivation(ui64 revolvingReadCounter) override;
         TMailbox* GetReadyActivationCommon(ui64 revolvingReadCounter);
         TMailbox* GetReadyActivationShared(ui64 revolvingReadCounter);
+        TMailbox* GetReadyActivationRingQueue(ui64 revolvingReadCounter);
         TMailbox* GetReadyActivationLocalQueue(ui64 revolvingReadCounter);
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;

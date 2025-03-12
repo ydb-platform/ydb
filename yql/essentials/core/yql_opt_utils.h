@@ -119,7 +119,7 @@ TExprNode::TPtr BuildKeySelector(TPositionHandle pos, const TStructExprType& row
 
 template <bool Cannonize, bool EnableNewOptimizers = true>
 TExprNode::TPtr OptimizeIfPresent(const TExprNode::TPtr& node, TExprContext& ctx);
-TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx);
+TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typeCtx);
 
 bool WarnUnroderedSubquery(const TExprNode& unourderedSubquery, TExprContext& ctx);
 
@@ -151,7 +151,8 @@ bool HasDependsOn(const TExprNode::TPtr& node, const TExprNode::TPtr& arg);
 TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstraintNode* sorted, const TTypeAnnotationNode* rowType, TExprContext& ctx);
 TExprNode::TPtr MakeSortByConstraint(TExprNode::TPtr node, const TSortedConstraintNode* sorted, const TTypeAnnotationNode* rowType, TExprContext& ctx);
 TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx);
-TExprNode::TPtr KeepWorld(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx, TTypeAnnotationContext& types);
+bool HasMissingWorlds(const TExprNode::TPtr& node, const TExprNode& src, const TTypeAnnotationContext& types);
+TExprNode::TPtr KeepWorld(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx, const TTypeAnnotationContext& types);
 
 void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, const TParentsMap& parentsMap,
     TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx,

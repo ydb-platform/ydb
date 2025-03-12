@@ -809,13 +809,15 @@ TExprNode::TPtr CheckIfWorldWithSame(const TExprNode::TPtr& node, TExprContext& 
     return node;
 }
 
-TExprNode::TPtr CheckIfWithSame(const TExprNode::TPtr& node, TExprContext& ctx) {
+TExprNode::TPtr CheckIfWithSame(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     if (node->Child(node->ChildrenSize() - 1U) == node->Child(node->ChildrenSize() - 2U)) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " with identical branches.";
         auto children = node->ChildrenList();
         children[children.size() - 3U] = std::move(children.back());
         children.resize(children.size() -2U);
-        return 1U == children.size() ? children.front() : ctx.ChangeChildren(*node, std::move(children));
+        auto res = 1U == children.size() ? children.front() : ctx.ChangeChildren(*node, std::move(children));
+        res = KeepWorld(res, *node, ctx, *optCtx.Types);
+        return res;
     }
 
     if (const auto width = node->ChildrenSize() >> 1U; width > 1U) {
@@ -850,7 +852,9 @@ TExprNode::TPtr CheckIfWithSame(const TExprNode::TPtr& node, TExprContext& ctx) 
                     } else
                         prev = ctx.NewCallable(node->Pos(), "Or", {std::move(prev), std::move(next)});
                     children.erase(children.cbegin() + i + 1U, children.cbegin() + i + 3U);
-                    return ctx.ChangeChildren(*node, std::move(children));
+                    auto res = ctx.ChangeChildren(*node, std::move(children));
+                    res = KeepWorld(res, *node, ctx, *optCtx.Types);
+                    return res;
                 }
             }
         }
@@ -860,10 +864,12 @@ TExprNode::TPtr CheckIfWithSame(const TExprNode::TPtr& node, TExprContext& ctx) 
 }
 
 template <bool Equal, bool Aggr>
-TExprNode::TPtr CheckCompareSame(const TExprNode::TPtr& node, TExprContext& ctx) {
+TExprNode::TPtr CheckCompareSame(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     if (&node->Head() == &node->Tail() && (Aggr || HasTotalOrder(*node->Head().GetTypeAnn()))) {
         YQL_CLOG(DEBUG, Core) << (Equal ? "Equal" : "Unequal") << " '" << node->Content() << "' with same args";
-        return MakeBool<Equal>(node->Pos(), ctx);
+        auto res = MakeBool<Equal>(node->Pos(), ctx);
+        res = KeepWorld(res, *node, ctx, *optCtx.Types);
+        return res;
     }
 
     return node;
@@ -896,7 +902,7 @@ void RegisterCoSimpleCallables2(TCallableOptimizerMap& map) {
 
     map[IfName] = std::bind(&CheckIfWorldWithSame, _1, _2);
 
-    map["If"] = std::bind(&CheckIfWithSame, _1, _2);
+    map["If"] = &CheckIfWithSame;
 
     map["Aggregate"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext&) {
         if (auto deduplicated = DeduplicateAggregateSameTraits(node, ctx); deduplicated != node) {
@@ -921,13 +927,13 @@ void RegisterCoSimpleCallables2(TCallableOptimizerMap& map) {
 
     map["AggrMin"] = map["AggrMax"] = map["Coalesce"] = std::bind(&DropAggrOverSame, _1);
 
-    map["StartsWith"] = map["EndsWith"] = map["StringContains"] = std::bind(&CheckCompareSame<true, false>, _1, _2);
+    map["StartsWith"] = map["EndsWith"] = map["StringContains"] = &CheckCompareSame<true, false>;
 
-    map["=="] = map["<="] = map[">="] = std::bind(&CheckCompareSame<true, false>, _1, _2);
-    map["!="] = map["<"] = map[">"] = std::bind(&CheckCompareSame<false, false>, _1, _2);
+    map["=="] = map["<="] = map[">="] = &CheckCompareSame<true, false>;
+    map["!="] = map["<"] = map[">"] = &CheckCompareSame<false, false>;
 
-    map["AggrEquals"] = map["AggrLessOrEqual"] = map["AggrGreaterOrEqual"] = std::bind(&CheckCompareSame<true, true>, _1, _2);
-    map["AggrNotEquals"] = map["AggrLess"] = map["AggrGreater"] = std::bind(&CheckCompareSame<false, true>, _1, _2);
+    map["AggrEquals"] = map["AggrLessOrEqual"] = map["AggrGreaterOrEqual"] = &CheckCompareSame<true, true>;
+    map["AggrNotEquals"] = map["AggrLess"] = map["AggrGreater"] = &CheckCompareSame<false, true>;
 
     map["IfPresent"] = std::bind(&IfPresentSubsetFields, _1, _2, _3);
 

@@ -656,13 +656,15 @@ private:
             }
         }
 
-        if (ProcessingError || TableState->BatchSize() > ExpectedBatchSize || *LastWriteTime < TInstant::Now() - FlushInterval) {
+        if (TableState->BatchSize() >= ExpectedBatchSize || *LastWriteTime < TInstant::Now() - FlushInterval) {
             if (TableState->Flush()) {
                 LastWriteTime.reset();
-                Become(&TThis::StateWrite);
-            } else if (ProcessingError) {
-                LogCritAndLeave(*ProcessingError);
-            }
+                return Become(&TThis::StateWrite);
+            } 
+        }
+        
+        if (ProcessingError) {
+            LogCritAndLeave(*ProcessingError);
         } else {
             PollSent = true;
             Send(Worker, new TEvWorker::TEvPoll(false));

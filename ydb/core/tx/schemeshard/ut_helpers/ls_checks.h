@@ -31,7 +31,6 @@ struct TApplyIfUnit {
 
     TApplyIfUnit() {}
 
-    // for historical reasons, TPathVersion was used as TApplyIfUnit
     TApplyIfUnit(const TPathVersion& pathVersion) {
         PathId = pathVersion.PathId;
         Version = pathVersion.Version;

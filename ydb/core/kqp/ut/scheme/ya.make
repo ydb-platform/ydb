@@ -24,7 +24,6 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/testing
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
-    ydb/library/actors/testlib
     ydb/core/statistics/ut_common
 )
 

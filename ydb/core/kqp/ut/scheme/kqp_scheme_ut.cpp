@@ -23,9 +23,6 @@
 
 #include <ydb/core/statistics/ut_common/ut_common.h>
 
-#include <ydb/library/actors/testlib/test_runtime.h>
-
-
 namespace NKikimr {
 namespace NKqp {
 
@@ -3833,9 +3830,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(AlterDatabaseChangeOwner) {
-        using namespace NStat;
-
-        TTestEnv env(1, 1, true);
+        NStat::TTestEnv env(1, 1, true);
 
         CreateDatabase(env, "Test");
 

@@ -15,14 +15,6 @@
 add_library(client-types-exceptions)
 
 
-target_include_directories(client-types-exceptions PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(client-types-exceptions PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(client-types-exceptions PUBLIC
   contrib-libs-cxxsupp
   yutil

@@ -15,14 +15,6 @@
 add_library(cpp-adapters-issue)
 
 
-target_include_directories(cpp-adapters-issue PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(cpp-adapters-issue PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(cpp-adapters-issue PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

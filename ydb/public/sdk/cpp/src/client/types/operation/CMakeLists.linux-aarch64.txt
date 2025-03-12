@@ -15,14 +15,6 @@
 add_library(client-types-operation)
 
 
-target_include_directories(client-types-operation PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(client-types-operation PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(client-types-operation PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

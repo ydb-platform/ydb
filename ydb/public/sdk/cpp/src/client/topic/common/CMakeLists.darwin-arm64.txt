@@ -15,14 +15,6 @@
 add_library(client-topic-common)
 
 
-target_include_directories(client-topic-common PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(client-topic-common PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(client-topic-common PUBLIC
   contrib-libs-cxxsupp
   yutil

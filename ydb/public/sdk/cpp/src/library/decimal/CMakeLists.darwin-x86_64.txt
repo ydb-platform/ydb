@@ -15,14 +15,6 @@
 add_library(src-library-decimal)
 
 
-target_include_directories(src-library-decimal PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(src-library-decimal PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(src-library-decimal PUBLIC
   contrib-libs-cxxsupp
   yutil

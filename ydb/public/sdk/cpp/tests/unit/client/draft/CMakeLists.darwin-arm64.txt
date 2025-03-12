@@ -17,10 +17,6 @@ add_subdirectory(helpers)
 add_executable(ydb-public-sdk-cpp-tests-unit-client-draft)
 
 
-target_include_directories(ydb-public-sdk-cpp-tests-unit-client-draft PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(ydb-public-sdk-cpp-tests-unit-client-draft PUBLIC
   contrib-libs-cxxsupp
   yutil

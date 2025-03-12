@@ -15,14 +15,6 @@
 add_library(client-iam_private-common INTERFACE)
 
 
-target_include_directories(client-iam_private-common INTERFACE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(client-iam_private-common INTERFACE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(client-iam_private-common INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

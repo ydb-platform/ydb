@@ -22,14 +22,6 @@ get_built_tool_path(
 add_library(src-client-monitoring)
 
 
-target_include_directories(src-client-monitoring PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(src-client-monitoring PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(src-client-monitoring PUBLIC
   contrib-libs-cxxsupp
   yutil

@@ -15,14 +15,6 @@
 add_library(sdk-library-grpc-client-v3)
 
 
-target_include_directories(sdk-library-grpc-client-v3 PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(sdk-library-grpc-client-v3 PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(sdk-library-grpc-client-v3 PUBLIC
   contrib-libs-cxxsupp
   yutil

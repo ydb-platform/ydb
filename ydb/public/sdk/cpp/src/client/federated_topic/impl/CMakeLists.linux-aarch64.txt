@@ -15,14 +15,6 @@
 add_library(client-federated_topic-impl)
 
 
-target_include_directories(client-federated_topic-impl PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(client-federated_topic-impl PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(client-federated_topic-impl PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

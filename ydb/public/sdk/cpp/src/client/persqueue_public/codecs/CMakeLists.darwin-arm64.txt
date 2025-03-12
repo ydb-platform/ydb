@@ -15,14 +15,6 @@
 add_library(client-persqueue_public-codecs INTERFACE)
 
 
-target_include_directories(client-persqueue_public-codecs INTERFACE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(client-persqueue_public-codecs INTERFACE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(client-persqueue_public-codecs INTERFACE
   contrib-libs-cxxsupp
   yutil

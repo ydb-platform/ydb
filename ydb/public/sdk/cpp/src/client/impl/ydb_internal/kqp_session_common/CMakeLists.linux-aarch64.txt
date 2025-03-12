@@ -15,14 +15,6 @@
 add_library(impl-ydb_internal-kqp_session_common)
 
 
-target_include_directories(impl-ydb_internal-kqp_session_common PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(impl-ydb_internal-kqp_session_common PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(impl-ydb_internal-kqp_session_common PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

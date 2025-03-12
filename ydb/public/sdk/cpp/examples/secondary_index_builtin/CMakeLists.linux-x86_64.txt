@@ -15,10 +15,6 @@
 add_executable(secondary_index_builtin)
 
 
-target_include_directories(secondary_index_builtin PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(secondary_index_builtin PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

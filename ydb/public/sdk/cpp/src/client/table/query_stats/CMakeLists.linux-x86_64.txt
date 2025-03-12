@@ -15,14 +15,6 @@
 add_library(client-table-query_stats)
 
 
-target_include_directories(client-table-query_stats PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(client-table-query_stats PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(client-table-query_stats PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

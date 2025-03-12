@@ -22,14 +22,6 @@ get_built_tool_path(
 add_library(src-client-resources)
 
 
-target_include_directories(src-client-resources PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(src-client-resources PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(src-client-resources PUBLIC
   contrib-libs-cxxsupp
   yutil
@@ -45,14 +37,6 @@ target_sources(src-client-resources PRIVATE
 add_global_library_for(src-client-resources.global
   src-client-resources)
 
-
-target_include_directories(src-client-resources.global PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(src-client-resources.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
 
 target_link_libraries(src-client-resources.global PUBLIC
   contrib-libs-cxxsupp

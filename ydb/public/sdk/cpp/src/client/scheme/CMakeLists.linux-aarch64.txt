@@ -22,14 +22,6 @@ get_built_tool_path(
 add_library(src-client-scheme)
 
 
-target_include_directories(src-client-scheme PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(src-client-scheme PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(src-client-scheme PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

@@ -15,14 +15,6 @@
 add_library(sdk-library-persqueue-topic_parser_public-v3)
 
 
-target_include_directories(sdk-library-persqueue-topic_parser_public-v3 PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(sdk-library-persqueue-topic_parser_public-v3 PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(sdk-library-persqueue-topic_parser_public-v3 PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

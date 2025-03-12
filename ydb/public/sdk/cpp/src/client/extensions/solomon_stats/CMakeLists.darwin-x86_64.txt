@@ -15,14 +15,6 @@
 add_library(client-extensions-solomon_stats)
 
 
-target_include_directories(client-extensions-solomon_stats PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(client-extensions-solomon_stats PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(client-extensions-solomon_stats PUBLIC
   contrib-libs-cxxsupp
   yutil

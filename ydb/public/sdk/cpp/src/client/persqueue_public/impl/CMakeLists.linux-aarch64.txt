@@ -15,14 +15,6 @@
 add_library(client-persqueue_public-impl)
 
 
-target_include_directories(client-persqueue_public-impl PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(client-persqueue_public-impl PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(client-persqueue_public-impl PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

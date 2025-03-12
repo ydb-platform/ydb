@@ -15,10 +15,6 @@
 add_executable(basic_example)
 
 
-target_include_directories(basic_example PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(basic_example PUBLIC
   contrib-libs-cxxsupp
   yutil

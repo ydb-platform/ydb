@@ -15,14 +15,6 @@
 add_library(client-topic-codecs)
 
 
-target_include_directories(client-topic-codecs PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(client-topic-codecs PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(client-topic-codecs PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

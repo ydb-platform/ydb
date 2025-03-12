@@ -15,14 +15,6 @@
 add_library(client-draft-helpers)
 
 
-target_include_directories(client-draft-helpers PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(client-draft-helpers PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(client-draft-helpers PUBLIC
   contrib-libs-cxxsupp
   yutil

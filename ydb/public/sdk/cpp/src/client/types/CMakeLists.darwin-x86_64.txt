@@ -28,14 +28,6 @@ add_subdirectory(operation)
 add_library(src-client-types)
 
 
-target_include_directories(src-client-types PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(src-client-types PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(src-client-types PUBLIC
   contrib-libs-cxxsupp
   yutil

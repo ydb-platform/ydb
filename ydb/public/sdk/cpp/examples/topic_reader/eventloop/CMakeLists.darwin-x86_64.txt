@@ -15,10 +15,6 @@
 add_executable(persqueue_reader_eventloop)
 
 
-target_include_directories(persqueue_reader_eventloop PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(persqueue_reader_eventloop PUBLIC
   contrib-libs-cxxsupp
   yutil

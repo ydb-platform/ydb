@@ -15,10 +15,6 @@
 add_executable(pagination)
 
 
-target_include_directories(pagination PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(pagination PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

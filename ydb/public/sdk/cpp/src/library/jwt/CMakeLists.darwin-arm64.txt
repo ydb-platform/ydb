@@ -15,14 +15,6 @@
 add_library(src-library-jwt)
 
 
-target_include_directories(src-library-jwt PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(src-library-jwt PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(src-library-jwt PUBLIC
   contrib-libs-cxxsupp
   yutil

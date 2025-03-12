@@ -15,14 +15,6 @@
 add_library(src-client-extension_common)
 
 
-target_include_directories(src-client-extension_common PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(src-client-extension_common PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(src-client-extension_common PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

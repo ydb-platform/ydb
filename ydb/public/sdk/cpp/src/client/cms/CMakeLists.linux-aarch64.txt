@@ -15,14 +15,6 @@
 add_library(src-client-cms)
 
 
-target_include_directories(src-client-cms PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(src-client-cms PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(src-client-cms PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

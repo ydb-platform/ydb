@@ -15,10 +15,6 @@
 add_executable(ttl)
 
 
-target_include_directories(ttl PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(ttl PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

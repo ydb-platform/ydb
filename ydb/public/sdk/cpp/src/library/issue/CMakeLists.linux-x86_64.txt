@@ -15,14 +15,6 @@
 add_library(src-library-issue)
 
 
-target_include_directories(src-library-issue PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(src-library-issue PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(src-library-issue PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

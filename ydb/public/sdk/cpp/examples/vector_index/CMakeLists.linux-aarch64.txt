@@ -15,10 +15,6 @@
 add_executable(vector_index)
 
 
-target_include_directories(vector_index PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(vector_index PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

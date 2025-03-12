@@ -25,14 +25,6 @@ add_subdirectory(ut)
 add_library(src-client-federated_topic)
 
 
-target_include_directories(src-client-federated_topic PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(src-client-federated_topic PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(src-client-federated_topic PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

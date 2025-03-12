@@ -15,14 +15,6 @@
 add_library(client-extensions-discovery_mutator)
 
 
-target_include_directories(client-extensions-discovery_mutator PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(client-extensions-discovery_mutator PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(client-extensions-discovery_mutator PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

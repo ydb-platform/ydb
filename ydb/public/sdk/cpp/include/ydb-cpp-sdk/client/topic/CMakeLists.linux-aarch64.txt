@@ -22,14 +22,6 @@ get_built_tool_path(
 add_library(ydb-cpp-sdk-client-topic)
 
 
-target_include_directories(ydb-cpp-sdk-client-topic PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(ydb-cpp-sdk-client-topic PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(ydb-cpp-sdk-client-topic PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

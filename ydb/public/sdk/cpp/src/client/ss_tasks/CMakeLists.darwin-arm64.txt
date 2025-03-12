@@ -22,14 +22,6 @@ get_built_tool_path(
 add_library(src-client-ss_tasks)
 
 
-target_include_directories(src-client-ss_tasks PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(src-client-ss_tasks PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(src-client-ss_tasks PUBLIC
   contrib-libs-cxxsupp
   yutil

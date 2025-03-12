@@ -15,10 +15,6 @@
 add_executable(read_from_topic_in_transaction)
 
 
-target_include_directories(read_from_topic_in_transaction PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(read_from_topic_in_transaction PUBLIC
   contrib-libs-cxxsupp
   yutil

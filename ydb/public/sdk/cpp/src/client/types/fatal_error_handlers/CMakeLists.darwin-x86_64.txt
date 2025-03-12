@@ -15,14 +15,6 @@
 add_library(client-types-fatal_error_handlers)
 
 
-target_include_directories(client-types-fatal_error_handlers PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(client-types-fatal_error_handlers PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(client-types-fatal_error_handlers PUBLIC
   contrib-libs-cxxsupp
   yutil

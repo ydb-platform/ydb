@@ -15,14 +15,6 @@
 add_library(library-string_utils-helpers)
 
 
-target_include_directories(library-string_utils-helpers PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(library-string_utils-helpers PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(library-string_utils-helpers PUBLIC
   contrib-libs-cxxsupp
   yutil

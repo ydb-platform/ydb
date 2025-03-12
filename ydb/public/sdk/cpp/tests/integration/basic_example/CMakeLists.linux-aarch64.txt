@@ -15,10 +15,6 @@
 add_executable(public-sdk-cpp-tests-integration-basic_example)
 
 
-target_include_directories(public-sdk-cpp-tests-integration-basic_example PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(public-sdk-cpp-tests-integration-basic_example PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

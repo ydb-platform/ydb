@@ -17,14 +17,6 @@ add_subdirectory(impl)
 add_library(src-client-query)
 
 
-target_include_directories(src-client-query PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(src-client-query PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(src-client-query PUBLIC
   contrib-libs-cxxsupp
   yutil

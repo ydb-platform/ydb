@@ -15,10 +15,6 @@
 add_executable(public-sdk-cpp-tests-unit-library-operation_id)
 
 
-target_include_directories(public-sdk-cpp-tests-unit-library-operation_id PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(public-sdk-cpp-tests-unit-library-operation_id PUBLIC
   contrib-libs-cxxsupp
   yutil

@@ -15,14 +15,6 @@
 add_library(src-client-result)
 
 
-target_include_directories(src-client-result PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(src-client-result PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(src-client-result PUBLIC
   contrib-libs-cxxsupp
   yutil

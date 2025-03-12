@@ -17,14 +17,6 @@ add_subdirectory(common)
 add_library(src-client-iam)
 
 
-target_include_directories(src-client-iam PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(src-client-iam PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(src-client-iam PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

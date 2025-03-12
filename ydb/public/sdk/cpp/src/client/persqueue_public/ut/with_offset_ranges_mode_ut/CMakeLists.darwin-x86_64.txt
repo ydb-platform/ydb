@@ -19,10 +19,6 @@ target_compile_options(with_offset_ranges_mode_ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
-target_include_directories(with_offset_ranges_mode_ut PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(with_offset_ranges_mode_ut PUBLIC
   contrib-libs-cxxsupp
   yutil

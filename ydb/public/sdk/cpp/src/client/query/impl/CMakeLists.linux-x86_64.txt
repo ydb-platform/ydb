@@ -15,14 +15,6 @@
 add_library(client-query-impl)
 
 
-target_include_directories(client-query-impl PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/include
-)
-
-target_include_directories(client-query-impl PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
-)
-
 target_link_libraries(client-query-impl PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp

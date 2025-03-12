@@ -4,15 +4,10 @@
 #include "blob_depot_tablet.h"
 #include "data.h"
 
-#include <ydb/core/wrappers/abstract.h>
-
 namespace NKikimr::NBlobDepot {
 
     class TBlobDepot::TS3Manager {
-        using TEvExternalStorage = NWrappers::TEvExternalStorage;
-
         TBlobDepot* const Self;
-        NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
         TActorId WrapperId;
         TActorId UploaderId;
         TString BasePath;

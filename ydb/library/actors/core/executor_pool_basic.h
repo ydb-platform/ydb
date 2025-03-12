@@ -241,7 +241,7 @@ namespace NActors {
         void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
 
         void ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingWriteCounter) override;
-        void ScheduleActivationExCommon(TMailbox* mailbox, ui64 revolvingWriteCounter, TAtomic semaphoreValue);
+        void ScheduleActivationExCommon(TMailbox* mailbox, ui64 revolvingWriteCounter, std::optional<TAtomic> semaphoreValue);
         void ScheduleActivationExLocalQueue(TMailbox* mailbox, ui64 revolvingWriteCounter);
 
         void SetLocalQueueSize(ui16 size);

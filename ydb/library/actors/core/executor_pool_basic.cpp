@@ -305,23 +305,29 @@ namespace NActors {
         }
     }
 
-    void TBasicExecutorPool::ScheduleActivationExCommon(TMailbox* mailbox, ui64 revolvingCounter, TAtomic x) {
-        TSemaphore semaphore = TSemaphore::GetSemaphore(x);
-        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "semaphore.OldSemaphore == ", semaphore.OldSemaphore, " semaphore.CurrentSleepThreadCount == ", semaphore.CurrentSleepThreadCount);
-        std::visit([mailbox, revolvingCounter](auto &x) {
-            x.Push(mailbox->Hint, revolvingCounter);
+    void TBasicExecutorPool::ScheduleActivationExCommon(TMailbox* mailbox, ui64 revolvingCounter, std::optional<TAtomic> initSemaphore) {
+        std::visit([mailbox, revolvingCounter](auto &queue) {
+            queue.Push(mailbox->Hint, revolvingCounter);
         }, Activations);
         bool needToWakeUp = false;
         bool needToChangeOldSemaphore = true;
 
-        if (SharedPool) {
+        TAtomic x;
+        TSemaphore semaphore;
+        if (!initSemaphore || SharedPool) {
             x = AtomicIncrement(Semaphore);
             needToChangeOldSemaphore = false;
+            semaphore = TSemaphore::GetSemaphore(x);
+        } else {
+            x = *initSemaphore;
+            semaphore = TSemaphore::GetSemaphore(x);
+        }
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "semaphore.OldSemaphore == ", semaphore.OldSemaphore, " semaphore.CurrentSleepThreadCount == ", semaphore.CurrentSleepThreadCount);
+        if (SharedPool) {
             if (SharedPool->WakeUpLocalThreads(PoolId)) {
                 EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "shared pool wake up local threads");
                 return;
             }
-            semaphore = TSemaphore::GetSemaphore(x);
         }    
 
         i16 sleepThreads = 0;
@@ -329,13 +335,18 @@ namespace NActors {
         do {
             needToWakeUp = semaphore.CurrentSleepThreadCount > 0;
             i64 oldX = semaphore.ConvertToI64();
+            bool changed = false;
             if (needToChangeOldSemaphore) {
                 semaphore.OldSemaphore++;
+                changed = true;
             }
             if (needToWakeUp) {
                 sleepThreads = semaphore.CurrentSleepThreadCount--;
+                changed = true;
             }
-            x = AtomicGetAndCas(&Semaphore, semaphore.ConvertToI64(), oldX);
+            if (changed) {
+                x = AtomicGetAndCas(&Semaphore, semaphore.ConvertToI64(), oldX);
+            }
             if (x == oldX) {
                 break;
             }
@@ -383,14 +394,14 @@ namespace NActors {
                 return;
             }
         }
-        ScheduleActivationExCommon(mailbox, revolvingWriteCounter, AtomicGet(Semaphore));
+        ScheduleActivationExCommon(mailbox, revolvingWriteCounter, std::nullopt);
     }
 
     void TBasicExecutorPool::ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingCounter) {
         if (MaxLocalQueueSize) {
             ScheduleActivationExLocalQueue(mailbox, revolvingCounter);
         } else {
-            ScheduleActivationExCommon(mailbox, revolvingCounter, AtomicGet(Semaphore));
+            ScheduleActivationExCommon(mailbox, revolvingCounter, std::nullopt);
         }
     }
 

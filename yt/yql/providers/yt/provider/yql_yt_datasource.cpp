@@ -271,7 +271,9 @@ public:
 
     bool CanBuildResult(const TExprNode& node, TSyncMap& syncList) override {
         TString usedCluster;
-        return IsYtCompleteIsolatedLambda(node, syncList, usedCluster, false);
+        const ERuntimeClusterSelectionMode selectionMode =
+            State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+        return IsYtCompleteIsolatedLambda(node, syncList, usedCluster, false, selectionMode);
     }
 
     bool GetExecWorld(const TExprNode::TPtr& node, TExprNode::TPtr& root) override {

@@ -1,0 +1,263 @@
+= __Application_Name__ Protobuf Documentation
+:toc:
+
+
+
+== Booking.proto
+
+
+
+=== Booking
+Represents the booking of a vehicle.
+
+Vehicles are some cool shit. But drive carefully!
+
+
+|===========================================
+|*Field* |*Type* |*Label* |*Description*
+
+|vehicle_id | <<int32,int32>> | |ID of booked vehicle.
+
+|customer_id | <<int32,int32>> | |Customer that booked the vehicle.
+
+|status | <<com.example.BookingStatus,BookingStatus>> | |Status of the booking.
+
+|confirmation_sent | <<bool,bool>> | |Has booking confirmation been sent?
+
+|payment_received | <<bool,bool>> | |Has payment been received?
+
+|color_preference | <<string,string>> | |Color preference of the customer.
+
+|===========================================
+
+
+
+=== BookingStatus
+Represents the status of a vehicle booking.
+
+
+|===========================================
+|*Field* |*Type* |*Label* |*Description*
+
+|id | <<int32,int32>> | |Unique booking status ID.
+
+|description | <<string,string>> | |Booking status description. E.g. "Active".
+
+|===========================================
+
+
+
+=== BookingStatusID
+Represents the booking status ID.
+
+
+|===========================================
+|*Field* |*Type* |*Label* |*Description*
+
+|id | <<int32,int32>> | |Unique booking status ID.
+
+|===========================================
+
+
+
+=== EmptyBookingMessage
+An empty message for testing
+
+
+
+
+
+
+
+== Customer.proto
+
+
+
+=== Address
+Represents a mail address.
+
+
+|===========================================
+|*Field* |*Type* |*Label* |*Description*
+
+|address_line_1 | <<string,string>> |required |First address line.
+
+|address_line_2 | <<string,string>> |optional |Second address line.
+
+|address_line_3 | <<string,string>> |optional |Second address line.
+
+|town | <<string,string>> |required |Address town.
+
+|county | <<string,string>> |optional |Address county, if applicable.
+
+|country | <<string,string>> |required |Address country.
+
+|===========================================
+
+
+
+=== Customer
+Represents a customer.
+
+
+|===========================================
+|*Field* |*Type* |*Label* |*Description*
+
+|id | <<int32,int32>> |required |Unique customer ID.
+
+|first_name | <<string,string>> |required |Customer first name.
+
+|last_name | <<string,string>> |required |Customer last name.
+
+|details | <<string,string>> |optional |Customer details.
+
+|email_address | <<string,string>> |optional |Customer e-mail address.
+
+|phone_number | <<string,string>> |repeated |Customer phone numbers, primary first.
+
+|mail_addresses | <<com.example.Address,Address>> |repeated |Customer mail addresses, primary first.
+
+|===========================================
+
+
+
+
+
+
+== Vehicle.proto
+
+
+
+=== Manufacturer
+Represents a manufacturer of cars.
+
+
+|===========================================
+|*Field* |*Type* |*Label* |*Description*
+
+|id | <<int32,int32>> |required |The unique manufacturer ID.
+
+|code | <<string,string>> |required |A manufacturer code, e.g. "DKL4P".
+
+|details | <<string,string>> |optional |Manufacturer details (minimum orders et.c.).
+
+|category | <<com.example.Manufacturer.Category,Manufacturer.Category>> |optional |Manufacturer category.
+
+|===========================================
+
+
+
+=== Model
+Represents a vehicle model.
+
+
+|===========================================
+|*Field* |*Type* |*Label* |*Description*
+
+|id | <<string,string>> |required |The unique model ID.
+
+|model_code | <<string,string>> |required |The car model code, e.g. "PZ003".
+
+|model_name | <<string,string>> |required |The car model name, e.g. "Z3".
+
+|daily_hire_rate_dollars | <<sint32,sint32>> |required |Dollars per day.
+
+|daily_hire_rate_cents | <<sint32,sint32>> |required |Cents per day.
+
+|===========================================
+
+
+
+=== Vehicle
+Represents a vehicle that can be hired.
+
+
+|===========================================
+|*Field* |*Type* |*Label* |*Description*
+
+|id | <<int32,int32>> |required |Unique vehicle ID.
+
+|model | <<com.example.Model,Model>> |required |Vehicle model.
+
+|reg_number | <<string,string>> |required |Vehicle registration number.
+
+|mileage | <<sint32,sint32>> |optional |Current vehicle mileage, if known.
+
+|category | <<com.example.Vehicle.Category,Vehicle.Category>> |optional |Vehicle category.
+
+|daily_hire_rate_dollars | <<sint32,sint32>> |optional |Dollars per day.
+
+|daily_hire_rate_cents | <<sint32,sint32>> |optional |Cents per day.
+
+|===========================================
+
+
+
+=== Vehicle.Category
+Represents a vehicle category. E.g. "Sedan" or "Truck".
+
+
+|===========================================
+|*Field* |*Type* |*Label* |*Description*
+
+|code | <<string,string>> |required |Category code. E.g. "S".
+
+|description | <<string,string>> |required |Category name. E.g. "Sedan".
+
+|===========================================
+
+
+
+
+
+[[Manufacturer.Category]]
+=== Manufacturer.Category
+Manufacturer category. A manufacturer may be either inhouse or external.
+
+|=====================================
+|*Name* |*Number* |*Description*
+
+|CATEGORY_INHOUSE |0 |The manufacturer is inhouse.
+
+|CATEGORY_EXTERNAL |1 |The manufacturer is external.
+
+|=====================================
+
+
+
+== Scalar Value Types
+
+|==============================================================
+|*.proto Type* |*Notes* |*C++ Type* |*Java Type* |*Python Type*
+
+|[[double]] (((double))) double | |double |double |float
+
+|[[float]] (((float))) float | |float |float |float
+
+|[[int32]] (((int32))) int32 |Uses variable-length encoding. Inefficient for encoding negative numbers – if your field is likely to have negative values, use sint32 instead. |int32 |int |int
+
+|[[int64]] (((int64))) int64 |Uses variable-length encoding. Inefficient for encoding negative numbers – if your field is likely to have negative values, use sint64 instead. |int64 |long |int/long
+
+|[[uint32]] (((uint32))) uint32 |Uses variable-length encoding. |uint32 |int |int/long
+
+|[[uint64]] (((uint64))) uint64 |Uses variable-length encoding. |uint64 |long |int/long
+
+|[[sint32]] (((sint32))) sint32 |Uses variable-length encoding. Signed int value. These more efficiently encode negative numbers than regular int32s. |int32 |int |int
+
+|[[sint64]] (((sint64))) sint64 |Uses variable-length encoding. Signed int value. These more efficiently encode negative numbers than regular int64s. |int64 |long |int/long
+
+|[[fixed32]] (((fixed32))) fixed32 |Always four bytes. More efficient than uint32 if values are often greater than 2^28. |uint32 |int |int
+
+|[[fixed64]] (((fixed64))) fixed64 |Always eight bytes. More efficient than uint64 if values are often greater than 2^56. |uint64 |long |int/long
+
+|[[sfixed32]] (((sfixed32))) sfixed32 |Always four bytes. |int32 |int |int
+
+|[[sfixed64]] (((sfixed64))) sfixed64 |Always eight bytes. |int64 |long |int/long
+
+|[[bool]] (((bool))) bool | |bool |boolean |boolean
+
+|[[string]] (((string))) string |A string must always contain UTF-8 encoded or 7-bit ASCII text. |string |String |str/unicode
+
+|[[bytes]] (((bytes))) bytes |May contain any arbitrary sequence of bytes. |string |ByteString |str
+
+|==============================================================

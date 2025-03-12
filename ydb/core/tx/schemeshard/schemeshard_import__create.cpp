@@ -537,8 +537,11 @@ private:
             << ", txId# " << txId);
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
+        
+        auto propose = CreateChangefeedPropose(Self, txId, item);
+        Y_ABORT_UNLESS(propose);
 
-        Send(Self->SelfId(), CreateChangefeedPropose(Self, txId, item));
+        Send(Self->SelfId(), std::move(propose));
     }
 
     void CreateConsumers(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {

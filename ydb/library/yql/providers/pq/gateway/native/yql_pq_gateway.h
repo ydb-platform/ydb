@@ -6,7 +6,7 @@
 
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <util/generic/ptr.h>
 

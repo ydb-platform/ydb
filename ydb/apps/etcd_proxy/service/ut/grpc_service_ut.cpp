@@ -162,6 +162,21 @@ i64 Put(std::string_view key, std::optional<std::string_view> value, const std::
     return putResponse.header().revision();
 }
 
+std::string Get(std::string_view key, const std::unique_ptr<etcdserverpb::KV::Stub> &stub)
+{
+    grpc::ClientContext readRangeCtx;
+    etcdserverpb::RangeRequest rangeRequest;
+    rangeRequest.set_key(key);
+
+    etcdserverpb::RangeResponse rangeResponse;
+    UNIT_ASSERT(stub->Range(&readRangeCtx, rangeRequest, &rangeResponse).ok());
+
+    UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 1LL);
+    UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 1U);
+    UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), key);
+    return rangeResponse.kvs(0).value();
+}
+
 i64 Delete(const std::string_view &key, const std::unique_ptr<etcdserverpb::KV::Stub> &stub, const std::string_view &rangeEnd = {})
 {
     grpc::ClientContext delCtx;
@@ -607,6 +622,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
     Y_UNIT_TEST(OptimisticCreate) {
         MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
             const auto key = "new_key"sv;
+            const auto val = "new_value"sv;
             {
                 grpc::ClientContext txnCtx;
                 etcdserverpb::TxnRequest txnRequest;
@@ -619,13 +635,15 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
 
                 const auto put = txnRequest.add_success()->mutable_request_put();
                 put->set_key(key);
-                put->set_value("new_value");
+                put->set_value(val);
 
                 etcdserverpb::TxnResponse txnResponse;
                 UNIT_ASSERT(etcd->Txn(&txnCtx, txnRequest, &txnResponse).ok());
 
                 UNIT_ASSERT(txnResponse.succeeded());
             }
+
+            UNIT_ASSERT_VALUES_EQUAL(Get(key, etcd), val);
 
             {
                 grpc::ClientContext txnCtx;
@@ -646,6 +664,8 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
 
                 UNIT_ASSERT(!txnResponse.succeeded());
             }
+
+            UNIT_ASSERT_VALUES_EQUAL(Get(key, etcd), val);
          });
     }
 
@@ -707,6 +727,8 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
 
                 UNIT_ASSERT(txnResponse.succeeded());
             }
+
+            UNIT_ASSERT_VALUES_EQUAL(Get(key, etcd), "changed_value");
          });
     }
 

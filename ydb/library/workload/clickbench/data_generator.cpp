@@ -50,10 +50,9 @@ TClickbenchWorkloadDataInitializerGenerator::TDataGenerartor::TDataGenerartor(co
 
 IBulkDataGenerator::TDataPortions TClickbenchWorkloadDataInitializerGenerator::TDataGenerartor::GenerateDataPortion() {
     while (true) {
-        size_t index;
         TFile::TPtr file;
         with_lock(Lock) {
-            if (Files.empty()) {
+            if (!FilesCount) {
                 return {};
             }
             if (FirstPortion) {
@@ -72,19 +71,22 @@ IBulkDataGenerator::TDataPortions TClickbenchWorkloadDataInitializerGenerator::T
                     )};
                 }
             }
-            index = std::hash<std::thread::id>{}(std::this_thread::get_id()) % Files.size();
-            file = Files[index];
-        }
-        if (auto result = file->GetPortion()) {
-            return {result};
-        }
-        with_lock(Lock) {
-            if (index < Files.size() && file == Files[index]) {
-                if (index + 1 != Files.size()) {
-                    Files[index].Swap(Files.back());
-                }
+            if (!Files.empty()) {
+                file = Files.back();
                 Files.pop_back();
             }
+        }
+        if (!file) {
+            Sleep(TDuration::MilliSeconds(100));
+            continue;
+        }
+        if (auto result = file->GetPortion()) {
+            auto g = Guard(Lock);
+            Files.push_back(file);
+            return {result};
+        } else {
+            auto g = Guard(Lock);
+            --FilesCount;
         }
     }
 }
@@ -179,6 +181,7 @@ void TClickbenchWorkloadDataInitializerGenerator::TDataGenerartor::AddFile(const
     } else if (name.EndsWith(".csv") || name.EndsWith(".csv.gz")) {
         Files.push_back(MakeIntrusive<TCsvFile>(*this, path));
     }
+    ++FilesCount;
 }
 
 }

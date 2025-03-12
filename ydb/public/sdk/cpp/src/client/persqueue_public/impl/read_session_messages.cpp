@@ -1,8 +1,8 @@
-#include <src/client/persqueue_public/include/read_events.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/include/read_events.h>
 
-#include <src/client/topic/impl/common.h>
-#include <src/client/topic/impl/read_session_impl.ipp>
-#include <src/client/persqueue_public/impl/aliases.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/read_session_impl.ipp>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/aliases.h>
 
 namespace NYdb::inline Dev::NPersQueue {
 

@@ -1,13 +1,13 @@
 #pragma once
 
-#include <src/client/persqueue_public/impl/aliases.h>
-#include <src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/aliases.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
-#include <src/client/persqueue_public/include/client.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/include/client.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <unordered_map>

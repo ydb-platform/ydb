@@ -1,11 +1,11 @@
-#include <src/client/persqueue_public/ut/ut_utils/ut_utils.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <src/client/persqueue_public/persqueue.h>
-#include <src/client/persqueue_public/impl/read_session.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/read_session.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
 #include <library/cpp/testing/gmock_in_unittest/gmock.h>

@@ -80,7 +80,7 @@ public:
             return NThreading::MakeFuture(TGetOperationResponse(EOperationStatus::NotFound));
         }
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(Operations_[operationId].SessionId);
-        YQL_CLOG(DEBUG, FastMapReduce) << "Getting operation status with id " << operationId;
+        YQL_CLOG(TRACE, FastMapReduce) << "Getting operation status with id " << operationId;
         auto& operationInfo = Operations_[operationId];
         auto operationStatus =  operationInfo.OperationStatus;
         auto errorMessages = operationInfo.ErrorMessages;

@@ -1318,7 +1318,7 @@ static art_val_t *art_find_at(const art_node_t *node,
 }
 
 // Returns the size in bytes of the subtrie.
-size_t art_size_in_bytes_at(const art_node_t *node) {
+static size_t art_size_in_bytes_at(const art_node_t *node) {
     if (art_is_leaf(node)) {
         return 0;
     }
@@ -1372,7 +1372,7 @@ static void art_node_print_type(const art_node_t *node) {
     }
 }
 
-void art_node_printf(const art_node_t *node, uint8_t depth) {
+static void art_node_printf(const art_node_t *node, uint8_t depth) {
     if (art_is_leaf(node)) {
         printf("{ type: Leaf, key: ");
         art_leaf_t *leaf = CROARING_CAST_LEAF(node);

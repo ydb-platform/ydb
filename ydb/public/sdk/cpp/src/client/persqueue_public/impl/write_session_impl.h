@@ -1,9 +1,9 @@
 #pragma once
 
-#include <src/client/persqueue_public/impl/aliases.h>
-#include <src/client/topic/common/callback_context.h>
-#include <src/client/topic/impl/common.h>
-#include <src/client/persqueue_public/impl/persqueue_impl.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/aliases.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/persqueue_impl.h>
 
 #include <util/generic/buffer.h>
 

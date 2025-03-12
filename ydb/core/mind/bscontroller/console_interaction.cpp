@@ -121,7 +121,7 @@ namespace NKikimr::NBsController {
                                 // execute initial migration transaction: restore cluster.yaml part from Console
                                 TYamlConfig yamlConfig(TString(), record.GetConsoleConfigVersion(), yamlReturnedByFetch);
                                 Self.Execute(Self.CreateTxCommitConfig(std::move(yamlConfig), std::nullopt,
-                                    std::move(storageConfig)));
+                                    std::move(storageConfig), std::nullopt, nullptr));
                                 CommitInProgress = true;
                             }
                         } catch (const std::exception& ex) {
@@ -220,6 +220,11 @@ namespace NKikimr::NBsController {
         ClientId = ev->Sender;
         ++ExpectedValidationTimeoutCookie;
 
+        if (!Self.ConfigLock.empty() || Self.SelfManagementEnabled) {
+            return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::OngoingCommit,
+                "configuration is locked by distconf");
+        }
+
         PendingStorageYamlConfig.reset();
 
         if (Self.StorageYamlConfig.has_value()) { // separate configuration
@@ -293,9 +298,7 @@ namespace NKikimr::NBsController {
         }
 
         if (PendingStorageYamlConfig && *PendingStorageYamlConfig) {
-            const ui64 expected = Self.StorageYamlConfig
-                ? Self.StorageYamlConfigVersion + 1
-                : 0;
+            const ui64 expected = Self.ExpectedStorageYamlConfigVersion;
 
             if (!NYamlConfig::IsStorageConfig(**PendingStorageYamlConfig)) {
                 return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
@@ -332,7 +335,9 @@ namespace NKikimr::NBsController {
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvControllerFetchConfigRequest::TPtr &ev) {
         const auto& record = ev->Get()->Record;
         auto response = std::make_unique<TEvBlobStorage::TEvControllerFetchConfigResponse>();
-        if (Self.StorageYamlConfig) {
+        if (!Self.ConfigLock.empty() || Self.SelfManagementEnabled) {
+            response->Record.SetErrorReason("configuration is locked by distconf");
+        } else if (Self.StorageYamlConfig) {
             if (record.GetDedicatedStorageSection()) {
                 // TODO(alexvru): increment generation
                 response->Record.SetStorageYaml(*Self.StorageYamlConfig);
@@ -412,10 +417,11 @@ namespace NKikimr::NBsController {
             // parse storage app config, if provided
             std::optional<NKikimrConfig::TAppConfig> storageAppConfig;
             ui64 storageYamlConfigVersion = 0;
+            std::optional<ui64> expectedStorageYamlConfigVersion;
             if (PendingStorageYamlConfig && *PendingStorageYamlConfig) {
                 parseConfig(**PendingStorageYamlConfig, storageAppConfig.emplace(), storageYamlConfigVersion);
-                // TODO(alexvru): check version
                 effectiveConfig = &storageAppConfig.value(); // use this configuration for storage config update
+                expectedStorageYamlConfigVersion.emplace(storageYamlConfigVersion + 1); // update expected version
             }
 
             // parse cluster YAML config, if provided, and calculate its version
@@ -442,7 +448,7 @@ namespace NKikimr::NBsController {
             }
 
             Self.Execute(Self.CreateTxCommitConfig(std::move(yamlConfig), std::exchange(PendingStorageYamlConfig, {}),
-                std::move(storageConfig)));
+                std::move(storageConfig), expectedStorageYamlConfigVersion, nullptr));
             CommitInProgress = true;
             PendingYamlConfig.reset();
         } catch (const TExError& error) {

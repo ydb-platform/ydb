@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/query/stats.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/stats.h>
 
 class TDuration;
 

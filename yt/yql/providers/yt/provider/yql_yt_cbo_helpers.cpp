@@ -103,11 +103,13 @@ IGraphTransformer::TStatus CollectCboStatsLeaf(
     TVector<TYtPathInfo::TPtr> tables;
     if (maxChunkCountExtendedStats) {
         TVector<TString> requestedColumnList;
-        auto columnsPos = relJoinColumns.find(JoinLeafLabel(leaf.Label));
-        if (columnsPos != relJoinColumns.end()) {
-            requestedColumnList.assign(columnsPos->second.begin(), columnsPos->second.end());
+        auto labels = JoinLeafLabels(leaf.Label);
+        for (const auto& relName : labels) {
+            auto columnsPos = relJoinColumns.find(relName);
+            if (columnsPos != relJoinColumns.end()) {
+                std::copy(columnsPos->second.begin(), columnsPos->second.end(), std::back_inserter(requestedColumnList));
+            }
         }
-
         THashSet<TString> memSizeColumns(requestedColumnList.begin(), requestedColumnList.end());
         TVector<IYtGateway::TPathStatReq> pathStatReqs;
 
@@ -277,5 +279,17 @@ IGraphTransformer::TStatus CollectCboStats(const TString& cluster, TYtJoinNodeOp
     THashMap<TString, THashSet<TString>> relJoinColumns;
     return CollectCboStatsNode(relJoinColumns, cluster, op, state, ctx);
 }
+
+TVector<TString> JoinLeafLabels(TExprNode::TPtr label) {
+    if (label->ChildrenSize() == 0) {
+        return TVector<TString>{TString(label->Content())};
+    }
+    TVector<TString> result;
+    for (ui32 i = 0; i < label->ChildrenSize(); ++i) {
+        result.push_back(TString(label->Child(i)->Content()));
+    }
+    return result;
+}
+
 
 }

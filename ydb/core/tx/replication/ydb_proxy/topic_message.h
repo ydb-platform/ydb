@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/topic/read_events.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_events.h>
 
 namespace NKikimr::NReplication {
 

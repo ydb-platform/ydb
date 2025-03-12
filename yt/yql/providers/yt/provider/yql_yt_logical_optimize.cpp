@@ -329,6 +329,8 @@ protected:
 
         auto cluster = TString{GetClusterName(input)};
         TSyncMap syncList;
+        const ERuntimeClusterSelectionMode selectionMode =
+            State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
 
         for (auto handler: aggregate.Handlers()) {
             auto trait = handler.Trait();
@@ -343,12 +345,12 @@ protected:
                     t.FinishHandler(),
                 };
                 for (auto lambda : lambdas) {
-                    if (!IsYtCompleteIsolatedLambda(lambda.Ref(), syncList, cluster, false)) {
+                    if (!IsYtCompleteIsolatedLambda(lambda.Ref(), syncList, cluster, false, selectionMode)) {
                         return node;
                     }
                 }
             } else if (trait.Ref().IsCallable("AggApply")) {
-                if (!IsYtCompleteIsolatedLambda(*trait.Ref().Child(2), syncList, cluster, false)) {
+                if (!IsYtCompleteIsolatedLambda(*trait.Ref().Child(2), syncList, cluster, false, selectionMode)) {
                     return node;
                 }
             }
@@ -1348,7 +1350,10 @@ protected:
         TYtDSource dataSource = GetDataSource(input, ctx);
         TString cluster = TString{dataSource.Cluster().Value()};
         TSyncMap syncList;
-        if (!IsYtCompleteIsolatedLambda(countBase.Count().Ref(), syncList, cluster, false)) {
+        const ERuntimeClusterSelectionMode selectionMode =
+            State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+
+        if (!IsYtCompleteIsolatedLambda(countBase.Count().Ref(), syncList, cluster, false, selectionMode)) {
             return node;
         }
 

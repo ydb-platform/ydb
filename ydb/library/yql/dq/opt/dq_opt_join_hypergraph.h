@@ -49,21 +49,6 @@ public:
             , IsReversed(false)
         {
             Y_ASSERT(LeftJoinKeys.size() == RightJoinKeys.size());
-            RemoveAttributeAliases();
-        }
-
-        void RemoveAttributeAliases() {
-            for (auto& leftKey : LeftJoinKeys) {
-                if (auto idx = leftKey.AttributeName.find('.'); idx != TString::npos) {
-                    leftKey.AttributeName = leftKey.AttributeName.substr(idx + 1);
-                }
-            }
-
-            for (auto& rightKey : RightJoinKeys) {
-                if (auto idx = rightKey.AttributeName.find('.'); idx != TString::npos) {
-                    rightKey.AttributeName = rightKey.AttributeName.substr(idx + 1);
-                }
-            }
         }
 
         inline bool IsSimple() const {

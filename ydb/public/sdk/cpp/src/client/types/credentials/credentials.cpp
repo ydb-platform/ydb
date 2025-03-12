@@ -1,4 +1,4 @@
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <util/string/cast.h>
 
 namespace NYdb::inline Dev {

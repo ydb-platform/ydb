@@ -179,7 +179,7 @@ template <CYsonStructDerived TStruct>
 class TConfigurator
 {
 public:
-    explicit TConfigurator(NDetail::TConfiguredFieldDirectoryPtr state = {});
+    explicit TConfigurator(NDetail::TConfiguredFieldDirectoryPtr configuredFields = {});
 
     template <class TValue>
     NDetail::TFieldConfigurator<TValue>& Field(const std::string& name, TYsonStructField<TStruct, TValue> field);

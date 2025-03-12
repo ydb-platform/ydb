@@ -1,10 +1,10 @@
 #pragma once
 
-#include <src/client/persqueue_public/impl/aliases.h>
-#include <src/client/topic/impl/read_session_impl.ipp>
-#include <src/client/topic/common/callback_context.h>
-#include <src/client/topic/impl/counters_logger.h>
-#include <src/client/persqueue_public/impl/persqueue_impl.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/aliases.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/read_session_impl.ipp>
+#include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/counters_logger.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/persqueue_impl.h>
 
 #include <unordered_map>
 

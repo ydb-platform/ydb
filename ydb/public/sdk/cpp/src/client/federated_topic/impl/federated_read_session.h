@@ -1,11 +1,11 @@
 #pragma once
 
-#include <src/client/federated_topic/impl/federated_topic_impl.h>
+#include <ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_topic_impl.h>
 
-#include <src/client/topic/common/callback_context.h>
-#include <src/client/topic/impl/read_session.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/read_session.h>
 
-#include <ydb-cpp-sdk/library/string_utils/helpers/helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/string_utils/helpers/helpers.h>
 
 namespace NYdb::inline Dev::NFederatedTopic {
 

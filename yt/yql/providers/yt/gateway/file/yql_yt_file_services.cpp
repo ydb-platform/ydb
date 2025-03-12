@@ -46,7 +46,7 @@ TString TYtFileServices::GetTablePath(TStringBuf cluster, TStringBuf table, bool
     if (auto dirPtr = TablesDirMapping.FindPtr(tablePrefix)) {
         return TFsPath(*dirPtr) / TString(table).append(".txt");
     }
-    throw TErrorException(TIssuesIds::YT_TABLE_NOT_FOUND) << "Table \"" << table << "\" does not exist";
+    throw TErrorException(TIssuesIds::YT_TABLE_NOT_FOUND) << "Table \"" << table << "\" does not exist on cluster \"" << cluster << "\"";
 }
 
 void TYtFileServices::LockPath(const TString& path, const TString& fullTableName) {

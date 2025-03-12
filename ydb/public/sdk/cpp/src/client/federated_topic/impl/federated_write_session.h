@@ -1,8 +1,8 @@
 #pragma once
 
-#include <src/client/federated_topic/impl/federated_topic_impl.h>
+#include <ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_topic_impl.h>
 
-#include <src/client/topic/impl/write_session.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/write_session.h>
 
 #include <deque>
 

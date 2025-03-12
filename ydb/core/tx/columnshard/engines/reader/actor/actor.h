@@ -56,12 +56,14 @@ private:
             hFunc(TEvents::TEvUndelivered, HandleScan);
             hFunc(TEvents::TEvWakeup, HandleScan);
             hFunc(NColumnShard::TEvPrivate::TEvTaskProcessedResult, HandleScan);
+            hFunc(NColumnShard::TEvPrivate::TEvScanInit, HandleScan);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
     }
 
     void HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResult::TPtr& ev);
+    void HandleScan(NColumnShard::TEvPrivate::TEvScanInit::TPtr& ev);
 
     void HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev);
 

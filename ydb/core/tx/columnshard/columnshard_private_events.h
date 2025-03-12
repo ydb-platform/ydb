@@ -7,6 +7,7 @@
 #include <ydb/core/formats/arrow/special_keys.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/engines/reader/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
@@ -68,6 +69,8 @@ struct TEvPrivate {
         EvAddPortionDataAccessor,
         EvRemovePortionDataAccessor,
         EvMetadataAccessorsInfo,
+
+        EvScanInit,
 
         EvEnd
     };
@@ -270,6 +273,16 @@ struct TEvPrivate {
         NOlap::TWritingBuffer& MutableWritesBuffer() {
             return WritesBuffer;
         }
+    };
+
+    struct TEvScanInit: public TEventLocal<TEvScanInit, EvScanInit> {
+        std::unique_ptr<NOlap::NReader::TScanIteratorBase> ScanIterator;
+        TConclusionStatus Status;
+
+        TEvScanInit(std::unique_ptr<NOlap::NReader::TScanIteratorBase> scanIterator, TConclusionStatus status)
+            : ScanIterator(std::move(scanIterator))
+            , Status(status)
+        {}
     };
 };
 

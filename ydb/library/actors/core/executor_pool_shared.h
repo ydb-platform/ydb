@@ -29,6 +29,7 @@ namespace NActors {
     struct TPoolShortInfo {
         i16 PoolId = 0;
         i16 SharedThreadCount = 0;
+        i16 AvailableSlots = 0;
         bool InPriorityOrder = false;
         TString PoolName;
     };

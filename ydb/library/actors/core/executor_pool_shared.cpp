@@ -80,9 +80,10 @@ namespace NActors {
             }
         }
         for (ui64 i = 0; i < PoolManager.PoolInfos.size(); ++i) {
-            ForeignThreadsAllowedByPool[i].store(0, std::memory_order_release);
-            ForeignThreadSlots[i].store(0, std::memory_order_release);
-            LocalThreads[i].store(PoolManager.PoolInfos[i].SharedThreadCount, std::memory_order_release);
+            auto &poolInfo = PoolManager.PoolInfos[i];
+            ForeignThreadsAllowedByPool[i].store(poolInfo.AvailableSlots, std::memory_order_release);
+            ForeignThreadSlots[i].store(poolInfo.AvailableSlots, std::memory_order_release);
+            LocalThreads[i].store(poolInfo.SharedThreadCount, std::memory_order_release);
             LocalNotifications[i].store(0, std::memory_order_release);
         }
         Y_ABORT_UNLESS(passedThreads == static_cast<ui64>(PoolThreads), "Passed threads %" PRIu64 " != PoolThreads %" PRIu64, passedThreads, static_cast<ui64>(PoolThreads));

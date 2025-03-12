@@ -168,7 +168,7 @@ void THarmonizer::ProcessNeedyState() {
         }
         float threadCount = pool.GetFullThreadCount() + SharedInfo.CpuConsumption[needyPoolIdx].CpuQuota;
 
-        if (Shared && SharedInfo.ForeignThreadsAllowed[needyPoolIdx] == 0) {
+        if (Shared && SharedInfo.ForeignThreadsAllowed[needyPoolIdx] == 0 && !NFeatures::TUnitedFlags::UseUnited) {
             Shared->SetForeignThreadSlots(needyPoolIdx, static_cast<i16>(Pools.size()));
             CpuConsumption.IsNeedyByPool[needyPoolIdx] = false;
         } else if (ProcessingBudget >= 1.0 && threadCount + 1 <= pool.MaxFullThreadCount) {
@@ -208,7 +208,7 @@ void THarmonizer::ProcessExchange() {
             break;
         }
 
-        if (Shared && SharedInfo.ForeignThreadsAllowed[needyPoolIdx] < static_cast<i16>(Pools.size())) {
+        if (Shared && SharedInfo.ForeignThreadsAllowed[needyPoolIdx] < static_cast<i16>(Pools.size()) && !NFeatures::TUnitedFlags::UseUnited) {
             Shared->SetForeignThreadSlots(needyPoolIdx, static_cast<i16>(Pools.size()));
             CpuConsumption.IsNeedyByPool[needyPoolIdx] = false;
         }
@@ -255,7 +255,7 @@ void THarmonizer::ProcessHoggishState() {
             pool.SetFullThreadCount(threadCount - 1);
             LWPROBE_WITH_DEBUG(HarmonizeOperation, hoggishPoolIdx, pool.Pool->GetName(), "decrease by hoggish", threadCount - 1, pool.DefaultFullThreadCount, pool.MaxFullThreadCount);
         }
-        if (threadCount == pool.MinFullThreadCount && Shared && SharedInfo.ForeignThreadsAllowed[hoggishPoolIdx] != 0) {
+        if (threadCount == pool.MinFullThreadCount && Shared && SharedInfo.ForeignThreadsAllowed[hoggishPoolIdx] != 0 && !NFeatures::TUnitedFlags::UseUnited) {
             Shared->SetForeignThreadSlots(hoggishPoolIdx, 0);
         }
         if (pool.BasicPool && pool.LocalQueueSize > pool.MinLocalQueueSize) {
@@ -380,7 +380,9 @@ void THarmonizer::AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo) {
     poolInfo.ThreadInfo.resize(poolInfo.MaxFullThreadCount);
     poolInfo.SharedInfo.resize(Shared ? Shared->GetSharedThreadCount() : 0);
     poolInfo.Priority = pool->GetPriority();
-    pool->SetFullThreadCount(poolInfo.DefaultFullThreadCount);
+    if (!NFeatures::TUnitedFlags::UseUnited) {
+        pool->SetFullThreadCount(poolInfo.DefaultFullThreadCount);
+    }
     if (pingInfo) {
         poolInfo.AvgPingCounter = pingInfo->AvgPingCounter;
         poolInfo.AvgPingCounterWithSmallWindow = pingInfo->AvgPingCounterWithSmallWindow;

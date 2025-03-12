@@ -36,6 +36,11 @@ target_link_libraries(ydb-core-blob_depot PUBLIC
 )
 
 target_sources(ydb-core-blob_depot PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/s3.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/s3_delete.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/s3_scan.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/s3_upload.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/s3_write.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/blob_depot.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/assimilator.cpp
@@ -53,11 +58,6 @@ target_sources(ydb-core-blob_depot PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/given_id_range.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/group_metrics_exchange.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/mon_main.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/s3.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/s3_delete.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/s3_scan.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/s3_upload.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/s3_write.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/space_monitor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/testing.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/op_apply_config.cpp

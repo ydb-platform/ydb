@@ -44,7 +44,6 @@ target_link_libraries(ydb-core-util PUBLIC
 
 target_sources(ydb-core-util PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/util/address_classifier.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/util/aws.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/backoff.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/cache.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/concurrent_rw_hash.cpp
@@ -65,6 +64,7 @@ target_sources(ydb-core-util PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/util/text.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/ulid.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/ui64id.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/util/aws.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/activeactors.h
   ${PROJECT_SOURCE_DIR}/ydb/core/util/cache.h
   ${PROJECT_SOURCE_DIR}/ydb/core/util/cache_cache.h

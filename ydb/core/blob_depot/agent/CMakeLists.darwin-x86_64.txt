@@ -25,6 +25,7 @@ target_link_libraries(core-blob_depot-agent PUBLIC
 )
 
 target_sources(core-blob_depot-agent PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/s3.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/agent.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/blob_mapping_cache.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/blocks.cpp

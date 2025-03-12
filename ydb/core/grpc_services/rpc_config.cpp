@@ -167,11 +167,11 @@ public:
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) override {
         const auto& request = *GetProtoRequest();
-        if (request.dry_run()) {
-            status = Ydb::StatusIds::BAD_REQUEST;
-            issues.AddIssue("DryRun is not supported yet.");
-            return false;
-        }
+        // if (request.dry_run()) {
+        //     status = Ydb::StatusIds::BAD_REQUEST;
+        //     issues.AddIssue("DryRun is not supported yet.");
+        //     return false;
+        // }
 
         auto* csk = AppData()->ConfigSwissKnife;
 
@@ -232,7 +232,8 @@ public:
             shim.SwitchDedicatedStorageSection,
             shim.DedicatedConfigMode,
             request->allow_unknown_fields() || request->bypass_checks(),
-            request->bypass_checks());
+            request->bypass_checks(),
+            request->dry_run());
     }
 
 private:

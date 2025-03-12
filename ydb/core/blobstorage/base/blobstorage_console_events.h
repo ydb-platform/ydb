@@ -83,7 +83,8 @@ namespace NKikimr {
             std::optional<bool> switchDedicatedStorageSection,
             bool dedicatedConfigMode,
             bool allowUnknownFields,
-            bool bypassMetadataChecks) {
+            bool bypassMetadataChecks,
+            bool dryRun) {
 
             if (clusterYaml) {
                 Record.SetClusterYaml(*clusterYaml);
@@ -97,6 +98,7 @@ namespace NKikimr {
             Record.SetDedicatedConfigMode(dedicatedConfigMode);
             Record.SetAllowUnknownFields(allowUnknownFields);
             Record.SetBypassMetadataChecks(bypassMetadataChecks);
+            Record.SetDryRun(dryRun);
         }
 
         TString ToString() const override {

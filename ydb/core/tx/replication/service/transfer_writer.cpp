@@ -408,9 +408,9 @@ class TTransferWriter
     : public TActorBootstrapped<TTransferWriter>
     , private NSchemeCache::TSchemeCacheHelpers
 {
-    static constexpr i64 ExpectedBatchSize = 64_MB;
-    static constexpr TDuration FlushInterval = TDuration::Seconds(60);
-    static constexpr TDuration MinRetryDelay = TDuration::Seconds(15);
+    static constexpr i64 ExpectedBatchSize = 8_MB;
+    static constexpr TDuration FlushInterval = TDuration::Seconds(5);
+    static constexpr TDuration MinRetryDelay = TDuration::Seconds(1);
     static constexpr TDuration MaxRetryDelay = TDuration::Minutes(10);
 
 public:
@@ -574,6 +574,9 @@ private:
     void StartWork() {
         Become(&TThis::StateWork);
 
+        Attempt = 0;
+        Delay = MinRetryDelay;
+
         if (PendingRecords) {
             ProcessData(PendingPartitionId, *PendingRecords);
             PendingRecords.reset();
@@ -694,12 +697,9 @@ private:
             << " status# " << ev->Get()->Status);
 
         auto error = TableState->Handle(ev);
-        if (ui32(NYdb::EStatus::SUCCESS) != ev->Get()->Status && Delay < MaxRetryDelay) {
+        if (ui32(NYdb::EStatus::SUCCESS) != ev->Get()->Status && Delay < MaxRetryDelay && !PendingLeave()) {
             return LogWarnAndRetry(error);
         }
-
-        Attempt = 0;
-        Delay = MinRetryDelay;
 
         if (error && !ProcessingError) {
             ProcessingError = error;
@@ -731,6 +731,10 @@ private:
 
 private:
 
+    bool PendingLeave() {
+        return PendingRecords && PendingRecords->empty();
+    }
+
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
@@ -755,7 +759,8 @@ private:
     }
 
     void Retry() {
-        Delay = Min(Delay * ++Attempt, MaxRetryDelay);
+        Delay = Attempt++ ? Delay * 2 : MinRetryDelay;
+        Delay = Min(Delay, MaxRetryDelay);
         const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
         this->Schedule(Delay + random, new TEvents::TEvWakeup(ui32(ETag::RetryFlush)));
     }

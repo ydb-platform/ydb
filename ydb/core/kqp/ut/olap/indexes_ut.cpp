@@ -7,7 +7,7 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 
-#include <ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

@@ -17,7 +17,7 @@
 #include <ydb/services/metadata/abstract/fetcher.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 namespace NKikimr::NOlap {
 struct TIndexInfo;

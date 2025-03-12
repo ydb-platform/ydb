@@ -642,12 +642,12 @@ void TExecutor::PlanTransactionActivation() {
     }
 }
 
-void TExecutor::ActivateWaitingTransactions(TPrivatePageCache::TPage::TWaitQueuePtr waitPadsQueue) {
-    if (waitPadsQueue) {
+void TExecutor::ActivateWaitingTransactions(const TVector<TIntrusivePtr<NPageCollection::TPagesWaitPad>>& waitPads) {
+    if (waitPads) {
         bool activate = CanExecuteTransaction();
         bool cancelled = false;
-        while (TPrivatePageCacheWaitPad *waitPad = waitPadsQueue->Pop()) {
-            if (auto it = TransactionWaitPads.find(waitPad); it != TransactionWaitPads.end()) {
+        for (auto& waitPad : waitPads) {
+            if (auto it = TransactionWaitPads.find(waitPad.Get()); it != TransactionWaitPads.end()) {
                 it->second->WaitingSpan.EndOk();
                 TSeat* seat = it->second->Seat;
                 Y_ABORT_UNLESS(seat->State == ESeatState::Waiting);
@@ -724,8 +724,8 @@ void TExecutor::DropSingleCache(const TLogoBlobID &label)
     Y_ABORT_UNLESS(StickyPagesMemory >= stickySize);
     StickyPagesMemory -= stickySize;
 
-    auto toActivate = PrivatePageCache->ForgetPageCollection(pageCollection);
-    ActivateWaitingTransactions(toActivate);
+    // auto toActivate = PrivatePageCache->ForgetPageCollection(pageCollection);
+    // ActivateWaitingTransactions(toActivate);
     if (!PrivatePageCache->Info(label))
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvInvalidate(label));
 
@@ -2119,9 +2119,8 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
 
     LWTRACK(TransactionPageFault, seat->Self->Orbit, seat->UniqID);
     seat->State = ESeatState::Waiting;
-    auto padHolder = MakeHolder<TTransactionWaitPad>(seat);
-    auto *const pad = padHolder.Get();
-    TransactionWaitPads[pad] = std::move(padHolder);
+    auto waitPad = MakeIntrusive<TTransactionWaitPad>(seat);
+    TransactionWaitPads[waitPad.Get()] = waitPad;
 
     ui32 waitPages = 0;
     ui64 loadBytes = 0;
@@ -2131,7 +2130,7 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
         TVector<NTable::TPageId> &pages = xpair.second;
         waitPages += pages.size();
 
-        const std::pair<ui32, ui64> toLoad = PrivatePageCache->Request(pages, pad, pageCollectionInfo);
+        const std::pair<ui32, ui64> toLoad = PrivatePageCache->Request(pages, pageCollectionInfo);
         if (toLoad.first) {
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl
@@ -2144,7 +2143,9 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
                 logl << "]";
             }
 
-            auto *req = new NPageCollection::TFetch(0, pageCollectionInfo->PageCollection, std::move(pages), pad->GetWaitingTraceId());
+            auto *req = new NPageCollection::TFetch(0, pageCollectionInfo->PageCollection, std::move(pages));
+            req->TraceId = waitPad->GetWaitingTraceId();
+            req->WaitPad = waitPad; // TODO: deal with one tx multiple fetches
 
             loadPages += toLoad.first;
             loadBytes += toLoad.second;
@@ -2154,13 +2155,13 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
 
     if (auto logl = Logger->Log(ELnLev::Debug)) {
         logl
-            << NFmt::Do(*this) << " " << NFmt::Do(*pad->Seat) << " postponed"
+            << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " postponed"
             << ", " << loadBytes << "b, pages "
             << "{" << waitPages << " wait, " << loadPages << " load}"
             << ", freshly touched " << newPinnedPages << " pages";
     }
 
-    pad->Seat->CPUBookkeepingTime += bookkeepingTimer.PassedReset();
+    seat->CPUBookkeepingTime += bookkeepingTimer.PassedReset();
     Counters->Cumulative()[TExecutorCounters::TX_POSTPONED].Increment(1);
 
     if (AppTxCounters && txType != UnknownTxType)
@@ -2169,7 +2170,7 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
     // Note: count all new touched pages (were obtained from cache), even not on the first attempt
     Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(newTouchedPages);
     Counters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(newTouchedBytes);
-    if (pad->Seat->Retries == 1) {
+    if (seat->Retries == 1) {
         Counters->Cumulative()[TExecutorCounters::TX_RETRIED].Increment(1);
     }
 
@@ -2930,9 +2931,10 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                 StickInMemPages(msg);
             }
             for (auto& loaded : msg->Loaded) {
-                TPrivatePageCache::TPage::TWaitQueuePtr transactionsToActivate = PrivatePageCache->ProvideBlock(std::move(loaded), collectionInfo);
-                ActivateWaitingTransactions(transactionsToActivate);
+                PrivatePageCache->ProvideBlock(std::move(loaded), collectionInfo);
             }
+            Y_ABORT_UNLESS(msg->WaitPad);
+            ActivateWaitingTransactions({std::move(msg->WaitPad)});
         }
         return;
 

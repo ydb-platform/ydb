@@ -1,18 +1,24 @@
 #pragma once
 
 #include "flat_sausage_gut.h"
+#include "flat_page_iface.h"
 
 #include <ydb/library/actors/util/shared_data.h>
 
 namespace NKikimr {
 namespace NPageCollection {
 
+    struct TPagesWaitPad : public TThrRefBase {
+        // no internal state
+    };
+
     struct TFetch {
-        TFetch(ui64 cookie, TIntrusiveConstPtr<IPageCollection> pageCollection, TVector<ui32> pages, NWilson::TTraceId traceId = {})
+        using TPageId = NTable::NPage::TPageId;
+
+        TFetch(ui64 cookie, TIntrusiveConstPtr<IPageCollection> pageCollection, TVector<TPageId> pages)
             : Cookie(cookie)
             , PageCollection(std::move(pageCollection))
             , Pages(std::move(pages))
-            , TraceId(std::move(traceId))
         {
 
         }
@@ -27,8 +33,9 @@ namespace NPageCollection {
         const ui64 Cookie = Max<ui64>();
 
         TIntrusiveConstPtr<IPageCollection> PageCollection;
-        TVector<ui32> Pages;
+        TVector<TPageId> Pages;
         NWilson::TTraceId TraceId;
+        TIntrusivePtr<TPagesWaitPad> WaitPad;
     };
 
     struct TLoadedPage {

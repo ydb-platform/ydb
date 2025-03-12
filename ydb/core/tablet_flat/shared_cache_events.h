@@ -132,6 +132,7 @@ namespace NKikimr::NSharedCache {
         const ui64 Cookie;
         const TIntrusiveConstPtr<NPageCollection::IPageCollection> Origin;
         TVector<TLoaded> Loaded;
+        TIntrusivePtr<NPageCollection::TPagesWaitPad> WaitPad;
     };
 
     struct TEvUpdated : public TEventLocal<TEvUpdated, EvUpdated> {

@@ -183,7 +183,7 @@ public:
         }
 
         ui32 GetCurrentNodeId() const {
-            return CurrentNode->GetIdentifier();
+            return GetCurrentNode().GetIdentifier();
         }
 
         const std::shared_ptr<TCompiledGraph::TNode>& GetCurrentGraphNode() const {

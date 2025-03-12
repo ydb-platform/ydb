@@ -24,13 +24,31 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr ExecutionDurationCounter;
     NMonitoring::TDynamicCounters::TCounterPtr TotalDurationCounter;
     NMonitoring::TDynamicCounters::TCounterPtr BytesCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr SkipGraphNode;
+    NMonitoring::TDynamicCounters::TCounterPtr SkipGraphNodeRecords;
+    NMonitoring::TDynamicCounters::TCounterPtr ExecuteGraphNode;
+    NMonitoring::TDynamicCounters::TCounterPtr ExecuteGraphNodeRecords;
 
 public:
     TFetchingStepSignals(NColumnShard::TCommonCountersOwner&& owner)
         : TBase(std::move(owner))
         , ExecutionDurationCounter(TBase::GetDeriviative("Duration/Execution/Us"))
         , TotalDurationCounter(TBase::GetDeriviative("Duration/Total/Us"))
-        , BytesCounter(TBase::GetDeriviative("Bytes/Count")) {
+        , BytesCounter(TBase::GetDeriviative("Bytes/Count"))
+        , SkipGraphNode(TBase::GetDeriviative("Skips/Count"))
+        , SkipGraphNodeRecords(TBase::GetDeriviative("Skips/Records/Count"))
+        , ExecuteGraphNode(TBase::GetDeriviative("Executions/Count"))
+        , ExecuteGraphNodeRecords(TBase::GetDeriviative("Executions/Records/Count")) {
+    }
+
+    void OnSkipGraphNode(const ui32 recordsCount) {
+        SkipGraphNode->Add(1);
+        SkipGraphNodeRecords->Add(recordsCount);
+    }
+
+    void OnExecuteGraphNode(const ui32 recordsCount) {
+        ExecuteGraphNode->Add(1);
+        ExecuteGraphNodeRecords->Add(recordsCount);
     }
 
     void AddExecutionDuration(const TDuration d) const {

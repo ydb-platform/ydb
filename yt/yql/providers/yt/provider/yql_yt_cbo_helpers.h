@@ -9,4 +9,6 @@ IGraphTransformer::TStatus CollectCboStats(const TString& cluster, TYtJoinNodeOp
 
 IGraphTransformer::TStatus PopulateJoinStrategySizeInfo(TRelSizeInfo& outLeft, TRelSizeInfo& outRight, const TYtState::TPtr& state, TString cluster, TExprContext& ctx, TYtJoinNodeOp* op);
 
+TVector<TString> JoinLeafLabels(TExprNode::TPtr label);
+
 }  // namespace NYql

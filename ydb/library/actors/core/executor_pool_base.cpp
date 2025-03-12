@@ -147,7 +147,7 @@ namespace NActors {
     }
 
     void TExecutorPoolBase::ScheduleActivation(TMailbox* mailbox) {
-        if (TlsThreadContext->UseRingQueue()) {
+        if (UseRingQueue()) {
             ScheduleActivationEx(mailbox, 0);
         } else {
             ScheduleActivationEx(mailbox, AtomicIncrement(ActivationsRevolvingCounter));

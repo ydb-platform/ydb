@@ -2,7 +2,7 @@
 
 #include "aliases.h"
 
-#include <ydb-cpp-sdk/client/topic/write_events.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_events.h>
 
 #include <util/datetime/base.h>
 

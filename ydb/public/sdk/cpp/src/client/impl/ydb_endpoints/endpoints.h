@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <vector>
 #include <string>
-#include <src/client/impl/ydb_stats/stats.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_stats/stats.h>
 
 namespace NYdb::inline Dev {
 

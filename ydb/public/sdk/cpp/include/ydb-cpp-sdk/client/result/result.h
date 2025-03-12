@@ -2,7 +2,7 @@
 
 #include "fwd.h"
 
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <string>
 

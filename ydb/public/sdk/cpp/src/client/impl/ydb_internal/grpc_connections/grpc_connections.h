@@ -1,20 +1,20 @@
 #pragma once
 
-#include <src/client/impl/ydb_internal/internal_header.h>
-#include <ydb-cpp-sdk/client/common_client/ssl_credentials.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/internal_header.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
 
 #include "actions.h"
 #include "params.h"
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
-#include <src/client/impl/ydb_internal/common/client_pid.h>
-#include <src/client/impl/ydb_internal/db_driver_state/state.h>
-#include <src/client/impl/ydb_internal/rpc_request_settings/settings.h>
-#include <src/client/impl/ydb_internal/thread_pool/pool.h>
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
-#include <ydb-cpp-sdk/client/extension_common/extension.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/common/client_pid.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/db_driver_state/state.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/rpc_request_settings/settings.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/thread_pool/pool.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extension_common/extension.h>
 
-#include <src/library/issue/yql_issue_message.h>
+#include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
 namespace NYdb::inline Dev {
 

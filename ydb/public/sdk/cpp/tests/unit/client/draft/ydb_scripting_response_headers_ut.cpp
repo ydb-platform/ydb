@@ -1,7 +1,7 @@
 #include "helpers/grpc_server.h"
 #include "helpers/grpc_services/scripting.h"
 
-#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

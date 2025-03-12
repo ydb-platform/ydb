@@ -1,4 +1,4 @@
-#include <ydb-cpp-sdk/client/topic/read_session.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_session.h>
 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 

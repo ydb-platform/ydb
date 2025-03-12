@@ -1,7 +1,7 @@
 #pragma once
 
-#include <src/client/impl/ydb_endpoints/endpoints.h>
-#include <src/client/impl/ydb_internal/internal_header.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_endpoints/endpoints.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/internal_header.h>
 
 namespace NYdb::inline Dev {
 

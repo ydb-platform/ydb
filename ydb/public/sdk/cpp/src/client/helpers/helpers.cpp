@@ -1,11 +1,11 @@
-#include <ydb-cpp-sdk/client/helpers/helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/helpers/helpers.h>
 
-#include <ydb-cpp-sdk/client/iam/iam.h>
-#include <ydb-cpp-sdk/client/resources/ydb_ca.h>
-#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_ca.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 
-#include <src/client/impl/ydb_internal/common/parser.h>
-#include <src/client/impl/ydb_internal/common/getenv.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/common/parser.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/common/getenv.h>
 
 #include <util/stream/file.h>
 

@@ -4,7 +4,7 @@
 #include "read_session_impl.ipp"
 #include "topic_impl.h"
 
-#include <src/client/topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
 
 namespace NYdb::inline Dev::NTopic {
 

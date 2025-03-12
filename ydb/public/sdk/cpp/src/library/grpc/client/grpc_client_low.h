@@ -2,7 +2,7 @@
 
 #include "grpc_common.h"
 
-#include <ydb-cpp-sdk/type_switcher.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
 #include <util/thread/factory.h>
 #include <util/string/builder.h>

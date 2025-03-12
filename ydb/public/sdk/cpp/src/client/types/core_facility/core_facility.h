@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/status_codes.h>
-#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 namespace NYdb::inline Dev {
 using TPeriodicCb = std::function<bool(NYdb::NIssue::TIssues&&, EStatus)>;

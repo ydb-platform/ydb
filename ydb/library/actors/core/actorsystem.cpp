@@ -226,9 +226,6 @@ namespace NActors {
 
         Y_DEBUG_ABORT_UNLESS(recipient == ev->GetRecipientRewrite());
         const ui32 recpPool = recipient.PoolID();
-        if (recipient.IsService()) {
-            Cerr << "actorid# " << recipient.ToString() << " recipient pool# " << recpPool << Endl;
-        }
         if (recipient && recpPool < ExecutorPoolCount) {
             if ((CpuManager->GetExecutorPool(recpPool)->*EPSpecificSend)(ev)) {
                 return true;
@@ -406,12 +403,14 @@ namespace NActors {
         Send(MakeSchedulerActorId(), new TEvSchedulerInitialize(scheduleReaders, &CurrentTimestamp, &CurrentMonotonic));
         Scheduler->Start();
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: started");
+        Cerr << "TActorSystem::Start: started\n";
     }
 
     void TActorSystem::Stop() {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop");
         if (StopExecuted || !StartExecuted) {
             ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop: already stopped");
+            Cerr << "TActorSystem::Stop: already stopped\n";
             return;
         }
 
@@ -426,6 +425,7 @@ namespace NActors {
         Scheduler->Stop();
         CpuManager->Shutdown();
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop: stopped");
+        Cerr << "TActorSystem::Stop: stopped\n";
     }
 
     void TActorSystem::Cleanup() {

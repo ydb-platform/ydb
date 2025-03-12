@@ -282,10 +282,13 @@ public:
             }
         }
 
+        std::atomic<bool> actorSystemStarted{ false };
         info.AppData = std::move(MakeAppData());
         info.ActorSystem = std::make_unique<TActorSystem>(setup, info.AppData.get(), LoggerSettings_);
-        info.MailboxTable = std::make_unique<TMailboxTable>();
+        info.MailboxTable = std::make_unique<TMailboxTable>(&actorSystemStarted);
         info.ExecutorThread = std::make_unique<TExecutorThread>(0, info.ActorSystem.get(), pool, "TestExecutor");
+        actorSystemStarted = true;
+        actorSystemStarted.notify_all();
     }
 
     void StartNode(ui32 nodeId) {

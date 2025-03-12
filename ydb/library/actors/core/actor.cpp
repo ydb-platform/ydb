@@ -148,16 +148,14 @@ namespace NActors {
 
     TActorId TActivationContext::RegisterWithSameMailbox(IActor* actor, TActorId parentId) {
         Y_DEBUG_ABORT_UNLESS(parentId);
+        Y_DEBUG_ABORT_UNLESS(TlsActivationContext);
         auto& ctx = *TlsActivationContext;
-        return ctx.AsActorContext().RegisterWithSameMailbox(actor);
-
-        //if (ctx.ExecutorPool_) {
-        //    return ctx.ExecutorPool_->Register(actor, &ctx.Mailbox, parentId);
-        //} else if (ctx.ExecutorThread_) {
-        //    return ctx.ExecutorPool_->Register(actor, &ctx.Mailbox, parentId);
-        //}
-        //Y_ABORT();
-        //return {};
+        if (ctx.ExecutorPool_) {
+            return ctx.ExecutorPool_->Register(actor, &ctx.Mailbox, parentId);
+        } else if (ctx.ExecutorThread_) {
+            return ctx.ExecutorThread_->RegisterActor(actor, &ctx.Mailbox, parentId);
+        }
+        Y_ABORT();
     }
 
     TActorId TActorContext::RegisterWithSameMailbox(IActor* actor) const {
@@ -528,12 +526,12 @@ namespace NActors {
     template TActorId TActivationContext::Register<ESendingType::Tail>(IActor* actor, TActorId parentId, TMailboxType::EType mailboxType, ui32 poolId);
 
     template <ESendingType SendingType>
-    TActorId TActivationContext::Register(IActor* actor, TActorId , TMailboxType::EType mailboxType, ui32 poolId) {
+    TActorId TActivationContext::Register(IActor* actor, TActorId parentId, TMailboxType::EType mailboxType, ui32 poolId) {
         auto ctx = AsActorContext();
         if (poolId == Max<ui32>()) {
             poolId = ctx.ExecutorPool_ ? ctx.ExecutorPool_->PoolId : 0;
         }
-        return TlsActivationContext->ActorSystem()->Register(actor, mailboxType, poolId);
+        return TlsActivationContext->ActorSystem()->Register(actor, mailboxType, poolId, 0, parentId);
     }
 
     template TActorId TActorContext::Register<ESendingType::Common>(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const;
@@ -546,7 +544,7 @@ namespace NActors {
             Y_ASSERT(ExecutorPool_);
             poolId = ExecutorPool_ ? ExecutorPool_->PoolId : 0;
         }
-        return ActorSystem()->Register(actor, mailboxType, poolId);
+        return ActorSystem()->Register(actor, mailboxType, poolId, 0, SelfID);
     }
 
     template bool TActorIdentity::Send<ESendingType::Common>(const TActorId& recipient, IEventBase* ev, TEventFlags flags, ui64 cookie, NWilson::TTraceId traceId) const;

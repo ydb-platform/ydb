@@ -83,6 +83,9 @@ namespace NActors {
         size_t Cleanup(bool worker) {
             std::unique_lock<std::mutex> g(Mutex);
             size_t x = Queue.size();
+            for (auto v : Queue) {
+                delete v;
+            }
             Queue.clear();
             g.unlock();
             if (worker) {
@@ -294,8 +297,7 @@ namespace NActors {
         std::atomic<uintptr_t> Status{ MarkerFree };
 
         // Preprocessed events ready for consumption
-        IEventHandle* EventHead{ nullptr };
-        IEventHandle* EventTail{ nullptr };
+        std::atomic<bool>* ActorSystemStarted{ nullptr };
 
         // Used to track how much time until activation
         NHPTimer::STime ScheduleMoment{ 0 };
@@ -513,15 +515,20 @@ namespace NActors {
     class TMailboxTable {
     public:
         static constexpr size_t LinesCount = 0x1FFE0u;
-        static constexpr size_t MailboxesPerLine = 0x1000u;
+        static constexpr size_t MailboxesPerLine = 0x0100u;
         static constexpr size_t BlockSize = MailboxesPerLine / 2;
 
         static constexpr int LineIndexShift = 12;
         static constexpr ui32 LineIndexMask = 0x1FFFFu;
         static constexpr ui32 MailboxIndexMask = 0xFFFu;
 
+        std::atomic<bool>* ActorSystemStarted{ nullptr };
+
     public:
-        TMailboxTable();
+        //TMailboxTable() : ActorSystemStarted(nullptr) {}
+
+        TMailboxTable(std::atomic<bool>* actorSystemStarted);
+
         ~TMailboxTable();
 
         bool Cleanup() noexcept;
@@ -579,6 +586,8 @@ namespace NActors {
         }
 
     private:
+        std::mutex Mutex;
+
         TMailboxTable* Table{ nullptr };
 
         TMailbox* CurrentBlock{ nullptr };

@@ -66,6 +66,9 @@ namespace NActors {
         virtual TMailboxTable* GetMailboxTable() const {
             return nullptr;
         }
+        virtual TMailboxCache* GetMailboxCache() {
+            return nullptr;
+        }
 
         virtual TActorSystem *GetActorSystem() const = 0;
 

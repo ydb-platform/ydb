@@ -316,7 +316,7 @@ HOP(time_extractor, hop, interval, delay)
 SELECT
     key,
     COUNT(*)
-FROM my_stream
+FROM my_table
 GROUP BY
     HOP(CAST(subkey AS Timestamp), "PT10S", "PT1M", "PT30S"),
     key;
@@ -330,7 +330,7 @@ SELECT
     double_key,
     HOP_END() as time,
     COUNT(*) as count
-FROM my_stream
+FROM my_table
 GROUP BY
     key + key AS double_key,
     HOP(ts, "PT1М", "PT1M", "PT1M");

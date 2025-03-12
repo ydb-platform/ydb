@@ -1511,4 +1511,36 @@ message TEvControllerFetchConfigRequest {
 message TEvControllerFetchConfigResponse {
     optional string ClusterYaml = 1;
     optional string StorageYaml = 2;
+    optional string ErrorReason = 3;
+}
+
+message TEvControllerDistconfRequest {
+    enum EOperation {
+        // this query is used to prepare BSC to enable distconf; it should validate configs and upon successful validation
+        // lock BSC from executing TEvControllerReplaceConfigRequest/TEvControllerFetchConfigRequest until pipe is
+        // is disconnected or distconf config is received
+        EnableDistconf = 0;
+        DisableDistconf = 1;
+        ValidateConfig = 2;
+    }
+
+    optional EOperation Operation = 1;
+    optional bytes CompressedMainConfig = 2; // if user has provided main config
+    optional bytes CompressedStorageConfig = 3; // if used has provided storage config
+    optional bool DedicatedConfigMode = 4; // as provided in used command
+    optional uint64 ExpectedStorageConfigVersion = 5;
+}
+
+message TEvControllerDistconfResponse {
+    enum EStatus {
+        OK = 0;
+        Error = 1;
+    }
+
+    optional EStatus Status = 1;
+    optional string ErrorReason = 2;
+    optional bytes CompressedMainConfig = 3; // current stored config in BSC (with current version, not the to-be-fetched one)
+    optional bytes CompressedStorageConfig = 4; // current stored config, if in dual-config mode
+    optional uint64 ExpectedMainConfigVersion = 5;
+    optional uint64 ExpectedStorageConfigVersion = 6;
 }

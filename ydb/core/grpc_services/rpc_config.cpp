@@ -211,7 +211,9 @@ public:
         NKikimrConfig::TAppConfig newConfig;
         try {
             auto shim = ConvertConfigReplaceRequest(*GetProtoRequest());
-            auto config = NFyaml::TDocument::Parse(shim.MainConfig.value_or(TString{"{}"}));
+            auto config = shim.StorageConfig
+                ? NFyaml::TDocument::Parse(*shim.StorageConfig)
+                : NFyaml::TDocument::Parse(shim.MainConfig.value_or(TString{"{}"}));
             newConfig = NYamlConfig::YamlToProto(config.Root(), true, true);
         } catch (const std::exception&) {
             return false; // assuming no distconf enabled in this config

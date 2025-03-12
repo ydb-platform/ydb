@@ -5203,14 +5203,14 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestImportChangefeeds(3, AddedSchemeWithPermissions);
     }
 
-    void TestCreateCdcStreams(TTestEnv& env, TTestActorRuntime& runtime, ui64& txId, const TString & dbName, ui64 count) {
+    void TestCreateCdcStreams(TTestEnv& env, TTestActorRuntime& runtime, ui64& txId, const TString& dbName, ui64 count) {
         for (ui64 i = 1; i <= count; ++i) {
             TestCreateCdcStream(runtime, ++txId, dbName, Sprintf(R"(
                 TableName: "Original"
                 StreamDescription {
                   Name: "update_feed%d"
                   Mode: ECdcStreamModeKeysOnly
-                  Format: ECdcStreamFormatProto
+                  Format: ECdcStreamFormatJson
                 }
             )", i));
             env.TestWaitNotification(runtime, txId);
@@ -5232,6 +5232,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
+        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Original"
@@ -5242,7 +5244,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestCreateCdcStreams(env, runtime, ++txId, "/MyRoot", 3);
+        TestCreateCdcStreams(env, runtime, txId, "/MyRoot", 3);
 
         TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {

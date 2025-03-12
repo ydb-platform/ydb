@@ -560,16 +560,16 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
             auto explainRes = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
             explainRes.GetIssues().PrintTo(Cerr);
-            // for (const auto& issue: explainRes.GetIssues()) {
-            //     for (const auto& subissue: issue.GetSubIssues()) {
-            //         UNIT_ASSERT_C(!(8000 <= subissue->IssueCode && subissue->IssueCode < 9000), "CBO didn't work for this query!");
-            //     }
-            // }
+            for (const auto& issue: explainRes.GetIssues()) {
+                for (const auto& subissue: issue.GetSubIssues()) {
+                    UNIT_ASSERT_C(!(8000 <= subissue->IssueCode && subissue->IssueCode < 9000), "CBO didn't work for this query!");
+                }
+            }
             UNIT_ASSERT_VALUES_EQUAL(explainRes.GetStatus(), EStatus::SUCCESS);
             TString plan = *explainRes.GetStats()->GetPlan();
             PrintPlan(plan);
 
-            // TBenchMarkInvariantsChecker().Check(queryPath, plan);
+            TBenchMarkInvariantsChecker().Check(queryPath, plan);
 
             auto execRes = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             execRes.GetIssues().PrintTo(Cerr);
@@ -939,11 +939,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
                 ).ExtractValueSync();
 
             result.GetIssues().PrintTo(Cerr);
-            // for (const auto& issue: result.GetIssues()) {
-            //     for (const auto& subissue: issue.GetSubIssues()) {
-            //         UNIT_ASSERT_C(!(8000 <= subissue->IssueCode && subissue->IssueCode < 9000), "CBO didn't work for this query!");
-            //     }
-            // }
+            for (const auto& issue: result.GetIssues()) {
+                for (const auto& subissue: issue.GetSubIssues()) {
+                    UNIT_ASSERT_C(!(8000 <= subissue->IssueCode && subissue->IssueCode < 9000), "CBO didn't work for this query!");
+                }
+            }
             PrintPlan(TString{*result.GetStats()->GetPlan()});
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 

@@ -177,8 +177,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
-        LOG_D("Handle TEvWorker::TEvData record count = " << ev->Get()->Records.size());
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_D("Handle " << ev->Get()->ToString());
 
         if (ev->Sender != Reader) {
             LOG_W("Data from unknown actor"

@@ -706,8 +706,7 @@ private:
         }
 
         if (ProcessingError) {
-            LOG_C(*ProcessingError);
-            return Leave(TEvWorker::TEvGone::SCHEME_ERROR, *ProcessingError);
+            return LogCritAndLeave(*ProcessingError);
         }
 
         if (!PollSent) {

@@ -1,14 +1,23 @@
 #include "thread_context.h"
 
 #include "executor_pool.h"
+#include "executor_pool_base.h"
 
 namespace NActors {
+
+    bool UseRingQueue(IExecutorPool* pool) {
+        if (auto* basePool = dynamic_cast<TExecutorPoolBase*>(pool)) {
+            return basePool->UseRingQueue();
+        }
+        return false;
+    }
 
     TWorkerContext::TWorkerContext(TWorkerId workerId, IExecutorPool* pool, IExecutorPool* sharedPool)
         : WorkerId(workerId)
         , Pool(pool)
         , OwnerPool(pool)
         , SharedPool(sharedPool)
+        , UseRingQueueValue(::NActors::UseRingQueue(pool))
     {
         AssignPool(pool);
     }
@@ -35,6 +44,10 @@ namespace NActors {
 
     bool TWorkerContext::IsShared() const {
         return SharedPool != nullptr;
+    }
+
+    bool TWorkerContext::UseRingQueue() const {
+        return UseRingQueueValue;
     }
 
     void TWorkerContext::AssignPool(IExecutorPool* pool, ui64 softDeadlineTs) {
@@ -76,6 +89,10 @@ namespace NActors {
 
     bool TThreadContext::IsShared() const {
         return WorkerContext.IsShared();
+    }
+
+    bool TThreadContext::UseRingQueue() const {
+        return WorkerContext.UseRingQueue();
     }
 
     ui64 TThreadContext::TimePerMailboxTs() const {

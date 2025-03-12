@@ -3,7 +3,7 @@
 #include "topic_workload_defines.h"
 #include "topic_workload_stats_collector.h"
 
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/logger/log.h>
 #include <util/system/types.h>

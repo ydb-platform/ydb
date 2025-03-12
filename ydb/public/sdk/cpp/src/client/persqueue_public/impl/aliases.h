@@ -1,11 +1,11 @@
 #pragma once
 
-#include <src/client/topic/common/callback_context.h>
-#include <ydb-cpp-sdk/client/topic/codecs.h>
-#include <src/client/topic/impl/common.h>
-#include <src/client/topic/impl/read_session_impl.ipp>
+#include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/read_session_impl.ipp>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 // codecs
 using NTopic::ICodec;

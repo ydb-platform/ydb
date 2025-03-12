@@ -880,6 +880,9 @@ struct TKeyBound
     /// @endcond
 };
 
+/// Equality check checks all fields of TKeyBound
+bool operator==(const TKeyBound& lhs, const TKeyBound& rhs) noexcept;
+
 ///
 /// @brief Description of the read limit.
 ///
@@ -923,6 +926,9 @@ struct TReadLimit
     FLUENT_FIELD_OPTION(i64, TabletIndex);
 };
 
+/// Equality check checks all fields of TReadLimit
+bool operator==(const TReadLimit& lhs, const TReadLimit& rhs) noexcept;
+
 ///
 /// @brief Range of a table or a file
 ///
@@ -962,6 +968,9 @@ struct TReadRange
             .UpperLimit(TReadLimit().Key(upperKeyExclusive));
     }
 };
+
+/// Equality check checks all fields of TReadRange
+bool operator==(const TReadRange& lhs, const TReadRange& rhs) noexcept;
 
 ///
 /// @brief Path with additional attributes.

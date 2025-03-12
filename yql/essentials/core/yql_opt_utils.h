@@ -151,6 +151,7 @@ bool HasDependsOn(const TExprNode::TPtr& node, const TExprNode::TPtr& arg);
 TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstraintNode* sorted, const TTypeAnnotationNode* rowType, TExprContext& ctx);
 TExprNode::TPtr MakeSortByConstraint(TExprNode::TPtr node, const TSortedConstraintNode* sorted, const TTypeAnnotationNode* rowType, TExprContext& ctx);
 TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx);
+TExprNode::TPtr KeepWorld(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx, TTypeAnnotationContext& types);
 
 void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, const TParentsMap& parentsMap,
     TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx,
@@ -178,24 +179,16 @@ bool CheckSupportedTypes(
 
 template<const char* OptName>
 bool IsOptimizerEnabled(const TTypeAnnotationContext& types) {
-    struct TFlag {
-        TFlag(const TTypeAnnotationContext& types)
-            : Value(types.OptimizerFlags.contains(to_lower(TString(OptName))))
-        {}
-        const bool Value;
-    };
-    return Singleton<TFlag>(types)->Value;
+    static const TString NormallizedName = to_lower(TString(OptName));
+    return types.OptimizerFlags.contains(NormallizedName);
 }
 
 template<const char* OptName>
 bool IsOptimizerDisabled(const TTypeAnnotationContext& types) {
-    struct TFlag {
-        TFlag(const TTypeAnnotationContext& types)
-            : Value(types.OptimizerFlags.contains(to_lower("Disable" + TString(OptName))))
-        {}
-        const bool Value;
-    };
-    return Singleton<TFlag>(types)->Value;
+    static const TString NormallizedName = to_lower("Disable" + TString(OptName));
+    return types.OptimizerFlags.contains(NormallizedName);
 }
+
+extern const char KeepWorldOptName[];
 
 }

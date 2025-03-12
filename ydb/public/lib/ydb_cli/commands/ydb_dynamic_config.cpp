@@ -1,7 +1,7 @@
 #include "ydb_dynamic_config.h"
 
-#include <ydb-cpp-sdk/client/draft/ydb_dynamic_config.h>
-#include <ydb-cpp-sdk/client/config/config.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_dynamic_config.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
 
 #include <openssl/sha.h>
@@ -78,16 +78,17 @@ TCommandConfigFetch::TCommandConfigFetch(bool allowEmptyDatabase)
 
 void TCommandConfigFetch::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption("all", "Fetch both main and volatile config")
-        .NoArgument().SetFlag(&All);
     config.Opts->AddLongOption("output-directory", "Directory to save config(s)")
         .RequiredArgument("[directory]").StoreResult(&OutDir);
     config.Opts->AddLongOption("strip-metadata", "Strip metadata from config")
         .NoArgument().SetFlag(&StripMetadata);
+    config.Opts->AddLongOption("dedicated-storage-section", "Fetch dedicated storage section")
+        .StoreTrue(&DedicatedStorageSection);
+    config.Opts->AddLongOption("dedicated-cluster-section", "Fetch dedicated cluster section")
+        .StoreTrue(&DedicatedClusterSection);
     config.SetFreeArgsNum(0);
 
     config.AllowEmptyDatabase = AllowEmptyDatabase;
-    config.Opts->MutuallyExclusive("all", "strip-metadata");
     config.Opts->MutuallyExclusive("output-directory", "strip-metadata");
 }
 
@@ -103,51 +104,79 @@ int TCommandConfigFetch::Run(TConfig& config) {
         config.Database.clear();
     }
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
-    auto result = client.GetConfig().GetValueSync();
-    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    auto client = NYdb::NConfig::TConfigClient(*driver);
 
-    auto cfg = TString{result.GetConfig()};
+    NYdb::NConfig::TFetchAllConfigsSettings settings;
+    auto result = client.FetchAllConfigs(settings).GetValueSync();
 
-    ui64 version = 0;
+    // if the new Config API is not supported, fallback to the old DynamicConfig API
+    if (result.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+        auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+        auto result = client.GetConfig().GetValueSync();
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
-    if (cfg) {
-        auto metadata = NYamlConfig::GetMainMetadata(cfg);
-        version = metadata.Version.value();
+        auto cfg = TString{result.GetConfig()};
 
-        if (StripMetadata) {
-            cfg = NYamlConfig::StripMetadata(cfg);
-        }
-    } else {
-        Cerr << "YAML config is absent on this cluster." << Endl;
-        return EXIT_FAILURE;
-    }
+        if (cfg) {
+            auto metadata = NYamlConfig::GetMainMetadata(cfg);
 
-    if (!OutDir) {
-        Cout << WrapYaml(cfg);
-    } else {
-        TFsPath dir(OutDir);
-        dir.MkDirs();
-        auto filepath = (dir / "dynconfig.yaml");
-        TFileOutput out(filepath);
-        out << cfg;
-    }
-
-    if (All) {
-        for (auto [id, cfg] : result.GetVolatileConfigs()) {
             if (StripMetadata) {
-                cfg = NYamlConfig::StripMetadata(TString{cfg});
+                cfg = NYamlConfig::StripMetadata(cfg);
             }
-
-            if (!OutDir) {
-                Cout << WrapYaml(TString{cfg});
-            } else {
-                auto filename = TString("volatile_") + ToString(version) + "_" + ToString(id) + ".yaml";
-                auto filepath = (TFsPath(OutDir) / filename);
-                TFileOutput out(filepath);
-                out << cfg;
-            }
+        } else {
+            Cerr << "YAML config is absent on this cluster." << Endl;
+            return EXIT_FAILURE;
         }
+
+        if (!OutDir) {
+            Cout << cfg << Endl;
+        } else {
+            TFsPath dir(OutDir);
+            dir.MkDirs();
+            auto filepath = (dir / "dynconfig.yaml");
+            TFileOutput out(filepath);
+            out << cfg;
+        }
+        return EXIT_SUCCESS;
+    }
+
+    // if the new Config API is supported, continue with the new API
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    TString clusterConfig;
+    TString storageConfig;
+
+    for (const auto& entry : result.GetConfigs()) {
+        std::visit([&](auto&& arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, NYdb::NConfig::TMainConfigIdentity>) {
+                if (DedicatedClusterSection || !DedicatedStorageSection) {
+                    clusterConfig = entry.Config;
+                }
+            } else if constexpr (std::is_same_v<T, NYdb::NConfig::TStorageConfigIdentity>) {
+                if (DedicatedStorageSection || !DedicatedClusterSection) {
+                    storageConfig = entry.Config;
+                }
+            }
+        }, entry.Identity);
+    }
+
+    if (!clusterConfig.empty()) {
+        if (!storageConfig.empty() || DedicatedStorageSection) {
+            Cerr << "cluster config: " << Endl;
+        }
+        Cout << clusterConfig << Endl;
+    }
+
+    if (!storageConfig.empty()) {
+        if (!clusterConfig.empty() || DedicatedClusterSection) {
+            Cerr << "storage config:" << Endl;
+        }
+        Cout << storageConfig << Endl;
+    }
+
+    if (clusterConfig.empty() && storageConfig.empty()) {
+        Cerr << "No config returned." << Endl;
+        return EXIT_FAILURE;
     }
 
     return EXIT_SUCCESS;

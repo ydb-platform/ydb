@@ -279,6 +279,7 @@ private:
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
 
+        bool allowMultiBroadcasts = TableServiceConfig.GetAllowMultiBroadcasts();
         bool enableKqpDataQueryStreamLookup = TableServiceConfig.GetEnableKqpDataQueryStreamLookup();
         bool enableKqpDataQueryStreamIdxLookupJoin = TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin();
         bool enableKqpScanQueryStreamIdxLookupJoin = TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
@@ -309,6 +310,8 @@ private:
 
         ui64 defaultCostBasedOptimizationLevel = TableServiceConfig.GetDefaultCostBasedOptimizationLevel();
         bool enableConstantFolding = TableServiceConfig.GetEnableConstantFolding();
+
+        bool defaultEnableShuffleElimination = TableServiceConfig.GetDefaultEnableShuffleElimination();
 
         TString enableSpillingNodes = TableServiceConfig.GetEnableSpillingNodes();
 
@@ -343,7 +346,10 @@ private:
             TableServiceConfig.GetEnableImplicitQueryParameterTypes() != enableImplicitQueryParameterTypes ||
             TableServiceConfig.GetEnablePgConstsToParams() != enablePgConstsToParams ||
             TableServiceConfig.GetEnablePerStatementQueryExecution() != enablePerStatementQueryExecution ||
-            TableServiceConfig.GetEnableSnapshotIsolationRW() != enableSnapshotIsolationRW) {
+            TableServiceConfig.GetEnableSnapshotIsolationRW() != enableSnapshotIsolationRW ||
+            TableServiceConfig.GetAllowMultiBroadcasts() != allowMultiBroadcasts ||
+            TableServiceConfig.GetDefaultEnableShuffleElimination() != defaultEnableShuffleElimination
+        ) {
 
             QueryCache->Clear();
 

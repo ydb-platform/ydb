@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 
 #include <ydb/library/formats/arrow/switch/switch_type.h>
@@ -34,27 +35,21 @@ protected:
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "incorrect column id");
             return false;
         };
-        ColumnIds.emplace(bFilter.GetColumnId());
+        AddColumnId(bFilter.GetColumnId());
         return true;
     }
 
     virtual NJson::TJsonValue DoSerializeDataToJson(const TString& data, const TIndexInfo& indexInfo) const override;
 
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const override {
-        AFL_VERIFY(ColumnIds.size() == 1);
         auto* filterProto = proto.MutableMaxIndex();
-        filterProto->SetColumnId(*ColumnIds.begin());
+        filterProto->SetColumnId(GetColumnId());
     }
 
 public:
     TIndexMeta() = default;
     TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const ui32& columnId)
-        : TBase(indexId, indexName, { columnId }, storageId) {
-    }
-
-    ui32 GetColumnId() const {
-        AFL_VERIFY(ColumnIds.size() == 1);
-        return *ColumnIds.begin();
+        : TBase(indexId, indexName, columnId, storageId, std::make_shared<TDefaultDataExtractor>()) {
     }
 
     static bool IsAvailableType(const NScheme::TTypeInfo type) {

@@ -51,15 +51,6 @@ namespace NActors {
         return new TEventSerializedData;
     }
 
-    bool IEventBase::DoExecute(IActor* /*actor*/, std::unique_ptr<IEventHandle> /*eventPtr*/) {
-        Y_DEBUG_ABORT_UNLESS(false);
-        return false;
-    }
-
-    bool IEventBase::Execute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr) {
-        return DoExecute(actor, std::move(eventPtr));
-    }
-
 #ifndef NDEBUG
     void IEventHandle::DoTrackNextEvent() {
         TrackNextEvent = true;

@@ -22,6 +22,8 @@ def flt(args):
 
 if '-apple-macos' in str(sys.argv):
     cmd = sys.argv[1:]
+elif '-apple-darwin' in str(sys.argv):
+    cmd = sys.argv[1:]
 else:
     cmd = [sys.argv[1]] + list(flt(sys.argv[2:]))
 

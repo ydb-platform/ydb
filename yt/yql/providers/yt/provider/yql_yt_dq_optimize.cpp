@@ -98,8 +98,10 @@ public:
             return read;
         }
 
+        const ERuntimeClusterSelectionMode selectionMode =
+            State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
         TSyncMap syncList;
-        if (!IsYtCompleteIsolatedLambda(count.Count().Ref(), syncList, cluster, false)) {
+        if (!IsYtCompleteIsolatedLambda(count.Count().Ref(), syncList, cluster, false, selectionMode)) {
             return read;
         }
 

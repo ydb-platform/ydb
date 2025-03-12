@@ -3,6 +3,8 @@
 #include "functions.h"
 #include "kernel_logic.h"
 
+#include <yql/essentials/core/arrow_kernels/request/request.h>
+
 namespace NKikimr::NArrow::NSSA {
 
 class TCalculationProcessor: public IResourceProcessor {
@@ -14,7 +16,7 @@ private:
 
     std::shared_ptr<IStepFunction> Function;
 
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<TAccessorsCollection>& resources) const override;
+    virtual TConclusionStatus DoExecute(const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& context) const override;
 
     TCalculationProcessor(std::vector<TColumnChainInfo>&& input, std::vector<TColumnChainInfo>&& output,
         const std::shared_ptr<IStepFunction>& function, const std::shared_ptr<IKernelLogic>& kernelLogic)
@@ -25,6 +27,23 @@ private:
 
     virtual bool IsAggregation() const override {
         return Function->IsAggregation();
+    }
+
+    virtual ui64 DoGetWeight() const override {
+        if (KernelLogic) {
+            return 0;
+        }
+        if (!YqlOperationId) {
+            return 10;
+        } else if ((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId == NYql::TKernelRequestBuilder::EBinaryOp::StartsWith ||
+                   (NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId == NYql::TKernelRequestBuilder::EBinaryOp::EndsWith) {
+            return 7;
+        } else if ((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId == NYql::TKernelRequestBuilder::EBinaryOp::StringContains) {
+            return 10;
+        } else if ((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId == NYql::TKernelRequestBuilder::EBinaryOp::Equals) {
+            return 5;
+        }
+        return 0;
     }
 
 public:

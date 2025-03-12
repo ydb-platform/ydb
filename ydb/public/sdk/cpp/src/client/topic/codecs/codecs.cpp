@@ -1,11 +1,11 @@
-#include <ydb-cpp-sdk/client/topic/codecs.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
 
 #include <util/stream/buffer.h>
 #include <util/stream/zlib.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 namespace {
 

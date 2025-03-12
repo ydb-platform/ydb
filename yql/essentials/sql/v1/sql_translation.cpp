@@ -5,9 +5,8 @@
 #include "sql_values.h"
 #include "sql_select.h"
 #include "source.h"
+#include "antlr_token.h"
 
-#include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/sql/settings/partitioning.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
 
@@ -19,6 +18,8 @@
 namespace {
 
 using namespace NSQLTranslationV1;
+
+using NSQLTranslation::ESqlMode;
 
 template <typename Callback>
 void VisitAllFields(const NProtoBuf::Message& msg, Callback& callback) {
@@ -55,68 +56,49 @@ TString CollectTokens(const TRule_select_stmt& selectStatement) {
     return tokenCollector.Tokens;
 }
 
-bool RecreateContext(
-    TContext& ctx, const NSQLTranslation::TTranslationSettings& settings, const TString& recreationQuery
-) {
-    if (!recreationQuery) {
-        return true;
-    }
-    const TString queryName = "context recreation query";
-
-    const auto* ast = NSQLTranslationV1::SqlAST(
-        ctx.Parsers,
-        recreationQuery, queryName, ctx.Issues,
-        settings.MaxErrors, settings.AnsiLexer,  settings.Antlr4Parser, settings.Arena
-    );
-    if (!ast) {
+bool BuildContextRecreationQuery(TContext& context, TStringBuilder& query) {
+    TVector<TString> statements;
+    if (!SplitQueryToStatements(context.Lexers, context.Parsers, context.Query, statements, context.Issues, context.Settings)) {
         return false;
     }
 
-    TSqlQuery queryTranslator(ctx, ctx.Settings.Mode, true);
-    auto node = queryTranslator.Build(static_cast<const TSQLv1ParserAST&>(*ast));
-
-    return node && node->Init(ctx, nullptr) && node->Translate(ctx);
+    for (size_t id : context.ForAllStatementsParts) {
+        query << statements[id] << '\n';
+    }
+    return true;
 }
 
-TNodePtr BuildViewSelect(
-    const TRule_select_stmt& selectStatement,
-    TContext& parentContext,
-    const TString& contextRecreationQuery
-) {
-    TIssues issues;
-    TContext context(parentContext.Lexers, parentContext.Parsers, parentContext.Settings, {}, issues, parentContext.Query);
-    if (!RecreateContext(context, context.Settings, contextRecreationQuery)) {
-        parentContext.Issues.AddIssues(issues);
-        return nullptr;
+// ensures that the parsing mode is restored to the original value
+class TModeGuard {
+    ESqlMode& Mode;
+    ESqlMode OriginalMode;
+
+public:
+    TModeGuard(ESqlMode& mode, ESqlMode newMode)
+        : Mode(mode)
+        , OriginalMode(std::exchange(mode, newMode))
+    {}
+
+    ~TModeGuard() {
+        Mode = OriginalMode;
     }
-    issues.Clear();
+};
 
-    // Holds (among other things) subquery references.
-    // These references need to be passed to the parent context
-    // to be able to compile view queries with subqueries.
-    context.PushCurrentBlocks(&parentContext.GetCurrentBlocks());
-
-    context.Settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
-
+TNodePtr BuildViewSelect(const TRule_select_stmt& selectStatement, TContext& context) {
+    TModeGuard guard(context.Settings.Mode, ESqlMode::LIMITED_VIEW);
     TSqlSelect selectTranslator(context, context.Settings.Mode);
-    TPosition pos = parentContext.Pos();
-    auto source = selectTranslator.Build(selectStatement, pos);
+    auto position = context.Pos();
+    auto source = selectTranslator.Build(selectStatement, position);
     if (!source) {
-        parentContext.Issues.AddIssues(issues);
         return nullptr;
     }
-    auto node = BuildSelectResult(
-        pos,
-        std::move(source),
-        false,
-        false,
+    return BuildSelectResult(
+        position,
+        source,
+        false, /* write result */
+        false, /* in subquery */
         context.Scoped
     );
-    if (!node) {
-        parentContext.Issues.AddIssues(issues);
-        return nullptr;
-    }
-    return node;
 }
 
 }
@@ -1710,9 +1692,9 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
 
                         auto& token = spec.GetBlock2().GetToken1();
                         auto tokenId = token.GetId();
-                        if (IS_TOKEN(tokenId, ASC)) {
+                        if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, ASC)) {
                             return true;
-                        } else if (IS_TOKEN(tokenId, DESC)) {
+                        } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, DESC)) {
                             desc = true;
                             return true;
                         } else {
@@ -3745,9 +3727,9 @@ bool TSqlTranslation::SortSpecification(const TRule_sort_specification& node, TV
         const auto& token = node.GetBlock2().GetToken1();
         Token(token);
         auto tokenId = token.GetId();
-        if (IS_TOKEN(tokenId, ASC)) {
+        if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, ASC)) {
             Ctx.IncrementMonCounter("sql_features", "OrderByAsc");
-        } else if (IS_TOKEN(tokenId, DESC)) {
+        } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, tokenId, DESC)) {
             asc = false;
             Ctx.IncrementMonCounter("sql_features", "OrderByDesc");
         } else {
@@ -3777,11 +3759,11 @@ bool TSqlTranslation::SortSpecificationList(const TRule_sort_specification_list&
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node) const {
     TPosition pos;
-    return node.HasBlock1() && IS_TOKEN(node.GetBlock1().GetToken1().GetId(), DISTINCT);
+    return node.HasBlock1() && IS_TOKEN(Ctx.Settings.Antlr4Parser, node.GetBlock1().GetToken1().GetId(), DISTINCT);
 }
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPosition& distinctPos) const {
-    if (node.HasBlock1() && IS_TOKEN(node.GetBlock1().GetToken1().GetId(), DISTINCT)) {
+    if (node.HasBlock1() && IS_TOKEN(Ctx.Settings.Antlr4Parser, node.GetBlock1().GetToken1().GetId(), DISTINCT)) {
         distinctPos = Ctx.TokenPosition(node.GetBlock1().GetToken1());
         return true;
     }
@@ -3820,35 +3802,44 @@ bool TSqlTranslation::RoleNameClause(const TRule_role_name& node, TDeferredAtom&
 }
 
 bool TSqlTranslation::PasswordParameter(const TRule_password_option& passwordOption, TUserParameters& result) {
-    // password_option: ENCRYPTED? PASSWORD expr;
-    TSqlExpression expr(Ctx, Mode);
-    TNodePtr password = expr.Build(passwordOption.GetRule_expr3());
-    if (!password) {
-        Error() << "Couldn't parse the password";
-        return false;
+    // password_option: ENCRYPTED? PASSWORD password_value;
+    // password_value: STRING_VALUE | NULL;
+
+    const auto& token = passwordOption.GetRule_password_value3().GetToken1();
+    TString stringValue(Ctx.Token(token));
+
+    if (to_lower(stringValue) == "null") {
+        result.IsPasswordNull = true;
+    } else {
+        auto password = StringContent(Ctx, Ctx.Pos(), stringValue);
+
+        if (!password) {
+            Error() << "Password should be enclosed into quotation marks.";
+            return false;
+        }
+
+        result.Password = TDeferredAtom(Ctx.Pos(), std::move(password->Content));
     }
 
     result.IsPasswordEncrypted = passwordOption.HasBlock1();
-    if (!password->IsNull()) {
-        result.Password = MakeAtomFromExpression(Ctx.Pos(), Ctx, password);
-    }
 
     return true;
 }
 
 bool TSqlTranslation::HashParameter(const TRule_hash_option& hashOption, TUserParameters& result) {
-    // hash_option: HASH expr;
-    TSqlExpression expr(Ctx, Mode);
-    TNodePtr hash = expr.Build(hashOption.GetRule_expr2());
+    // hash_option: HASH STRING_VALUE;
+
+    const auto& token = hashOption.GetToken2();
+    TString stringValue(Ctx.Token(token));
+
+    auto hash = StringContent(Ctx, Ctx.Pos(), stringValue);
 
     if (!hash) {
-        Error() << "Couldn't parse the hash of password";
+        Error() << "Hash should be enclosed into quotation marks.";
         return false;
     }
 
-    if (!hash->IsNull()) {
-        result.Hash = MakeAtomFromExpression(Ctx.Pos(), Ctx, hash);
-    }
+    result.Hash = TDeferredAtom(Ctx.Pos(), std::move(hash->Content));
 
     return true;
 }
@@ -3857,9 +3848,9 @@ void TSqlTranslation::LoginParameter(const TRule_login_option& loginOption, std:
     // login_option: LOGIN | NOLOGIN;
 
     auto token = loginOption.GetToken1().GetId();
-    if (IS_TOKEN(token, LOGIN)) {
+    if (IS_TOKEN(Ctx.Settings.Antlr4Parser, token, LOGIN)) {
         canLogin = true;
-    } else if (IS_TOKEN(token, NOLOGIN)) {
+    } else if (IS_TOKEN(Ctx.Settings.Antlr4Parser, token, NOLOGIN)) {
         canLogin = false;
     } else {
         Y_ABORT("You should change implementation according to grammar changes");
@@ -3936,6 +3927,7 @@ bool TSqlTranslation::UserParameters(const std::vector<TRule_user_option>& optio
 
     if (isCreateUser) {
         result.CanLogin = true;
+        result.IsPasswordNull = true;
     }
 
     for (const auto& option : optionsList) {
@@ -5120,32 +5112,20 @@ bool TSqlTranslation::ParseViewQuery(
     std::map<TString, TDeferredAtom>& features,
     const TRule_select_stmt& query
 ) {
-    TString queryText = CollectTokens(query);
-    TString contextRecreationQuery;
-    {
-        const auto& service = Ctx.Scoped->CurrService;
-        const auto& cluster = Ctx.Scoped->CurrCluster;
-        const auto effectivePathPrefix = Ctx.GetPrefixPath(service, cluster);
-
-        // TO DO: capture all runtime pragmas in a similar fashion.
-        if (effectivePathPrefix != Ctx.Settings.PathPrefix) {
-            contextRecreationQuery = TStringBuilder() << "PRAGMA TablePathPrefix = \"" << effectivePathPrefix << "\";\n";
-        }
-
-        // TO DO: capture other compilation-affecting statements except USE.
-        if (cluster.GetLiteral() && *cluster.GetLiteral() != Ctx.Settings.DefaultCluster) {
-            contextRecreationQuery = TStringBuilder() << "USE " << *cluster.GetLiteral() << ";\n";
-        }
+    TStringBuilder queryText;
+    if (!BuildContextRecreationQuery(Ctx, queryText)) {
+        return false;
     }
-    features["query_text"] = { Ctx.Pos(), contextRecreationQuery + queryText };
+    queryText << CollectTokens(query);
+    features["query_text"] = { Ctx.Pos(), queryText };
 
-    // AST is needed for ready-made validation of CREATE VIEW statement.
-    // Query is stored as plain text, not AST.
-    const auto viewSelect = BuildViewSelect(query, Ctx, contextRecreationQuery);
+    // The AST is needed solely for the validation of the CREATE VIEW statement.
+    // The final storage format for the query is a plain text, not an AST.
+    const auto viewSelect = BuildViewSelect(query, Ctx);
     if (!viewSelect) {
         return false;
     }
-    features["query_ast"] = {viewSelect, Ctx};
+    features["query_ast"] = { viewSelect, Ctx };
 
     return true;
 }

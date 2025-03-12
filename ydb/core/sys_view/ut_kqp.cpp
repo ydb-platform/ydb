@@ -1,12 +1,20 @@
 #include "ut_common.h"
 
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb-cpp-sdk/client/value/value.h>
 
+#include <ydb/core/base/path.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/common/simple/temp_tables.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/ydb_convert/table_description.h>
 
-#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
@@ -125,6 +133,7 @@ void SetupAuthAccessEnvironment(TTestEnv& env) {
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
     env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
     env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("user1rootadmin");
+    env.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableDatabaseAdmin(true);
     env.GetClient().SetSecurityToken("root@builtin");
     CreateTenantsAndTables(env, true);
 
@@ -132,19 +141,211 @@ void SetupAuthAccessEnvironment(TTestEnv& env) {
     env.GetClient().CreateUser("/Root", "user2", "password2");
     env.GetClient().CreateUser("/Root/Tenant1", "user3", "password3");
     env.GetClient().CreateUser("/Root/Tenant1", "user4", "password4");
+    env.GetClient().CreateUser("/Root/Tenant2", "user5", "password5");
+
+    // Note: in real scenarios user6tenant1admin should be created in /Root/Tenant1
+    // but it isn't supported by test framework
+    env.GetClient().CreateUser("/Root", "user6tenant1admin", "password6");
+    env.GetClient().ModifyOwner("/Root", "Tenant1", "user6tenant1admin");
 
     {
         NACLib::TDiffACL acl;
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1rootadmin");
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user2");
+        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user6tenant1admin");
+        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull, "root@builtin");
         env.GetClient().ModifyACL("", "Root", acl.SerializeAsString());
     }
 }
 
 void CheckAuthAdministratorAccessIsRequired(TScanQueryPartIterator& it) {
-    NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, 
+    NKqp::StreamResultToYson(it, false, EStatus::UNAUTHORIZED,
         "Administrator access is required");
 }
+
+void CheckEmpty(TScanQueryPartIterator& it) {
+    auto expected = R"([
+
+    ])";
+    NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+}
+
+class TShowCreateTableChecker {
+public:
+
+    explicit TShowCreateTableChecker(TTestEnv& env)
+        : Env(env)
+        , QueryClient(NQuery::TQueryClient(Env.GetDriver()))
+        , TableClient(TTableClient(Env.GetDriver()))
+    {}
+
+    void CheckShowCreateTable(const std::string& query, const std::string& tableName, TString formatQuery = "", bool temporary = false) {
+        auto session = QueryClient.GetSession().GetValueSync().GetSession();
+
+        std::optional<TString> sessionId = std::nullopt;
+        if (temporary) {
+            sessionId = session.GetId();
+        }
+
+        CreateTable(session, query);
+        auto showCreateTableQuery = ShowCreateTable(session, tableName);
+
+        if (formatQuery) {
+            UNIT_ASSERT_VALUES_EQUAL_C(UnescapeC(formatQuery), UnescapeC(showCreateTableQuery), UnescapeC(showCreateTableQuery));
+        }
+
+        auto tableDescOrig = DescribeTable(tableName, sessionId);
+
+        DropTable(session, tableName);
+
+        CreateTable(session, showCreateTableQuery);
+        auto tableDescNew = DescribeTable(tableName, sessionId);
+
+        DropTable(session, tableName);
+
+        CompareDescriptions(std::move(tableDescOrig), std::move(tableDescNew), showCreateTableQuery);
+    }
+
+private:
+
+    void CreateTable(NYdb::NQuery::TSession& session, const std::string& query) {
+        auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    NKikimrSchemeOp::TTableDescription DescribeTable(const std::string& tableName,
+            std::optional<TString> sessionId = std::nullopt) {
+
+        auto describeTable = [this](const TString& path) {
+            auto& runtime = *(this->Env.GetServer().GetRuntime());
+            auto sender = runtime.AllocateEdgeActor();
+            TAutoPtr<IEventHandle> handle;
+
+            auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+            request->Record.MutableDescribePath()->SetPath(path);
+            request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
+            request->Record.MutableDescribePath()->MutableOptions()->SetReturnBoundaries(true);
+            runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+
+            return reply->GetRecord().GetPathDescription().GetTable();
+        };
+
+        TString tablePath = TString(tableName);
+        if (!IsStartWithSlash(tablePath)) {
+            tablePath = CanonizePath(JoinPath({"/Root", tablePath}));
+        }
+        if (sessionId.has_value()) {
+            auto pos = sessionId.value().find("&id=");
+            tablePath = NKqp::GetTempTablePath("Root", sessionId.value().substr(pos + 4), tablePath);
+        }
+        auto tableDesc = describeTable(tablePath);
+
+        return tableDesc;
+    }
+
+    std::string ShowCreateTable(NYdb::NQuery::TSession& session, const std::string& tableName) {
+        auto result = session.ExecuteQuery(TStringBuilder() << R"(
+            SHOW CREATE TABLE `)" << tableName << R"(`;
+        )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+        auto resultSet = result.GetResultSet(0);
+        auto columnsMeta = resultSet.GetColumnsMeta();
+        UNIT_ASSERT(columnsMeta.size() == 3);
+
+        NYdb::TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+
+        TString tablePath = TString(tableName);
+
+        TString statement = "";
+
+        for (size_t i = 0; i < columnsMeta.size(); i++) {
+            const auto& column = columnsMeta[i];
+            if (column.Name == "Path") {
+                TValueParser parserValue(parser.GetValue(i));
+                parserValue.OpenOptional();
+                UNIT_ASSERT_VALUES_EQUAL(parserValue.GetUtf8(), std::string(tablePath));
+                continue;
+            } else if (column.Name == "PathType") {
+                TValueParser parserValue(parser.GetValue(i));
+                parserValue.OpenOptional();
+                UNIT_ASSERT_VALUES_EQUAL(parserValue.GetUtf8(), "Table");
+                continue;
+            } else if (column.Name == "Statement") {
+                TValueParser parserValue(parser.GetValue(i));
+                parserValue.OpenOptional();
+                statement = parserValue.GetUtf8();
+            } else {
+                UNIT_ASSERT_C(false, "Invalid column name");
+            }
+        }
+        UNIT_ASSERT(statement);
+
+        return statement;
+    }
+
+    void DropTable(NYdb::NQuery::TSession& session, const std::string& tableName) {
+        auto result = session.ExecuteQuery(TStringBuilder() << R"(
+            DROP TABLE `)" << tableName << R"(`;
+        )",  NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    void CompareDescriptions(NKikimrSchemeOp::TTableDescription origDesc, NKikimrSchemeOp::TTableDescription newDesc, const std::string& showCreateTableQuery) {
+        Ydb::Table::CreateTableRequest requestFirst = *GetCreateTableRequest(origDesc);
+        Ydb::Table::CreateTableRequest requestSecond = *GetCreateTableRequest(newDesc);
+
+        TString first;
+        ::google::protobuf::TextFormat::PrintToString(requestFirst, &first);
+        TString second;
+        ::google::protobuf::TextFormat::PrintToString(requestSecond, &second);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(first, second, showCreateTableQuery);
+    }
+
+    TMaybe<Ydb::Table::CreateTableRequest> GetCreateTableRequest(const NKikimrSchemeOp::TTableDescription& tableDesc) {
+        Ydb::Table::CreateTableRequest scheme;
+
+        NKikimrMiniKQL::TType mkqlKeyType;
+
+        try {
+            FillColumnDescription(scheme, mkqlKeyType, tableDesc);
+        } catch (const yexception&) {
+            return Nothing();
+        }
+
+        scheme.mutable_primary_key()->CopyFrom(tableDesc.GetKeyColumnNames());
+
+        try {
+            FillTableBoundary(scheme, tableDesc, mkqlKeyType);
+            FillIndexDescription(scheme, tableDesc);
+        } catch (const yexception&) {
+            return Nothing();
+        }
+
+        FillStorageSettings(scheme, tableDesc);
+        FillColumnFamilies(scheme, tableDesc);
+        FillPartitioningSettings(scheme, tableDesc);
+        FillKeyBloomFilter(scheme, tableDesc);
+        FillReadReplicasSettings(scheme, tableDesc);
+
+        TString error;
+        Ydb::StatusIds::StatusCode status;
+        if (!FillSequenceDescription(scheme, tableDesc, status, error)) {
+            return Nothing();
+        }
+
+        return scheme;
+    }
+
+private:
+    TTestEnv& Env;
+    NQuery::TQueryClient QueryClient;
+    TTableClient TableClient;
+};
 
 class TYsonFieldChecker {
     NYT::TNode Root;
@@ -369,6 +570,621 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
+    Y_UNIT_TEST(ShowCreateTableDefaultLiteral) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateTableChecker checker(env);
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Bool DEFAULT true,
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint32,
+    `Value` Bool DEFAULT TRUE,
+    PRIMARY KEY (`Key`)
+);
+)"
+        );
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE `/Root/test_show_create` (
+                Key Uint32 DEFAULT 1,
+                Value Int32 DEFAULT -100,
+                PRIMARY KEY (Key)
+            );
+            )", "test_show_create"
+        );
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint64 DEFAULT 100,
+                Value Int64 DEFAULT -100,
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Double DEFAULT 0.5,
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Float DEFAULT CAST(4.0 AS FLOAT),
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint32,
+    `Value` Float DEFAULT 4,
+    PRIMARY KEY (`Key`)
+);
+)"
+        );
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Double DEFAULT 0.075,
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Date DEFAULT CAST('2000-01-02' as DATE),
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Datetime DEFAULT CAST('2000-01-02T02:26:51Z' as DATETIME),
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Timestamp DEFAULT CAST('2000-01-02T02:26:50.999900Z' as TIMESTAMP),
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Uuid DEFAULT Uuid("afcbef30-9ac3-481a-aa6a-8d9b785dbb0a"),
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Json DEFAULT "[12]",
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Yson DEFAULT "[13]",
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value String DEFAULT "string",
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Utf8 DEFAULT "utf8",
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Interval DEFAULT Interval("P10D"),
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Date32 DEFAULT Date32('1970-01-05'),
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Datetime64 DEFAULT Datetime64('1970-01-01T00:00:00Z'),
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Timestamp64 DEFAULT Timestamp64('1970-01-01T00:00:00Z'),
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Interval64 DEFAULT Interval64('P222D'),
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Decimal(22, 15) DEFAULT CAST("11.11" AS Decimal(22, 15)),
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Decimal(35, 10) DEFAULT CAST("110.111" AS Decimal(35, 10)),
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+    }
+
+    Y_UNIT_TEST(ShowCreateTablePartitionAtKeys) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateTableChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64,
+                Key2 String,
+                Value String,
+                PRIMARY KEY (Key1, Key2)
+            )
+            WITH (
+                PARTITION_AT_KEYS = ((10), (100, "123"), (1000, "cde"))
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64,
+                Key2 String,
+                Key3 Utf8,
+                PRIMARY KEY (Key1, Key2)
+            )
+            WITH (
+                PARTITION_AT_KEYS = (10)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64,
+                Key2 String,
+                Key3 Utf8,
+                PRIMARY KEY (Key1, Key2)
+            )
+            WITH (
+                PARTITION_AT_KEYS = (10, 20, 30)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64,
+                Key2 String,
+                Key3 Utf8,
+                PRIMARY KEY (Key1, Key2, Key3)
+            )
+            WITH (
+                PARTITION_AT_KEYS = ((10, "str"), (10, "str", "utf"))
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                BoolValue Bool,
+                Int32Value Int32,
+                Uint32Value Uint32,
+                Int64Value Int64,
+                Uint64Value Uint64,
+                StringValue String,
+                Utf8Value Utf8,
+                Value1 Int32 Family family1,
+                Value2 Int64 Family family1,
+                FAMILY family1 (),
+                PRIMARY KEY (BoolValue, Int32Value, Uint32Value, Int64Value, Uint64Value, StringValue, Utf8Value)
+            ) WITH (
+                PARTITION_AT_KEYS = ((false), (false, 1, 2), (true, 1, 1, 1, 1, "str"), (true, 1, 1, 100, 0, "str", "utf"))
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `BoolValue` Bool,
+    `Int32Value` Int32,
+    `Uint32Value` Uint32,
+    `Int64Value` Int64,
+    `Uint64Value` Uint64,
+    `StringValue` String,
+    `Utf8Value` Utf8,
+    `Value1` Int32 FAMILY `family1`,
+    `Value2` Int64 FAMILY `family1`,
+    FAMILY `family1` (),
+    PRIMARY KEY (`BoolValue`, `Int32Value`, `Uint32Value`, `Int64Value`, `Uint64Value`, `StringValue`, `Utf8Value`)
+)
+WITH (PARTITION_AT_KEYS = ((FALSE), (FALSE, 1, 2), (TRUE, 1, 1, 1, 1, 'str'), (TRUE, 1, 1, 100, 0, 'str', 'utf')));
+)",
+        true);
+    }
+
+    Y_UNIT_TEST(ShowCreateTablePartitionSettings) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateTableChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value1 String NOT NULL,
+                Value2 Int32 NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                UNIFORM_PARTITIONS = 10,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+            );
+        )", "test_show_create");
+    }
+
+    Y_UNIT_TEST(ShowCreateTableReadReplicas) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateTableChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                READ_REPLICAS_SETTINGS = "PER_AZ:2"
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                READ_REPLICAS_SETTINGS = "ANY_AZ:3"
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint64 NOT NULL,
+    `Value` String NOT NULL,
+    PRIMARY KEY (`Key`)
+)
+WITH (READ_REPLICAS_SETTINGS = 'ANY_AZ:3');
+)"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableKeyBloomFilter) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateTableChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                KEY_BLOOM_FILTER = ENABLED
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                KEY_BLOOM_FILTER = DISABLED
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint64 NOT NULL,
+    `Value` String NOT NULL,
+    PRIMARY KEY (`Key`)
+)
+WITH (KEY_BLOOM_FILTER = DISABLED);
+)"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableTtlSettings) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateTableChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Timestamp NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                TTL = Interval("P1D") DELETE ON Key
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint32 NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                TTL =
+                    Interval("PT1H") DELETE ON Key AS SECONDS
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint32 NOT NULL,
+    PRIMARY KEY (`Key`)
+)
+WITH (TTL = INTERVAL('PT1H') DELETE ON Key AS SECONDS);
+)"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableTemporary) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateTableChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TEMPORARY TABLE test_show_create (
+                Key Int32 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create",
+R"(CREATE TEMPORARY TABLE `test_show_create` (
+    `Key` Int32 NOT NULL,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+);
+)"
+        , true);
+    }
+
+    Y_UNIT_TEST(ShowCreateTable) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateTableChecker checker(env);
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE `/Root/test_show_create` (
+                Key Uint32,
+                Value Uint32,
+                PRIMARY KEY (Key)
+            );
+            )", "test_show_create"
+        );
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE test_show_create (
+                Key Uint32,
+                Value Uint32,
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Int64 NOT NULL,
+                Key2 Utf8 NOT NULL,
+                Key3 PgInt2 NOT NULL,
+                Value1 Utf8,
+                Value2 Bool,
+                Value3 String,
+                PRIMARY KEY (Key1, Key2, Key3),
+                INDEX Index1 GLOBAL USING vector_kmeans_tree ON (`Value3`) WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2)
+            );
+            ALTER TABLE test_show_create ADD INDEX Index2 GLOBAL SYNC ON (Key2, Value1, Value2);
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                BoolValue Bool,
+                Int32Value Int32,
+                Uint32Value Uint32,
+                Int64Value Int64,
+                Uint64Value Uint64,
+                FloatValue Float,
+                DoubleValue Double,
+                StringValue String,
+                Utf8Value Utf8,
+                DateValue Date,
+                DatetimeValue Datetime,
+                TimestampValue Timestamp,
+                IntervalValue Interval,
+                DecimalValue1 Decimal(22,9),
+                DecimalValue2 Decimal(35,10),
+                JsonValue Json,
+                YsonValue Yson,
+                JsonDocumentValue JsonDocument,
+                DyNumberValue DyNumber,
+                Int32NotNullValue Int32 NOT NULL,
+                PRIMARY KEY (Key)
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Int64 NOT NULL DEFAULT -100,
+                Key2 Utf8 NOT NULL,
+                Key3 BigSerial NOT NULL,
+                Value1 Utf8 FAMILY Family1,
+                Value2 Bool FAMILY Family2,
+                Value3 String FAMILY Family2,
+                INDEX Index1 GLOBAL USING vector_kmeans_tree ON (`Value3`) WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2),
+                PRIMARY KEY (Key1, Key2, Key3),
+                FAMILY Family1 (
+                    DATA = "test0",
+                    COMPRESSION = "off"
+                ),
+                FAMILY Family2 (
+                    DATA = "test1",
+                    COMPRESSION = "lz4"
+                )
+            ) WITH (
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000
+            );
+            ALTER TABLE test_show_create ADD INDEX Index2 GLOBAL ASYNC ON (Key2, Value1, Value2);
+            ALTER TABLE test_show_create ADD INDEX Index3 GLOBAL ASYNC ON (Key3, Value2) COVER (Value1, Value3);
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Int64 NOT NULL DEFAULT -100,
+    `Key2` Utf8 NOT NULL,
+    `Key3` Serial8 NOT NULL,
+    `Value1` Utf8 FAMILY `Family1`,
+    `Value2` Bool FAMILY `Family2`,
+    `Value3` String FAMILY `Family2`,
+    INDEX `Index1` GLOBAL USING vector_kmeans_tree ON (`Value3`) WITH (distance = cosine, vector_type = 'uint8', vector_dimension = 2, clusters = 2, levels = 1),
+    INDEX `Index2` GLOBAL ASYNC ON (`Key2`, `Value1`, `Value2`),
+    INDEX `Index3` GLOBAL ASYNC ON (`Key3`, `Value2`) COVER (`Value1`, `Value3`),
+    FAMILY `Family1` (DATA = 'test0', COMPRESSION = 'off'),
+    FAMILY `Family2` (DATA = 'test1', COMPRESSION = 'lz4'),
+    PRIMARY KEY (`Key1`, `Key2`, `Key3`)
+)
+WITH (
+    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000
+);
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Int64 NOT NULL DEFAULT -100,
+                Key2 Utf8 NOT NULL,
+                Key3 BigSerial NOT NULL,
+                Value1 Utf8,
+                Value2 Bool,
+                Value3 STRING,
+                Value4 Timestamp DEFAULT CAST('2000-01-02T02:26:50.999900Z' as TIMESTAMP),
+                Value5 String,
+                INDEX Index2 GLOBAL USING vector_kmeans_tree ON (Value5) COVER (Value1, Value3) WITH (distance=manhattan, vector_type=float, vector_dimension=2, clusters=2, levels=1),
+                PRIMARY KEY (Key1, Key2, Key3),
+            ) WITH (
+                TTL = Interval("PT1H") DELETE ON Value4,
+                KEY_BLOOM_FILTER = ENABLED,
+                PARTITION_AT_KEYS = ((10), (100, "123"), (1000, "cde")),
+                AUTO_PARTITIONING_BY_LOAD = ENABLED
+            );
+            ALTER TABLE test_show_create ADD INDEX Index1 GLOBAL ASYNC ON (Key2, Value1, Value2) COVER (Value5, Value3);
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Int64 NOT NULL DEFAULT -100,
+    `Key2` Utf8 NOT NULL,
+    `Key3` Serial8 NOT NULL,
+    `Value1` Utf8,
+    `Value2` Bool,
+    `Value3` String,
+    `Value4` Timestamp DEFAULT TIMESTAMP('2000-01-02T02:26:50.999900Z'),
+    `Value5` String,
+    INDEX `Index1` GLOBAL ASYNC ON (`Key2`, `Value1`, `Value2`) COVER (`Value5`, `Value3`),
+    INDEX `Index2` GLOBAL USING vector_kmeans_tree ON (`Value5`) COVER (`Value1`, `Value3`) WITH (distance = manhattan, vector_type = 'float', vector_dimension = 2, clusters = 2, levels = 1),
+    PRIMARY KEY (`Key1`, `Key2`, `Key3`)
+)
+WITH (
+    AUTO_PARTITIONING_BY_LOAD = ENABLED,
+    PARTITION_AT_KEYS = ((10), (100, '123'), (1000, 'cde')),
+    KEY_BLOOM_FILTER = ENABLED,
+    TTL = INTERVAL('PT1H') DELETE ON Value4
+);
+)"
+        );
+    }
+
     Y_UNIT_TEST(Nodes) {
         TTestEnv env;
         CreateTenantsAndTables(env, false);
@@ -420,6 +1236,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
+
+
     }
 
     Y_UNIT_TEST(QueryStats) {
@@ -1448,7 +2266,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 SELECT * FROM `Root/Tenant1/Table1` WHERE Key = 1;
             )", TTxControl::BeginTx().CommitTx()).GetValueSync();
             NKqp::AssertSuccessResult(result);
-            
+
             TString actual = FormatResultSetYson(result.GetResultSet(0));
             NKqp::CompareYson(R"([
                 [[1u]]
@@ -1461,12 +2279,12 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 SELECT * FROM `Root/Tenant1/Table1` WHERE Key = 2;
             )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
             NKqp::AssertSuccessResult(result);
-            
+
             TString actual = FormatResultSetYson(result.GetResultSet(0));
             NKqp::CompareYson(R"([
                 [[2u]]
             ])", actual);
-        }        
+        }
 
         size_t rowCount = 0;
         for (size_t iter = 0; iter < 30; ++iter) {
@@ -1478,7 +2296,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         {
             auto result = session.ExecuteDataQuery(R"(
-                SELECT                     
+                SELECT
                     IntervalEnd,
                     Rank,
                     TabletId,
@@ -1581,8 +2399,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
             check.Uint64(0); // IndexSize
             check.Uint64(0); // InFlightTxCount
             check.Uint64Greater(0); // FollowerId
-        }        
-    }    
+        }
+    }
 
     Y_UNIT_TEST(Describe) {
         TTestEnv env;
@@ -1764,7 +2582,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 30);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 31);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -1782,7 +2600,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 24);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 25);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -2244,23 +3062,42 @@ Y_UNIT_TEST_SUITE(SystemView) {
         SetupAuthAccessEnvironment(env);
         TTableClient client(env.GetDriver());
 
+        // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant1").DebugString() << Endl;
+
         { // anonymous login doesn't give administrative access as `AdministrationAllowedSIDs` isn't empty
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint());
             auto driver = TDriver(driverConfig);
             TTableClient client(driver);
 
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Sid
-                FROM `Root/.sys/auth_users`
-            )").GetValueSync();
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/.sys/auth_users`
+                )").GetValueSync();
 
-            auto expected = R"([
+                CheckEmpty(it);
+            }
 
-            ])";
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant1/.sys/auth_users`
+                )").GetValueSync();
+
+                CheckEmpty(it);
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant2/.sys/auth_users`
+                )").GetValueSync();
+
+                CheckEmpty(it);
+            }
         }
-        
+
         { // user1rootadmin is /Root admin
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(env.GetEndpoint())
@@ -2280,6 +3117,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 auto expected = R"([
                     [["user1rootadmin"]];
                     [["user2"]];
+                    [["user6tenant1admin"]];
                 ])";
                 NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
             }
@@ -2293,6 +3131,18 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 auto expected = R"([
                     [["user3"]];
                     [["user4"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant2/.sys/auth_users`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["user5"]];
                 ])";
                 NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
             }
@@ -2326,15 +3176,63 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     FROM `Root/Tenant1/.sys/auth_users`
                 )").GetValueSync();
 
-                auto expected = R"([
+                CheckEmpty(it);
+            }
 
-                ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant2/.sys/auth_users`
+                )").GetValueSync();
+
+                CheckEmpty(it);
             }
         }
 
-        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
-        // and test tenant user and tenant admin
+        { // user6tenant1admin is /Root/Tenant1 admin
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user6tenant1admin",
+                    .Password = "password6",
+                }));
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/.sys/auth_users`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["user6tenant1admin"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant1/.sys/auth_users`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["user3"]];
+                    [["user4"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant2/.sys/auth_users`
+                )").GetValueSync();
+
+                CheckEmpty(it);
+            }
+        }
     }
 
     Y_UNIT_TEST(AuthUsers_ResultOrder) {
@@ -2566,6 +3464,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         env.GetClient().CreateGroup("/Root", "group2");
         env.GetClient().CreateGroup("/Root/Tenant1", "group3");
         env.GetClient().CreateGroup("/Root/Tenant1", "group4");
+        env.GetClient().CreateGroup("/Root/Tenant2", "group5");
 
         { // anonymous login doesn't give administrative access as `AdministrationAllowedSIDs` isn't empty
             auto driverConfig = TDriverConfig()
@@ -2573,12 +3472,32 @@ Y_UNIT_TEST_SUITE(SystemView) {
             auto driver = TDriver(driverConfig);
             TTableClient client(driver);
 
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Sid
-                FROM `Root/.sys/auth_groups`
-            )").GetValueSync();
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/.sys/auth_groups`
+                )").GetValueSync();
 
-            CheckAuthAdministratorAccessIsRequired(it);
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant1/.sys/auth_groups`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant2/.sys/auth_groups`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
         }
 
         { // user1rootadmin is /Root admin
@@ -2616,6 +3535,18 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 ])";
                 NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
             }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant2/.sys/auth_groups`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["group5"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
         }
 
         { // user2 isn't /Root admin
@@ -2645,10 +3576,58 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
                 CheckAuthAdministratorAccessIsRequired(it);
             }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant2/.sys/auth_groups`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
         }
 
-        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
-        // and test tenant user and tenant admin
+        { // user6tenant1admin is /Root/Tenant1 admin
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user6tenant1admin",
+                    .Password = "password6",
+                }));
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/.sys/auth_groups`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant1/.sys/auth_groups`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["group3"]];
+                    [["group4"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT Sid
+                    FROM `Root/Tenant2/.sys/auth_groups`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
+        }
     }
 
     Y_UNIT_TEST(AuthGroups_ResultOrder) {
@@ -2801,11 +3780,13 @@ Y_UNIT_TEST_SUITE(SystemView) {
         env.GetClient().CreateGroup("/Root", "group2");
         env.GetClient().CreateGroup("/Root/Tenant1", "group3");
         env.GetClient().CreateGroup("/Root/Tenant1", "group4");
+        env.GetClient().CreateGroup("/Root/Tenant2", "group5");
 
         env.GetClient().AddGroupMembership("/Root", "group1", "user1rootadmin");
         env.GetClient().AddGroupMembership("/Root", "group2", "user2");
         env.GetClient().AddGroupMembership("/Root/Tenant1", "group3", "user3");
         env.GetClient().AddGroupMembership("/Root/Tenant1", "group4", "user4");
+        env.GetClient().AddGroupMembership("/Root/Tenant2", "group5", "user5");
 
         { // anonymous login doesn't give administrative access as `AdministrationAllowedSIDs` isn't empty
             auto driverConfig = TDriverConfig()
@@ -2813,12 +3794,32 @@ Y_UNIT_TEST_SUITE(SystemView) {
             auto driver = TDriver(driverConfig);
             TTableClient client(driver);
 
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_group_members`
-            )").GetValueSync();
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/.sys/auth_group_members`
+                )").GetValueSync();
 
-            CheckAuthAdministratorAccessIsRequired(it);
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/Tenant1/.sys/auth_group_members`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/Tenant2/.sys/auth_group_members`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
         }
 
         { // user1rootadmin is /Root admin
@@ -2856,6 +3857,18 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 ])";
                 NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
             }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/Tenant2/.sys/auth_group_members`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["group5"];["user5"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
         }
 
         { // user2 isn't /Root admin
@@ -2885,10 +3898,58 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
                 CheckAuthAdministratorAccessIsRequired(it);
             }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/Tenant2/.sys/auth_group_members`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
         }
 
-        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
-        // and test tenant user and tenant admin
+        { // user6tenant1admin is /Root/Tenant1 admin
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                    .User = "user6tenant1admin",
+                    .Password = "password6",
+                }));
+            auto driver = TDriver(driverConfig);
+            TTableClient client(driver);
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/.sys/auth_group_members`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/Tenant1/.sys/auth_group_members`
+                )").GetValueSync();
+
+                auto expected = R"([
+                    [["group3"];["user3"]];
+                    [["group4"];["user4"]];
+                ])";
+                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+            }
+
+            {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    SELECT *
+                    FROM `Root/Tenant2/.sys/auth_group_members`
+                )").GetValueSync();
+
+                CheckAuthAdministratorAccessIsRequired(it);
+            }
+        }
     }
 
     Y_UNIT_TEST(AuthGroupMembers_ResultOrder) {
@@ -2923,7 +3984,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }) {
             env.GetClient().AddGroupMembership("/Root", membership.first, membership.second);
         }
-        
+
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT *
             FROM `Root/.sys/auth_group_members`
@@ -2973,7 +4034,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }) {
             env.GetClient().AddGroupMembership("/Root", membership.first, membership.second);
         }
-        
+
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
@@ -3296,7 +4357,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 )").GetValueSync();
 
                 auto expected = R"([
-                    [["/Root/Tenant1"];["root@builtin"]];
+                    [["/Root/Tenant1"];["user6tenant1admin"]];
                     [["/Root/Tenant1/Dir3"];["user3"]];
                     [["/Root/Tenant1/Dir4"];["root@builtin"]];
                     [["/Root/Tenant1/Table1"];["root@builtin"]]
@@ -3335,9 +4396,6 @@ Y_UNIT_TEST_SUITE(SystemView) {
             ])";
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
-
-        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
-        // and test tenant user and tenant admin
     }
 
     Y_UNIT_TEST(AuthOwners_ResultOrder) {
@@ -3357,7 +4415,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }) {
             env.GetClient().MkDir("/Root", path);
         }
-        
+
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT *
             FROM `Root/.sys/auth_owners`
@@ -3414,7 +4472,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         env.GetClient().ModifyOwner("/Root/Dir1", "SubDir0", "user0");
         env.GetClient().ModifyOwner("/Root/Dir1", "SubDir1", "user1");
         env.GetClient().ModifyOwner("/Root/Dir1", "SubDir2", "user2");
-        
+
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *
@@ -3736,7 +4794,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "group1");
             env.GetClient().ModifyACL("/Root/Tenant2", "Dir4", acl.SerializeAsString());
         }
-        
+
         // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant2/Dir4").DebugString() << Endl;
 
         {
@@ -3799,7 +4857,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         env.GetClient().MkDir("/Root", "Dir2");
         env.GetClient().MkDir("/Root/Tenant1", "Dir3");
         env.GetClient().MkDir("/Root/Tenant1", "Dir4");
-        
+
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1rootadmin");
@@ -3829,8 +4887,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
             )").GetValueSync();
 
             auto expected = R"([
+                [["/Root"];["ydb.generic.full"];["root@builtin"]];
                 [["/Root"];["ydb.generic.use"];["user1rootadmin"]];
                 [["/Root"];["ydb.generic.use"];["user2"]];
+                [["/Root"];["ydb.generic.use"];["user6tenant1admin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
@@ -3860,8 +4920,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 )").GetValueSync();
 
                 auto expected = R"([
+                    [["/Root"];["ydb.generic.full"];["root@builtin"]];
                     [["/Root"];["ydb.generic.use"];["user1rootadmin"]];
                     [["/Root"];["ydb.generic.use"];["user2"]];
+                    [["/Root"];["ydb.generic.use"];["user6tenant1admin"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
                     [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
@@ -3908,8 +4970,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
             )").GetValueSync();
 
             auto expected = R"([
+                [["/Root"];["ydb.generic.full"];["root@builtin"]];
                 [["/Root"];["ydb.generic.use"];["user1rootadmin"]];
                 [["/Root"];["ydb.generic.use"];["user2"]];
+                [["/Root"];["ydb.generic.use"];["user6tenant1admin"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
                 [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
@@ -3920,9 +4984,6 @@ Y_UNIT_TEST_SUITE(SystemView) {
             ])";
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
-
-        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
-        // and test tenant user and tenant admin
     }
 
     Y_UNIT_TEST(AuthPermissions_ResultOrder) {
@@ -3947,7 +5008,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }) {
             env.GetClient().MkDir("/Root", dir);
         }
-        
+
         for (auto acl : TVector<std::tuple<TString, TString, TString, NACLib::EAccessRights>>{
             {"/", "Root", "user1", NACLib::SelectRow},
             {"/", "Root", "user1", NACLib::EraseRow},
@@ -4016,7 +5077,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user2");
             env.GetClient().ModifyACL("/Root/Tenant1", "Dir2", acl.SerializeAsString());
         }
-        
+
         // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant2/Dir4").DebugString() << Endl;
 
         {
@@ -4087,7 +5148,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::EraseRow, "user2");
             env.GetClient().ModifyACL("/Root/Dir1", "SubDir1", acl.SerializeAsString());
         }
-        
+
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT *

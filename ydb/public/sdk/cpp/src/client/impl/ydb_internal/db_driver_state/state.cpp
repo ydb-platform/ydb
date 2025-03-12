@@ -1,8 +1,8 @@
 #define INCLUDE_YDB_INTERNAL_H
 #include "state.h"
 
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
-#include <src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
 
@@ -18,7 +18,7 @@ namespace {
     }
 }
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 constexpr int PESSIMIZATION_DISCOVERY_THRESHOLD = 50; // percent of endpoints pessimized by transport error to start recheck
 constexpr TDuration ENDPOINT_UPDATE_PERIOD = TDuration::Minutes(1); // period to perform endpoints update in "normal" case

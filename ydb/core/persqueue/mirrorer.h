@@ -11,7 +11,7 @@
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
 

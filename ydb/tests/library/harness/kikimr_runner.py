@@ -89,13 +89,17 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         )
 
         if configurator.use_log_files:
-            self.__log_file = tempfile.NamedTemporaryFile(dir=self.__working_dir, prefix="logfile_", suffix=".log", delete=False)
+            # use NamedTemporaryFile only as a unique name generator
+            log_file = tempfile.NamedTemporaryFile(dir=self.__working_dir, prefix="logfile_", suffix=".log", delete=False)
+            self.__log_file_name = log_file.name
+            log_file.close()
             kwargs = {
                 "stdout_file": os.path.join(self.__working_dir, "stdout"),
-                "stderr_file": os.path.join(self.__working_dir, "stderr")
+                "stderr_file": os.path.join(self.__working_dir, "stderr"),
+                "aux_file": self.__log_file_name,
                 }
         else:
-            self.__log_file = None
+            self.__log_file_name = None
             kwargs = {
                 "stdout_file": "/dev/stdout",
                 "stderr_file": "/dev/stderr"
@@ -168,9 +172,9 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--node-kind=%s" % self.__configurator.node_kind
             )
 
-        if self.__log_file is not None:
+        if self.__log_file_name is not None:
             command.append(
-                "--log-file-name=%s" % self.__log_file.name,
+                "--log-file-name=%s" % self.__log_file_name,
             )
 
         command.extend(
@@ -289,7 +293,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
     def server(self):
         return self.__server
 
-    def __call_kikimr_new_cli(self, cmd, connect_to_server=True):
+    def __call_kikimr_new_cli(self, cmd, connect_to_server=True, token=None):
         server = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
         binary_path = self.__configurator.get_binary_path(0)
         full_command = [binary_path]
@@ -297,9 +301,15 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             full_command += ["--server={server}".format(server=server)]
         full_command += cmd
 
+        env = None
+        token = token or self.__configurator.default_clusteradmin
+        if token is not None:
+            env = os.environ.copy()
+            env['YDB_TOKEN'] = token
+
         logger.debug("Executing command = {}".format(full_command))
         try:
-            return yatest.common.execute(full_command)
+            return yatest.common.execute(full_command, env=env)
         except yatest.common.ExecutionError as e:
             logger.exception("KiKiMR command '{cmd}' failed with error: {e}\n\tstdout: {out}\n\tstderr: {err}".format(
                 cmd=" ".join(str(x) for x in full_command),
@@ -366,7 +376,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         logger.info("Cluster started and initialized")
 
         if bs_needed:
-            self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"))
+            self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"), token=self.__configurator.default_clusteradmin)
 
     def __run_node(self, node_id):
         """

@@ -1,8 +1,8 @@
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 const Ydb::Type& TProtoAccessor::GetProto(const TType& type) {
     return type.GetProto();

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb-cpp-sdk/library/retry/retry_policy.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/retry/retry_policy.h>
 #include "utils.h"
 
-#include <src/library/retry/protos/retry_options.pb.h>
+#include <ydb/public/sdk/cpp/src/library/retry/protos/retry_options.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/typetraits.h>

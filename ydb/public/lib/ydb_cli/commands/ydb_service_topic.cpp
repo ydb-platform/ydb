@@ -8,7 +8,7 @@
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_write.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/generic/set.h>
 #include <util/stream/str.h>
@@ -881,6 +881,10 @@ namespace NYdb::NConsoleClient {
         }
 
         settings.AppendTopics(std::move(readSettings));
+
+        // This check was added for the static analyzer.
+        Y_ABORT_UNLESS(!settings.EventHandlers_.DataReceivedHandler_);
+
         return settings;
     }
 
@@ -1024,6 +1028,9 @@ namespace NYdb::NConsoleClient {
 
         settings.MessageGroupId(*MessageGroupId_);
         settings.ProducerId(*MessageGroupId_);
+
+        // This check was added for the static analyzer.
+        Y_ABORT_UNLESS(!settings.EventHandlers_.AcksHandler_);
 
         return settings;
     }

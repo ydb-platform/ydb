@@ -3087,6 +3087,8 @@ protected:
         StateInitImpl(ev, SelfId());
     }
 
+    using TTabletExecutedFlat::Enqueue;
+
     void Enqueue(STFUNC_SIG) override {
         ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInit unhandled event type: " << ev->GetTypeRewrite()
                            << " event: " << ev->ToString());

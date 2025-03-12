@@ -1,4 +1,4 @@
-#include <src/client/impl/ydb_endpoints/endpoints.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_endpoints/endpoints.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>

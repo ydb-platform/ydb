@@ -10,7 +10,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/core/ydb_convert/table_profiles.h>
 #include <ydb/library/accessor/accessor.h>
@@ -190,8 +190,6 @@ public:
 public:
     virtual TString GetDatabase() = 0;
     virtual TString GetDatabaseId() = 0;
-    virtual bool GetDomainLoginOnly() = 0;
-    virtual TMaybe<TString> GetDomainName() = 0;
 
     /* Scheme */
     virtual NThreading::TFuture<TKqpTableProfilesResult> GetTableProfiles() = 0;

@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/fwd.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fwd.h>
 
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <library/cpp/threading/future/future.h>
 
@@ -18,7 +18,7 @@ class Operation;
 } // namespace Operations
 } // namespace Ydb
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class TOperation {
 public:

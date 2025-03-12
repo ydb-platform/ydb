@@ -181,6 +181,7 @@ class TJsonNodes : public TViewerPipeClient {
     ui32 SpaceUsageProblem = 90; // %
     bool OffloadMerge = true;
     size_t OffloadMergeAttempts = 2;
+    size_t OffloadMergeBatchSize = 200;
 
     using TGroupSortKey = std::variant<TString, ui64, float, int>;
 
@@ -206,7 +207,7 @@ class TJsonNodes : public TViewerPipeClient {
         bool HasDisks = false;
         bool GotDatabaseFromDatabaseBoardInfo = false;
         bool GotDatabaseFromResourceBoardInfo = false;
-        int UptimeSeconds = 0;
+        std::optional<int> UptimeSeconds = 0;
         ui32 Connections = 0;
         ui64 SendThroughput = 0;
         ui64 ReceiveThroughput = 0;
@@ -460,11 +461,19 @@ class TJsonNodes : public TViewerPipeClient {
             return TInstant::MilliSeconds(SystemState.GetDisconnectTime());
         }
 
-        int GetUptimeSeconds(TInstant now) const {
+        std::optional<int> GetUptimeSeconds(TInstant now) const {
             if (Disconnected) {
-                return static_cast<int>(GetDisconnectTime().Seconds()) - static_cast<int>(now.Seconds()); // negative for disconnected nodes
+                if (SystemState.HasDisconnectTime()) {
+                    return static_cast<int>(GetDisconnectTime().Seconds()) - static_cast<int>(now.Seconds()); // negative for disconnected nodes
+                } else {
+                    return std::nullopt;
+                }
             } else {
-                return static_cast<int>(now.Seconds()) - static_cast<int>(GetStartTime().Seconds());
+                if (SystemState.HasStartTime()) {
+                    return static_cast<int>(now.Seconds()) - static_cast<int>(GetStartTime().Seconds());
+                } else {
+                    return std::nullopt;
+                }
             }
         }
 
@@ -538,38 +547,41 @@ class TJsonNodes : public TViewerPipeClient {
         }
 
         TString GetUptimeForGroup() const {
-            if (!Disconnected && UptimeSeconds >= 0) {
-                if (UptimeSeconds < 60 * 10) {
-                    return "up <10m";
-                }
-                if (UptimeSeconds < 60 * 60) {
-                    return "up <1h";
-                }
-                if (UptimeSeconds < 60 * 60 * 24) {
-                    return "up <24h";
-                }
-                if (UptimeSeconds < 60 * 60 * 24 * 7) {
-                    return "up 24h+";
-                }
-                return "up 1 week+";
-            } else {
-                if (SystemState.HasDisconnectTime()) {
-                    if (UptimeSeconds > -60 * 10) {
+            if (UptimeSeconds) {
+                if (*UptimeSeconds >= 0) {
+                    if (*UptimeSeconds < 60 * 10) {
+                        return "up <10m";
+                    }
+                    if (*UptimeSeconds < 60 * 60) {
+                        return "up <1h";
+                    }
+                    if (*UptimeSeconds < 60 * 60 * 24) {
+                        return "up <24h";
+                    }
+                    if (*UptimeSeconds < 60 * 60 * 24 * 7) {
+                        return "up 24h+";
+                    }
+                    return "up 1 week+";
+                } else {
+                    if (*UptimeSeconds > -60 * 10) {
                         return "down <10m";
                     }
-                    if (UptimeSeconds > -60 * 60) {
+                    if (*UptimeSeconds > -60 * 60) {
                         return "down <1h";
                     }
-                    if (UptimeSeconds > -60 * 60 * 24) {
+                    if (*UptimeSeconds > -60 * 60 * 24) {
                         return "down <24h";
                     }
-                    if (UptimeSeconds > -60 * 60 * 24 * 7) {
+                    if (*UptimeSeconds > -60 * 60 * 24 * 7) {
                         return "down 24h+";
                     }
                     return "down 1 week+";
-                } else {
-                    return "disconnected";
                 }
+            }
+            if (Disconnected) {
+                return "disconnected";
+            } else {
+                return "unknown";
             }
         }
 
@@ -682,7 +694,7 @@ class TJsonNodes : public TViewerPipeClient {
                 case ENodeFields::Missing:
                     return MissingDisks;
                 case ENodeFields::Uptime:
-                    return UptimeSeconds;
+                    return UptimeSeconds.value_or(0);
                 case ENodeFields::SystemState:
                     return static_cast<int>(GetOverall());
                 case ENodeFields::ConnectStatus:
@@ -737,6 +749,8 @@ class TJsonNodes : public TViewerPipeClient {
     std::vector<TNodeGroup> NodeGroups;
     std::unordered_map<TNodeId, TNode*> NodesByNodeId;
     std::unordered_map<TNodeId, TNodeBatch> NodeBatches;
+    std::vector<TNodeBatch> OriginalNodeBatches;
+    bool DumpOriginalNodeBatches = false;
 
     TFieldsType FieldsRequired;
     TFieldsType FieldsAvailable;
@@ -937,10 +951,15 @@ public:
             FilterGroup = params.Get("filter_group");
             FilterGroupBy = ParseENodeFields(params.Get("filter_group_by"));
             FieldsRequired.set(+FilterGroupBy);
+            if (FilterGroupBy == ENodeFields::Uptime) {
+                FieldsRequired.set(+ENodeFields::DisconnectTime);
+            }
         }
 
-        OffloadMerge = FromStringWithDefault<bool>(params.Get("offload_merge"), OffloadMerge);
-        OffloadMergeAttempts = FromStringWithDefault<bool>(params.Get("offload_merge_attempts"), OffloadMergeAttempts);
+        OffloadMerge = FromStringWithDefault(params.Get("offload_merge"), OffloadMerge);
+        OffloadMergeAttempts = FromStringWithDefault(params.Get("offload_merge_attempts"), OffloadMergeAttempts);
+        OffloadMergeBatchSize = FromStringWithDefault(params.Get("offload_merge_batch_size"), OffloadMergeBatchSize);
+        DumpOriginalNodeBatches = FromStringWithDefault(params.Get("dump_original_node_batches"), DumpOriginalNodeBatches);
         Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
         TString filterStoragePool = params.Get("pool");
         if (filterStoragePool.empty()) {
@@ -1034,6 +1053,9 @@ public:
             NeedGroup = true;
             GroupBy = ParseENodeFields(group);
             FieldsRequired.set(+GroupBy);
+            if (GroupBy == ENodeFields::Uptime) {
+                FieldsRequired.set(+ENodeFields::DisconnectTime);
+            }
             NeedSort = false;
             NeedLimit = false;
         }
@@ -1060,6 +1082,9 @@ public:
             auto request = std::make_unique<TEvWhiteboard::TEvNodeStateRequest>();
             request->Record.AddFieldsRequired(-1);
             NodeStateResponse = MakeWhiteboardRequest(TActivationContext::ActorSystem()->NodeId, request.release());
+        }
+        if (!FilterDatabase && OffloadMerge && FieldsNeeded(FieldsSystemState)) {
+            FieldsRequired.set(+ENodeFields::SubDomainKey);
         }
         if (!FilterStoragePools.empty() || !FilterGroupIds.empty()) {
             FilterDatabase = false; // we disable database filter if we're filtering by pool or group
@@ -1094,7 +1119,7 @@ public:
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto* domain = domains->GetDomain();
         DomainPath = "/" + domain->Name;
-        if (ProblemNodesOnly || GroupBy == ENodeFields::Uptime) {
+        if (ProblemNodesOnly || FieldsRequired.test(+ENodeFields::Uptime) || FieldsRequired.test(+ENodeFields::DisconnectTime)) {
             FieldsRequired.set(+ENodeFields::SystemState);
             TTabletId rootHiveId = domains->GetHive();
             HivesToAsk.push_back(rootHiveId);
@@ -1294,7 +1319,7 @@ public:
             if (UptimeSeconds > 0 && FieldsAvailable.test(+ENodeFields::SystemState)) {
                 TNodeView nodeView;
                 for (TNode* node : NodeView) {
-                    if (node->UptimeSeconds < UptimeSeconds) {
+                    if (node->UptimeSeconds.value_or(0) < UptimeSeconds) {
                         nodeView.push_back(node);
                     }
                 }
@@ -1446,7 +1471,7 @@ public:
                     NeedSort = false;
                     break;
                 case ENodeFields::Uptime:
-                    SortCollection(NodeView, [](const TNode* node) { return node->UptimeSeconds; }, ReverseSort);
+                    SortCollection(NodeView, [](const TNode* node) { return node->UptimeSeconds.value_or(0); }, ReverseSort);
                     NeedSort = false;
                     break;
                 case ENodeFields::Memory:
@@ -1554,8 +1579,6 @@ public:
         ApplyLimit();
     }
 
-    static constexpr size_t BATCH_SIZE = 200;
-
     void BuildCandidates(TNodeBatch& batch, std::vector<TNode*>& candidates) {
         auto itCandidate = candidates.begin();
         for (; itCandidate != candidates.end() && batch.NodesToAskFor.size() < OffloadMergeAttempts; ++itCandidate) {
@@ -1574,9 +1597,9 @@ public:
         std::sort(candidates.begin(), candidates.end(), [](TNode* a, TNode* b) {
             return a->GetCandidateScore() > b->GetCandidateScore();
         });
-        while (nodeBatch.NodesToAskAbout.size() > BATCH_SIZE) {
+        while (nodeBatch.NodesToAskAbout.size() > OffloadMergeBatchSize) {
             TNodeBatch newBatch;
-            size_t splitSize = std::min(BATCH_SIZE, nodeBatch.NodesToAskAbout.size() / 2);
+            size_t splitSize = std::min(OffloadMergeBatchSize, nodeBatch.NodesToAskAbout.size() / 2);
             newBatch.NodesToAskAbout.reserve(splitSize);
             for (size_t i = 0; i < splitSize; ++i) {
                 newBatch.NodesToAskAbout.push_back(nodeBatch.NodesToAskAbout.back());
@@ -2088,6 +2111,9 @@ public:
                 FieldsRequired.set(+ENodeFields::SystemState);
             }
             std::vector<TNodeBatch> batches = BatchNodes(NodeView);
+            if (DumpOriginalNodeBatches) {
+                OriginalNodeBatches = batches;
+            }
             if (FilterPeerRole == EPeerRole::Static || FilterPeerRole == EPeerRole::Other) {
                 for (TNodeBatch& batch : batches) {
                     batch.FieldsRequested.set(+ENodeFields::Peers);
@@ -3084,6 +3110,16 @@ public:
         AddEvent("ReplyAndPassAway");
         ApplyEverything();
         NKikimrViewer::TNodesInfo json;
+        for (const auto& batch : OriginalNodeBatches) {
+            auto* jsonBatch = json.AddOriginalNodeBatches();
+            for (const auto& node : batch.NodesToAskFor) {
+                jsonBatch->AddNodesToAskFor(node->GetNodeId());
+            }
+            for (const auto& node : batch.NodesToAskAbout) {
+                jsonBatch->AddNodesToAskAbout(node->GetNodeId());
+            }
+            jsonBatch->SetHasStaticNodes(batch.HasStaticNodes);
+        }
         json.SetVersion(Viewer->GetCapabilityVersion("/viewer/nodes"));
         json.SetFieldsAvailable(FieldsAvailable.to_string());
         json.SetFieldsRequired(FieldsRequired.to_string());
@@ -3126,7 +3162,7 @@ public:
                     jsonNode.SetDatabase(node->Database);
                 }
                 if (node->UptimeSeconds) {
-                    jsonNode.SetUptimeSeconds(node->UptimeSeconds);
+                    jsonNode.SetUptimeSeconds(*(node->UptimeSeconds));
                 }
                 if (node->Disconnected) {
                     jsonNode.SetDisconnected(node->Disconnected);

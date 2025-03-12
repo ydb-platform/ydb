@@ -420,6 +420,7 @@ public:
                 return false;
             }
             const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false);
+            const auto enableDynamicStoreRead = State_->Configuration->EnableDynamicStoreReadInDQ.Get().GetOrElse(false);
             ui64 chunksCount = 0ull;
             for (auto section: maybeRead.Cast().Input()) {
                 if (HasSettingsExcept(maybeRead.Cast().Input().Item(0).Settings().Ref(), DqReadSupportedSettings) || HasNonEmptyKeyFilter(maybeRead.Cast().Input().Item(0))) {
@@ -466,6 +467,9 @@ public:
                             return false;
                         } else if (tableInfo->Meta->IsDynamic && !canUseYtPartitioningApi) {
                             AddMessage(ctx, "dynamic table", skipIssues, State_->PassiveExecution);
+                            return false;
+                        } else if (tableInfo->Meta->IsDynamic && tableInfo->Meta->Attrs.contains("enable_dynamic_store_read") && !enableDynamicStoreRead) {
+                            AddMessage(ctx, "dynamic store read", skipIssues, State_->PassiveExecution);
                             return false;
                         }
 
@@ -587,6 +591,7 @@ public:
                 auto& groupIdPathInfo = clusterToGroups[cluster];
 
                 const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false);
+                const auto enableDynamicStoreRead = State_->Configuration->EnableDynamicStoreReadInDQ.Get().GetOrElse(false);
 
                 auto input = maybeRead.Cast().Input();
                 for (auto section: input) {
@@ -602,6 +607,9 @@ public:
                             return Nothing();
                         } else if (tableInfo->Meta->IsDynamic && !canUseYtPartitioningApi) {
                             AddErrorWrap(ctx, node_->Pos(), "dynamic table");
+                            return Nothing();
+                        } else if (tableInfo->Meta->IsDynamic && tableInfo->Meta->Attrs.contains("enable_dynamic_store_read") && !enableDynamicStoreRead) {
+                            AddErrorWrap(ctx, node_->Pos(), "dynamic store read");
                             return Nothing();
                         } else { //
                             if (tableInfo->Meta->Attrs.Value("erasure_codec", "none") != "none") {

@@ -45,7 +45,7 @@
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
-#include <ydb/library/yql/providers/solomon/async_io/dq_solomon_write_actor.h>
+#include <ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 
 
@@ -88,14 +88,21 @@ void Init(
     const auto clientCounters = yqCounters->GetSubgroup("subsystem", "ClientMetrics");
 
     if (protoConfig.GetControlPlaneStorage().GetEnabled()) {
+        const auto counters = yqCounters->GetSubgroup("subsystem", "ControlPlaneStorage");
         auto controlPlaneStorage = protoConfig.GetControlPlaneStorage().GetUseInMemory()
-            ? NFq::CreateInMemoryControlPlaneStorageServiceActor(protoConfig.GetControlPlaneStorage())
+            ? NFq::CreateInMemoryControlPlaneStorageServiceActor(
+                protoConfig.GetControlPlaneStorage(),
+                protoConfig.GetGateways().GetS3(),
+                protoConfig.GetCommon(),
+                protoConfig.GetCompute(),
+                counters,
+                tenant)
             : NFq::CreateYdbControlPlaneStorageServiceActor(
                 protoConfig.GetControlPlaneStorage(),
                 protoConfig.GetGateways().GetS3(),
                 protoConfig.GetCommon(),
                 protoConfig.GetCompute(),
-                yqCounters->GetSubgroup("subsystem", "ControlPlaneStorage"),
+                counters,
                 yqSharedResources,
                 NKikimr::CreateYdbCredentialsProviderFactory,
                 tenant);

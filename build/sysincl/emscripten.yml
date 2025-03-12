@@ -108,6 +108,9 @@
     - contrib/restricted/emscripten/system/lib/libc/musl/src/internal/syscall.h
     - contrib/restricted/emscripten/system/lib/libc/musl/arch/emscripten/bits/syscall.h
 
+  - syscall_arch.h:
+    - contrib/restricted/emscripten/system/lib/libc/musl/arch/emscripten/syscall_arch.h
+
   - inttypes.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/inttypes.h
   - stddef.h:               contrib/restricted/emscripten/system/lib/libc/musl/include/stddef.h
   - stdint.h:               contrib/restricted/emscripten/system/lib/libc/musl/include/stdint.h

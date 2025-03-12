@@ -14,11 +14,11 @@ public:
         size_t MinUpperCaseCount = 0;
         size_t MinNumbersCount = 0;
         size_t MinSpecialCharsCount = 0;
-        TString SpecialChars = VALID_SPECIAL_CHARS;
+        TString SpecialChars;
         bool CanContainUsername = false;
     };
 
-    static const TString VALID_SPECIAL_CHARS;
+    static const std::unordered_set<char> VALID_SPECIAL_CHARS;
 
     size_t MinLength = 0;
     size_t MinLowerCaseCount = 0;

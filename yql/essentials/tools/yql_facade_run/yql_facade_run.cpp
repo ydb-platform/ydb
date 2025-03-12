@@ -36,6 +36,7 @@
 #include <yql/essentials/utils/failure_injector/failure_injector.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
 #include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/mem_limit.h>
 #include <yql/essentials/protos/yql_mount.pb.h>
 #include <yql/essentials/protos/pg_ext.pb.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
@@ -67,10 +68,6 @@
 #include <util/generic/ptr.h>
 #include <util/generic/yexception.h>
 #include <util/datetime/base.h>
-
-#ifdef __unix__
-#include <sys/resource.h>
-#endif
 
 namespace {
 
@@ -359,25 +356,7 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
         });
     opts.AddLongOption("full-expr", "Avoid buffering of expr/plan").NoArgument().SetFlag(&FullExpr);
     opts.AddLongOption("mem-limit", "Set memory limit in megabytes")
-        .Handler1T<ui32>(0, [](ui32 memLimit) {
-            if (memLimit) {
-#ifdef __unix__
-                auto memLimitBytes = memLimit * 1024 * 1024;
-
-                struct rlimit rl;
-                if (getrlimit(RLIMIT_AS, &rl)) {
-                    throw TSystemError() << "Cannot getrlimit(RLIMIT_AS)";
-                }
-
-                rl.rlim_cur = memLimitBytes;
-                if (setrlimit(RLIMIT_AS, &rl)) {
-                    throw TSystemError() << "Cannot setrlimit(RLIMIT_AS) to " << memLimitBytes << " bytes";
-                }
-#else
-                throw yexception() << "Memory limit can not be set on this platfrom";
-#endif
-            }
-        });
+        .Handler1T<ui32>(0, SetAddressSpaceLimit);
 
     opts.AddLongOption("validate-mode", "Validate udf mode, available values: " + NUdf::ValidateModeAvailables())
         .DefaultValue(NUdf::ValidateModeAsStr(NUdf::EValidateMode::Greedy))

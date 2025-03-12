@@ -15,6 +15,9 @@
 #include <unordered_set>
 
 namespace NYql {
+
+static const char CheckMissingWorldOptName[] = "CheckMissingWorld";
+
 namespace {
 
 class TCommonOptTransformer final : public TSyncTransformerBase {
@@ -44,6 +47,7 @@ private:
     THashSet<TIssue> AddedErrors;
     TTypeAnnotationContext* TypeCtx;
     const bool Final;
+    bool CheckMissingWorld = false;
 };
 
 }
@@ -59,6 +63,10 @@ TAutoPtr<IGraphTransformer> CreateCommonOptFinalTransformer(TTypeAnnotationConte
 IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     IGraphTransformer::TStatus status = IGraphTransformer::TStatus::Ok;
     output = std::move(input);
+
+    if (IsOptimizerEnabled<CheckMissingWorldOptName>(*TypeCtx) && !IsOptimizerDisabled<CheckMissingWorldOptName>(*TypeCtx)) {
+        CheckMissingWorld = true;
+    }
 
     if (Final) {
         return DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance().FinalCallables, FinalProcessedNodes, true);
@@ -91,6 +99,7 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(TExprNode::TPtr in
 }
 
 void TCommonOptTransformer::Rewind() {
+    CheckMissingWorld = false;
     AddedErrors.clear();
     ErrorProcessedNodes.clear();
     FinalProcessedNodes.clear();
@@ -150,7 +159,7 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(
         defaultOpt = defaultIt->second;
     }
 
-    return OptimizeExpr(input, output, [&callables, &optCtx, defaultOpt](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+    return OptimizeExpr(input, output, [&callables, &optCtx, defaultOpt, checkMissingWorld = CheckMissingWorld](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         const auto rule = callables.find(node->Content());
         TExprNode::TPtr result = node;
         if (rule != callables.cend()) {
@@ -159,6 +168,12 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(
 
         if (defaultOpt && result == node) {
             result = defaultOpt(node, ctx, optCtx);
+        }
+
+        if (checkMissingWorld && result && result != node && !node->GetTypeAnn()->ReturnsWorld()) {
+            if (KeepWorld(result, *node, ctx, *optCtx.Types) != result) {
+                throw yexception() << "Missing world over " << result->Dump();
+            }
         }
 
         return result;

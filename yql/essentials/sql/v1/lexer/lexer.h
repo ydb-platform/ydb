@@ -11,12 +11,6 @@ struct TLexers {
     NSQLTranslation::TLexerFactoryPtr Antlr4Ansi;
 };
 
-//FIXME remove
-TLexers MakeAllLexers();
-
-//FIXME remove
-NSQLTranslation::ILexer::TPtr MakeLexer(bool ansi, bool antlr4);
-
 NSQLTranslation::ILexer::TPtr MakeLexer(const TLexers& lexers, bool ansi, bool antlr4);
 
 // "Probably" because YQL keyword can be an identifier

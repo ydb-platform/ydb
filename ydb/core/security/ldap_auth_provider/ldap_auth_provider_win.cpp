@@ -151,7 +151,7 @@ bool IsRetryableError(int error) {
         case LDAP_CONNECT_ERROR:
         case LDAP_BUSY:
         case LDAP_UNAVAILABLE:
-        case LDAP_ADMINLIMIT_EXCEEDED:
+        case LDAP_ADMIN_LIMIT_EXCEEDED:
             return true;
     }
     return false;

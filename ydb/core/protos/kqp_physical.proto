@@ -62,7 +62,7 @@ message TKqpPhyColumnId {
 
 message TKqpPhyColumnTypeParam {
     oneof TypeParam {
-        string PgTypeName = 1;    
+        string PgTypeName = 1;
         Ydb.DecimalType Decimal = 2;
     }
 }
@@ -211,6 +211,8 @@ message TKqpPhyOpReadOlapRanges {
     EReadType ReadType = 13;
 
     repeated string GroupByColumnNames = 14;
+    // If set, only data from the specified tablet will be processed
+    optional uint64 TabletId = 15;
 }
 
 message TKqpPhyOpReadRanges {
@@ -351,6 +353,7 @@ message TKqpReadRangesSource {
 message TKqpExternalSource {
     string Type = 1;
     google.protobuf.Any Settings = 2;
+    bool Embedded = 7;
 
     // Partitioning
     string TaskParamKey = 3;

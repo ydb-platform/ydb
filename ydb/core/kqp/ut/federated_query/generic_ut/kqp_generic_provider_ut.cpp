@@ -5,6 +5,9 @@
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/connector_client_mock.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/database_resolver_mock.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
+#include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb-cpp-sdk/client/query/query.h>
 #include <ydb-cpp-sdk/client/types/status_codes.h>
@@ -66,6 +69,11 @@ namespace NKikimr::NKqp {
         appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableConnector()->MutableEndpoint()->set_host("localhost");
         appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableConnector()->MutableEndpoint()->set_port(1234);
         appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableDefaultSettings()->Add(std::move(dateTimeFormat));
+        appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ClickHouse");
+        appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
+        appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("MySQL");
+        appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("Ydb");
         return appConfig;
     }
 
@@ -470,6 +478,40 @@ namespace NKikimr::NKqp {
 
         Y_UNIT_TEST(YdbFilterPushdown) {
             TestFilterPushdown(EProviderType::Ydb);
+        }
+
+        void TestFailsOnIncorrectScriptExecutionOperation(const TString& operationId, const TString& fetchToken) {
+            auto clientMock = std::make_shared<TConnectorClientMock>();
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(EProviderType::Ydb);
+            auto appConfig = CreateDefaultAppConfig();
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory);
+
+            // Create trash query
+            NYdbGrpc::TGRpcClientLow clientLow;
+
+            std::shared_ptr<grpc::Channel> channel;
+            channel = grpc::CreateChannel("localhost:" + ToString(kikimr->GetTestServer().GetGRpcServer().GetPort()), grpc::InsecureChannelCredentials());
+            {
+                std::unique_ptr<Ydb::Query::V1::QueryService::Stub> stub;
+                stub = Ydb::Query::V1::QueryService::NewStub(channel);
+                grpc::ClientContext context;
+                Ydb::Query::FetchScriptResultsRequest request;
+                request.set_operation_id(operationId);
+                request.set_fetch_token(fetchToken);
+                Ydb::Query::FetchScriptResultsResponse response;
+                grpc::Status st = stub->FetchScriptResults(&context, request, &response);
+                UNIT_ASSERT(st.ok());
+                UNIT_ASSERT_EQUAL_C(response.status(), Ydb::StatusIds::BAD_REQUEST, response);
+            }
+        }
+
+        Y_UNIT_TEST(TestFailsOnIncorrectScriptExecutionOperationId) {
+            TestFailsOnIncorrectScriptExecutionOperation("trash", "");
+        }
+
+        Y_UNIT_TEST(TestFailsOnIncorrectScriptExecutionFetchToken) {
+            TestFailsOnIncorrectScriptExecutionOperation("", "trash");
         }
     }
 }

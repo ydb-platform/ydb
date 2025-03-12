@@ -1,6 +1,6 @@
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/types/exceptions/exceptions.h>
-#include <ydb-cpp-sdk/type_switcher.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>

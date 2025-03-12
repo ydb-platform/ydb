@@ -3223,10 +3223,6 @@ ISqlFormatter::TPtr MakeSqlFormatter(const NSQLTranslationV1::TLexers& lexers,
     return ISqlFormatter::TPtr(new TSqlFormatter(lexers, parsers, settings));
 }
 
-ISqlFormatter::TPtr MakeSqlFormatter(const NSQLTranslation::TTranslationSettings& settings) {
-    return MakeSqlFormatter(NSQLTranslationV1::MakeAllLexers(), NSQLTranslationV1::MakeAllParsers(), settings);
-}
-
 TString MutateQuery(const NSQLTranslationV1::TLexers& lexers,
     const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
     auto parsedSettings = settings;

@@ -1,15 +1,15 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/iam/common/types.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/common/types.h>
 
-#include <src/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 #include <library/cpp/threading/future/future.h>
 
 #include <util/string/builder.h>
 #include <util/system/spinlock.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 constexpr TDuration BACKOFF_START = TDuration::MilliSeconds(50);
 constexpr TDuration BACKOFF_MAX = TDuration::Seconds(10);

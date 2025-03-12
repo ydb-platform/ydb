@@ -1,12 +1,12 @@
 #include "import.h"
 
 #include <util/stream/format.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/operation/operation.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb-cpp-sdk/client/query/client.h>
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
@@ -1368,11 +1368,7 @@ TStatus TImportFileClient::TImpl::GenerateCreateTableFromCsv(IInputStream& input
         auto& possibleTypeIt = possibleType.GetIterator();
         TString typeText = possibleTypeIt != possibleType.GetAvailableTypesEnd()
             && possibleType.GetHasNonNulls() ? possibleTypeIt->ToString() : "Text";
-        res << "    `" << header[i] << "` " << typeText;
-        if (!possibleType.GetHasNulls()) {
-            res << " NOT NULL";
-        }
-        res << ",";
+        res << "    `" << header[i] << "` " << typeText << ",";
         if (!possibleType.GetHasNonNulls()) {
             res << " -- No data in this column to infer type";
         }

@@ -20,6 +20,8 @@ struct TPeriodicExecutorOptions
     TDuration Splay;
     double Jitter = 0.0;
 
+    bool operator==(const TPeriodicExecutorOptions& other) const = default;
+
     //! Sets #Period and Applies set#DefaultJitter.
     static TPeriodicExecutorOptions WithJitter(TDuration period);
 };

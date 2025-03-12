@@ -1421,6 +1421,9 @@ void TReadSessionActor<UseMigrationProtocol>::SendReleaseSignal(TPartitionActorI
         result.mutable_stop_partition_session_request()->set_committed_offset(partition.Offset);
         if (DirectRead) {
             result.mutable_stop_partition_session_request()->set_last_direct_read_id(partition.LastDirectReadId);
+            ctx.Send(NPQ::MakePQDReadCacheServiceActorId(),
+                 new TEvPQProxy::TEvDirectReadDestroyPartitionSession(Session, partition.Partition.AssignId));
+
         }
     }
 

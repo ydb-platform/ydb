@@ -9,15 +9,6 @@
 
 namespace NKikimr::NOlap::NIndexes::NRequest {
 
-TString TNodeId::ToString() const {
-    return TStringBuilder() << "[" << ColumnId << "." << GenerationId << "." << NodeType << "]";
-}
-
-TNodeId TNodeId::Original(const ui32 columnId) {
-    AFL_VERIFY(columnId);
-    return TNodeId(columnId, Counter.Inc(), ENodeType::OriginalColumn);
-}
-
 std::shared_ptr<IRequestNode> IRequestNode::Copy() const {
     auto selfCopy = DoCopy();
     selfCopy->Parent = nullptr;
@@ -94,24 +85,24 @@ NJson::TJsonValue TPackAnd::DoSerializeToJson() const {
         auto& arrJson = result.InsertValue("equals", NJson::JSON_ARRAY);
         for (auto&& i : Equals) {
             auto& jsonCondition = arrJson.AppendValue(NJson::JSON_MAP);
-            jsonCondition.InsertValue(::ToString(i.first), i.second->ToString());
+            jsonCondition.InsertValue(i.first.DebugString(), i.second->ToString());
         }
     }
     {
         auto& arrJson = result.InsertValue("likes", NJson::JSON_ARRAY);
         for (auto&& i : Likes) {
             auto& jsonCondition = arrJson.AppendValue(NJson::JSON_MAP);
-            jsonCondition.InsertValue(::ToString(i.first), i.second.ToString());
+            jsonCondition.InsertValue(i.first.DebugString(), i.second.ToString());
         }
     }
     return result;
 }
 
-void TPackAnd::AddEqual(const ui32 columnId, const std::shared_ptr<arrow::Scalar>& value) {
+void TPackAnd::AddEqual(const TOriginalDataAddress& originalDataAddress, const std::shared_ptr<arrow::Scalar>& value) {
     AFL_VERIFY(value);
-    auto it = Equals.find(columnId);
+    auto it = Equals.find(originalDataAddress);
     if (it == Equals.end()) {
-        Equals.emplace(columnId, value);
+        Equals.emplace(originalDataAddress, value);
     } else if (it->second->Equals(*value)) {
         return;
     } else {
@@ -129,7 +120,7 @@ bool TOperationNode::DoCollapse() {
     }
     if (Operation == NYql::TKernelRequestBuilder::EBinaryOp::Equals && Children.size() == 2 && Children[1]->Is<TConstantNode>() &&
         Children[0]->Is<TOriginalColumn>()) {
-        Parent->Exchange(GetNodeId(), std::make_shared<TPackAnd>(Children[0]->As<TOriginalColumn>()->GetNodeId().GetColumnId(),
+        Parent->Exchange(GetNodeId(), std::make_shared<TPackAnd>(Children[0]->As<TOriginalColumn>()->GetNodeId().BuildOriginalDataAddress(),
                                           Children[1]->As<TConstantNode>()->GetConstant()));
         return true;
     }
@@ -150,7 +141,8 @@ bool TOperationNode::DoCollapse() {
         }
         AFL_VERIFY(op);
         TLikePart likePart(*op, TString((const char*)scalarString->value->data(), scalarString->value->size()));
-        Parent->Exchange(GetNodeId(), std::make_shared<TPackAnd>(Children[0]->As<TOriginalColumn>()->GetNodeId().GetColumnId(), likePart));
+        Parent->Exchange(
+            GetNodeId(), std::make_shared<TPackAnd>(Children[0]->As<TOriginalColumn>()->GetNodeId().BuildOriginalDataAddress(), likePart));
         return true;
     }
     if (Operation == NYql::TKernelRequestBuilder::EBinaryOp::And) {
@@ -218,6 +210,18 @@ bool TOperationNode::DoCollapse() {
     return false;
 }
 
+bool TKernelNode::DoCollapse() {
+    if (KernelName == "JsonValue" && Children.size() == 2 && Children[1]->Is<TConstantNode>() && Children[0]->Is<TOriginalColumn>()) {
+        auto scalar = Children[1]->As<TConstantNode>()->GetConstant();
+        AFL_VERIFY(scalar->type->id() == arrow::binary()->id() || scalar->type->id() == arrow::utf8()->id())("type", scalar->type->ToString());
+        auto scalarString = static_pointer_cast<arrow::BinaryScalar>(scalar);
+        const TString jsonPath((const char*)scalarString->value->data(), scalarString->value->size());
+        Parent->Exchange(GetNodeId(), std::make_shared<TOriginalColumn>(Children[0]->As<TOriginalColumn>()->GetNodeId().GetColumnId(), jsonPath));
+        return true;
+    }
+    return false;
+}
+
 bool TNormalForm::Add(const NArrow::NSSA::IResourceProcessor& processor, const TProgramContainer& program) {
     if (processor.GetProcessorType() == NArrow::NSSA::EProcessorType::Filter) {
         return true;
@@ -230,7 +234,8 @@ bool TNormalForm::Add(const NArrow::NSSA::IResourceProcessor& processor, const T
             if (it == Nodes.end()) {
                 it = NodesGlobal.find(arg.GetColumnId());
                 if (it == NodesGlobal.end()) {
-                    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "program_arg_is_missing")("program", program.DebugString());
+                    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "program_arg_is_missing")("program", program.DebugString())(
+                        "column_id", arg.GetColumnId());
                     return false;
                 }
                 data = it->second->Copy();
@@ -257,6 +262,10 @@ bool TNormalForm::Add(const NArrow::NSSA::IResourceProcessor& processor, const T
         if (!!calcProcessor->GetYqlOperationId()) {
             auto node = std::make_shared<TOperationNode>(
                 processor.GetOutputColumnIdOnce(), (NYql::TKernelRequestBuilder::EBinaryOp)*calcProcessor->GetYqlOperationId(), argNodes);
+            Nodes.emplace(processor.GetOutputColumnIdOnce(), node);
+            NodesGlobal.emplace(processor.GetOutputColumnIdOnce(), node);
+        } else if (calcProcessor->GetKernelLogic()) {
+            auto node = std::make_shared<TKernelNode>(processor.GetOutputColumnIdOnce(), calcProcessor->GetKernelLogic()->GetClassName(), argNodes);
             Nodes.emplace(processor.GetOutputColumnIdOnce(), node);
             NodesGlobal.emplace(processor.GetOutputColumnIdOnce(), node);
         }

@@ -336,7 +336,8 @@ namespace NActors {
             TlsThreadContext->LocalQueueContext.LocalQueueSize = LocalQueueSize.load(std::memory_order_relaxed);
         }
         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "local queue done; moving to common");
-        if (false && TlsThreadContext->UseRingQueue()) {
+
+        if (TlsThreadContext->UseRingQueue()) {
             return GetReadyActivationRingQueue(revolvingCounter);
         }
         return GetReadyActivationCommon(revolvingCounter);
@@ -346,7 +347,7 @@ namespace NActors {
         if (MaxLocalQueueSize) {
             EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "local queue");
             return GetReadyActivationLocalQueue(revolvingCounter);
-        } else if (false && TlsThreadContext->UseRingQueue()) {
+        } else if (TlsThreadContext->UseRingQueue()) {
             EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "ring queue");
             return GetReadyActivationRingQueue(revolvingCounter);
         } else {

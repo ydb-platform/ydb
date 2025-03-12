@@ -572,7 +572,7 @@ protected:
         auto *storageConfig = result.mutable_storage_config();
         for (auto &channel : desc.GetBoundChannels()) {
             auto *channelBind = storageConfig->add_channel();
-            channelBind->set_media(channel.GetStoragePoolName());
+            channelBind->set_media(channel.GetStoragePoolKind());
         }
         this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, TActivationContext::AsActorContext());
     }
@@ -645,7 +645,6 @@ public:
     }
 
     STFUNC(StateWork) {
-        Cerr << "TAlterVolumeRequest::StateWork; received event: " << ev->GetTypeName() << Endl;
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         default:
@@ -664,7 +663,7 @@ public:
         const NKikimrSchemeOp::TSolomonVolumeDescription &desc = request->ResultSet[0].SolomonVolumeInfo->Description;
         for (auto &channel : desc.GetBoundChannels()) {
             auto *channelBind = StorageConfig.add_channel();
-            channelBind->set_media(channel.GetStoragePoolName());
+            channelBind->set_media(channel.GetStoragePoolKind());
         }
         SendProposeRequest(TActivationContext::AsActorContext());
     }

@@ -11,8 +11,14 @@
 
 namespace NYql::NDq {
 
+enum class EStatusCompatibilityLevel {
+    Basic,
+    WithUnauthorized
+};
+
 Ydb::StatusIds::StatusCode DqStatusToYdbStatus(NYql::NDqProto::StatusIds::StatusCode statusCode);
-NYql::NDqProto::StatusIds::StatusCode YdbStatusToDqStatus(Ydb::StatusIds::StatusCode statusCode);
+NYql::NDqProto::StatusIds::StatusCode YdbStatusToDqStatus(Ydb::StatusIds::StatusCode statusCode, EStatusCompatibilityLevel compatibility = EStatusCompatibilityLevel::Basic);
+TMaybe<NYql::NDqProto::StatusIds::StatusCode> GetDqStatus(const TIssue& issue);
 
 struct TEvDq {
 
@@ -88,8 +94,8 @@ struct TChannelDataOOB {
         return Proto.GetData().GetRaw().size() + Payload.Size();
     }
 
-    ui32 RowCount() const {
-        return Proto.GetData().GetRows();
+    ui32 ChunkCount() const {
+        return Proto.GetData().GetChunks();
     }
 };
 

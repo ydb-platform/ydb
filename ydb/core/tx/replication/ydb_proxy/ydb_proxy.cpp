@@ -2,8 +2,8 @@
 #include "ydb_proxy.h"
 
 #include <ydb/core/protos/replication.pb.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -23,14 +23,6 @@ using namespace NYdb;
 using namespace NYdb::NScheme;
 using namespace NYdb::NTable;
 using namespace NYdb::NTopic;
-
-void TEvYdbProxy::TReadTopicResult::TMessage::Out(IOutputStream& out) const {
-    out << "{"
-        << " Offset: " << Offset
-        << " Data: " << Data.size() << "b"
-        << " Codec: " << Codec
-    << " }";
-}
 
 void TEvYdbProxy::TReadTopicResult::Out(IOutputStream& out) const {
     out << "{"
@@ -512,10 +504,6 @@ IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ss
     return new TYdbProxy(endpoint, database, ssl, credentials);
 }
 
-}
-
-Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::TEvYdbProxy::TReadTopicResult::TMessage, o, x) {
-    return x.Out(o);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::TEvYdbProxy::TReadTopicResult, o, x) {

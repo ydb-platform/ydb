@@ -74,9 +74,9 @@ public:
     }
 
     [[nodiscard]] TConclusionStatus Init(
-        const NArrow::NSSA::IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram);
-    [[nodiscard]] TConclusionStatus Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TOlapProgram& olapProgramProto);
-    [[nodiscard]] TConclusionStatus Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TProgram& programProto);
+        const NArrow::NSSA::IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram) noexcept;
+    [[nodiscard]] TConclusionStatus Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TOlapProgram& olapProgramProto) noexcept;
+    [[nodiscard]] TConclusionStatus Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TProgram& programProto) noexcept;
 
     const std::shared_ptr<NArrow::NSSA::TProgramChain>& GetChainVerified() const {
         AFL_VERIFY(!!Program);

@@ -269,6 +269,8 @@ public:
             bool canHaveLimit = TYtTransientOpBase(writer).Output().Size() == 1;
             if (canHaveLimit) {
                 TString usedCluster;
+                const ERuntimeClusterSelectionMode selectionMode =
+                    State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
                 for (auto item: x.second) {
                     if (!std::get<1>(item)) { // YtLength, YtPublish
                         canHaveLimit = false;
@@ -288,7 +290,7 @@ public:
                         auto kind = FromString<EYtSettingType>(setting.Name().Value());
                         if (EYtSettingType::Take == kind || EYtSettingType::Skip == kind) {
                             TSyncMap syncList;
-                            if (!IsYtCompleteIsolatedLambda(setting.Value().Ref(), syncList, usedCluster, false) || !syncList.empty()) {
+                            if (!IsYtCompleteIsolatedLambda(setting.Value().Ref(), syncList, usedCluster, false, selectionMode) || !syncList.empty()) {
                                 hasTake = false;
                                 break;
                             }
@@ -2862,7 +2864,12 @@ private:
 
             // Check all counsumers are known
             auto& processed = ProcessedCalculateColumnGroups[writer];
-            if (processed.size() == readers.size() && AllOf(readers, [&processed](const auto& item) { return processed.contains(std::get<0>(item)->UniqueId()); })) {
+            if (processed.size() == readers.size() &&
+                AllOf(readers, [&processed](const auto& item) {
+                    // Always reprocess ops with merge/copy readers
+                    return !TYtCopy::Match(std::get<0>(item)) && !TYtMerge::Match(std::get<0>(item)) && processed.contains(std::get<0>(item)->UniqueId());
+                })
+            ) {
                 continue;
             }
             processed.clear();

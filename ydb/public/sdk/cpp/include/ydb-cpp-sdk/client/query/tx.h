@@ -1,12 +1,12 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 
 #include <util/stream/output.h>
 
 #include <optional>
 
-namespace NYdb::inline V3::NQuery {
+namespace NYdb::inline Dev::NQuery {
 
 struct TTxOnlineSettings {
     using TSelf = TTxOnlineSettings;
@@ -116,4 +116,4 @@ private:
         : TxSettings_(txSettings) {}
 };
 
-} // namespace NYdb::V3::NQuery
+} // namespace NYdb::NQuery

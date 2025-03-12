@@ -159,10 +159,26 @@ class Nodes(object):
 
         self._check_async_execution(running_jobs)
 
-    # copy local_path to remote_path for every node in nodes
     def copy(self, local_path, remote_path, directory=False, compressed_path=None):
-        if directory:
+        """
+        Copies a file or directory from a local path to a remote path, with optional compression.
+        Args:
+            local_path (str): The local path of the file or directory to copy.
+            remote_path (str): The remote path where the file or directory will be copied.
+            directory (bool, optional): If True, treats the remote path as a directory. Defaults to False.
+            compressed_path (str, optional): If provided, compresses the local file or directory to this path before copying. Defaults to None.
+        Raises:
+            subprocess.CalledProcessError: If the compression command fails.
+        Notes:
+            - If `compressed_path` is provided, the method will compress the local file or directory using `zstd` before copying.
+            - The method ensures that the remote directory exists before copying.
+            - The method copies the file or directory to a hub node first, then distributes it to other nodes.
+            - If `compressed_path` is provided, the method will decompress the file on the remote side if necessary.
+        """
+
+        if os.path.isdir(local_path):
             local_path += '/'
+        if directory:
             remote_path += '/'
         if compressed_path is not None:
             self._logger.info('compressing %s to %s' % (local_path, compressed_path))

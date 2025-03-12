@@ -73,6 +73,9 @@ void TTargetBase::SetDstState(const EDstState value) {
         return Replication->AddPendingAlterTarget(Id);
     case EDstState::Done:
         return Replication->RemovePendingAlterTarget(Id);
+    case EDstState::Ready:
+        PendingRemoveWorkers = false;
+        break;
     default:
         break;
     }
@@ -92,6 +95,14 @@ const TString& TTargetBase::GetStreamName() const {
 
 void TTargetBase::SetStreamName(const TString& value) {
     StreamName = value;
+}
+
+const TString& TTargetBase::GetStreamConsumerName() const {
+    return StreamConsumerName;
+}
+
+void TTargetBase::SetStreamConsumerName(const TString& value) {
+    StreamConsumerName = value;
 }
 
 EStreamState TTargetBase::GetStreamState() const {
@@ -194,6 +205,9 @@ void TTargetBase::Shutdown(const TActorContext& ctx) {
             ctx.Send(actorId, new TEvents::TEvPoison());
         }
     }
+}
+
+void TTargetBase::UpdateConfig(const NKikimrReplication::TReplicationConfig&) {
 }
 
 }

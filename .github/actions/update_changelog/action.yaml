@@ -40,5 +40,5 @@ runs:
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git config --local github.token ${{ env.YDBOT_TOKEN }}
+        git config --local github.token ${{ env.GH_TOKEN }}
         python ${{ github.action_path }}/update_changelog.py pr_data.txt "${{ inputs.changelog_path }}" "${{ inputs.base_branch }}" "${{ inputs.suffix }}"

@@ -1,6 +1,6 @@
 #include "basic_example.h"
 
-#include <ydb-cpp-sdk/client/retry/retry.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
 
 #include <util/string/cast.h>
 

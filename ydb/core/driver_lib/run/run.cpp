@@ -243,6 +243,11 @@ public:
             TVector<TString> registerDynamicNodeAllowedSIDs(allowedSids.cbegin(), allowedSids.cend());
             appData->RegisterDynamicNodeAllowedSIDs = std::move(registerDynamicNodeAllowedSIDs);
         }
+        if (securityConfig.BootstrapAllowedSIDsSize() > 0) {
+            const auto& allowedSids = securityConfig.GetBootstrapAllowedSIDs();
+            TVector<TString> bootstrapAllowedSIDs(allowedSids.cbegin(), allowedSids.cend());
+            appData->BootstrapAllowedSIDs = std::move(bootstrapAllowedSIDs);
+        }
 
         appData->InitFeatureFlags(Config.GetFeatureFlags());
         appData->AllowHugeKeyValueDeletes = Config.GetFeatureFlags().GetAllowHugeKeyValueDeletes();
@@ -1200,6 +1205,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->ReplicationConfig = runConfig.AppConfig.GetReplicationConfig();
     }
 
+    if (runConfig.AppConfig.HasHealthCheckConfig()) {
+        AppData->HealthCheckConfig = runConfig.AppConfig.GetHealthCheckConfig();
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())
@@ -1740,11 +1749,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TGraphServiceInitializer(runConfig));
     }
 
-#ifndef KIKIMR_DISABLE_S3_OPS
     if (serviceMask.EnableAwsService) {
         sil->AddServiceInitializer(new TAwsApiInitializer(*this));
     }
-#endif
 
     return sil;
 }

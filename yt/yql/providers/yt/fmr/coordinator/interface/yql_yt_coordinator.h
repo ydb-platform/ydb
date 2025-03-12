@@ -11,7 +11,6 @@ struct THeartbeatRequest {
     ui32 WorkerId;
     TString VolatileId;
     std::vector<TTaskState::TPtr> TaskStates;
-    TStatistics Statistics;
 };
 // Worker sends requests in loop or long polling
 
@@ -22,10 +21,11 @@ struct THeartbeatResponse {
 
 struct TStartOperationRequest {
     ETaskType TaskType;
-    TTaskParams TaskParams;
+    TOperationParams OperationParams;
     TString SessionId;
     TMaybe<TString> IdempotencyKey = Nothing();
     ui32 NumRetries = 1; // Not supported yet
+    TClusterConnection ClusterConnection = {};
 };
 
 struct TStartOperationResponse {
@@ -50,6 +50,15 @@ struct TDeleteOperationResponse {
     EOperationStatus Status;
 };
 
+struct TGetFmrTableInfoRequest {
+    TString TableId;
+};
+
+struct TGetFmrTableInfoResponse {
+    TTableStats TableStats; // for only one PartId
+    std::vector<TFmrError> ErrorMessages = {};
+};
+
 class IFmrCoordinator: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<IFmrCoordinator>;
@@ -63,6 +72,8 @@ public:
     virtual NThreading::TFuture<TDeleteOperationResponse> DeleteOperation(const TDeleteOperationRequest& request) = 0;
 
     virtual NThreading::TFuture<THeartbeatResponse> SendHeartbeatResponse(const THeartbeatRequest& request) = 0;
+
+    virtual NThreading::TFuture<TGetFmrTableInfoResponse> GetFmrTableInfo(const TGetFmrTableInfoRequest& request) = 0;
 };
 
 } // namespace NYql::NFmr

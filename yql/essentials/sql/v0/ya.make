@@ -1,7 +1,7 @@
 LIBRARY()
 
 PEERDIR(
-    library/cpp/charset
+    library/cpp/charset/lite
     library/cpp/enumbitset
     yql/essentials/minikql
     yql/essentials/public/udf

@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/abstract.h>
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
 class TIndexConstructor: public IIndexMetaConstructor {
@@ -10,6 +11,7 @@ public:
 
 private:
     TString ColumnName;
+    TReadDataExtractorContainer DataExtractor;
     ui32 NGrammSize = 3;
     ui32 FilterSizeBytes = 512;
     ui32 HashesCount = 2;

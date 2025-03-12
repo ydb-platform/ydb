@@ -387,7 +387,7 @@ TBuffer TEncryptedFileSerializer::AddBlock(TStringBuf data, bool last) {
     return Impl->AddBlock(data, last);
 }
 
-TBuffer TEncryptedFileSerializer::EncryptFile(TString algorithm, TEncryptionKey key, TEncryptionIV iv, TStringBuf data) {
+TBuffer TEncryptedFileSerializer::EncryptFullFile(TString algorithm, TEncryptionKey key, TEncryptionIV iv, TStringBuf data) {
     TEncryptedFileSerializer serializer(std::move(algorithm), std::move(key), std::move(iv));
     return serializer.AddBlock(data, true);
 }
@@ -853,7 +853,7 @@ std::pair<TBuffer, TEncryptionIV> TEncryptedFileDeserializer::DecryptFile(TEncry
     return {std::move(*result), deserializer.GetIV()};
 }
 
-TBuffer TEncryptedFileDeserializer::DecryptFile(TEncryptionKey key, TEncryptionIV expectedIV, TBuffer data) {
+TBuffer TEncryptedFileDeserializer::DecryptFullFile(TEncryptionKey key, TEncryptionIV expectedIV, TBuffer data) {
     TEncryptedFileDeserializer deserializer(std::move(key), std::move(expectedIV));
     deserializer.AddData(std::move(data), true);
 

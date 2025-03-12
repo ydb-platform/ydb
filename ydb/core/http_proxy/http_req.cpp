@@ -38,7 +38,7 @@
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 
 #include <ydb-cpp-sdk/client/datastreams/datastreams.h>
-#include <src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 
 #include <ydb/services/datastreams/datastreams_proxy.h>
 #include <ydb/services/datastreams/next_token.h>
@@ -488,7 +488,7 @@ namespace NKikimr::NHttpProxy {
                         }
                         CloudId = cloudIdAndResourceId.first;
                         HttpContext.ResourceId = ResourceId = cloudIdAndResourceId.second;
-                        HttpContext.ResponseData.YmqIsFifo = queueUrl.EndsWith(".fifo");
+                        HttpContext.ResponseData.YmqIsFifo = AsciiHasSuffixIgnoreCase(queueUrl, ".fifo");
                     }
                 } catch (const NKikimr::NSQS::TSQSException& e) {
                     NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;

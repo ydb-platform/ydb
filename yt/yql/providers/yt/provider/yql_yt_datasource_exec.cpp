@@ -114,7 +114,8 @@ protected:
 
         TString usedCluster;
         TSyncMap syncList;
-        if (!IsYtIsolatedLambda(data.Ref(), syncList, usedCluster, false)) {
+        const ERuntimeClusterSelectionMode mode = State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+        if (!IsYtIsolatedLambda(data.Ref(), syncList, usedCluster, false, mode)) {
             ctx.AddError(TIssue(ctx.GetPosition(data.Pos()), TStringBuilder() << "Failed to execute node due to bad graph: " << input->Content()));
             return SyncError();
         }

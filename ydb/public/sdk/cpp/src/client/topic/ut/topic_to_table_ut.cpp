@@ -1,8 +1,8 @@
 #include "ut_utils/topic_sdk_test_setup.h"
 
-#include <ydb-cpp-sdk/client/topic/client.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <src/client/persqueue_public/ut/ut_utils/ut_utils.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
 
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
@@ -3026,7 +3026,7 @@ Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions, TFixture)
     // will make sure that when committing transactions, the division into blocks is taken into account.
 
     const size_t PARTITIONS_COUNT = 20;
-    const size_t TXS_COUNT = 100;
+    const size_t TXS_COUNT = 10;
 
     CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
 

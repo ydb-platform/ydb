@@ -289,6 +289,4 @@ namespace NKikimr::NBsController {
         }
     };
 
-    TLayoutCheckResult CheckGroupLayout(const TGroupGeometryInfo& geom, const THashMap<TVDiskIdShort, std::pair<TNodeLocation, TPDiskId>>& layout);
-
 } // NKikimr::NBsController

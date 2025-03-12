@@ -1,6 +1,6 @@
 #include "yql_issue_message.h"
 
-#include <ydb-cpp-sdk/type_switcher.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
 #include <util/generic/yexception.h>
 #include <util/stream/output.h>
@@ -8,7 +8,9 @@
 
 #include <deque>
 
-namespace NYdb::NIssue {
+namespace NYdb {
+inline namespace Dev {
+namespace NIssue {
 
 TIssue IssueFromMessage(const Ydb::Issue::IssueMessage& issueMessage) {
     TIssue topIssue;
@@ -90,4 +92,6 @@ void IssuesToMessage(const TIssues& issues, ::google::protobuf::RepeatedPtrField
     }
 }
 
+}
+}
 }

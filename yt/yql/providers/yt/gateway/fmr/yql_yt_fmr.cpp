@@ -2,7 +2,10 @@
 
 #include <thread>
 
+#include <yt/cpp/mapreduce/interface/client.h>
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
+#include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
+#include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <yt/yql/providers/yt/provider/yql_yt_helpers.h>
 
 #include <yql/essentials/utils/log/log.h>
@@ -40,7 +43,7 @@ public:
                 with_lock(SessionStates_->Mutex) {
                     auto checkOperationStatuses = [&] <typename T> (std::unordered_map<TString, TPromise<T>>& operationStatuses, const TString& sessionId) {
                         for (auto& [operationId, promise]: operationStatuses) {
-                            YQL_CLOG(DEBUG, FastMapReduce) << "Sending get operation request to coordinator with operationId: " << operationId;
+                            YQL_CLOG(TRACE, FastMapReduce) << "Sending get operation request to coordinator with operationId: " << operationId;
 
                             auto getOperationFuture = Coordinator_->GetOperation({operationId});
                             getOperationFuture.Subscribe([&, operationId, sessionId] (const auto& getFuture) {
@@ -96,10 +99,22 @@ public:
             return Slave_->Publish(node, ctx, std::move(options));
         }
         auto publish = TYtPublish(node);
+        TString sessionId = options.SessionId();
 
         auto cluster = publish.DataSink().Cluster().StringValue();
+        auto token = options.Config()->Auth.Get();
+        TString transformedInputPath;
+        TString userName = GetUsername(sessionId);
+        for (auto out: publish.Input()) {
+            auto outTable = GetOutTable(out).Cast<TYtOutTable>();
+            TStringBuf inputPath = outTable.Name().Value();
+            transformedInputPath = NYql::TransformPath(GetTablesTmpFolder(*options.Config()), inputPath, true, userName);
+            break;
+        }
+
+        // TODO - handle several inputs in Publish, use ColumnGroups, Run Merge
+
         auto outputPath = publish.Publish().Name().StringValue();
-        auto transactionId = GenerateId();
         auto idempotencyKey = GenerateId();
 
         auto fmrTableId = cluster + "." + outputPath;
@@ -107,15 +122,14 @@ public:
         TFuture<TDownloadTableToFmrResult> downloadToFmrFuture;
         TFuture<void> downloadedSuccessfully;
 
-        TString sessionId = options.SessionId();
-
         with_lock(SessionStates_->Mutex) {
             auto& tablePresenceStatuses = SessionStates_->Sessions[sessionId].TablePresenceStatuses;
 
             if (!tablePresenceStatuses.contains(fmrTableId)) {
-                TYtTableRef ytTable{.Path = outputPath, .Cluster = cluster, .TransactionId = transactionId};
+                TYtTableRef ytTable{.Path = transformedInputPath, .Cluster = cluster};
+                TFmrTableRef fmrTable{.TableId = fmrTableId};
                 tablePresenceStatuses[fmrTableId] = ETablePresenceStatus::Both;
-                downloadToFmrFuture = DownloadToFmrTableDataSerivce(ytTable, sessionId);
+                downloadToFmrFuture = DownloadToFmrTableDataSerivce(ytTable, fmrTable, sessionId, options.Config());
                 downloadedSuccessfully = downloadToFmrFuture.Apply([downloadedSuccessfully] (auto& downloadFuture) {
                     auto downloadResult = downloadFuture.GetValueSync();
                 });
@@ -125,15 +139,27 @@ public:
         }
         downloadedSuccessfully.Wait(); // blocking until download to fmr finishes
 
-        YQL_CLOG(INFO, FastMapReduce) << "Uploading table with cluster " << cluster << " and path " << outputPath << " from fmr to yt";
-
-        TUploadTaskParams uploadTaskParams{
+        TUploadOperationParams uploadOperationParams{
             .Input = TFmrTableRef{fmrTableId},
-            .Output = TYtTableRef{outputPath, cluster, transactionId}
+            .Output = TYtTableRef{outputPath, cluster}
         };
 
+        auto clusterConnectionOptions = TClusterConnectionOptions(options.SessionId())
+            .Cluster(cluster).Config(options.Config());
+        auto clusterConnection = GetClusterConnection(std::move(clusterConnectionOptions));
+        YQL_ENSURE(clusterConnection.Success());
+
         TStartOperationRequest uploadRequest{
-            .TaskType = ETaskType::Upload, .TaskParams = uploadTaskParams, .SessionId = sessionId, .IdempotencyKey=idempotencyKey, .NumRetries=1
+            .TaskType = ETaskType::Upload,
+            .OperationParams = uploadOperationParams,
+            .SessionId = sessionId,
+            .IdempotencyKey=idempotencyKey,
+            .NumRetries=1,
+            .ClusterConnection = TClusterConnection{
+                .TransactionId = clusterConnection.TransactionId,
+                .YtServerName = clusterConnection.YtServerName,
+                .Token = clusterConnection.Token
+            }
         };
 
         auto promise = NewPromise<TPublishResult>();
@@ -155,19 +181,34 @@ public:
         return future;
     }
 
-    TFuture<TDownloadTableToFmrResult> DownloadToFmrTableDataSerivce(const TYtTableRef& ytTableRef, const TString& sessionId) {
+    TFuture<TDownloadTableToFmrResult> DownloadToFmrTableDataSerivce(
+        const TYtTableRef& ytTableRef, const TFmrTableRef& fmrTableRef, const TString& sessionId, TYtSettings::TConstPtr& config)
+    {
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
-        TString fmrTableId = ytTableRef.Cluster + "." + ytTableRef.Path;
-        TDownloadTaskParams downloadTaskParams{
+        TString fmrTableId = fmrTableRef.TableId;
+        TDownloadOperationParams downloadOperationParams{
             .Input = ytTableRef,
             .Output = {fmrTableId}
         };
         auto idempotencyKey = GenerateId();
+        auto clusterConnectionOptions = TClusterConnectionOptions(sessionId)
+            .Cluster(ytTableRef.Cluster).Config(config);
+        auto clusterConnection = GetClusterConnection(std::move(clusterConnectionOptions));
+        YQL_ENSURE(clusterConnection.Success());
         TStartOperationRequest downloadRequest{
-            .TaskType = ETaskType::Download, .TaskParams = downloadTaskParams, .SessionId = sessionId, .IdempotencyKey=idempotencyKey, .NumRetries=1
+            .TaskType = ETaskType::Download,
+            .OperationParams = downloadOperationParams,
+            .SessionId = sessionId,
+            .IdempotencyKey = idempotencyKey,
+            .NumRetries=1,
+            .ClusterConnection = TClusterConnection{
+                .TransactionId = clusterConnection.TransactionId,
+                .YtServerName = clusterConnection.YtServerName,
+                .Token = clusterConnection.Token
+            }
         };
 
-        YQL_CLOG(DEBUG, FastMapReduce) << "Starting download to from yt table: " << fmrTableId;
+        YQL_CLOG(DEBUG, FastMapReduce) << "Starting download from yt table: " << fmrTableId;
 
         auto promise = NewPromise<TDownloadTableToFmrResult>();
         auto future = promise.GetFuture();
@@ -186,22 +227,24 @@ public:
         return future;
     }
 
-    void OpenSession(TOpenSessionOptions&& options) final {
-        Slave_->OpenSession(std::move(options));
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) override {
+        return Slave_->GetClusterConnection(std::move(options));
+    }
 
+    void OpenSession(TOpenSessionOptions&& options) final {
         TString sessionId = options.SessionId();
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
         with_lock(SessionStates_->Mutex) {
-            auto sessions = SessionStates_->Sessions;
+            auto& sessions = SessionStates_->Sessions;
             if (sessions.contains(sessionId)) {
                 YQL_LOG_CTX_THROW yexception() << "Session already exists: " << sessionId;
             }
-            sessions[sessionId] = TSessionInfo();
+            sessions[sessionId] = TSessionInfo{.UserName = options.UserName()};
         }
+        Slave_->OpenSession(std::move(options));
     }
 
     TFuture<void> CloseSession(TCloseSessionOptions&& options) final {
-        Slave_->CloseSession(std::move(options)).Wait();
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
 
         with_lock(SessionStates_->Mutex) {
@@ -211,11 +254,11 @@ public:
                 sessions.erase(it);
             }
         }
+        Slave_->CloseSession(std::move(options)).Wait();
         return MakeFuture();
     }
 
     TFuture<void> CleanupSession(TCleanupSessionOptions&& options) final {
-        Slave_->CleanupSession(std::move(options)).Wait();
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
 
         TString sessionId = options.SessionId();
@@ -239,7 +282,7 @@ public:
             cancelOperationsFunc(operationStates.DownloadOperationStatuses);
             cancelOperationsFunc(operationStates.UploadOperationStatuses);
         }
-
+        Slave_->CleanupSession(std::move(options)).Wait();
         return MakeFuture();
     }
 
@@ -252,6 +295,7 @@ private:
     struct TSessionInfo {
         TFmrGatewayOperationsState OperationStates;
         std::unordered_map<TString, ETablePresenceStatus> TablePresenceStatuses; // yt cluster and path -> is it In Yt, Fmr TableDataService
+        TString UserName;
     };
 
     struct TSession {
@@ -281,6 +325,14 @@ private:
             commonOperationResult.SetException(exception);
         }
         promise.SetValue(commonOperationResult);
+    }
+
+    TString GetUsername(const TString& sessionId) {
+        with_lock(SessionStates_->Mutex) {
+            YQL_ENSURE(SessionStates_->Sessions.contains(sessionId));
+            auto& session = SessionStates_->Sessions[sessionId];
+            return session.UserName;
+        }
     }
 };
 

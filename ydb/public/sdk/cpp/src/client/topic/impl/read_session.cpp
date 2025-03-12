@@ -1,13 +1,13 @@
 #include "read_session.h"
 
-#include <src/client/topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <util/generic/guid.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 static const std::string DRIVER_IS_STOPPING_DESCRIPTION = "Driver is stopping";
 

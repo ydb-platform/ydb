@@ -927,20 +927,21 @@ public:
             return IsClosed() && IsEmpty();
         }
 
-        void MakeNextBatches(i64 maxDataSize, ui64 maxCount) {
+        void MakeNextBatches(i64 maxDataSize, std::optional<ui64> maxCount) {
             YQL_ENSURE(BatchesInFlight == 0);
             YQL_ENSURE(!IsEmpty());
-            YQL_ENSURE(maxCount != 0);
             i64 dataSize = 0;
             // For columnshard batch can be slightly larger than the limit.
-            while (BatchesInFlight < maxCount
+            while ((!maxCount || BatchesInFlight < *maxCount)
                     && BatchesInFlight < Batches.size()
                     && (dataSize + GetBatch(BatchesInFlight).GetMemory() <= maxDataSize || BatchesInFlight == 0)) {
                 dataSize += GetBatch(BatchesInFlight).GetMemory();
                 ++BatchesInFlight;
             }
             YQL_ENSURE(BatchesInFlight != 0);
-            YQL_ENSURE(BatchesInFlight == Batches.size() || BatchesInFlight >= maxCount || dataSize + GetBatch(BatchesInFlight).GetMemory() > maxDataSize);
+            YQL_ENSURE(BatchesInFlight == Batches.size()
+                || (maxCount && BatchesInFlight >= *maxCount)
+                || dataSize + GetBatch(BatchesInFlight).GetMemory() > maxDataSize);
         }
 
         TBatchWithMetadata& GetBatch(size_t index) {
@@ -1451,9 +1452,11 @@ private:
     void BuildBatchesForShard(TShardsInfo::TShardInfo& shard) {
         if (shard.GetBatchesInFlight() == 0) {
             YQL_ENSURE(IsOlap != std::nullopt);
-            shard.MakeNextBatches(
-                Settings.MemoryLimitPerMessage,
-                (*IsOlap) ? 1 : Settings.MaxBatchesPerMessage);
+            if (*IsOlap) {
+                shard.MakeNextBatches(Settings.MemoryLimitPerMessage, 1);
+            } else {
+                shard.MakeNextBatches(Settings.MemoryLimitPerMessage, std::nullopt);
+            }
         }
     }
 

@@ -4,8 +4,8 @@
 Y_UNIT_TEST_SUITE(TCacheTest) {
     Y_UNIT_TEST(TestLruCache) {
         NLogin::TLruCache cache(2);
-        const auto user1 = std::make_pair("user1", "pass1");
-        const auto user2 = std::make_pair("user2", "pass2");
+        const NLogin::TLruCache::TKey user1 = {.User = "user1", .Password = "pass1", .Hash = "12345"};
+        const NLogin::TLruCache::TKey user2 = {.User = "user2", .Password = "pass2", .Hash = "67890"};
         UNIT_ASSERT_EQUAL(cache.Size(), 0);
         {
             const auto insertResult = cache.Insert(user1, true);
@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
             UNIT_ASSERT(it != cache.End());
             UNIT_ASSERT_EQUAL(it->second, true);
         }
-        const auto user3 = std::make_pair("user3", "pass3");
+        const NLogin::TLruCache::TKey user3 = {.User = "user3", .Password = "pass3", .Hash = "abcd"};
         // user2 must be evicted
         {
             const auto insertResult = cache.Insert(user3, true);
@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
             UNIT_ASSERT(it != cache.End());
             UNIT_ASSERT_EQUAL(it->second, true);
         }
-        const auto user4 = std::make_pair("user4", "pass4");
+        const NLogin::TLruCache::TKey user4 = {.User = "user4", .Password = "pass4", .Hash = "fedcba"};
         // user1 must be evicted
         {
             const auto insertResult = cache.Insert(user4, true);
@@ -61,8 +61,8 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
 
     Y_UNIT_TEST(TestLruCacheWithEmptyCapacity) {
         NLogin::TLruCache cache(0);
-        const auto user1 = std::make_pair("user1", "pass1");
-        const auto user2 = std::make_pair("user2", "pass2");
+        const NLogin::TLruCache::TKey user1 = {.User = "user1", .Password = "pass1", .Hash = "12345"};
+        const NLogin::TLruCache::TKey user2 = {.User = "user2", .Password = "pass2", .Hash = "67890"};
         UNIT_ASSERT_EQUAL(cache.Size(), 0);
         {
             const auto insertResult = cache.Insert(user1, true);
@@ -74,5 +74,41 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
             UNIT_ASSERT_EQUAL(insertResult.second, false);
             UNIT_ASSERT(insertResult.first == cache.End());
         }
+    }
+
+    Y_UNIT_TEST(TestLruCacheWithSameUserAndPassword) {
+        NLogin::TLruCache cache(2);
+        const NLogin::TLruCache::TKey key1 = {.User = "user1", .Password = "pass1", .Hash = "12345"};
+        const NLogin::TLruCache::TKey key2 = {.User = "user1", .Password = "pass1", .Hash = "67890"};
+        UNIT_ASSERT_EQUAL(cache.Size(), 0);
+        {
+            const auto insertResult = cache.Insert(key1, false); // Bad password
+            UNIT_ASSERT_EQUAL(insertResult.second, true);
+            UNIT_ASSERT(insertResult.first != cache.End());
+        }
+        {
+            const auto insertResult = cache.Insert(key2, true); // Good password
+            UNIT_ASSERT_EQUAL(insertResult.second, true);
+            UNIT_ASSERT(insertResult.first != cache.End());
+        }
+        UNIT_ASSERT_EQUAL(cache.Size(), 2);
+    }
+
+    Y_UNIT_TEST(TestLruCacheWithDifferentPasswords) {
+        NLogin::TLruCache cache(2);
+        const NLogin::TLruCache::TKey key1 = {.User = "user1", .Password = "pass1", .Hash = "12345"};
+        const NLogin::TLruCache::TKey key2 = {.User = "user1", .Password = "pass2", .Hash = "12345"};
+        UNIT_ASSERT_EQUAL(cache.Size(), 0);
+        {
+            const auto insertResult = cache.Insert(key1, false); // Bad password
+            UNIT_ASSERT_EQUAL(insertResult.second, true);
+            UNIT_ASSERT(insertResult.first != cache.End());
+        }
+        {
+            const auto insertResult = cache.Insert(key2, true); // Good password
+            UNIT_ASSERT_EQUAL(insertResult.second, true);
+            UNIT_ASSERT(insertResult.first != cache.End());
+        }
+        UNIT_ASSERT_EQUAL(cache.Size(), 2);
     }
 }

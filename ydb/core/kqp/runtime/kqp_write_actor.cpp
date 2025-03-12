@@ -2336,14 +2336,13 @@ public:
         auto getPathes = [&]() -> TString {
             const auto tableInfo = TxManager->GetShardTableInfo(ev->Get()->Record.GetOrigin());
             TStringBuilder builder;
-            builder << (tableInfo.Pathes.size() == 1 ? "Table: " : "Tables: ");
             for (const auto& path : tableInfo.Pathes) {
                 if (!builder.empty()) {
                     builder << ", ";
                 }
                 builder << "`" << path << "`";
             }
-            return builder;
+            return (tableInfo.Pathes.size() == 1 ? "Table: " : "Tables: ")  + builder;
         };
 
         // TODO: get rid of copy-paste

@@ -2456,13 +2456,13 @@ struct TOperationProgress
 /// @brief Brief operation progress (numbers of jobs in these states).
 struct TOperationBriefProgress
 {
-    ui64 Aborted = 0;
-    ui64 Completed = 0;
-    ui64 Failed = 0;
-    ui64 Lost = 0;
-    ui64 Pending = 0;
-    ui64 Running = 0;
-    ui64 Total = 0;
+    i64 Aborted = 0;
+    i64 Completed = 0;
+    i64 Failed = 0;
+    i64 Lost = 0;
+    i64 Pending = 0;
+    i64 Running = 0;
+    i64 Total = 0;
 };
 
 ///

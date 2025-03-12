@@ -15,6 +15,8 @@
 
 namespace NYql {
 
+const char KeepWorldOptName[] = "KeepWorld";
+
 using namespace NNodes;
 
 namespace {
@@ -2330,6 +2332,65 @@ bool CheckSupportedTypes(
         }
     }
     return true;
+}
+
+TExprNode::TPtr KeepWorld(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx, TTypeAnnotationContext& types) {
+    const bool optEnabled = IsOptimizerEnabled<KeepWorldOptName>(types) && !IsOptimizerDisabled<KeepWorldOptName>(types);
+    if (!optEnabled) {
+        return node;
+    }
+
+    const auto& worldLinks = src.GetWorldLinks();
+    if (!worldLinks) {
+        return node;
+    }
+
+    TExprNode::TListType missingLinks;
+    for (const auto& link : *worldLinks) {
+        if (!IsDepended(*node, *link)) {
+            missingLinks.push_back(link);
+        }
+    }
+
+    if (missingLinks.empty()) {
+        return node;
+    }
+
+    for (auto& link : missingLinks) {
+        if (link->GetTypeAnn()->GetKind() != ETypeAnnotationKind::World) {
+            link = ctx.NewCallable(node->Pos(), LeftName, { link });
+        }
+    }
+
+    TExprNode::TPtr syncLink;
+    if (missingLinks.size() == 1) {
+        syncLink = missingLinks[0];
+    } else {
+        syncLink = ctx.NewCallable(node->Pos(), SyncName, std::move(missingLinks));
+    }
+
+    YQL_CLOG(DEBUG, Core) << "KeepWorld over " << node->Content();
+    if (src.GetTypeAnn()->ReturnsWorld()) {
+        if (src.GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
+            return ctx.NewCallable(src.Pos(), SyncName, { syncLink, node});
+        } else {
+            return ctx.Builder(src.Pos())
+                .Callable("WithWorld")
+                    .Callable(0, RightName)
+                        .Add(0, node)
+                    .Seal()
+                    .Callable(1, SyncName)
+                        .Add(0, syncLink)
+                        .Callable(1, LeftName)
+                            .Add(0, node)
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+    } else {
+        return ctx.NewCallable(src.Pos(), "WithWorld", { node, syncLink});
+    }
 }
 
 }

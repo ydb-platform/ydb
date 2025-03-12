@@ -219,6 +219,18 @@ BELONGS ya.make
         lib/ngtcp2_pq.c [4:5]
         lib/ngtcp2_pq.h [4:5]
 
+KEEP     COPYRIGHT_SERVICE_LABEL d6540bc8665ef99ad871e3a0a3847f50
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2025 ngtcp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/ngtcp2_dcidtr.c [4:4]
+        lib/ngtcp2_dcidtr.h [4:4]
+
 KEEP     COPYRIGHT_SERVICE_LABEL d8ca50c11a8cd311a31e6462c4b42555
 BELONGS ya.make
     License text:

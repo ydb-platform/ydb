@@ -39,6 +39,24 @@ const TString& GetPersistentExecPathMd5()
     return md5;
 }
 
+void MergeAnnotations(
+    const NYT::TNode::TMapType& attrs,
+    const TString& attribute,
+    NYT::TNode& annotations)
+{
+    if (auto attrAnnotations = attrs.FindPtr(attribute)) {
+        if (!attrAnnotations->IsMap()) {
+            throw yexception() << "Operation attribute " << attribute.Quote() << " should be a map";
+        }
+        for (const auto& [k, v] : attrAnnotations->AsMap()) {
+            auto it = annotations.AsMap().find(k);
+            if (it == annotations.AsMap().end()) {
+                annotations[k] = v;
+            }
+        }
+    }
+}
+
 }
 
 TMaybe<TString> GetPool(
@@ -197,18 +215,9 @@ void FillSpec(NYT::TNode& spec,
 
     // merge annotations from attributes
     if (auto attrs = execCtx.Session_->OperationOptions_.AttrsYson.GetOrElse(TString())) {
-        NYT::TNode node = NYT::NodeFromYsonString(attrs);
-        if (auto attrAnnotations = node.AsMap().FindPtr("yt_annotations")) {
-            if (!attrAnnotations->IsMap()) {
-                throw yexception() << "Operation attribute \"yt_annotations\" should be a map";
-            }
-            for (const auto& [k, v] : attrAnnotations->AsMap()) {
-                auto it = annotations.AsMap().find(k);
-                if (it == annotations.AsMap().end()) {
-                    annotations[k] = v;
-                }
-            }
-        }
+        NYT::TNode attributes = NYT::NodeFromYsonString(attrs);
+        MergeAnnotations(attributes.AsMap(), "yt_annotations", annotations);
+        MergeAnnotations(attributes.AsMap(), "nirvana_yt_annotations", annotations);
     }
 
     if (!annotations.Empty()) {

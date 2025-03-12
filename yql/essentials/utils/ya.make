@@ -16,6 +16,8 @@ SRCS(
     line_split.cpp
     md5_stream.cpp
     md5_stream.h
+    mem_limit.h
+    mem_limit.cpp
     method_index.cpp
     method_index.h
     multi_resource_lock.cpp

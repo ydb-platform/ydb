@@ -1,4 +1,4 @@
-#include <ydb-cpp-sdk/client/extensions/solomon_stats/pull_client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extensions/solomon_stats/pull_client.h>
 
 namespace NSolomonStatExtension::inline Dev {
 

@@ -1,6 +1,6 @@
 #include <library/cpp/resource/resource.h>
 
-#include <ydb-cpp-sdk/client/resources/ydb_ca.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_ca.h>
 
 namespace NYdb::inline Dev {
 

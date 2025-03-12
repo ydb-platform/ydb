@@ -2,7 +2,7 @@
 
 #include "ydb_dynamic_config.h"
 
-#include <ydb-cpp-sdk/client/config/config.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 
 #define INCLUDE_YDB_INTERNAL_H

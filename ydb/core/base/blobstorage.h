@@ -870,6 +870,8 @@ struct TEvBlobStorage {
         EvControllerShredResponse                   = 0x1003162a,
         EvControllerFetchConfigRequest              = 0x1003162b,
         EvControllerFetchConfigResponse             = 0x1003162c,
+        EvControllerDistconfRequest                 = 0x1003162d,
+        EvControllerDistconfResponse                = 0x1003162e,
 
         // BSC interface result section
         EvControllerNodeServiceSetUpdate            = 0x10031802,
@@ -2523,6 +2525,8 @@ struct TEvBlobStorage {
     struct TEvControllerShredResponse;
     struct TEvControllerFetchConfigRequest;
     struct TEvControllerFetchConfigResponse;
+    struct TEvControllerDistconfRequest;
+    struct TEvControllerDistconfResponse;
 
     struct TEvMonStreamQuery;
     struct TEvMonStreamActorDeathNote;

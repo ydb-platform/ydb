@@ -1,21 +1,21 @@
 #include "impl/client_session.h"
 
-#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_endpoints/endpoints.h>
-#include <src/client/impl/ydb_internal/make_request/make.h>
-#include <src/client/impl/ydb_internal/retry/retry.h>
-#include <src/client/impl/ydb_internal/retry/retry_async.h>
-#include <src/client/impl/ydb_internal/retry/retry_sync.h>
-#include <src/client/impl/ydb_internal/session_client/session_client.h>
-#include <src/client/impl/ydb_internal/session_pool/session_pool.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_endpoints/endpoints.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry_async.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry_sync.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/session_client/session_client.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/session_pool/session_pool.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
-#include <src/client/common_client/impl/client.h>
-#include <src/client/query/impl/exec_query.h>
-#include <ydb-cpp-sdk/client/retry/retry.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/src/client/query/impl/exec_query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 

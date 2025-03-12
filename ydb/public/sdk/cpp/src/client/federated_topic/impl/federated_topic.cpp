@@ -1,5 +1,5 @@
-#include <ydb-cpp-sdk/client/federated_topic/federated_topic.h>
-#include <src/client/federated_topic/impl/federated_topic_impl.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
+#include <ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_topic_impl.h>
 
 namespace NYdb::inline Dev::NFederatedTopic {
 

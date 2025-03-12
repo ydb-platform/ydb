@@ -1,6 +1,6 @@
-#include <ydb-cpp-sdk/client/common_client/settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/settings.h>
 
-#include <src/client/impl/ydb_internal/common/parser.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/common/parser.h>
 
 namespace NYdb::inline Dev {
 

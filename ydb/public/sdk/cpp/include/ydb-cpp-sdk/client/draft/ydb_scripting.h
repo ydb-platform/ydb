@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
 namespace NYdb::inline Dev {

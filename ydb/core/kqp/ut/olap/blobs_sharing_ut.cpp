@@ -12,7 +12,7 @@
 #include <ydb/core/tx/columnshard/data_sharing/initiator/status/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 
-#include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/src/client/ss_tasks/task.h>
 
 namespace NKikimr::NKqp {

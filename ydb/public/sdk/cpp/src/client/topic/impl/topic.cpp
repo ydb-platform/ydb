@@ -1,9 +1,9 @@
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
-#include <src/client/topic/impl/topic_impl.h>
-#include <src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 
-#include <src/client/impl/ydb_internal/scheme_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/scheme_helpers/helpers.h>
 
 #include <util/random/random.h>
 #include <util/string/cast.h>

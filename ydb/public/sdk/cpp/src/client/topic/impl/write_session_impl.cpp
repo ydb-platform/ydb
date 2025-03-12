@@ -1,7 +1,7 @@
 #include "write_session_impl.h"
 
-#include <src/client/topic/common/log_lazy.h>
-#include <src/client/topic/common/trace_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/trace_lazy.h>
 
 #include <library/cpp/string_utils/url/url.h>
 

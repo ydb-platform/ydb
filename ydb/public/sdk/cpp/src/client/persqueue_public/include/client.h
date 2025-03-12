@@ -4,8 +4,8 @@
 #include "read_session.h"
 #include "write_session.h"
 
-#include <ydb-cpp-sdk/client/common_client/settings.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 namespace NYdb::inline Dev {
     class TProtoAccessor;

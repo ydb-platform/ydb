@@ -1,4 +1,5 @@
 #include "s3.h"
+
 #include <ydb/core/wrappers/s3_wrapper.h>
 
 namespace NKikimr::NBlobDepot {
@@ -14,8 +15,8 @@ namespace NKikimr::NBlobDepot {
     void TS3Manager::Init(const NKikimrBlobDepot::TS3BackendSettings *settings) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS05, "Init", (Settings, settings));
         if (settings) {
-            ExternalStorageConfig = NWrappers::IExternalStorageConfig::Construct(settings->GetSettings());
-            WrapperId = Self->Register(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
+            auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(settings->GetSettings());
+            WrapperId = Self->Register(NWrappers::CreateS3Wrapper(externalStorageConfig->ConstructStorageOperator()));
             BasePath = TStringBuilder() << settings->GetSettings().GetObjectKeyPattern() << '/' << Self->Config.GetName();
             Bucket = settings->GetSettings().GetBucket();
             SyncMode = settings->HasSyncMode();

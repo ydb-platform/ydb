@@ -1,7 +1,7 @@
 exclude:
   - ydb/_grpc/v3/*
   - ydb/_grpc/v4/*
+  - ydb/_grpc/v5/*
 mark_as_tests:
   - "**/*_test.py"
   - ydb/_topic_common/test_helpers.py
-

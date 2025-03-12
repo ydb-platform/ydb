@@ -3020,6 +3020,7 @@ public:
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     const TActorId Source;
     bool Wait = true;
+    TString Error;
 
     TTxMonEvent_InitMigration(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
@@ -3032,6 +3033,9 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_INIT_MIGRATION; }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
+        if (Self->AreWeRootHive()) {
+            Error = "Cannot migrate to root hive";
+        }
         TActorId waitActorId;
         TInitMigrationWaitActor* waitActor = nullptr;
         if (Wait) {
@@ -3045,8 +3049,12 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        if (!Wait) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
+        if (Error) {
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
+        } else {
+            if (!Wait) {
+                ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
+            }
         }
     }
 };

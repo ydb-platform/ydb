@@ -166,11 +166,11 @@ namespace NActors {
      */
     IActor* CreateResolveActor(
         const TString& host, ui16 port, ui32 nodeId, const TString& defaultAddress,
-        const TActorId& replyTo, const TActorId& replyFrom, TInstant deadline);
+        const TActorId& replyTo, const TActorId& replyFrom, TMonotonic deadline);
 
     inline IActor* CreateResolveActor(
         ui32 nodeId, const TTableNameserverSetup::TNodeInfo& nodeInfo,
-        const TActorId& replyTo, const TActorId& replyFrom, TInstant deadline)
+        const TActorId& replyTo, const TActorId& replyFrom, TMonotonic deadline)
     {
         return CreateResolveActor(nodeInfo.ResolveHost, nodeInfo.Port, nodeId, nodeInfo.Address,
             replyTo, replyFrom, deadline);
@@ -184,6 +184,6 @@ namespace NActors {
      */
     IActor* CreateResolveActor(
         const TString& host, ui16 port,
-        const TActorId& replyTo, const TActorId& replyFrom, TInstant deadline);
+        const TActorId& replyTo, const TActorId& replyFrom, TMonotonic deadline);
 
 }

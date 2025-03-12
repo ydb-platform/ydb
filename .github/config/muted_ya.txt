@@ -26,6 +26,8 @@ ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail+useSink
 ydb/core/kqp/ut/query KqpLimits.QSReplySizeEnsureMemoryLimits+useSink
+ydb/core/kqp/ut/query KqpStats.OneShardLocalExec+UseSink
+ydb/core/kqp/ut/query KqpStats.OneShardNonLocalExec+UseSink
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication

@@ -242,9 +242,8 @@ namespace NYql::NDq::NWorker {
         pfOptions.ExecPath = GetExecPath();
         pfOptions.FileCache = fileCache;
 
-        auto localLDLibraryPath = IsTrue(GetEnv(TString("YT_SECURE_VAULT_") + NCommonJobVars::YT_LOCAL_LD_LIBRARY_PATH, ""));
-        if (localLDLibraryPath) {
-            pfOptions.Env["LD_LIBRARY_PATH"] = std::filesystem::current_path().string();
+        if (backendConfig.UseLocalLDLibraryPath) {
+            pfOptions.Env["LD_LIBRARY_PATH"] = ".";
         }
 
         if (deterministicMode) {

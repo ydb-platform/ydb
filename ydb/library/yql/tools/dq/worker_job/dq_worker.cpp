@@ -242,7 +242,7 @@ namespace NYql::NDq::NWorker {
         pfOptions.ExecPath = GetExecPath();
         pfOptions.FileCache = fileCache;
 
-        if (backendConfig.UseLocalLDLibraryPath) {
+        if (backendConfig.GetUseLocalLDLibraryPath()) {
             pfOptions.Env["LD_LIBRARY_PATH"] = ".";
         }
 

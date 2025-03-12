@@ -511,7 +511,7 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
             }
             if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kMap) {
                 // We want to enforce sourceShardCount from map connection, cause it can be at most one map connection
-                // and ColumnShardHash in Shuffle will use this parameter to shuffle on this map (same with taskIdByHash mapping)
+                // and ColumnShardHash in Shuffle will use this parameter to shuffle on this map (same with taskIndexByHash mapping)
                 hasMap = true;
                 break;
             }
@@ -521,9 +521,9 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
     // if it is stage, where we don't inherit parallelism.
     if (enableShuffleElimination && !hasMap && !isFusedWithScanStage && stageInfo.Tasks.size() > 0 && stage.InputsSize() > 0) {
         columnShardHashV1Params.SourceShardCount = stageInfo.Tasks.size();
-        columnShardHashV1Params.TaskIdByHash = std::make_shared<TVector<ui64>>(columnShardHashV1Params.SourceShardCount);
+        columnShardHashV1Params.TaskIndexByHash = std::make_shared<TVector<ui64>>(columnShardHashV1Params.SourceShardCount);
         for (std::size_t i = 0; i < columnShardHashV1Params.SourceShardCount; ++i) {
-            (*columnShardHashV1Params.TaskIdByHash)[i] = i;
+            (*columnShardHashV1Params.TaskIndexByHash)[i] = i;
         }
 
         for (auto& input : stage.GetInputs()) {
@@ -1206,7 +1206,7 @@ void FillOutputDesc(
                         << " for the columns: " << "[" << JoinSeq(",", output.KeyColumns) << "]"
                     );
                     Y_ENSURE(columnShardHashV1Params.SourceShardCount != 0, "ShardCount for ColumnShardHashV1 Shuffle can't be equal to 0");
-                    Y_ENSURE(columnShardHashV1Params.TaskIdByHash != nullptr, "TaskIdByHash for ColumnShardHashV1 wasn't propogated to this stage");
+                    Y_ENSURE(columnShardHashV1Params.TaskIndexByHash != nullptr, "TaskIndexByHash for ColumnShardHashV1 wasn't propogated to this stage");
                     Y_ENSURE(columnShardHashV1Params.SourceTableKeyColumnTypes != nullptr, "SourceTableKeyColumnTypes for ColumnShardHashV1 wasn't propogated to this stage");
 
                     Y_ENSURE(
@@ -1225,9 +1225,9 @@ void FillOutputDesc(
                         columnTypes->Add(type.GetTypeId());
                     }
 
-                    auto* taskIdByHash = columnShardHashV1.MutableTaskIdByHash();
-                    for (std::size_t taskID: *columnShardHashV1Params.TaskIdByHash) {
-                        taskIdByHash->Add(taskID);
+                    auto* taskIndexByHash = columnShardHashV1.MutableTaskIndexByHash();
+                    for (std::size_t taskID: *columnShardHashV1Params.TaskIndexByHash) {
+                        taskIndexByHash->Add(taskID);
                     }
                     break;
                 }

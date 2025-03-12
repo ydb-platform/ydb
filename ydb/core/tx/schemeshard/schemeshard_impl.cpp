@@ -7246,13 +7246,15 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
 
     if (appConfig.HasQueryServiceConfig()) {
         const auto& hostnamePatterns = appConfig.GetQueryServiceConfig().GetHostnamePatterns();
+        const auto& availableExternalDataSources = appConfig.GetQueryServiceConfig().GetAvailableExternalDataSources();
         ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(
             std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
             nullptr,
             appConfig.GetQueryServiceConfig().GetS3().GetGeneratorPathsLimit(),
             nullptr,
             appConfig.GetFeatureFlags().GetEnableExternalSourceSchemaInference(),
-            appConfig.GetQueryServiceConfig().GetS3().GetAllowLocalFiles()
+            appConfig.GetQueryServiceConfig().GetS3().GetAllowLocalFiles(),
+            std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend())
         );
     }
 

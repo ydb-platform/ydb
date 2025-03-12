@@ -1286,7 +1286,7 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPart
     }
 
     if (auto* stage = bundle.GetStage<TPendingPartSwitch::TLoaderStage>()) {
-        if (auto fetch = stage->Loader.Run(PreloadTablesData.contains(partSwitch.TableId))) {
+        if (auto fetch = stage->Loader.Run({.PreloadIndex = true, .PreloadData = PreloadTablesData.contains(partSwitch.TableId)})) {
             Y_ABORT_UNLESS(fetch.size() == 1, "Cannot handle loads from more than one page collection");
 
             for (auto req : fetch) {
@@ -2978,9 +2978,9 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
 void TExecutor::Handle(NSharedCache::TEvUpdated::TPtr &ev) {
     const auto *msg = ev->Get();
 
-    for (auto &kv : msg->Actions) {
+    for (auto &kv : msg->DroppedPages) {
         if (auto *info = PrivatePageCache->Info(kv.first)) {
-            for (ui32 pageId : kv.second.Dropped) {
+            for (ui32 pageId : kv.second) {
                 PrivatePageCache->DropSharedBody(info, pageId);
             }
         }

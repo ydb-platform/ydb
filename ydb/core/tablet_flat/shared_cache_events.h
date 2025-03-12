@@ -135,11 +135,7 @@ namespace NKikimr::NSharedCache {
     };
 
     struct TEvUpdated : public TEventLocal<TEvUpdated, EvUpdated> {
-        struct TActions {
-            THashSet<ui32> Dropped;
-        };
-
-        THashMap<TLogoBlobID, TActions> Actions;
+        THashMap<TLogoBlobID, THashSet<TPageId>> DroppedPages;
     };
 }
 

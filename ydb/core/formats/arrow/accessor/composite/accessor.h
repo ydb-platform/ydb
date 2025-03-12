@@ -63,7 +63,7 @@ public:
 
     virtual bool HasSubColumnData(const TString& subColumnName) const override {
         for (auto&& i : Chunks) {
-            if (!i->HasWholeDataVolume()) {
+            if (!i->HasSubColumnData(subColumnName)) {
                 return false;
             }
         }

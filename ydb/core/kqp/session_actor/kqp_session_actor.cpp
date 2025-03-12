@@ -1751,7 +1751,7 @@ public:
             << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode) << " send to: " << ExecuterId << " from: " << ev->Sender;
 
         if (!QueryState || !QueryState->TxCtx || QueryState->TxCtx->BufferActorId != ev->Sender) {
-            LOG_E(logMsg <<  ": Old error.");
+            LOG_E(logMsg <<  ": Ignored error.");
             return;
         } else {
             LOG_W(logMsg);

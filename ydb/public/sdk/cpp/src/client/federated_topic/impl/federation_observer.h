@@ -16,7 +16,7 @@
 #include <deque>
 #include <memory>
 
-namespace NYdb::inline V3::NFederatedTopic {
+namespace NYdb::inline Dev::NFederatedTopic {
 
 struct TFederatedDbState {
 public:
@@ -121,4 +121,4 @@ public:
     }
 };
 
-} // namespace NYdb::V3::NFederatedTopic
+} // namespace NYdb::NFederatedTopic

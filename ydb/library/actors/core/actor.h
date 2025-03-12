@@ -284,12 +284,6 @@ namespace NActors {
 
     class TDecorator;
 
-    class TActorVirtualBehaviour {
-    public:
-        static void Receive(IActor* actor, std::unique_ptr<IEventHandle> ev);
-    public:
-    };
-
     class TActorCallbackBehaviour {
     private:
         using TBase = IActor;
@@ -374,18 +368,14 @@ namespace NActors {
         friend class TExecutorPoolBaseMailboxed;
         friend class TExecutorThread;
 
-        IActor(const ui32 activityType)
-            : SelfActorId(TActorId())
-            , ElapsedTicks(0)
-            , ActivityType(activityType)
-            , HandledEvents(0) {
-        }
+    public:
+        using TReceiveFunc = void (IActor::*)(TAutoPtr<IEventHandle>& ev);
 
-    protected:
-        TActorCallbackBehaviour CImpl;
+    private:
+        TReceiveFunc StateFunc_;
+
     public:
         using TEventFlags = IEventHandle::TEventFlags;
-        using TReceiveFunc = TActorCallbackBehaviour::TReceiveFunc;
         /// @sa services.proto NKikimrServices::TActivity::EType
         using EActorActivity = EInternalActorType;
         using EActivityType = EActorActivity;
@@ -394,23 +384,39 @@ namespace NActors {
     protected:
         ui64 HandledEvents;
 
-        template <typename EEnum = EActivityType, typename std::enable_if<std::is_enum<EEnum>::value, bool>::type v = true>
-        IActor(const EEnum activityEnumType = EActivityType::OTHER)
-            : IActor(TEnumProcessKey<TActorActivityTag, EEnum>::GetIndex(activityEnumType)) {
-        }
-
-        IActor(TActorCallbackBehaviour&& cImpl, const ui32 activityType)
+        IActor(TReceiveFunc stateFunc, const ui32 activityType)
             : SelfActorId(TActorId())
             , ElapsedTicks(0)
-            , CImpl(std::move(cImpl))
+            , StateFunc_(stateFunc)
             , ActivityType(activityType)
             , HandledEvents(0)
         {
         }
 
         template <typename EEnum = EActivityType, typename std::enable_if<std::is_enum<EEnum>::value, bool>::type v = true>
-        IActor(TActorCallbackBehaviour&& cImpl, const EEnum activityEnumType = EActivityType::OTHER)
-            : IActor(std::move(cImpl), TEnumProcessKey<TActorActivityTag, EEnum>::GetIndex(activityEnumType)) {
+        IActor(TReceiveFunc stateFunc, const EEnum activityEnumType = EActivityType::OTHER)
+            : IActor(stateFunc, TEnumProcessKey<TActorActivityTag, EEnum>::GetIndex(activityEnumType)) {
+        }
+
+        template <typename T>
+        void Become(T stateFunc) {
+            StateFunc_ = static_cast<TReceiveFunc>(stateFunc);
+        }
+
+        template <typename T, typename... TArgs>
+        void Become(T stateFunc, TArgs&&... args) {
+            StateFunc_ = static_cast<TReceiveFunc>(stateFunc);
+            Schedule(std::forward<TArgs>(args)...);
+        }
+
+        template <typename T, typename... TArgs>
+        void Become(T stateFunc, const TActorContext& ctx, TArgs&&... args) {
+            StateFunc_ = static_cast<TReceiveFunc>(stateFunc);
+            ctx.Schedule(std::forward<TArgs>(args)...);
+        }
+
+        TReceiveFunc CurrentStateFunc() const {
+            return StateFunc_;
         }
 
     public:
@@ -549,11 +555,7 @@ namespace NActors {
 #endif
             ++HandledEvents;
             LastReceiveTimestamp = TActivationContext::Monotonic();
-            if (CImpl.Initialized()) {
-                CImpl.Receive(this, ev);
-            } else {
-                TActorVirtualBehaviour::Receive(this, std::unique_ptr<IEventHandle>(ev.Release()));
-            }
+            (this->*StateFunc_)(ev);
         }
 
         TActorContext ActorContext() const {
@@ -639,43 +641,11 @@ namespace NActors {
         return TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetNameByIndex(index);
     }
 
-    class IActorCallback: public IActor {
-    protected:
-        template <class TEnum = IActor::EActivityType>
-        IActorCallback(TReceiveFunc stateFunc, const TEnum activityType = IActor::EActivityType::OTHER)
-            : IActor(TActorCallbackBehaviour(stateFunc), activityType) {
-
-        }
-
-        IActorCallback(TReceiveFunc stateFunc, const ui32 activityType)
-            : IActor(TActorCallbackBehaviour(stateFunc), activityType) {
-
-        }
-
-    public:
-        template <typename T>
-        void Become(T stateFunc) {
-            CImpl.Become(stateFunc);
-        }
-
-        template <typename T, typename... TArgs>
-        void Become(T stateFunc, const TActorContext& ctx, TArgs&&... args) {
-            CImpl.Become(stateFunc, ctx, std::forward<TArgs>(args)...);
-        }
-
-        template <typename T, typename... TArgs>
-        void Become(T stateFunc, TArgs&&... args) {
-            CImpl.Become(stateFunc);
-            Schedule(std::forward<TArgs>(args)...);
-        }
-
-        TReceiveFunc CurrentStateFunc() const {
-            return CImpl.CurrentStateFunc();
-        }
-    };
+    // For compatibility with existing code
+    using IActorCallback = IActor;
 
     template <typename TDerived>
-    class TActor: public IActorCallback {
+    class TActor: public IActor {
     private:
         using TDerivedReceiveFunc = void (TDerived::*)(TAutoPtr<IEventHandle>& ev);
 
@@ -729,36 +699,36 @@ namespace NActors {
         // UnsafeBecome methods don't verify the bindings of the stateFunc to the TDerived
         template <typename T>
         void UnsafeBecome(T stateFunc) {
-            this->IActorCallback::Become(stateFunc);
+            this->IActor::Become(stateFunc);
         }
 
         template <typename T, typename... TArgs>
         void UnsafeBecome(T stateFunc, const TActorContext& ctx, TArgs&&... args) {
-            this->IActorCallback::Become(stateFunc, ctx, std::forward<TArgs>(args)...);
+            this->IActor::Become(stateFunc, ctx, std::forward<TArgs>(args)...);
         }
 
         template <typename T, typename... TArgs>
         void UnsafeBecome(T stateFunc, TArgs&&... args) {
-            this->IActorCallback::Become(stateFunc, std::forward<TArgs>(args)...);
+            this->IActor::Become(stateFunc, std::forward<TArgs>(args)...);
         }
 
         template <typename T>
         void Become(T stateFunc) {
             // TODO(kruall): have to uncomment asserts after end of sync contrib/ydb
             // static_assert(std::is_convertible_v<T, TDerivedReceiveFunc>);
-            this->IActorCallback::Become(stateFunc);
+            this->IActor::Become(stateFunc);
         }
 
         template <typename T, typename... TArgs>
         void Become(T stateFunc, const TActorContext& ctx, TArgs&&... args) {
             // static_assert(std::is_convertible_v<T, TDerivedReceiveFunc>);
-            this->IActorCallback::Become(stateFunc, ctx, std::forward<TArgs>(args)...);
+            this->IActor::Become(stateFunc, ctx, std::forward<TArgs>(args)...);
         }
 
         template <typename T, typename... TArgs>
         void Become(T stateFunc, TArgs&&... args) {
             // static_assert(std::is_convertible_v<T, TDerivedReceiveFunc>);
-            this->IActorCallback::Become(stateFunc, std::forward<TArgs>(args)...);
+            this->IActor::Become(stateFunc, std::forward<TArgs>(args)...);
         }
     };
 

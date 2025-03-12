@@ -9,7 +9,7 @@
 #include <util/string/cast.h>
 #include <util/string/subst.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 class TCommonCodecsProvider {
 public:

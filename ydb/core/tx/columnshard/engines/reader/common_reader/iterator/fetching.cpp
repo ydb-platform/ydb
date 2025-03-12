@@ -194,6 +194,7 @@ void TFetchingScriptBuilder::AddAssembleStep(
 TConclusion<bool> TProgramStepPrepare::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     TReadActionsCollection readActions;
     THashMap<ui32, std::shared_ptr<IKernelFetchLogic>> fetchers;
+    TFetchingResultContext context(*source->GetStageData().GetTable(), *source->GetStageData().GetIndexes(), source);
     for (auto&& i : Step.GetOriginalColumnsToUse()) {
         const auto columnLoader = source->GetSourceSchema()->GetColumnLoaderVerified(i.GetColumnId());
         auto customFetchInfo = Step->BuildFetchTask(i.GetColumnId(), columnLoader->GetAccessorConstructor()->GetType(), source->GetStageData().GetTable());
@@ -205,12 +206,12 @@ TConclusion<bool> TProgramStepPrepare::DoExecuteInplace(const std::shared_ptr<ID
         }
         std::shared_ptr<IKernelFetchLogic> logic;
         if (customFetchInfo->GetFullRestore() || source->GetStageData().GetPortionAccessor().GetColumnChunksPointers(i.GetColumnId()).empty()) {
-            logic = std::make_shared<TDefaultFetchLogic>(i.GetColumnId(), source);
+            logic = std::make_shared<TDefaultFetchLogic>(i.GetColumnId(), source->GetContext()->GetCommonContext()->GetStoragesManager());
         } else {
             AFL_VERIFY(customFetchInfo->GetSubColumns().size());
             logic = std::make_shared<TSubColumnsFetchLogic>(i.GetColumnId(), source, customFetchInfo->GetSubColumns());
         }
-        logic->Start(readActions);
+        logic->Start(readActions, context);
         AFL_VERIFY(fetchers.emplace(i.GetColumnId(), logic).second)("column_id", i.GetColumnId());
     }
     if (readActions.IsEmpty()) {
@@ -240,6 +241,7 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
 
 TConclusion<bool> TProgramStepAssemble::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*cursor*/) const {
+    TFetchingResultContext context(*source->GetStageData().GetTable(), *source->GetStageData().GetIndexes(), source);
     for (auto&& i : Step.GetOriginalColumnsToUse()) {
         const auto columnLoader = source->GetSourceSchema()->GetColumnLoaderVerified(i.GetColumnId());
         auto customFetchInfo =
@@ -248,7 +250,7 @@ TConclusion<bool> TProgramStepAssemble::DoExecuteInplace(
             continue;
         }
         auto fetcher = source->MutableStageData().ExtractFetcherVerified(i.GetColumnId());
-        fetcher->OnDataCollected();
+        fetcher->OnDataCollected(context);
     }
     return true;
 }

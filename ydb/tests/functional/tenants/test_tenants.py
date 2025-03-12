@@ -10,7 +10,7 @@ from hamcrest import assert_that, greater_than, is_, not_, none
 
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.library.harness.ydb_fixtures import ydb_database_ctx
+from ydb.tests.library.fixtures import ydb_database_ctx
 
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ def enable_alter_database_create_hive_first(request):
     return request.param
 
 
-# ydb_fixtures.ydb_cluster_configuration local override
+# fixtures.ydb_cluster_configuration local override
 @pytest.fixture(scope='module')
 def ydb_cluster_configuration(enable_alter_database_create_hive_first):
     conf = copy.deepcopy(CLUSTER_CONFIG)

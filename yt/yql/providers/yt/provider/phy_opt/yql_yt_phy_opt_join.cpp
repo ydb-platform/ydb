@@ -2,6 +2,7 @@
 #include "yql_yt_phy_opt_helper.h"
 
 #include <yt/yql/providers/yt/provider/yql_yt_helpers.h>
+#include <yt/yql/providers/yt/provider/yql_yt_cbo_helpers.h>
 #include <yt/yql/providers/yt/provider/yql_yt_join_impl.h>
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 
@@ -351,16 +352,13 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::RuntimeEquiJoin(TExprBa
     }
     const auto tree = ImportYtEquiJoin(equiJoin, ctx);
 
-    const TMaybe<ui64> maxChunkCountExtendedStats = State_->Configuration->ExtendedStatsMaxChunkCount.Get();
-
-    if (tryReorder && waitAllInputs && maxChunkCountExtendedStats) {
+    if (tryReorder) {
         YQL_CLOG(INFO, ProviderYt) << "Collecting cbo stats for equiJoin";
         auto collectStatus = CollectCboStats(cluster, *tree, State_, ctx);
         if (collectStatus == TStatus::Repeat) {
             return ExportYtEquiJoin(equiJoin, *tree, ctx, State_);
         }
-    }
-    if (tryReorder) {
+
         const auto optimizedTree = OrderJoins(tree, State_, cluster, ctx);
         if (optimizedTree != tree) {
             return ExportYtEquiJoin(equiJoin, *optimizedTree, ctx, State_);

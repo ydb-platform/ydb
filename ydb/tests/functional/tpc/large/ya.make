@@ -1,8 +1,8 @@
 PY3TEST()
-ENV(YDB_HARD_MEMORY_LIMIT_BYTES="107374182400")
 
 TEST_SRCS(
     test_tpcds.py
+    test_tpch_spilling.py
 )
 
 SIZE(LARGE)

@@ -462,7 +462,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerTest) {
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 46u
+
     Y_UNIT_TEST_LLVM(TestHasLimitButPasstroughtYields) {
         TTestStreamParams params;
         params.TestYieldStreamData = {0, 1, 0, 2, TTestStreamParams::Yield, 0, TTestStreamParams::Yield, 1, 2, 0, 1, 3, 0, TTestStreamParams::Yield, 1, 2};
@@ -495,8 +495,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerTest) {
         UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Finish);
         UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Finish);
     }
-#endif
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 46u
+
     Y_UNIT_TEST_LLVM(TestSkipYieldRespectsMemLimit) {
         TTestStreamParams params;
         params.StringSize = 50000;
@@ -529,7 +528,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerTest) {
         UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Finish);
         UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Finish);
     }
-#endif
 }
 
 Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerPerfTest) {

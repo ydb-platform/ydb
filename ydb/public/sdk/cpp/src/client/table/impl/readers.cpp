@@ -3,7 +3,7 @@
 #include <src/client/common_client/impl/client.h>
 
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NTable {
 
 using namespace NThreading;

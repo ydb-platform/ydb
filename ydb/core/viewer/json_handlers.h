@@ -38,7 +38,11 @@ public:
     {}
 
     IActor* CreateRequestActor(IViewer* viewer, NMon::TEvHttpInfo::TPtr& event) override {
-        return new ActorRequestType(viewer, event);
+        if constexpr (!std::is_same_v<ActorRequestType, void>) {
+            return new ActorRequestType(viewer, event);
+        } else {
+            return nullptr;
+        }
     }
 
     YAML::Node GetRequestSwagger() override {

@@ -10,7 +10,7 @@
 #include <ydb-cpp-sdk/client/retry/retry.h>
 #include <ydb-cpp-sdk/client/types/request_settings.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
     class TProtoAccessor;
 
     namespace NRetry::Async {
@@ -23,7 +23,7 @@ namespace NYdb::inline V3 {
     } // namespace NRetry::Sync
 }
 
-namespace NYdb::inline V3::NQuery {
+namespace NYdb::inline Dev::NQuery {
 
 struct TCreateSessionSettings : public TSimpleRequestSettings<TCreateSessionSettings> {
     TCreateSessionSettings();
@@ -267,4 +267,4 @@ private:
     std::optional<TTransaction> Transaction_;
 };
 
-} // namespace NYdb::V3::NQuery
+} // namespace NYdb::NQuery

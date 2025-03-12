@@ -2299,7 +2299,7 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
 TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx, TMaybe<bool>& predicateOut)
 {
     if (tx.ForcePredicateFalse) {
-        predicate = false;
+        predicateOut = false;
         return EProcessResult::Continue;
     }
 

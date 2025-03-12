@@ -646,8 +646,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         auto msg = TString(1_MB, 'a');
 
-        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, TEST_TOPIC, false);
-        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, TEST_TOPIC, false);
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, std::string{TEST_TOPIC}, false);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, std::string{TEST_TOPIC}, false);
 
         {
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, 1)));
@@ -667,8 +667,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
         }
 
-        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, TEST_TOPIC, false);
-        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, TEST_TOPIC, false);
+        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, std::string{TEST_TOPIC}, false);
+        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, std::string{TEST_TOPIC}, false);
 
         {
             UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 7)));
@@ -691,15 +691,15 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         UNIT_ASSERT(description.GetPartitions().size() == 5);
 
         auto stats0 = description.GetPartitions().at(0).GetPartitionConsumerStats();
-        UNIT_ASSERT(stats0.Defined());
+        UNIT_ASSERT(stats0);
         UNIT_ASSERT(stats0->GetCommittedOffset() == 6);
 
         auto stats1 = description.GetPartitions().at(1).GetPartitionConsumerStats();
-        UNIT_ASSERT(stats1.Defined());
+        UNIT_ASSERT(stats1);
         UNIT_ASSERT(stats1->GetCommittedOffset() == 2);
 
         auto stats3 = description.GetPartitions().at(3).GetPartitionConsumerStats();
-        UNIT_ASSERT(stats3.Defined());
+        UNIT_ASSERT(stats3);
         UNIT_ASSERT(stats3->GetCommittedOffset() == 0);
     }
 
@@ -972,8 +972,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         auto msg = TString(1_MB, 'a');
 
-        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, TEST_TOPIC, false);
-        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, TEST_TOPIC, false);
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, std::string{TEST_TOPIC}, false);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, std::string{TEST_TOPIC}, false);
 
         {
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, 1)));
@@ -993,8 +993,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
         }
 
-        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, TEST_TOPIC, false);
-        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, TEST_TOPIC, false);
+        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, std::string{TEST_TOPIC}, false);
+        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, std::string{TEST_TOPIC}, false);
 
         {
             UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 7)));
@@ -1063,7 +1063,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         UNIT_ASSERT(description.GetPartitions().size() == 5);
 
         auto stats1 = description.GetPartitions().at(1).GetPartitionConsumerStats();
-        UNIT_ASSERT(stats1.Defined());
+        UNIT_ASSERT(stats1);
         UNIT_ASSERT(stats1->GetCommittedOffset() == 4);
     }
 
@@ -1090,8 +1090,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         auto msg = TString(1_MB, 'a');
 
-        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, TEST_TOPIC, false);
-        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, TEST_TOPIC, false);
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, std::string{TEST_TOPIC}, false);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, std::string{TEST_TOPIC}, false);
 
         {
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, 1)));
@@ -1111,8 +1111,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
         }
 
-        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, TEST_TOPIC, false);
-        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, TEST_TOPIC, false);
+        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, std::string{TEST_TOPIC}, false);
+        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, std::string{TEST_TOPIC}, false);
 
         {
             UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 7)));
@@ -1196,7 +1196,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         UNIT_ASSERT(description.GetPartitions().size() == 5);
 
         auto stats1 = description.GetPartitions().at(1).GetPartitionConsumerStats();
-        UNIT_ASSERT(stats1.Defined());
+        UNIT_ASSERT(stats1);
 
         UNIT_ASSERT(stats1->GetCommittedOffset() == 0);
 
@@ -1213,7 +1213,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         UNIT_ASSERT(description2.GetPartitions().size() == 5);
 
         stats1 = description2.GetPartitions().at(1).GetPartitionConsumerStats();
-        UNIT_ASSERT(stats1.Defined());
+        UNIT_ASSERT(stats1);
 
         UNIT_ASSERT(stats1->GetCommittedOffset() == 4);
     }
@@ -1241,8 +1241,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         auto msg = TString(1_MB, 'a');
 
-        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, TEST_TOPIC, false);
-        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, TEST_TOPIC, false);
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, std::string{TEST_TOPIC}, false);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, std::string{TEST_TOPIC}, false);
         auto seqNo = 1;
         {
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, seqNo++)));
@@ -1262,7 +1262,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
         }
 
-        auto writeSession_3 = CreateWriteSession(client, "producer-2", 1, TEST_TOPIC, false);
+        auto writeSession_3 = CreateWriteSession(client, "producer-2", 1, std::string{TEST_TOPIC}, false);
         UNIT_ASSERT(writeSession_3->Write(Msg("message", seqNo++)));
         UNIT_ASSERT(writeSession_3->Write(Msg("message", seqNo++)));
 

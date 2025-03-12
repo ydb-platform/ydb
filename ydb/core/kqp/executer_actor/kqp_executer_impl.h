@@ -764,7 +764,7 @@ protected:
     }
 
     void HandleAbortExecution(
-            NYql::NDqProto::StatusIds::StatusCode statusCode, 
+            NYql::NDqProto::StatusIds::StatusCode statusCode,
             const NYql::TIssues& issues,
             const bool sessionSender) {
         LOG_D("Got EvAbortExecution, status: " << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode)
@@ -1698,8 +1698,8 @@ protected:
 
             } else if (enableShuffleElimination /* save partitioning for shuffle elimination */) {
                 std::size_t stageInternalTaskId = 0;
-                columnShardHashV1Params.TaskIdByHash = std::make_shared<TVector<ui64>>();
-                columnShardHashV1Params.TaskIdByHash->resize(columnShardHashV1Params.SourceShardCount);
+                columnShardHashV1Params.TaskIndexByHash = std::make_shared<TVector<ui64>>();
+                columnShardHashV1Params.TaskIndexByHash->resize(columnShardHashV1Params.SourceShardCount);
 
                 for (auto&& pair : nodeShards) {
                     const auto nodeId = pair.first;
@@ -1750,7 +1750,7 @@ protected:
 
                         for (const auto& readInfo: *task.Meta.Reads) {
                             Y_ENSURE(hashByShardId.contains(readInfo.ShardId));
-                            (*columnShardHashV1Params.TaskIdByHash)[hashByShardId[readInfo.ShardId]] = stageInternalTaskId;
+                            (*columnShardHashV1Params.TaskIndexByHash)[hashByShardId[readInfo.ShardId]] = stageInternalTaskId;
                         }
 
                     }
@@ -1759,8 +1759,8 @@ protected:
                 LOG_DEBUG_S(
                     *TlsActivationContext,
                     NKikimrServices::KQP_EXECUTER,
-                    "Stage with scan " << "[" << stageInfo.Id.TxId << ":" << stageInfo.Id.StageId << "]" << " has keys: "
-                    << columnShardHashV1Params.KeyTypesToString();
+                    "Stage with scan " << "[" << stageInfo.Id.TxId << ":" << stageInfo.Id.StageId << "]"
+                    << " has keys: " << columnShardHashV1Params.KeyTypesToString();
                 );
             } else {
                 ui32 metaId = 0;

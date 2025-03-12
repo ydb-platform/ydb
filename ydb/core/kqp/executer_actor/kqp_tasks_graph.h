@@ -32,7 +32,7 @@ struct TTransaction : private TMoveOnly {
 struct TColumnShardHashV1Params {
     ui64 SourceShardCount = 0;
     std::shared_ptr<TVector<NScheme::TTypeInfo>> SourceTableKeyColumnTypes = nullptr;
-    std::shared_ptr<TVector<ui64>> TaskIdByHash = nullptr; // hash belongs [0; ShardCount]
+    std::shared_ptr<TVector<ui64>> TaskIndexByHash = nullptr; // hash belongs [0; ShardCount]
 
     TColumnShardHashV1Params DeepCopy() const {
         TColumnShardHashV1Params copy;
@@ -44,10 +44,10 @@ struct TColumnShardHashV1Params {
             copy.SourceTableKeyColumnTypes = nullptr;
         }
 
-        if (TaskIdByHash) {
-            copy.TaskIdByHash = std::make_shared<TVector<ui64>>(*TaskIdByHash);
+        if (TaskIndexByHash) {
+            copy.TaskIndexByHash = std::make_shared<TVector<ui64>>(*TaskIndexByHash);
         } else {
-            copy.TaskIdByHash = nullptr;
+            copy.TaskIndexByHash = nullptr;
         }
 
         return copy;

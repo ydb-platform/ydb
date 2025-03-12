@@ -52,7 +52,8 @@ namespace NKikimr {
 
         friend class TActorBootstrapped<THullSyncFullActor>;
 
-        constexpr static double MaxProcessingTimeSec = 0.005;  // 5ms, half of a quota for mailbox
+        constexpr static TDuration MaxProcessingTime = TDuration::MilliSeconds(5);  // half of a quota for mailbox
+        constexpr static ui32 TimerIterations = 1024;
 
         void Serialize(const TActorContext &ctx,
                        TString *buf,
@@ -151,9 +152,24 @@ namespace NKikimr {
             using TIndexForwardIterator = typename TLevelIndexSnapshot::TIndexForwardIterator;
             TIndexForwardIterator it(HullCtx, &snapshot);
             it.Seek(key);
+
             // copy data until we have some space
-            while (it.Valid() && (data->size() + NSyncLog::MaxRecFullSize <= data->capacity())
-                    && timer.Passed() < MaxProcessingTimeSec) {
+            ui32 result = 0;
+            ui32 timerIterations = TimerIterations;
+            while (it.Valid()) {
+                if (data->size() + NSyncLog::MaxRecFullSize > data->capacity()) {
+                    result |= MsgFullFlag;
+                    break;
+                }
+
+                if (--timerIterations == 0) {
+                    if (TDuration::Seconds(timer.Passed()) > MaxProcessingTime) {
+                        result |= LongProcessing;
+                        break;
+                    }
+                    timerIterations = TimerIterations;
+                }
+
                 key = it.GetCurKey();
                 if (filter.Check(key, it.GetMemRec(), HullCtx->AllowKeepFlags, true /*allowGarbageCollection*/))
                     Serialize(ctx, data, key, it.GetMemRec());
@@ -161,13 +177,9 @@ namespace NKikimr {
             }
             // key points to the last seen key
 
-            ui32 result = 0;
             if (!it.Valid())
                 result |= EmptyFlag;
-            if (data->size() + NSyncLog::MaxRecFullSize > data->capacity())
-                result |= MsgFullFlag;
-            if (timer.Passed() >= MaxProcessingTimeSec)
-                result |= LongProcessing;
+
             return result;
         }
 

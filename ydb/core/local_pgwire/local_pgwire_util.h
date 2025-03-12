@@ -8,7 +8,7 @@
 
 #include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/plain_status/status.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/plain_status/status.h>
 #include <ydb-cpp-sdk/client/table/table.h>
 #include <ydb-cpp-sdk/client/types/operation/operation.h>
 #include <ydb-cpp-sdk/client/value/value.h>

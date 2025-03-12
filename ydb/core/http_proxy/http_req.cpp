@@ -38,7 +38,7 @@
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 
 #include <ydb-cpp-sdk/client/datastreams/datastreams.h>
-#include <src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 
 #include <ydb/services/datastreams/datastreams_proxy.h>
 #include <ydb/services/datastreams/next_token.h>

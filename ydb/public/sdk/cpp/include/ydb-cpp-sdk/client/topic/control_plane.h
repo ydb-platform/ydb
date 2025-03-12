@@ -2,7 +2,7 @@
 
 #include "codecs.h"
 
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 

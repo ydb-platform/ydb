@@ -1,4 +1,4 @@
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 Y_DECLARE_OUT_SPEC(, NYdb::NTable::TCopyItem, o, x) {
     return x.Out(o);

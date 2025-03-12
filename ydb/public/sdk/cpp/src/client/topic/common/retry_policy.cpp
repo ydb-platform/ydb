@@ -1,5 +1,5 @@
-#include <ydb-cpp-sdk/client/topic/errors.h>
-#include <ydb-cpp-sdk/client/topic/retry_policy.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/errors.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/retry_policy.h>
 
 namespace NYdb::inline Dev::NTopic {
 

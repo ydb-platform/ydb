@@ -1,6 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <src/client/topic/ut/ut_utils/trace.h>
+#include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/trace.h>
 
 namespace NYdb::NTopic::NTests {
 

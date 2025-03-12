@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/topic/executor.h>
-#include <src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/executor.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
 #include <util/thread/pool.h>
 

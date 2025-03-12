@@ -366,4 +366,8 @@ message TTableServiceConfig {
     optional bool EnableSnapshotIsolationRW = 76 [default = false];
     optional bool EnableStreamWrite = 77 [default = false];
     optional bool EnableBatchUpdates = 78 [default = false];
+
+    optional bool AllowMultiBroadcasts = 79 [default = false];
+
+    optional bool DefaultEnableShuffleElimination = 80 [default = false];
 };

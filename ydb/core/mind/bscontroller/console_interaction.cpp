@@ -515,7 +515,6 @@ namespace NKikimr::NBsController {
                     throw TExError(TStringBuilder() << "failed to validate derived StorageConfig: " << *errorReason);
                 }
             }
-
             Self.Execute(Self.CreateTxCommitConfig(std::move(yamlConfig), std::exchange(PendingStorageYamlConfig, {}),
                 std::move(storageConfig), expectedStorageYamlConfigVersion, nullptr, SwitchEnableConfigV2));
             CommitInProgress = true;

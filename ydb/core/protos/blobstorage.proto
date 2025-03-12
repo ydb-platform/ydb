@@ -1452,6 +1452,7 @@ message TEvControllerReplaceConfigRequest {
     // console flags
     optional bool AllowUnknownFields = 8;
     optional bool BypassMetadataChecks = 9;
+    optional bool DryRun = 10;
 }
 
 message TEvControllerReplaceConfigResponse {

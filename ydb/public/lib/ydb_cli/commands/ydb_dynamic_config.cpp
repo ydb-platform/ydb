@@ -235,6 +235,15 @@ void TCommandConfigReplace::Config(TConfig& config) {
         .StoreTrue(&AllowUnknownFields);
     config.Opts->AddLongOption("force", "Ignore metadata on config replacement")
         .StoreTrue(&Force);
+    config.Opts->AddLongOption("dedicated-cluster-yaml", "Path to dedicated cluster section of configuration")
+        .RequiredArgument("[cluster.yaml]").StoreResult(&ClusterYamlPath);
+    config.Opts->AddLongOption("dedicated-storage-yaml", "Path to dedicated storage section of configuration")
+        .RequiredArgument("[storage.yaml]").StoreResult(&StorageYamlPath);
+    config.Opts->AddLongOption("enable-dedicated-storage-section", "Turn on dedicated storage section in stored configuration")
+        .StoreTrue(&EnableDedicatedStorageSection);
+    config.Opts->AddLongOption("disable-dedicated-storage-section", "Turn off dedicated storage section in stored configuration")
+        .StoreTrue(&DisableDedicatedStorageSection);
+    config.SetFreeArgsNum(0);
     config.AllowEmptyDatabase = AllowEmptyDatabase;
     config.SetFreeArgsNum(0);
 }
@@ -242,13 +251,29 @@ void TCommandConfigReplace::Config(TConfig& config) {
 void TCommandConfigReplace::Parse(TConfig& config) {
     TClientCommand::Parse(config);
 
-    if (Filename == "") {
-        ythrow yexception() << "Must specify non-empty -f (--filename)";
+    if (EnableDedicatedStorageSection && DisableDedicatedStorageSection) {
+        ythrow yexception() << "Can't provide both --enable-dedicated-storage-section and --disable-dedicated-storage-section";
+    } else if (Filename && (ClusterYamlPath || StorageYamlPath)) {
+        ythrow yexception() << "Can't provide -f (--filename) with either --cluster-yaml or --storage-yaml";
     }
 
-    const auto configStr = Filename == "-" ? Cin.ReadAll() : TFileInput(Filename).ReadAll();
+    if (ClusterYamlPath) {
+        ClusterYaml.emplace(ClusterYamlPath == "-" ? Cin.ReadAll() : TFileInput(ClusterYamlPath).ReadAll());
+        DedicatedConfigMode = true;
+    }
+    if (StorageYamlPath) {
+        StorageYaml.emplace(StorageYamlPath == "-" ? Cin.ReadAll() : TFileInput(StorageYamlPath).ReadAll());
+        DedicatedConfigMode = true;
+    }
+    if (Filename && !DedicatedConfigMode) {
+        ClusterYaml.emplace(Filename == "-" ? Cin.ReadAll() : TFileInput(Filename).ReadAll());
+    }
 
-    DynamicConfig = configStr;
+    if (EnableDedicatedStorageSection) {
+        SwitchDedicatedStorageSection.emplace(true);
+    } else if (DisableDedicatedStorageSection) {
+        SwitchDedicatedStorageSection.emplace(false);
+    }
 
     if (!IgnoreCheck) {
         NYamlConfig::GetMainMetadata(configStr);
@@ -279,7 +304,17 @@ int TCommandConfigReplace::Run(TConfig& config) {
     auto status = TStatus(EStatus::CLIENT_CALL_UNIMPLEMENTED, {});
 
     if (!UseLegacyApi) {
-        status = client.ReplaceConfig(DynamicConfig, settings).GetValueSync();
+        auto status = [&]() {
+            if (SwitchDedicatedStorageSection && !*SwitchDedicatedStorageSection) {
+                return client.ReplaceConfigDisableDedicatedStorageSection(ClusterYaml.value(), settings).GetValueSync();
+            } else if (SwitchDedicatedStorageSection && *SwitchDedicatedStorageSection) {
+                return client.ReplaceConfigEnableDedicatedStorageSection(ClusterYaml.value(), StorageYaml.value(), settings).GetValueSync();
+            } else if (DedicatedConfigMode) {
+                return client.ReplaceConfig(ClusterYaml.value(), StorageYaml.value(), settings).GetValueSync();
+            } else {
+                return client.ReplaceConfig(ClusterYaml.value(), settings).GetValueSync();
+            }
+        }();
     }
 
     if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || status.GetStatus() == EStatus::UNSUPPORTED) {

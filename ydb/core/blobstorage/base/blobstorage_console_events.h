@@ -79,7 +79,7 @@ namespace NKikimr {
 
         TEvControllerReplaceConfigRequest(std::optional<TString> clusterYaml, std::optional<TString> storageYaml,
                 std::optional<bool> switchDedicatedStorageSection, bool dedicatedConfigMode, bool allowUnknownFields,
-                bool bypassMetadataChecks, bool enableConfigV2, bool disableConfigV2) {
+                bool bypassMetadataChecks, bool enableConfigV2, bool disableConfigV2, bool dryRun) {
             if (clusterYaml) {
                 Record.SetClusterYaml(*clusterYaml);
             }
@@ -97,6 +97,7 @@ namespace NKikimr {
             } else if (disableConfigV2) {
                 Record.SetSwitchEnableConfigV2(false);
             }
+            Record.SetDryRun(dryRun);
         }
 
         TString ToString() const override {

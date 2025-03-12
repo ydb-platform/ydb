@@ -43,9 +43,18 @@ private:
     bool Force = false;
     bool DryRun = false;
     bool AllowUnknownFields = false;
-    TString DynamicConfig;
-    TString Filename;
     bool AllowEmptyDatabase = false;
+
+    TString Filename;
+    TString ClusterYamlPath;
+    TString StorageYamlPath;
+    bool EnableDedicatedStorageSection = false;
+    bool DisableDedicatedStorageSection = false;
+
+    std::optional<TString> ClusterYaml;
+    std::optional<TString> StorageYaml;
+    std::optional<bool> SwitchDedicatedStorageSection;
+    bool DedicatedConfigMode = false;
 };
 
 class TCommandConfigFetch : public TYdbReadOnlyCommand {

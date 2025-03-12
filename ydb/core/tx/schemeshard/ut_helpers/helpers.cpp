@@ -187,17 +187,29 @@ namespace NSchemeShardUT_Private {
     }
 
     void SetApplyIf(NKikimrSchemeOp::TModifyScheme& transaction, const TApplyIf& applyIf) {
-        for (auto& pathVersion: applyIf) {
+        for (const auto& applyIfUnit: applyIf) {
             auto condition = transaction.AddApplyIf();
-            condition->SetPathId(pathVersion.PathId.LocalPathId);
-            condition->SetPathVersion(pathVersion.Version);
+
+            if (applyIfUnit.PathId.has_value()) {
+                condition->SetPathId(applyIfUnit.PathId.value().LocalPathId);
+            }
+
+            if (applyIfUnit.Version.has_value()) {
+                condition->SetPathVersion(applyIfUnit.Version.value());
+            }
+
+            if (applyIfUnit.AllowedPathTypes.has_value()) {
+                for (auto allowedPathType : applyIfUnit.AllowedPathTypes.value()) {
+                    condition->AddAllowedPathTypes(allowedPathType);
+                }
+            }
         }
     }
 
     TEvSchemeShard::TEvModifySchemeTransaction* CreateModifyACLRequest(
         ui64 txId, ui64 schemeshard,
         TString parentPath, TString name, 
-        const TString& diffAcl, const TString& newOwner, ETypeOfPath typeOfPath = ETypeOfPath::Any
+        const TString& diffAcl, const TString& newOwner, const TApplyIf& applyIf
     )
     {
         auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, schemeshard);
@@ -205,16 +217,7 @@ namespace NSchemeShardUT_Private {
         transaction->SetWorkingDir(parentPath);
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
 
-        switch (typeOfPath) {
-            case ETypeOfPath::SubDomainOrExtSubDomain: {
-                auto condition = transaction->AddApplyIf();
-                condition->SetCheckTypeOfPath(NKikimrSchemeOp::TApplyIf::SubDomainOrExtSubDomain);
-                break;
-            }
-            case ETypeOfPath::Any: {
-                break;
-            }
-        }
+        SetApplyIf(*transaction, applyIf);
 
         auto op = transaction->MutableModifyACL();
         op->SetName(name);
@@ -232,19 +235,19 @@ namespace NSchemeShardUT_Private {
         TTestActorRuntime& runtime,
         ui64 schemeShardId, ui64 txId,
         TString parentPath, TString name,
-        const TString& diffAcl, const TString& newOwner, ETypeOfPath typeOfPath
+        const TString& diffAcl, const TString& newOwner, const TApplyIf& applyIf
     )
     {
-        AsyncSend(runtime, schemeShardId, CreateModifyACLRequest(txId, schemeShardId, parentPath, name, diffAcl, newOwner, typeOfPath));
+        AsyncSend(runtime, schemeShardId, CreateModifyACLRequest(txId, schemeShardId, parentPath, name, diffAcl, newOwner, applyIf));
     }
 
     void AsyncModifyACL(
         TTestActorRuntime& runtime,
         ui64 txId, TString parentPath, TString name,
-        const TString& diffAcl, const TString& newOwner, ETypeOfPath typeOfPath
+        const TString& diffAcl, const TString& newOwner, const TApplyIf& applyIf
     )
     {
-        return AsyncModifyACL(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, diffAcl, newOwner, typeOfPath);
+        return AsyncModifyACL(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, diffAcl, newOwner, applyIf);
     }
 
     void TestModifyACL(
@@ -253,10 +256,10 @@ namespace NSchemeShardUT_Private {
         TString parentPath, TString name,
         const TString& diffAcl, const TString& newOwner,
         TEvSchemeShard::EStatus expectedResult,
-        ETypeOfPath typeOfPath
+        const TApplyIf& applyIf
     )
     {
-        AsyncModifyACL(runtime, schemeShardId, txId, parentPath, name, diffAcl, newOwner, typeOfPath);
+        AsyncModifyACL(runtime, schemeShardId, txId, parentPath, name, diffAcl, newOwner, applyIf);
         TestModificationResult(runtime, txId, expectedResult);
     }
 
@@ -265,10 +268,10 @@ namespace NSchemeShardUT_Private {
         ui64 txId, TString parentPath, TString name,
         const TString& diffAcl, const TString& newOwner,
         TEvSchemeShard::EStatus expectedResult,
-        ETypeOfPath typeOfPath
+        const TApplyIf& applyIf
     )
     {
-        TestModifyACL(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, diffAcl, newOwner, expectedResult, typeOfPath);
+        TestModifyACL(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, diffAcl, newOwner, expectedResult, applyIf);
     }
 
 

@@ -64,7 +64,7 @@ set_property(
   ydb-core-kqp-ut-join
   PROPERTY
   SPLIT_FACTOR
-  50
+  200
 )
 
 add_yunittest(

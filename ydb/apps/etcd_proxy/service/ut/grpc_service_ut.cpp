@@ -666,6 +666,29 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
             }
 
             UNIT_ASSERT_VALUES_EQUAL(Get(key, etcd), val);
+            UNIT_ASSERT_VALUES_EQUAL(Delete(key, etcd), 1LL);
+
+            {
+                grpc::ClientContext txnCtx;
+                etcdserverpb::TxnRequest txnRequest;
+
+                const auto compare = txnRequest.add_compare();
+                compare->set_result(etcdserverpb::Compare_CompareResult_EQUAL);
+                compare->set_target(etcdserverpb::Compare_CompareTarget_MOD);
+                compare->set_key(key);
+                compare->set_mod_revision(0LL);
+
+                const auto put = txnRequest.add_success()->mutable_request_put();
+                put->set_key(key);
+                put->set_value(val);
+
+                etcdserverpb::TxnResponse txnResponse;
+                UNIT_ASSERT(etcd->Txn(&txnCtx, txnRequest, &txnResponse).ok());
+
+                UNIT_ASSERT(txnResponse.succeeded());
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(Get(key, etcd), val);
          });
     }
 

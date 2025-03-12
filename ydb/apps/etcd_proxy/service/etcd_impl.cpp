@@ -257,7 +257,7 @@ struct TPut : public TOperation {
         const auto& oldResultSetName = GetNameWithIndex("Old", resultsCounter);
         const auto& newResultSetName = GetNameWithIndex("New", resultsCounter);
 
-        sql << oldResultSetName << " = select `key`, `created`, `modified`, `version`, `value`, `lease` from `verhaal`";
+        sql << oldResultSetName << " = select `key`, `created`, `modified`, `version`, `value`, `lease` from `huidig`";
         sql << keyFilter << " order by `modified` desc limit 1;" << std::endl;
 
         sql << newResultSetName << " = select" << std::endl;

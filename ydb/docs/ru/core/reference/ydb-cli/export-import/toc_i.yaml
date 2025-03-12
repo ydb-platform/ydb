@@ -13,3 +13,5 @@ items:
   href: import-s3.md
 - name: Импорт данных из файла в существующую таблицу
   href: import-file.md
+- name: Резервное копирование и восстановление представлений (views)
+  href: view-backup.md

@@ -38,6 +38,7 @@ class TestStress(object):
         self.endpoint = "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port)
         output_path = yatest.common.test_output_path()
         self.output_f = open(os.path.join(output_path, "out.log"), "w")
+        self.results_out_path = os.path.join(output_path, "results.out")
         yield
         self.cluster.stop()
 
@@ -245,6 +246,8 @@ class TestStress(object):
             # not working for row tables
             "17",
             "--check-canonical",
+            "--output",
+            self.results_out_path,
         ]
 
         yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)

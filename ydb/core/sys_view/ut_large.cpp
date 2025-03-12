@@ -6,7 +6,7 @@
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
-#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <library/cpp/yson/node/node_io.h>
 

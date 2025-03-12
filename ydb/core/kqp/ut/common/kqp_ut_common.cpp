@@ -5,7 +5,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <yql/essentials/core/yql_data_provider.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>

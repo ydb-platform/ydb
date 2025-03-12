@@ -10,9 +10,9 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/plain_status/status.h>
-#include <ydb-cpp-sdk/client/types/operation/operation.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>

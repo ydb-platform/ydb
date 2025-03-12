@@ -11,7 +11,7 @@
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/utils/resetable_setting.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/manager/abstract.h>
 #include <ydb/services/persqueue_v1/actors/events.h>

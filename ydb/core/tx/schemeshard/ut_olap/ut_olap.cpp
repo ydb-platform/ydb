@@ -29,6 +29,20 @@ static const TString defaultStoreSchema = R"(
     }
 )";
 
+static const TString invalidStoreSchema = R"(
+    Name: "OlapStore"
+    ColumnShardCount: 1
+    SchemaPresets {
+        Name: "default"
+        Schema {
+            Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+            Columns { Name: "data" Type: "Utf8" }
+            Columns { Name: "mess age" Type: "Utf8" }
+            KeyColumnNames: "timestamp"
+        }
+    }
+)";
+
 static const TString defaultTableSchema = R"(
     Name: "ColumnTable"
     ColumnShardCount: 1
@@ -44,8 +58,75 @@ static const TVector<NArrow::NTest::TTestColumn> defaultYdbSchema = {
     NArrow::NTest::TTestColumn("data", TTypeInfo(NTypeIds::Utf8) )
 };
 
-}}
+static const TString tableSchemaFormat = R"(
+    Name: "TestTable"
+    Schema {
+        Columns {
+            Name: "Id"
+            Type: "Int32"
+            NotNull: True
+        }
+        Columns {
+            Name: "%s"
+            Type: "Utf8"
+        }
+        KeyColumnNames: ["Id"]
+    }
+)";
 
+#define DEBUG_HINT (TStringBuilder() << "at line " << __LINE__)
+
+NLs::TCheckFunc LsCheckDiskQuotaExceeded(
+    bool expectExceeded = true,
+    const TString& debugHint = ""
+) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        auto& desc = record.GetPathDescription().GetDomainDescription();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            desc.GetDomainState().GetDiskQuotaExceeded(),
+            expectExceeded,
+            debugHint << ", subdomain's disk space usage:\n" << desc.GetDiskSpaceUsage().DebugString()
+        );
+    };
+}
+
+void CheckQuotaExceedance(TTestActorRuntime& runtime,
+                          ui64 schemeShard,
+                          const TString& pathToSubdomain,
+                          bool expectExceeded,
+                          const TString& debugHint = ""
+) {
+    TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain), {
+        LsCheckDiskQuotaExceeded(expectExceeded, debugHint)
+    });
+}
+
+NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 columnShardId, ui64 minPartCount = 0) {
+    NKikimrTxDataShard::TEvPeriodicTableStats stats;
+    bool captured = false;
+
+    auto observer = runtime.AddObserver<TEvDataShard::TEvPeriodicTableStats>([&](const auto& event) {
+            const auto& record = event->Get()->Record;
+            if (record.GetDatashardId() == columnShardId && record.GetTableStats().GetPartCount() >= minPartCount) {
+                stats = record;
+                captured = true;
+            }
+        }
+    );
+
+    for (int i = 0; i < 5 && !captured; ++i) {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() { return captured; };
+        runtime.DispatchEvents(options, TDuration::Seconds(5));
+    }
+
+    observer.Remove();
+
+    UNIT_ASSERT(captured);
+
+    return stats;
+}
+}}
 
 Y_UNIT_TEST_SUITE(TOlap) {
     Y_UNIT_TEST(CreateStore) {
@@ -925,4 +1006,163 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathExist);
     }    
+}
+
+Y_UNIT_TEST_SUITE(TOlapNaming) {
+
+    Y_UNIT_TEST(CreateColumnTableOk) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TString allowedChars = "_-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+        TString tableSchema = Sprintf(tableSchemaFormat.c_str(), allowedChars.c_str());
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(CreateColumnTableFailed) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        
+        TVector<TString> notAllowedNames = {"mess age", "~!@#$%^&*()+=asdfa"};
+        
+        for (const auto& colName: notAllowedNames) {
+            TString tableSchema = Sprintf(tableSchemaFormat.c_str(), colName.c_str());
+
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, {NKikimrScheme::StatusSchemeError});
+            env.TestWaitNotification(runtime, txId);
+        }
+    }
+
+    Y_UNIT_TEST(CreateColumnStoreOk) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const TString& storeSchema = defaultStoreSchema;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", storeSchema, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathExist);
+    }
+
+    Y_UNIT_TEST(CreateColumnStoreFailed) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const TString& storeSchema = invalidStoreSchema;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", storeSchema, {NKikimrScheme::StatusSchemeError});
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathNotExist);
+    }
+
+    Y_UNIT_TEST(AlterColumnTableOk) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        TTestEnv env(runtime, options);
+        ui64 txId = 100;
+
+        TString tableSchema = Sprintf(tableSchemaFormat.c_str(), "message");
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            AlterSchema {
+                AddColumns {
+                    Name: "NewColumn"
+                    Type: "Int32"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(AlterColumnTableFailed) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        TTestEnv env(runtime, options);
+        ui64 txId = 100;
+
+        TString tableSchema = Sprintf(tableSchemaFormat.c_str(), "message");
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            AlterSchema {
+                AddColumns {
+                    Name: "New Column"
+                    Type: "Int32"
+                }
+            }
+        )", {NKikimrScheme::StatusSchemeError});
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(AlterColumnStoreOk) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const TString& olapSchema = defaultStoreSchema;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", olapSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        const TString& tableSchema = defaultTableSchema;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            AlterSchemaPresets {
+                Name: "default"
+                AlterSchema {
+                    AddColumns { Name: "comment" Type: "Utf8" }
+                }
+            }
+        )", {NKikimrScheme::StatusAccepted});
+
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(AlterColumnStoreFailed) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const TString& olapSchema = defaultStoreSchema;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", olapSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        const TString& tableSchema = defaultTableSchema;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            AlterSchemaPresets {
+                Name: "default"
+                AlterSchema {
+                    AddColumns { Name: "mess age" Type: "Utf8" }
+                }
+            }
+        )", {NKikimrScheme::StatusSchemeError});
+
+        env.TestWaitNotification(runtime, txId);
+    }
 }

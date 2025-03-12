@@ -33,7 +33,8 @@ protected:
     const NTable::TScheme& Scheme() const noexcept;
 
     TActorContext ExecutorCtx(const TActivationContext &ctx) {
-        return TActorContext(ctx.Mailbox, ctx.ExecutorThread, ctx.EventStart, ExecutorID());
+        return ctx.AsActorContext();
+        //return TActorContext(ctx.Mailbox, ctx.ExecutorThread, ctx.EventStart, ExecutorID());
     }
 
     virtual void OnActivateExecutor(const TActorContext &ctx) = 0;

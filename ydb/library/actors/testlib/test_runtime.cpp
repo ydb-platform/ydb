@@ -291,6 +291,10 @@ namespace NActors {
         {
         }
 
+        TActorSystem *GetActorSystem() const override {
+            return Node->ActorSystem.Get();
+        }
+
         TTestActorRuntimeBase* GetRuntime() {
             return Runtime;
         }

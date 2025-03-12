@@ -95,7 +95,7 @@ namespace NActors {
     }
 
     bool TExecutorPoolBaseMailboxed::Send(TAutoPtr<IEventHandle>& ev) {
-        Y_DEBUG_ABORT_UNLESS(ev->GetRecipientRewrite().PoolID() == PoolId);
+        //Y_DEBUG_ABORT_UNLESS(ev->GetRecipientRewrite().PoolID() == PoolId);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         RelaxedStore(&ev->SendTime, (::NHPTimer::STime)GetCycleCountFast());
 #endif
@@ -103,13 +103,15 @@ namespace NActors {
             TlsThreadContext->IsCurrentRecipientAService = ev->Recipient.IsService();
         }
 
-        if (TMailbox* mailbox = MailboxTable->Get(ev->GetRecipientRewrite().Hint())) {
+        TMailbox* mailbox = MailboxTable->Get(ev->GetRecipientRewrite().Hint());
+        // Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " mailbox# " << (void*)mailbox << " ev# " << (void*)ev.Get() << Endl);
+        if (mailbox) {
             switch (mailbox->Push(ev)) {
                 case EMailboxPush::Pushed:
                     return true;
                 case EMailboxPush::Locked:
-                    mailbox->ScheduleMoment = GetCycleCountFast();
-                    ScheduleActivation(mailbox);
+                    //mailbox->ScheduleMoment = GetCycleCountFast();
+                    //ScheduleActivation(mailbox);
                     return true;
                 case EMailboxPush::Free:
                     // message cannot be delivered
@@ -129,16 +131,20 @@ namespace NActors {
             TlsThreadContext->IsCurrentRecipientAService = ev->Recipient.IsService();
         }
 
-        if (TMailbox* mailbox = MailboxTable->Get(ev->GetRecipientRewrite().Hint())) {
+        TMailbox* mailbox = MailboxTable->Get(ev->GetRecipientRewrite().Hint());
+        // Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " mailbox# " << (void*)mailbox << " ev# " << (void*)ev.Get() << Endl);
+        if (mailbox) {
             switch (mailbox->Push(ev)) {
                 case EMailboxPush::Pushed:
                     return true;
                 case EMailboxPush::Locked:
-                    mailbox->ScheduleMoment = GetCycleCountFast();
-                    SpecificScheduleActivation(mailbox);
+                    //mailbox->ScheduleMoment = GetCycleCountFast();
+                    //SpecificScheduleActivation(mailbox);
                     return true;
                 case EMailboxPush::Free:
                     // message cannot be delivered
+                    Y_ABORT();
+
                     break;
             }
         }
@@ -199,6 +205,8 @@ namespace NActors {
         AtomicIncrement(ActorRegistrations);
 
         TMailbox* mailbox = cache ? cache.Allocate() : MailboxTable->Allocate();
+
+        mailbox->SetExecutorPool(this);
 
         // Free mailboxes are not executing, lock to a normal state
         mailbox->LockFromFree();

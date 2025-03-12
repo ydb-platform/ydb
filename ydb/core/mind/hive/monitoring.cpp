@@ -4484,7 +4484,7 @@ public:
 
 bool THive::IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
     NMon::TEvRemoteHttpInfo* httpInfo = ev->Get();
-    if (httpInfo->Method != HTTP_METHOD_POST) {
+    if (httpInfo->GetMethod() != HTTP_METHOD_POST) {
         ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\":\"only POST method is allowed\"}"));
         return false;
     }

@@ -2,6 +2,7 @@
 
 #include "external_source.h"
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
 
 namespace NKikimr::NExternalSource {
 
@@ -16,6 +17,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
                                                          size_t pathsLimit = 50000,
                                                          std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory = nullptr,
                                                          bool enableInfer = false,
-                                                         bool allowLocalFiles = false);
+                                                         bool allowLocalFiles = false,
+                                                         const std::set<TString>& availableExternalDataSources = NYql::GetAllExternalDataSourceTypes());
 
 }

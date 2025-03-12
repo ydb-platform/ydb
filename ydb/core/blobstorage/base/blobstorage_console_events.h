@@ -10,9 +10,10 @@ namespace NKikimr {
             NKikimrBlobStorage::TEvControllerProposeConfigRequest, EvControllerProposeConfigRequest> {
         TEvControllerProposeConfigRequest() = default;
 
-        TEvControllerProposeConfigRequest(ui64 configHash, ui64 configVersion) {
+        TEvControllerProposeConfigRequest(ui64 configHash, ui64 configVersion, bool distconf) {
             Record.SetConfigHash(configHash);
             Record.SetConfigVersion(configVersion);
+            Record.SetDistconf(distconf);
         }
         
         TString ToString() const override {

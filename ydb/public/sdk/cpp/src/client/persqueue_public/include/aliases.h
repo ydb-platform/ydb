@@ -7,7 +7,7 @@
 #include <ydb-cpp-sdk/client/topic/executor.h>
 #include <ydb-cpp-sdk/client/topic/retry_policy.h>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 // codecs
 using NTopic::ECodec;

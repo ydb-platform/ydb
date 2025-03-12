@@ -5,7 +5,7 @@
 #include <src/client/topic/impl/common.h>
 #include <src/client/topic/impl/read_session_impl.ipp>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 // codecs
 using NTopic::ICodec;

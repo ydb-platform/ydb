@@ -10,11 +10,11 @@
 
 #include <util/generic/size_literals.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
     class TProtoAccessor;
 }
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
     
 enum class EFormat {
     BASE = 1,
@@ -45,7 +45,7 @@ private:
 
 // Result for describe resource request.
 struct TDescribeTopicResult : public TStatus {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
     struct TTopicSettings {
         TTopicSettings(const Ydb::PersQueue::V1::TopicSettings&);

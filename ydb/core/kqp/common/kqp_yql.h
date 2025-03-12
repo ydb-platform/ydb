@@ -80,12 +80,14 @@ struct TKqpReadTableSettings {
     static constexpr TStringBuf SequentialSettingName = "Sequential";
     static constexpr TStringBuf ForcePrimaryName = "ForcePrimary";
     static constexpr TStringBuf GroupByFieldNames = "GroupByFieldNames";
+    static constexpr TStringBuf TabletIdName = "TabletId";
 
     TVector<TString> SkipNullKeys;
     TExprNode::TPtr ItemsLimit;
     bool Reverse = false;
     bool Sorted = false;
     TMaybe<ui64> SequentialInFlight;
+    TMaybe<ui64> TabletId;
     bool ForcePrimary = false;
 
     void AddSkipNullKey(const TString& key);

@@ -5,7 +5,7 @@
 
 #include <util/string/builder.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 using std::string;
 

@@ -30,6 +30,7 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TStorageConfig ProposedStorageConfig;
 
         std::optional<TString> NewYaml;
+        std::optional<TString> VersionError;
 
     public:
         TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>>&& ev)
@@ -707,6 +708,9 @@ namespace NKikimr::NStorage {
                 newExpectedStorageYamlVersion.emplace(config.GetExpectedStorageYamlVersion());
             }
 
+            std::optional<ui64> storageYamlVersion;
+            std::optional<ui64> mainYamlVersion;
+
             try {
                 auto load = [&](const TString& yaml, ui64& version, const char *expectedKind) {
                     state = TStringBuilder() << "loading " << expectedKind << " YAML";
@@ -736,29 +740,13 @@ namespace NKikimr::NStorage {
                 const NJson::TJsonValue *effective = nullptr;
 
                 if (newStorageYaml) {
-                    ui64 version = 0;
-                    storage = load(*newStorageYaml, version, "StorageConfig");
-                    if (const ui64 expected = Self->StorageConfig->GetExpectedStorageYamlVersion(); version != expected) {
-                        return FinishWithError(TResult::ERROR, TStringBuilder()
-                            << "storage config version must be increasing by one"
-                            << " new version# " << version
-                            << " expected version# " << expected);
-                    }
-
-                    newExpectedStorageYamlVersion = version + 1;
+                    storage = load(*newStorageYaml, storageYamlVersion.emplace(), "StorageConfig");
+                    newExpectedStorageYamlVersion = *storageYamlVersion + 1;
                     effective = &storage;
                 }
 
                 if (NewYaml) {
-                    ui64 version = 0;
-                    main = load(*NewYaml, version, "MainConfig");
-                    if (const ui64 expected = *Self->MainConfigYamlVersion + 1; version != expected) {
-                        return FinishWithError(TResult::ERROR, TStringBuilder()
-                            << "main config version must be increasing by one"
-                            << " new version# " << version
-                            << " expected version# " << expected);
-                    }
-
+                    main = load(*NewYaml, mainYamlVersion.emplace(), "MainConfig");
                     if (!effective && !Self->StorageConfigYaml) {
                         effective = &main;
                     }
@@ -778,6 +766,29 @@ namespace NKikimr::NStorage {
             } catch (const std::exception& ex) {
                  return FinishWithError(TResult::ERROR, TStringBuilder() << "exception while " << state
                     << ": " << ex.what());
+            }
+
+            if (storageYamlVersion) {
+                const ui64 expected = Self->StorageConfig->GetExpectedStorageYamlVersion();
+                if (*storageYamlVersion != expected) {
+                    VersionError = TStringBuilder()
+                        << "storage config version must be increasing by one"
+                        << " new version# " << *storageYamlVersion
+                        << " expected version# " << expected;
+                }
+            }
+
+            if (!VersionError && mainYamlVersion && Self->MainConfigYamlVersion) {
+                // TODO(alexvru): we have to check version when migrating to self-managed mode
+                const ui64 expected = Self->MainConfigYamlVersion
+                    ? *Self->MainConfigYamlVersion + 1
+                    : 0;
+                if (*mainYamlVersion != expected) {
+                    VersionError = TStringBuilder()
+                        << "main config version must be increasing by one"
+                        << " new version# " << *mainYamlVersion
+                        << " expected version# " << expected;
+                }
             }
 
             if (NewYaml) {
@@ -813,20 +824,71 @@ namespace NKikimr::NStorage {
                     << "ReplaceStorageConfig config validation failed: " << *error);
             }
 
-            if (request.GetSkipConsoleValidation() || !NewYaml) {
-                return StartProposition(&config);
-            }
+            // whether we are enabling distconf right now (by this operation)
+            ProposedStorageConfig = std::move(config);
 
-            // whether we are enabling distconf right now
-            const bool enablingDistconf = Self->BaseConfig.GetSelfManagementConfig().GetEnabled() &&
-                !Self->SelfManagementEnabled &&
-                config.GetSelfManagementConfig().GetEnabled();
-
-            if (!Self->EnqueueConsoleConfigValidation(SelfId(), enablingDistconf, *NewYaml)) {
-                FinishWithError(TResult::ERROR, "console pipe is not available");
+            if (!Self->SelfManagementEnabled && ProposedStorageConfig.GetSelfManagementConfig().GetEnabled()) {
+                TryEnableDistconf();
             } else {
-                ProposedStorageConfig = std::move(config);
+                IssueQueryToConsole(false);
             }
+        }
+
+        void IssueQueryToConsole(bool enablingDistconf) {
+            if (VersionError) {
+                FinishWithError(TResult::ERROR, *VersionError);
+            } else if (Event->Get()->Record.GetReplaceStorageConfig().GetSkipConsoleValidation() || !NewYaml) {
+                StartProposition(&ProposedStorageConfig);
+            } else if (!Self->EnqueueConsoleConfigValidation(SelfId(), enablingDistconf, *NewYaml)) {
+                FinishWithError(TResult::ERROR, "console pipe is not available");
+            }
+        }
+
+        void TryEnableDistconf() {
+            const ERootState prevState = std::exchange(Self->RootState, ERootState::IN_PROGRESS);
+            Y_ABORT_UNLESS(prevState == ERootState::RELAX);
+
+            TEvScatter task;
+            task.MutableCollectConfigs();
+            IssueScatterTask(std::move(task), [this](TEvGather *res) -> std::optional<TString> {
+                Y_ABORT_UNLESS(Self->StorageConfig); // it can't just disappear
+
+                const ERootState prevState = std::exchange(Self->RootState, ERootState::RELAX);
+                Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
+
+                if (!res->HasCollectConfigs()) {
+                    return "incorrect CollectConfigs response";
+                } else if (Self->CurrentProposedStorageConfig) {
+                    FinishWithError(TResult::RACE, "config proposition request in flight");
+                } else if (Scepter.expired()) {
+                    return "scepter lost during query execution";
+                } else {
+                    auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt);
+                    return std::visit<std::optional<TString>>(TOverloaded{
+                        [&](std::monostate&) -> std::optional<TString> {
+                            if (r.IsDistconfDisabledQuorum) {
+                                // distconf is disabled on the majority of nodes; we have just to replace configs
+                                // and then to restart these nodes in order to enable it in future
+                                auto ev = PrepareResult(TResult::CONTINUE_BSC, "proceed with BSC");
+                                ev->Record.MutableReplaceStorageConfig()->SetAllowEnablingDistconf(true);
+                                Finish(Sender, SelfId(), ev.release(), 0, Cookie);
+                            } else {
+                                // we can actually enable distconf with this query, so do it
+                                IssueQueryToConsole(true);
+                            }
+                            return std::nullopt;
+                        },
+                        [&](TString& error) {
+                            return std::move(error);
+                        },
+                        [&](NKikimrBlobStorage::TStorageConfig& /*proposedConfig*/) {
+                            return "unexpected config proposition";
+                        }
+                    }, r.Outcome);
+                }
+
+                return std::nullopt; // no error or it is already processed
+            });
         }
 
         void Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr ev) {
@@ -843,7 +905,7 @@ namespace NKikimr::NStorage {
                 case NKikimrBlobStorage::TEvControllerValidateConfigResponse::IdPipeServerMismatch:
                     Self->DisconnectFromConsole();
                     Self->ConnectToConsole();
-                    return FinishWithError(TResult::ERROR, TStringBuilder() << "console connection race detected");
+                    return FinishWithError(TResult::ERROR, TStringBuilder() << "console connection race detected: " << record.GetErrorReason());
 
                 case NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigNotValid:
                     return FinishWithError(TResult::ERROR, TStringBuilder() << "console config validation failed: "
@@ -884,25 +946,24 @@ namespace NKikimr::NStorage {
                     FinishWithError(TResult::RACE, "storage config generation regenerated while collecting configs");
                     return std::nullopt;
                 }
-                TOverloaded handler{
-                    [&](std::monostate&&) {
+                auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID);
+                return std::visit<std::optional<TString>>(TOverloaded{
+                    [&](std::monostate&) {
                         const ERootState prevState = std::exchange(Self->RootState, ERootState::RELAX);
                         Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
                         Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
                         return std::nullopt;
                     },
-                    [&](TString&& error) {
+                    [&](TString& error) {
                         const ERootState prevState = std::exchange(Self->RootState, ERootState::RELAX);
                         Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
                         return error;
                     },
-                    [&](NKikimrBlobStorage::TStorageConfig&& proposedConfig) {
+                    [&](NKikimrBlobStorage::TStorageConfig& proposedConfig) {
                         StartProposition(&proposedConfig, false);
                         return std::nullopt;
                     }
-                };
-                return std::visit<std::optional<TString>>(handler,
-                    Self->ProcessCollectConfigs(res->MutableCollectConfigs(), &selfAssemblyUUID));
+                }, r.Outcome);
             };
 
             TEvScatter task;
@@ -980,12 +1041,12 @@ namespace NKikimr::NStorage {
         }
 
         std::unique_ptr<TEvNodeConfigInvokeOnRootResult> PrepareResult(TResult::EStatus status,
-                std::optional<std::reference_wrapper<const TString>> errorReason) {
+                std::optional<TStringBuf> errorReason) {
             auto ev = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
             auto *record = &ev->Record;
             record->SetStatus(status);
             if (errorReason) {
-                record->SetErrorReason(*errorReason);
+                record->SetErrorReason(errorReason->data(), errorReason->size());
             }
             if (auto scepter = Scepter.lock()) {
                 auto *s = record->MutableScepter();

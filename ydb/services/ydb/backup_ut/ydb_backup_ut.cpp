@@ -1306,7 +1306,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
 
         auto opts = NDump::TRestoreSettings().Mode(NDump::TRestoreSettings::EMode::ImportData);
-        using TYdbErrorException = V3::NStatusHelpers::TYdbErrorException;
+        using TYdbErrorException = ::NYdb::Dev::NStatusHelpers::TYdbErrorException;
 
         ExecuteDataDefinitionQuery(session, Sprintf(R"(
                 DROP TABLE `%s`;
@@ -2261,6 +2261,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         NTopic::TTopicClient topicClient(testEnv.GetDriver());
 
         constexpr const char* table = "/Root/table";
+        testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
         testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
 
         TestChangefeedAndTopicDescriptionsIsPreserved(

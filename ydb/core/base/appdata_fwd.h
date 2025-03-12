@@ -114,7 +114,7 @@ namespace NMonitoring {
     class TBusNgMonPage;
 }
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
     class TDriver;
 }
 

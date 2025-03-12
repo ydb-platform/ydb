@@ -11,6 +11,7 @@
 #include <string>
 
 namespace NYdbGrpc {
+inline namespace Dev {
 
 struct TGRpcClientConfig {
     std::string Locator; // format host:port
@@ -84,4 +85,5 @@ inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRp
     }
 }
 
-} // namespace NGRpc
+}
+}

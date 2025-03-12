@@ -6,12 +6,12 @@ This page provides a detailed description of the code for a [test app](https://g
 
 ## Downloading and starting {#download}
 
-The following execution scenario is based on [Git](https://git-scm.com/downloads) and [Go](https://go.dev/doc/install). Make sure to install the [YDB Go SDK](../../../reference/ydb-sdk/install.md).
+The instructions below assume that [Git](https://git-scm.com/downloads) and [Go](https://go.dev/doc/install) are installed. Make sure to install the [YDB Go SDK](../../../reference/ydb-sdk/install.md).
 
 Create a working directory and use it to run the following command from the command line to clone the GitHub repository:
 
 ```bash
-git clone https://github.com/ydb-platform/ydb-go-examples/
+git clone https://github.com/ydb-platform/ydb-go-sdk.git
 ```
 
 Next, from the same working directory, run the following command to start the test app:
@@ -24,225 +24,210 @@ To work with {{ ydb-short-name }} in `Go`, import the `ydb-go-sdk` driver packag
 
 ```go
 import (
-  // general imports from standard library
-  "context"
-  "log"
-  "path"
+ "context"
+ "log"
+ "path"
 
-  // importing the packages ydb-go-sdk
-  "github.com/ydb-platform/ydb-go-sdk/v3"
-  "github.com/ydb-platform/ydb-go-sdk/v3/table" // needed to work with table service
-  "github.com/ydb-platform/ydb-go-sdk/v3/table/options" // needed to work with table service
-  "github.com/ydb-platform/ydb-go-sdk/v3/table/result" // needed to work with table service
-  "github.com/ydb-platform/ydb-go-sdk/v3/table/result/named" // needed to work with table service
-  "github.com/ydb-platform/ydb-go-sdk/v3/table/types" // needed to work with YDB types and values
-  "github.com/ydb-platform/ydb-go-sdk-auth-environ" // needed to authenticate using environment variables
-  "github.com/ydb-platform/ydb-go-yc" // to work with YDB in Yandex Cloud
+ "github.com/ydb-platform/ydb-go-sdk/v3"
+ "github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 ```
 
-App code snippet for driver initialization:
+To interact with {{ ydb-short-name }}, it is necessary to create a {{ ydb-short-name }} driver:
 
 ```go
-ctx := context.Background()
-// connection string
-dsn := "grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1g8skpblkos03malf3s/etn01f8gv9an9sedo9fu"
-// IAM token
-token := "t1.9euelZrOy8aVmZKJm5HGjceMkMeVj-..."
-// create a connection object called db, it is an entry point for YDB services
-db, err := ydb.Open(ctx,  dsn,
-//  yc.WithInternalCA(), // use Yandex Cloud certificates
-  ydb.WithAccessTokenCredentials(token), // authenticate using the token
-//  ydb.WithAnonimousCredentials(), // authenticate anonymously (for example, using docker ydb)
-//  yc.WithMetadataCredentials(token), // authenticate from inside a VM in Yandex Cloud or Yandex Function
-//  yc.WithServiceAccountKeyFileCredentials("~/.ydb/sa.json"), // authenticate in Yandex Cloud using a service account file
-//  environ.WithEnvironCredentials(ctx), // authenticate using environment variables
-)
+db, err := ydb.Open(context.Background(), "grpc://localhost:2136/local")
 if err != nil {
-  // handle a connection error
+  // handle connection error
 }
-// driver must be closed when done
+
+// You should close the driver when your application finishes its work (for example, when exiting the program).
+defer db.Close(context.Background())
+```
+
+The `ydb.Open` method returns a driver instance if successful. The driver performs several services, such as {{ ydb-short-name }} cluster discovery and client-side load balancing.
+
+The `ydb.Open` method takes two mandatory arguments:
+
+* a context
+* a {{ ydb-short-name }} connection string
+
+There are also many connection options available that let you override the default settings.
+
+
+By default, anonymous authentication is used. To connect to the {{ ydb-short-name }} cluster using a token, use the following syntax:
+
+```go
+db, err := ydb.Open(context.Background(), clusterEndpoint,
+ ydb.WithAccessTokenCredentials(token),
+)
+```
+You can see the full list of auth providers in the [ydb-go-sdk documentation](https://github.com/ydb-platform/ydb-go-sdk?tab=readme-ov-file#credentials-) and on the [recipes page](../../../recipes/ydb-sdk/auth.md).
+
+It is necessary to close the driver at the end of work to clean up resources.
+
+```go
 defer db.Close(ctx)
 ```
 
-The `db` object serves as the entry point for working with {{ ydb-short-name }} services. To interact with the table service, use the `db.Table()` client. This client provides an `API` for making queries to tables. The most commonly used method is `db.Table().Do(ctx, op)`, which handles session creation in the background and retries executing the specified `op` operation, passing the created session to the user's code.
+The `db` struct is the entry point for working with {{ ydb-short-name }}. To query tables, use the `db.Query()` query service:
 
-The session has a comprehensive `API` that allows you to perform `DDL`, `DML`, `DQL`, and `TCL` requests.
+YQL queries are executed within special objects called `query.Session`. Sessions store the execution context of queries (for example, transactions) and provide server-side load balancing among the {{ ydb-short-name }} cluster nodes.
+
+The query service client provides an API for executing queries:
+
+* `db.Query().Do(ctx, op)` creates sessions in the background and automatically retries the provided `op func(ctx context.Context, s query.Session) error` operation if necessary. As soon as a session is ready, it is passed to the callback.
+* `db.Query().DoTx(ctx, op)` automatically handles the transaction lifecycle. It provides a prepared transaction object, `query.TxActor`, to the user-defined function `op func(ctx context.Context, tx query.TxActor)` error. If the operation returns without an error (nil), the transaction commits automatically. If the operation returns an error, the transaction rolls back automatically.
+* `db.Query().Exec` runs a single query that returns **no result**, with automatic retry logic on failure. This method returns nil if the execution is successful or an error otherwise.
+* `db.Query().Query` executes a single query containing one or more statements that return a result. It automatically handles retries. Upon successful execution, it returns a fully materialized result (`query.Result`). All result rows are loaded into memory and available for immediate iteration. For queries returning large datasets, this may lead to an [out of memory](https://en.wikipedia.org/wiki/Out_of_memory) problem.
+* `db.Query().QueryResultSet` executes a query that contains exactly one statement returning results (it may contain other auxiliary statements that return no results, such as `UPSERT`). Like `db.Query().Query`, it automatically retries failed operations and returns a fully materialized result set (`query.ResultSet`). Queries that return large datasets may cause an [OOM](https://en.wikipedia.org/wiki/Out_of_memory) error.
+* `db.Query().QueryRow` runs queries expected to return exactly one row. It also automatically retries failed operations. On success, it returns a `query.Row` instance.
 
 {% include [steps/02_create_table.md](../_includes/steps/02_create_table.md) %}
 
-To create tables, use the `table.Session.CreateTable()` method:
+Example of a query with no returned result (table creation):
 
 ```go
-err = db.Table().Do(ctx,
-  func(ctx context.Context, s table.Session) (err error) {
-    return s.CreateTable(ctx, path.Join(db.Name(), "series"),
-      options.WithColumn("series_id", types.TypeUint64),  // not null column
-      options.WithColumn("title", types.Optional(types.TypeUTF8)),
-      options.WithColumn("series_info", types.Optional(types.TypeUTF8)),
-      options.WithColumn("release_date", types.Optional(types.TypeDate)),
-      options.WithColumn("comment", types.Optional(types.TypeUTF8)),
-      options.WithPrimaryKeyColumn("series_id"),
-    )
-  },
+import "github.com/ydb-platform/ydb-go-sdk/v3/query"
+
+err = db.Query().Exec(ctx, `
+ CREATE TABLE IF NOT EXISTS series (
+  series_id Bytes,
+  title Text,
+  series_info Text,
+  release_date Date,
+  comment Text,
+
+  PRIMARY KEY(series_id)
+ )`, query.WithTxControl(query.NoTx()),
 )
 if err != nil {
-  // handling query execution failure
-}
-```
-
-You can use the `table.Session.DescribeTable()` method to print information about the table structure and make sure that it was properly created:
-
-```go
-err = db.Table().Do(ctx,
-  func(ctx context.Context, s table.Session) (err error) {
-    desc, err := s.DescribeTable(ctx, path.Join(db.Name(), "series"))
-    if err != nil {
-      return
-    }
-    log.Printf("> describe table: %s\n", tableName)
-    for _, c := range desc.Columns {
-      log.Printf("  > column, name: %s, %s\n", c.Type, c.Name)
-    }
-    return
-  },
-)
-if err != nil {
-  // handling query execution failure
+  // handle query execution error
 }
 ```
 
 {% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
 
-To execute YQL queries, use the `table.Session.Execute()` method.
-The SDK lets you explicitly control the execution of transactions and configure the transaction execution mode using the `table.TxControl` structure.
+To execute YQL queries and fetch results, use `query.Session` methods: `query.Session.Query`, `query.Session.QueryResultSet`, or `query.Session.QueryRow`.
+
+The {{ ydb-short-name }} SDK supports explicit transaction control via the `query.TxControl` structure:
 
 ```go
-var (
-  readTx = table.TxControl(
-    table.BeginTx(
-      table.WithOnlineReadOnly(),
-    ),
-    table.CommitTx(),
-  )
+readTx := query.TxControl(
+ query.BeginTx(
+  query.WithSnapshotReadOnly(),
+ ),
+ query.CommitTx(),
 )
-err := db.Table().Do(ctx,
-  func(ctx context.Context, s table.Session) (err error) {
-    var (
-      res   result.Result
-      id    uint64 // a variable for required results
-      title *string // a pointer for optional results
-      date  *time.Time // a pointer for optional results
-    )
-    _, res, err = s.Execute(
-      ctx,
-      readTx,
-      `
-        DECLARE $seriesID AS Uint64;
-        SELECT
-          series_id,
-          title,
-          release_date
-        FROM
-          series
-        WHERE
-          series_id = $seriesID;
-      `
-,      table.NewQueryParameters(
-        table.ValueParam("$seriesID", types.Uint64Value(1)), // insert into the query criteria
-      ),
-    )
-    if err != nil {
-      return err
-    }
-    defer res.Close() // result must be closed
-    log.Printf("> select_simple_transaction:\n")
-    for res.NextResultSet(ctx) {
-      for res.NextRow() {
-        // use ScanNamed to pass column names from the scan string,
-        // addresses (and data types) to be assigned the query results
-        err = res.ScanNamed(
-          named.Optional("series_id", &id),
-          named.Optional("title", &title),
-          named.Optional("release_date", &date),
-        )
-        if err != nil {
-          return err
-        }
-        log.Printf(
-          "  > %d %s %s\n",
-          id, *title, *date,
-        )
-      }
-    }
-    return res.Err()
-  },
+row, err := db.Query().QueryRow(ctx,`
+ DECLARE $seriesID AS Uint64;
+ SELECT
+   series_id,
+   title,
+   release_date
+ FROM
+   series
+ WHERE
+   series_id = $seriesID;`,
+ query.WithParameters(
+  ydb.ParamsBuilder().Param("$seriesID").Uint64(1).Build(),
+ ),
+ query.WithTxControl(readTx),
 )
 if err != nil {
-  // handle a query execution error
+  // handle query execution error
 }
 ```
 
+You can extract row data (`query.Row`) using the following methods:
+
+* `query.Row.ScanStruct` — scans row data into a struct based on struct field tags that match column names.
+* `query.Row.ScanNamed` — scans data into variables using explicitly defined column-variable pairs.
+* `query.Row.Scan` — scans data directly by column order into the provided variables.
+
+{% list tabs %}
+
+- ScanStruct
+
+  ```go
+  var info struct {
+   SeriesID    string    `sql:"series_id"`
+   Title       string    `sql:"title"`
+   ReleaseDate time.Time `sql:"release_date"`
+  }
+  err = row.ScanStruct(&info)
+  if err != nil {
+    // handle query execution error
+  }
+  ```
+
+- ScanNamed
+
+  ```go
+  var seriesID, title string
+  var releaseDate time.Time
+  err = row.ScanNamed(query.Named("series_id", &seriesID), query.Named("title", &title), query.Named("release_date", &releaseDate))
+  if err != nil {
+    // handle query execution error
+  }
+  ```
+
+- Scan
+
+  ```go
+  var seriesID, title string
+  var releaseDate time.Time
+  err = row.Scan(&seriesID, &title, &releaseDate)
+  if err != nil {
+    // handle query execution error
+  }
+  ```
+  
+ {% endlist %}
+
 {% include [scan_query.md](../_includes/steps/08_scan_query.md) %}
 
-To execute scan queries, use the `table.Session.StreamExecuteScanQuery()` method.
+{% note warning %}
+
+If the expected query result is very large, avoid loading all data into memory using helper methods like `query.Client.Query` or `query.Client.QueryResultSet`. These methods return fully materialized results, storing all rows from the server in local client memory. Large result sets can cause an [OOM](https://en.wikipedia.org/wiki/Out_of_memory) problem.
+
+Instead, use the `query.TxActor.Query` or `query.TxActor.QueryResultSet` methods on a transaction or session. These methods return iterators over results without fully materializing them upfront. The `query.Session` object is accessible via the `query.Client.Do` method, which handles automatic retries. Keep in mind that the read operation can be interrupted at any time, restarting the entire query process. Therefore, the user function passed to `Do` may run multiple times.
+
+{% endnote %}
+
 
 ```go
-var (
-  query = `
-    DECLARE $series AS List<UInt64>;
-    SELECT series_id, season_id, title, first_aired
-    FROM seasons
-    WHERE series_id IN $series
-  `
-  res result.StreamResult
-)
-err = c.Do(ctx,
-  func(ctx context.Context, s table.Session) (err error) {
-    res, err = s.StreamExecuteScanQuery(ctx, query,
-      table.NewQueryParameters(
-        table.ValueParam("$series",
-          types.ListValue(
-            types.Uint64Value(1),
-            types.Uint64Value(10),
-          ),
-        ),
-      ),
-    )
-    if err != nil {
-      return err
-    }
-    defer res.Close() // be sure to close the result
-    var (
-      seriesID uint64
-      seasonID uint64
-      title    string
-      date     time.Time
-    )
-    log.Print("\n> scan_query_select:")
-    for res.NextResultSet(ctx) {
-      if err = res.Err(); err != nil {
-        return err
-      }
-      for res.NextRow() {
-        // named.OptionalWithDefault enables you to "deploy" optional
-        // results or use the default type value in Go
-        err = res.ScanNamed(
-          named.Required("series_id", &seriesID),
-          named.OptionalWithDefault("season_id", &seasonID),
-          named.OptionalWithDefault("title", &title),
-          named.OptionalWithDefault("first_aired", &date),
-        )
-        if err != nil {
-          return err
-        }
-        log.Printf("#  Season, SeriesId: %d, SeasonId: %d, Title: %s, Air date: %s", seriesID, seasonID, title, date)
-      }
-    }
-    return res.Err()
-  },
+err = db.Query().Do(ctx,
+ func(ctx context.Context, s query.Session) error {
+  rows, err := s.QueryResultSet(ctx,`
+   SELECT series_id, season_id, title, first_aired
+   FROM seasons`,
+  )
+  if err != nil {
+   return err
+  }
+  defer rows.Close(ctx)
+  for row, err := range rows.Rows(ctx) {
+   if err != nil {
+    return err
+   }
+   var info struct {
+    SeriesID    string    `sql:"series_id"`
+    SeasonID    string    `sql:"season_id"`
+    Title       string    `sql:"title"`
+    FirstAired  time.Time `sql:"first_aired"`
+   }
+   err = row.ScanStruct(&info)
+   if err != nil {
+    return err
+   }
+   fmt.Printf("%+v\n", info)
+  }
+  return nil
+ },
+ query.WithIdempotent(),
 )
 if err != nil {
-  // handling a query execution error
+  // handle query execution error
 }
 ```

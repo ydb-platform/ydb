@@ -34,9 +34,9 @@ std::set<std::string> TPKRangeFilter::GetColumnNames() const {
     return result;
 }
 
-NKikimr::NArrow::TColumnFilter TPKRangeFilter::BuildFilter(const arrow::Datum& data) const {
-    NArrow::TColumnFilter result = PredicateTo.BuildFilter(data);
-    return result.And(PredicateFrom.BuildFilter(data));
+NArrow::NAccessor::IChunkedArray::TRowRange TPKRangeFilter::BuildFilterRange(const NArrow::TGeneralContainer& data) const {
+    auto result = PredicateTo.BuildFilterRange(data);
+    return result.Intersect(PredicateFrom.BuildFilterRange(data));
 }
 
 bool TPKRangeFilter::IsUsed(const TPortionInfo& info) const {

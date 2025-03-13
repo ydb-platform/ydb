@@ -480,8 +480,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvDirectReadAc
     }
 
     if (it->second.LastDirectReadId + MAX_PENDING_DIRECT_READ_ACKS < (ui64)ev->Get()->DirectReadId) {
-        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST,
-            TStringBuilder() << "too many direct read ids sent that are not existing yet " << ev->Get()->DirectReadId, ctx);
+        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder() << "too many pending DirectReadAcks", ctx);
     }
 
     it->second.MaxProcessedDirectReadId = ev->Get()->DirectReadId;

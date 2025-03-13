@@ -504,13 +504,17 @@ struct TCompare {
     }
 
     // return default value if key is absent.
-    template<bool Negative = false>
-    bool MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params, size_t* paramsCounter) const {
-        sql << '`' << Fields[Target] << '`' << ' ' << (Negative  ? Inverted : Comparator)[Result] << ' ';
-        if (const auto val = std::get_if<std::string>(&Value))
-            sql << AddParam("Value", params, *val, paramsCounter);
-        else if (const auto val = std::get_if<i64>(&Value)) {
-            sql << AddParam("Arg", params, *val, paramsCounter);
+    bool MakeQueryWithParams(std::ostream& positive, std::ostream& negative, NYdb::TParamsBuilder& params, size_t* paramsCounter) const {
+        positive << '`' << Fields[Target] << '`' << ' ' << Comparator[Result] << ' ';
+        negative << '`' << Fields[Target] << '`' << ' ' << Inverted[Result] << ' ';
+        if (const auto val = std::get_if<std::string>(&Value)) {
+            const auto& valueParamName = AddParam("Value", params, *val, paramsCounter);
+            positive << valueParamName;
+            negative << valueParamName;
+        } else if (const auto val = std::get_if<i64>(&Value)) {
+            const auto& argParamName = AddParam("Arg", params, *val, paramsCounter);
+            positive << argParamName;
+            negative << argParamName;
             return !*val && Target < 3U;
         }
         return false;
@@ -649,8 +653,7 @@ struct TTxn : public TOperation {
                 thenFilter << " and ";
                 elseFilter << " or ";
             }
-            def = j->MakeQueryWithParams<false>(thenFilter, params, paramsCounter) && def;
-            def = j->MakeQueryWithParams<true>(elseFilter, params, paramsCounter) && def;
+            def = j->MakeQueryWithParams(thenFilter, elseFilter, params, paramsCounter) && def;
         }
 
         if (Compares.empty()) {
@@ -715,7 +718,8 @@ struct TTxn : public TOperation {
                 for (auto j = compares.cbegin(); compares.cend() != j; ++j) {
                     if (compares.cbegin() != j)
                         sql << " and ";
-                    def = j->MakeQueryWithParams(sql, params, paramsCounter) && def;
+                    std::ostringstream stub;
+                    def = j->MakeQueryWithParams(sql, stub, params, paramsCounter) && def;
                 }
                 sql << "), " << (def ? "true" : "false") << ") as `cmp` from (";
                 MakeSlice(i->first.first, i->first.second, sql, params, paramsCounter);
@@ -1302,8 +1306,12 @@ std::string AddParam(const std::string_view& name, NYdb::TParamsBuilder& params,
     } else if constexpr (std::is_same<TValueType, std::string>::value) {
         params.AddParam(param).String(value).Build();
     } else if constexpr (std::is_same<TValueType, i64>::value) {
+        if (!value)
+            return "0L";
         params.AddParam(param).Int64(value).Build();
     } else if constexpr (std::is_same<TValueType, ui64>::value) {
+        if (!value)
+            return "0UL";
         params.AddParam(param).Uint64(value).Build();
     }
     return param;

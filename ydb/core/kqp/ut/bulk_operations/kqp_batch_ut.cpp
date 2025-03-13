@@ -99,29 +99,34 @@ void CreateTuplePrimaryTable(TSession& session, const TString& name = "TestTable
 void CreateTuplePrimaryReorderTable(TSession& session, const TString& name = "TestTable") {
     UNIT_ASSERT(session.ExecuteQuery(TStringBuilder() << R"(
         CREATE TABLE `)" << name << R"(` (
-            Col1 Int32,
-            Col2 Int64,
+            Col1 Uint32,
+            Col2 Uint64,
             Col3 Int64,
             Col4 Int64,
-            PRIMARY KEY (Col2, Col1)
+            PRIMARY KEY (Col2, Col1, Col3)
         ) WITH (
             AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
-            PARTITION_AT_KEYS = ((2, 1))
+            PARTITION_AT_KEYS = (2, 3)
         );)", NYdb::NQuery::TTxControl::NoTx()).GetValueSync().IsSuccess());
 
     auto result = session.ExecuteQuery(TStringBuilder() << R"(
         UPSERT INTO `/Root/)" << name << R"(` (Col1, Col2, Col3, Col4) VALUES
-                (1, NULL, 1, 0),
-                (1, 2, 1, 2),
+                (0, 1, 0, 0),
+                (1, 1, 0, 0),
+                (1, 1, 1, 0),
+                (1, 1, 2, 0),
+                (2, 1, 0, 0),
+                (1, 2, 0, 0),
+                (1, 2, 1, 0),
+                (2, 2, 0, 0),
+                (3, 2, 0, 0),
+                (0, 3, 0, 0),
                 (1, 3, 0, 0),
-                (NULL, 2, 2, -1),
-                (NULL, 1, 3, -2),
-                (2, NULL, 4, -3),
-                (2, 1, -6, 5),
-                (2, 2, 1, 1),
-                (3, NULL, 12, 9),
-                (3, 1, 6, -5),
-                (NULL, 3, 10, 0);
+                (2, 3, 0, 0),
+                (0, 3, 0, 0),
+                (1, 3, 0, 0),
+                (2, 3, 0, 0),
+                (3, 3, 0, 0);
     )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
@@ -459,14 +464,24 @@ Y_UNIT_TEST_SUITE(KqpBatch) {
 
         {
             auto query = Q_(R"(
-                BATCH UPDATE TestTable SET Col3 = 0 WHERE Col4 >= 0;
+                BATCH UPDATE TestTable SET Col4 = 2 WHERE Col4 >= 0;
             )");
 
             auto txControl = NYdb::NQuery::TTxControl::NoTx();
             auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
-        // todo ditimizhev
+        {
+            auto query = Q_(R"(
+                SELECT * FROM TestTable WHERE Col4 != 2;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::NoTx();
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+        }
     }
 
     Y_UNIT_TEST(UpdateTuplePrimaryMulti) {

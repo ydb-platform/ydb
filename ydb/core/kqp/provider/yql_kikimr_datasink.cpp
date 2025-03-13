@@ -9,6 +9,8 @@
 
 #include <ydb/core/kqp/common/batch/params.h>
 
+#include <ydb/core/kqp/common/kqp_yql.h>
+
 namespace NYql {
 namespace {
 
@@ -16,6 +18,7 @@ using namespace NKikimr;
 using namespace NNodes;
 
 namespace {
+
 bool HasUpdateIntersection(const NCommon::TWriteTableSettings& settings) {
     THashSet<TStringBuf> columnNames;
     auto equalStmts = settings.Update.Cast().Ptr()->Child(1);
@@ -41,120 +44,177 @@ bool HasUpdateIntersection(const NCommon::TWriteTableSettings& settings) {
     return hasIntersection;
 }
 
-TExprNode::TPtr CreateNodeTypeParameter(const TString& name, const TTypeAnnotationNode* colType, TPositionHandle pos,
+TCoParameter MakeTypeAnnotatedParameter(const TString& name, const TTypeAnnotationNode* colType, TPositionHandle pos,
     TExprContext& ctx) {
-    if (colType->GetKind() == ETypeAnnotationKind::Optional) {
-        auto unwrapType = colType->Cast<TOptionalExprType>()->GetItemType();
-        return ctx.NewCallable(pos, "Parameter", {
-            ctx.NewAtom(pos, name),
-            ctx.NewCallable(pos, "OptionalType", {
-                ctx.NewCallable(pos, "DataType", {
-                    ctx.NewAtom(pos, FormatType(unwrapType))
-                })
-            })
-        });
+    return Build<TCoParameter>(ctx, pos)
+        .Name().Build(name)
+        .Type(ExpandType(pos, *colType, ctx))
+        .Done();
+}
+
+TCoParameter MakeCustomTypedParameter(const TString& name, const TString& typeName, TPositionHandle pos, TExprContext& ctx) {
+    return Build<TCoParameter>(ctx, pos)
+        .Name().Build(name)
+        .Type<TCoDataType>()
+            .Type().Value(typeName).Build()
+            .Build()
+        .Done();
+}
+
+TExprBase MakeBatchRange(const TVector<TExprBase>& params, const TVector<TExprBase>& members, const TString& sign,
+    TPositionHandle pos, TExprContext& ctx)
+{
+    auto paramsList = Build<TExprList>(ctx, pos).Add(params).Done();
+    auto membersList = Build<TExprList>(ctx, pos).Add(members).Done();
+
+    if (sign == ">") {
+        return Build<TCoCmpGreater>(ctx, pos)
+            .Left(paramsList)
+            .Right(membersList)
+            .Done();
+    } else if (sign == ">=") {
+        return Build<TCoCmpGreaterOrEqual>(ctx, pos)
+            .Left(paramsList)
+            .Right(membersList)
+            .Done();
+    } else if (sign == "<") {
+        return Build<TCoCmpLess>(ctx, pos)
+            .Left(paramsList)
+            .Right(membersList)
+            .Done();
+    } else if (sign == "<=") {
+        return Build<TCoCmpLessOrEqual>(ctx, pos)
+            .Left(paramsList)
+            .Right(membersList)
+            .Done();
+    } else {
+        YQL_ENSURE(false);
+        return TExprBase(nullptr);
+    }
+}
+
+TCoOr MakeBatchRangesWithPrefixSize(const TVector<TExprBase>& members, const TVector<const TTypeAnnotationNode*>& types, const TString& sign,
+    bool isBegin, TPositionHandle pos, TExprContext& ctx)
+{
+    auto paramName = (isBegin) ? NKqp::NBatchParams::Begin : NKqp::NBatchParams::End;
+    auto prefixParamName = (isBegin) ? NKqp::NBatchParams::BeginPrefixSize : NKqp::NBatchParams::EndPrefixSize;
+
+    TVector<TExprBase> cur_params;
+    TVector<TExprBase> cur_members;
+    TVector<TExprBase> ranges;
+
+    cur_params.reserve(types.size());
+    cur_members.reserve(types.size());
+    ranges.reserve(types.size() + 1);
+
+    ranges.push_back(Build<TCoCmpEqual>(ctx, pos)
+        .Left(MakeCustomTypedParameter(prefixParamName, "Uint32", pos, ctx))
+        .Right<TCoUint32>()
+            .Literal().Build("0")
+            .Build()
+        .Done());
+
+    for (size_t i = 0; i < types.size(); ++i) {
+        cur_params.push_back(MakeTypeAnnotatedParameter(paramName + ToString(i + 1), types[i], pos, ctx));
+        cur_members.push_back(members[i]);
+
+        ranges.push_back(Build<TCoAnd>(ctx, pos)
+            .Add<TCoCmpEqual>()
+                .Left(MakeCustomTypedParameter(prefixParamName, "Uint32", pos, ctx))
+                .Right<TCoUint32>()
+                    .Literal().Build(ToString(i + 1))
+                    .Build()
+                .Build()
+            .Add(MakeBatchRange(cur_params, cur_members, sign, pos, ctx))
+            .Done());
     }
 
-    return ctx.NewCallable(pos, "Parameter", {
-        ctx.NewAtom(pos, name),
-        ctx.NewCallable(pos, "DataType", {
-            ctx.NewAtom(pos, FormatType(colType))
-        })
-    });
+    return Build<TCoOr>(ctx, pos)
+        .Add(ranges)
+        .Done();
 }
 
-TExprNode::TPtr CreateNodeBoolParameter(const TString& name, TPositionHandle pos, TExprContext& ctx) {
-    return ctx.NewCallable(pos, "Parameter", {
-        ctx.NewAtom(pos, name),
-        ctx.NewCallable(pos, "DataType", {
-            ctx.NewAtom(pos, "Bool")
-        })
-    });
-}
+TCoLambda RewriteBatchFilter(const TCoLambda& lambda, const TKikimrTableDescription& tableDesc, TExprContext& ctx) {
+    const TPositionHandle pos = lambda.Pos();
 
-TCoLambda RewriteBatchFilter(const TCoLambda& node, const TKikimrTableDescription& tableDesc, TExprContext& ctx) {
-    const TPositionHandle pos = node.Pos();
-    const TExprNode::TPtr newLambda = ctx.DeepCopyLambda(node.Ref());
-    const TExprNode::TPtr row = newLambda->ChildPtr(0)->ChildPtr(0);
-    const TExprNode::TPtr filter = newLambda->ChildPtr(1);
+    YQL_ENSURE(lambda.Args().Size() == 1);
+    TCoArgument row = lambda.Args().Arg(0);
 
     TVector<TString> primaryColumns = tableDesc.Metadata->KeyColumnNames;
+    TVector<TExprBase> members;
+    TVector<const TTypeAnnotationNode*> types;
 
-    TExprNode::TListType beginParamsList;
-    TExprNode::TListType endParamsList;
-    TExprNode::TListType primaryMembersList;
+    members.reserve(primaryColumns.size());
+    types.reserve(primaryColumns.size());
 
     for (size_t i = 0; i < primaryColumns.size(); ++i) {
-        auto colType = tableDesc.GetColumnType(primaryColumns[i]);
-        beginParamsList.push_back(CreateNodeTypeParameter(NKqp::NBatchParams::Begin + ToString(i + 1), colType, pos, ctx));
-        endParamsList.push_back(CreateNodeTypeParameter(NKqp::NBatchParams::End + ToString(i + 1), colType, pos, ctx));
-
-        primaryMembersList.push_back(ctx.NewCallable(pos, "Member", {
-            row,
-            ctx.NewAtom(pos, primaryColumns[i])
-        }));
+        types.push_back(tableDesc.GetColumnType(primaryColumns[i]));
+        members.push_back(Build<TCoMember>(ctx, pos)
+            .Struct(row)
+            .Name().Build(primaryColumns[i])
+            .Done());
     }
 
-    TExprNode::TPtr beginNodeParams = beginParamsList.front();
-    TExprNode::TPtr endNodeParams = endParamsList.front();
-    TExprNode::TPtr primaryNodeMember = primaryMembersList.front();
+    auto newFilter = Build<TCoAnd>(ctx, pos)
+        .Add<TCoOr>()
+            .Add(MakeCustomTypedParameter(NKqp::NBatchParams::IsFirstQuery, "Bool", pos, ctx))
+            .Add<TCoOr>()
+                .Add<TCoAnd>()
+                    .Add(MakeCustomTypedParameter(NKqp::NBatchParams::IsInclusiveLeft, "Bool", pos, ctx))
+                    .Add(MakeBatchRangesWithPrefixSize(members, types, "<=", /* isBegin */ true, pos, ctx))
+                    .Build()
+                .Add<TCoAnd>()
+                    .Add<TCoNot>()
+                        .Value(MakeCustomTypedParameter(NKqp::NBatchParams::IsInclusiveLeft, "Bool", pos, ctx))
+                        .Build()
+                    .Add(MakeBatchRangesWithPrefixSize(members, types, "<", /* isBegin */ true, pos, ctx))
+                    .Build()
+                .Build()
+            .Build()
+        .Add<TCoOr>()
+            .Add(MakeCustomTypedParameter(NKqp::NBatchParams::IsLastQuery, "Bool", pos, ctx))
+            .Add<TCoOr>()
+                .Add<TCoAnd>()
+                    .Add(MakeCustomTypedParameter(NKqp::NBatchParams::IsInclusiveRight, "Bool", pos, ctx))
+                    .Add(MakeBatchRangesWithPrefixSize(members, types, ">=", /* isBegin */ false, pos, ctx))
+                    .Build()
+                .Add<TCoAnd>()
+                    .Add<TCoNot>()
+                        .Value(MakeCustomTypedParameter(NKqp::NBatchParams::IsInclusiveRight, "Bool", pos, ctx))
+                        .Build()
+                    .Add(MakeBatchRangesWithPrefixSize(members, types, ">", /* isBegin */ false, pos, ctx))
+                    .Build()
+                .Build()
+            .Build()
+        .Done();
 
-    if (primaryColumns.size() > 1) {
-        beginNodeParams = ctx.NewList(pos, std::move(beginParamsList));
-        endNodeParams = ctx.NewList(pos, std::move(endParamsList));
-        primaryNodeMember = ctx.NewList(pos, std::move(primaryMembersList));
+    if (lambda.Body().Maybe<TCoCoalesce>()) {
+        TCoCoalesce filter = lambda.Body().Cast<TCoCoalesce>();
+        return Build<TCoLambda>(ctx, pos)
+            .Args({row})
+            .Body<TCoCoalesce>()
+                .Predicate<TCoAnd>()
+                    .Add(newFilter)
+                    .Add(filter.Predicate())
+                    .Build()
+                .Value<TCoBool>()
+                    .Literal().Build("false")
+                    .Build()
+                .Build()
+            .Done();
     }
 
-    TExprNode::TPtr newFilter = ctx.ChangeChild(*filter, 0, ctx.NewCallable(pos, "And", {
-        ctx.NewCallable(pos, "And", {
-            ctx.NewCallable(pos, "Or", {
-                CreateNodeBoolParameter(NKqp::NBatchParams::IsFirstQuery, pos, ctx),
-                ctx.NewCallable(pos, "Or", {
-                    ctx.NewCallable(pos, "And", {
-                        CreateNodeBoolParameter(NKqp::NBatchParams::IsInclusiveLeft, pos, ctx),
-                        ctx.NewCallable(pos, ">=", {
-                            primaryNodeMember,
-                            beginNodeParams
-                        })
-                    }),
-                    ctx.NewCallable(pos, "And", {
-                        ctx.NewCallable(pos, "Not", {
-                            CreateNodeBoolParameter(NKqp::NBatchParams::IsInclusiveLeft, pos, ctx)
-                        }),
-                        ctx.NewCallable(pos, ">", {
-                            primaryNodeMember,
-                            beginNodeParams
-                        })
-                    })
-                })
-            }),
-            ctx.NewCallable(pos, "Or", {
-                CreateNodeBoolParameter(NKqp::NBatchParams::IsLastQuery, pos, ctx),
-                ctx.NewCallable(pos, "Or", {
-                    ctx.NewCallable(pos, "And", {
-                        CreateNodeBoolParameter(NKqp::NBatchParams::IsInclusiveRight, pos, ctx),
-                        ctx.NewCallable(pos, "<=", {
-                            primaryNodeMember,
-                            endNodeParams
-                        })
-                    }),
-                    ctx.NewCallable(pos, "And", {
-                        ctx.NewCallable(pos, "Not", {
-                            CreateNodeBoolParameter(NKqp::NBatchParams::IsInclusiveRight, pos, ctx)
-                        }),
-                        ctx.NewCallable(pos, "<", {
-                            primaryNodeMember,
-                            endNodeParams
-                        })
-                    })
-                })
-            }),
-        }),
-        filter->ChildPtr(0)
-    }));
-
-    return TCoLambda(ctx.ChangeChild(*newLambda, 1, std::move(newFilter)));
+    return Build<TCoLambda>(ctx, pos)
+        .Args({row})
+        .Body<TCoCoalesce>()
+            .Predicate(newFilter)
+            .Value<TCoBool>()
+                .Literal().Build("false")
+                .Build()
+            .Build()
+        .Done();
 }
+
 } // namespace
 
 class TKiSinkIntentDeterminationTransformer: public TKiSinkVisitorTransformer {

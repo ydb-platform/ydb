@@ -2,20 +2,18 @@
 #include "kqp_executer.h"
 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
-#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/batch/params.h>
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_log.h>
-
-#include <util/string/split.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -46,6 +44,7 @@ class TKqpPartitionedExecuter : public TActorBootstrapped<TKqpPartitionedExecute
     struct TKeyColumnInfo {
         ui32 Id;
         NScheme::TTypeInfo Type;
+        size_t ParamIndex;
     };
 
 public:
@@ -113,8 +112,8 @@ public:
         YQL_ENSURE(range.IsFullRange(KeyColumnInfo.size()));
 
         TVector<NScheme::TTypeInfo> keyColumnTypes;
-        for (const auto& [_, type] : KeyColumnInfo) {
-            keyColumnTypes.push_back(type);
+        for (const auto& info : KeyColumnInfo) {
+            keyColumnTypes.push_back(info.Type);
         }
 
         auto keyRange = MakeHolder<TKeyDesc>(TableId, range, TKeyDesc::ERowOperation::Update,
@@ -173,7 +172,7 @@ public:
 
             if (i > 0) {
                 ptr->BeginRange = partitioning->at(i - 1).Range;
-                if (ptr->BeginRange) {
+                if (!ptr->BeginRange.Empty()) {
                     ptr->BeginRange->IsInclusive = !ptr->BeginRange->IsInclusive;
                 }
             }
@@ -309,15 +308,7 @@ public:
             case Ydb::StatusIds::ABORTED:
             case Ydb::StatusIds::UNAVAILABLE:
             case Ydb::StatusIds::OVERLOADED:
-                if (partInfo->LimitSize <= MinLimitSize) {
-                    partInfo->Response = EExecuterResponse::ERROR;
-                    RuntimeError(
-                    Ydb::StatusIds::INTERNAL_ERROR,
-                    NYql::TIssues({NYql::TIssue(TStringBuilder() << CurrentStateFuncName()
-                        << ", executer cannot be retried")}));
-                }
-
-                partInfo->LimitSize = partInfo->LimitSize / 2;
+                partInfo->LimitSize = (partInfo->LimitSize / 2 <= MinLimitSize) ? MinLimitSize : partInfo->LimitSize / 2;
                 RetryPartExecution(ev->Sender, /* fromBuffer */ false);
                 break;
             default:
@@ -339,34 +330,8 @@ public:
         auto endRows = ev->BatchEndRows;
         auto endKeyIds = ev->BatchKeyIds;
 
-        if (NeedReordering.Empty()) {
-            NeedReordering = false;
-
-            if (!endKeyIds.empty()) {
-                YQL_ENSURE(KeyColumnInfo.size() == endKeyIds.size());
-
-                for (size_t i = 0; i < KeyColumnInfo.size(); ++i) {
-                    if (KeyColumnInfo[i].Id != endKeyIds[i]) {
-                        NeedReordering = true;
-                        break;
-                    }
-                }
-            }
-
-            if (NeedReordering.GetRef()) {
-                for (auto& curPart : Partitions) {
-                    auto& beginRow = curPart->BeginRange;
-                    if (!beginRow.Empty()) {
-                        beginRow->EndKeyPrefix = ReorderRowKeyColumns(beginRow->EndKeyPrefix, endKeyIds);
-                    }
-
-                    auto& endRow = curPart->EndRange;
-                    if (!endRow.Empty()) {
-                        endRow->EndKeyPrefix = ReorderRowKeyColumns(endRow->EndKeyPrefix, endKeyIds);
-                    }
-                }
-                ReorderKeyColumnInfo(endKeyIds);
-            }
+        if (!endKeyIds.empty()) {
+            TryReorderKeysByIds(endKeyIds);
         }
 
         TSerializedCellVec maxRow;
@@ -379,7 +344,7 @@ public:
             auto row = endRows[i];
             YQL_ENSURE(row.GetCells().size() == maxRow.GetCells().size());
 
-            for (size_t j = 0; j < row.GetCells().size(); ++j) {
+            for (size_t j = 0; j < KeyColumnInfo.size(); ++j) {
                 NScheme::TTypeInfoOrder typeOrder(KeyColumnInfo[j].Type, NScheme::EOrder::Ascending);
                 if (CompareTypedCells(maxRow.GetCells()[j], row.GetCells()[j], typeOrder) < 0) {
                     maxRow = row;
@@ -517,10 +482,11 @@ private:
         YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
 
         KeyColumnInfo.reserve(settings.GetKeyColumns().size());
-        for (const auto& column : settings.GetKeyColumns()) {
+        for (int i = 0; i < settings.GetKeyColumns().size(); ++i) {
+            const auto& column = settings.GetKeyColumns()[i];
             auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
                 column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
-            KeyColumnInfo.emplace_back(column.GetId(), typeInfoMod.TypeInfo);
+            KeyColumnInfo.emplace_back(column.GetId(), typeInfoMod.TypeInfo, i);
         }
 
         TableId = MakeTableId(settings.GetTable());
@@ -547,7 +513,7 @@ private:
         auto queryData = physicalRequest.Transactions.front().Params;
         queryData->ClearPrunedParams();
 
-        DebugPrintRequest(queryData);
+        DebugPrintRequest(queryData, partitionIdx);
 
         if (!ev->GetTxResults().empty()) {
             queryData->AddTxResults(0, std::move(ev->GetTxResults()));
@@ -565,8 +531,8 @@ private:
         auto& queryData = newRequest.Transactions.front().Params;
         auto& partition = Partitions[partitionIdx];
 
-        YQL_ENSURE(FillParamValue(queryData, NBatchParams::IsFirstQuery, partition->IsFirstQuery));
-        YQL_ENSURE(FillParamValue(queryData, NBatchParams::IsLastQuery, partition->IsLastQuery));
+        FillParamValue(queryData, NBatchParams::IsFirstQuery, partition->IsFirstQuery);
+        FillParamValue(queryData, NBatchParams::IsLastQuery, partition->IsLastQuery);
 
         FillRequestRange(queryData, partition->BeginRange, /* isBegin */ true);
         FillRequestRange(queryData, partition->EndRange, /* isBegin */ false);
@@ -615,23 +581,37 @@ private:
     }
 
     void FillRequestRange(TQueryData::TPtr queryData, const TMaybe<TKeyDesc::TPartitionRangeInfo>& range, bool isBegin) {
-        YQL_ENSURE(FillParamValue(queryData,
-            (isBegin) ? NBatchParams::IsInclusiveLeft : NBatchParams::IsInclusiveRight,
-            (range) ? range->IsInclusive : false));
+        auto isInclusive = (isBegin) ? NBatchParams::IsInclusiveLeft : NBatchParams::IsInclusiveRight;
+        auto rangeName = ((isBegin) ? NBatchParams::Begin : NBatchParams::End);
+        auto prefixRangeName = ((isBegin) ? NBatchParams::BeginPrefixSize : NBatchParams::EndPrefixSize);
+
+        FillParamValue(queryData, isInclusive, (!range.Empty()) ? range->IsInclusive : false);
+
+        size_t firstEmpty = (range.Empty()) ? 0 : KeyColumnInfo.size();
 
         for (size_t i = 0; i < KeyColumnInfo.size(); ++i) {
-            auto paramName = ((isBegin) ? NBatchParams::Begin : NBatchParams::End) + ToString(i + 1);
-            if (range && i < range->EndKeyPrefix.GetCells().size()) {
-                auto cellValue = NMiniKQL::GetCellValue(range->EndKeyPrefix.GetCells()[i], KeyColumnInfo[i].Type);
-                YQL_ENSURE(FillParamValue(queryData, paramName, cellValue));
-            } else {
-                YQL_ENSURE(FillParamValue(queryData, paramName, false, /* setDefault */ true));
+            const auto& info = KeyColumnInfo[i];
+            auto paramName = rangeName + ToString(info.ParamIndex + 1);
+
+            if (range.Empty() || range->EndKeyPrefix.GetCells().size() <= i) {
+                firstEmpty = std::min(firstEmpty, info.ParamIndex);
+                FillParamValue(queryData, paramName, false, /* setDefault */ true);
+                continue;
             }
+
+            auto cellValue = NMiniKQL::GetCellValue(range->EndKeyPrefix.GetCells()[i], info.Type);
+            if (!cellValue.HasValue()) {
+                firstEmpty = std::min(firstEmpty, info.ParamIndex);
+            }
+
+            FillParamValue(queryData, paramName, cellValue);
         }
+
+        FillParamValue(queryData, prefixRangeName, firstEmpty);
     }
 
     template <typename T>
-    bool FillParamValue(TQueryData::TPtr queryData, const TString& name, T value, bool setDefault = false) {
+    void FillParamValue(TQueryData::TPtr queryData, const TString& name, T value, bool setDefault = false) {
         for (const auto& paramDesc : PreparedQuery->GetParameters()) {
             if (paramDesc.GetName() != name) {
                 continue;
@@ -643,31 +623,35 @@ private:
             if (setDefault) {
                 auto defaultValue = MakeDefaultValueByType(paramType);
                 queryData->AddUVParam(name, paramType, defaultValue);
-                return true;
+                return;
             }
 
             queryData->AddUVParam(name, paramType, NUdf::TUnboxedValuePod(value));
-            return true;
+            return;
         }
-        return false;
+
+        YQL_ENSURE(false);
     }
 
     void PrepareParameters(IKqpGateway::TExecPhysicalRequest& request) {
         auto& queryData = request.Transactions.front().Params;
+        TString paramName;
 
         try {
             for (const auto& paramDesc : PreparedQuery->GetParameters()) {
+                paramName = paramDesc.GetName();
                 queryData->ValidateParameter(paramDesc.GetName(), paramDesc.GetType(), request.TxAlloc->TypeEnv);
             }
 
             for(const auto& paramBinding: request.Transactions.front().Body->GetParamBindings()) {
+                paramName = paramBinding.GetName();
                 queryData->MaterializeParamValue(true, paramBinding);
             }
         } catch (const yexception& ex) {
             RuntimeError(
                 Ydb::StatusIds::BAD_REQUEST,
                 NYql::TIssues({NYql::TIssue(TStringBuilder() << CurrentStateFuncName()
-                    << ", cannot prepare parameters for request.")}));
+                    << ", cannot prepare parameters for request, name = " << paramName)}));
         }
     }
 
@@ -681,20 +665,42 @@ private:
             [](auto it) { return it->Response == EExecuterResponse::ERROR; });
     }
 
-    TSerializedCellVec ReorderRowKeyColumns(const TSerializedCellVec& row, const TVector<ui32>& keyIds) {
+    void TryReorderKeysByIds(const TVector<ui32>& keyIds) {
+        YQL_ENSURE(KeyColumnInfo.size() == keyIds.size());
+
+        for (size_t i = 0; i < KeyColumnInfo.size(); ++i) {
+            if (KeyColumnInfo[i].Id != keyIds[i]) {
+                ReorderKeysByIds(keyIds);
+                break;
+            }
+        }
+    }
+
+    void ReorderKeysByIds(const TVector<ui32>& keyIds) {
+        ReorderKeyColumnInfo(keyIds);
+
+        for (auto& curPart : Partitions) {
+            auto& beginRow = curPart->BeginRange;
+            if (!beginRow.Empty()) {
+                beginRow->EndKeyPrefix = ReorderKeyColumns(beginRow->EndKeyPrefix);
+            }
+
+            auto& endRow = curPart->EndRange;
+            if (!endRow.Empty()) {
+                endRow->EndKeyPrefix = ReorderKeyColumns(endRow->EndKeyPrefix);
+            }
+        }
+    }
+
+    TSerializedCellVec ReorderKeyColumns(const TSerializedCellVec& row) {
         if (row.GetCells().empty()) {
             return row;
         }
 
         TVector<TCell> newRow;
-        for (auto keyId : keyIds) {
-            for (size_t i = 0; i < KeyColumnInfo.size(); ++i) {
-                const auto& [prevKeyId, _] = KeyColumnInfo[i];
-                if (prevKeyId == keyId) {
-                    newRow.push_back(row.GetCells()[i]);
-                    break;
-                }
-            }
+        auto cells = row.GetCells();
+        for (const auto& info : KeyColumnInfo) {
+            newRow.push_back(cells[info.ParamIndex]);
         }
 
         TConstArrayRef<TCell> rowRef(newRow);
@@ -703,11 +709,11 @@ private:
 
     void ReorderKeyColumnInfo(const TVector<ui32>& keyIds) {
         TVector<TKeyColumnInfo> newInfo;
-        for (size_t i = 0; i < keyIds.size(); ++i) {
-            for (const auto& [keyId, keyType] : KeyColumnInfo) {
-                if (keyId == keyIds[i]) {
-                    newInfo.emplace_back(keyId, keyType);
-                    break;
+
+        for (const auto& id : keyIds) {
+            for (const auto& info : KeyColumnInfo) {
+                if (info.Id == id) {
+                    newInfo.push_back(info);
                 }
             }
         }
@@ -715,9 +721,9 @@ private:
         KeyColumnInfo = std::move(newInfo);
     }
 
-    void DebugPrintRequest(TQueryData::TPtr queryData) {
+    void DebugPrintRequest(TQueryData::TPtr queryData, size_t partitionIdx) {
         TStringBuilder builder;
-        builder << "Fill request with parameters: ";
+        builder << "Fill request with parameters for partitionIdx = " << partitionIdx << ": ";
 
         auto [isFirstQueryType, isFirstQueryValue] = queryData->GetParameterUnboxedValue(NBatchParams::IsFirstQuery);
         auto [isLastQueryType, isLastQueryValue] = queryData->GetParameterUnboxedValue(NBatchParams::IsLastQuery);
@@ -731,10 +737,11 @@ private:
         builder << "(";
 
         for (size_t i = 0; i < KeyColumnInfo.size(); ++i) {
-            auto beginName = NBatchParams::Begin + ToString(i + 1);
+            auto paramIndex = KeyColumnInfo[i].ParamIndex;
+            auto beginName = NBatchParams::Begin + ToString(paramIndex + 1);
             auto [beginType, beginValue] = queryData->GetParameterUnboxedValue(beginName);
 
-            auto endName = NBatchParams::End + ToString(i + 1);
+            auto endName = NBatchParams::End + ToString(paramIndex + 1);
             auto [endType, endValue] = queryData->GetParameterUnboxedValue(endName);
 
             if (isFirstQueryValue.Get<bool>()) {
@@ -744,7 +751,7 @@ private:
             }
             builder << ((isInclusiveLeftValue.Get<bool>()) ? " <= " : " < ");
 
-            builder << ("Key" + ToString(i + 1));
+            builder << ("Column" + ToString(paramIndex + 1));
 
             builder << ((isInclusiveRightValue.Get<bool>()) ? " <= " : " < ");
             if (isLastQueryValue.Get<bool>()) {
@@ -802,7 +809,6 @@ private:
     TVector<TBatchPartitionInfo::TPtr> Partitions;
     THashMap<TActorId, TBatchPartitionInfo::TPtr> ExecuterPartition;
     THashMap<TActorId, TBatchPartitionInfo::TPtr> BufferPartition;
-    TMaybe<bool> NeedReordering = Nothing();
     TTableId TableId;
     TString TablePath;
     IKqpGateway::TExecPhysicalRequest LiteralRequest;

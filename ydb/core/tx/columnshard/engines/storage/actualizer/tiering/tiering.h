@@ -116,7 +116,7 @@ private:
     std::optional<ui32> TieringColumnId;
 
     std::shared_ptr<ISnapshotSchema> TargetCriticalSchema;
-    const ui64 PathId;
+    const NColumnShard::TInternalPathId PathId;
     const TVersionedIndex& VersionedIndex;
     const std::shared_ptr<IStoragesManager>& StoragesManager;
 
@@ -137,11 +137,11 @@ private:
 public:
     void ActualizePortionInfo(const TPortionDataAccessor& accessor, const TActualizationContext& context);
     std::vector<TCSMetadataRequest> BuildMetadataRequests(
-        const ui64 pathId, const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TTieringActualizer>& index);
+        const NColumnShard::TInternalPathId pathId, const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TTieringActualizer>& index);
 
     void Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext);
 
-    TTieringActualizer(const ui64 pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager)
+    TTieringActualizer(const NColumnShard::TInternalPathId pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager)
         : PathId(pathId)
         , VersionedIndex(versionedIndex)
         , StoragesManager(storagesManager)

@@ -15,11 +15,11 @@ NKikimr::TConclusionStatus TMetadataFromStore::DoFillMetadata(const NColumnShard
         return TConclusionStatus::Success();
     }
 
-    THashSet<ui64> pathIds;
+    THashSet< NColumnShard::TInternalPathId> pathIds;
     AFL_VERIFY(read.PKRangesFilter);
     for (auto&& filter : *read.PKRangesFilter) {
-        const ui64 fromPathId = *filter.GetPredicateFrom().Get<arrow::UInt64Array>(0, 0, 1);
-        const ui64 toPathId = *filter.GetPredicateTo().Get<arrow::UInt64Array>(0, 0, Max<ui64>());
+        const auto fromPathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(*filter.GetPredicateFrom().Get<arrow::UInt64Array>(0, 0, 1));
+        const auto toPathId =  NColumnShard::TInternalPathId::FromInternalPathIdValue(*filter.GetPredicateTo().Get<arrow::UInt64Array>(0, 0, Max<ui64>()));
         auto pathInfos = logsIndex->GetTables(fromPathId, toPathId);
         for (auto&& pathInfo : pathInfos) {
             if (pathIds.emplace(pathInfo->GetPathId()).second) {
@@ -45,8 +45,8 @@ NKikimr::TConclusionStatus TMetadataFromTable::DoFillMetadata(const NColumnShard
     }
     AFL_VERIFY(read.PKRangesFilter);
     for (auto&& filter : *read.PKRangesFilter) {
-        const ui64 fromPathId = *filter.GetPredicateFrom().Get<arrow::UInt64Array>(0, 0, 1);
-        const ui64 toPathId = *filter.GetPredicateTo().Get<arrow::UInt64Array>(0, 0, Max<ui64>());
+        const auto fromPathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(*filter.GetPredicateFrom().Get<arrow::UInt64Array>(0, 0, 1));
+        const auto toPathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(*filter.GetPredicateTo().Get<arrow::UInt64Array>(0, 0, Max<ui64>()));
         if (fromPathId <= read.PathId && read.PathId <= toPathId) {
             auto pathInfo = logsIndex->GetGranuleOptional(read.PathId);
             if (!pathInfo) {

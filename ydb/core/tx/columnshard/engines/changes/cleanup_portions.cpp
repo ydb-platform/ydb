@@ -21,7 +21,7 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
     AFL_VERIFY(FetchedDataAccessors);
     PortionsToRemove.ApplyOnExecute(self, context, *FetchedDataAccessors);
 
-    THashSet<ui64> pathIds;
+    THashSet<NColumnShard::TInternalPathId> pathIds;
     if (!self) {
         return;
     }

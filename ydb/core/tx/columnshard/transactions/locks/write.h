@@ -5,7 +5,7 @@ namespace NKikimr::NOlap::NTxInteractions {
 
 class TEvWriteWriter: public ITxEventWriter {
 private:
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, RecordBatch);
 
     virtual bool DoCheckInteraction(
@@ -25,7 +25,7 @@ private:
     }
 
 public:
-    TEvWriteWriter(const ui64 pathId, const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema)
+    TEvWriteWriter(const NColumnShard::TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema)
         : PathId(pathId)
         , RecordBatch(NArrow::TColumnOperator().Extract(batch, pkSchema->field_names())) {
         AFL_VERIFY(PathId);

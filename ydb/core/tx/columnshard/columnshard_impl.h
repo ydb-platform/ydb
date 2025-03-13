@@ -28,6 +28,7 @@
 #include "resource_subscriber/task.h"
 #include "subscriber/abstract/manager/manager.h"
 #include "transactions/tx_controller.h"
+#include "common/path_id.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/statistics/events.h>
@@ -183,7 +184,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxMonitoring;
     friend class TTxRemoveSharedBlobs;
     friend class TTxFinishAsyncTransaction;
-    friend class TWaitEraseTablesTxSubscriber;
+    friend class TWaitOnProposeTxSubscriberBase;
     friend class TTxPersistSubDomainOutOfSpace;
     friend class TTxPersistSubDomainPathId;
     friend class TSpaceWatcher;
@@ -337,8 +338,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
         putStatus.OnYellowChannels(Executor());
     }
 
-    void ActivateTiering(const ui64 pathId, const THashSet<NTiers::TExternalStorageId>& tiers);
-    void OnTieringModified(const std::optional<ui64> pathId = {});
+    void ActivateTiering(const NColumnShard::TInternalPathId pathId, const THashSet<NTiers::TExternalStorageId>& tiers);
+    void OnTieringModified(const std::optional<NColumnShard::TInternalPathId> pathId = {});
 
     std::shared_ptr<TAtomicCounter> TabletActivityImpl = std::make_shared<TAtomicCounter>(0);
 
@@ -389,8 +390,8 @@ public:
 private:
     void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize, const ui64 cookie,
         std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
-    EOverloadStatus CheckOverloadedImmediate(const ui64 tableId) const;
-    EOverloadStatus CheckOverloadedWait(const ui64 tableId) const;
+    EOverloadStatus CheckOverloadedImmediate(const TInternalPathId tableId) const;
+    EOverloadStatus CheckOverloadedWait(const TInternalPathId tableId) const;
 
 protected:
     STFUNC(StateInit) {
@@ -601,10 +602,12 @@ private:
         const NKikimrTxColumnShard::TDropTable& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunAlterStore(
         const NKikimrTxColumnShard::TAlterStore& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
+    void RunMoveTable(
+        const NKikimrTxColumnShard::TMoveTable& proto, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
 
     void StartIndexTask(std::vector<const NOlap::TCommittedData*>&& dataToIndex, const i64 bytesToIndex);
     void SetupIndexation();
-    void SetupCompaction(const std::set<ui64>& pathIds);
+    void SetupCompaction(const std::set<TInternalPathId>& pathIds);
     void StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
     void SetupMetadata();

@@ -21,7 +21,7 @@ NKikimr::TConclusionStatus TSourceSession::DeserializeFromProto(const NKikimrCol
         return TConclusionStatus::Fail("Incorrect DestinationTabletId in proto.");
     }
     for (auto&& i : proto.GetPathIds()) {
-        if (!PathIds.emplace(i).second) {
+        if (!PathIds.emplace(NColumnShard::TInternalPathId::FromInternalPathIdValue(i)).second) {
             return TConclusionStatus::Fail("PathIds contains duplicated values.");
         }
     }
@@ -79,7 +79,7 @@ void TSourceSession::ActualizeDestination(const NColumnShard::TColumnShard& shar
     AFL_VERIFY(Cursor);
     if (Cursor->IsValid()) {
         if (!Cursor->IsAckDataReceived()) {
-            const THashMap<ui64, NEvents::TPathIdData>& packPortions = Cursor->GetSelected();
+            const THashMap<NColumnShard::TInternalPathId, NEvents::TPathIdData>& packPortions = Cursor->GetSelected();
 
             auto ev = std::make_unique<NEvents::TEvSendDataFromSource>(GetSessionId(), Cursor->GetPackIdx(), SelfTabletId, packPortions, Cursor->GetSelectedSchemas());
             NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
@@ -104,13 +104,13 @@ void TSourceSession::ActualizeDestination(const NColumnShard::TColumnShard& shar
     }
 }
 
-void TSourceSession::StartCursor(const NColumnShard::TColumnShard& shard, THashMap<ui64, std::vector<TPortionDataAccessor>>&& portions, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory) {
+void TSourceSession::StartCursor(const NColumnShard::TColumnShard& shard, THashMap<NColumnShard::TInternalPathId, std::vector<TPortionDataAccessor>>&& portions, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory) {
     AFL_VERIFY(Cursor);
     AFL_VERIFY(Cursor->Start(shard.GetStoragesManager(), std::move(portions), std::move(schemeHistory), shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex()));
     ActualizeDestination(shard, shard.GetDataLocksManager());
 }
 
-TConclusionStatus TSourceSession::DoStart(NColumnShard::TColumnShard& shard, THashMap<ui64, std::vector<TPortionDataAccessor>>&& portions) {
+TConclusionStatus TSourceSession::DoStart(NColumnShard::TColumnShard& shard, THashMap<NColumnShard::TInternalPathId, std::vector<TPortionDataAccessor>>&& portions) {
     shard.Execute(new TTxStartSourceCursor(this, &shard, std::move(portions), "start_source_cursor"));
     return TConclusionStatus::Success();
 }

@@ -54,14 +54,14 @@ void RefreshTiering(TTestBasicRuntime& runtime, const TActorId& sender) {
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
 }
 
-bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, NOlap::TSnapshot snap) {
+bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId) {
     auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
-        NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, snap.GetTxId(), txBody, 0, 0);
+        NKikimrTxColumnShard::TX_KIND_SCHEMA, sender, txId, txBody);
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
     auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
     const auto& res = ev->Get()->Record;
-    UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
+    UNIT_ASSERT_EQUAL(res.GetTxId(), txId);
     UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_SCHEMA);
     return (res.GetStatus() == NKikimrTxColumnShard::PREPARED);
 }
@@ -223,10 +223,12 @@ void ProposeCommitCheck(TTestBasicRuntime& runtime, TActorId& sender, ui64 shard
     checker(res);
 }
 
-void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
+void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId, bool expectSuccess) {
     ProposeCommitCheck(runtime, sender, shardId, txId, writeIds, lockId, [&](auto& res) {
-        AFL_VERIFY(res.GetTxId() == txId)("tx_id", txId)("res", res.GetTxId());
-        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+        UNIT_ASSERT_EQUAL(res.GetTxId(), txId);
+        if (expectSuccess) {
+            UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+        }
     });
 }
 
@@ -236,8 +238,8 @@ void ProposeCommitFail(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardI
     });
 }
 
-void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
-    ProposeCommit(runtime, sender, TTestTxConfig::TxTablet0, txId, writeIds, lockId);
+void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId, bool expectSuccess) {
+    ProposeCommit(runtime, sender, TTestTxConfig::TxTablet0, txId, writeIds, lockId, expectSuccess);
 }
 
 
@@ -474,7 +476,7 @@ namespace NKikimr::NColumnShard {
         }
 
         using namespace NTxUT;
-        bool ok = ProposeSchemaTx(runtime, sender, txBody, snapshot);
+        bool ok = ProposeSchemaTx(runtime, sender, txBody, snapshot.GetTxId());
         UNIT_ASSERT_VALUES_EQUAL(ok, succeed);
         if (succeed) {
             PlanSchemaTx(runtime, sender, snapshot);

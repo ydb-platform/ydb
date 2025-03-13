@@ -36,7 +36,7 @@ void TGranuleActualizationIndex::RefreshScheme(const TAddExternalContext& contex
     NYDBTest::TControllers::GetColumnShardController()->OnActualizationRefreshScheme();
 }
 
-TGranuleActualizationIndex::TGranuleActualizationIndex(const ui64 pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager)
+TGranuleActualizationIndex::TGranuleActualizationIndex(const NColumnShard::TInternalPathId pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager)
     : PathId(pathId)
     , VersionedIndex(versionedIndex)
     , StoragesManager(storagesManager)

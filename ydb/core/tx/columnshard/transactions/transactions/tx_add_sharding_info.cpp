@@ -8,7 +8,7 @@ bool TTxAddShardingInfo::Execute(TTransactionContext& txc, const TActorContext& 
     AFL_VERIFY(!!SnapshotVersion);
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::ShardingInfo>()
-        .Key(PathId, ShardingVersion)
+        .Key(PathId.GetInternalPathIdValue(), ShardingVersion)
         .Update(NIceDb::TUpdate<Schema::ShardingInfo::Snapshot>(SnapshotVersion->SerializeToString()), 
             NIceDb::TUpdate<Schema::ShardingInfo::Logic>(GranuleShardingLogic.SerializeToString()));
     return true;

@@ -346,6 +346,9 @@ void TColumnShard::RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, 
             RunAlterStore(body.GetAlterStore(), version, txc);
             return;
         }
+        case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable: {
+            return RunMoveTable(body.GetMoveTable(), version, txc);
+        }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET: {
             break;
         }
@@ -378,18 +381,19 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
     NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
-    const ui64 pathId = tableProto.GetPathId();
-    if (TablesManager.HasTable(pathId)) {
-        LOG_S_DEBUG("EnsureTable for existed pathId: " << pathId << " at tablet " << TabletID());
+    const TLocalPathId localPathId = TLocalPathId::FromLocalPathIdValue(tableProto.GetPathId());
+    if (const auto internalPathId = TablesManager.ResolveInternalPathId(localPathId)) {
+        LOG_S_DEBUG("EnsureTable for existed LocalPathId: " << localPathId << " at tablet " << TabletID());
         return;
     }
+    const auto internalPathId = TInternalPathId::FromInternalPathIdValue(localPathId.GetLocalPathIdValue()); //On table creation use the same value for local an internal path ids
 
-    LOG_S_DEBUG("EnsureTable for pathId: " << pathId
+    LOG_S_DEBUG("EnsureTable for LocalPathId: " << localPathId
                                            << " ttl settings: " << tableProto.GetTtlSettings()
                                            << " at tablet " << TabletID());
 
     NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
-    tableVerProto.SetPathId(pathId);
+    tableVerProto.SetPathId(internalPathId.GetInternalPathIdValue());
 
     // check schema changed
 
@@ -412,7 +416,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     {
         THashSet<NTiers::TExternalStorageId> usedTiers;
-        TTableInfo table(pathId);
+        TTableInfo table(internalPathId, localPathId); 
         if (tableProto.HasTtlSettings()) {
             const auto& ttlSettings = tableProto.GetTtlSettings();
             *tableVerProto.MutableTtlSettings() = ttlSettings;
@@ -422,14 +426,14 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
         }
         TablesManager.RegisterTable(std::move(table), db);
         if (!usedTiers.empty()) {
-            ActivateTiering(pathId, usedTiers);
+            ActivateTiering(internalPathId, usedTiers);
         }
     }
 
     tableVerProto.SetSchemaPresetVersionAdj(tableProto.GetSchemaPresetVersionAdj());
 
-    TablesManager.AddTableVersion(pathId, version, tableVerProto, schema, db);
-    InsertTable->RegisterPathInfo(pathId);
+    TablesManager.AddTableVersion(internalPathId, version, tableVerProto, schema, db);
+    InsertTable->RegisterPathInfo(internalPathId);
 
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, TablesManager.GetTableCount());
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, TablesManager.GetSchemaPresets().size());
@@ -440,10 +444,11 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
-    const ui64 pathId = alterProto.GetPathId();
-    Y_ABORT_UNLESS(TablesManager.HasTable(pathId), "AlterTable on a dropped or non-existent table");
+    const auto localPathId = NColumnShard::TLocalPathId::FromLocalPathIdValue(alterProto.GetPathId());
+    const auto internalPathId = TablesManager.ResolveInternalPathId(localPathId);
+    Y_ABORT_UNLESS(internalPathId, "AlterTable on a dropped or non-existent table");
 
-    LOG_S_DEBUG("AlterTable for pathId: " << pathId
+    LOG_S_DEBUG("AlterTable for LocalPathId: " << localPathId
                                           << " schema: " << alterProto.GetSchema()
                                           << " ttl settings: " << alterProto.GetTtlSettings()
                                           << " at tablet " << TabletID());
@@ -465,18 +470,18 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
         if (ttlSettings.HasEnabled()) {
             usedTiers = NOlap::TTiering::GetUsedTiers(ttlSettings.GetEnabled());
         }
-        ActivateTiering(pathId, usedTiers);
+        ActivateTiering(*internalPathId, usedTiers);
     }
 
     tableVerProto.SetSchemaPresetVersionAdj(alterProto.GetSchemaPresetVersionAdj());
-    TablesManager.AddTableVersion(pathId, version, tableVerProto, schema, db);
+    TablesManager.AddTableVersion(*internalPathId, version, tableVerProto, schema, db);
 }
 
 void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProto, const NOlap::TSnapshot& version,
     NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
-    const ui64 pathId = dropProto.GetPathId();
+    const auto pathId =  NColumnShard::TInternalPathId::FromInternalPathIdValue(dropProto.GetPathId());
     if (!TablesManager.HasTable(pathId)) {
         LOG_S_DEBUG("DropTable for unknown or deleted pathId: " << pathId << " at tablet " << TabletID());
         return;
@@ -508,6 +513,16 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
         }
         TablesManager.AddSchemaVersion(presetProto.GetId(), version, presetProto.GetSchema(), db);
     }
+}
+
+void TColumnShard::RunMoveTable(const NKikimrTxColumnShard::TMoveTable& proto, const NOlap::TSnapshot& /*version*/,
+                                 NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+
+    const auto srcPathId = TLocalPathId::FromLocalPathIdValue(proto.GetSrcPathId());
+    const auto dstPathId = TLocalPathId::FromLocalPathIdValue(proto.GetDstPathId());
+    TablesManager.MoveTableProgressOnExecute(db, srcPathId, dstPathId);
+    TablesManager.MoveTableProgressOnComplete(srcPathId, dstPathId); //TODO FIX ME
 }
 
 void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
@@ -825,13 +840,12 @@ public:
 
 }   // namespace
 
-void TColumnShard::SetupCompaction(const std::set<ui64>& pathIds) {
+void TColumnShard::SetupCompaction(const std::set<TInternalPathId>& pathIds) {
     if (!AppDataVerified().ColumnShardConfig.GetCompactionEnabled() ||
         !NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::Compaction)) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_compaction")("reason", "disabled");
         return;
     }
-
     BackgroundController.CheckDeadlines();
     if (BackgroundController.GetCompactionsCount()) {
         return;
@@ -1054,7 +1068,7 @@ void TColumnShard::SetupCleanupPortions() {
     }
 
     const NOlap::TSnapshot minReadSnapshot = GetMinReadSnapshot();
-    THashSet<ui64> pathsToDrop = TablesManager.GetPathsToDrop(minReadSnapshot);
+    auto pathsToDrop = TablesManager.GetPathsToDrop(minReadSnapshot);
 
     auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(minReadSnapshot, pathsToDrop, DataLocksManager);
     if (!changes) {
@@ -1080,7 +1094,7 @@ void TColumnShard::SetupCleanupTables() {
         return;
     }
 
-    THashSet<ui64> pathIdsEmptyInInsertTable;
+    THashSet<TInternalPathId> pathIdsEmptyInInsertTable;
     for (auto&& i : TablesManager.GetPathsToDrop(GetMinReadSnapshot())) {
         if (InsertTable->HasPathIdData(i)) {
             continue;
@@ -1271,12 +1285,12 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvSendDataFromSource::T
     // in current implementation the next loop will crash if schemas will be sent in the same package with the data, so adding this verify to ensure consistent behaviour
     AFL_VERIFY(ev->Get()->Record.GetPathIdData().empty() || ev->Get()->Record.GetSchemeHistory().empty())("reason", "can not send schemas and data in the same package");
 
-    THashMap<ui64, NOlap::NDataSharing::NEvents::TPathIdData> dataByPathId;
+    THashMap<NColumnShard::TInternalPathId, NOlap::NDataSharing::NEvents::TPathIdData> dataByPathId;
     TBlobGroupSelector dsGroupSelector(Info());
     for (auto&& i : ev->Get()->Record.GetPathIdData()) {
         auto data = NOlap::NDataSharing::NEvents::TPathIdData::BuildFromProto(i, TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().GetVersionedIndex(), dsGroupSelector);
         AFL_VERIFY(data.IsSuccess())("error", data.GetErrorMessage());
-        AFL_VERIFY(dataByPathId.emplace(i.GetPathId(), data.DetachResult()).second);
+        AFL_VERIFY(dataByPathId.emplace(TInternalPathId::FromInternalPathIdValue(i.GetPathId()), data.DetachResult()).second);
     }
 
     const auto& schemeHistoryProto = ev->Get()->Record.GetSchemeHistory();
@@ -1425,7 +1439,7 @@ class TTxAskPortionChunks: public TTransactionBase<TColumnShard> {
 private:
     using TBase = TTransactionBase<TColumnShard>;
     std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback> FetchCallback;
-    THashMap<ui64, std::vector<NOlap::TPortionInfo::TConstPtr>> PortionsByPath;
+    THashMap<NColumnShard::TInternalPathId, std::vector<NOlap::TPortionInfo::TConstPtr>> PortionsByPath;
     std::vector<TPortionConstructorV2> FetchedAccessors;
     const TString Consumer;
     THashMap<NOlap::TPortionAddress, TPortionConstructorV2> Constructors;
@@ -1459,7 +1473,7 @@ public:
                     continue;
                 }
                 if (!itPortionConstructor->second.HasRecords()) {
-                    auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(p->GetPathId(), p->GetPortionId()).Select();
+                    auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(p->GetPathId().GetInternalPathIdValue(), p->GetPortionId()).Select();
                     if (!rowset.IsReady()) {
                         reask = true;
                     } else {
@@ -1473,7 +1487,7 @@ public:
                     if (!p->GetSchema(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex())->GetIndexesCount()) {
                         itPortionConstructor->second.SetIndexes({});
                     } else {
-                        auto rowset = db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
+                        auto rowset = db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(p->GetPathId().GetInternalPathIdValue(), p->GetPortionId()).Select();
                         if (!rowset.IsReady()) {
                             reask = true;
                         } else {
@@ -1592,7 +1606,7 @@ void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs:
     Execute(new TTxRemoveSharedBlobs(this, blobs, NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()), ev->Get()->Record.GetStorageId()), ctx);
 }
 
-void TColumnShard::ActivateTiering(const ui64 pathId, const THashSet<NTiers::TExternalStorageId>& usedTiers) {
+void TColumnShard::ActivateTiering(const NColumnShard::TInternalPathId pathId, const THashSet<NTiers::TExternalStorageId>& usedTiers) {
     AFL_VERIFY(Tiers);
     Tiers->ActivateTiers(usedTiers);
     OnTieringModified(pathId);
@@ -1612,7 +1626,7 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
     }
 }
 
-void TColumnShard::OnTieringModified(const std::optional<ui64> pathId) {
+void TColumnShard::OnTieringModified(const std::optional<NColumnShard::TInternalPathId> pathId) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified")("path_id", pathId);
     StoragesManager->OnTieringModified(Tiers);
     if (TablesManager.HasPrimaryIndex()) {

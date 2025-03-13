@@ -4386,7 +4386,7 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
     Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
 }
 
-const NTable::TScheme& TExecutor::Scheme() const noexcept {
+const NTable::TScheme& TExecutor::Scheme() const {
     Y_DEBUG_ABORT_UNLESS(Database);
     return Database->GetScheme();
 }

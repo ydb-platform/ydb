@@ -649,7 +649,7 @@ namespace NFlatExecutorSetup {
         virtual float GetRejectProbability() const = 0;
 
         // Returns current database scheme (executor must be active)
-        virtual const NTable::TScheme& Scheme() const noexcept = 0;
+        virtual const NTable::TScheme& Scheme() const = 0;
 
         virtual void SetPreloadTablesData(THashSet<ui32> tables) = 0;
 

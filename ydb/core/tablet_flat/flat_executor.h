@@ -712,7 +712,7 @@ public:
     STFUNC(StateFollower);
 
     // database interface
-    const NTable::TScheme& Scheme() const noexcept override;
+    const NTable::TScheme& Scheme() const override;
     ui64 TabletId() const { return Owner->TabletID(); }
 
     float GetRejectProbability() const override;

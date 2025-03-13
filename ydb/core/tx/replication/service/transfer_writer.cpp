@@ -667,7 +667,7 @@ private:
             LogCritAndLeave(*ProcessingError);
         } else {
             PollSent = true;
-            Send(Worker, new TEvWorker::TEvPoll(false));
+            Send(Worker, new TEvWorker::TEvPoll(true));
         }
     }
 

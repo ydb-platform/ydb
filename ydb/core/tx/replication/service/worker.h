@@ -33,9 +33,9 @@ struct TEvWorker {
     struct TEvHandshake: public TEventLocal<TEvHandshake, EvHandshake> {};
 
     struct TEvPoll: public TEventLocal<TEvPoll, EvPoll> {
-        bool AutoCommit;
+        bool SkipCommit;
 
-        explicit TEvPoll(bool autoCommit = true);
+        explicit TEvPoll(bool skipCommit = false);
         TString ToString() const override;
     };
 

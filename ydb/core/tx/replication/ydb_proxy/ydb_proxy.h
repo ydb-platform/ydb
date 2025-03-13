@@ -162,7 +162,9 @@ struct TEvYdbProxy {
     struct TReadTopicSettings {
         using TSelf = TReadTopicSettings;
 
-        FLUENT_SETTING_DEFAULT(bool, AutoCommit, true);
+        // This option allows you to postpone the auto-commit of read messages. All previously 
+        // read messages will be commited upon subsequent receipt of TEvPoll with SkipCommit set to false.
+        FLUENT_SETTING_DEFAULT(bool, SkipCommit, false);
     };
 
     struct TReadTopicResult {

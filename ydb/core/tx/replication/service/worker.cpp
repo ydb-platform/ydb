@@ -14,14 +14,14 @@
 
 namespace NKikimr::NReplication::NService {
 
-TEvWorker::TEvPoll::TEvPoll(bool autoCommit)
-    : AutoCommit(autoCommit)
+TEvWorker::TEvPoll::TEvPoll(bool skipCommit)
+    : SkipCommit(skipCommit)
 {
 }
 
 TString TEvWorker::TEvPoll::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
-        << " AutoCommit: " << AutoCommit
+        << " SkipCommit: " << SkipCommit
     << " }";
 }
 

@@ -374,36 +374,66 @@ namespace NActors {
     }
 
     TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, ssize_t recordSize) {
-            TEventSerializationInfo info;
-            info.IsExtendedFormat = static_cast<bool>(payload);
+        TEventSerializationInfo info;
+        info.IsExtendedFormat = static_cast<bool>(payload);
 
-            if (allowExternalDataChannel) {
-                if (payload) {
-                    char temp[MaxNumberBytes];
-                    size_t headerLen = 1 + SerializeNumber(payload.size(), temp);
-                    for (const TRope& rope : payload) {
-                        headerLen += SerializeNumber(rope.size(), temp);
-                    }
-                    info.Sections.push_back(TEventSectionInfo{0, headerLen, 0, 0, true});
-                    for (const TRope& rope : payload) {
-                        info.Sections.push_back(TEventSectionInfo{0, rope.size(), 0, 0, false});
-                    }
+        if (allowExternalDataChannel) {
+            if (payload) {
+                char temp[MaxNumberBytes];
+                size_t headerLen = 1 + SerializeNumber(payload.size(), temp);
+                for (const TRope& rope : payload) {
+                    headerLen += SerializeNumber(rope.size(), temp);
                 }
-
-                const size_t byteSize = Max<ssize_t>(0, recordSize) + preserializedSize;
-                info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true}); // protobuf itself
-
-#ifndef NDEBUG
-                size_t total = 0;
-                for (const auto& section : info.Sections) {
-                    total += section.Size;
+                info.Sections.push_back(TEventSectionInfo{0, headerLen, 0, 0, true});
+                for (const TRope& rope : payload) {
+                    info.Sections.push_back(TEventSectionInfo{0, rope.size(), 0, 0, false});
                 }
-                size_t serialized = CalculateSerializedSizeImpl(payload, recordSize);
-                Y_ABORT_UNLESS(total == serialized, "total# %zu serialized# %zu byteSize# %zd payload.size# %zu", total,
-                    serialized, byteSize, payload.size());
-#endif
             }
 
-            return info;
+            const size_t byteSize = Max<ssize_t>(0, recordSize) + preserializedSize;
+            info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true}); // protobuf itself
+
+#ifndef NDEBUG
+            size_t total = 0;
+            for (const auto& section : info.Sections) {
+                total += section.Size;
+            }
+            size_t serialized = CalculateSerializedSizeImpl(payload, recordSize);
+            Y_ABORT_UNLESS(total == serialized, "total# %zu serialized# %zu byteSize# %zd payload.size# %zu", total,
+                serialized, byteSize, payload.size());
+#endif
         }
+
+        return info;
+    }
+
+    TString DumpRopeStreamData(TRopeStream* stream) {
+        stream->BackUp(stream->ByteCount());
+        TStringBuilder result;
+
+        const void* data;
+        int size;
+
+        ui64 offset = 0;
+        while (stream->Next(&data, &size)) {
+            const unsigned char* bytes = static_cast<const unsigned char*>(data);
+
+            for (int i = 0; i < size; ++i) {
+                if ((offset + i) % 16 == 0) {
+                    if (offset + i > 0) result << "\n";
+                    result << Sprintf("%08" PRIx64 ": ", offset + i);
+                }
+
+                result << Sprintf("%02x ", bytes[i]);
+            }
+            offset += size;
+        }
+        if (offset > 0) {
+            result << "\n";
+        }
+
+        TStringBuilder finalResult;
+        finalResult << "RopeStream dump (size: " << stream->ByteCount() << "):\n" << result;
+        return finalResult; 
+    }
 }

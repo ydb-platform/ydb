@@ -193,11 +193,11 @@ bool HasNonTrivialAny(const TEquiJoinLinkSettings& linkSettings, const TMapJoinS
 
 TStatus UpdateInMemorySizeSetting(TMapJoinSettings& settings, TYtSection& inputSection, const TJoinLabels& labels,
     const TYtJoinNodeOp& op, TExprContext& ctx, bool isLeft,
-    const TStructExprType* itemType, const TVector<TString>& joinKeyList, const TYtState::TPtr& state, const TString& cluster,
+    const TStructExprType* itemType, const TVector<TString>& joinKeyList, const TYtState::TPtr& state,
     const TVector<TYtPathInfo::TPtr>& tables, bool mapJoinUseFlow)
 {
     ui64 size = 0;
-    auto status = CalculateJoinLeafSize(size, settings, inputSection, op, ctx, isLeft, itemType, joinKeyList, state, cluster, tables);
+    auto status = CalculateJoinLeafSize(size, settings, inputSection, op, ctx, isLeft, itemType, joinKeyList, state, tables);
     if (status != TStatus::Ok) {
         return status;
     }
@@ -230,11 +230,11 @@ TStatus UpdateInMemorySizeSetting(TMapJoinSettings& settings, TYtSection& inputS
 
 TStatus UpdateInMemorySizeUsingBlocksSetting(TMapJoinSettings& settings, TYtSection& inputSection,
     const TYtJoinNodeOp& op, TExprContext& ctx, bool isLeft,
-    const TStructExprType* itemType, const TVector<TString>& joinKeyList, const TYtState::TPtr& state, const TString& cluster,
+    const TStructExprType* itemType, const TVector<TString>& joinKeyList, const TYtState::TPtr& state,
     const TVector<TYtPathInfo::TPtr>& tables)
 {
     ui64 dataSize = 0;
-    auto status = CalculateJoinLeafSize(dataSize, settings, inputSection, op, ctx, isLeft, itemType, joinKeyList, state, cluster, tables);
+    auto status = CalculateJoinLeafSize(dataSize, settings, inputSection, op, ctx, isLeft, itemType, joinKeyList, state, tables);
     if (status != TStatus::Ok) {
         return status;
     }
@@ -3050,7 +3050,7 @@ bool RewriteYtEmptyJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoin
 }
 
 TStatus CollectJoinSideStats(ESizeStatCollectMode sizeMode, TJoinSideStats& stats, TYtSection& inputSection,
-    const TYtState& state, const TString& cluster,
+    const TYtState& state,
     const TVector<TYtPathInfo::TPtr>& tableInfo, const THashSet<TString>& joinKeys,
     bool isCross, TMaybeNode<TCoLambda> premap, TExprContext& ctx)
 {
@@ -3103,7 +3103,7 @@ TStatus CollectJoinSideStats(ESizeStatCollectMode sizeMode, TJoinSideStats& stat
     }
 
     IYtGateway::TPathStatResult pathStatResult;
-    auto status = TryEstimateDataSizeChecked(pathStatResult, inputSection, cluster, tableInfo, {}, state, ctx);
+    auto status = TryEstimateDataSizeChecked(pathStatResult, inputSection, tableInfo, {}, state, ctx);
     if (status.Level != TStatus::Ok) {
         return status;
     }
@@ -3271,8 +3271,6 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
         return TStatus::Repeat;
     }
 
-    auto cluster = TString{equiJoin.DataSink().Cluster().Value()};
-
     TMapJoinSettings mapSettings;
     TJoinSideStats leftStats;
     TJoinSideStats rightStats;
@@ -3281,7 +3279,7 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
     if (allowLookupJoin) {
         auto status = CollectStatsAndMapJoinSettings(ESizeStatCollectMode::RawSize, mapSettings, leftStats, rightStats,
                                                      leftTablesReady, leftTables, leftJoinKeys, rightTablesReady, rightTables, rightJoinKeys,
-                                                     &leftLeaf, &rightLeaf, *state, isCross, cluster, ctx);
+                                                     &leftLeaf, &rightLeaf, *state, isCross, ctx);
         if (status.Level != TStatus::Ok) {
             return (status.Level == TStatus::Repeat) ? TStatus::Ok : status;
         }
@@ -3352,7 +3350,7 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
     {
         auto status = CollectStatsAndMapJoinSettings(ESizeStatCollectMode::ColumnarSize, mapSettings, leftStats, rightStats,
                                                     leftTablesReady, leftTables, leftJoinKeys, rightTablesReady, rightTables, rightJoinKeys,
-                                                    &leftLeaf, &rightLeaf, *state, isCross, cluster, ctx);
+                                                    &leftLeaf, &rightLeaf, *state, isCross, ctx);
         if (status.Level != TStatus::Ok) {
             return (status.Level == TStatus::Repeat) ? TStatus::Ok : status;
         }
@@ -3624,13 +3622,13 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
             bool mapJoinUseBlocks = state->Configuration->BlockMapJoin.Get().GetOrElse(state->Types->UseBlocks);
 
             if (leftTablesReady) {
-                auto status = UpdateInMemorySizeSetting(mapSettings, leftLeaf.Section, labels, op, ctx, true, leftItemType, leftJoinKeyList, state, cluster, leftTables, mapJoinUseFlow);
+                auto status = UpdateInMemorySizeSetting(mapSettings, leftLeaf.Section, labels, op, ctx, true, leftItemType, leftJoinKeyList, state, leftTables, mapJoinUseFlow);
                 if (status.Level != TStatus::Ok) {
                     return (status.Level == TStatus::Repeat) ? TStatus::Ok : status;
                 }
 
                 if (mapJoinUseBlocks) {
-                    auto status = UpdateInMemorySizeUsingBlocksSetting(mapSettings, leftLeaf.Section, op, ctx, true, leftItemType, leftJoinKeyList, state, cluster, leftTables);
+                    auto status = UpdateInMemorySizeUsingBlocksSetting(mapSettings, leftLeaf.Section, op, ctx, true, leftItemType, leftJoinKeyList, state, leftTables);
                     if (status.Level != TStatus::Ok) {
                         return (status.Level == TStatus::Repeat) ? TStatus::Ok : status;
                     }
@@ -3638,13 +3636,13 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
             }
 
             if (rightTablesReady) {
-                auto status = UpdateInMemorySizeSetting(mapSettings, rightLeaf.Section, labels, op, ctx, false, rightItemType, rightJoinKeyList, state, cluster, rightTables, mapJoinUseFlow);
+                auto status = UpdateInMemorySizeSetting(mapSettings, rightLeaf.Section, labels, op, ctx, false, rightItemType, rightJoinKeyList, state, rightTables, mapJoinUseFlow);
                 if (status.Level != TStatus::Ok) {
                     return (status.Level == TStatus::Repeat) ? TStatus::Ok : status;
                 }
 
                 if (mapJoinUseBlocks) {
-                    auto status = UpdateInMemorySizeUsingBlocksSetting(mapSettings, rightLeaf.Section, op, ctx, false, rightItemType, rightJoinKeyList, state, cluster, rightTables);
+                    auto status = UpdateInMemorySizeUsingBlocksSetting(mapSettings, rightLeaf.Section, op, ctx, false, rightItemType, rightJoinKeyList, state, rightTables);
                     if (status.Level != TStatus::Ok) {
                         return (status.Level == TStatus::Repeat) ? TStatus::Ok : status;
                     }
@@ -3947,9 +3945,6 @@ void CollectPossibleStarJoins(const TYtEquiJoin& equiJoin, TYtJoinNodeOp& op, co
         rightJoinKeyList = BuildJoinKeyList(labels.Inputs[leftLeaf ? 1 : 0], *op.RightLabel);
     }
 
-
-    auto cluster = TString{equiJoin.DataSink().Cluster().Value()};
-
     TMapJoinSettings mapSettings;
     TJoinSideStats leftStats;
     TJoinSideStats rightStats;
@@ -3958,7 +3953,7 @@ void CollectPossibleStarJoins(const TYtEquiJoin& equiJoin, TYtJoinNodeOp& op, co
         bool isCross = false;
         auto status = CollectStatsAndMapJoinSettings(ESizeStatCollectMode::NoSize, mapSettings, leftStats, rightStats,
                                                      leftTablesReady, leftTables, leftJoinKeys, rightTablesReady, rightTables, rightJoinKeys,
-                                                     leftLeaf, rightLeaf, *state, isCross, cluster, ctx);
+                                                     leftLeaf, rightLeaf, *state, isCross, ctx);
 
         switch (status.Level) {
         case TStatus::Error:
@@ -4866,12 +4861,12 @@ EStarRewriteStatus RewriteYtEquiJoinStar(TYtEquiJoin equiJoin, TYtJoinNodeOp& op
 
 } // namespace
 
-IGraphTransformer::TStatus TryEstimateDataSizeChecked(IYtGateway::TPathStatResult& result, TYtSection& inputSection, const TString& cluster,
+IGraphTransformer::TStatus TryEstimateDataSizeChecked(IYtGateway::TPathStatResult& result, TYtSection& inputSection,
     const TVector<TYtPathInfo::TPtr>& paths, const TMaybe<TVector<TString>>& columns, const TYtState& state, TExprContext& ctx)
 {
     result = IYtGateway::TPathStatResult();
     if (GetJoinCollectColumnarStatisticsMode(*state.Configuration) == EJoinCollectColumnarStatisticsMode::Sync) {
-        auto syncResult = EstimateDataSize(cluster, paths, columns, state, ctx);
+        auto syncResult = EstimateDataSize(paths, columns, state, ctx);
         if (!syncResult) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -4881,7 +4876,7 @@ IGraphTransformer::TStatus TryEstimateDataSizeChecked(IYtGateway::TPathStatResul
     }
 
     TSet<TString> requestedColumns;
-    auto status = TryEstimateDataSize(result, requestedColumns, cluster, paths, columns, state, ctx);
+    auto status = TryEstimateDataSize(result, requestedColumns, paths, columns, state, ctx);
     auto settings = inputSection.Settings().Ptr();
     if (status == TStatus::Repeat) {
         bool hasStatColumns = NYql::HasSetting(inputSection.Settings().Ref(), EYtSettingType::StatColumns);
@@ -4935,7 +4930,7 @@ TStatus CollectStatsAndMapJoinSettings(ESizeStatCollectMode sizeMode, TMapJoinSe
     bool leftTablesReady, const TVector<TYtPathInfo::TPtr>& leftTables, const THashSet<TString>& leftJoinKeys,
     bool rightTablesReady, const TVector<TYtPathInfo::TPtr>& rightTables, const THashSet<TString>& rightJoinKeys,
     TYtJoinNodeLeaf* leftLeaf, TYtJoinNodeLeaf* rightLeaf, const TYtState& state, bool isCross,
-    TString cluster, TExprContext& ctx)
+    TExprContext& ctx)
 {
     mapSettings = {};
     leftStats = {};
@@ -4943,7 +4938,7 @@ TStatus CollectStatsAndMapJoinSettings(ESizeStatCollectMode sizeMode, TMapJoinSe
 
     if (leftLeaf) {
         auto premap = GetPremapLambda(*leftLeaf);
-        auto joinSideStatus = CollectJoinSideStats(leftTablesReady ? sizeMode : ESizeStatCollectMode::NoSize, leftStats, leftLeaf->Section, state, cluster,
+        auto joinSideStatus = CollectJoinSideStats(leftTablesReady ? sizeMode : ESizeStatCollectMode::NoSize, leftStats, leftLeaf->Section, state,
                                                    leftTables, leftJoinKeys, isCross, premap, ctx);
         if (joinSideStatus.Level != TStatus::Ok) {
             return joinSideStatus;
@@ -4959,7 +4954,7 @@ TStatus CollectStatsAndMapJoinSettings(ESizeStatCollectMode sizeMode, TMapJoinSe
 
     if (rightLeaf) {
         auto premap = GetPremapLambda(*rightLeaf);
-        auto joinSideStatus = CollectJoinSideStats(rightTablesReady ? sizeMode : ESizeStatCollectMode::NoSize, rightStats, rightLeaf->Section, state, cluster,
+        auto joinSideStatus = CollectJoinSideStats(rightTablesReady ? sizeMode : ESizeStatCollectMode::NoSize, rightStats, rightLeaf->Section, state,
                                                    rightTables, rightJoinKeys, isCross, premap, ctx);
         if (joinSideStatus.Level != TStatus::Ok) {
             return joinSideStatus;
@@ -4983,7 +4978,7 @@ TStatus CollectStatsAndMapJoinSettings(ESizeStatCollectMode sizeMode, TMapJoinSe
 
 TStatus CalculateJoinLeafSize(ui64& result, TMapJoinSettings& settings, TYtSection& inputSection,
     const TYtJoinNodeOp& op, TExprContext& ctx, bool isLeft,
-    const TStructExprType* itemType, const TVector<TString>& joinKeyList, const TYtState::TPtr& state, const TString& cluster,
+    const TStructExprType* itemType, const TVector<TString>& joinKeyList, const TYtState::TPtr& state,
     const TVector<TYtPathInfo::TPtr>& tables)
 {
     result = isLeft ? settings.LeftSize : settings.RightSize;
@@ -4992,7 +4987,7 @@ TStatus CalculateJoinLeafSize(ui64& result, TMapJoinSettings& settings, TYtSecti
     if (!needPayload && !op.JoinKind->IsAtom("Cross")) {
         if (joinKeyList.size() < itemType->GetSize()) {
             IYtGateway::TPathStatResult pathStatResult;
-            auto status = TryEstimateDataSizeChecked(pathStatResult, inputSection, cluster, tables, joinKeyList, *state, ctx);
+            auto status = TryEstimateDataSizeChecked(pathStatResult, inputSection, tables, joinKeyList, *state, ctx);
             if (status.Level != TStatus::Ok) {
                 return status;
             }

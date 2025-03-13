@@ -8,7 +8,7 @@ import ydb
 from ydb.tests.olap.lib.utils import get_external_param
 from copy import deepcopy
 from time import sleep, time
-from typing import List, Optional
+from typing import List, Optional, Callable
 from enum import Enum
 
 LOGGER = logging.getLogger()
@@ -172,17 +172,20 @@ class YdbCluster:
         return cls._ydb_driver
 
     @classmethod
-    def list_directory(cls, root_path: str, rel_path: str) -> List[ydb.SchemeEntry]:
+    def list_directory(cls, root_path: str, rel_path: str, kind_order_key: Optional[Callable[[ydb.SchemeEntryType], int]] = None) -> List[ydb.SchemeEntry]:
         path = f'{root_path}/{rel_path}' if root_path else rel_path
         LOGGER.info(f'list {path}')
         result = []
-        for child in cls.get_ydb_driver().scheme_client.list_directory(path).children:
+        entries = cls.get_ydb_driver().scheme_client.list_directory(path).children
+        if kind_order_key is not None:
+            entries = sorted(entries, key=lambda x: kind_order_key(x.type))
+        for child in entries:
             if child.name == '.sys':
                 continue
             child.name = f'{rel_path}/{child.name}'
             result.append(child)
             if child.is_directory() or child.is_column_store():
-                result += cls.list_directory(root_path, child.name)
+                result += cls.list_directory(root_path, child.name, kind_order_key)
         return result
 
     @classmethod

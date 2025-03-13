@@ -10,13 +10,18 @@
 
 namespace NYql::NFmr {
 
-TDownloadTaskParams downloadTaskParams{
-    .Input = TYtTableRef{"Path","Cluster","TransactionId"},
+TDownloadOperationParams downloadOperationParams{
+    .Input = TYtTableRef{"Path","Cluster"},
     .Output = TFmrTableRef{"TableId"}
 };
 
-TStartOperationRequest CreateOperationRequest(ETaskType taskType = ETaskType::Download, TTaskParams taskParams = downloadTaskParams) {
-    return TStartOperationRequest{.TaskType = taskType, .TaskParams = taskParams, .IdempotencyKey = "IdempotencyKey"};
+TStartOperationRequest CreateOperationRequest(ETaskType taskType = ETaskType::Download, TOperationParams operationParams = downloadOperationParams) {
+    return TStartOperationRequest{
+        .TaskType = taskType,
+        .OperationParams = operationParams,
+        .IdempotencyKey = "IdempotencyKey",
+        .ClusterConnection = TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}
+    };
 }
 
 Y_UNIT_TEST_SUITE(FmrWorkerTests) {
@@ -26,9 +31,9 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
         auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             while (!cancelFlag->load()) {
                 *operationResults = "operation_result";
-                return ETaskStatus::Completed;
+                return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = TStatistics()};
             }
-            return ETaskStatus::Failed;
+            return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
         };
         TFmrJobFactorySettings settings{.NumThreads = 3, .Function = func};
 
@@ -52,11 +57,11 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
                 ++numIterations;
                 if (numIterations == 100) {
                     *operationResults = "operation_result";
-                    return ETaskStatus::Completed;
+                    return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = TStatistics()};
                 }
             }
             *operationResults = "operation_cancelled";
-            return ETaskStatus::Failed;
+            return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
         };
         TFmrJobFactorySettings settings{.NumThreads =3, .Function=func};
         auto factory = MakeFmrJobFactory(settings);
@@ -64,7 +69,7 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
         auto worker = MakeFmrWorker(coordinator, factory, workerSettings);
         worker->Start();
         auto operationId = coordinator->StartOperation(CreateOperationRequest()).GetValueSync().OperationId;
-        Sleep(TDuration::Seconds(2));
+        Sleep(TDuration::Seconds(3));
         coordinator->DeleteOperation({operationId}).GetValueSync();
         Sleep(TDuration::Seconds(5));
         worker->Stop();
@@ -80,9 +85,9 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
             while (!cancelFlag->load()) {
                 Sleep(TDuration::Seconds(1));
                 (*operationResult)++;
-                return ETaskStatus::Completed;
+                return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = TStatistics()};
             }
-            return ETaskStatus::Failed;
+            return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
         };
         TFmrJobFactorySettings settings{.NumThreads =3, .Function=func};
         auto factory = MakeFmrJobFactory(settings);

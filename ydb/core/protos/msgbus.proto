@@ -255,38 +255,6 @@ message TTabletCountersRequest {
     optional uint64 Timeout = 11;
 }
 
-message TLocalMKQL {
-    message TProgram {
-        optional bytes Bin = 1;
-        optional string Text = 2;
-    };
-
-    message TParams {
-        optional bytes Bin = 1;
-        optional string Text = 2;
-    }
-
-    optional uint64 TabletID = 1;
-    optional NKikimrTxUserProxy.TMiniKQLTransaction Program = 2;
-    optional bool ConnectToFollower = 3;
-
-    optional string SecurityToken = 5;
-
-    optional bool WithRetry = 10;
-    optional uint64 Timeout = 11;
-}
-
-message TLocalSchemeTx {
-    optional uint64 TabletID = 1;
-    optional bool ConnectToFollower = 2;
-    optional NTabletFlatScheme.TSchemeChanges SchemeChanges = 3;
-    optional bool DryRun = 4;
-    optional string SecurityToken = 5;
-
-    optional bool WithRetry = 10;
-    optional uint64 Timeout = 11;
-}
-
 message TSchemeNavigate {
     optional bytes Path = 1;
     optional uint32 ReadMaterializedFamily = 2;
@@ -391,10 +359,6 @@ message TMessageBusTraceRequest {
 message TMessageBusTraceStatus {
     optional bool TraceActive = 1;
     optional bytes Path = 2;
-};
-
-message TTabletKillRequest {
-    optional uint64 TabletID = 1;
 };
 
 message TTabletStateRequest {

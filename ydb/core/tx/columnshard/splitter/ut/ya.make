@@ -23,7 +23,7 @@ PEERDIR(
     ydb/core/tx/columnshard/data_accessor
     ydb/core/tx
     ydb/core/mind
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg
     ydb/services/kesus

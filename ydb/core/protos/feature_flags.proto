@@ -127,7 +127,7 @@ message TFeatureFlags {
     optional bool EnableTempTables = 102 [default = true];
     optional bool SuppressCompatibilityCheck = 103 [default = false, (RequireRestart) = true];
     optional bool EnableUniqConstraint = 104 [default = true];
-    optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = false];
+    optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = true];
     optional bool EnableStatistics = 106 [default = true];
     optional bool EnableUuidAsPrimaryKey = 107 [default = true];
     optional bool EnableTablePgTypes = 108 [default = false];
@@ -156,7 +156,7 @@ message TFeatureFlags {
     optional bool EnableSingleCompositeActionGroup = 131 [default = false];
     optional bool EnableResourcePoolsOnServerless = 132 [default = false];
     optional bool EnableVectorIndex = 133 [default = false];
-    optional bool EnableChangefeedsOnIndexTables = 134 [default = false];
+    optional bool EnableChangefeedsOnIndexTables = 134 [default = true];
     optional bool EnableResourcePoolsCounters = 135 [default = false];
     optional bool EnableOptionalColumnsInColumnShard = 136 [default = false];
     optional bool EnableGranularTimecast = 137 [default = true];
@@ -176,7 +176,7 @@ message TFeatureFlags {
     optional bool EnableTopicAutopartitioningForReplication = 151 [default = false];
     optional bool EnableDriveSerialsDiscovery = 152 [default = false];
     optional bool EnableSeparateDiskSpaceQuotas = 153 [default = false];
-    optional bool EnableAntlr4Parser = 154 [default = false];
+    optional bool EnableAntlr4Parser = 154 [default = true];
     optional bool EnableReleaseNodeNameOnGracefulShutdown = 155 [default = false];
     optional bool ForceDistconfDisable = 156 [default = false];
     optional bool EnableScaleRecommender = 157 [default = false];
@@ -184,7 +184,7 @@ message TFeatureFlags {
     optional bool EnableDataShardInMemoryStateMigration = 159 [default = true];
     optional bool EnableDataShardInMemoryStateMigrationAcrossGenerations = 160 [default = false];
     optional bool DisableLocalDBEraseCache = 161 [default = false];
-    optional bool EnableExportChecksums = 162 [default = false];
+    optional bool EnableChecksumsExport = 162 [default = false];
     optional bool EnableTopicTransfer = 163 [default = false];
     optional bool EnableViewExport = 164 [default = false];
     optional bool EnableColumnStore = 165 [default = false];
@@ -195,4 +195,8 @@ message TFeatureFlags {
     optional bool EnableDatabaseAdmin = 169 [default = false];
     optional bool EnableChangefeedsImport = 170 [default = false];
     optional bool EnablePermissionsExport = 171 [default = false];
+    optional bool EnableDataErasure = 172 [default = false];
+    optional bool EnableShowCreate = 173 [default = false];
+    optional bool EnableChangefeedsExport = 174 [default = false];
+    optional bool EnableKafkaNativeBalancing = 175 [default = false];
 }

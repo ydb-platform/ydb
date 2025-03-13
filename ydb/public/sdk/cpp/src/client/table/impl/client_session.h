@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <src/client/impl/ydb_internal/kqp_session_common/kqp_session_common.h>
-#include <src/client/impl/ydb_endpoints/endpoints.h>
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/kqp_session_common/kqp_session_common.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_endpoints/endpoints.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
@@ -13,7 +13,7 @@
 
 #include <functional>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NTable {
 
 ////////////////////////////////////////////////////////////////////////////////

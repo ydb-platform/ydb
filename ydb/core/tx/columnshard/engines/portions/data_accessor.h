@@ -239,6 +239,7 @@ public:
         NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
 
     std::vector<const TColumnRecord*> GetColumnChunksPointers(const ui32 columnId) const;
+    std::vector<const TIndexChunk*> GetIndexChunksPointers(const ui32 indexId) const;
 
     THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const;
 
@@ -284,7 +285,7 @@ public:
         }
 
         void SetExpectedRecordsCount(const ui32 expectedRowsCount) {
-            AFL_VERIFY(!ExpectedRowsCount);
+            AFL_VERIFY(!ExpectedRowsCount || ExpectedRowsCount == expectedRowsCount);
             ExpectedRowsCount = expectedRowsCount;
             if (!Data) {
                 AFL_VERIFY(*ExpectedRowsCount == DefaultRowsCount);

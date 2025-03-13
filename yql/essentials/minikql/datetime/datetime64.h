@@ -106,13 +106,26 @@ struct TTM64Storage {
         Microsecond = value - datetime * 1000000ll;
     }
 
-    i32 ToDate32(const NUdf::IDateBuilder& builder) const {
-        i32 date;
-        if (!builder.MakeTzDate32(Year, Month, Day, date, TimezoneId)) {
-            ythrow yexception() << "Error in MakeTzDate32 tzId " << TimezoneId
-                << " " << Year << "-" << Month << "-" << Day;
+    i32 ToDate32(const NUdf::IDateBuilder& builder, bool local) const {
+        if (!IsUniversal(TimezoneId)) {
+            i64 datetime;
+            ui32 hour = local ? 0 : Hour;
+            ui32 minute = local ? 0 : Minute;
+            ui32 second = local ? 0 : Second;
+            if (!builder.MakeTzDatetime64(Year, Month, Day, hour, minute, second, datetime, TimezoneId)) {
+                ythrow yexception() << "Error in MakeTzDatetime64 tzId "
+                    << TimezoneId << " " << Year << "-" << Month << "-" << Day
+                    << "T" << hour << ":" << minute << ":" << second;
+            }
+            return datetime / 86400u;
+        } else {
+            i32 date;
+            if (!builder.MakeTzDate32(Year, Month, Day, date, TimezoneId)) {
+                ythrow yexception() << "Error in MakeTzDate32 tzId "
+                    << TimezoneId << " " << Year << "-" << Month << "-" << Day;
+            }
+            return date;
         }
-        return date;
     }
 
     i64 ToDatetime64(const NUdf::IDateBuilder& builder) const {
@@ -148,6 +161,25 @@ struct TTM64Storage {
         return true;
     }
 
+    inline void FromTimeOfDay(ui64 value) {
+        Hour = value / 3600000000ull;
+        value -= Hour * 3600000000ull;
+        Minute = value / 60000000ull;
+        value -= Minute * 60000000ull;
+        Second = value / 1000000ull;
+        Microsecond = value - Second * 1000000ull;
+    }
+
+    inline ui64 ToTimeOfDay() const {
+        return ((Hour * 60ull + Minute) * 60ull + Second) * 1000000ull + Microsecond;
+    }
+
+    const TString ToString() const {
+        const auto& tzName = NUdf::GetTimezones()[TimezoneId];
+        return Sprintf("%8d-%02d-%02dT%02d:%02d:%02d.%06d,%.*s",
+                       Year, Month, Day, Hour, Minute, Second, Microsecond,
+                       static_cast<int>(tzName.size()), tzName.data());
+    }
 };
 
 }

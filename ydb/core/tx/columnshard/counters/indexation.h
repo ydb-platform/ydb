@@ -1,6 +1,8 @@
 #pragma once
-#include "common/owner.h"
 #include "splitter.h"
+#include "sub_columns.h"
+
+#include "common/owner.h"
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -16,6 +18,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr CompactionHugePartsCount;
 
 public:
+    std::shared_ptr<TSubColumnCounters> SubColumnCounters;
     NMonitoring::TDynamicCounters::TCounterPtr CompactionInputBytes;
 
     NMonitoring::TDynamicCounters::TCounterPtr ReadErrors;
@@ -62,4 +65,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NColumnShard

@@ -1,23 +1,25 @@
 #include "arrow_helpers.h"
-#include "switch_type.h"
-#include "common/validation.h"
 #include "permutations.h"
-#include "simple_arrays_cache.h"
 #include "replace_key.h"
+#include "simple_arrays_cache.h"
 
-#include <ydb/library/yverify_stream/yverify_stream.h>
+#include "switch/switch_type.h"
+#include "validation/validation.h"
+
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <util/system/yassert.h>
-#include <util/string/join.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <ydb/library/actors/core/log.h>
+#include <util/string/join.h>
+#include <util/system/yassert.h>
+
 #include <memory>
 
 #define Y_VERIFY_OK(status) Y_ABORT_UNLESS(status.ok(), "%s", status.ToString().c_str())
@@ -80,8 +82,8 @@ bool IsTrivial(const arrow::UInt64Array& permutation, const ui64 originalLength)
     return true;
 }
 
-std::shared_ptr<arrow::RecordBatch> Reorder(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                            const std::shared_ptr<arrow::UInt64Array>& permutation, const bool canRemove) {
+std::shared_ptr<arrow::RecordBatch> Reorder(
+    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::UInt64Array>& permutation, const bool canRemove) {
     Y_ABORT_UNLESS(permutation->length() == batch->num_rows() || canRemove);
 
     auto res = IsTrivial(*permutation, batch->num_rows()) ? batch : arrow::compute::Take(batch, permutation);
@@ -89,14 +91,15 @@ std::shared_ptr<arrow::RecordBatch> Reorder(const std::shared_ptr<arrow::RecordB
     return (*res).record_batch();
 }
 
-THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch, const THashMap<ui64, std::vector<ui32>>& shardRows) {
+THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> ShardingSplit(
+    const std::shared_ptr<arrow::RecordBatch>& batch, const THashMap<ui64, std::vector<ui32>>& shardRows) {
     AFL_VERIFY(batch);
     std::shared_ptr<arrow::UInt64Array> permutation;
     {
         arrow::UInt64Builder builder;
         Y_VERIFY_OK(builder.Reserve(batch->num_rows()));
 
-        for (auto&& [shardId, rowIdxs]: shardRows) {
+        for (auto&& [shardId, rowIdxs] : shardRows) {
             for (auto& row : rowIdxs) {
                 Y_VERIFY_OK(builder.Append(row));
             }
@@ -121,7 +124,8 @@ THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::sha
     return out;
 }
 
-std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::vector<ui32>>& shardRows, const ui32 numShards) {
+std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(
+    const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::vector<ui32>>& shardRows, const ui32 numShards) {
     AFL_VERIFY(batch);
     std::shared_ptr<arrow::UInt64Array> permutation;
     {
@@ -153,8 +157,8 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared
     return out;
 }
 
-std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                               const std::vector<ui32>& sharding, ui32 numShards) {
+std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(
+    const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& sharding, ui32 numShards) {
     AFL_VERIFY(batch);
     Y_ABORT_UNLESS((size_t)batch->num_rows() == sharding.size());
 
@@ -176,8 +180,8 @@ bool HasAllColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const std::
     return true;
 }
 
-std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared_ptr<arrow::Schema>& schema,
-                                                               size_t reserve, const std::map<std::string, ui64>& sizeByColumn) {
+std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(
+    const std::shared_ptr<arrow::Schema>& schema, size_t reserve, const std::map<std::string, ui64>& sizeByColumn) {
     std::vector<std::unique_ptr<arrow::ArrayBuilder>> builders;
     builders.reserve(schema->num_fields());
 
@@ -196,7 +200,6 @@ std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared
         }
 
         builders.emplace_back(std::move(builder));
-
     }
     return builders;
 }
@@ -257,7 +260,7 @@ std::shared_ptr<arrow::StringArray> MakeStringArray(const TString& value, const 
 
 std::pair<int, int> FindMinMaxPosition(const std::shared_ptr<arrow::Array>& array) {
     if (array->length() == 0) {
-        return {-1, -1};
+        return { -1, -1 };
     }
 
     int minPos = 0;
@@ -279,7 +282,7 @@ std::pair<int, int> FindMinMaxPosition(const std::shared_ptr<arrow::Array>& arra
         }
         return true;
     });
-    return {minPos, maxPos};
+    return { minPos, maxPos };
 }
 
 std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>& type) {
@@ -289,10 +292,8 @@ std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>&
         using T = typename TWrap::T;
         using TScalar = typename arrow::TypeTraits<T>::ScalarType;
 
-        if constexpr (std::is_same_v<T, arrow::StringType> ||
-                      std::is_same_v<T, arrow::BinaryType> ||
-                      std::is_same_v<T, arrow::LargeStringType> ||
-                      std::is_same_v<T, arrow::LargeBinaryType>) {
+        if constexpr (std::is_same_v<T, arrow::StringType> || std::is_same_v<T, arrow::BinaryType> ||
+                      std::is_same_v<T, arrow::LargeStringType> || std::is_same_v<T, arrow::LargeBinaryType>) {
             out = std::make_shared<TScalar>(arrow::Buffer::FromString(""), type);
         } else if constexpr (std::is_same_v<T, arrow::FixedSizeBinaryType>) {
             std::string s(static_cast<arrow::FixedSizeBinaryType&>(*type).byte_width(), '\0');
@@ -328,7 +329,7 @@ public:
     static constexpr bool Value = false;
 };
 
-}
+}   // namespace
 
 std::shared_ptr<arrow::Scalar> DefaultScalar(const std::shared_ptr<arrow::DataType>& type) {
     std::shared_ptr<arrow::Scalar> out;
@@ -337,10 +338,8 @@ std::shared_ptr<arrow::Scalar> DefaultScalar(const std::shared_ptr<arrow::DataTy
         using T = typename TWrap::T;
         using TScalar = typename arrow::TypeTraits<T>::ScalarType;
 
-        if constexpr (std::is_same_v<T, arrow::StringType> ||
-            std::is_same_v<T, arrow::BinaryType> ||
-            std::is_same_v<T, arrow::LargeStringType> ||
-            std::is_same_v<T, arrow::LargeBinaryType>) {
+        if constexpr (std::is_same_v<T, arrow::StringType> || std::is_same_v<T, arrow::BinaryType> ||
+                      std::is_same_v<T, arrow::LargeStringType> || std::is_same_v<T, arrow::LargeBinaryType>) {
             out = std::make_shared<TScalar>(arrow::Buffer::FromString(""), type);
         } else if constexpr (std::is_same_v<T, arrow::FixedSizeBinaryType>) {
             std::string s(static_cast<arrow::FixedSizeBinaryType&>(*type).byte_width(), '\0');
@@ -399,11 +398,10 @@ bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y) {
     return ScalarCompare(x, y) < 0;
 }
 
-bool ColumnEqualsScalar(
-    const std::shared_ptr<arrow::Array>& c, const ui32 position, const std::shared_ptr<arrow::Scalar>& s) {
+bool ColumnEqualsScalar(const std::shared_ptr<arrow::Array>& c, const ui32 position, const std::shared_ptr<arrow::Scalar>& s) {
     AFL_VERIFY(c);
     if (!s) {
-        return c->IsNull(position) ;
+        return c->IsNull(position);
     }
     AFL_VERIFY(c->type()->Equals(s->type))("s", s->type->ToString())("c", c->type()->ToString());
 
@@ -465,7 +463,7 @@ int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
                 return 0;
             }
         }
-        Y_ABORT_UNLESS(false); // TODO: non primitive types
+        Y_ABORT_UNLESS(false);   // TODO: non primitive types
         return 0;
     });
 }
@@ -499,7 +497,6 @@ std::shared_ptr<arrow::Array> BoolVecToArray(const std::vector<bool>& vec) {
     return out;
 }
 
-
 bool ArrayScalarsEqual(const std::shared_ptr<arrow::Array>& lhs, const std::shared_ptr<arrow::Array>& rhs) {
     bool res = lhs->length() == rhs->length();
     for (int64_t i = 0; i < lhs->length() && res; ++i) {
@@ -510,9 +507,7 @@ bool ArrayScalarsEqual(const std::shared_ptr<arrow::Array>& lhs, const std::shar
 
 bool ReserveData(arrow::ArrayBuilder& builder, const size_t size) {
     arrow::Status result = arrow::Status::OK();
-    if (builder.type()->id() == arrow::Type::BINARY ||
-        builder.type()->id() == arrow::Type::STRING)
-    {
+    if (builder.type()->id() == arrow::Type::BINARY || builder.type()->id() == arrow::Type::STRING) {
         static_assert(std::is_convertible_v<arrow::StringBuilder&, arrow::BaseBinaryBuilder<arrow::BinaryType>&>,
             "Expected StringBuilder to be BaseBinaryBuilder<BinaryType>");
         auto& bBuilder = static_cast<arrow::BaseBinaryBuilder<arrow::BinaryType>&>(builder);
@@ -549,7 +544,8 @@ bool MergeBatchColumnsImpl(const std::vector<std::shared_ptr<TData>>& batches, s
             fields.emplace_back(f);
         }
         if (i->num_rows() != batches.front()->num_rows()) {
-            AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "inconsistency record sizes")("i", i->num_rows())("front", batches.front()->num_rows());
+            AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "inconsistency record sizes")("i", i->num_rows())(
+                "front", batches.front()->num_rows());
             return false;
         }
         for (auto&& c : i->columns()) {
@@ -578,23 +574,28 @@ bool MergeBatchColumnsImpl(const std::vector<std::shared_ptr<TData>>& batches, s
     return true;
 }
 
-bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::Table>>& batches, std::shared_ptr<arrow::Table>& result, const std::vector<std::string>& columnsOrder, const bool orderFieldsAreNecessary) {
-    const auto builder = [](const std::shared_ptr<arrow::Schema>& schema, const ui32 recordsCount, std::vector<std::shared_ptr<arrow::ChunkedArray>>&& columns) {
+bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::Table>>& batches, std::shared_ptr<arrow::Table>& result,
+    const std::vector<std::string>& columnsOrder, const bool orderFieldsAreNecessary) {
+    const auto builder = [](const std::shared_ptr<arrow::Schema>& schema, const ui32 recordsCount,
+                             std::vector<std::shared_ptr<arrow::ChunkedArray>>&& columns) {
         return arrow::Table::Make(schema, columns, recordsCount);
     };
 
     return MergeBatchColumnsImpl<arrow::Table, arrow::ChunkedArray>(batches, result, columnsOrder, orderFieldsAreNecessary, builder);
 }
 
-bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::shared_ptr<arrow::RecordBatch>& result, const std::vector<std::string>& columnsOrder, const bool orderFieldsAreNecessary) {
-    const auto builder = [](const std::shared_ptr<arrow::Schema>& schema, const ui32 recordsCount, std::vector<std::shared_ptr<arrow::Array>>&& columns) {
+bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::shared_ptr<arrow::RecordBatch>& result,
+    const std::vector<std::string>& columnsOrder, const bool orderFieldsAreNecessary) {
+    const auto builder = [](const std::shared_ptr<arrow::Schema>& schema, const ui32 recordsCount,
+                             std::vector<std::shared_ptr<arrow::Array>>&& columns) {
         return arrow::RecordBatch::Make(schema, recordsCount, columns);
     };
 
     return MergeBatchColumnsImpl<arrow::RecordBatch, arrow::Array>(batches, result, columnsOrder, orderFieldsAreNecessary, builder);
 }
 
-std::partial_ordering ColumnsCompare(const std::vector<std::shared_ptr<arrow::Array>>& x, const ui32 xRow, const std::vector<std::shared_ptr<arrow::Array>>& y, const ui32 yRow) {
+std::partial_ordering ColumnsCompare(
+    const std::vector<std::shared_ptr<arrow::Array>>& x, const ui32 xRow, const std::vector<std::shared_ptr<arrow::Array>>& y, const ui32 yRow) {
     return TRawReplaceKey(&x, xRow).CompareNotNull(TRawReplaceKey(&y, yRow));
 }
 
@@ -681,7 +682,7 @@ NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 head
             }
         }
         return true;
-        });
+    });
     return resultFull;
 }
 
@@ -766,7 +767,8 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
             AFL_VERIFY(it != i->chunks().end());
             AFL_VERIFY(positions[idx + 1] - currentPosition <= length)("length", length)("idx+1", positions[idx + 1])("pos", currentPosition);
             auto chunk = (*it)->Slice(positions[idx] - currentPosition, positions[idx + 1] - positions[idx]);
-            AFL_VERIFY_DEBUG(chunk->length() == positions[idx + 1] - positions[idx])("length", chunk->length())("expect", positions[idx + 1] - positions[idx]);
+            AFL_VERIFY_DEBUG(chunk->length() == positions[idx + 1] - positions[idx])
+            ("length", chunk->length())("expect", positions[idx + 1] - positions[idx]);
             if (positions[idx + 1] - currentPosition == length) {
                 ++it;
                 initializeIt();
@@ -784,7 +786,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
         count += result.back()->num_rows();
     }
     AFL_VERIFY(count == t->num_rows())("count", count)("t", t->num_rows())("sd_size", slicedData.size())("columns", t->num_columns())(
-                            "schema", t->schema()->ToString());
+                          "schema", t->schema()->ToString());
     return result;
 }
 
@@ -792,7 +794,7 @@ std::shared_ptr<arrow::Table> ToTable(const std::shared_ptr<arrow::RecordBatch>&
     if (!batch) {
         return nullptr;
     }
-    return TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batch->schema(), {batch}));
+    return TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batch->schema(), { batch }));
 }
 
 bool HasNulls(const std::shared_ptr<arrow::Array>& column) {
@@ -819,7 +821,7 @@ std::vector<std::string> ConvertStrings(const std::vector<TString>& input) {
 std::shared_ptr<arrow::Table> DeepCopy(const std::shared_ptr<arrow::Table>& table, arrow::MemoryPool* pool) {
     arrow::ArrayVector arrays;
 
-    for (const auto& column: table->columns()) {
+    for (const auto& column : table->columns()) {
         auto&& array = TStatusValidator::GetValid(arrow::Concatenate(column->chunks(), pool));
         arrays.push_back(std::move(array));
     }
@@ -827,4 +829,55 @@ std::shared_ptr<arrow::Table> DeepCopy(const std::shared_ptr<arrow::Table>& tabl
     return arrow::Table::Make(table->schema(), arrays);
 }
 
-} // namespace NKikimr::NArrow
+TConclusion<bool> ScalarIsTrue(const arrow::Scalar& x) {
+    std::optional<bool> result;
+    if (!SwitchTypeImpl<bool, false>(x.type->id(), [&](const auto& type) {
+            using TWrap = std::decay_t<decltype(type)>;
+            using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
+            using TValue = std::decay_t<decltype(static_cast<const TScalar&>(x).value)>;
+
+            if constexpr (std::is_arithmetic_v<TValue>) {
+                result = ((int)static_cast<const TScalar&>(x).value == 1);
+                return true;
+            }
+            return false;
+        })) {
+        return TConclusionStatus::Fail("not appropriate scalar type for bool interpretation");
+    }
+    Y_ABORT_UNLESS(result);
+    return *result;
+}
+
+TConclusion<bool> ScalarIsFalse(const arrow::Scalar& x) {
+    std::optional<bool> result;
+    if (!SwitchTypeImpl<bool, false>(x.type->id(), [&](const auto& type) {
+            using TWrap = std::decay_t<decltype(type)>;
+            using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
+            using TValue = std::decay_t<decltype(static_cast<const TScalar&>(x).value)>;
+
+            if constexpr (std::is_arithmetic_v<TValue>) {
+                result = ((int)static_cast<const TScalar&>(x).value == 0);
+                return true;
+            }
+            return false;
+        })) {
+        return TConclusionStatus::Fail("not appropriate scalar type for bool interpretation");
+    }
+    Y_ABORT_UNLESS(result);
+    return *result;
+}
+
+TConclusion<bool> ScalarIsFalse(const std::shared_ptr<arrow::Scalar>& x) {
+    if (!x) {
+        return true;
+    }
+    return ScalarIsFalse(*x);
+}
+TConclusion<bool> ScalarIsTrue(const std::shared_ptr<arrow::Scalar>& x) {
+    if (!x) {
+        return false;
+    }
+    return ScalarIsTrue(*x);
+}
+
+}   // namespace NKikimr::NArrow

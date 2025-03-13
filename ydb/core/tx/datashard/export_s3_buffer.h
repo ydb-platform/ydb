@@ -5,6 +5,8 @@
 #include "export_iface.h"
 #include "export_scan.h"
 
+#include <ydb/core/backup/common/encryption.h>
+
 #include <util/generic/maybe.h>
 
 namespace NKikimr {
@@ -56,6 +58,29 @@ struct TS3ExportBufferSettings {
         return TCompressionSettings().WithAlgorithm(TCompressionSettings::EAlgorithm::Zstd).WithCompressionLevel(level);
     }
 
+    struct TEncryptionSettings {
+        // Builders
+        TEncryptionSettings& WithAlgorithm(const TString& algorithm) {
+            Algorithm = algorithm;
+            return *this;
+        }
+
+        TEncryptionSettings& WithKey(const NBackup::TEncryptionKey& key) {
+            Key = key;
+            return *this;
+        }
+
+        TEncryptionSettings& WithIV(const NBackup::TEncryptionIV& iv) {
+            IV = iv;
+            return *this;
+        }
+
+        // Fields
+        TString Algorithm;
+        NBackup::TEncryptionKey Key;
+        NBackup::TEncryptionIV IV;
+    };
+
     // Builders
     TS3ExportBufferSettings& WithColumns(IExport::TTableColumns columns) {
         Columns = std::move(columns);
@@ -87,6 +112,11 @@ struct TS3ExportBufferSettings {
         return *this;
     }
 
+    TS3ExportBufferSettings& WithEncryption(TEncryptionSettings settings) {
+        EncryptionSettings.ConstructInPlace(std::move(settings));
+        return *this;
+    }
+
     // Fields
     IExport::TTableColumns Columns;
     ui64 MaxRows = 0;
@@ -96,6 +126,7 @@ struct TS3ExportBufferSettings {
     // Data processing
     TMaybe<TChecksumSettings> ChecksumSettings;
     TMaybe<TCompressionSettings> CompressionSettings;
+    TMaybe<TEncryptionSettings> EncryptionSettings;
 };
 
 NExportScan::IBuffer* CreateS3ExportBuffer(TS3ExportBufferSettings&& settings);

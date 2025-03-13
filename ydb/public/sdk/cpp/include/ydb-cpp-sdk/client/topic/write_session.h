@@ -6,16 +6,16 @@
 #include "retry_policy.h"
 #include "write_events.h"
 
-#include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
-#include <ydb-cpp-sdk/client/types/request_settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
 #include <util/generic/size_literals.h>
 
-namespace NYdb::inline V3::NTable {
+namespace NYdb::inline Dev::NTable {
     class TTransaction;
 }
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 using TTransaction = NTable::TTransaction;
 

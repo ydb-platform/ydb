@@ -8,13 +8,16 @@
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
-#include <yql/essentials/minikql/mkql_terminator.h>
-
 namespace NKikimr::NOlap::NReader::NSimple {
 
-TConclusion<bool> TIndexBlobsFetchingStep::DoExecuteInplace(
-    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
-    return !source->StartFetchingIndexes(source, step, Indexes);
+TConclusion<bool> IFetchingStep::DoExecuteInplace(
+    const std::shared_ptr<NCommon::IDataSource>& sourceExt, const TFetchingScriptCursor& step) const {
+    const auto source = std::static_pointer_cast<IDataSource>(sourceExt);
+    return DoExecuteInplace(source, step);
+}
+
+ui64 IFetchingStep::GetProcessingDataSize(const std::shared_ptr<NCommon::IDataSource>& source) const {
+    return GetProcessingDataSize(std::static_pointer_cast<IDataSource>(source));
 }
 
 TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
@@ -71,11 +74,6 @@ TConclusion<bool> TShardingFilter::DoExecuteInplace(const std::shared_ptr<IDataS
     return true;
 }
 
-TConclusion<bool> TApplyIndexStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    source->ApplyIndex(IndexChecker);
-    return true;
-}
-
 NKikimr::TConclusion<bool> TFilterCutLimit::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     source->MutableStageData().CutFilter(source->GetRecordsCount(), Limit, Reverse);
@@ -88,7 +86,8 @@ TConclusion<bool> TPortionAccessorFetchingStep::DoExecuteInplace(
 }
 
 TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    if (Columns.GetColumnsCount()) {
+    const auto& chainProgram = source->GetContext()->GetReadMetadata()->GetProgram().GetChainVerified();
+    if (Columns.GetColumnsCount() && !chainProgram->HasAggregations()) {
         source->SetSourceInMemory(
             source->GetColumnRawBytes(Columns.GetColumnIds()) < NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
     } else {
@@ -158,9 +157,10 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IData
     if (!source->GetStageResult().IsEmpty()) {
         resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
         if (auto filter = source->GetStageResult().GetNotAppliedFilter()) {
-            filter->Apply(resultBatch, NArrow::TColumnFilter::TApplyContext(StartIndex, RecordsCount).SetTrySlices(true));
+            AFL_VERIFY(filter->Apply(resultBatch, NArrow::TColumnFilter::TApplyContext(StartIndex, RecordsCount).SetTrySlices(true)));
         }
     }
+
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
         new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
             std::make_shared<TApplySourceResult>(source, std::move(resultBatch), StartIndex, RecordsCount, step)));
@@ -168,7 +168,7 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IData
 }
 
 TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    std::shared_ptr<TFetchingScript> plan = std::make_shared<TFetchingScript>(*source->GetContext());
+    NCommon::TFetchingScriptBuilder acc(*source->GetContext());
     if (source->IsSourceInMemory()) {
         AFL_VERIFY(source->GetStageResult().GetPagesToResultVerified().size() == 1);
     }
@@ -177,8 +177,9 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
                                                   source->GetSourceId(), i.GetIndexStart(), i.GetRecordsCount())) {
             continue;
         }
-        plan->AddStep<TBuildResultStep>(i.GetIndexStart(), i.GetRecordsCount());
+        acc.AddStep(std::make_shared<TBuildResultStep>(i.GetIndexStart(), i.GetRecordsCount()));
     }
+    auto plan = std::move(acc).Build();
     AFL_VERIFY(!plan->IsFinished(0));
     source->InitFetchingPlan(plan);
 
@@ -186,16 +187,6 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
     auto task = std::make_shared<TStepAction>(source, std::move(cursor), source->GetContext()->GetCommonContext()->GetScanActorId());
     NConveyor::TScanServiceOperator::SendTaskToExecute(task);
     return false;
-}
-
-TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    for (auto&& f : IIndexInfo::ArrowSchemaSnapshot()->fields()) {
-        source->MutableStageData().GetTable()->AddVerified(source->GetContext()->GetCommonContext()->GetResolver()->GetColumnIdVerified(f->name()),
-            NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), source->GetRecordsCount()));
-    }
-    source->SetUsedRawBytes(0);
-    source->Finalize({});
-    return true;
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

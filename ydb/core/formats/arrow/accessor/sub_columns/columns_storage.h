@@ -33,6 +33,8 @@ public:
         return result;
     }
 
+    TColumnsData ApplyFilter(const TColumnFilter& filter) const;
+
     TColumnsData Slice(const ui32 offset, const ui32 count) const;
 
     static TColumnsData BuildEmpty(const ui32 recordsCount) {
@@ -47,7 +49,7 @@ public:
     private:
         ui32 KeyIndex;
         std::shared_ptr<IChunkedArray> GlobalChunkedArray;
-        std::shared_ptr<arrow::StringArray> CurrentArrayData;
+        const arrow::StringArray* CurrentArrayData;
         std::optional<IChunkedArray::TFullChunkedArrayAddress> FullArrayAddress;
         std::optional<IChunkedArray::TFullDataAddress> ChunkAddress;
         ui32 CurrentIndex = 0;
@@ -61,7 +63,7 @@ public:
                 const ui32 localIndex = FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex);
                 ChunkAddress = FullArrayAddress->GetArray()->GetChunk(ChunkAddress, localIndex);
                 AFL_VERIFY(ChunkAddress->GetArray()->type()->id() == arrow::utf8()->id());
-                CurrentArrayData = std::static_pointer_cast<arrow::StringArray>(ChunkAddress->GetArray());
+                CurrentArrayData = static_cast<const arrow::StringArray*>(ChunkAddress->GetArray().get());
                 if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array) {
                     if (CurrentArrayData->IsNull(localIndex)) {
                         Next();
@@ -139,7 +141,7 @@ public:
     TColumnsData(const TDictStats& dict, const std::shared_ptr<TGeneralContainer>& data)
         : Stats(dict)
         , Records(data) {
-        AFL_VERIFY(Records->num_columns() == Stats.GetColumnsCount());
+        AFL_VERIFY(Records->num_columns() == Stats.GetColumnsCount())("records", Records->num_columns())("stats", Stats.GetColumnsCount());
         for (auto&& i : Records->GetColumns()) {
             AFL_VERIFY(i->GetDataType()->id() == arrow::utf8()->id());
         }

@@ -459,6 +459,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, ForceTmpSecurity);
     REGISTER_SETTING(*this, JoinCommonUseMapMultiOut);
     REGISTER_SETTING(*this, _EnableYtPartitioning);
+    REGISTER_SETTING(*this, EnableDynamicStoreReadInDQ);
     REGISTER_SETTING(*this, UseAggPhases);
     REGISTER_SETTING(*this, UsePartitionsByKeysForFinalAgg);
     REGISTER_SETTING(*this, ForceJobSizeAdjuster);
@@ -528,6 +529,18 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, JobBlockOutput).Parser([](const TString& v) { return FromString<EBlockOutputMode>(v); });
     REGISTER_SETTING(*this, _EnableYtDqProcessWriteConstraints);
     REGISTER_SETTING(*this, CompactForDistinct);
+    REGISTER_SETTING(*this, DropUnusedKeysFromKeyFilter);
+    REGISTER_SETTING(*this, ReportEquiJoinStats);
+    REGISTER_SETTING(*this, RuntimeCluster)
+        .Validator([this] (const TString& cluster, TString value) {
+            if (cluster != "$all") {
+                throw yexception() << "Per-cluster setting is not supported for RuntimeCluster";
+            }
+            if (!ValidClusters.contains(value)) {
+                throw yexception() << "Unknown cluster name: " << value;
+            }
+        });
+    REGISTER_SETTING(*this, RuntimeClusterSelection).Parser([](const TString& v) { return FromString<ERuntimeClusterSelectionMode>(v); });
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

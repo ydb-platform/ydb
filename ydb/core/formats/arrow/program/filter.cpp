@@ -1,4 +1,5 @@
 #include "collection.h"
+#include "execution.h"
 #include "filter.h"
 
 #include <ydb/core/formats/arrow/arrow_filter.h>
@@ -60,17 +61,21 @@ private:
     arrow::Status VisitImpl(const TArray& array) {
         AFL_VERIFY(Started);
         for (ui32 i = 0; i < array.length(); ++i) {
-            const bool columnValue = (bool)array.Value(i);
             const ui32 currentIdx = CursorIdx++;
-            FiltersMerged[currentIdx] = FiltersMerged[currentIdx] && columnValue;
+            FiltersMerged[currentIdx] = FiltersMerged[currentIdx] && !array.IsNull(i) && (bool)array.Value(i);
         }
         AFL_VERIFY(CursorIdx <= FiltersMerged.size());
         return arrow::Status::OK();
     }
 };
 
-TConclusionStatus TFilterProcessor::DoExecute(const std::shared_ptr<TAccessorsCollection>& resources) const {
-    const std::vector<std::shared_ptr<IChunkedArray>> inputColumns = resources->GetAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
+TConclusion<IResourceProcessor::EExecutionResult> TFilterProcessor::DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const {
+    std::vector<std::shared_ptr<IChunkedArray>> inputColumns;
+    if (nodeContext.GetRemoveResourceIds().contains(GetInputColumnIdOnce())) {
+        inputColumns = context.GetResources()->ExtractAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
+    } else {
+        inputColumns = context.GetResources()->GetAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
+    }
     TFilterVisitor filterVisitor(inputColumns.front()->GetRecordsCount());
     for (auto& arr : inputColumns) {
         AFL_VERIFY(arr->GetRecordsCount() == inputColumns.front()->GetRecordsCount())("arr", arr->GetRecordsCount())(
@@ -83,8 +88,13 @@ TConclusionStatus TFilterProcessor::DoExecute(const std::shared_ptr<TAccessorsCo
     }
     NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
     filterVisitor.BuildColumnFilter(filter);
-    resources->AddFilter(filter);
-    return TConclusionStatus::Success();
+    if (context.GetLimit()) {
+        context.GetResources()->AddFilter(
+            filter.Cut(context.GetResources()->GetRecordsCountActualVerified(), *context.GetLimit(), context.GetReverse()));
+    } else {
+        context.GetResources()->AddFilter(filter);
+    }
+    return EExecutionResult::Success;
 }
 
 }   // namespace NKikimr::NArrow::NSSA

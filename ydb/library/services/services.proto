@@ -107,6 +107,7 @@ enum EServiceKikimr {
     OPS_BACKUP = 668;
     SAUSAGE_BIO = 669;
     FAKE_ENV = 670;
+    TABLET_STATS_BUILDER = 671;
 
     // PIPE section
     PIPE_CLIENT = 320;
@@ -397,6 +398,7 @@ enum EServiceKikimr {
     TX_CONVEYOR = 2000;
     TX_LIMITER=2001;
     ARROW_HELPER = 2100;
+    SSA_GRAPH_EXECUTION = 2101;
 
     KAFKA_PROXY = 2200;
 
@@ -414,6 +416,8 @@ enum EServiceKikimr {
     TX_PRIORITIES_QUEUE = 3100;
 
     BSCONFIG = 3200;
+
+    NAMESERVICE = 3300;
 };
 
 message TActivity {
@@ -1078,5 +1082,7 @@ message TActivity {
         HTTP_MON_AUTHORIZED_ACTOR_REQUEST = 655;
         IMPORT_SCHEME_QUERY_EXECUTOR = 656;
         REPLICATION_TRANSFER_WRITER = 657;
+        DATA_ERASURE = 658;
+        TENANT_DATA_ERASURE = 659;
     };
 };

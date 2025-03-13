@@ -248,7 +248,7 @@ public:
         Functions["BlockMergeFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;
         Functions["BlockMergeManyFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;
         Functions["MultiHoppingCore"] = &TCallableConstraintTransformer::MultiHoppingCoreWrap;
-        Functions["StablePickle"] = &TCallableConstraintTransformer::FromFirst<TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfChoppedConstraintNode, TVarIndexConstraintNode>;
+        Functions["StablePickle"] = &TCallableConstraintTransformer::PickleWrap;
         Functions["Unpickle"] = &TCallableConstraintTransformer::FromSecond<TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfChoppedConstraintNode, TVarIndexConstraintNode>;
     }
 
@@ -402,6 +402,14 @@ private:
         }
 
         return FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
+    }
+
+    TStatus PickleWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        if (IsDataOrOptionalOfDataOrPg(input->Head().GetTypeAnn())) {
+            TApplyConstraintFromInput<0, TPartOfChoppedConstraintNode, TPartOfUniqueConstraintNode, TPartOfDistinctConstraintNode>::Do(input);
+        }
+
+        return FromFirst<TUniqueConstraintNode, TDistinctConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
     }
 
     TStatus AssumeConstraintsWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {

@@ -3,6 +3,8 @@
 #include "functions.h"
 #include "kernel_logic.h"
 
+#include <yql/essentials/core/arrow_kernels/request/request.h>
+
 namespace NKikimr::NArrow::NSSA {
 
 class TCalculationProcessor: public IResourceProcessor {
@@ -14,7 +16,11 @@ private:
 
     std::shared_ptr<IStepFunction> Function;
 
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<TAccessorsCollection>& resources) const override;
+    virtual NJson::TJsonValue DoDebugJson() const override;
+
+    virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
+
+    virtual TString DoGetSignalCategoryName() const override;
 
     TCalculationProcessor(std::vector<TColumnChainInfo>&& input, std::vector<TColumnChainInfo>&& output,
         const std::shared_ptr<IStepFunction>& function, const std::shared_ptr<IKernelLogic>& kernelLogic)
@@ -22,6 +28,12 @@ private:
         , KernelLogic(kernelLogic)
         , Function(function) {
     }
+
+    virtual bool IsAggregation() const override {
+        return Function->IsAggregation();
+    }
+
+    virtual ui64 DoGetWeight() const override;
 
 public:
     static TConclusion<std::shared_ptr<TCalculationProcessor>> Build(std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output, 

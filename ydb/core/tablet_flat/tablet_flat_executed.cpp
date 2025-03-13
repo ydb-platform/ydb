@@ -39,12 +39,27 @@ void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction) {
         static_cast<TExecutor*>(Executor())->Execute(transaction, ExecutorCtx(*TlsActivationContext));
 }
 
-void TTabletExecutedFlat::EnqueueExecute(TAutoPtr<ITransaction> transaction) {
-    if (transaction)
-        static_cast<TExecutor*>(Executor())->Enqueue(transaction, ExecutorCtx(*TlsActivationContext));
+ui64 TTabletExecutedFlat::Enqueue(TAutoPtr<ITransaction> transaction) {
+    if (transaction) {
+        return static_cast<TExecutor*>(Executor())->Enqueue(transaction);
+    } else {
+        return 0;
+    }
 }
 
-const NTable::TScheme& TTabletExecutedFlat::Scheme() const noexcept {
+ui64 TTabletExecutedFlat::EnqueueExecute(TAutoPtr<ITransaction> transaction) {
+    return Enqueue(transaction);
+}
+
+ui64 TTabletExecutedFlat::EnqueueLowPriority(TAutoPtr<ITransaction> transaction) {
+    if (transaction) {
+        return static_cast<TExecutor*>(Executor())->EnqueueLowPriority(transaction);
+    } else {
+        return 0;
+    }
+}
+
+const NTable::TScheme& TTabletExecutedFlat::Scheme() const {
     return static_cast<TExecutor*>(Executor())->Scheme();
 }
 

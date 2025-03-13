@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         env.GetRuntime().Register(CreateStreamCreator(
             env.GetSender(), env.GetYdbProxy(), 1 /* rid */, 1 /* tid */,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
-            "Stream", TDuration::Hours(1), resolvedTimestamps
+            "Stream", "replicationConsumer", TDuration::Hours(1), resolvedTimestamps
         ));
         {
             auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());

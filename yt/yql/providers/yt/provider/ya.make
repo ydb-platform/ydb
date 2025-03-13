@@ -5,6 +5,7 @@ SRCS(
     yql_yt_block_io_filter.cpp
     yql_yt_block_io_utils.cpp
     yql_yt_block_output.cpp
+    yql_yt_cbo_helpers.cpp
     yql_yt_datasink_constraints.cpp
     yql_yt_datasink_exec.cpp
     yql_yt_datasink_finalize.cpp
@@ -81,6 +82,10 @@ PEERDIR(
     yql/essentials/public/udf/tz
     yql/essentials/sql
     yql/essentials/sql/v1
+    yql/essentials/sql/v1/lexer/antlr4
+    yql/essentials/sql/v1/lexer/antlr4_ansi
+    yql/essentials/sql/v1/proto_parser/antlr4
+    yql/essentials/sql/v1/proto_parser/antlr4_ansi
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/utils
     yql/essentials/utils/log

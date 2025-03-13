@@ -1,4 +1,5 @@
 from __future__ import print_function
+
 import sys
 import os
 import json
@@ -6,7 +7,16 @@ import subprocess
 import tempfile
 import collections
 import optparse
-import pipes
+
+try:
+    import shlex
+    shlex_join = shlex.join
+except AttributeError:
+    import pipes
+
+    def shlex_join(cmd):
+        # equivalent to shlex.join() in python 3
+        return ' '.join(pipes.quote(part) for part in cmd)
 
 # Explicitly enable local imports
 # Don't forget to add imported scripts to inputs of the calling command!
@@ -16,10 +26,6 @@ import link_exe
 
 from process_whole_archive_option import ProcessWholeArchiveOption
 
-
-def shlex_join(cmd):
-    # equivalent to shlex.join() in python 3
-    return ' '.join(pipes.quote(part) for part in cmd)
 
 
 def parse_export_file(p):
@@ -129,26 +135,6 @@ def fix_windows_param(ex):
         return ['/DEF:{}'.format(def_file.name)]
 
 
-CUDA_LIBRARIES = {
-    '-lcublas_static': '-lcublas',
-    '-lcublasLt_static': '-lcublasLt',
-    '-lcudart_static': '-lcudart',
-    '-lcudnn_static': '-lcudnn',
-    '-lcufft_static_nocallback': '-lcufft',
-    '-lcurand_static': '-lcurand',
-    '-lcusolver_static': '-lcusolver',
-    '-lcusparse_static': '-lcusparse',
-    '-lmyelin_compiler_static': '-lmyelin',
-    '-lmyelin_executor_static': '-lnvcaffe_parser',
-    '-lmyelin_pattern_library_static': '',
-    '-lmyelin_pattern_runtime_static': '',
-    '-lnvinfer_static': '-lnvinfer',
-    '-lnvinfer_plugin_static': '-lnvinfer_plugin',
-    '-lnvonnxparser_static': '-lnvonnxparser',
-    '-lnvparsers_static': '-lnvparsers',
-}
-
-
 def fix_cmd(arch, c):
     if arch == 'WINDOWS':
         prefix = '/DEF:'
@@ -174,16 +160,6 @@ def fix_cmd(arch, c):
     return sum((do_fix(x) for x in c), [])
 
 
-def fix_cmd_for_dynamic_cuda(cmd):
-    flags = []
-    for flag in cmd:
-        if flag in CUDA_LIBRARIES:
-            flags.append(CUDA_LIBRARIES[flag])
-        else:
-            flags.append(flag)
-    return flags
-
-
 def parse_args(args):
     parser = optparse.OptionParser()
     parser.disable_interspersed_args()
@@ -195,9 +171,6 @@ def parse_args(args):
     parser.add_option('--fix-elf')
     parser.add_option('--linker-output')
     parser.add_option('--dynamic-cuda', action='store_true')
-    parser.add_option('--cuda-architectures',
-                      help='List of supported CUDA architectures, separated by ":" (e.g. "sm_52:compute_70:lto_90a"')
-    parser.add_option('--nvprune-exe')
     parser.add_option('--objcopy-exe')
     parser.add_option('--whole-archive-peers', action='append')
     parser.add_option('--whole-archive-libs', action='append')
@@ -230,13 +203,6 @@ if __name__ == '__main__':
 
     cmd = args
     cmd = fix_cmd(opts.arch, cmd)
-
-    if opts.dynamic_cuda:
-        cmd = fix_cmd_for_dynamic_cuda(cmd)
-    else:
-        cuda_manager = link_exe.CUDAManager(opts.cuda_architectures, opts.nvprune_exe)
-        cmd = link_exe.process_cuda_libraries_by_nvprune(cmd, cuda_manager, opts.build_root)
-        cmd = link_exe.process_cuda_libraries_by_objcopy(cmd, opts.build_root, opts.objcopy_exe)
 
     cmd = ProcessWholeArchiveOption(opts.arch, opts.whole_archive_peers, opts.whole_archive_libs).construct_cmd(cmd)
     thinlto_cache.preprocess(opts, cmd)

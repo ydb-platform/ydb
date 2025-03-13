@@ -2,6 +2,8 @@ import ydb.apps.dstool.lib.common as common
 import ydb.core.protos.blob_depot_config_pb2 as blob_depot_config
 import sys
 import time
+from argparse import FileType
+import google.protobuf.json_format as pb_json
 
 description = 'Create virtual group backed by BlobDepot'
 
@@ -17,11 +19,18 @@ def add_options(p):
     p.add_argument('--log-channel-sp', type=str, metavar='POOL_NAME', required=True, help='channel 0 specifier')
     p.add_argument('--snapshot-channel-sp', type=str, metavar='POOL_NAME', help='channel 1 specifier (defaults to channel 0)')
     p.add_argument('--data-channel-sp', type=str, metavar='POOL_NAME[*COUNT]', nargs='+', required=True, help='data channel specifier')
+    p.add_argument('--s3-settings', type=FileType('r', encoding='utf-8'), metavar='JSON_FILE', help='path to JSON file containing S3 settings')
     p.add_argument('--wait', action='store_true', help='wait for operation to complete by polling')
 
 
 def do(args):
     request = common.create_bsc_request(args)
+
+    if args.s3_settings:
+        s3_settings = args.s3_settings.read()
+    else:
+        s3_settings = None
+
     for name in args.name:
         cmd = request.Command.add().AllocateVirtualGroup
 
@@ -40,6 +49,9 @@ def do(args):
             except Exception:
                 print(f'Invalid --storage-pool-id={args.storage_pool_id} format, <number>:<number> expected', file=sys.stderr)
                 sys.exit(1)
+
+        if s3_settings is not None:
+            pb_json.Parse(s3_settings, cmd.S3BackendSettings)
 
         cmd.ChannelProfiles.add(StoragePoolName=args.log_channel_sp, ChannelKind=blob_depot_config.TChannelKind.System)
         chan1 = args.snapshot_channel_sp if args.snapshot_channel_sp is not None else args.log_channel_sp

@@ -17,6 +17,7 @@ SRCS(
     ydb_debug.cpp
     ydb_dynamic_config.cpp
     ydb_latency.cpp
+    ydb_node_config.cpp
     ydb_ping.cpp
     ydb_profile.cpp
     ydb_root_common.cpp

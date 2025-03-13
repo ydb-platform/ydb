@@ -45,14 +45,15 @@ TConclusion<std::shared_ptr<TPartialReadResult>> TStatsIteratorBase::GetBatch() 
 
         {
             NArrow::TColumnFilter filter = ReadMetadata->GetPKRangesFilter().BuildFilter(originalBatch);
-            filter.Apply(originalBatch);
+            AFL_VERIFY(filter.Apply(originalBatch));
         }
 
         // Leave only requested columns
         auto resultBatch = NArrow::TColumnOperator().Adapt(originalBatch, ResultSchema).DetachResult();
         NArrow::NSSA::TSchemaColumnResolver resolver(DataSchema);
         auto collection = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(resultBatch, resolver);
-        auto applyConclusion = ReadMetadata->GetProgram().ApplyProgram(collection);
+        auto source = std::make_shared<NArrow::NSSA::TFakeDataSource>();
+        auto applyConclusion = ReadMetadata->GetProgram().ApplyProgram(collection, source);
         if (applyConclusion.IsFail()) {
             return applyConclusion;
         }

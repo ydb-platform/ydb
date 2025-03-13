@@ -5,7 +5,7 @@
 
 #include <ydb/tests/tools/kqprun/runlib/utils.h>
 
-#include <ydb-cpp-sdk/client/query/query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
 
 
 namespace NKqpRun {

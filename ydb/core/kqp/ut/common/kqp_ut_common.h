@@ -6,10 +6,10 @@
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
-#include <ydb-cpp-sdk/client/query/client.h>
-#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/json/json_reader.h>
@@ -125,6 +125,10 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings& SetColumnShardAlterObjectEnabled(bool enable) {
             AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(enable);
             return *this;
+    }
+    TKikimrSettings& SetColumnShardDoubleOutOfRangeHandling(const NKikimrConfig::TColumnShardConfig_EJsonDoubleOutOfRangeHandlingPolicy value) {
+        AppConfig.MutableColumnShardConfig()->SetDoubleOutOfRangeHandling(value);
+        return *this;
     }
 };
 
@@ -389,6 +393,7 @@ struct TGetPlanParams {
     bool IncludeFilters = false;
     bool IncludeOptimizerEstimation = false;
     bool IncludeTables = true;
+    bool IncludeShuffles = false;
 };
 
 /* Gets join order with details as: join algo, join type and scan type. */

@@ -1,13 +1,13 @@
 #pragma once
 
-#include <src/client/impl/ydb_internal/internal_header.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/internal_header.h>
 #include <ydb/public/api/protos/ydb_common.pb.h>
 
 #include <util/datetime/base.h>
 
 #include <google/protobuf/duration.pb.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 void SetDuration(const TDuration& duration, google::protobuf::Duration& protoValue);
 

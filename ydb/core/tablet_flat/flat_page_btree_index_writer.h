@@ -241,12 +241,12 @@ namespace NKikimr::NTable::NPage {
             }
         }
 
-        void PlaceBytes(TString&& data) noexcept
+        void PlaceBytes(TString&& data)
         {
             std::copy(data.data(), data.data() + data.size(), Advance(data.size()));
         }
 
-        void PlaceChild(const TChild& child) noexcept
+        void PlaceChild(const TChild& child)
         {
             if (IsShortChildFormat()) {
                 Y_DEBUG_ABORT_UNLESS(child.GetGroupDataSize() == 0);
@@ -258,18 +258,18 @@ namespace NKikimr::NTable::NPage {
         }
 
         template<typename T>
-        T& Place() noexcept
+        T& Place()
         {
             return *reinterpret_cast<T*>(Advance(TPgSizeOf<T>::Value));
         }
 
-        void Zero(size_t size) noexcept
+        void Zero(size_t size)
         {
             auto *from = Advance(size);
             std::fill(from, Ptr, 0);
         }
 
-        char* Advance(size_t size) noexcept
+        char* Advance(size_t size)
         {
             auto newPtr = Ptr + size;
             Y_ABORT_UNLESS(newPtr <= End);

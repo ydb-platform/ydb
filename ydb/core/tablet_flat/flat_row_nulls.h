@@ -35,7 +35,7 @@ namespace NTable {
         static TIntrusiveConstPtr<TSelf> Make(
                 TArrayRef<const TType> types,
                 TArrayRef<const TOrder> order,
-                TArrayRef<const TCell> defs) noexcept
+                TArrayRef<const TCell> defs)
         {
             size_t offT = AlignUp(sizeof(TSelf));
             size_t offO = offT + AlignUp(sizeof(TType) * types.size());
@@ -124,7 +124,7 @@ namespace NTable {
     public:
         static TIntrusiveConstPtr<TRowCellDefaults> Make(
                 TArrayRef<const TType> types,
-                TArrayRef<const TCell> defs) noexcept
+                TArrayRef<const TCell> defs)
         {
             return TCellDefaults::Make<TRowCellDefaults>(types, { }, defs);
         }
@@ -149,7 +149,7 @@ namespace NTable {
     public:
         static TIntrusiveConstPtr<TKeyCellDefaults> Make(
                 TArrayRef<const TOrder> order,
-                TArrayRef<const TCell> defs) noexcept
+                TArrayRef<const TCell> defs)
         {
             TStackVec<TType> types;
             types.reserve(order.size());

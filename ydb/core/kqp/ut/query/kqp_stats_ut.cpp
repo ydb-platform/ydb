@@ -1,11 +1,11 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <cstdlib>
 
@@ -104,7 +104,6 @@ TCollectedStreamResult JoinStatsBasic(
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
 
     auto settings = TKikimrSettings()
         .SetAppConfig(appConfig);
@@ -409,7 +408,6 @@ Y_UNIT_TEST(StatsProfile) {
 Y_UNIT_TEST_TWIN(StreamLookupStats, StreamLookupJoin) {
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
 
     TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(app));
     auto db = kikimr.GetTableClient();

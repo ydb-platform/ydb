@@ -75,14 +75,14 @@ void TRelOptimizerNode::Print(std::stringstream& stream, int ntabs) {
 }
 
 TJoinOptimizerNode::TJoinOptimizerNode(
-    const std::shared_ptr<IBaseOptimizerNode>& left, 
+    const std::shared_ptr<IBaseOptimizerNode>& left,
     const std::shared_ptr<IBaseOptimizerNode>& right,
     TVector<TJoinColumn> leftKeys,
     TVector<TJoinColumn> rightKeys,
-    const EJoinKind joinType, 
-    const EJoinAlgoType joinAlgo, 
+    const EJoinKind joinType,
+    const EJoinAlgoType joinAlgo,
     bool leftAny,
-    bool rightAny, 
+    bool rightAny,
     bool nonReorderable
 )   : IBaseOptimizerNode(JoinNodeType)
     , LeftArg(left)
@@ -129,7 +129,7 @@ void TJoinOptimizerNode::Print(std::stringstream& stream, int ntabs) {
         stream << "    ";
     }
     stream << Stats << "\n";
-    
+
 
     LeftArg->Print(stream, ntabs+1);
     RightArg->Print(stream, ntabs+1);
@@ -141,7 +141,7 @@ bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TJoinColumn>& joi
     }
 
     for(size_t i = 0; i < stats.KeyColumns->Data.size(); i++){
-        if (std::find_if(joinKeys.begin(), joinKeys.end(), 
+        if (std::find_if(joinKeys.begin(), joinKeys.end(),
         [&] (const TJoinColumn& c) { return c.AttributeName == stats.KeyColumns->Data[i];}) == joinKeys.end()) {
             return false;
         }
@@ -171,6 +171,29 @@ double TBaseProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftSta
     return leftStats.Nrows + 2.0 * rightStats.Nrows + outputRows;
 }
 
+
+TOptimizerStatistics TBaseProviderContext::ComputeJoinStatsV1(
+    const TOptimizerStatistics& leftStats,
+    const TOptimizerStatistics& rightStats,
+    const TVector<NDq::TJoinColumn>& leftJoinKeys,
+    const TVector<NDq::TJoinColumn>& rightJoinKeys,
+    EJoinAlgoType joinAlgo,
+    EJoinKind joinKind,
+    TCardinalityHints::TCardinalityHint* maybeHint,
+    bool shuffleLeftSide,
+    bool shuffleRightSide
+) const {
+    auto stats = ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint);
+    if (shuffleLeftSide) {
+        stats.Cost += leftStats.Nrows;
+    }
+    if (shuffleRightSide) {
+        stats.Cost += rightStats.Nrows;
+    }
+
+    return stats;
+}
+
 /**
  * Compute the cost and output cardinality of a join
  *
@@ -194,8 +217,12 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     bool rightKeyColumns = false;
     double selectivity = 1.0;
 
-    bool isRightPKJoin = IsPKJoin(rightStats,rightJoinKeys);
-    bool isLeftPKJoin = IsPKJoin(leftStats,leftJoinKeys);
+    bool isAntiOrSemiJoin = (joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly);
+    bool isCrossJoin = (joinKind == EJoinKind::Cross);
+
+    /* it doesn't matter for these joins (semi, anti, cross) to be pk join or not. We process them separately */
+    bool isRightPKJoin = !isAntiOrSemiJoin && !isCrossJoin && IsPKJoin(rightStats,rightJoinKeys);
+    bool isLeftPKJoin =  !isAntiOrSemiJoin && !isCrossJoin && IsPKJoin(leftStats,leftJoinKeys);
 
     if (isRightPKJoin && isLeftPKJoin) {
         auto rightPKJoinCard = leftStats.Nrows * rightStats.Selectivity;
@@ -208,7 +235,6 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     if (isRightPKJoin) {
         switch (joinKind) {
             case EJoinKind::LeftJoin:
-            case EJoinKind::LeftOnly:
                 newCard = leftStats.Nrows; break;
             default: {
                 newCard = leftStats.Nrows * rightStats.Selectivity;
@@ -225,13 +251,12 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     } else if (isLeftPKJoin) {
         switch (joinKind) {
             case EJoinKind::RightJoin:
-            case EJoinKind::RightOnly:
                 newCard = rightStats.Nrows; break;
             default: {
                 newCard = leftStats.Selectivity * rightStats.Nrows;
             }
         }
-        
+
         selectivity = leftStats.Selectivity * rightStats.Selectivity;
         rightKeyColumns = true;
         if (rightStats.Type == EStatisticsType::BaseTable){
@@ -239,6 +264,12 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         } else {
             outputType = rightStats.Type;
         }
+    } else if (isCrossJoin) {
+        newCard = leftStats.Nrows * rightStats.Nrows;
+        outputType = EStatisticsType::ManyManyJoin;
+    } else if (isAntiOrSemiJoin) {
+        newCard = leftStats.Nrows;
+        outputType = EStatisticsType::FilteredFactTable;
     } else {
         std::optional<double> lhsUniqueVals;
         std::optional<double> rhsUniqueVals;
@@ -269,6 +300,10 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
 
     double cost = ComputeJoinCost(leftStats, rightStats, newCard, newByteSize, joinAlgo)
         + leftStats.Cost + rightStats.Cost;
+
+    if (isCrossJoin /* in case of cross join we broadcast the right part to the left */) {
+        cost += rightStats.Nrows;
+    }
 
     auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, cost,
         leftKeyColumns ? leftStats.KeyColumns : ( rightKeyColumns ? rightStats.KeyColumns : TIntrusivePtr<TOptimizerStatistics::TKeyColumns>()));

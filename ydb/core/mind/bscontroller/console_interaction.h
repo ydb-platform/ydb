@@ -33,6 +33,8 @@ namespace NKikimr::NBsController {
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& /*ev*/);
         void Handle(TEvBlobStorage::TEvGetBlockResult::TPtr& ev);
 
+        bool RequestIsBeingProcessed() const { return static_cast<bool>(ClientId); }
+
     private:
         TBlobStorageController& Self;
         TActorId ConsolePipe;

@@ -28,7 +28,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -97,7 +97,7 @@ using namespace NResourceBroker;
 
 class TExecutor::TActiveTransactionZone {
 public:
-    explicit TActiveTransactionZone(TExecutor* self) noexcept
+    explicit TActiveTransactionZone(TExecutor* self)
         : Self(self)
     {
         Y_DEBUG_ABORT_UNLESS(!Self->ActiveTransaction);
@@ -105,11 +105,11 @@ public:
         Active = true;
     }
 
-    ~TActiveTransactionZone() noexcept {
+    ~TActiveTransactionZone() {
         Done();
     }
 
-    void Done() noexcept {
+    void Done() {
         if (Active) {
             Self->ActiveTransaction = false;
             Active = false;
@@ -128,8 +128,6 @@ TExecutor::TExecutor(
     , Time(TAppData::TimeProvider)
     , Owner(owner)
     , OwnerActorId(ownerActorId)
-    , ActivationQueue(new TActivationQueue())
-    , PendingQueue(new TActivationQueue())
     , Emitter(new TIdEmitter)
     , CounterEventsInFlight(new TEvTabletCounters::TInFlightCookie)
     , Stats(new TExecutorStatsImpl())
@@ -144,6 +142,10 @@ TExecutor::~TExecutor() {
 ui64 TExecutor::Stamp() const noexcept
 {
     return CommitManager ? CommitManager->Stamp() : TTxStamp{ Generation0, Step0 }.Raw;
+}
+
+TActorContext TExecutor::SelfCtx() const {
+    return TActivationContext::ActorContextFor(SelfId());
 }
 
 TActorContext TExecutor::OwnerCtx() const {
@@ -205,7 +207,7 @@ void TExecutor::Broken() {
     return PassAway();
 }
 
-void TExecutor::RecreatePageCollectionsCache() noexcept
+void TExecutor::RecreatePageCollectionsCache()
 {
     PrivatePageCache = MakeHolder<TPrivatePageCache>();
     StickyPagesMemory = 0;
@@ -221,19 +223,24 @@ void TExecutor::RecreatePageCollectionsCache() noexcept
     }
 
     if (TransactionWaitPads) {
-        for (auto &xpair : TransactionWaitPads) {
-            auto &seat = xpair.second->Seat;
-            xpair.second->WaitingSpan.EndOk();
-            LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
-            seat->StartEnqueuedSpan();
-            ActivationQueue->Push(seat.Release());
-            ActivateTransactionWaiting++;
+        auto it = TransactionWaitPads.begin();
+        while (it != TransactionWaitPads.end()) {
+            it->second->WaitingSpan.EndOk();
+            TSeat* seat = it->second->Seat;
+            Y_ABORT_UNLESS(seat->State == ESeatState::Waiting);
+            seat->State = ESeatState::None;
+            TransactionWaitPads.erase(it++);
+
+            if (seat->Cancelled) {
+                FinishCancellation(seat, false);
+            } else {
+                EnqueueActivation(seat, false);
+            }
         }
-        TransactionWaitPads.clear();
     }
 }
 
-void TExecutor::ReflectSchemeSettings() noexcept
+void TExecutor::ReflectSchemeSettings()
 {
     for (const auto &it : Scheme().Tables) {
         auto &policy = *it.second.CompactionPolicy;
@@ -447,7 +454,7 @@ void TExecutor::Active(const TActorContext &ctx) {
     CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(MemTableMemoryConsumersCollection.Get(), Logger.Get(), Broker.Get(), this, loadedState->Comp,
                                                                      Sprintf("tablet-%" PRIu64, Owner->TabletID())));
     DataCleanupLogic = MakeHolder<TDataCleanupLogic>(static_cast<NActors::IActorOps*>(this), this, Owner, Logger.Get(), GcLogic.Get());
-    LogicRedo->InstallCounters(Counters.Get(), nullptr);
+    LogicRedo->InstallCounters(Counters.Get(), AppTxCounters);
 
     ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), 0, Launcher);
 
@@ -547,51 +554,106 @@ void TExecutor::TranscriptFollowerBootOpResult(ui32 res, const TActorContext &ct
     }
 }
 
+std::unique_ptr<TSeat> TExecutor::RemoveTransaction(ui64 id) {
+    auto it = Transactions.find(id);
+    Y_ABORT_UNLESS(it != Transactions.end(), "Cannot find transaction %" PRIu64, id);
+    auto res = std::move(it->second);
+    res->State = ESeatState::Done;
+    Transactions.erase(it);
+    return res;
+}
+
+void TExecutor::FinishCancellation(TSeat* seat, bool activateMore) {
+    UnpinTransactionPages(*seat);
+    Memory->ReleaseMemory(*seat);
+    --Stats->TxInFly;
+    Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
+    if (AppTxCounters && seat->TxType != UnknownTxType) {
+        AppTxCounters->TxSimple(seat->TxType, COUNTER_TT_INFLY) -= 1;
+    }
+    RemoveTransaction(seat->UniqID);
+    if (activateMore) {
+        PlanTransactionActivation();
+        MaybeRelaxRejectProbability();
+    }
+}
+
+void TExecutor::EnqueueActivation(TSeat* seat, bool activate) {
+    LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
+    seat->StartEnqueuedSpan();
+    if (!seat->LowPriority) {
+        seat->State = ESeatState::Active;
+        ActivationQueue.PushBack(seat);
+        ActivateTransactionWaiting++;
+        if (activate && ActivateTransactionInFlight < ActivateTransactionWaiting) {
+            Send(SelfId(), new TEvPrivate::TEvActivateExecution());
+            ++ActivateTransactionInFlight;
+        }
+    } else {
+        seat->State = ESeatState::ActiveLow;
+        ActivationLowQueue.PushBack(seat);
+        ActivateLowTransactionWaiting++;
+        if (activate && ActivateLowTransactionInFlight < 1) {
+            Send(SelfId(), new TEvPrivate::TEvActivateLowExecution());
+            ++ActivateLowTransactionInFlight;
+        }
+    }
+}
+
 void TExecutor::PlanTransactionActivation() {
     if (!CanExecuteTransaction())
         return;
 
     const ui64 limitTxInFly = Scheme().Executor.LimitInFlyTx;
-    while (PendingQueue->Head() && (!limitTxInFly || (Stats->TxInFly - Stats->TxPending < limitTxInFly))) {
-        TAutoPtr<TSeat> seat = PendingQueue->Pop();
+    while (PendingQueue && (!limitTxInFly || (Stats->TxInFly - Stats->TxPending < limitTxInFly))) {
+        TSeat* seat = PendingQueue.PopFront();
+        Y_ABORT_UNLESS(seat->State == ESeatState::Pending);
+        seat->State = ESeatState::None;
         seat->FinishPendingSpan();
-        LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
-        seat->StartEnqueuedSpan();
-        ActivationQueue->Push(seat.Release());
-        ActivateTransactionWaiting++;
         --Stats->TxPending;
+        EnqueueActivation(seat, false);
     }
 
     while (ActivateTransactionInFlight < ActivateTransactionWaiting) {
         Send(SelfId(), new TEvPrivate::TEvActivateExecution());
-        ActivateTransactionInFlight++;
+        ++ActivateTransactionInFlight;
+    }
+
+    while (ActivateLowTransactionWaiting > 0 && ActivateLowTransactionInFlight < 1) {
+        Send(SelfId(), new TEvPrivate::TEvActivateLowExecution());
+        ++ActivateLowTransactionInFlight;
     }
 }
 
 void TExecutor::ActivateWaitingTransactions(TPrivatePageCache::TPage::TWaitQueuePtr waitPadsQueue) {
     if (waitPadsQueue) {
-        bool haveTransactions = false;
+        bool activate = CanExecuteTransaction();
+        bool cancelled = false;
         while (TPrivatePageCacheWaitPad *waitPad = waitPadsQueue->Pop()) {
             if (auto it = TransactionWaitPads.find(waitPad); it != TransactionWaitPads.end()) {
                 it->second->WaitingSpan.EndOk();
-                auto &seat = it->second->Seat;
-                LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
-                seat->StartEnqueuedSpan();
-                ActivationQueue->Push(seat.Release());
-                ActivateTransactionWaiting++;
-                TransactionWaitPads.erase(waitPad);
-                haveTransactions = true;
+                TSeat* seat = it->second->Seat;
+                Y_ABORT_UNLESS(seat->State == ESeatState::Waiting);
+                seat->State = ESeatState::None;
+                TransactionWaitPads.erase(it);
+                if (seat->Cancelled) {
+                    FinishCancellation(seat, false);
+                    cancelled = true;
+                } else {
+                    EnqueueActivation(seat, activate);
+                }
             } else {
                 Y_Fail("Unexpected wait pad triggered");
             }
         }
-        if (haveTransactions) {
+        if (cancelled && activate) {
             PlanTransactionActivation();
+            MaybeRelaxRejectProbability();
         }
     }
 }
 
-void TExecutor::AddCachesOfBundle(const NTable::TPartView &partView) noexcept
+void TExecutor::AddCachesOfBundle(const NTable::TPartView &partView)
 {
     auto *partStore = partView.As<NTable::TPartStore>();
 
@@ -609,7 +671,7 @@ void TExecutor::AddCachesOfBundle(const NTable::TPartView &partView) noexcept
         AddSingleCache(blobs);
 }
 
-void TExecutor::AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info) noexcept
+void TExecutor::AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info)
 {
     PrivatePageCache->RegisterPageCollection(info);
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(info->PageCollection, SelfId()));
@@ -619,7 +681,7 @@ void TExecutor::AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &in
     Counters->Simple()[TExecutorCounters::CACHE_TOTAL_STICKY] = StickyPagesMemory;
 }
 
-void TExecutor::DropCachesOfBundle(const NTable::TPart &part) noexcept
+void TExecutor::DropCachesOfBundle(const NTable::TPart &part)
 {
     auto *partStore = CheckedCast<const NTable::TPartStore*>(&part);
 
@@ -637,7 +699,7 @@ void TExecutor::DropCachesOfBundle(const NTable::TPart &part) noexcept
         DropSingleCache(blobs->Id);
 }
 
-void TExecutor::DropSingleCache(const TLogoBlobID &label) noexcept
+void TExecutor::DropSingleCache(const TLogoBlobID &label)
 {
     auto pageCollection = PrivatePageCache->GetPageCollection(label);
 
@@ -1225,7 +1287,7 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPart
     }
 
     if (auto* stage = bundle.GetStage<TPendingPartSwitch::TLoaderStage>()) {
-        if (auto fetch = stage->Loader.Run(PreloadTablesData.contains(partSwitch.TableId))) {
+        if (auto fetch = stage->Loader.Run({.PreloadIndex = true, .PreloadData = PreloadTablesData.contains(partSwitch.TableId)})) {
             Y_ABORT_UNLESS(fetch.size() == 1, "Cannot handle loads from more than one page collection");
 
             for (auto req : fetch) {
@@ -1352,8 +1414,8 @@ void TExecutor::AdvancePendingPartSwitches() {
         PlanTransactionActivation();
         MaybeRelaxRejectProbability();
 
-        // followers haven't DataCleanupLogic
-        if (DataCleanupLogic && DataCleanupLogic->NeedLogSnaphot()) {
+        // Note: followers don't have DataCleanupLogic
+        if (NeedFollowerSnapshot || DataCleanupLogic && DataCleanupLogic->NeedLogSnaphot()) {
             MakeLogSnapshot();
         }
     }
@@ -1678,16 +1740,19 @@ bool TExecutor::CanExecuteTransaction() const {
     return Stats->IsActive && (Stats->IsFollower() || PendingPartSwitches.empty()) && !BrokenTransaction;
 }
 
-void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, const TActorContext &ctx) {
-    Y_ABORT_UNLESS(ActivationQueue, "attempt to execute transaction before activation");
-
-    TAutoPtr<TSeat> seat = new TSeat(++TransactionUniqCounter, self);
+ui64 TExecutor::DoExecute(TAutoPtr<ITransaction> self, ETxMode mode) {
+    ui64 uniqId = ++TransactionUniqCounter;
+    TSeat* seat = (Transactions[uniqId] = std::make_unique<TSeat>(uniqId, self)).get();
+    seat->LowPriority = mode == ETxMode::LowPriority;
     seat->Self->SetupTxSpanName();
 
     LWTRACK(TransactionBegin, seat->Self->Orbit, seat->UniqID, Owner->TabletID(), TypeName(*seat->Self));
 
     ++Stats->TxInFly;
     Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
+    if (AppTxCounters && seat->TxType != UnknownTxType) {
+        AppTxCounters->TxSimple(seat->TxType, COUNTER_TT_INFLY) += 1;
+    }
     Counters->Cumulative()[TExecutorCounters::TX_COUNT_ALL].Increment(1); //Deprecated
     Counters->Cumulative()[TExecutorCounters::TX_QUEUED].Increment(1);
 
@@ -1705,11 +1770,9 @@ void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, cons
     if (staticRemain < seat->CurrentTxDataLimit) {
         LWTRACK(TransactionNeedMemory, seat->Self->Orbit, seat->UniqID);
         Memory->RequestLimit(*seat, seat->CurrentTxDataLimit);
-        auto *transptr = seat.Release();
-        auto pairIt = PostponedTransactions.emplace(transptr, transptr);
-        Y_ABORT_UNLESS(pairIt.second);
-
-        return;
+        seat->State = ESeatState::Postponed;
+        PostponedTransactions.PushBack(seat);
+        return uniqId;
     }
 
     Memory->AllocStatic(*seat, Memory->Profile->GetInitialTxMemory());
@@ -1720,32 +1783,98 @@ void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, cons
         LWTRACK(TransactionPending, seat->Self->Orbit, seat->UniqID,
                 CanExecuteTransaction() ? "tx limit reached" : "transactions paused");
         seat->CreatePendingSpan();
-        PendingQueue->Push(seat.Release());
+        seat->State = ESeatState::Pending;
+        PendingQueue.PushBack(seat);
         ++Stats->TxPending;
-        return;
+        return uniqId;
     }
 
-    if (ActiveTransaction || ActivateTransactionWaiting || !allowImmediate) {
-        LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
-        seat->StartEnqueuedSpan();
-        ActivationQueue->Push(seat.Release());
-        ActivateTransactionWaiting++;
-        PlanTransactionActivation();
-        return;
+    if (mode == ETxMode::Execute && (ActiveTransaction || ActivateTransactionWaiting)) {
+        mode = ETxMode::Enqueue;
     }
 
-    ExecuteTransaction(seat, ctx);
+    switch (mode) {
+        case ETxMode::Execute:
+            ExecuteTransaction(seat);
+            return uniqId;
+
+        case ETxMode::Enqueue:
+        case ETxMode::LowPriority:
+            EnqueueActivation(seat, true);
+            return uniqId;
+    }
+
+    Y_FAIL("Unimplemented transaction mode");
 }
 
 void TExecutor::Execute(TAutoPtr<ITransaction> self, const TActorContext &ctx) {
-    DoExecute(self, true, ctx);
+    Y_UNUSED(ctx);
+    DoExecute(self, ETxMode::Execute);
 }
 
-void TExecutor::Enqueue(TAutoPtr<ITransaction> self, const TActorContext &ctx) {
-    DoExecute(self, false, ctx);
+ui64 TExecutor::Enqueue(TAutoPtr<ITransaction> self) {
+    return DoExecute(self, ETxMode::Enqueue);
 }
 
-void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ctx) {
+ui64 TExecutor::EnqueueLowPriority(TAutoPtr<ITransaction> self) {
+    return DoExecute(self, ETxMode::LowPriority);
+}
+
+bool TExecutor::CancelTransaction(ui64 id) {
+    auto it = Transactions.find(id);
+    if (it == Transactions.end()) {
+        return false;
+    }
+
+    TSeat* seat = it->second.get();
+    switch (seat->State) {
+        case ESeatState::None:
+            // Transaction is not paused in any way
+            Y_DEBUG_ABORT_UNLESS(false,
+                "Tablet %" PRIu64 " CancelTransaction(%" PRIu64 ") from inside transaction?",
+                TabletId(), id);
+            return false;
+
+        case ESeatState::Active:
+            ActivationQueue.Remove(seat);
+            Y_ABORT_UNLESS(ActivateTransactionWaiting > 0);
+            --ActivateTransactionWaiting;
+            break;
+
+        case ESeatState::ActiveLow:
+            ActivationLowQueue.Remove(seat);
+            Y_ABORT_UNLESS(ActivateLowTransactionWaiting > 0);
+            --ActivateLowTransactionWaiting;
+            break;
+
+        case ESeatState::Pending:
+            PendingQueue.Remove(seat);
+            Y_ABORT_UNLESS(Stats->TxPending > 0);
+            --Stats->TxPending;
+            break;
+
+        case ESeatState::Postponed:
+        case ESeatState::Waiting:
+            if (seat->Cancelled) {
+                return false;
+            }
+            // Cannot safely remove now, wait until later
+            seat->Cancelled = true;
+            return true;
+
+        default:
+            Y_DEBUG_ABORT_UNLESS(false,
+                "Tablet %" PRIu64 " CancelTransaction(% " PRIu64 ") for a finished transaction",
+                TabletId(), id);
+            return false;
+    }
+
+    seat->State = ESeatState::None;
+    FinishCancellation(seat);
+    return true;
+}
+
+void TExecutor::ExecuteTransaction(TSeat* seat) {
     TActiveTransactionZone activeTransaction(this);
     ++seat->Retries;
 
@@ -1762,7 +1891,7 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     LWTRACK(TransactionExecuteBegin, seat->Self->Orbit, seat->UniqID);
 
     txc.StartExecutionSpan();
-    const bool done = seat->Self->Execute(txc, ctx.MakeFor(OwnerActorId));
+    const bool done = seat->Self->Execute(txc, OwnerCtx());
     txc.FinishExecutionSpan();
 
     LWTRACK(TransactionExecuteEnd, seat->Self->Orbit, seat->UniqID, done);
@@ -1826,18 +1955,21 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
 
         // It may not be safe to call Broken right now, call it later
         Send(SelfId(), new TEvPrivate::TEvBrokenTransaction());
+
+        // Make sure transaction is properly destroyed
+        RemoveTransaction(seat->UniqID);
     } else if (done) {
         Y_ABORT_UNLESS(!txc.IsRescheduled());
         Y_ABORT_UNLESS(!seat->RequestedMemory);
         seat->OnPersistent = std::move(prod.OnPersistent);
-        CommitTransactionLog(seat, env, prod.Change, cpuTimer, ctx);
+        CommitTransactionLog(RemoveTransaction(seat->UniqID), env, prod.Change, cpuTimer);
     } else {
         Y_ABORT_UNLESS(!seat->CapturedMemory);
         if (!PrivatePageCache->GetStats().CurrentCacheMisses && !seat->RequestedMemory && !txc.IsRescheduled()) {
             Y_Fail(NFmt::Do(*this) << " " << NFmt::Do(*seat) << " type "
                     << NFmt::Do(*seat->Self) << " postponed w/o demands");
         }
-        PostponeTransaction(seat, env, prod.Change, cpuTimer, ctx);
+        PostponeTransaction(seat, env, prod.Change, cpuTimer);
     }
     PrivatePageCache->ResetTouchesAndToLoad(false);
 
@@ -1859,14 +1991,14 @@ void TExecutor::UnpinTransactionPages(TSeat &seat) {
     Counters->Simple()[TExecutorCounters::CACHE_TOTAL_USED] = TransactionPagesMemory;
 }
 
-void TExecutor::ReleaseTxData(TSeat &seat, ui64 requested, const TActorContext &ctx)
+void TExecutor::ReleaseTxData(TSeat &seat, ui64 requested)
 {
     if (auto logl = Logger->Log(ELnLev::Debug))
         logl << NFmt::Do(*this) << " " << NFmt::Do(seat) << " release tx data";
 
     TTxMemoryProvider provider(seat.CurrentTxDataLimit - requested, seat.TaskId);
     static_cast<TTxMemoryProviderBase&>(provider).RequestMemory(requested);
-    seat.Self->ReleaseTxData(provider, ctx.MakeFor(OwnerActorId));
+    seat.Self->ReleaseTxData(provider, OwnerCtx());
 
     Counters->Cumulative()[TExecutorCounters::TX_DATA_RELEASES].Increment(1);
 
@@ -1876,11 +2008,11 @@ void TExecutor::ReleaseTxData(TSeat &seat, ui64 requested, const TActorContext &
     Memory->ReleaseTxData(seat);
 }
 
-void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &env,
+void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
                                     TAutoPtr<NTable::TChange> change,
-                                    THPTimer &bookkeepingTimer, const TActorContext &ctx)
+                                    THPTimer &bookkeepingTimer)
 {
-    TTxType txType = seat->Self->GetTxType();
+    TTxType txType = seat->TxType;
 
     ui32 touchedPages = 0;
     ui32 newPinnedPages = 0;
@@ -1926,7 +2058,7 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
         }
 
         seat->TerminationReason = ETerminationReason::MemoryLimitExceeded;
-        CommitTransactionLog(seat, env, change, bookkeepingTimer, ctx);
+        CommitTransactionLog(RemoveTransaction(seat->UniqID), env, change, bookkeepingTimer);
         return;
     } else if (totalMemory > seat->CurrentMemoryLimit) {
 
@@ -1950,13 +2082,11 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
             LWTRACK(TransactionNeedMemory, seat->Self->Orbit, seat->UniqID);
             Memory->FreeStatic(*seat, 0);
             UnpinTransactionPages(*seat);
-            ReleaseTxData(*seat, requestedMemory, ctx);
+            ReleaseTxData(*seat, requestedMemory);
 
             Memory->RequestLimit(*seat, desired);
-
-            auto *transptr = seat.Release();
-            auto pairIt = PostponedTransactions.emplace(transptr, transptr);
-            Y_ABORT_UNLESS(pairIt.second);
+            seat->State = ESeatState::Postponed;
+            PostponedTransactions.PushBack(seat);
 
             // todo: counters
             return;
@@ -1966,16 +2096,13 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
     // If memory was allocated and there is nothing to load
     // then tx may be re-activated.
     if (!PrivatePageCache->GetStats().CurrentCacheMisses) {
-        LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
-        seat->StartEnqueuedSpan();
-        ActivationQueue->Push(seat.Release());
-        ActivateTransactionWaiting++;
-        PlanTransactionActivation();
+        EnqueueActivation(seat, CanExecuteTransaction());
         return;
     }
 
     LWTRACK(TransactionPageFault, seat->Self->Orbit, seat->UniqID);
-    auto padHolder = MakeHolder<TTransactionWaitPad>(std::move(seat));
+    seat->State = ESeatState::Waiting;
+    auto padHolder = MakeHolder<TTransactionWaitPad>(seat);
     auto *const pad = padHolder.Get();
     TransactionWaitPads[pad] = std::move(padHolder);
 
@@ -2041,11 +2168,10 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
     Counters->Simple()[TExecutorCounters::CACHE_TOTAL_USED] = TransactionPagesMemory;
 }
 
-void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &env,
-                    TAutoPtr<NTable::TChange> change, THPTimer &bookkeepingTimer, const TActorContext &ctx) {
+void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectionTxEnv &env,
+                    TAutoPtr<NTable::TChange> change, THPTimer &bookkeepingTimer) {
     const bool isReadOnly = !(change->HasAny() || env.HasChanges());
-    const bool isTerminated = seat->TerminationReason != ETerminationReason::None;
-    const TTxType txType = seat->Self->GetTxType();
+    const TTxType txType = seat->TxType;
 
     size_t touchedBlocks = PrivatePageCache->GetStats().CurrentCacheHits;
     Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_TOUCHED_BLOCKS].IncrementFor(touchedBlocks);
@@ -2072,27 +2198,20 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
     const double currentBookkeepingTime = seat->CPUBookkeepingTime;
     const double currentExecTime = seat->CPUExecTime;
 
-    if (isTerminated) {
-        if (Stats->IsFollower()) {
-            --Stats->TxInFly;
-            Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
-            seat->Terminate(seat->TerminationReason, OwnerCtx());
-        } else if (LogicRedo->TerminateTransaction(seat, ctx, OwnerActorId)) {
-            --Stats->TxInFly;
-            Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
-        }
-    } else if (isReadOnly) {
+    if (isReadOnly) {
+        // Note: per-tx InFly is decremented in txloglogic
         if (Stats->IsFollower()) {
             // todo: extract completion counters from txloglogic
             --Stats->TxInFly;
             Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
-            CompleteRoTransaction(seat, OwnerCtx(), Counters.Get(), AppTxCounters);
-        } else if (LogicRedo->CommitROTransaction(seat, OwnerCtx())) {
+            CompleteRoTransaction(std::move(seat), OwnerCtx(), Counters.Get(), AppTxCounters);
+        } else if (LogicRedo->CommitROTransaction(std::move(seat), OwnerCtx())) {
             --Stats->TxInFly;
             Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
         }
     } else {
         Y_ABORT_UNLESS(!Stats->IsFollower());
+        Y_ABORT_UNLESS(!seat->IsTerminated(), "Read-write transactions cannot be terminated");
 
         const bool allowBatching = Scheme().Executor.AllowLogBatching;
         const bool force = !allowBatching
@@ -2106,7 +2225,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
             || env.LoanConfirmation
             || env.BorrowUpdates;
 
-        auto commitResult = LogicRedo->CommitRWTransaction(seat, *change, force);
+        auto commitResult = LogicRedo->CommitRWTransaction(std::move(seat), *change, force);
 
         Y_ABORT_UNLESS(!force || commitResult.Commit);
         auto *commit = commitResult.Commit.Get(); // could be nullptr
@@ -2534,7 +2653,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
                 delay = TDuration::MicroSeconds(LogFlushDelayOverrideUsec);
             }
             if (delay.MicroSeconds() == 0) {
-                ctx.Send(ctx.SelfID, new TEvents::TEvFlushLog());
+                Send(SelfId(), new TEvents::TEvFlushLog());
             } else {
                 Y_DEBUG_ABORT_UNLESS(delay < TDuration::Minutes(1));
                 delay = Min(delay, TDuration::Seconds(59));
@@ -2562,7 +2681,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
 
     if (ResourceMetrics) {
         ResourceMetrics->CPU.Increment(bookkeepingTimeuS + execTimeuS, Time->Now());
-        ResourceMetrics->TryUpdate(ctx);
+        ResourceMetrics->TryUpdate(SelfCtx());
     }
 
     MaybeRelaxRejectProbability();
@@ -2683,17 +2802,21 @@ void TExecutor::MakeLogSnapshot() {
 
 void TExecutor::Handle(TEvPrivate::TEvActivateExecution::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev);
+    Y_UNUSED(ctx);
     Y_ABORT_UNLESS(ActivateTransactionInFlight > 0);
     ActivateTransactionInFlight--;
 
     if (!CanExecuteTransaction())
         return;
 
-    if (TAutoPtr<TSeat> seat = ActivationQueue->Pop()) {
+    if (ActivationQueue) {
+        TSeat* seat = ActivationQueue.PopFront();
+        Y_ABORT_UNLESS(seat->State == ESeatState::Active);
+        seat->State = ESeatState::None;
         Y_ABORT_UNLESS(ActivateTransactionWaiting > 0);
         ActivateTransactionWaiting--;
         seat->FinishEnqueuedSpan();
-        ExecuteTransaction(seat, ctx);
+        ExecuteTransaction(seat);
     } else {
         // N.B. it should actually never happen, since ActivationQueue size
         // is always exactly equal to ActivateTransactionWaiting and we never
@@ -2701,6 +2824,35 @@ void TExecutor::Handle(TEvPrivate::TEvActivateExecution::TPtr &ev, const TActorC
         // transactions, so when we handle this event we must have at least
         // one transaction in queue.
         Y_ABORT_UNLESS(ActivateTransactionWaiting == 0);
+    }
+}
+
+void TExecutor::Handle(TEvPrivate::TEvActivateLowExecution::TPtr &ev, const TActorContext &ctx) {
+    Y_UNUSED(ev);
+    Y_UNUSED(ctx);
+    Y_ABORT_UNLESS(ActivateLowTransactionInFlight > 0);
+    ActivateLowTransactionInFlight--;
+
+    if (!CanExecuteTransaction())
+        return;
+
+    if (ActivationLowQueue) {
+        TSeat* seat = ActivationLowQueue.PopFront();
+        Y_ABORT_UNLESS(seat->State == ESeatState::ActiveLow);
+        seat->State = ESeatState::None;
+        Y_ABORT_UNLESS(ActivateLowTransactionWaiting > 0);
+        ActivateLowTransactionWaiting--;
+        seat->FinishEnqueuedSpan();
+
+        // Activate the next transaction
+        if (ActivateLowTransactionWaiting > 0 && ActivateLowTransactionInFlight < 1) {
+            Send(SelfId(), new TEvPrivate::TEvActivateLowExecution());
+            ++ActivateLowTransactionInFlight;
+        }
+
+        ExecuteTransaction(seat);
+    } else {
+        Y_ABORT_UNLESS(ActivateLowTransactionWaiting == 0);
     }
 }
 
@@ -2827,9 +2979,9 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
 void TExecutor::Handle(NSharedCache::TEvUpdated::TPtr &ev) {
     const auto *msg = ev->Get();
 
-    for (auto &kv : msg->Actions) {
+    for (auto &kv : msg->DroppedPages) {
         if (auto *info = PrivatePageCache->Info(kv.first)) {
-            for (ui32 pageId : kv.second.Dropped) {
+            for (ui32 pageId : kv.second) {
                 PrivatePageCache->DropSharedBody(info, pageId);
             }
         }
@@ -2949,6 +3101,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
     switch (cookie) {
     case ECommit::Redo:
         {
+            // Note: per-tx InFly is decrememnted in txloglogic
             const ui64 confirmedTransactions = LogicRedo->Confirm(step, ctx, OwnerActorId);
             Stats->TxInFly -= confirmedTransactions;
             Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
@@ -3025,19 +3178,21 @@ void TExecutor::Handle(TEvResourceBroker::TEvResourceAllocated::TPtr &ev) {
     }
 }
 
-void TExecutor::StartSeat(ui64 task, TResource *cookie_) noexcept
+void TExecutor::StartSeat(ui64 task, TResource *cookie_)
 {
     auto *cookie = CheckedCast<TMemory::TCookie*>(cookie_);
-    auto it = PostponedTransactions.find(cookie->Seat);
-    Y_ABORT_UNLESS(it != PostponedTransactions.end());
-    TAutoPtr<TSeat> seat = std::move(it->second);
-    PostponedTransactions.erase(it);
+    TSeat* seat = cookie->Seat;
+    Y_ABORT_UNLESS(seat->State == ESeatState::Postponed);
+    PostponedTransactions.Remove(seat);
+    seat->State = ESeatState::None;
     Memory->AcquiredMemory(*seat, task);
-    LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
-    seat->StartEnqueuedSpan();
-    ActivationQueue->Push(seat.Release());
-    ActivateTransactionWaiting++;
-    PlanTransactionActivation();
+
+    if (seat->Cancelled) {
+        FinishCancellation(seat);
+        return;
+    }
+
+    EnqueueActivation(seat, CanExecuteTransaction());
 }
 
 THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::TCompactionParams *params, TRowVersion snapshot)
@@ -3092,13 +3247,13 @@ THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::
     return THolder<TScanSnapshot>(new TScanSnapshot{table, std::move(barrier), subset, snapshot});
 }
 
-void TExecutor::StartScan(ui64 serial, ui32 table) noexcept
+void TExecutor::StartScan(ui64 serial, ui32 table)
 {
     Y_UNUSED(table);
     Scans->Start(serial);
 }
 
-void TExecutor::StartScan(ui64 task, TResource *cookie) noexcept
+void TExecutor::StartScan(ui64 task, TResource *cookie)
 {
     if (auto acquired = Scans->Acquired(task, cookie)) {
         StartScan(acquired.Serial, acquired.Table);
@@ -3957,6 +4112,7 @@ STFUNC(TExecutor::StateBoot) {
     switch (ev->GetTypeRewrite()) {
         // N.B. must work during follower promotion to leader
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
+        HFunc(TEvPrivate::TEvActivateLowExecution, Handle);
         HFunc(TEvPrivate::TEvBrokenTransaction, Handle);
         HFunc(TEvents::TEvWakeup, Wakeup);
         hFunc(TEvResourceBroker::TEvResourceAllocated, Handle);
@@ -3968,6 +4124,7 @@ STFUNC(TExecutor::StateBoot) {
 STFUNC(TExecutor::StateWork) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
+        HFunc(TEvPrivate::TEvActivateLowExecution, Handle);
         HFunc(TEvPrivate::TEvBrokenTransaction, Handle);
         HFunc(TEvPrivate::TEvActivateCompactionChanges, Handle);
         CFunc(TEvPrivate::EvUpdateCounters, UpdateCounters);
@@ -4000,6 +4157,7 @@ STFUNC(TExecutor::StateWork) {
 STFUNC(TExecutor::StateFollower) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
+        HFunc(TEvPrivate::TEvActivateLowExecution, Handle);
         HFunc(TEvPrivate::TEvBrokenTransaction, Handle);
         CFunc(TEvPrivate::EvUpdateCounters, UpdateCounters);
         HFunc(TEvents::TEvWakeup, Wakeup);
@@ -4022,6 +4180,7 @@ STFUNC(TExecutor::StateFollowerBoot) {
     switch (ev->GetTypeRewrite()) {
         // N.B. must handle activities started before resync
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
+        HFunc(TEvPrivate::TEvActivateLowExecution, Handle);
         HFunc(TEvPrivate::TEvBrokenTransaction, Handle);
         HFunc(TEvents::TEvWakeup, Wakeup);
         hFunc(TEvResourceBroker::TEvResourceAllocated, Handle);
@@ -4227,7 +4386,7 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
     Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
 }
 
-const NTable::TScheme& TExecutor::Scheme() const noexcept {
+const NTable::TScheme& TExecutor::Scheme() const {
     Y_DEBUG_ABORT_UNLESS(Database);
     return Database->GetScheme();
 }
@@ -4237,8 +4396,9 @@ void TExecutor::RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> app
     AppCountersBaseline = MakeHolder<TTabletCountersBase>();
     AppCounters->RememberCurrentStateAsBaseline(*AppCountersBaseline);
 
+    AppTxCounters = dynamic_cast<TTabletCountersWithTxTypes*>(AppCounters.Get());
+
     if (LogicRedo) {
-        AppTxCounters = dynamic_cast<TTabletCountersWithTxTypes*>(AppCounters.Get());
         LogicRedo->InstallCounters(Counters.Get(), AppTxCounters);
     }
 }
@@ -4301,15 +4461,15 @@ TString TExecutor::CheckBorrowConsistency() {
     return BorrowLogic->DebugCheckBorrowConsistency(knownBundles);
 }
 
-TTransactionWaitPad::TTransactionWaitPad(THolder<TSeat> seat)
-    : Seat(std::move(seat))
+TTransactionWaitPad::TTransactionWaitPad(TSeat* seat)
+    : Seat(seat)
     , WaitingSpan(NWilson::TSpan(TWilsonTablet::TabletDetailed, Seat->GetTxTraceId(), "Tablet.Transaction.Wait"))
 {}
 
 TTransactionWaitPad::~TTransactionWaitPad()
 {}
 
-NWilson::TTraceId TTransactionWaitPad::GetWaitingTraceId() const noexcept {
+NWilson::TTraceId TTransactionWaitPad::GetWaitingTraceId() const {
     return WaitingSpan.GetTraceId();
 }
 

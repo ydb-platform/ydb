@@ -28,6 +28,7 @@ public:
     }
 
     TOthersData Slice(const ui32 offset, const ui32 count, const TSettings& settings) const;
+    TOthersData ApplyFilter(const TColumnFilter& filter, const TSettings& settings) const;
 
     static TOthersData BuildEmpty();
 
@@ -120,10 +121,6 @@ public:
         return Stats;
     }
 
-    ui32 GetColumnsCount() const {
-        return Records->num_rows();
-    }
-
     static std::shared_ptr<arrow::Schema> GetSchema() {
         static arrow::FieldVector fields = { std::make_shared<arrow::Field>("record_idx", arrow::uint32()),
             std::make_shared<arrow::Field>("key", arrow::uint32()), std::make_shared<arrow::Field>("value", arrow::utf8()) };
@@ -134,6 +131,7 @@ public:
     TOthersData(const TDictStats& stats, const std::shared_ptr<TGeneralContainer>& records)
         : Stats(stats)
         , Records(records) {
+        AFL_VERIFY(Records);
         AFL_VERIFY(Records->num_columns() == 3)("count", Records->num_columns());
         AFL_VERIFY(Records->GetColumnVerified(0)->GetDataType()->id() == arrow::uint32()->id());
         AFL_VERIFY(Records->GetColumnVerified(1)->GetDataType()->id() == arrow::uint32()->id());

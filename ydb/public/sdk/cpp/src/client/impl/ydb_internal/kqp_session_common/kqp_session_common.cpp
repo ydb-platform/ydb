@@ -1,10 +1,10 @@
 #include "kqp_session_common.h"
 
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <util/string/cast.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 using std::string;
 

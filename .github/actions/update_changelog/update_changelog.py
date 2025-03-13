@@ -15,6 +15,8 @@ VERSION_PREFIX = "## "
 CATEGORY_PREFIX = "### "
 ITEM_PREFIX = "* "
 
+GH_TOKEN = os.getenv("GH_TOKEN")
+
 @functools.cache
 def get_github_api_url():
    return os.getenv('GITHUB_REPOSITORY')
@@ -121,7 +123,8 @@ def update_changelog(changelog_path, pr_data):
         if validate_pr_description(pr["body"], is_not_for_cl_valid=False):
             category = extract_changelog_category(pr["body"])
             category = match_pr_to_changelog_category(category)
-            body = extract_changelog_body(pr["body"])
+            dirty_body = extract_changelog_body(pr["body"])
+            body = dirty_body.replace("\r", "")
             if category and body:
                 body += f" [#{pr['number']}]({pr['url']})"
                 body += f" ([{pr['name']}]({pr['user_url']}))"
@@ -150,7 +153,7 @@ def fetch_pr_details(pr_id):
     url = f"https://api.github.com/repos/{get_github_api_url()}/pulls/{pr_id}"
     headers = {
         "Accept": "application/vnd.github.v3+json",
-        "Authorization": f"token {GITHUB_TOKEN}"
+        "Authorization": f"token {GH_TOKEN}"
     }
     response = requests.get(url, headers=headers)
     response.raise_for_status()
@@ -160,7 +163,7 @@ def fetch_user_details(username):
     url = f"https://api.github.com/users/{username}"
     headers = {
         "Accept": "application/vnd.github.v3+json",
-        "Authorization": f"token {GITHUB_TOKEN}"
+        "Authorization": f"token {GH_TOKEN}"
     }
     response = requests.get(url, headers=headers)
     response.raise_for_status()
@@ -175,8 +178,6 @@ if __name__ == "__main__":
     changelog_path = sys.argv[2]
     base_branch = sys.argv[3]
     suffix = sys.argv[4]
-
-    GITHUB_TOKEN = os.getenv("UPDATE_REPO_TOKEN")
    
     try:
         with open(pr_data_file, 'r') as file:
@@ -190,12 +191,13 @@ if __name__ == "__main__":
         try:
             pr_details = fetch_pr_details(pr["id"])
             user_details = fetch_user_details(pr_details["user"]["login"])
+            name = user_details.get("name", None)
             if validate_pr_description(pr_details["body"], is_not_for_cl_valid=False):
                 pr_data.append({
                     "number": pr_details["number"],
                     "body": pr_details["body"].strip(),
                     "url": pr_details["html_url"],
-                    "name": user_details.get("name", pr_details["user"]["login"]),  # Use login if name is not available
+                    "name": name or pr_details["user"]["login"],  # Use login if name is not available
                     "user_url": pr_details["user"]["html_url"]
                 })
         except Exception as e:
@@ -204,7 +206,7 @@ if __name__ == "__main__":
 
     update_changelog(changelog_path, pr_data)
 
-    base_branch_name = f"changelog-for-{base_branch}-{suffix}"
+    base_branch_name = f"changelog/{base_branch}-{suffix}"
     branch_name = base_branch_name
     index = 1
     while branch_exists(branch_name):

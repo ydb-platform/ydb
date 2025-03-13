@@ -98,14 +98,13 @@ namespace TEvColumnShard {
     struct TEvInternalScan: public TEventLocal<TEvInternalScan, EvInternalScan> {
     private:
         YDB_READONLY(ui64, PathId, 0);
+        YDB_READONLY(NOlap::TSnapshot, Snapshot, NOlap::TSnapshot::Zero());
         YDB_READONLY_DEF(std::optional<ui64>, LockId);
         YDB_ACCESSOR(bool, Reverse, false);
         YDB_ACCESSOR(ui32, ItemsLimit, 0);
         YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
         std::set<ui32> ColumnIdsSet;
     public:
-        std::optional<NOlap::TSnapshot> ReadFromSnapshot;
-        std::optional<NOlap::TSnapshot> ReadToSnapshot;
         TString TaskIdentifier;
         std::shared_ptr<NOlap::TPKRangesFilter> RangesFilter;
     public:
@@ -114,11 +113,12 @@ namespace TEvColumnShard {
             ColumnIds.emplace_back(id);
         }
 
-        TEvInternalScan(const ui64 pathId, const std::optional<ui64> lockId)
+        TEvInternalScan(const ui64 pathId, const NOlap::TSnapshot& snapshot, const std::optional<ui64> lockId)
             : PathId(pathId)
+            , Snapshot(snapshot)
             , LockId(lockId)
         {
-
+            AFL_VERIFY(Snapshot.Valid());
         }
     };
 
@@ -140,16 +140,19 @@ namespace TEvColumnShard {
         }
 
         TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, ui64 ssId, const TActorId& source,
-                ui64 txId, TString txBody, const ui32 flags = 0)
+                ui64 txId, TString txBody, const ui32 flags, ui64 subDomainPathId)
             : TEvProposeTransaction(txKind, source, txId, std::move(txBody), flags)
         {
 //            Y_ABORT_UNLESS(txKind == NKikimrTxColumnShard::TX_KIND_SCHEMA);
             Record.SetSchemeShardId(ssId);
+            if (subDomainPathId != 0) {
+                Record.SetSubDomainPathId(subDomainPathId);
+            }
         }
 
         TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, ui64 ssId, const TActorId& source,
-            ui64 txId, TString txBody, const TMessageSeqNo& seqNo, const NKikimrSubDomains::TProcessingParams& processingParams, const ui32 flags = 0)
-            : TEvProposeTransaction(txKind, ssId, source, txId, std::move(txBody), flags)
+            ui64 txId, TString txBody, const TMessageSeqNo& seqNo, const NKikimrSubDomains::TProcessingParams& processingParams, const ui32 flags, ui64 subDomainPathId)
+            : TEvProposeTransaction(txKind, ssId, source, txId, std::move(txBody), flags, subDomainPathId)
         {
             Record.MutableProcessingParams()->CopyFrom(processingParams);
             *Record.MutableSeqNo() = seqNo.SerializeToProto();

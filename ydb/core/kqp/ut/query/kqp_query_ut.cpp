@@ -1,10 +1,11 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -1934,7 +1935,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 SELECT * FROM `/Root/RowSrc`;
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Unexpected token", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "no viable alternative at input 'CREATE IF'", result.GetIssues().ToString());
         }
 
         {
@@ -1947,7 +1948,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 SELECT * FROM `/Root/RowSrc`;
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Unexpected token", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "extraneous input", result.GetIssues().ToString());
         }
 
         {
@@ -2140,6 +2141,51 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYson(R"([[3u]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ReadOverloaded, StreamLookup) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto setting = NKikimrKqp::TKqpSetting();
+        TKikimrSettings settings;
+        settings.SetAppConfig(appConfig);
+        settings.SetUseRealThreads(false);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto writeSession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        
+        kikimr.RunCall([&]{ CreateSampleTablesWithIndex(session, false /* no need in table data */); return true; });
+
+        {
+            const TString query(StreamLookup
+                ? Q1_(R"(
+                        SELECT Value FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk = 1
+                    )")
+                : Q1_(R"(
+                        SELECT COUNT(a.Key) FROM `/Root/SecondaryKeys` as a;
+                    )"));
+
+            auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                if (ev->GetTypeRewrite() == TEvDataShard::TEvReadResult::EventType) {
+                    auto* msg = ev->Get<TEvDataShard::TEvReadResult>();
+                    msg->Record.MutableStatus()->SetCode(::Ydb::StatusIds::OVERLOADED);
+                }
+
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            runtime.SetObserverFunc(grab);
+            auto future = kikimr.RunInThreadPool([&]{
+                auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+                return session.ExecuteDataQuery(query, txc).ExtractValueSync();
+            });
+
+            auto result = runtime.WaitFuture(future);
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetStatus() == NYdb::EStatus::OVERLOADED);
         }
     }
 }

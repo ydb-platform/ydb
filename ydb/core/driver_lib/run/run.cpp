@@ -243,6 +243,11 @@ public:
             TVector<TString> registerDynamicNodeAllowedSIDs(allowedSids.cbegin(), allowedSids.cend());
             appData->RegisterDynamicNodeAllowedSIDs = std::move(registerDynamicNodeAllowedSIDs);
         }
+        if (securityConfig.BootstrapAllowedSIDsSize() > 0) {
+            const auto& allowedSids = securityConfig.GetBootstrapAllowedSIDs();
+            TVector<TString> bootstrapAllowedSIDs(allowedSids.cbegin(), allowedSids.cend());
+            appData->BootstrapAllowedSIDs = std::move(bootstrapAllowedSIDs);
+        }
 
         appData->InitFeatureFlags(Config.GetFeatureFlags());
         appData->AllowHugeKeyValueDeletes = Config.GetFeatureFlags().GetAllowHugeKeyValueDeletes();
@@ -250,6 +255,7 @@ public:
 
         appData->CompactionConfig = Config.GetCompactionConfig();
         appData->BackgroundCleaningConfig = Config.GetBackgroundCleaningConfig();
+        appData->DataErasureConfig = Config.GetDataErasureConfig();
     }
 };
 
@@ -1085,6 +1091,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->PersQueueGetReadSessionsInfoWorkerFactory = ModuleFactories ? ModuleFactories->PQReadSessionsInfoWorkerFactory.get() : nullptr;
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
     AppData->SchemeOperationFactory = ModuleFactories ? ModuleFactories->SchemeOperationFactory.get() : nullptr;
+    AppData->ConfigSwissKnife = ModuleFactories ? ModuleFactories->ConfigSwissKnife.get() : nullptr;
 
     AppData->SqsAuthFactory = ModuleFactories
         ? ModuleFactories->SqsAuthFactory.get()
@@ -1196,6 +1203,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasReplicationConfig()) {
         AppData->ReplicationConfig = runConfig.AppConfig.GetReplicationConfig();
+    }
+
+    if (runConfig.AppConfig.HasHealthCheckConfig()) {
+        AppData->HealthCheckConfig = runConfig.AppConfig.GetHealthCheckConfig();
     }
 
     // setup resource profiles
@@ -1738,11 +1749,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TGraphServiceInitializer(runConfig));
     }
 
-#ifndef KIKIMR_DISABLE_S3_OPS
     if (serviceMask.EnableAwsService) {
         sil->AddServiceInitializer(new TAwsApiInitializer(*this));
     }
-#endif
 
     return sil;
 }

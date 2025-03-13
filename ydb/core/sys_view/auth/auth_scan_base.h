@@ -84,7 +84,21 @@ protected:
     void ProceedToScan() override {
         TBase::Become(&TAuthScanBase::StateScan);
 
-        if (RequireUserAdministratorAccess && !IsAdministrator(AppData(), UserToken.Get())) {
+        //NOTE: here is the earliest point when Base::DatabaseOwner is already set
+        bool isClusterAdmin = IsAdministrator(AppData(), UserToken.Get());
+        bool isDatabaseAdmin = (AppData()->FeatureFlags.GetEnableDatabaseAdmin() && IsDatabaseAdministrator(UserToken.Get(), TBase::DatabaseOwner));
+        bool isAdmin = isClusterAdmin || isDatabaseAdmin;
+
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
+            "ProceedToScan,"
+            << " tenant name: " << TBase::TenantName
+            << " tenant owner: " << TBase::DatabaseOwner
+            << " subject sid: " << (UserToken ? UserToken->GetUserSID() : "empty")
+            << " require admin access: " << RequireUserAdministratorAccess
+            << " is admin: " << isAdmin
+        );
+
+        if (RequireUserAdministratorAccess && !isAdmin) {
             TBase::ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "Administrator access is required");
             return;
         }
@@ -128,7 +142,7 @@ protected:
                     last.Entry.Path.pop_back();
                     continue;
                 }
-                
+
                 NavigatePath(last.Entry.Path);
                 last.Entry.Path.pop_back();
                 return;
@@ -145,21 +159,21 @@ protected:
 
         Y_ABORT_UNLESS(request->ResultSet.size() == 1);
         auto& entry = request->ResultSet.back();
-        
+
         if (entry.Status != TNavigate::EStatus::Ok) {
-            TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << 
+            TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() <<
                 "Failed to navigate " << CanonizePath(entry.Path) << ": " << entry.Status);
             return;
         }
 
         LOG_TRACE_S(ctx, NKikimrServices::SYSTEM_VIEWS,
             "Got navigate: " << request->ToString(*AppData()->TypeRegistry));
-        
+
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
 
         FillBatch(*batch, entry);
 
-        if (!RequireUserAdministratorAccess 
+        if (!RequireUserAdministratorAccess
                 && UserToken && !UserToken->GetSerializedToken().empty()
                 && entry.SecurityObject && !entry.SecurityObject->CheckAccess(NACLib::DescribeSchema, *UserToken)) {
             batch->Rows.clear();
@@ -196,7 +210,7 @@ protected:
 
         TBase::Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
     }
-    
+
     // this method only skip foolproof useless paths
     // ignores from/to inclusive flags for simplicity
     // ignores some boundary cases for simplicity

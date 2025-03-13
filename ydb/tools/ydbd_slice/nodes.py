@@ -36,11 +36,13 @@ class Nodes(object):
 
         return command
 
-    def _check_async_execution(self, running_jobs, check_retcode=True, results=None):
+    def _check_async_execution(self, running_jobs, check_retcode=True, results=None, retry_attemps=0):
         if self._dry_run:
             return
 
         assert results is None or isinstance(results, dict)
+
+        new_jobs = []
 
         for cmd, process, host in running_jobs:
             out, err = process.communicate()
@@ -73,13 +75,19 @@ class Nodes(object):
                     )
                 )
                 if check_retcode:
-                    sys.exit(status_line)
+                    if retry_attemps > 0:
+                        new_jobs.append((cmd, subprocess.Popen(cmd), host))
+                    else:
+                        sys.exit(status_line)
             if results is not None:
                 results[host] = {
                     'retcode': retcode,
                     'stdout': out,
                     'stderr': err
                 }
+
+            if len(new_jobs) > 0:
+                self._check_async_execution(new_jobs, check_retcode, results, retry_attemps - 1)
 
     def execute_async_ret(self, cmd, check_retcode=True, nodes=None, results=None):
         running_jobs = []
@@ -157,12 +165,28 @@ class Nodes(object):
             process = subprocess.Popen(cmd)
             running_jobs.append((cmd, process, dst))
 
-        self._check_async_execution(running_jobs)
+        self._check_async_execution(running_jobs, retry_attemps=2)
 
-    # copy local_path to remote_path for every node in nodes
     def copy(self, local_path, remote_path, directory=False, compressed_path=None):
-        if directory:
+        """
+        Copies a file or directory from a local path to a remote path, with optional compression.
+        Args:
+            local_path (str): The local path of the file or directory to copy.
+            remote_path (str): The remote path where the file or directory will be copied.
+            directory (bool, optional): If True, treats the remote path as a directory. Defaults to False.
+            compressed_path (str, optional): If provided, compresses the local file or directory to this path before copying. Defaults to None.
+        Raises:
+            subprocess.CalledProcessError: If the compression command fails.
+        Notes:
+            - If `compressed_path` is provided, the method will compress the local file or directory using `zstd` before copying.
+            - The method ensures that the remote directory exists before copying.
+            - The method copies the file or directory to a hub node first, then distributes it to other nodes.
+            - If `compressed_path` is provided, the method will decompress the file on the remote side if necessary.
+        """
+
+        if os.path.isdir(local_path):
             local_path += '/'
+        if directory:
             remote_path += '/'
         if compressed_path is not None:
             self._logger.info('compressing %s to %s' % (local_path, compressed_path))

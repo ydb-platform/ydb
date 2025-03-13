@@ -6,9 +6,6 @@
 #include <ydb/core/tx/columnshard/engines/changes/compaction/abstract/merger.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/library/formats/arrow/accessor/common/const.h>
-
 namespace NKikimr::NOlap::NCompaction::NSubColumns {
 
 class TRemapColumns {
@@ -66,7 +63,8 @@ private:
 public:
     TRemapColumns() = default;
 
-    TOthersData::TFinishContext BuildRemapInfo(const std::vector<TDictStats::TRTStatsValue>& statsByKeyIndex, const TSettings& settings, const ui32 recordsCount) const;
+    TOthersData::TFinishContext BuildRemapInfo(
+        const std::vector<TDictStats::TRTStatsValue>& statsByKeyIndex, const TSettings& settings, const ui32 recordsCount) const;
 
     void RegisterColumnStats(const TDictStats& resultColumnStats) {
         ResultColumnStats = &resultColumnStats;

@@ -1,9 +1,9 @@
 #include "accessor.h"
 #include "constructor.h"
 
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
@@ -18,11 +18,13 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     auto result = externalInfo.GetDefaultSerializer()->Deserialize(originalData, schema);
     if (!result.ok()) {
         return TConclusionStatus::Fail(result.status().ToString());
-    } else {
-        auto rb = TStatusValidator::GetValid(result);
-        AFL_VERIFY(rb->num_columns() == 1)("count", rb->num_columns())("schema", schema->ToString());
-        return std::make_shared<NArrow::NAccessor::TTrivialArray>(rb->column(0));
     }
+    auto rb = TStatusValidator::GetValid(result);
+    AFL_VERIFY(rb->num_columns() == 1)("count", rb->num_columns())("schema", schema->ToString());
+    if (externalInfo.HasNullRecordsCount()) {
+        rb->column(0)->data()->SetNullCount(externalInfo.GetNullRecordsCountVerified());
+    }
+    return std::make_shared<NArrow::NAccessor::TTrivialArray>(rb->column(0));
 }
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstructDefault(const TChunkConstructionData& externalInfo) const {

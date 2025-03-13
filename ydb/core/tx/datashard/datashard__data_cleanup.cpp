@@ -55,6 +55,8 @@ public:
                 "DataCleanup of tablet# " << Self->TabletID()
                 << ": expired snapshots removed");
         }
+        Self->OutReadSets.Cleanup(db, ctx);
+
         Self->Executor()->CleanupData(Ev->Get()->Record.GetDataCleanupGeneration());
         Self->DataCleanupWaiters.insert({Ev->Get()->Record.GetDataCleanupGeneration(), Ev->Sender});
         return true;
@@ -97,7 +99,7 @@ public:
             waiterIt = Self->DataCleanupWaiters.erase(waiterIt);
         }
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Updated last DataCleanupof tablet# "<< Self->TabletID()
+            "Updated last DataCleanup of tablet# "<< Self->TabletID()
             << ", last persisted DataCleanup generation: " << DataCleanupGeneration);
     }
 };

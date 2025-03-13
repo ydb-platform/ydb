@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
@@ -432,7 +433,15 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     auto it = Indexes.find(indexId);
     AFL_VERIFY(it != Indexes.end());
     auto& index = it->second;
-    std::shared_ptr<IPortionDataChunk> chunk = index->BuildIndex(originalData, recordsCount, *this);
+    TMemoryProfileGuard mpg("IndexConstruction::" + index->GetIndexName());
+    auto indexChunkConclusion = index->BuildIndexOptional(originalData, recordsCount, *this);
+    if (indexChunkConclusion.IsFail()) {
+        return indexChunkConclusion;
+    }
+    if (!*indexChunkConclusion) {
+        return TConclusionStatus::Success();
+    }
+    auto chunk = indexChunkConclusion.DetachResult();
     auto opStorage = operators->GetOperatorVerified(index->GetStorageId());
     if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
         return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ":" + ::ToString(chunk->GetPackedSize()) + ":" +
@@ -654,6 +663,21 @@ ui32 TIndexInfo::GetColumnIndexVerified(const ui32 id) const {
     auto result = GetColumnIndexOptional(id);
     AFL_VERIFY(result)("id", id)("indexes", JoinSeq(",", SchemaColumnIdsWithSpecials));
     return *result;
+}
+
+std::vector<std::shared_ptr<NIndexes::TSkipIndex>> TIndexInfo::FindSkipIndexes(
+    const NIndexes::NRequest::TOriginalDataAddress& originalDataAddress, const NArrow::NSSA::EIndexCheckOperation op) const {
+    std::vector<std::shared_ptr<NIndexes::TSkipIndex>> result;
+    for (auto&& [_, i] : Indexes) {
+        if (!i->IsSkipIndex()) {
+            continue;
+        }
+        auto skipIndex = std::static_pointer_cast<NIndexes::TSkipIndex>(i.GetObjectPtrVerified());
+        if (skipIndex->IsAppropriateFor(originalDataAddress, op)) {
+            result.emplace_back(skipIndex);
+        }
+    }
+    return result;
 }
 
 }   // namespace NKikimr::NOlap

@@ -20,11 +20,11 @@ namespace NTable {
 
         }
 
-        void Pause() noexcept {
+        void Pause() {
             OnPause = true;
         }
 
-        void Resume(EScan op) noexcept
+        void Resume(EScan op)
         {
             Y_DEBUG_ABORT_UNLESS(op == EScan::Feed || op == EScan::Reset);
 
@@ -35,7 +35,7 @@ namespace NTable {
             }
         }
 
-        EReady Process() noexcept
+        EReady Process()
         {
             if (OnPause) {
                 return EReady::Page;
@@ -230,17 +230,17 @@ namespace NTable {
         }
 
     protected:
-        IScan* DetachScan() noexcept
+        IScan* DetachScan()
         {
             return std::exchange(const_cast<IScan*&>(Scan), nullptr);
         }
 
-        bool IsPaused() const noexcept
+        bool IsPaused() const
         {
             return OnPause;
         }
 
-        EReady ImplicitPageFault() noexcept
+        EReady ImplicitPageFault()
         {
             if (Iter) {
                 // Implicit page fault during iteration
@@ -254,11 +254,11 @@ namespace NTable {
         }
 
     private:
-        virtual IPages* MakeEnv() noexcept = 0;
+        virtual IPages* MakeEnv() = 0;
 
-        virtual TPartView LoadPart(const TIntrusiveConstPtr<TColdPart>& part) noexcept = 0;
+        virtual TPartView LoadPart(const TIntrusiveConstPtr<TColdPart>& part) = 0;
 
-        EReady NotifyPageFault() noexcept
+        EReady NotifyPageFault()
         {
             EScan op = Scan->PageFault();
 
@@ -280,7 +280,7 @@ namespace NTable {
             Y_ABORT("Unexpected EScan result from IScan::PageFault(...)");
         }
 
-        EReady NotifyExhausted() noexcept
+        EReady NotifyExhausted()
         {
             Iter = nullptr;
 
@@ -305,7 +305,7 @@ namespace NTable {
             Y_ABORT("Unexpected EScan result from IScan::Exhausted(...)");
         }
 
-        bool Reset() noexcept
+        bool Reset()
         {
             Seeks++;
 
@@ -342,7 +342,7 @@ namespace NTable {
             return true;
         }
 
-        bool LoadColdParts() noexcept
+        bool LoadColdParts()
         {
             LoadedParts.clear();
             LoadingParts = 0;
@@ -360,7 +360,7 @@ namespace NTable {
             return LoadingParts == 0;
         }
 
-        void PrepareBoots() noexcept
+        void PrepareBoots()
         {
             auto keyDefaults = Subset.Scheme->Keys;
 
@@ -398,7 +398,7 @@ namespace NTable {
             }
         }
 
-        bool SeekBoots() noexcept
+        bool SeekBoots()
         {
             if (Boots) {
                 auto saved = Boots.begin();
@@ -440,7 +440,7 @@ namespace NTable {
         /**
          * @return true on page fault
          */
-        bool Seek() noexcept
+        bool Seek()
         {
             switch (SeekState) {
                 case ESeekState::LoadColdParts:

@@ -1182,7 +1182,7 @@ public:
     }
 
 private:
-    void Describe(IOutputStream& out) const noexcept final {
+    void Describe(IOutputStream& out) const final {
         out << "TDataShard::TReadScan{"
             << " TabletId# " << TabletId
             << " Reader# " << Ev->Sender
@@ -1190,7 +1190,7 @@ private:
             << " }";
     }
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept final {
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) final {
         Y_ABORT_UNLESS(driver);
         Y_ABORT_UNLESS(scheme);
 
@@ -1202,7 +1202,7 @@ private:
         return { EScan::Feed, {} };
     }
 
-    EScan Seek(TLead& lead, ui64 /* seq */) noexcept final {
+    EScan Seek(TLead& lead, ui64 /* seq */) final {
         if (RangeIndex >= Request->Ranges.size() || TotalRows >= TotalRowsLimit) {
             return EScan::Final;
         }
@@ -1237,7 +1237,7 @@ private:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
         if (!BlockBuilder) {
             TString error;
             BlockBuilder = CreateBlockBuilder(ColumnNamesTypes, Format, Max<ui64>(), Max<ui64>(), error);
@@ -1266,7 +1266,7 @@ private:
         return EScan::Feed;
     }
 
-    EScan Exhausted() noexcept final {
+    EScan Exhausted() final {
         ++RangeIndex;
         if (RangeIndex >= Request->Ranges.size()) {
             return EScan::Final;
@@ -1275,7 +1275,7 @@ private:
         return EScan::Reset;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
+    TAutoPtr<IDestructable> Finish(EAbort abort) final {
         if (!Aborted) {
             switch (abort) {
                 case EAbort::None:
@@ -2326,7 +2326,7 @@ private:
             sysLocks.BreakSetLocks();
         }
 
-        auto locks = sysLocks.ApplyLocks();
+        auto [locks, _] = sysLocks.ApplyLocks();
 
         for (auto& lock : locks) {
             NKikimrDataEvents::TLock* addLock;
@@ -2399,6 +2399,7 @@ public:
                         return true;
                     }
                     auto& state = *readIt->second;
+                    state.EnqueuedLocalTxId = 0;
                     ReplyError(
                         Ydb::StatusIds::INTERNAL_ERROR,
                         TStringBuilder() << "Failed to sync follower: " << errMessage
@@ -2417,6 +2418,7 @@ public:
                 const auto& record = request->Record;
 
                 Y_ABORT_UNLESS(state.State == TReadIteratorState::EState::Init);
+                state.EnqueuedLocalTxId = 0;
 
                 bool setUsingSnapshotFlag = false;
 
@@ -2958,7 +2960,7 @@ public:
                 state.Lock = nullptr;
             } else {
                 // Lock valid, apply conflict changes
-                auto locks = sysLocks.ApplyLocks();
+                auto [locks, _] = sysLocks.ApplyLocks();
                 Y_ABORT_UNLESS(locks.empty(), "ApplyLocks acquired unexpected locks");
             }
         }
@@ -3221,7 +3223,9 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
 
     SetCounter(COUNTER_READ_ITERATORS_COUNT, ReadIterators.size());
 
-    Executor()->Execute(new TTxReadViaPipeline(this, localReadId, request->ReadSpan.GetTraceId()), ctx);
+    // Note: we may have a read cancellation already in the mailbox, so we
+    // enqueue a low-priority transaction.
+    state.EnqueuedLocalTxId = Executor()->EnqueueLowPriority(new TTxReadViaPipeline(this, localReadId, request->ReadSpan.GetTraceId()));
 }
 
 void TDataShard::Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorContext& ctx) {
@@ -3453,6 +3457,9 @@ void TDataShard::DeleteReadIterator(TReadIteratorsMap::iterator it) {
     }
     if (state.IsExhausted()) {
         DecCounter(COUNTER_READ_ITERATORS_EXHAUSTED_COUNT);
+    }
+    if (state.EnqueuedLocalTxId) {
+        Executor()->CancelTransaction(state.EnqueuedLocalTxId);
     }
     ReadIteratorsByLocalReadId.erase(state.LocalReadId);
     ReadIterators.erase(it);

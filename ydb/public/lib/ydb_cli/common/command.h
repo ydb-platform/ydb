@@ -2,8 +2,8 @@
 
 #include "common.h"
 
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
-#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/colorizer/colors.h>
@@ -110,6 +110,18 @@ public:
         TString Database;
         TString CaCerts;
         TString CaCertsFile;
+        TString ClientCert;
+        TString ClientCertPrivateKey;
+        TString ClientCertPrivateKeyPassword;
+        TString ClientCertFile;
+        TString ClientCertPrivateKeyFile;
+        TString ClientCertPrivateKeyPasswordFile;
+
+        // Client cert initialization.
+        // Parses certificate from dirrefent formats.
+        // Can ask for password if private key is protected with password and it is not set in options.
+        void InitClientCert();
+
         TMap<TString, TVector<TConnectionParam>> ConnectionParams;
         bool EnableSsl = false;
         bool IsNetworkIntensive = false;

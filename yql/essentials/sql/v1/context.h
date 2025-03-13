@@ -18,10 +18,6 @@
 #include <util/generic/deque.h>
 #include <util/generic/vector.h>
 
-#define ANTLR3_TOKEN(NAME) SQLv1LexerTokens::TOKEN_##NAME << 16
-#define ANTLR4_TOKEN(NAME) (SQLv1Antlr4Lexer::TOKEN_##NAME << 16) + 1
-#define IS_TOKEN(ID, NAME) (UnifiedToken(ID) == ANTLR3_TOKEN(NAME) || UnifiedToken(ID) == ANTLR4_TOKEN(NAME))
-
 namespace NSQLTranslationV1 {
     inline bool IsAnonymousName(const TString& name) {
         return name == "$_";
@@ -92,12 +88,6 @@ namespace NSQLTranslationV1 {
 
     class TContext {
     public:
-        //FIXME remove
-        TContext(const NSQLTranslation::TTranslationSettings& settings,
-            const NSQLTranslation::TSQLHints& hints,
-            NYql::TIssues& issues,
-            const TString& query = {});
-
         TContext(const TLexers& lexers,
                 const TParsers& parsers,
                 const NSQLTranslation::TTranslationSettings& settings,
@@ -444,10 +434,6 @@ namespace NSQLTranslationV1 {
 
         const TString& Token(const NSQLv1Generated::TToken& token) {
             return Ctx.Token(token);
-        }
-
-        ui32 UnifiedToken(ui32 id) const {
-            return Ctx.Settings.Antlr4Parser + (id << 16);
         }
 
         TString Identifier(const NSQLv1Generated::TToken& token) {

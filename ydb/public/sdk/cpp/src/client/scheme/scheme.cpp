@@ -1,17 +1,17 @@
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/make_request/make.h>
-#include <src/client/impl/ydb_internal/scheme_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/scheme_helpers/helpers.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_scheme.pb.h>
-#include <src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
 #include <util/string/join.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NScheme {
 
 using namespace NThreading;

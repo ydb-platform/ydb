@@ -406,8 +406,6 @@ class YdbTenant(BaseTenant):
             KikimrConfigGenerator(
                 domain_name='local',
                 use_in_memory_pdisks=True,
-                disable_iterator_reads=True,
-                disable_iterator_lookups=True,
                 port_allocator=port_allocator,
                 dynamic_storage_pools=[
                     dict(name="dynamic_storage_pool:1",
@@ -484,6 +482,13 @@ class YqTenant(BaseTenant):
         # TBD: move to default.yaml after KIKIMR stable update
         fq_config['test_connection'] = {'enabled': True}
         fq_config['common']['keep_internal_errors'] = True
+
+        fq_config['common']['ydb_driver_config'] = {}
+        fq_config['common']['ydb_driver_config']['network_threads_num'] = 1
+        fq_config['common']['ydb_driver_config']['client_threads_num'] = 1
+
+        fq_config['common']['topic_client_handlers_executor_threads_num'] = 1
+        fq_config['common']['topic_client_compression_executor_threads_num'] = 1
 
         if self.mvp_mock_port is not None:
             fq_config['common']['ydb_mvp_cloud_endpoint'] = "localhost:" + str(self.mvp_mock_port)

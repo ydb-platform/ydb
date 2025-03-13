@@ -10,7 +10,7 @@ namespace NPageCollection {
     public:
         TAlign(TArrayRef<const ui64> steps) : Steps(steps) { }
 
-        TBorder Lookup(ui64 offset, const ui64 sz) const noexcept
+        TBorder Lookup(ui64 offset, const ui64 sz) const
         {
             auto it = UpperBound(Steps.begin(), Steps.end(), offset);
             Y_ABORT_UNLESS(it != Steps.end(), "Lookup span is out of borders");

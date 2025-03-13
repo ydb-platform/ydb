@@ -25,9 +25,10 @@ struct TControllerSchema: NIceDb::Schema {
         struct State: Column<5, NScheme::NTypeIds::Uint8> { using Type = TReplication::EState; };
         struct Issue: Column<6, NScheme::NTypeIds::Utf8> {};
         struct NextTargetId: Column<7, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 1; };
+        struct DesiredState: Column<8, NScheme::NTypeIds::Uint8> { using Type = TReplication::EState; };
 
         using TKey = TableKey<Id>;
-        using TColumns = TableColumns<Id, PathOwnerId, PathLocalId, Config, State, Issue, NextTargetId>;
+        using TColumns = TableColumns<Id, PathOwnerId, PathLocalId, Config, State, Issue, NextTargetId, DesiredState>;
     };
 
     struct Targets: Table<3> {
@@ -57,9 +58,10 @@ struct TControllerSchema: NIceDb::Schema {
         struct TargetId: Column<2, NScheme::NTypeIds::Uint64> {};
         struct Name: Column<3, NScheme::NTypeIds::Utf8> {};
         struct State: Column<4, NScheme::NTypeIds::Uint8> { using Type = TReplication::EStreamState; };
+        struct ConsumerName: Column<5, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<ReplicationId, TargetId>;
-        using TColumns = TableColumns<ReplicationId, TargetId, Name, State>;
+        using TColumns = TableColumns<ReplicationId, TargetId, Name, State, ConsumerName>;
     };
 
     struct TxIds: Table<5> {

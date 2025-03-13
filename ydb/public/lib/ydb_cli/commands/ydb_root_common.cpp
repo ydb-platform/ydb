@@ -18,9 +18,10 @@
 #include "ydb_workload.h"
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
-#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
-#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
-#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/jwt_token_source.h>
+#include <ydb/public/lib/ydb_cli/common/cert_format_converter.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/jwt_token_source.h>
 
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
@@ -352,18 +353,19 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     ParseDatabase(config);
     ParseAddress(config);
     ParseCaCerts(config);
+    ParseClientCert(config);
     ParseIamEndpoint(config);
 
     ParseCredentials(config);
 }
 
 namespace {
-    inline void PrintSettingFromProfile(const TString& setting, std::shared_ptr<IProfile> profile, bool explicitOption) {
+    inline void PrintSettingFromProfile(const TString& setting, const std::shared_ptr<IProfile>& profile, bool explicitOption) {
         Cerr << "Using " << setting << " due to configuration in" << (explicitOption ? "" : " active") << " profile \""
             << profile->GetName() << "\"" << (explicitOption ? " from explicit --profile option" : "") << Endl;
     }
 
-    inline TString GetProfileSource(std::shared_ptr<IProfile> profile, bool explicitOption) {
+    inline TString GetProfileSource(const std::shared_ptr<IProfile>& profile, bool explicitOption) {
         Y_ABORT_UNLESS(profile, "No profile to get source");
         if (explicitOption) {
             return TStringBuilder() << "profile \"" << profile->GetName() << "\" from explicit --profile option";
@@ -372,10 +374,38 @@ namespace {
     }
 }
 
-bool TClientCommandRootCommon::TryGetParamFromProfile(const TString& name, std::shared_ptr<IProfile> profile, bool explicitOption,
+bool TClientCommandRootCommon::TryGetParamFromProfile(const TString& name, const std::shared_ptr<IProfile>& profile, bool explicitOption,
                                                       std::function<bool(const TString&, const TString&, bool)> callback) {
     if (profile && profile->Has(name)) {
         return callback(profile->GetValue(name).as<TString>(), GetProfileSource(profile, explicitOption), explicitOption);
+    }
+    return false;
+}
+
+bool TClientCommandRootCommon::TryGetParamsPackFromProfile(const std::shared_ptr<IProfile>& profile, bool explicitOption,
+                                                           std::function<bool(const TString& /*source*/, bool /*explicit*/, const std::vector<TString>& /*values*/)> callback,
+                                                           const std::initializer_list<TString>& names) {
+    if (!profile) {
+        return false;
+    }
+    bool hasAtLeastOne = false;
+    for (const TString& name : names) {
+        if (profile->Has(name)) {
+            hasAtLeastOne = true;
+            break;
+        }
+    }
+    if (hasAtLeastOne) {
+        std::vector<TString> values;
+        values.reserve(names.size());
+        for (const TString& name : names) {
+            if (profile->Has(name)) {
+                values.emplace_back(profile->GetValue(name).as<TString>());
+            } else {
+                values.emplace_back();
+            }
+        }
+        return callback(GetProfileSource(profile, explicitOption), explicitOption, values);
     }
     return false;
 }
@@ -407,14 +437,72 @@ void TClientCommandRootCommon::ParseCaCerts(TConfig& config) {
     }
 }
 
+void TClientCommandRootCommon::ParseClientCert(TConfig& config) {
+    auto getClientCertFiles = [this, &config] (const TString& sourceText, bool explicitOption, const std::vector<TString>& values) {
+        Y_ABORT_UNLESS(values.size() == 3);
+        const TString& clientCertFileParam = values[0];
+        const TString& clientCertPrivateKeyFileParam = values[1];
+        const TString& clientCertPrivateKeyPasswordFileParam = values[2];
+        if (!IsClientCertFileSet && (explicitOption || !Profile)) {
+            config.ClientCertFile = clientCertFileParam;
+            config.ClientCertPrivateKeyFile = clientCertPrivateKeyFileParam;
+            config.ClientCertPrivateKeyPasswordFile = clientCertPrivateKeyPasswordFileParam;
+            IsClientCertFileSet = true;
+            GetClientCert(config);
+        }
+        if (!IsVerbose()) {
+            return true;
+        }
+        Cerr << "Using client certificate from file: " << clientCertFileParam << Endl;
+        config.ConnectionParams["client-cert-file"].push_back({clientCertFileParam, sourceText});
+        config.ConnectionParams["client-cert-key-file"].push_back({clientCertPrivateKeyFileParam, sourceText});
+        config.ConnectionParams["client-cert-key-password-file"].push_back({clientCertPrivateKeyPasswordFileParam, sourceText});
+        return false;
+    };
+    // Priority 1. Explicit --client-cert-file/--client-cert-key-file options
+    if (ClientCertFile) {
+        if (getClientCertFiles("explicit --client-cert-file/--client-cert-key-file/--client-cert-key-password-file options", true, { ClientCertFile, ClientCertPrivateKeyFile, ClientCertPrivateKeyPasswordFile })) {
+            return;
+        }
+    }
+    // Priority 2. Explicit --profile option
+    if (TryGetParamsPackFromProfile(Profile, true, getClientCertFiles, { "client-cert-file", "client-cert-key-file", "client-cert-key-password-file" })) {
+        return;
+    }
+    // Priority 3. Active profile (if --profile option is not specified)
+    if (TryGetParamsPackFromProfile(ProfileManager->GetActiveProfile(), false, getClientCertFiles, { "client-cert-file", "client-cert-key-file", "client-cert-key-password-file" })) {
+        return;
+    }
+}
+
 void TClientCommandRootCommon::GetCaCerts(TConfig& config) {
     if (!config.EnableSsl && !config.CaCertsFile.empty()) {
         throw TMisuseException()
-            << "\"ca-file\" option provided for a non-ssl connection. Use grpcs:// prefix for host to connect using SSL.";
+            << "\"ca-file\" option is provided for a non-ssl connection. Use grpcs:// prefix for host to connect using SSL.";
     }
     if (!config.CaCertsFile.empty()) {
         config.CaCerts = ReadFromFile(config.CaCertsFile, "CA certificates");
     }
+}
+
+void TClientCommandRootCommon::GetClientCert(TConfig& config) {
+    if (!config.EnableSsl && !config.ClientCertFile.empty()) {
+        throw TMisuseException()
+            << "\"client-cert-file\"/\"client-cert-key-file\"/\"client-cert-key-password-file\" options are provided for a non-ssl connection. Use grpcs:// prefix for host to connect using SSL.";
+    }
+    if (!config.ClientCertFile.empty()) {
+        config.ClientCert = ReadFromFile(config.ClientCertFile, "Client certificate");
+    }
+    if (!config.ClientCertPrivateKeyFile.empty()) {
+        config.ClientCertPrivateKey = ReadFromFile(config.ClientCertPrivateKeyFile, "Client certificate private key");
+    }
+    if (!config.ClientCertPrivateKeyPasswordFile.empty()) {
+        config.ClientCertPrivateKeyPassword = ReadFromFile(config.ClientCertPrivateKeyPasswordFile, "Client certificate private key password");
+    }
+
+    // Convert certificates from PKCS#12 to PEM or encrypted private key to nonencrypted
+    // May ask for password
+    std::tie(config.ClientCert, config.ClientCertPrivateKey) = ConvertCertToPEM(config.ClientCert, config.ClientCertPrivateKey, config.ClientCertPrivateKeyPassword);
 }
 
 void TClientCommandRootCommon::ParseAddress(TConfig& config) {

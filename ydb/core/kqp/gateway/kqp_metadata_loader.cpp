@@ -225,6 +225,12 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         tableMeta->ColumnOrder.push_back(column);
     }
 
+    if (entry.ColumnTableInfo) {
+        for (const auto& column: entry.ColumnTableInfo->Description.GetSharding().GetHashSharding().GetColumns()) {
+            tableMeta->PartitionedByColumns.push_back(column);
+        }
+    }
+
     IndexProtoToMetadata(entry.Indexes, tableMeta);
 
     return result;
@@ -863,7 +869,14 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
                             NExternalSource::IExternalSource::TPtr externalSource;
                             if (settings.ExternalSourceFactory) {
-                                externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalSource.Type);
+                                try {
+                                    externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalSource.Type);
+                                } catch (const std::exception& exception) {
+                                    TTableMetadataResult wrapper;
+                                    wrapper.SetException(yexception() << "couldn't get external source with type " << externalDataSourceMetadata.Metadata->ExternalSource.Type << ", " <<  exception.what());
+                                    promise.SetValue(wrapper);
+                                    return;
+                                }
                             }
 
                             if (externalSource && externalSource->CanLoadDynamicMetadata()) {

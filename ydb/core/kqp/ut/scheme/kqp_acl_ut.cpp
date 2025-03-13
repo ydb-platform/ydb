@@ -1,7 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -217,8 +217,10 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
                 primary key (id)
             ) WITH (STORE=%s);
         )", isOlap ? "COLUMN" : "ROW");
-    
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        auto settings = NKqp::TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(appConfig);
 
         {
             auto driverConfig = TDriverConfig()

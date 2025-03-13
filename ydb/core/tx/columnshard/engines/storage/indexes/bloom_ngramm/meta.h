@@ -2,13 +2,14 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
-class TIndexMeta: public TIndexByColumns {
+class TIndexMeta: public TSkipIndex {
 public:
     static TString GetClassNameStatic() {
         return "BLOOM_NGRAMM_FILTER";
     }
+
 private:
-    using TBase = TIndexByColumns;
+    using TBase = TSkipIndex;
     std::shared_ptr<arrow::Schema> ResultSchema;
     ui32 NGrammSize = 3;
     ui32 FilterSizeBytes = 512;
@@ -17,12 +18,27 @@ private:
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
     void Initialize() {
         AFL_VERIFY(!ResultSchema);
-        std::vector<std::shared_ptr<arrow::Field>> fields = {std::make_shared<arrow::Field>("", arrow::boolean())};
+        std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("", arrow::boolean()) };
         ResultSchema = std::make_shared<arrow::Schema>(fields);
         AFL_VERIFY(TConstants::CheckHashesCount(HashesCount));
         AFL_VERIFY(TConstants::CheckFilterSizeBytes(FilterSizeBytes));
         AFL_VERIFY(TConstants::CheckNGrammSize(NGrammSize));
         AFL_VERIFY(TConstants::CheckRecordsCount(RecordsCount));
+    }
+
+    virtual bool DoIsAppropriateFor(const TString& subColumnName, const EOperation op) const override {
+        if (!!subColumnName) {
+            return false;
+        }
+        switch (op) {
+            case EOperation::Equals:
+            case EOperation::StartsWith:
+            case EOperation::EndsWith:
+            case EOperation::Contains:
+                return true;
+        }
+
+        return false;
     }
 
 protected:
@@ -40,8 +56,6 @@ protected:
         }
         return TBase::CheckSameColumnsForModification(newMeta);
     }
-    virtual void DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const override;
-
     virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override {
@@ -53,6 +67,9 @@ protected:
             if (!TConstants::CheckRecordsCount(RecordsCount)) {
                 return false;
             }
+        }
+        if (!MutableDataExtractor().DeserializeFromProto(bFilter.GetDataExtractor())) {
+            return false;
         }
         HashesCount = bFilter.GetHashesCount();
         if (!TConstants::CheckHashesCount(HashesCount)) {
@@ -69,7 +86,7 @@ protected:
         if (!bFilter.HasColumnId() || !bFilter.GetColumnId()) {
             return false;
         }
-        ColumnIds.emplace(bFilter.GetColumnId());
+        AddColumnId(bFilter.GetColumnId());
         Initialize();
         return true;
     }
@@ -79,24 +96,27 @@ protected:
         AFL_VERIFY(TConstants::CheckFilterSizeBytes(FilterSizeBytes));
         AFL_VERIFY(TConstants::CheckHashesCount(HashesCount));
         AFL_VERIFY(TConstants::CheckRecordsCount(RecordsCount));
-        AFL_VERIFY(ColumnIds.size() == 1);
         filterProto->SetRecordsCount(RecordsCount);
         filterProto->SetNGrammSize(NGrammSize);
         filterProto->SetFilterSizeBytes(FilterSizeBytes);
         filterProto->SetHashesCount(HashesCount);
-        filterProto->SetColumnId(*ColumnIds.begin());
+        filterProto->SetColumnId(GetColumnId());
+        *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
     }
+
+    virtual bool DoCheckValue(
+        const TString& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const override;
 
 public:
     TIndexMeta() = default;
-    TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const ui32 columnId, const ui32 hashesCount,
-        const ui32 filterSizeBytes, const ui32 nGrammSize, const ui32 recordsCount)
-        : TBase(indexId, indexName, { columnId }, storageId)
+    TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const ui32 columnId,
+        const TReadDataExtractorContainer& dataExtractor, const ui32 hashesCount, const ui32 filterSizeBytes, const ui32 nGrammSize,
+        const ui32 recordsCount)
+        : TBase(indexId, indexName, columnId, storageId, dataExtractor)
         , NGrammSize(nGrammSize)
         , FilterSizeBytes(filterSizeBytes)
         , RecordsCount(recordsCount)
-        , HashesCount(hashesCount)
-    {
+        , HashesCount(hashesCount) {
         Initialize();
     }
 
@@ -105,4 +125,4 @@ public:
     }
 };
 
-}   // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NIndexes::NBloomNGramm

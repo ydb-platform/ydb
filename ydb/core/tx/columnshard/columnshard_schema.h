@@ -3,7 +3,6 @@
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
@@ -84,7 +83,9 @@ struct Schema : NIceDb::Schema {
         LastCompletedTxId = 14,
         LastNormalizerSequentialId = 15,
         GCBarrierPreparationGen = 16,
-        GCBarrierPreparationStep = 17
+        GCBarrierPreparationStep = 17,
+        SubDomainLocalPathId = 18,
+        SubDomainOutOfSpace = 19
     };
 
     enum class EInsertTableIds : ui8 {

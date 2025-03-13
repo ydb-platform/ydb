@@ -176,7 +176,10 @@ void TPathDescriber::FillChildDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElem
         descr->SetCreateStep(ui64(pathEl->StepCreated));
     }
 
-    descr->SetChildrenExist(pathEl->GetAliveChildren() > 0);
+    if (pathEl->PathType != NKikimrSchemeOp::EPathTypeSubDomain
+        && pathEl->PathType != NKikimrSchemeOp::EPathTypeExtSubDomain) {
+        descr->SetChildrenExist(pathEl->GetAliveChildren() > 0);
+    }
 
     if (pathEl->PathType == NKikimrSchemeOp::EPathTypePersQueueGroup) {
         auto it = Self->Topics.FindPtr(pathEl->PathId);
@@ -810,6 +813,15 @@ void TPathDescriber::DescribeSolomonVolume(TPathId pathId, TPathElement::TPtr pa
         }
     }
 
+    if (solomonVolumeInfo->Partitions.size() > 0) {
+        auto shardId = solomonVolumeInfo->Partitions.begin()->first;
+        auto shardInfo = Self->ShardInfos.FindPtr(shardId);
+        Y_ABORT_UNLESS(shardInfo);
+        for (const auto& channel : shardInfo->BindedChannels) {
+            entry->AddBoundChannels()->CopyFrom(channel);
+        }
+    }
+
     Sort(entry->MutablePartitions()->begin(),
          entry->MutablePartitions()->end(),
          [] (auto& part1, auto& part2) {
@@ -1297,6 +1309,29 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     NKikimrSchemeOp::TDescribeOptions options;
     options.SetShowPrivateTable(true);
     return DescribePath(self, ctx, pathId, options);
+}
+
+THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+    TSchemeShard* self,
+    const TActorContext& ctx,
+    const TString& path,
+    const NKikimrSchemeOp::TDescribeOptions& opts
+) {
+    NKikimrSchemeOp::TDescribePath params;
+    params.SetPath(path);
+    params.MutableOptions()->CopyFrom(opts);
+
+    return TPathDescriber(self, std::move(params)).Describe(ctx);
+}
+
+THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+    TSchemeShard* self,
+    const TActorContext& ctx,
+    const TString& path
+) {
+    NKikimrSchemeOp::TDescribeOptions options;
+    options.SetShowPrivateTable(true);
+    return DescribePath(self, ctx, path, options);
 }
 
 void TSchemeShard::DescribeTable(

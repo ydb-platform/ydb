@@ -2,18 +2,18 @@
 
 #include "fwd.h"
 
-#include <ydb-cpp-sdk/client/common_client/settings.h>
-#include <ydb-cpp-sdk/client/types/status_codes.h>
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
-#include <ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
-#include <ydb-cpp-sdk/client/types/request_settings.h>
-#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <library/cpp/logger/backend.h>
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class TGRpcConnectionsImpl;
 
@@ -47,7 +47,7 @@ public:
     //! default: 0
     TDriverConfig& SetMaxClientQueueSize(size_t sz);
     //! Enable Ssl.
-    //! caCerts  - The buffer containing the PEM encoding of the server root certificates.
+    //! caCerts  - The buffer containing the PEM encoded root certificates for SSL/TLS connections.
     //!            If this parameter is empty, the default roots will be used.
     TDriverConfig& UseSecureConnection(const std::string& caCerts = std::string());
     TDriverConfig& UseClientCertificate(const std::string& clientCert, const std::string& clientPrivateKey);

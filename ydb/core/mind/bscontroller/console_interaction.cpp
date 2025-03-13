@@ -71,15 +71,66 @@ namespace NKikimr::NBsController {
         if (!Working) {
             return;
         }
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC19, "Console proposed config response", (Response, ev->Get()->Record));
-        switch (auto& record = ev->Get()->Record; record.GetStatus()) {
+
+        auto& record = ev->Get()->Record;
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC19, "Console proposed config response", (Response, record));
+
+        auto overwriteConfig = [&] {
+            TString yamlReturnedByFetch = record.GetYAML();
+            if (!yamlReturnedByFetch) {
+                return; // no yaml config stored in Console
+            }
+            try {
+                NKikimrConfig::TAppConfig appConfig = NYaml::Parse(yamlReturnedByFetch);
+                NKikimrBlobStorage::TStorageConfig storageConfig;
+                TString temp;
+                if (!NKikimr::NStorage::DeriveStorageConfig(appConfig, &storageConfig, &temp)) {
+                    STLOG(PRI_ERROR, BS_CONTROLLER, BSC21, "failed to derive storage config from one stored in Console",
+                        (ErrorReason, temp), (AppConfig, appConfig));
+                } else if (auto errorReason = NKikimr::NStorage::ValidateConfig(storageConfig)) {
+                    STLOG(PRI_ERROR, BS_CONTROLLER, BSC23, "failed to validate StorageConfig",
+                        (ErrorReason, errorReason), (StorageConfig, storageConfig));
+                } else {
+                    // try to obtain original config, without version incremented
+                    TString yaml;
+                    ui64 version = record.GetConsoleConfigVersion() - 1; // Console config version is the next expected one
+                    if (auto m = NYamlConfig::GetMainMetadata(yamlReturnedByFetch); m.Version.value_or(0)) {
+                        version = m.Version.emplace(*m.Version - 1);
+                        yaml = NYamlConfig::ReplaceMetadata(yamlReturnedByFetch, m);
+                    }
+
+                    TYamlConfig yamlConfig(std::move(yaml), version, std::move(yamlReturnedByFetch));
+                    Self.Execute(Self.CreateTxCommitConfig(std::move(yamlConfig), std::nullopt,
+                        std::move(storageConfig), std::nullopt, nullptr));
+                    CommitInProgress = true;
+                }
+            } catch (const std::exception& ex) {
+                STLOG(PRI_ERROR, BS_CONTROLLER, BSC26, "failed to parse config obtained from Console",
+                    (ErrorReason, ex.what()), (Yaml, yamlReturnedByFetch));
+            }
+        };
+
+        switch (record.GetStatus()) {
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::HashMismatch:
                 STLOG(PRI_CRIT, BS_CONTROLLER, BSC25, "Config hash mismatch.");
                 Y_DEBUG_ABORT();
                 break;
 
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::UnexpectedConfig:
-                MakeGetBlock();
+                if (record.GetProposedConfigVersion() + 1 < record.GetConsoleConfigVersion()) {
+                    // console has a newer config, possibly updated during older version of server running
+                    if (Self.StorageYamlConfig) {
+                        STLOG(PRI_ERROR, BS_CONTROLLER, BSC30, "Console has newer config, but BSC has dedicated storage"
+                            " yaml config section, config not updated");
+                    } else if (record.HasYAML()) {
+                        overwriteConfig();
+                    } else {
+                        STLOG(PRI_ERROR, BS_CONTROLLER, BSC32, "Console has newer config, but no yaml was returned");
+                    }
+                } else {
+                    STLOG(PRI_CRIT, BS_CONTROLLER, BSC31, "Console has older config version than BSC");
+                    Y_DEBUG_ABORT();
+                }
                 break;
 
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNotNeeded:
@@ -102,33 +153,7 @@ namespace NKikimr::NBsController {
 
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::ReverseCommit:
                 if (!Self.YamlConfig && !Self.StorageYamlConfig) {
-                    const TString& yamlReturnedByFetch = record.GetYAML();
-                    const ui64 version = record.GetConsoleConfigVersion();
-                    if (!version) {
-                        // there is no config in Console
-                    } else {
-                        try {
-                            NKikimrConfig::TAppConfig appConfig = NYaml::Parse(yamlReturnedByFetch);
-                            NKikimrBlobStorage::TStorageConfig storageConfig;
-                            TString temp;
-                            if (!NKikimr::NStorage::DeriveStorageConfig(appConfig, &storageConfig, &temp)) {
-                                STLOG(PRI_ERROR, BS_CONTROLLER, BSC21, "failed to derive storage config from one stored in Console",
-                                    (ErrorReason, temp), (Version, version), (AppConfig, appConfig));
-                            } else if (auto errorReason = NKikimr::NStorage::ValidateConfig(storageConfig)) {
-                                STLOG(PRI_ERROR, BS_CONTROLLER, BSC23, "failed to validate StorageConfig",
-                                    (ErrorReason, errorReason), (StorageConfig, storageConfig));
-                            } else {
-                                // execute initial migration transaction: restore cluster.yaml part from Console
-                                TYamlConfig yamlConfig(TString(), record.GetConsoleConfigVersion(), yamlReturnedByFetch);
-                                Self.Execute(Self.CreateTxCommitConfig(std::move(yamlConfig), std::nullopt,
-                                    std::move(storageConfig)));
-                                CommitInProgress = true;
-                            }
-                        } catch (const std::exception& ex) {
-                            STLOG(PRI_ERROR, BS_CONTROLLER, BSC26, "failed to parse config obtained from Console",
-                                (ErrorReason, ex.what()), (Yaml, yamlReturnedByFetch));
-                        }
-                    }
+                    overwriteConfig();
                 } else {
                     STLOG(PRI_CRIT, BS_CONTROLLER, BSC29, "ReverseCommit status received when BSC has YamlConfig/StorageYamlConfig",
                         (YamlConfig, Self.YamlConfig), (StorageYamlConfig, Self.StorageYamlConfig), (Record,  record));
@@ -220,6 +245,11 @@ namespace NKikimr::NBsController {
         ClientId = ev->Sender;
         ++ExpectedValidationTimeoutCookie;
 
+        if (!Self.ConfigLock.empty() || Self.SelfManagementEnabled) {
+            return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::OngoingCommit,
+                "configuration is locked by distconf");
+        }
+
         PendingStorageYamlConfig.reset();
 
         if (Self.StorageYamlConfig.has_value()) { // separate configuration
@@ -277,14 +307,32 @@ namespace NKikimr::NBsController {
             PendingYamlConfig.reset();
         }
 
-        if (PendingYamlConfig && !NYamlConfig::IsMainConfig(*PendingYamlConfig)) {
-            return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
-                "cluster YAML config is not of MainConfig kind");
+        if (PendingYamlConfig) {
+            const ui64 expected = Self.YamlConfig
+                ? GetVersion(*Self.YamlConfig) + 1
+                : 0;
+
+            if (!NYamlConfig::IsMainConfig(*PendingYamlConfig)) {
+                return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
+                    "cluster YAML config is not of MainConfig kind");
+            } else if (const auto& meta = NYamlConfig::GetMainMetadata(*PendingYamlConfig); meta.Version != expected) {
+                return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
+                     TStringBuilder() << "cluster YAML config version mismatch got# " << meta.Version
+                         << " expected# " << expected);
+           }
         }
 
-        if (PendingStorageYamlConfig && *PendingStorageYamlConfig && !NYamlConfig::IsStorageConfig(**PendingStorageYamlConfig)) {
-            return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
-                "storage YAML config is not of StorageConfig kind");
+        if (PendingStorageYamlConfig && *PendingStorageYamlConfig) {
+            const ui64 expected = Self.ExpectedStorageYamlConfigVersion;
+
+            if (!NYamlConfig::IsStorageConfig(**PendingStorageYamlConfig)) {
+                return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
+                    "storage YAML config is not of StorageConfig kind");
+            } else if (const auto& meta = NYamlConfig::GetStorageMetadata(**PendingStorageYamlConfig); meta.Version != expected) {
+                return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
+                    TStringBuilder() << "storage YAML config version mismatch got# " << meta.Version
+                        << " expected# " << expected);
+            }
         }
 
         if (record.GetSkipConsoleValidation() || !record.HasClusterYaml()) {
@@ -312,7 +360,9 @@ namespace NKikimr::NBsController {
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvControllerFetchConfigRequest::TPtr &ev) {
         const auto& record = ev->Get()->Record;
         auto response = std::make_unique<TEvBlobStorage::TEvControllerFetchConfigResponse>();
-        if (Self.StorageYamlConfig) {
+        if (!Self.ConfigLock.empty() || Self.SelfManagementEnabled) {
+            response->Record.SetErrorReason("configuration is locked by distconf");
+        } else if (Self.StorageYamlConfig) {
             if (record.GetDedicatedStorageSection()) {
                 // TODO(alexvru): increment generation
                 response->Record.SetStorageYaml(*Self.StorageYamlConfig);
@@ -392,10 +442,11 @@ namespace NKikimr::NBsController {
             // parse storage app config, if provided
             std::optional<NKikimrConfig::TAppConfig> storageAppConfig;
             ui64 storageYamlConfigVersion = 0;
+            std::optional<ui64> expectedStorageYamlConfigVersion;
             if (PendingStorageYamlConfig && *PendingStorageYamlConfig) {
                 parseConfig(**PendingStorageYamlConfig, storageAppConfig.emplace(), storageYamlConfigVersion);
-                // TODO(alexvru): check version
                 effectiveConfig = &storageAppConfig.value(); // use this configuration for storage config update
+                expectedStorageYamlConfigVersion.emplace(storageYamlConfigVersion + 1); // update expected version
             }
 
             // parse cluster YAML config, if provided, and calculate its version
@@ -422,7 +473,7 @@ namespace NKikimr::NBsController {
             }
 
             Self.Execute(Self.CreateTxCommitConfig(std::move(yamlConfig), std::exchange(PendingStorageYamlConfig, {}),
-                std::move(storageConfig)));
+                std::move(storageConfig), expectedStorageYamlConfigVersion, nullptr));
             CommitInProgress = true;
             PendingYamlConfig.reset();
         } catch (const TExError& error) {

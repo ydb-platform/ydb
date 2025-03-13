@@ -1,8 +1,7 @@
 #pragma once
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
-
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/library/formats/arrow/accessor/composite/accessor.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -16,6 +15,7 @@ public:
         YDB_READONLY(ui32, RecordsCount, 0);
         std::shared_ptr<IChunkedArray> PredefinedArray;
         const TString Data;
+        const TStringBuf DataBuffer;
 
     public:
         TChunk(const std::shared_ptr<IChunkedArray>& predefinedArray)
@@ -29,18 +29,24 @@ public:
             , Data(data) {
         }
 
-        std::shared_ptr<IChunkedArray> GetArrayVerified(const std::shared_ptr<TColumnLoader>& loader) const {
-            if (PredefinedArray) {
-                return PredefinedArray;
-            }
-            return loader->ApplyVerified(Data, RecordsCount);
+        TChunk(const ui32 recordsCount, const TStringBuf dataBuffer)
+            : RecordsCount(recordsCount)
+            , DataBuffer(dataBuffer) {
         }
+
+        std::shared_ptr<IChunkedArray> GetArrayVerified(const std::shared_ptr<TColumnLoader>& loader) const;
     };
 
 private:
     std::shared_ptr<TColumnLoader> Loader;
     std::vector<TChunk> Chunks;
     const bool ForLazyInitialization = false;
+
+    virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const override {
+        for (auto&& i : Chunks) {
+            i.GetArrayVerified(Loader)->VisitValues(visitor);
+        }
+    }
 
 protected:
     virtual ui32 DoGetNullsCount() const override {
@@ -77,12 +83,12 @@ protected:
     }
 
 public:
-    TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, std::vector<TChunk>&& chunks, const bool forLazyInitialization = false)
+    TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, std::vector<TChunk>&& chunks,
+        const bool forLazyInitialization = false)
         : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())
         , Loader(loader)
         , Chunks(std::move(chunks))
-        , ForLazyInitialization(forLazyInitialization)
-    {
+        , ForLazyInitialization(forLazyInitialization) {
         AFL_VERIFY(Loader);
     }
 };

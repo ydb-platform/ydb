@@ -15,6 +15,8 @@
 
 namespace NYql {
 
+const char KeepWorldOptName[] = "KeepWorld";
+
 using namespace NNodes;
 
 namespace {
@@ -1543,35 +1545,45 @@ template TExprNode::TPtr OptimizeIfPresent<true, true>(const TExprNode::TPtr& no
 template TExprNode::TPtr OptimizeIfPresent<false, true>(const TExprNode::TPtr& node, TExprContext& ctx);
 template TExprNode::TPtr OptimizeIfPresent<false, false>(const TExprNode::TPtr& node, TExprContext& ctx);
 
-TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx)  {
+TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typeCtx) {
     if (HasError(node->Head().GetTypeAnn(), ctx)) {
         return TExprNode::TPtr();
     }
 
     if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Void) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        return MakeBool<false>(node->Pos(), ctx);
+        auto res = MakeBool<false>(node->Pos(), ctx);
+        res = KeepWorld(res, *node, ctx, typeCtx);
+        return res;
     }
 
     if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        return MakeBool<false>(node->Pos(), ctx);
+        auto res = MakeBool<false>(node->Pos(), ctx);
+        res = KeepWorld(res, *node, ctx, typeCtx);
+        return res;
     }
 
     if (node->Head().IsCallable({"Just", "PgConst"})) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        return MakeBool<true>(node->Pos(), ctx);
+        auto res = MakeBool<true>(node->Pos(), ctx);
+        res = KeepWorld(res, *node, ctx, typeCtx);
+        return res;
     }
 
     if (node->Head().IsCallable({"Nothing","EmptyFrom"})) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        return MakeBool<false>(node->Pos(), ctx);
+        auto res = MakeBool<false>(node->Pos(), ctx);
+        res = KeepWorld(res, *node, ctx, typeCtx);
+        return res;
     }
 
     if (node->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional &&
         node->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Pg) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over non-optional";
-        return MakeBool<true>(node->Pos(), ctx);
+        auto res = MakeBool<true>(node->Pos(), ctx);
+        res = KeepWorld(res, *node, ctx, typeCtx);
+        return res;
     }
 
     if (const auto& input = node->Head(); IsTransparentIfPresent(input)) {
@@ -2330,6 +2342,85 @@ bool CheckSupportedTypes(
         }
     }
     return true;
+}
+
+bool HasMissingWorlds(const TExprNode::TPtr& node, const TExprNode& src, const TTypeAnnotationContext& types) {
+    const bool optEnabled = IsOptimizerEnabled<KeepWorldOptName>(types) && !IsOptimizerDisabled<KeepWorldOptName>(types);
+    if (!optEnabled) {
+        return false;
+    }
+
+    const auto& worldLinks = src.GetWorldLinks();
+    if (!worldLinks) {
+        return false;
+    }
+
+    for (const auto& link : *worldLinks) {
+        if (!IsDepended(*node, *link)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+TExprNode::TPtr KeepWorld(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx, const TTypeAnnotationContext& types) {
+    const bool optEnabled = IsOptimizerEnabled<KeepWorldOptName>(types) && !IsOptimizerDisabled<KeepWorldOptName>(types);
+    if (!optEnabled) {
+        return node;
+    }
+
+    const auto& worldLinks = src.GetWorldLinks();
+    if (!worldLinks) {
+        return node;
+    }
+
+    TExprNode::TListType missingLinks;
+    for (const auto& link : *worldLinks) {
+        if (!IsDepended(*node, *link)) {
+            missingLinks.push_back(link);
+        }
+    }
+
+    if (missingLinks.empty()) {
+        return node;
+    }
+
+    for (auto& link : missingLinks) {
+        if (link->GetTypeAnn()->GetKind() != ETypeAnnotationKind::World) {
+            link = ctx.NewCallable(node->Pos(), LeftName, { link });
+        }
+    }
+
+    TExprNode::TPtr syncLink;
+    if (missingLinks.size() == 1) {
+        syncLink = missingLinks[0];
+    } else {
+        syncLink = ctx.NewCallable(node->Pos(), SyncName, std::move(missingLinks));
+    }
+
+    YQL_CLOG(DEBUG, Core) << "KeepWorld over " << node->Content();
+    if (src.GetTypeAnn()->ReturnsWorld()) {
+        if (src.GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
+            return ctx.NewCallable(src.Pos(), SyncName, { syncLink, node});
+        } else {
+            return ctx.Builder(src.Pos())
+                .Callable("WithWorld")
+                    .Callable(0, RightName)
+                        .Add(0, node)
+                    .Seal()
+                    .Callable(1, SyncName)
+                        .Add(0, syncLink)
+                        .Callable(1, LeftName)
+                            .Add(0, node)
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+    } else {
+        return ctx.NewCallable(src.Pos(), "WithWorld", { node, syncLink});
+    }
 }
 
 }

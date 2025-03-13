@@ -14,7 +14,7 @@ static constexpr ui32 PRIORITY_UPDATE_FACTOR = 20;
 
 }
 
-void TGenCompactionParams::Describe(IOutputStream& out) const noexcept {
+void TGenCompactionParams::Describe(IOutputStream& out) const {
     out << "TGenCompactionParams{" << Table << ": gen " << Generation;
 
     if (Edge.Head == TEpoch::Max()) {
@@ -31,7 +31,7 @@ struct TGenCompactionStrategy::TPartAggregator {
     THashMap<ui64, TStats> StatsPerTablet;
     ui64 PartEpochCount = 0;
 
-    TPartAggregator& Add(const TPartInfo& part) noexcept {
+    TPartAggregator& Add(const TPartInfo& part) {
         Y_ABORT_UNLESS(part.Epoch != TEpoch::Max(),
             "Unexpected part with an infinite epoch found");
         Stats += part.Stats;
@@ -44,7 +44,7 @@ struct TGenCompactionStrategy::TPartAggregator {
     }
 
     template<class Container>
-    TPartAggregator& Add(const Container& container) noexcept {
+    TPartAggregator& Add(const Container& container) {
         for (auto& part : container) {
             Add(part);
         }
@@ -89,7 +89,7 @@ struct TGenCompactionStrategy::TExtraState {
     }
 };
 
-TGenCompactionStrategy::TPartInfo& TGenCompactionStrategy::TGeneration::PushFront(TPartView partView) noexcept {
+TGenCompactionStrategy::TPartInfo& TGenCompactionStrategy::TGeneration::PushFront(TPartView partView) {
     Y_ABORT_UNLESS(TakenHeadParts == 0,
         "Attempting to prepend part to generation that has taken head parts");
 
@@ -104,7 +104,7 @@ TGenCompactionStrategy::TPartInfo& TGenCompactionStrategy::TGeneration::PushFron
     return front;
 }
 
-TGenCompactionStrategy::TPartInfo& TGenCompactionStrategy::TGeneration::PushBack(TPartView partView) noexcept {
+TGenCompactionStrategy::TPartInfo& TGenCompactionStrategy::TGeneration::PushBack(TPartView partView) {
     Y_ABORT_UNLESS(CompactingTailParts == 0,
         "Attempting to append part to generation that has compacting tail parts");
 
@@ -123,7 +123,7 @@ TGenCompactionStrategy::TPartInfo& TGenCompactionStrategy::TGeneration::PushBack
     return back;
 }
 
-void TGenCompactionStrategy::TGeneration::PopFront() noexcept {
+void TGenCompactionStrategy::TGeneration::PopFront() {
     Y_ABORT_UNLESS(Parts.size() > CompactingTailParts,
         "Attempting to remove part crossing compacting tail parts");
 
@@ -151,7 +151,7 @@ void TGenCompactionStrategy::TGeneration::PopFront() noexcept {
     }
 }
 
-void TGenCompactionStrategy::TGeneration::PopBack() noexcept {
+void TGenCompactionStrategy::TGeneration::PopBack() {
     Y_ABORT_UNLESS(Parts.size() > TakenHeadParts,
         "Attempting to remove part crossing taken head parts");
 

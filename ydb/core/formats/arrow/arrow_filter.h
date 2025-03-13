@@ -7,6 +7,10 @@
 
 #include <deque>
 
+namespace NKikimr::NArrow::NAccessor {
+class IChunkedArray;
+}
+
 namespace NKikimr::NArrow {
 
 class TGeneralContainer;
@@ -47,6 +51,7 @@ public:
         ui32 CurrentStartIndex = 0;
         bool CurrentIsFiltered = false;
         std::vector<ui32>::const_iterator CurrentIterator;
+
     public:
         TSlicesIterator(const TColumnFilter& owner, const std::optional<ui32> start, const std::optional<ui32> count);
 
@@ -79,8 +84,9 @@ public:
         }
 
         bool Next();
-
     };
+
+    TColumnFilter Cut(const ui32 filteredRecordsCount, const ui32 limit, const bool reverse) const;
 
     TSlicesIterator BuildSlicesIterator(const std::optional<ui32> startIndex, const std::optional<ui32> count) const {
         return TSlicesIterator(*this, startIndex, count);
@@ -115,6 +121,16 @@ public:
 
     ui64 GetDataSize() const {
         return Filter.capacity() * sizeof(ui32) + RecordsCount * sizeof(bool);
+    }
+
+    static TColumnFilter BuildConstFilter(const bool startValue, const std::initializer_list<ui32> list) {
+        TColumnFilter result = BuildAllowFilter();
+        bool value = startValue;
+        for (auto&& i : list) {
+            result.Add(value, i);
+            value = !value;
+        }
+        return result;
     }
 
     static ui64 GetPredictedMemorySize(const ui32 recordsCount) {
@@ -176,7 +192,13 @@ public:
         bool Next(const ui32 size);
     };
 
+    TString DebugString() const;
+
     TIterator GetIterator(const bool reverse, const ui32 expectedSize) const;
+
+    bool CheckSlice(const ui32 offset, const ui32 count) const;
+
+    TColumnFilter Slice(const ui32 offset, const ui32 count) const;
 
     bool empty() const {
         return Filter.empty();
@@ -267,10 +289,12 @@ public:
         TApplyContext& Slice(const ui32 start, const ui32 count);
     };
 
-    bool Apply(std::shared_ptr<TGeneralContainer>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
-    bool Apply(std::shared_ptr<arrow::Table>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
-    bool Apply(std::shared_ptr<arrow::RecordBatch>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
+    [[nodiscard]] bool Apply(std::shared_ptr<TGeneralContainer>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
+    [[nodiscard]] bool Apply(std::shared_ptr<arrow::Table>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
+    [[nodiscard]] bool Apply(std::shared_ptr<arrow::RecordBatch>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
     void Apply(const ui32 expectedRecordsCount, std::vector<arrow::Datum*>& datums) const;
+    [[nodiscard]] std::shared_ptr<NAccessor::IChunkedArray> Apply(
+        const std::shared_ptr<NAccessor::IChunkedArray>& source, const TApplyContext& context = Default<TApplyContext>()) const;
 
     // Combines filters by 'and' operator (extFilter count is true positions count in self, thought extFitler patch exactly that positions)
     TColumnFilter CombineSequentialAnd(const TColumnFilter& extFilter) const Y_WARN_UNUSED_RESULT;

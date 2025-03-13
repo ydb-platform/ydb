@@ -180,9 +180,7 @@ ITransactionPtr TClient::AttachTransaction(
     ToProto(req->mutable_transaction_id(), transactionId);
     // COMPAT(kiselyovp): remove auto_abort from the protocol
     req->set_auto_abort(false);
-    if (options.PingPeriod) {
-        req->set_ping_period(options.PingPeriod->GetValue());
-    }
+    YT_OPTIONAL_SET_PROTO(req, ping_period, options.PingPeriod);
     req->set_ping(options.Ping);
     req->set_ping_ancestors(options.PingAncestors);
 
@@ -366,12 +364,8 @@ TFuture<void> TClient::ReshardTable(
 
     req->set_path(path);
     req->set_tablet_count(tabletCount);
-    if (options.Uniform) {
-        req->set_uniform(*options.Uniform);
-    }
-    if (options.EnableSlicing) {
-        req->set_enable_slicing(*options.EnableSlicing);
-    }
+    YT_OPTIONAL_SET_PROTO(req, uniform, options.Uniform);
+    YT_OPTIONAL_SET_PROTO(req, enable_slicing, options.EnableSlicing);
     if (options.SlicingAccuracy) {
         req->set_slicing_accuracy(*options.SlicingAccuracy);
     }
@@ -438,9 +432,7 @@ TFuture<void> TClient::AlterTable(
     if (options.SchemaId) {
         ToProto(req->mutable_schema_id(), *options.SchemaId);
     }
-    if (options.Dynamic) {
-        req->set_dynamic(*options.Dynamic);
-    }
+    YT_OPTIONAL_SET_PROTO(req, dynamic, options.Dynamic);
     if (options.UpstreamReplicaId) {
         ToProto(req->mutable_upstream_replica_id(), *options.UpstreamReplicaId);
     }
@@ -468,29 +460,20 @@ TFuture<void> TClient::AlterTableReplica(
 
     ToProto(req->mutable_replica_id(), replicaId);
 
-    if (options.Enabled) {
-        req->set_enabled(*options.Enabled);
-    }
+    YT_OPTIONAL_SET_PROTO(req, enabled, options.Enabled);
 
     if (options.Mode) {
         req->set_mode(static_cast<NProto::ETableReplicaMode>(*options.Mode));
     }
 
-    if (options.PreserveTimestamps) {
-        req->set_preserve_timestamps(*options.PreserveTimestamps);
-    }
+    YT_OPTIONAL_SET_PROTO(req, preserve_timestamps, options.PreserveTimestamps);
 
     if (options.Atomicity) {
         req->set_atomicity(static_cast<NProto::EAtomicity>(*options.Atomicity));
     }
 
-    if (options.EnableReplicatedTableTracker) {
-        req->set_enable_replicated_table_tracker(*options.EnableReplicatedTableTracker);
-    }
-
-    if (options.ReplicaPath) {
-        req->set_replica_path(*options.ReplicaPath);
-    }
+    YT_OPTIONAL_SET_PROTO(req, enable_replicated_table_tracker, options.EnableReplicatedTableTracker);
+    YT_OPTIONAL_TO_PROTO(req, replica_path, options.ReplicaPath);
 
     ToProto(req->mutable_mutating_options(), options);
 
@@ -566,9 +549,7 @@ TFuture<std::vector<TTableReplicaId>> TClient::GetInSyncReplicas(
         req->set_timestamp(options.Timestamp);
     }
 
-    if (options.CachedSyncReplicasTimeout) {
-        req->set_cached_sync_replicas_timeout(NYT::ToProto(*options.CachedSyncReplicasTimeout));
-    }
+    YT_OPTIONAL_SET_PROTO(req, cached_sync_replicas_timeout, options.CachedSyncReplicasTimeout);
 
     req->set_path(path);
     req->Attachments() = SerializeRowset(nameTable, keys, req->mutable_rowset_descriptor());
@@ -592,9 +573,7 @@ TFuture<std::vector<TTableReplicaId>> TClient::GetInSyncReplicas(
         req->set_timestamp(options.Timestamp);
     }
 
-    if (options.CachedSyncReplicasTimeout) {
-        req->set_cached_sync_replicas_timeout(NYT::ToProto(*options.CachedSyncReplicasTimeout));
-    }
+    YT_OPTIONAL_SET_PROTO(req, cached_sync_replicas_timeout, options.CachedSyncReplicasTimeout);
 
     req->set_path(path);
     req->RequireServerFeature(ERpcProxyFeature::GetInSyncWithoutKeys);
@@ -659,9 +638,7 @@ TFuture<TGetTabletErrorsResult> TClient::GetTabletErrors(
     SetTimeoutOptions(*req, options);
 
     req->set_path(path);
-    if (options.Limit) {
-        req->set_limit(*options.Limit);
-    }
+    YT_OPTIONAL_SET_PROTO(req, limit, options.Limit);
 
     return req->Invoke().Apply(BIND([] (const TErrorOr<TApiServiceProxy::TRspGetTabletErrorsPtr>& rspOrError) {
         const auto& rsp = rspOrError.ValueOrThrow();
@@ -739,12 +716,8 @@ TFuture<void> TClient::AlterReplicationCard(
     if (options.ReplicatedTableOptions) {
         req->set_replicated_table_options(ConvertToYsonString(options.ReplicatedTableOptions).ToString());
     }
-    if (options.EnableReplicatedTableTracker) {
-        req->set_enable_replicated_table_tracker(*options.EnableReplicatedTableTracker);
-    }
-    if (options.ReplicationCardCollocationId) {
-        ToProto(req->mutable_replication_card_collocation_id(), *options.ReplicationCardCollocationId);
-    }
+    YT_OPTIONAL_SET_PROTO(req, enable_replicated_table_tracker, options.EnableReplicatedTableTracker);
+    YT_OPTIONAL_TO_PROTO(req, replication_card_collocation_id, options.ReplicationCardCollocationId);
     if (options.CollocationOptions) {
         req->set_collocation_options(ConvertToYsonString(options.CollocationOptions).ToString());
     }
@@ -837,9 +810,7 @@ TFuture<IQueueRowsetPtr> TClient::PullQueueConsumer(
 
     ToProto(req->mutable_consumer_path(), consumerPath);
     ToProto(req->mutable_queue_path(), queuePath);
-    if (offset) {
-        req->set_offset(*offset);
-    }
+    YT_OPTIONAL_SET_PROTO(req, offset, offset);
     req->set_partition_index(partitionIndex);
     ToProto(req->mutable_row_batch_read_options(), rowBatchReadOptions);
 
@@ -900,12 +871,8 @@ TFuture<std::vector<TListQueueConsumerRegistrationsResult>> TClient::ListQueueCo
     auto req = proxy.ListQueueConsumerRegistrations();
     SetTimeoutOptions(*req, options);
 
-    if (queuePath) {
-        ToProto(req->mutable_queue_path(), *queuePath);
-    }
-    if (consumerPath) {
-        ToProto(req->mutable_consumer_path(), *consumerPath);
-    }
+    YT_OPTIONAL_TO_PROTO(req, queue_path, queuePath);
+    YT_OPTIONAL_TO_PROTO(req, consumer_path, consumerPath);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspListQueueConsumerRegistrationsPtr& rsp) {
         std::vector<TListQueueConsumerRegistrationsResult> result;
@@ -1030,9 +997,7 @@ TFuture<TCheckPermissionResponse> TClient::CheckPermission(
         auto* protoColumns = req->mutable_columns();
         ToProto(protoColumns->mutable_items(), *options.Columns);
     }
-    if (options.Vital) {
-        req->set_vital(*options.Vital);
-    }
+    YT_OPTIONAL_SET_PROTO(req, vital, options.Vital);
 
     ToProto(req->mutable_master_read_options(), options);
     ToProto(req->mutable_transactional_options(), options);
@@ -1059,9 +1024,7 @@ TFuture<TCheckPermissionByAclResult> TClient::CheckPermissionByAcl(
     auto req = proxy.CheckPermissionByAcl();
     SetTimeoutOptions(*req, options);
 
-    if (user) {
-        req->set_user(ToProto(*user));
-    }
+    YT_OPTIONAL_SET_PROTO(req, user, user);
     req->set_permission(ToProto(permission));
     req->set_acl(ConvertToYsonString(acl).ToString());
     req->set_ignore_missing_subjects(options.IgnoreMissingSubjects);
@@ -1148,9 +1111,7 @@ TFuture<void> TClient::AbortOperation(
 
     NScheduler::ToProto(req, operationIdOrAlias);
 
-    if (options.AbortMessage) {
-        req->set_abort_message(*options.AbortMessage);
-    }
+    YT_OPTIONAL_TO_PROTO(req, abort_message, options.AbortMessage);
 
     return req->Invoke().As<void>();
 }
@@ -1166,9 +1127,7 @@ TFuture<void> TClient::SuspendOperation(
 
     NScheduler::ToProto(req, operationIdOrAlias);
     req->set_abort_running_jobs(options.AbortRunningJobs);
-    if (options.Reason) {
-        req->set_reason(*options.Reason);
-    }
+    YT_OPTIONAL_TO_PROTO(req, reason, options.Reason);
 
     return req->Invoke().As<void>();
 }
@@ -1349,12 +1308,8 @@ TFuture<TGetJobStderrResponse> TClient::GetJobStderr(
 
     NScheduler::ToProto(req, operationIdOrAlias);
     ToProto(req->mutable_job_id(), jobId);
-    if (options.Limit) {
-        req->set_limit(*options.Limit);
-    }
-    if (options.Offset) {
-        req->set_offset(*options.Offset);
-    }
+    YT_OPTIONAL_SET_PROTO(req, limit, options.Limit);
+    YT_OPTIONAL_SET_PROTO(req, offset, options.Offset);
 
     return req->Invoke().Apply(BIND([req = req](const TApiServiceProxy::TRspGetJobStderrPtr& rsp) {
         YT_VERIFY(rsp->Attachments().size() == 1);
@@ -1373,24 +1328,12 @@ TFuture<std::vector<TJobTraceEvent>> TClient::GetJobTrace(
     SetTimeoutOptions(*req, options);
 
     NScheduler::ToProto(req, operationIdOrAlias);
-    if (options.JobId) {
-        ToProto(req->mutable_job_id(), *options.JobId);
-    }
-    if (options.TraceId) {
-        ToProto(req->mutable_trace_id(), *options.TraceId);
-    }
-    if (options.FromTime) {
-        req->set_from_time(*options.FromTime);
-    }
-    if (options.ToTime) {
-        req->set_to_time(*options.ToTime);
-    }
-    if (options.FromEventIndex) {
-        req->set_from_event_index(*options.FromEventIndex);
-    }
-    if (options.ToEventIndex) {
-        req->set_to_event_index(*options.ToEventIndex);
-    }
+    YT_OPTIONAL_TO_PROTO(req, job_id, options.JobId);
+    YT_OPTIONAL_TO_PROTO(req, trace_id, options.TraceId);
+    YT_OPTIONAL_SET_PROTO(req, from_time, options.FromTime);
+    YT_OPTIONAL_SET_PROTO(req, to_time, options.ToTime);
+    YT_OPTIONAL_SET_PROTO(req, from_event_index, options.FromEventIndex);
+    YT_OPTIONAL_SET_PROTO(req, to_event_index, options.ToEventIndex);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetJobTracePtr& rsp) {
         return FromProto<std::vector<TJobTraceEvent>>(rsp->events());
@@ -1425,19 +1368,11 @@ TFuture<TListOperationsResult> TClient::ListOperations(
     auto req = proxy.ListOperations();
     SetTimeoutOptions(*req, options);
 
-    if (options.FromTime) {
-        req->set_from_time(NYT::ToProto(*options.FromTime));
-    }
-    if (options.ToTime) {
-        req->set_to_time(NYT::ToProto(*options.ToTime));
-    }
-    if (options.CursorTime) {
-        req->set_cursor_time(NYT::ToProto(*options.CursorTime));
-    }
+    YT_OPTIONAL_SET_PROTO(req, from_time, options.FromTime);
+    YT_OPTIONAL_SET_PROTO(req, to_time, options.ToTime);
+    YT_OPTIONAL_SET_PROTO(req, cursor_time, options.CursorTime);
     req->set_cursor_direction(static_cast<NProto::EOperationSortDirection>(options.CursorDirection));
-    if (options.UserFilter) {
-        req->set_user_filter(*options.UserFilter);
-    }
+    YT_OPTIONAL_TO_PROTO(req, user_filter, options.UserFilter);
 
     if (options.AccessFilter) {
         req->set_access_filter(ConvertToYsonString(options.AccessFilter).ToString());
@@ -1449,15 +1384,9 @@ TFuture<TListOperationsResult> TClient::ListOperations(
     if (options.TypeFilter) {
         req->set_type_filter(NProto::ConvertOperationTypeToProto(*options.TypeFilter));
     }
-    if (options.SubstrFilter) {
-        req->set_substr_filter(*options.SubstrFilter);
-    }
-    if (options.Pool) {
-        req->set_pool(*options.Pool);
-    }
-    if (options.PoolTree) {
-        req->set_pool_tree(*options.PoolTree);
-    }
+    YT_OPTIONAL_TO_PROTO(req, substr_filter, options.SubstrFilter);
+    YT_OPTIONAL_TO_PROTO(req, pool, options.Pool);
+    YT_OPTIONAL_TO_PROTO(req, pool_tree, options.PoolTree);
     if (options.WithFailedJobs) {
         req->set_with_failed_jobs(*options.WithFailedJobs);
     }
@@ -2358,7 +2287,7 @@ TFuture<TQueryResult> TClient::GetQueryResult(
             .Schema = rsp->has_schema() ? FromProto<NTableClient::TTableSchemaPtr>(rsp->schema()) : nullptr,
             .DataStatistics = FromProto<NChunkClient::NProto::TDataStatistics>(rsp->data_statistics()),
             .IsTruncated = rsp->is_truncated(),
-            .FullResult = rsp->has_full_result() ? std::make_optional(TYsonString(rsp->full_result())) : std::nullopt,
+            .FullResult = rsp->has_full_result() ? TYsonString(rsp->full_result()) : TYsonString(),
         };
     }));
 }

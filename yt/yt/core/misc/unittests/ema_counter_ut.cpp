@@ -67,7 +67,9 @@ TEST(TEmaCounterTest, MockTime)
     // Result should be almost 1 (recall that the initial rate value of 0
     // is remembered by EMA for some time).
     EXPECT_NEAR(1.0, counter.WindowRates[0], 1e-3);
-    EXPECT_TRUE(counter.GetRate(0, currentTimestamp));
+    ASSERT_TRUE(counter.GetRate(0, currentTimestamp));
+    EXPECT_NEAR(1.0, *counter.GetRate(0, currentTimestamp - sec), 1e-3);
+    EXPECT_NEAR(1e-3, *counter.GetRate(0, currentTimestamp + 5 * min), 1e-3); // log2(1e-3) ~ -10. Window is doubled half-decay period.
 
     for (int index = 300; index < 360; ++index, currentTimestamp += sec) {
         currentCount += actualRate;

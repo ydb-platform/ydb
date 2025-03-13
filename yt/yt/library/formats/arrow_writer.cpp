@@ -148,6 +148,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
                     .Union());
 
         case ESimpleLogicalValueType::Utf8:
+        case ESimpleLogicalValueType::Json:
             return std::tuple(
                 org::apache::arrow::flatbuf::Type_Utf8,
                 org::apache::arrow::flatbuf::CreateUtf8(*flatbufBuilder)

@@ -766,7 +766,7 @@ protected:
         std::atomic<TDuration> LoggingSuppressionTimeout = {};
 
         using TNonowningPerformanceCountersKey = std::tuple<TStringBuf, TRequestQueue*>;
-        using TOwningPerformanceCountersKey = std::tuple<TString, TRequestQueue*>;
+        using TOwningPerformanceCountersKey = std::tuple<std::string, TRequestQueue*>;
         using TPerformanceCountersKeyHash = THash<TNonowningPerformanceCountersKey>;
 
         struct TPerformanceCountersKeyEquals
@@ -813,7 +813,7 @@ protected:
         const NProfiling::TProfiler Profiler_;
 
         //! Number of requests per user agent.
-        NConcurrency::TSyncMap<TString, NProfiling::TCounter> RequestsPerUserAgent_;
+        NConcurrency::TSyncMap<std::string, NProfiling::TCounter, THash<TStringBuf>, TEqualTo<TStringBuf>> RequestsPerUserAgent_;
     };
 
     using TPerformanceCountersPtr = TIntrusivePtr<TPerformanceCounters>;

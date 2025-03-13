@@ -59,7 +59,7 @@ namespace NTable {
                 return false;
             }
 
-            void Aggr(TDbStats &aggr, bool enter) const noexcept
+            void Aggr(TDbStats &aggr, bool enter) const
             {
                 const auto &stat = Self->Stat();
 
@@ -84,14 +84,14 @@ namespace NTable {
                 }
             }
 
-            void BackupMemStats() noexcept
+            void BackupMemStats()
             {
                 BackupMemTableWaste = Self->GetMemWaste();
                 BackupMemTableBytes = Self->GetMemSize();
                 BackupMemTableOps = Self->GetOpsCount();
             }
 
-            void RestoreMemStats(TDbStats &aggr) const noexcept
+            void RestoreMemStats(TDbStats &aggr) const
             {
                 NUtil::SubSafe(aggr.MemTableWaste, BackupMemTableWaste);
                 NUtil::SubSafe(aggr.MemTableBytes, BackupMemTableBytes);
@@ -99,6 +99,24 @@ namespace NTable {
                 aggr.MemTableWaste += Self->GetMemWaste();
                 aggr.MemTableBytes += Self->GetMemSize();
                 aggr.MemTableOps += Self->GetOpsCount();
+            }
+
+            /**
+             * Returns serial before the transaction (when in transaction),
+             * but possibly after schema changes or memtable flushes.
+             */
+            ui64 StableSerial() const noexcept
+            {
+                return DataModified && !EpochSnapshot ? SerialBackup : Serial;
+            }
+
+            /**
+             * Returns epoch before the transaction (when in transaction),
+             * but possibly after schema changes or memtable flushes.
+             */
+            TEpoch StableHead() const noexcept
+            {
+                return EpochSnapshot ? *EpochSnapshot : Self->Head();
             }
 
             const ui32 Table = Max<ui32>();
@@ -147,7 +165,15 @@ namespace NTable {
             return Serial_;
         }
 
-        TTableWrapper& Get(ui32 table, bool require) noexcept
+        /**
+         * Returns serial before the transaction (when in transaction)
+         */
+        ui64 StableSerial() const noexcept
+        {
+            return InTransaction ? Begin_ : Serial_;
+        }
+
+        TTableWrapper& Get(ui32 table, bool require)
         {
             auto *wrap = Tables.FindPtr(table);
 
@@ -192,7 +218,7 @@ namespace NTable {
             return *wrap;
         }
 
-        TTableWrapper& GetForUpdate(ui32 table) noexcept
+        TTableWrapper& GetForUpdate(ui32 table)
         {
             Y_ABORT_UNLESS(InTransaction);
             TTableWrapper& wrap = Get(table, true);
@@ -210,13 +236,13 @@ namespace NTable {
             return wrap;
         }
 
-        ui64 Rewind(ui64 serial) noexcept
+        ui64 Rewind(ui64 serial)
         {
             Y_ABORT_UNLESS(!InTransaction, "Unexpected rewind inside a transaction");
             return std::exchange(Serial_, Max(Serial_, serial));
         }
 
-        void BeginTransaction() noexcept
+        void BeginTransaction()
         {
             Y_ABORT_UNLESS(!InTransaction);
             InTransaction = true;
@@ -232,7 +258,7 @@ namespace NTable {
             Y_DEBUG_ABORT_UNLESS(Prepared.empty());
         }
 
-        TEpoch FlushTable(ui32 tid) noexcept
+        TEpoch FlushTable(ui32 tid)
         {
             Y_ABORT_UNLESS(InTransaction);
             auto& wrap = Get(tid, true);
@@ -249,7 +275,7 @@ namespace NTable {
             return *wrap.EpochSnapshot;
         }
 
-        void CommitTransaction(TTxStamp stamp, TArrayRef<const TMemGlob> annex, NRedo::TWriter& writer) noexcept
+        void CommitTransaction(TTxStamp stamp, TArrayRef<const TMemGlob> annex, NRedo::TWriter& writer)
         {
             Y_ABORT_UNLESS(Stamp <= stamp, "Executor tx stamp cannot go to the past");
             Stamp = stamp;
@@ -306,7 +332,7 @@ namespace NTable {
             InTransaction = false;
         }
 
-        void CommitScheme(TArrayRef<const TMemGlob> annex) noexcept
+        void CommitScheme(TArrayRef<const TMemGlob> annex)
         {
             if (!SchemeRollbackState.Tables.empty() || SchemeRollbackState.Redo) {
                 // Table or redo settings have changed
@@ -363,7 +389,7 @@ namespace NTable {
             SchemeRollbackState.Redo.reset();
         }
 
-        void RollbackTransaction() noexcept
+        void RollbackTransaction()
         {
             for (ui32 tid : Prepared) {
                 auto& wrap = Tables.at(tid);
@@ -396,7 +422,7 @@ namespace NTable {
             InTransaction = false;
         }
 
-        void RollbackScheme() noexcept
+        void RollbackScheme()
         {
             // Note: we assume schema rollback is very rare,
             // so it doesn't have to be efficient
@@ -451,7 +477,7 @@ namespace NTable {
             GCList->RunGC();
         }
 
-        TDatabaseImpl& Switch(TTxStamp stamp) noexcept
+        TDatabaseImpl& Switch(TTxStamp stamp)
         {
             Y_ABORT_UNLESS(!InTransaction, "Unexpected switch inside a transaction");
             Y_ABORT_UNLESS(Stamp <= stamp, "Executor tx stamp cannot go to the past");
@@ -465,14 +491,14 @@ namespace NTable {
             return *this;
         }
 
-        void Assign(TVector<TMemGlob> annex) noexcept
+        void Assign(TVector<TMemGlob> annex)
         {
             Y_ABORT_UNLESS(!Annex, "Annex has been already attached to TDatabaseImpl");
 
             Annex = std::move(annex);
         }
 
-        void ReplaceSlices(ui32 tid, TBundleSlicesMap slices) noexcept
+        void ReplaceSlices(ui32 tid, TBundleSlicesMap slices)
         {
             auto &wrap = Get(tid, true);
 
@@ -485,7 +511,7 @@ namespace NTable {
             ui32 tid,
             const TSubset &subset,
             TArrayRef<const TPartView> newParts,
-            TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> newTxStatus) noexcept
+            TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> newTxStatus)
         {
             auto &wrap = Get(tid, true);
 
@@ -494,7 +520,7 @@ namespace NTable {
             wrap.Aggr(Stats, true /* enter */);
         }
 
-        void Merge(ui32 tid, TPartView partView) noexcept
+        void Merge(ui32 tid, TPartView partView)
         {
             auto &wrap = Get(tid, true);
 
@@ -503,7 +529,7 @@ namespace NTable {
             wrap.Aggr(Stats, true /* enter */);
         }
 
-        void Merge(ui32 tid, TIntrusiveConstPtr<TColdPart> part) noexcept
+        void Merge(ui32 tid, TIntrusiveConstPtr<TColdPart> part)
         {
             auto &wrap = Get(tid, true);
 
@@ -512,7 +538,7 @@ namespace NTable {
             wrap.Aggr(Stats, true /* enter */);
         }
 
-        void Merge(ui32 tid, TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
+        void Merge(ui32 tid, TIntrusiveConstPtr<TTxStatusPart> txStatus)
         {
             auto &wrap = Get(tid, true);
 
@@ -521,7 +547,7 @@ namespace NTable {
             wrap.Aggr(Stats, true /* enter */);
         }
 
-        void MergeDone(ui32 tid) noexcept
+        void MergeDone(ui32 tid)
         {
             auto &wrap = Get(tid, true);
 
@@ -530,7 +556,7 @@ namespace NTable {
             wrap.Aggr(Stats, true /* enter */);
         }
 
-        void MergeDone() noexcept
+        void MergeDone()
         {
             for (auto &pr : Tables) {
                 MergeDone(pr.first);
@@ -550,7 +576,7 @@ namespace NTable {
             }
         }
 
-        TDatabaseImpl& ApplyRedo(TArrayRef<const char> plain) noexcept
+        TDatabaseImpl& ApplyRedo(TArrayRef<const char> plain)
         {
             return Redo.Replay(plain), *this;
         }
@@ -582,7 +608,7 @@ namespace NTable {
             Large = Max(Large, Scheme->Redo.Annex);
         }
 
-        TTableWrapper& MakeTable(ui32 table, TSnapEdge edge) noexcept
+        TTableWrapper& MakeTable(ui32 table, TSnapEdge edge)
         {
             if (edge.TxStamp == Max<ui64>()) {
                 Y_ABORT("Cannot make table on undefined TxStamp edge");
@@ -633,7 +659,7 @@ namespace NTable {
         }
 
     public: /*_ Redo log player interface impl. */
-        bool NeedIn(ui32 table) noexcept
+        bool NeedIn(ui32 table)
         {
             /* Scheme deltas are applied before any redo log entries on
                 db bootstrap and udate log entries for already deleted
@@ -645,7 +671,7 @@ namespace NTable {
             return wrap ? Stamp > wrap.Edge : false;
         }
 
-        void DoBegin(ui32 tail, ui32 head, ui64 serial, ui64 stamp) noexcept
+        void DoBegin(ui32 tail, ui32 head, ui64 serial, ui64 stamp)
         {
             TAbi().Check(tail, head, "redo");
 
@@ -666,7 +692,7 @@ namespace NTable {
             First_ = Min(First_, Serial_);
         }
 
-        void DoAnnex(TArrayRef<const TStdPad<NPageCollection::TGlobId>> annex) noexcept
+        void DoAnnex(TArrayRef<const TStdPad<NPageCollection::TGlobId>> annex)
         {
             if (Annex) {
                 Y_ABORT_UNLESS(annex.size() == Annex.size());
@@ -684,7 +710,7 @@ namespace NTable {
             }
         }
 
-        void DoUpdate(ui32 tid, ERowOp rop, TKeys key, TOps ops, TRowVersion rowVersion) noexcept
+        void DoUpdate(ui32 tid, ERowOp rop, TKeys key, TOps ops, TRowVersion rowVersion)
         {
             auto &wrap = Touch(tid);
 
@@ -696,7 +722,7 @@ namespace NTable {
             Stats.MemTableOps += 1;
         }
 
-        void DoUpdateTx(ui32 tid, ERowOp rop, TKeys key, TOps ops, ui64 txId) noexcept
+        void DoUpdateTx(ui32 tid, ERowOp rop, TKeys key, TOps ops, ui64 txId)
         {
             auto &wrap = Touch(tid);
 
@@ -708,7 +734,7 @@ namespace NTable {
             Stats.MemTableOps += 1;
         }
 
-        void DoCommitTx(ui32 tid, ui64 txId, TRowVersion rowVersion) noexcept
+        void DoCommitTx(ui32 tid, ui64 txId, TRowVersion rowVersion)
         {
             auto &wrap = Touch(tid);
 
@@ -719,7 +745,7 @@ namespace NTable {
             Stats.MemTableBytes += wrap->GetMemSize();
         }
 
-        void DoRemoveTx(ui32 tid, ui64 txId) noexcept
+        void DoRemoveTx(ui32 tid, ui64 txId)
         {
             auto &wrap = Touch(tid);
 
@@ -730,7 +756,7 @@ namespace NTable {
             Stats.MemTableBytes += wrap->GetMemSize();
         }
 
-        void DoFlush(ui32 tid, ui64 /* stamp */, TEpoch epoch) noexcept
+        void DoFlush(ui32 tid, ui64 /* stamp */, TEpoch epoch)
         {
             auto on = Touch(tid)->Snapshot();
 
@@ -740,7 +766,7 @@ namespace NTable {
             }
         }
 
-        TTableWrapper& Touch(ui32 table) noexcept
+        TTableWrapper& Touch(ui32 table)
         {
             auto &wrap = Get(table, true);
 

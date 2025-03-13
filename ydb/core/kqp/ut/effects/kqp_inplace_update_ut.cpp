@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -69,7 +69,6 @@ void Test(
 
     // source read and stream lookup use iterator interface, that doesn't use datashard transactions
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
 
     auto settings = TKikimrSettings()
         .SetAppConfig(appConfig)
@@ -370,7 +369,6 @@ Y_UNIT_TEST(BigRow) {
 
     // source read use iterator interface, that doesn't use datashard transactions
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
 
     auto settings = TKikimrSettings()
         .SetAppConfig(appConfig)

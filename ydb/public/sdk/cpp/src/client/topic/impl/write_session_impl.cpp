@@ -1,7 +1,7 @@
 #include "write_session_impl.h"
 
-#include <src/client/topic/common/log_lazy.h>
-#include <src/client/topic/common/trace_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/trace_lazy.h>
 
 #include <library/cpp/string_utils/url/url.h>
 
@@ -12,7 +12,13 @@
 #include <util/stream/buffer.h>
 #include <util/generic/guid.h>
 
-namespace NYdb::inline V3::NTopic {
+template <>
+void Out<NYdb::NTopic::TTransactionId>(IOutputStream& s, const NYdb::NTopic::TTransactionId& v)
+{
+    s << "{" << v.SessionId << ", " << v.TxId << "}";
+}
+
+namespace NYdb::inline Dev::NTopic {
 
 const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
 // Error code from file ydb/public/api/protos/persqueue_error_codes_v1.proto
@@ -35,13 +41,22 @@ TTxIdOpt GetTransactionId(const Ydb::Topic::StreamWriteMessage_WriteRequest& req
     return TTxId(tx.session(), tx.id());
 }
 
-TTxIdOpt GetTransactionId(const NTable::TTransaction* tx)
+TTxIdOpt GetTransactionId(const std::optional<TTransactionId>& tx)
 {
     if (!tx) {
         return std::nullopt;
     }
 
-    return TTxId(tx->GetSession().GetId(), tx->GetId());
+    return TTxId(tx->SessionId, tx->TxId);
+}
+
+std::optional<TTransactionId> MakeTransactionId(const NTable::TTransaction* tx)
+{
+    if (!tx) {
+        return std::nullopt;
+    }
+
+    return TTransactionId{tx->GetSession().GetId(), tx->GetId()};
 }
 
 }
@@ -584,7 +599,7 @@ void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
         ++txInfo->AckCount;
 
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                 LogPrefixImpl() << "OnAck: seqNo=" << seqNo << ", txId=" << GetTxId(txId) << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+                 LogPrefixImpl() << "OnAck: seqNo=" << seqNo << ", txId=" << txId << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
 
         if (txInfo->CommitCalled && (txInfo->WriteCount == txInfo->AckCount)) {
             txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
@@ -631,7 +646,7 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
                 ++txInfo->WriteCount;
 
                 LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                         LogPrefixImpl() << "OnWrite: seqNo=" << seqNo << ", txId=" << GetTxId(txId) << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+                         LogPrefixImpl() << "OnWrite: seqNo=" << seqNo << ", txId=" << txId << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
             }
             WrittenInTx[seqNo] = txId;
         }
@@ -639,7 +654,7 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
         CurrentBatch.Add(
                 seqNo, createdAtValue, message.Data, message.Codec, message.OriginalSize,
                 message.MessageMeta_,
-                message.GetTxPtr()
+                MakeTransactionId(message.GetTxPtr())
         );
 
         FlushWriteIfRequiredImpl();
@@ -988,7 +1003,7 @@ TStringBuilder TWriteSessionImpl::LogPrefixImpl() const {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     TStringBuilder ret;
-    ret << " TraceId [" << Settings.TraceId_ << "] ";;
+    ret << " TraceId [" << Settings.TraceId_ << "] ";
     ret << " SessionId [" << SessionId << "] ";
 
     if (Settings.PartitionId_.has_value() || DirectWriteToPartitionId.has_value()) {
@@ -1412,10 +1427,10 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             if (!currMessage.MessageMeta.empty()) {
                 OriginalMessagesToSend.emplace(id, createTs, datum.size(),
                                                std::move(currMessage.MessageMeta),
-                                               currMessage.Tx);
+                                               std::move(currMessage.Tx));
             } else {
                 OriginalMessagesToSend.emplace(id, createTs, datum.size(),
-                                               currMessage.Tx);
+                                               std::move(currMessage.Tx));
             }
         }
         block.Data = std::move(CurrentBatch.Data);
@@ -1523,8 +1538,8 @@ void TWriteSessionImpl::SendImpl() {
                 auto* msgData = writeRequest->add_messages();
 
                 if (message.Tx) {
-                    writeRequest->mutable_tx()->set_id(TStringType{message.Tx->GetId()});
-                    writeRequest->mutable_tx()->set_session(TStringType{message.Tx->GetSession().GetId()});
+                    writeRequest->mutable_tx()->set_id(message.Tx->TxId);
+                    writeRequest->mutable_tx()->set_session(message.Tx->SessionId);
                 }
 
                 msgData->set_seq_no(GetSeqNoImpl(message.Id));

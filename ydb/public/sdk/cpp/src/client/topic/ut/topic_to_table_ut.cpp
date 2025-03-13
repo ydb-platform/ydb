@@ -1,8 +1,8 @@
 #include "ut_utils/topic_sdk_test_setup.h"
 
-#include <ydb-cpp-sdk/client/topic/client.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <src/client/persqueue_public/ut/ut_utils/ut_utils.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
 
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
@@ -94,6 +94,8 @@ protected:
                                TDuration stabilizationWindow,
                                ui64 downUtilizationPercent,
                                ui64 upUtilizationPercent);
+    void SetPartitionWriteSpeed(const std::string& topicPath,
+                                size_t bytesPerSeconds);
 
     void WriteToTopicWithInvalidTxId(bool invalidTxId);
 
@@ -506,6 +508,18 @@ void TFixture::AlterAutoPartitioning(const TString& topicPath,
             .EndAlterAutoPartitioningSettings()
         .EndAlterTopicPartitioningSettings()
         ;
+
+    auto result = client.AlterTopic(topicPath, settings).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+void TFixture::SetPartitionWriteSpeed(const std::string& topicPath,
+                                      size_t bytesPerSeconds)
+{
+    NTopic::TTopicClient client(GetDriver());
+    NTopic::TAlterTopicSettings settings;
+
+    settings.SetPartitionWriteSpeedBytesPerSecond(bytesPerSeconds);
 
     auto result = client.AlterTopic(topicPath, settings).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -3005,9 +3019,6 @@ Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_3, TFixtureSinks)
 
 Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions, TFixture)
 {
-    // Consumes a lot of memory. Temporarily disabled
-    return;
-
     // The test verifies the simultaneous execution of several transactions. There is a topic
     // with PARTITIONS_COUNT partitions. In each transaction, the test writes to all the partitions.
     // The size of the messages is random. Such that both large blobs in the body and small ones in
@@ -3015,9 +3026,11 @@ Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions, TFixture)
     // will make sure that when committing transactions, the division into blocks is taken into account.
 
     const size_t PARTITIONS_COUNT = 20;
-    const size_t TXS_COUNT = 100;
+    const size_t TXS_COUNT = 10;
 
     CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
+
+    SetPartitionWriteSpeed("topic_A", 50'000'000);
 
     std::vector<NTable::TSession> sessions;
     std::vector<NTable::TTransaction> transactions;
@@ -3057,6 +3070,141 @@ Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions, TFixture)
         const auto& result = futures[i].GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
+}
+
+Y_UNIT_TEST_F(Write_Only_Big_Messages_In_Wide_Transactions, TFixture)
+{
+    // The test verifies the simultaneous execution of several transactions. There is a topic `topic_A` and
+    // it contains a `PARTITIONS_COUNT' of partitions. In each transaction, the test writes to all partitions.
+    // The size of the messages is chosen so that only large blobs are recorded in the transaction and there
+    // are no records in the head. Thus, we verify that transaction bundling is working correctly.
+
+    const size_t PARTITIONS_COUNT = 20;
+    const size_t TXS_COUNT = 100;
+
+    CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
+
+    SetPartitionWriteSpeed("topic_A", 50'000'000);
+
+    std::vector<NTable::TSession> sessions;
+    std::vector<NTable::TTransaction> transactions;
+
+    // We open TXS_COUNT transactions and write messages to the topic.
+    for (size_t i = 0; i < TXS_COUNT; ++i) {
+        sessions.push_back(CreateTableSession());
+        auto& session = sessions.back();
+
+        transactions.push_back(BeginTx(session));
+        auto& tx = transactions.back();
+
+        for (size_t j = 0; j < PARTITIONS_COUNT; ++j) {
+            TString sourceId = TEST_MESSAGE_GROUP_ID;
+            sourceId += "_";
+            sourceId += ToString(i);
+            sourceId += "_";
+            sourceId += ToString(j);
+
+            WriteToTopic("topic_A", sourceId, TString(6'500'000, 'x'), &tx, j);
+
+            WaitForAcks("topic_A", sourceId);
+        }
+    }
+
+    // We are doing an asynchronous commit of transactions. They will be executed simultaneously.
+    std::vector<NTable::TAsyncCommitTransactionResult> futures;
+
+    for (size_t i = 0; i < TXS_COUNT; ++i) {
+        futures.push_back(transactions[i].Commit());
+    }
+
+    // All transactions must be completed successfully.
+    for (size_t i = 0; i < TXS_COUNT; ++i) {
+        futures[i].Wait();
+        const auto& result = futures[i].GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+}
+
+Y_UNIT_TEST_F(Transactions_Conflict_On_SeqNo, TFixture)
+{
+    const ui32 PARTITIONS_COUNT = 20;
+    const size_t TXS_COUNT = 100;
+
+    CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
+
+    SetPartitionWriteSpeed("topic_A", 50'000'000);
+
+    auto tableSession = CreateTableSession();
+    std::vector<std::shared_ptr<NTopic::ISimpleBlockingWriteSession>> topicWriteSessions;
+
+    for (ui32 i = 0; i < PARTITIONS_COUNT; ++i) {
+        TString sourceId = TEST_MESSAGE_GROUP_ID;
+        sourceId += "_";
+        sourceId += ToString(i);
+
+        NTopic::TTopicClient client(GetDriver());
+        NTopic::TWriteSessionSettings options;
+        options.Path("topic_A");
+        options.ProducerId(sourceId);
+        options.MessageGroupId(sourceId);
+        options.PartitionId(i);
+        options.Codec(ECodec::RAW);
+
+        auto session = client.CreateSimpleBlockingWriteSession(options);
+
+        topicWriteSessions.push_back(std::move(session));
+    }
+
+    std::vector<NTable::TSession> sessions;
+    std::vector<NTable::TTransaction> transactions;
+
+    for (size_t i = 0; i < TXS_COUNT; ++i) {
+        sessions.push_back(CreateTableSession());
+        auto& session = sessions.back();
+
+        transactions.push_back(BeginTx(session));
+        auto& tx = transactions.back();
+
+        for (size_t j = 0; j < PARTITIONS_COUNT; ++j) {
+            TString sourceId = TEST_MESSAGE_GROUP_ID;
+            sourceId += "_";
+            sourceId += ToString(j);
+
+            for (size_t k = 0, count = RandomNumber<size_t>(20) + 1; k < count; ++k) {
+                const std::string data(RandomNumber<size_t>(1'000) + 100, 'x');
+                NTopic::TWriteMessage params(data);
+                params.Tx(tx);
+
+                topicWriteSessions[j]->Write(std::move(params));
+            }
+        }
+    }
+
+    std::vector<NTable::TAsyncCommitTransactionResult> futures;
+
+    for (size_t i = 0; i < TXS_COUNT; ++i) {
+        futures.push_back(transactions[i].Commit());
+    }
+
+    // Some transactions should end with the error `ABORTED`
+    size_t successCount = 0;
+
+    for (size_t i = 0; i < TXS_COUNT; ++i) {
+        futures[i].Wait();
+        const auto& result = futures[i].GetValueSync();
+        switch (result.GetStatus()) {
+        case EStatus::SUCCESS:
+            ++successCount;
+            break;
+        case EStatus::ABORTED:
+            break;
+        default:
+            UNIT_FAIL("unexpected status: " << static_cast<const NYdb::TStatus&>(result));
+            break;
+        }
+    }
+
+    UNIT_ASSERT_VALUES_UNEQUAL(successCount, TXS_COUNT);
 }
 
 }

@@ -44,7 +44,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     struct TPathToResolve {
         const NKikimrSchemeOp::TModifyScheme& ModifyScheme;
         ui32 RequireAccess = NACLib::EAccessRights::NoAccess;
-        bool AllowedByLevel = true;
 
         // Params for NSchemeCache::TSchemeCacheNavigate::TEntry
         TVector<TString> Path;
@@ -63,6 +62,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     bool CheckDatabaseAdministrator = false;
     bool IsClusterAdministrator = false;
     bool IsDatabaseAdministrator = false;
+    NACLib::TSID DatabaseOwner;
 
     TBaseSchemeReq(const TTxProxyServices &services, ui64 txid, TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request, const TIntrusivePtr<TTxProxyMon> &txProxyMon)
         : Services(services)
@@ -1107,7 +1107,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
             // Check admin restrictions and special cases
             if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterLogin) {
-                // User management allowed to any user or (if configured so) to admins only
+                // User management is allowed to any user or (if configured so) to admins only
                 if (checkAdmin && !isAdmin) {
                     const auto errString = MakeAccessDeniedError(ctx, "attempt to manage user");
                     auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
@@ -1116,25 +1116,55 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 }
                 allowACLBypass = checkAdmin && isAdmin;
 
+                const auto& alterLogin = modifyScheme.GetAlterLogin();
+
                 // Any user can change their own password (but nothing else)
-                auto isUserChangesOwnPassword = [](const auto& modifyScheme, const NACLib::TSID& subjectSid) {
-                    const auto& alter = modifyScheme.GetAlterLogin();
-                    if (alter.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser) {
-                        const auto& targetUser = alter.GetModifyUser();
+                auto isUserChangesOwnPassword = [](const auto& alterLogin, const NACLib::TSID& subjectSid) {
+                    if (alterLogin.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser) {
+                        const auto& targetUser = alterLogin.GetModifyUser();
                         if (targetUser.HasPassword() && !targetUser.HasCanLogin()) {
                             return (subjectSid == targetUser.GetUser());
                         }
                     }
                     return false;
                 };
-                allowACLBypass = allowACLBypass || isUserChangesOwnPassword(modifyScheme, UserToken->GetUserSID());
+                allowACLBypass = allowACLBypass || isUserChangesOwnPassword(alterLogin, UserToken->GetUserSID());
+
+                // Database admin is not allowed to manage group of database admins (its the privilege of cluster admins).
+                if (IsDatabaseAdministrator) {
+                    TString group;
+                    switch (alterLogin.GetAlterCase()) {
+                        case NKikimrSchemeOp::TAlterLogin::kAddGroupMembership:
+                            group = alterLogin.GetAddGroupMembership().GetGroup();
+                            break;
+                        case NKikimrSchemeOp::TAlterLogin::kRemoveGroupMembership:
+                            group = alterLogin.GetRemoveGroupMembership().GetGroup();
+                            break;
+                        case NKikimrSchemeOp::TAlterLogin::kRemoveGroup:
+                            group = alterLogin.GetRemoveGroup().GetGroup();
+                            break;
+                        case NKikimrSchemeOp::TAlterLogin::kRenameGroup:
+                            group = alterLogin.GetRenameGroup().GetGroup();
+                            break;
+                        default:
+                            break;
+                    }
+                    if (!group.empty() && group == DatabaseOwner) {
+                        const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
+                            << "attempt to administer database admin group by the database admin"
+                        );
+                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
+                        return false;
+                    }
+                }
 
             } else if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpModifyACL) {
                 // Only the owner of the schema object (path) can transfer their ownership away.
                 // Or admins (if configured so).
                 const auto& newOwner = modifyScheme.GetModifyACL().GetNewOwner();
                 if (!newOwner.empty()) {
-                    // That modifyACL is changing the owner
+                    // This modifyACL is changing the owner
                     auto isObjectOwner = [](const auto& userToken, const NACLib::TSID& owner) {
                         return userToken->IsExist(owner);
                     };
@@ -1143,6 +1173,18 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                     if (!allow) {
                         const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
                             << "attempt to change ownership"
+                            << " from " << owner
+                            << " to " << newOwner
+                        );
+                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
+                        return false;
+                    }
+
+                    // Database admin is not allowed to change ownership of its own database
+                    if (IsDatabaseAdministrator && IsDB(entry)) {
+                        const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
+                            << "attempt to change database ownership by the database admin"
                             << " from " << owner
                             << " to " << newOwner
                         );
@@ -1305,6 +1347,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         }
 
         const auto& database = request.ResultSet.front();
+        DatabaseOwner = database.Self->Info.GetOwner();
         IsDatabaseAdministrator = NKikimr::IsDatabaseAdministrator(&UserToken.value(), database.Self->Info.GetOwner());
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
@@ -1314,6 +1357,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             << " CheckDatabaseAdministrator: " << CheckDatabaseAdministrator
             << " IsClusterAdministrator: " << IsClusterAdministrator
             << " IsDatabaseAdministrator: " << IsDatabaseAdministrator
+            << " DatabaseOwner: " << DatabaseOwner
         );
 
         static_cast<TDerived*>(this)->Start(ctx);

@@ -231,8 +231,8 @@ void Serialize(const TTableSchema& schema, NYson::IYsonConsumer* consumer)
 {
     auto position = NYTree::BuildYsonFluently(consumer)
         .BeginAttributes()
-            .Item("strict").Value(schema.GetStrict())
-            .Item("unique_keys").Value(schema.GetUniqueKeys())
+            .Item("strict").Value(schema.IsStrict())
+            .Item("unique_keys").Value(schema.IsUniqueKeys())
             .DoIf(schema.HasNontrivialSchemaModification(), [&] (NYTree::TFluentMap fluent) {
                 fluent.Item("schema_modification").Value(schema.GetSchemaModification());
             })

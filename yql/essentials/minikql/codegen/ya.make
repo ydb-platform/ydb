@@ -1,1 +1,4 @@
-RECURSE(no_llvm llvm14 llvm16)
+RECURSE(
+    llvm16
+    no_llvm
+)

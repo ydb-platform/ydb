@@ -136,7 +136,8 @@ public:
         TKqpRequestCounters::TPtr counters,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        ui32 statementResultIndex, ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
+        ui32 statementResultIndex,
+        ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
         bool streamResult = false, const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr, ui64 batchLimit = 0)
         : NActors::TActor<TDerived>(&TDerived::ReadyState)
         , Request(std::move(request))
@@ -291,10 +292,6 @@ protected:
         size_t Size() const {
             return Proto.GetChannelData().GetData().GetRaw().size() + Payload.size();
         }
-
-        ui32 RowCount() const {
-            return Proto.GetChannelData().GetData().GetRows();
-        }
     };
 
     void HandleChannelData(NYql::NDq::TEvDqCompute::TEvChannelData::TPtr& ev) {
@@ -429,7 +426,7 @@ protected:
         if (state.HasStats()) {
             ui64 cycleCount = GetCycleCountFast();
 
-            Stats->UpdateTaskStats(taskId, state.GetStats());
+            Stats->UpdateTaskStats(taskId, state.GetStats(), (NYql::NDqProto::EComputeState) state.GetState());
             if (Request.ProgressStatsPeriod) {
                 auto now = TInstant::Now();
                 if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
@@ -472,6 +469,7 @@ protected:
                     Stats->AddComputeActorStats(
                         computeActor.NodeId(),
                         std::move(*state.MutableStats()),
+                        (NYql::NDqProto::EComputeState) state.GetState(),
                         TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs())
                     );
 
@@ -511,8 +509,8 @@ protected:
                 if (populateChannels) {
                     auto& task = TasksGraph.GetTask(taskId);
                     THashMap<TActorId, THashSet<ui64>> updates;
-                    CollectTaskChannelsUpdates(task, updates);
-                    PropagateChannelsUpdates(updates);
+                    Planner->CollectTaskChannelsUpdates(task, updates);
+                    Planner->PropagateChannelsUpdates(updates);
                 }
                 break;
             }
@@ -750,94 +748,39 @@ protected:
             TActorId computeActorId = ActorIdFromProto(startedTask.GetActorId());
             LOG_D("Executing task: " << taskId << " on compute actor: " << computeActorId);
             YQL_ENSURE(Planner);
-            bool channelUpdates = Planner->AcknowledgeCA(taskId, computeActorId, nullptr);
-            if (channelUpdates) {
-                CollectTaskChannelsUpdates(task, channelsUpdates);
+            bool ack = Planner->AcknowledgeCA(taskId, computeActorId, nullptr);
+            if (ack) {
+                Planner->CollectTaskChannelsUpdates(task, channelsUpdates);
             }
 
         }
 
-        PropagateChannelsUpdates(channelsUpdates);
+        Planner->PropagateChannelsUpdates(channelsUpdates);
     }
 
     void HandleAbortExecution(TEvKqp::TEvAbortExecution::TPtr& ev) {
         auto& msg = ev->Get()->Record;
         NYql::TIssues issues = ev->Get()->GetIssues();
-        LOG_D("Got EvAbortExecution, status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
+        HandleAbortExecution(msg.GetStatusCode(), ev->Get()->GetIssues(), ev->Sender != Target);
+    }
+
+    void HandleAbortExecution(
+            NYql::NDqProto::StatusIds::StatusCode statusCode,
+            const NYql::TIssues& issues,
+            const bool sessionSender) {
+        LOG_D("Got EvAbortExecution, status: " << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode)
             << ", message: " << issues.ToOneLineString());
-        auto statusCode = NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode());
-        if (statusCode == Ydb::StatusIds::INTERNAL_ERROR) {
+        auto ydbStatusCode = NYql::NDq::DqStatusToYdbStatus(statusCode);
+        if (ydbStatusCode == Ydb::StatusIds::INTERNAL_ERROR) {
             InternalError(issues);
-        } else if (statusCode == Ydb::StatusIds::TIMEOUT) {
-            TimeoutError(ev->Sender, issues);
+        } else if (ydbStatusCode == Ydb::StatusIds::TIMEOUT) {
+            TimeoutError(sessionSender, issues);
         } else {
-            RuntimeError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), issues);
+            RuntimeError(NYql::NDq::DqStatusToYdbStatus(statusCode), issues);
         }
     }
 
 protected:
-    void CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& task, THashMap<TActorId, THashSet<ui64>>& updates) {
-        YQL_ENSURE(task.ComputeActorId);
-
-        LOG_T("Collect channels updates for task: " << task.Id << " at actor " << task.ComputeActorId);
-
-        auto& selfUpdates = updates[task.ComputeActorId];
-
-        for (auto& input : task.Inputs) {
-            for (auto channelId : input.Channels) {
-                auto& channel = TasksGraph.GetChannel(channelId);
-                YQL_ENSURE(channel.DstTask == task.Id);
-                YQL_ENSURE(channel.SrcTask);
-
-                auto& srcTask = TasksGraph.GetTask(channel.SrcTask);
-                if (srcTask.ComputeActorId) {
-                    updates[srcTask.ComputeActorId].emplace(channelId);
-                    selfUpdates.emplace(channelId);
-                }
-
-                LOG_T("Task: " << task.Id << ", input channelId: " << channelId << ", src task: " << channel.SrcTask
-                    << ", at actor " << srcTask.ComputeActorId);
-            }
-        }
-
-        for (auto& output : task.Outputs) {
-            for (auto channelId : output.Channels) {
-                selfUpdates.emplace(channelId);
-
-                auto& channel = TasksGraph.GetChannel(channelId);
-                YQL_ENSURE(channel.SrcTask == task.Id);
-
-                if (channel.DstTask) {
-                    auto& dstTask = TasksGraph.GetTask(channel.DstTask);
-                    if (dstTask.ComputeActorId) {
-                        // not a optimal solution
-                        updates[dstTask.ComputeActorId].emplace(channelId);
-                    }
-
-                    LOG_T("Task: " << task.Id << ", output channelId: " << channelId << ", dst task: " << channel.DstTask
-                        << ", at actor " << dstTask.ComputeActorId);
-                }
-            }
-        }
-    }
-
-    void PropagateChannelsUpdates(const THashMap<TActorId, THashSet<ui64>>& updates) {
-        for (auto& pair : updates) {
-            auto computeActorId = pair.first;
-            auto& channelIds = pair.second;
-
-            auto channelsInfoEv = MakeHolder<NYql::NDq::TEvDqCompute::TEvChannelsInfo>();
-            auto& record = channelsInfoEv->Record;
-
-            for (auto& channelId : channelIds) {
-                FillChannelDesc(TasksGraph, *record.AddUpdate(), TasksGraph.GetChannel(channelId), TasksGraph.GetMeta().ChannelTransportVersion, false);
-            }
-
-            LOG_T("Sending channels info to compute actor: " << computeActorId << ", channels: " << channelIds.size());
-            this->Send(computeActorId, channelsInfoEv.Release());
-        }
-    }
-
     void UpdateResourcesUsage(bool force) {
         TInstant now = TActivationContext::Now();
         if ((now - LastResourceUsageUpdate < ResourceUsageUpdateInterval) && !force)
@@ -1082,10 +1025,12 @@ protected:
         for (ui32 i = 0; i < taskCount; i++) {
             auto& task = TasksGraph.AddTask(stageInfo);
 
-            auto& input = task.Inputs[stageSource.GetInputIndex()];
-            input.ConnectionInfo = NYql::NDq::TSourceInput{};
-            input.SourceSettings = externalSource.GetSettings();
-            input.SourceType = externalSource.GetType();
+            if (!externalSource.GetEmbedded()) {
+                auto& input = task.Inputs[stageSource.GetInputIndex()];
+                input.ConnectionInfo = NYql::NDq::TSourceInput{};
+                input.SourceSettings = externalSource.GetSettings();
+                input.SourceType = externalSource.GetType();
+            }
 
             if (structuredToken) {
                 task.Meta.SecureParams.emplace(sourceName, structuredToken);
@@ -1426,6 +1371,10 @@ protected:
         ui32 partitionsCount = 1;
         ui32 inputTasks = 0;
         bool isShuffle = false;
+        bool forceMapTasks = false;
+        ui32 mapCnt = 0;
+
+
         for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
             const auto& input = stage.GetInputs(inputIndex);
 
@@ -1439,6 +1388,7 @@ protected:
                     case NKqpProto::TKqpPhyConnection::kUnionAll:
                     case NKqpProto::TKqpPhyConnection::kMerge:
                     case NKqpProto::TKqpPhyConnection::kStreamLookup:
+                    case NKqpProto::TKqpPhyConnection::kMap:
                         break;
                     default:
                         YQL_ENSURE(false, "Unexpected connection type: " << (ui32)input.GetTypeCase() << Endl
@@ -1456,18 +1406,23 @@ protected:
                 }
 
                 case NKqpProto::TKqpPhyConnection::kStreamLookup:
+                    partitionsCount = originStageInfo.Tasks.size();
                     UnknownAffectedShardCount = true;
-		    [[fallthrough]];
+                    break;
                 case NKqpProto::TKqpPhyConnection::kMap:
                     partitionsCount = originStageInfo.Tasks.size();
+                    forceMapTasks = true;
+                    ++mapCnt;
                     break;
-
                 default:
                     break;
             }
+
         }
 
-        if (isShuffle) {
+        Y_ENSURE(mapCnt < 2, "There can be only < 2 'Map' connections");
+
+        if (isShuffle && !forceMapTasks) {
             if (stage.GetTaskCount()) {
                 partitionsCount = stage.GetTaskCount();
             } else {
@@ -1676,17 +1631,27 @@ protected:
         return true;
     }
 
-    void BuildScanTasksFromShards(TStageInfo& stageInfo) {
+    void BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination) {
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, std::vector<TShardInfoWithId>> nodeShards;
         THashMap<ui64, ui64> assignedShardsCount;
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
+        auto& columnShardHashV1Params = stageInfo.Meta.ColumnShardHashV1Params;
+        if (enableShuffleElimination && stageInfo.Meta.ColumnTableInfoPtr) {
+            const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
+            columnShardHashV1Params.SourceShardCount = tableDesc.GetColumnShardCount();
+            columnShardHashV1Params.SourceTableKeyColumnTypes = std::make_shared<TVector<NScheme::TTypeInfo>>();
+            for (const auto& column: tableDesc.GetSharding().GetHashSharding().GetColumns()) {
+                auto columnType = stageInfo.Meta.TableConstInfo->Columns.at(column).Type;
+                columnShardHashV1Params.SourceTableKeyColumnTypes->push_back(columnType);
+            }
+        }
+
         YQL_ENSURE(Stats);
 
         const auto& tableInfo = stageInfo.Meta.TableConstInfo;
         const auto& keyTypes = tableInfo->KeyColumnTypes;
-        ui32 metaId = 0;
         for (auto& op : stage.GetTableOps()) {
             Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
@@ -1737,7 +1702,74 @@ protected:
                     }
                 }
 
+            } else if (enableShuffleElimination /* save partitioning for shuffle elimination */) {
+                std::size_t stageInternalTaskId = 0;
+                columnShardHashV1Params.TaskIndexByHash = std::make_shared<TVector<ui64>>();
+                columnShardHashV1Params.TaskIndexByHash->resize(columnShardHashV1Params.SourceShardCount);
+
+                for (auto&& pair : nodeShards) {
+                    const auto nodeId = pair.first;
+                    auto& shardsInfo = pair.second;
+                    std::size_t maxTasksPerNode = std::min<std::size_t>(shardsInfo.size(), GetScanTasksPerNode(stageInfo, isOlapScan, nodeId));
+                    std::vector<TTaskMeta> metas(maxTasksPerNode, TTaskMeta());
+                    {
+                        for (std::size_t i = 0; i < shardsInfo.size(); ++i) {
+                            auto&& shardInfo = shardsInfo[i];
+                            MergeReadInfoToTaskMeta(
+                                metas[i % maxTasksPerNode],
+                                shardInfo.ShardId,
+                                shardInfo.KeyReadRanges,
+                                readSettings,
+                                columns, op,
+                                /*isPersistentScan*/ true
+                            );
+                        }
+
+                        for (auto& meta: metas) {
+                            PrepareScanMetaForUsage(meta, keyTypes);
+                            LOG_D("Stage " << stageInfo.Id << " create scan task meta for node: " << nodeId
+                                << ", meta: " << meta.ToString(keyTypes, *AppData()->TypeRegistry));
+                        }
+                    }
+
+                    // in runtime we calc hash, which will be in [0; shardcount]
+                    // so we merge to mappings : hash -> shardID and shardID -> channelID for runtime
+                    THashMap<ui64, ui64> hashByShardId;
+                    Y_ENSURE(stageInfo.Meta.ColumnTableInfoPtr != nullptr, "ColumnTableInfoPtr is nullptr, maybe information about shards haven't beed delivered yet.");
+                    const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
+                    const auto& sharding = tableDesc.GetSharding();
+                    for (std::size_t i = 0; i < sharding.ColumnShardsSize(); ++i) {
+                        hashByShardId.insert({sharding.GetColumnShards(i), i});
+                    }
+
+                    for (ui32 t = 0; t < maxTasksPerNode; ++t, ++stageInternalTaskId) {
+                        auto& task = TasksGraph.AddTask(stageInfo);
+                        task.Meta = metas[t];
+                        task.Meta.SetEnableShardsSequentialScan(false);
+                        task.Meta.ExecuterId = SelfId();
+                        task.Meta.NodeId = nodeId;
+                        task.Meta.ScanTask = true;
+                        task.Meta.Type = TTaskMeta::TTaskType::Scan;
+                        task.SetMetaId(t);
+                        FillSecureParamsFromStage(task.Meta.SecureParams, stage);
+                        BuildSinks(stage, task);
+
+                        for (const auto& readInfo: *task.Meta.Reads) {
+                            Y_ENSURE(hashByShardId.contains(readInfo.ShardId));
+                            (*columnShardHashV1Params.TaskIndexByHash)[hashByShardId[readInfo.ShardId]] = stageInternalTaskId;
+                        }
+
+                    }
+                }
+
+                LOG_DEBUG_S(
+                    *TlsActivationContext,
+                    NKikimrServices::KQP_EXECUTER,
+                    "Stage with scan " << "[" << stageInfo.Id.TxId << ":" << stageInfo.Id.StageId << "]"
+                    << " has keys: " << columnShardHashV1Params.KeyTypesToString();
+                );
             } else {
+                ui32 metaId = 0;
                 for (auto&& pair : nodeShards) {
                     const auto nodeId = pair.first;
                     auto& shardsInfo = pair.second;
@@ -1883,7 +1915,7 @@ protected:
         ReplyErrorAndDie(status, &issues);
     }
 
-    void TimeoutError(TActorId abortSender, NYql::TIssues issues) {
+    void TimeoutError(bool sessionSender, NYql::TIssues issues) {
         if (AlreadyReplied) {
             LOG_E("Timeout when we already replied - not good" << Endl << TBackTrace().PrintToString() << Endl);
             return;
@@ -1907,7 +1939,7 @@ protected:
         NYql::IssuesToMessage(issues, ResponseEv->Record.MutableResponse()->MutableIssues());
 
         // TEvAbortExecution can come from either ComputeActor or SessionActor (== Target).
-        if (abortSender != Target) {
+        if (!sessionSender) {
             auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(status, issues);
             this->Send(Target, abortEv.Release());
         }

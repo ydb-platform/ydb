@@ -19,7 +19,7 @@ namespace NBoot {
         TMemTable(IStep *owner) : IStep(owner, NBoot::EStep::MemTable) { }
 
     private: /* IStep, boot logic DSL actor interface   */
-        void Start() noexcept override
+        void Start() override
         {
             for (auto it: Back->DatabaseImpl->Scheme->Tables) {
                 const auto &wrap = Back->DatabaseImpl->Get(it.first, true);
@@ -48,7 +48,7 @@ namespace NBoot {
             }
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
+        void HandleStep(TIntrusivePtr<IStep> step) override
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(Pending);
 

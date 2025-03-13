@@ -585,6 +585,11 @@ struct TEvPQProxy {
     };
 
     struct TEvDirectReadDestroyPartitionSession : public TEventLocal<TEvDirectReadDestroyPartitionSession, EvDirectReadDestroyPartitionSession> {
+
+        TEvDirectReadDestroyPartitionSession(const TString& sessionId, ui64 partitionSessionId)
+            : ReadKey(sessionId, partitionSessionId)
+        {}
+
         TEvDirectReadDestroyPartitionSession(const NKikimr::NPQ::TReadSessionKey& sessionKey,
                                              Ydb::PersQueue::ErrorCode::ErrorCode code, const TString& reason)
             : ReadKey(sessionKey)

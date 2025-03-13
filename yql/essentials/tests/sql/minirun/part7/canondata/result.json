@@ -220,7 +220,7 @@
         {
             "checksum": "02e80809d3cbf91101d09d4ac1e87aa0",
             "size": 623,
-            "uri": "https://{canondata_backend}/1917492/b01930df0710eb10e4ce2d35cddca6be33ac8a9f/resource.tar.gz#test.test_blocks-as_tuple-default.txt-Peephole_/opt.yql"
+            "uri": "https://{canondata_backend}/1130705/f9eb075ce8fc54a57832e4ee918669601325c133/resource.tar.gz#test.test_blocks-as_tuple-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-as_tuple-default.txt-Results]": [
@@ -553,6 +553,20 @@
             "checksum": "f8e598179b9ae09ee2626c2d0342a968",
             "size": 3995,
             "uri": "https://{canondata_backend}/1937429/ab4dd66771a60c21f698c24d93aafbe26098e494/resource.tar.gz#test.test_in-in_with_nulls_and_optionals_extra_ansi-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[join-eq_over_join_basic-default.txt-Debug]": [
+        {
+            "checksum": "da1603d7d463a99c9b81d07ab562f3c7",
+            "size": 1625,
+            "uri": "https://{canondata_backend}/937458/0493b86f10f9e96f10e8955e2d365f91a1c2a439/resource.tar.gz#test.test_join-eq_over_join_basic-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[join-eq_over_join_basic-default.txt-Results]": [
+        {
+            "checksum": "ce622e48816b3c6eb5f8255906683831",
+            "size": 5679,
+            "uri": "https://{canondata_backend}/937458/0493b86f10f9e96f10e8955e2d365f91a1c2a439/resource.tar.gz#test.test_join-eq_over_join_basic-default.txt-Results_/results.txt"
         }
     ],
     "test.test[join-inmem_with_set_key-default.txt-Debug]": [

@@ -3,7 +3,7 @@
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/resource_quota.h>
 
-#include <ydb-cpp-sdk/type_switcher.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/common/constants.h>
 
 #include <util/datetime/base.h>
@@ -11,6 +11,7 @@
 #include <string>
 
 namespace NYdbGrpc {
+inline namespace Dev {
 
 struct TGRpcClientConfig {
     std::string Locator; // format host:port
@@ -84,4 +85,5 @@ inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRp
     }
 }
 
-} // namespace NGRpc
+}
+}

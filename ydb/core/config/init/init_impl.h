@@ -2,8 +2,8 @@
 
 #include "init.h"
 
-#include <ydb-cpp-sdk/client/discovery/discovery.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
@@ -178,6 +178,7 @@ void AddProtoConfigOptions(IProtoConfigFileProvider& out);
 void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErrorCollector& errorCollector, TVector<TString> configFiles, NKikimrConfig::TAppConfig& out);
 void LoadMainYamlConfig(TConfigRefs refs, const TString& mainYamlConfigFile, const TString& storageYamlConfigFile,
     bool loadedFromStore, NKikimrConfig::TAppConfig& appConfig,
+    NYamlConfig::IConfigSwissKnife* csk,
     const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
 void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const NYdb::NDiscovery::TNodeLocation& src);
 void CopyNodeLocation(NYdb::NDiscovery::TNodeLocation* dst, const NActorsInterconnect::TNodeLocation& src);
@@ -332,7 +333,7 @@ struct TCommonAppOptions {
     TString PathToInterconnectPrivateKeyFile;
     TString PathToInterconnectCaFile;
     TString YamlConfigFile;
-    TString ConfigStorePath;
+    TString ConfigDirPath;
     bool SysLogEnabled = false;
     bool TcpEnabled = false;
     bool SuppressVersionCheck = false;
@@ -427,7 +428,7 @@ struct TCommonAppOptions {
         opts.AddLongOption("body", "body name (used to describe dynamic node location)")
             .RequiredArgument("NUM").StoreResult(&Body);
         opts.AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").StoreResult(&YamlConfigFile);
-        opts.AddLongOption("config-store", "Directory to store Yaml config").RequiredArgument("PATH").StoreResult(&ConfigStorePath);
+        opts.AddLongOption("config-dir", "Directory to store Yaml config").RequiredArgument("PATH").StoreResult(&ConfigDirPath);
 
         opts.AddLongOption("tiny-mode", "Start in a tiny mode")
             .NoArgument().SetFlag(&TinyMode);
@@ -1056,7 +1057,7 @@ public:
         MbusAppOptions.ValidateCliOptions(opts, parseResult);
     }
 
-    void Parse(const TVector<TString>& freeArgs) override {
+    void Parse(const TVector<TString>& freeArgs, NYamlConfig::IConfigSwissKnife* csk) override {
         using TCfg = NKikimrConfig::TAppConfig;
 
         NConfig::TConfigRefs refs{ConfigUpdateTracer, ErrorCollector, ProtoConfigFileProvider};
@@ -1068,24 +1069,24 @@ public:
         TString storageYamlConfigFile;
         bool loadedFromStore = false;
 
-        if (CommonAppOptions.ConfigStorePath) {
-            AppConfig.SetConfigStorePath(CommonAppOptions.ConfigStorePath);
+        if (CommonAppOptions.ConfigDirPath) {
+            AppConfig.SetConfigDirPath(CommonAppOptions.ConfigDirPath);
 
-            auto dir = fs::path(CommonAppOptions.ConfigStorePath.c_str());
+            auto dir = fs::path(CommonAppOptions.ConfigDirPath.c_str());
 
             if (auto path = dir / STORAGE_CONFIG_NAME; fs::is_regular_file(path)) {
-                storageYamlConfigFile = path.c_str();
+                storageYamlConfigFile = path.string();
             }
 
             if (auto path = dir / CONFIG_NAME; fs::is_regular_file(path)) {
-                yamlConfigFile = path.c_str();
+                yamlConfigFile = path.string();
                 loadedFromStore = true;
             } else {
                 storageYamlConfigFile.clear();
             }
         }
 
-        LoadMainYamlConfig(refs, yamlConfigFile, storageYamlConfigFile, loadedFromStore, AppConfig);
+        LoadMainYamlConfig(refs, yamlConfigFile, storageYamlConfigFile, loadedFromStore, AppConfig, csk);
         OptionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{});
 
         // start memorylog as soon as possible
@@ -1107,7 +1108,7 @@ public:
             InitDynamicNode();
         }
 
-        LoadMainYamlConfig(refs, yamlConfigFile, storageYamlConfigFile, loadedFromStore, AppConfig);
+        LoadMainYamlConfig(refs, yamlConfigFile, storageYamlConfigFile, loadedFromStore, AppConfig, csk);
 
         Option("sys-file", TCfg::TActorSystemConfigFieldTag{});
 
@@ -1401,6 +1402,7 @@ public:
         configsDispatcherInitInfo.StartupConfigYaml = appConfig.GetStartupConfigYaml();
         configsDispatcherInitInfo.ItemsServeRules = std::monostate{},
         configsDispatcherInitInfo.Labels = Labels;
+        configsDispatcherInitInfo.Labels["configuration_version"] = appConfig.GetConfigDirPath() ? "v2" : "v1";
         configsDispatcherInitInfo.DebugInfo = TDebugInfo {
             .InitInfo = InitDebug.ConfigTransformInfo,
         };

@@ -103,6 +103,20 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(), 0);
     }
 
+    Y_UNIT_TEST(GoodFormatYqlWithWinEOL) {
+        TChecksRequest request;
+        request.Program = "SELECT\r\n    1\r\n;\r\n";
+        request.Syntax = ESyntax::YQL;
+        request.Filters.ConstructInPlace();
+        request.Filters->push_back(TCheckFilter{.CheckNameGlob = "format"});
+        auto res = RunChecks(request);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "format");
+        UNIT_ASSERT(res.Checks[0].Success);
+        Cerr << res.Checks[0].Issues.ToString();
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(), 0);
+    }
+
     Y_UNIT_TEST(UnparsedFormatYql) {
         TChecksRequest request;
         request.Program = "select1\n";

@@ -1,7 +1,7 @@
 LIBRARY()
 
 RESOURCE_FILES(
-    config.clang-format
+    .clang-format
 )
 
 END()

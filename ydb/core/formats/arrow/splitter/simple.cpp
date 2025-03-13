@@ -2,8 +2,8 @@
 
 #include <ydb/core/formats/arrow/size_calcer.h>
 
-#include <ydb/library/formats/arrow/common/validation.h>
 #include <ydb/library/formats/arrow/splitter/similar_packer.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
 
 #include <util/string/join.h>
 

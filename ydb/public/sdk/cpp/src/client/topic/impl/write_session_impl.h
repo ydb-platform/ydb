@@ -2,14 +2,14 @@
 
 #include "transaction.h"
 
-#include <src/client/topic/common/callback_context.h>
-#include <src/client/topic/impl/common.h>
-#include <src/client/topic/impl/topic_impl.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h>
 
 #include <util/generic/buffer.h>
 
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 class TWriteSessionEventsQueue: public TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent, TSessionClosedEvent, IExecutor> {
     using TParent = TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent, TSessionClosedEvent, IExecutor>;
@@ -164,18 +164,18 @@ private:
         std::optional<ECodec> Codec;
         ui32 OriginalSize; // only for coded messages
         std::vector<std::pair<std::string, std::string>> MessageMeta;
-        const NTable::TTransaction* Tx;
+        std::optional<TTransactionId> Tx;
 
         TMessage(uint64_t id, const TInstant& createdAt, std::string_view data, std::optional<ECodec> codec = {},
                  ui32 originalSize = 0, const std::vector<std::pair<std::string, std::string>>& messageMeta = {},
-                 const NTable::TTransaction* tx = nullptr)
+                 std::optional<TTransactionId>&& tx = {})
             : Id(id)
             , CreatedAt(createdAt)
             , DataRef(data)
             , Codec(codec)
             , OriginalSize(originalSize)
             , MessageMeta(messageMeta)
-            , Tx(tx)
+            , Tx(std::move(tx))
         {}
     };
 
@@ -189,11 +189,11 @@ private:
 
         void Add(uint64_t id, const TInstant& createdAt, std::string_view data, std::optional<ECodec> codec, ui32 originalSize,
                  const std::vector<std::pair<std::string, std::string>>& messageMeta,
-                 const NTable::TTransaction* tx) {
+                 std::optional<TTransactionId>&& tx) {
             if (StartedAt == TInstant::Zero())
                 StartedAt = TInstant::Now();
             CurrentSize += codec ? originalSize : data.size();
-            Messages.emplace_back(id, createdAt, data, codec, originalSize, messageMeta, tx);
+            Messages.emplace_back(id, createdAt, data, codec, originalSize, messageMeta, std::move(tx));
             Acquired = false;
         }
 
@@ -263,24 +263,24 @@ private:
         TInstant CreatedAt;
         size_t Size;
         std::vector<std::pair<std::string, std::string>> MessageMeta;
-        const NTable::TTransaction* Tx;
+        std::optional<TTransactionId> Tx;
 
         TOriginalMessage(const uint64_t id, const TInstant createdAt, const size_t size,
-                         const NTable::TTransaction* tx)
+                         std::optional<TTransactionId>&& tx)
             : Id(id)
             , CreatedAt(createdAt)
             , Size(size)
-            , Tx(tx)
+            , Tx(std::move(tx))
         {}
 
         TOriginalMessage(const uint64_t id, const TInstant createdAt, const size_t size,
                          std::vector<std::pair<std::string, std::string>>&& messageMeta,
-                         const NTable::TTransaction* tx)
+                         std::optional<TTransactionId>&& tx)
             : Id(id)
             , CreatedAt(createdAt)
             , Size(size)
             , MessageMeta(std::move(messageMeta))
-            , Tx(tx)
+            , Tx(std::move(tx))
         {}
     };
 

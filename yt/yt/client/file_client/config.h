@@ -8,10 +8,9 @@ namespace NYT::NFileClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TFileChunkWriterConfig
+struct TFileChunkWriterConfig
     : public virtual NChunkClient::TEncodingWriterConfig
 {
-public:
     i64 BlockSize;
 
     REGISTER_YSON_STRUCT(TFileChunkWriterConfig);

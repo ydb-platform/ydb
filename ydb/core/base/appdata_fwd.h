@@ -68,10 +68,12 @@ namespace NKikimrConfig {
     class TAwsCompatibilityConfig;
     class TS3ProxyResolverConfig;
     class TBackgroundCleaningConfig;
+    class TDataErasureConfig;
     class TGraphConfig;
     class TMetadataCacheConfig;
     class TMemoryControllerConfig;
     class TFeatureFlags;
+    class THealthCheckConfig;
 }
 
 namespace NKikimrReplication {
@@ -112,7 +114,7 @@ namespace NMonitoring {
     class TBusNgMonPage;
 }
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
     class TDriver;
 }
 
@@ -153,6 +155,10 @@ namespace NSchemeShard {
 
 class TFormatFactory;
 
+namespace NYamlConfig {
+    class IConfigSwissKnife;
+}
+
 struct TAppData {
     static const ui32 MagicTag = 0x2991AAF8;
     const ui32 Magic;
@@ -172,6 +178,7 @@ struct TAppData {
     const TFormatFactory* FormatFactory = nullptr;
     const NSQS::IEventsWriterFactory* SqsEventsWriterFactory = nullptr;
     const NSchemeShard::IOperationFactory *SchemeOperationFactory = nullptr;
+    const NYamlConfig::IConfigSwissKnife *ConfigSwissKnife = nullptr;
 
     NSQS::IAuthFactory* SqsAuthFactory = nullptr;
 
@@ -235,6 +242,8 @@ struct TAppData {
     NKikimrConfig::TMemoryControllerConfig& MemoryControllerConfig;
     NKikimrReplication::TReplicationDefaults& ReplicationConfig;
     NKikimrProto::TDataIntegrityTrailsConfig& DataIntegrityTrailsConfig;
+    NKikimrConfig::TDataErasureConfig& DataErasureConfig;
+    NKikimrConfig::THealthCheckConfig& HealthCheckConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
@@ -243,10 +252,13 @@ struct TAppData {
     bool EnableMvccSnapshotWithLegacyDomainRoot = false;
     bool UsePartitionStatsCollectorForTests = false;
     bool DisableCdcAutoSwitchingToReadyStateForTests = false;
+
     TVector<TString> AdministrationAllowedSIDs; // use IsAdministrator method to check whether a user or a group is allowed to perform administrative tasks
+    TVector<TString> RegisterDynamicNodeAllowedSIDs;
+    TVector<TString> BootstrapAllowedSIDs;
     TVector<TString> DefaultUserSIDs;
     TString AllAuthenticatedUsers = "all-users@well-known";
-    TVector<TString> RegisterDynamicNodeAllowedSIDs;
+
     TString TenantName;
     TString NodeName;
 

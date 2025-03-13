@@ -1,4 +1,4 @@
-#include <src/client/persqueue_public/ut/ut_utils/ut_utils.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/future.h>

@@ -3,9 +3,8 @@
 #include "settings.h"
 #include "stats.h"
 
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
 
@@ -60,8 +59,7 @@ private:
 public:
     TDataBuilder(const std::shared_ptr<arrow::DataType>& type, const TSettings& settings)
         : Type(type)
-        , Settings(settings)
-    {
+        , Settings(settings) {
     }
 
     void StartNextRecord() {
@@ -134,7 +132,7 @@ public:
     TDictStats BuildStats(const std::vector<TColumnElements*>& keys, const TSettings& settings, const ui32 recordsCount) const {
         auto builder = TDictStats::MakeBuilder();
         for (auto&& i : keys) {
-            builder.Add(i->GetKeyName(), i->GetRecordIndexes().size(), i->GetDataSize(), 
+            builder.Add(i->GetKeyName(), i->GetRecordIndexes().size(), i->GetDataSize(),
                 settings.IsSparsed(i->GetRecordIndexes().size(), recordsCount) ? IChunkedArray::EType::SparsedArray
                                                                                : IChunkedArray::EType::Array);
         }

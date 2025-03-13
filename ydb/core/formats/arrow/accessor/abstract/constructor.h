@@ -1,7 +1,8 @@
 #pragma once
 
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/library/formats/arrow/accessor/common/chunk_data.h>
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
+
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
@@ -67,7 +68,13 @@ public:
         if (originalArray->GetType() == GetType()) {
             return originalArray;
         } else {
-            return DoConstruct(originalArray, externalInfo);
+            auto result = DoConstruct(originalArray, externalInfo);
+            if (result.IsFail()) {
+                return result;
+            }
+            AFL_VERIFY(result.GetResult()->GetRecordsCount() == originalArray->GetRecordsCount())("result", result.GetResult()->GetRecordsCount())(
+                                                      "original", originalArray->GetRecordsCount());
+            return result;
         }
     }
 

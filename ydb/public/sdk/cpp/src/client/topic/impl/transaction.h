@@ -1,27 +1,30 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
-namespace NYdb::inline V3::NTable {
+namespace NYdb::inline Dev::NTable {
 
 class TTransaction;
 
 }
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
-using TTransactionId = std::pair<std::string, std::string>;
+struct TTransactionId {
+    std::string SessionId;
+    std::string TxId;
+};
 
 inline
-const std::string& GetSessionId(const TTransactionId& x)
+bool operator==(const TTransactionId& lhs, const TTransactionId& rhs)
 {
-    return x.first;
+    return (lhs.SessionId == rhs.SessionId) && (lhs.TxId == rhs.TxId);
 }
 
 inline
-const std::string& GetTxId(const TTransactionId& x)
+bool operator!=(const TTransactionId& lhs, const TTransactionId& rhs)
 {
-    return x.second;
+    return !(lhs == rhs);
 }
 
 TTransactionId MakeTransactionId(const NTable::TTransaction& tx);
@@ -30,3 +33,10 @@ TStatus MakeSessionExpiredError();
 TStatus MakeCommitTransactionSuccess();
 
 }
+
+template <>
+struct THash<NYdb::NTopic::TTransactionId> {
+    size_t operator()(const NYdb::NTopic::TTransactionId& v) const noexcept {
+        return CombineHashes(THash<std::string>()(v.SessionId), THash<std::string>()(v.TxId));
+    }
+};

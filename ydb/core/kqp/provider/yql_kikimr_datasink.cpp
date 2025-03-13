@@ -1106,7 +1106,7 @@ public:
         } else {
             YQL_ENSURE(false, "Invalid key type for sequence");
         }
-        
+
 
         return Build<TKiAlterSequence>(ctx, node->Pos())
             .World(node->Child(0))

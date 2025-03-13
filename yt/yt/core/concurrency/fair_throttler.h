@@ -19,7 +19,7 @@ struct TFairThrottlerConfig
 
     int GlobalAccumulationTicks;
 
-    std::optional<TString> IPCPath;
+    std::optional<TString> IpcPath;
 
     REGISTER_YSON_STRUCT(TFairThrottlerConfig);
 
@@ -52,11 +52,11 @@ DEFINE_REFCOUNTED_TYPE(TFairThrottlerBucketConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct IIPCBucket
+struct IIpcBucket
     : public TRefCounted
 {
     // NB: This struct is shared between processes. All changes must be backward compatible.
-    struct TBucket
+    struct TState
     {
         std::atomic<double> Weight;
         std::atomic<i64> Limit;
@@ -66,14 +66,14 @@ struct IIPCBucket
         std::atomic<i64> GuaranteedQuota;
     };
 
-    virtual TBucket* State() = 0;
+    virtual TState* GetState() = 0;
 };
 
-DEFINE_REFCOUNTED_TYPE(IIPCBucket)
+DEFINE_REFCOUNTED_TYPE(IIpcBucket)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct IThrottlerIPC
+struct IThrottlerIpc
     : public TRefCounted
 {
     // NB: This struct is shared between processes. All changes must be backward compatible.
@@ -84,13 +84,13 @@ struct IThrottlerIPC
 
     virtual bool TryLock() = 0;
     virtual TSharedBucket* State() = 0;
-    virtual std::vector<IIPCBucketPtr> ListBuckets() = 0;
-    virtual IIPCBucketPtr AddBucket() = 0;
+    virtual std::vector<IIpcBucketPtr> ListBuckets() = 0;
+    virtual IIpcBucketPtr AddBucket() = 0;
 };
 
-IThrottlerIPCPtr CreateFileThrottlerIPC(const TString& path);
+IThrottlerIpcPtr CreateFileThrottlerIpc(const TString& path);
 
-DEFINE_REFCOUNTED_TYPE(IThrottlerIPC)
+DEFINE_REFCOUNTED_TYPE(IThrottlerIpc)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -116,12 +116,12 @@ public:
         NProfiling::TProfiler profiler);
 
     IThroughputThrottlerPtr CreateBucketThrottler(
-        const TString& name,
+        const std::string& name,
         TFairThrottlerBucketConfigPtr config);
 
     void Reconfigure(
         TFairThrottlerConfigPtr config,
-        const THashMap<TString, TFairThrottlerBucketConfigPtr>& bucketConfigs);
+        const THashMap<std::string, TFairThrottlerBucketConfigPtr>& bucketConfigs);
 
     static std::vector<i64> ComputeFairDistribution(
         i64 totalLimit,
@@ -140,15 +140,15 @@ private:
     {
         TFairThrottlerBucketConfigPtr Config;
         TBucketThrottlerPtr Throttler;
-        IIPCBucketPtr IPC;
+        IIpcBucketPtr Ipc;
     };
 
     // Protects all Config_ and Buckets_.
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
     TFairThrottlerConfigPtr Config_;
-    THashMap<TString, TBucket> Buckets_;
+    THashMap<std::string, TBucket> Buckets_;
 
-    IThrottlerIPCPtr IPC_;
+    IThrottlerIpcPtr Ipc_;
 
     void DoUpdateLeader();
     void DoUpdateFollower();

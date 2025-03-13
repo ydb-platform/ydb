@@ -4,7 +4,7 @@
 
 Specifies a named action that is a parameterizable block of multiple top-level expressions.
 
-### Syntax
+#### Syntax
 
 1. `DEFINE ACTION`: action definition.
 1. [Action name](expressions.md#named-nodes) that will be used to access the defined action further in the query.
@@ -19,7 +19,7 @@ One or more of the last parameters can be marked with a question mark `?` as opt
 
 Executes an `ACTION` with the specified parameters.
 
-### Syntax
+#### Syntax
 
 1. `DO`: Executing an action.
 1. The named expression for which the action is defined.
@@ -33,7 +33,7 @@ In large queries, you can use separate files for action definition and include t
 
 {% endnote %}
 
-### Example
+#### Example
 
 ```yql
 DEFINE ACTION $hello_world($name, $suffix?) AS
@@ -51,7 +51,7 @@ DO $hello_world(NULL, "Earth");
 
 Performing an action without declaring it (anonymous action).
 
-### Syntax
+#### Syntax
 
 1. `BEGIN`.
 1. List of top-level expressions.
@@ -59,7 +59,7 @@ Performing an action without declaring it (anonymous action).
 
 An anonymous action can't include any parameters.
 
-### Example
+#### Example
 
 ```yql
 DO BEGIN
@@ -86,7 +86,7 @@ END DO
 4. [DO](#do) with the name and parameters of an action or an anonymous action. In the parameters, you can use both the current element from the first paragraph and any named expressions declared above, including the list itself.
 5. An optional `ELSE` followed by the second `DO` for the situation when the list is empty.
 
-### Examples
+#### Examples
 
 ```yql
 DEFINE ACTION $hello() AS

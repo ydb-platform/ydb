@@ -173,6 +173,9 @@ public:
     // "versioned_write_options"
     NTableClient::TVersionedWriteOptions GetVersionedWriteOptions() const;
 
+    // "access_method"
+    std::optional<TString> GetAccessMethod() const;
+
 private:
     TYPath Path_;
     NYTree::IAttributeDictionaryPtr Attributes_;

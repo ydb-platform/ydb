@@ -43,6 +43,9 @@ namespace NMonitoring {
 
         void Close() override {
         }
+
+        void OnMemOnly(bool) override {
+        }
     };
 
     IMetricEncoderPtr EncoderFake() {

@@ -38,7 +38,7 @@ namespace NTest {
             return Stop ? 0 : 4096;
         }
 
-        TString Report() const noexcept
+        TString Report() const
         {
             TStringStream out;
 

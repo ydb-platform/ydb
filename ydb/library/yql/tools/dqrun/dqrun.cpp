@@ -43,7 +43,7 @@
 #include <ydb/library/yql/providers/function/provider/dq_function_provider.h>
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
-#include <ydb/library/yql/providers/solomon/async_io/dq_solomon_read_actor.h>
+#include <ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
 #include <yql/essentials/providers/pg/provider/yql_pg_provider.h>
@@ -74,6 +74,10 @@
 #include <yql/essentials/core/pg_ext/yql_pg_ext.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/utils/log/tls_backend.h>
 #include <yql/essentials/utils/log/log.h>
@@ -806,8 +810,12 @@ int RunMain(int argc, const char* argv[])
     }
 
     if (res.Has("replay")) {
-        qStorage = MakeFileQStorage(qStorageDir);
-        qContext = TQContext(qStorage->MakeReader(opId, {}));
+        try {
+            qStorage = MakeFileQStorage(qStorageDir);
+            qContext = TQContext(qStorage->MakeReader(opId, {}));
+        } catch (...) {
+            throw yexception() << "QPlayer replay is probably broken. Exception: " << CurrentExceptionMessage();
+        }
     } else if (res.Has("capture")) {
         qStorage = MakeFileQStorage(qStorageDir);
         qContext = TQContext(qStorage->MakeWriter(opId, {}));
@@ -1089,7 +1097,7 @@ int RunMain(int argc, const char* argv[])
         auto solomonConfig = gatewaysConfig.GetSolomon();
         auto solomonGateway = CreateSolomonGateway(solomonConfig);
 
-        dataProvidersInit.push_back(NYql::GetSolomonDataProviderInitializer(solomonGateway, false));
+        dataProvidersInit.push_back(NYql::GetSolomonDataProviderInitializer(solomonGateway, nullptr, false));
         for (const auto& cluster: gatewaysConfig.GetSolomon().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{NYql::SolomonProviderName});
         }
@@ -1126,9 +1134,16 @@ int RunMain(int argc, const char* argv[])
         dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateDqExecTransformer, dqGateway, dqCompFactory, {}, storage));
     }
 
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+
     NSQLTranslation::TTranslators translators(
         nullptr,
-        NSQLTranslationV1::MakeTranslator(),
+        NSQLTranslationV1::MakeTranslator(lexers, parsers),
         NSQLTranslationPG::MakeTranslator()
     );
 

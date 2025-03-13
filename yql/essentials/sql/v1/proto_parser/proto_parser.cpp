@@ -52,11 +52,6 @@ google::protobuf::Message* SqlAST(const TParsers& parsers, const TString& query,
             if (!res) {
                 return res;
             }
-        } else if (parsers.Antlr4Ansi) {
-            res = parsers.Antlr4Ansi->MakeParser()->Parse(query, queryName, err, arena);
-            if (!res) {
-                return res;
-            }
         } else {
             ReportError(err, "antlr3_ansi");
             return nullptr;
@@ -67,11 +62,6 @@ google::protobuf::Message* SqlAST(const TParsers& parsers, const TString& query,
         google::protobuf::Message* res = nullptr;
         if (parsers.Antlr3) {
             res = parsers.Antlr3->MakeParser()->Parse(query, queryName, err, arena);
-            if (!res) {
-                return res;
-            }
-        } else if (parsers.Antlr4) {
-            res = parsers.Antlr4->MakeParser()->Parse(query, queryName, err, arena);
             if (!res) {
                 return res;
             }
@@ -108,27 +98,6 @@ google::protobuf::Message* SqlAST(const TParsers& parsers, const TString& query,
 
         return res;
     }
-}
-
-google::protobuf::Message* SqlAST(const TString& query, const TString& queryName,
-    NYql::TIssues& err, size_t maxErrors, bool ansiLexer, bool antlr4Parser, bool testAntlr4, google::protobuf::Arena* arena) {
-    Y_UNUSED(testAntlr4);
-    return SqlAST(MakeAllParsers(), query, queryName, err, maxErrors, ansiLexer, antlr4Parser, arena);
-}
-
-google::protobuf::Message* SqlAST(const TString& query, const TString& queryName,
-    NProtoAST::IErrorCollector& err, bool ansiLexer, bool antlr4Parser, bool testAntlr4, google::protobuf::Arena* arena) {
-    Y_UNUSED(testAntlr4);
-    return SqlAST(MakeAllParsers(), query, queryName, err, ansiLexer, antlr4Parser, arena);
-}
-
-TParsers MakeAllParsers() {
-    return TParsers {
-        .Antlr3 = MakeAntlr3ParserFactory(),
-        .Antlr3Ansi = MakeAntlr3AnsiParserFactory(),
-        .Antlr4 = MakeAntlr4ParserFactory(),
-        .Antlr4Ansi = MakeAntlr4AnsiParserFactory()
-    };
 }
 
 } // namespace NSQLTranslationV1

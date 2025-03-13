@@ -1,24 +1,26 @@
 #include "kqp_federated_query_helpers.h"
 
 #include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/config.pb.h>
 
 #include <ydb/core/fq/libs/actors/database_resolver.h>
 #include <ydb/core/fq/libs/actors/proxy.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
+#include <ydb/library/actors/http/http_proxy.h>
 
 #include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
 #include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
+#include <yt/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
 
 #include <util/system/file.h>
 #include <util/stream/file.h>
-
-#include <ydb/core/protos/auth.pb.h>
 
 namespace NKikimr::NKqp {
     NYql::IYtGateway::TPtr MakeYtGateway(const NMiniKQL::IFunctionRegistry* functionRegistry, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
@@ -57,6 +59,11 @@ namespace NKikimr::NKqp {
         return std::make_pair(ToString(host), scheme == "grpcs");
     }
 
+    bool IsValidExternalDataSourceType(const TString& type) {
+        static auto allTypes = NYql::GetAllExternalDataSourceTypes();
+        return allTypes.contains(type);
+    }
+
     // TKqpFederatedQuerySetupFactoryDefault contains network clients and service actors necessary
     // for federated queries. HTTP Gateway (required by S3 provider) is run by default even without
     // explicit configuration. Token Accessor and Connector Client are run only if config is provided.
@@ -79,6 +86,7 @@ namespace NKikimr::NKqp {
 
         YtGatewayConfig = queryServiceConfig.GetYt();
         YtGateway = MakeYtGateway(appData->FunctionRegistry, queryServiceConfig);
+        DqTaskTransformFactory = NYql::CreateYtDqTaskTransformFactory(true);
 
         // Initialize Token Accessor
         if (appConfig.GetAuthConfig().HasTokenAccessorConfig()) {
@@ -135,7 +143,8 @@ namespace NKikimr::NKqp {
             SolomonGatewayConfig,
             SolomonGateway,
             nullptr,
-            S3ReadActorFactoryConfig};
+            S3ReadActorFactoryConfig,
+            DqTaskTransformFactory};
 
         // Init DatabaseAsyncResolver only if all requirements are met
         if (DatabaseResolverActorId && MdbEndpointGenerator &&
@@ -160,6 +169,11 @@ namespace NKikimr::NKqp {
             return std::make_shared<TKqpFederatedQuerySetupFactoryNoop>();
         }
 
+        for (const auto& source : appConfig.GetQueryServiceConfig().GetAvailableExternalDataSources()) {
+            if (!IsValidExternalDataSourceType(source)) {
+                ythrow yexception() << "wrong AvailableExternalDataSources \"" << source << "\"";
+            }
+        }
         return std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryDefault>(setup, appData, appConfig);
     }
 

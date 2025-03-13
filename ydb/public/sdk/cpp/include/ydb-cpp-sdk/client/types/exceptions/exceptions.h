@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/fwd.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fwd.h>
 
 #include <util/generic/yexception.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class TYdbException : public yexception {
 public:

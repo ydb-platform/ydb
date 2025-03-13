@@ -12,6 +12,10 @@
 #include <yql/essentials/core/services/yql_eval_params.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/utils/log/context.h>
 #include <yql/essentials/utils/log/profile.h>
@@ -687,6 +691,7 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
         loadedSettings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());
         loadedSettings.DqDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["DqDefaultAuto"].AsBool());
         loadedSettings.BlockDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["BlockDefaultAuto"].AsBool());
+        loadedSettings.IsReplay = true;
         currentSettings = &loadedSettings;
     }
 }
@@ -731,9 +736,16 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     }
 
     currentSettings->EmitReadsForExists = true;
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+
     NSQLTranslation::TTranslators translators(
         nullptr,
-        NSQLTranslationV1::MakeTranslator(),
+        NSQLTranslationV1::MakeTranslator(lexers, parsers),
         NSQLTranslationPG::MakeTranslator()
     );
 

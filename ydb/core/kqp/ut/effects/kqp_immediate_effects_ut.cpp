@@ -1,5 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -2227,6 +2227,160 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         }
     }
 
+    Y_UNIT_TEST(ManyFlushes) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateTestTable(session);
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (3u, "Three"),
+                    (4u, "Four");
+
+                SELECT * FROM TestImmediateEffects;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]]
+            ])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+
+        {  // multiple effects
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES (5u, "Five");
+                SELECT * FROM TestImmediateEffects;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES (6u, "Six");
+                SELECT * FROM TestImmediateEffects;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES (7u, "Seven");
+                SELECT * FROM TestImmediateEffects;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]];
+                [[5u];["Five"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]];
+                [[5u];["Five"]];
+                [[6u];["Six"]]
+            ])", FormatResultSetYson(result.GetResultSet(1)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]];
+                [[5u];["Five"]];
+                [[6u];["Six"]];
+                [[7u];["Seven"]]
+            ])", FormatResultSetYson(result.GetResultSet(2)));
+        }
+    }
+
+     Y_UNIT_TEST(Interactive) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateTestTable(session);
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (3u, "Three"),
+                    (4u, "Four");
+
+                SELECT * FROM TestImmediateEffects;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]]
+            ])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES (5u, "Five");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto tx = result.GetTransaction();
+
+            result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES (6u, "Six");
+                SELECT * FROM TestImmediateEffects;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES (7u, "Seven");
+                SELECT * FROM TestImmediateEffects;
+            )", TTxControl::Tx(*tx)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]];
+                [[5u];["Five"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]];
+                [[5u];["Five"]];
+                [[6u];["Six"]]
+            ])", FormatResultSetYson(result.GetResultSet(1)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]];
+                [[5u];["Five"]];
+                [[6u];["Six"]];
+                [[7u];["Seven"]]
+            ])", FormatResultSetYson(result.GetResultSet(2)));
+
+            auto commitResult = tx->Commit().ExtractValueSync();
+            UNIT_ASSERT(commitResult.IsSuccess());
+        }
+    }
 }
 
 } // namespace NKqp

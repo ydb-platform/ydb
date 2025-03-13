@@ -583,6 +583,7 @@ struct Schema : NIceDb::Schema {
         struct YTSettings : Column<3, NScheme::NTypeIds::String> {};
         struct S3Settings : Column<6, NScheme::NTypeIds::String> {};
         struct TableDescription : Column<7, NScheme::NTypeIds::String> {};
+        struct ChangefeedUnderlyingTopics : Column<13, NScheme::NTypeIds::String> {};
         struct NumberOfRetries : Column<8, NScheme::NTypeIds::Uint32> {};
         struct ScanSettings : Column<9, NScheme::NTypeIds::String> {};
         struct NeedToBill : Column<10, NScheme::NTypeIds::Bool> {};
@@ -605,7 +606,8 @@ struct Schema : NIceDb::Schema {
             ScanSettings,
             NeedToBill,
             EnableChecksums,
-            EnablePermissions
+            EnablePermissions,
+            ChangefeedUnderlyingTopics
         >;
     };
 
@@ -617,6 +619,7 @@ struct Schema : NIceDb::Schema {
         struct YTSettings : Column<4, NScheme::NTypeIds::String> {};
         struct S3Settings : Column<7, NScheme::NTypeIds::String> {};
         struct TableDescription : Column<8, NScheme::NTypeIds::String> {};
+        struct ChangefeedUnderlyingTopics : Column<14, NScheme::NTypeIds::String> {};
         struct NumberOfRetries : Column<9, NScheme::NTypeIds::Uint32> {};
         struct ScanSettings : Column<10, NScheme::NTypeIds::String> {};
         struct NeedToBill : Column<11, NScheme::NTypeIds::Bool> {};
@@ -640,7 +643,8 @@ struct Schema : NIceDb::Schema {
             ScanSettings,
             NeedToBill,
             EnableChecksums,
-            EnablePermissions
+            EnablePermissions,
+            ChangefeedUnderlyingTopics
         >;
     };
 
@@ -1574,7 +1578,7 @@ struct Schema : NIceDb::Schema {
         // NKikimrSchemeOp::TModifyScheme serialized as string
         struct PreparedCreationQuery : Column<14, NScheme::NTypeIds::String> {};
         struct Permissions : Column<11, NScheme::NTypeIds::String> {};
-        struct Metadata : Column<12, NScheme::NTypeIds::String> {}; 
+        struct Metadata : Column<12, NScheme::NTypeIds::String> {};
         struct Changefeeds : Column<15, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TImportTableChangefeeds; };
 
         struct State : Column<7, NScheme::NTypeIds::Byte> {};
@@ -1940,6 +1944,56 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct DataErasureGenerations : Table<115> {
+        struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Status : Column<2, NScheme::NTypeIds::Uint32> { using Type = EDataErasureStatus; };
+        struct StartTime : Column<3, NScheme::NTypeIds::Timestamp> {};
+
+        using TKey = TableKey<Generation>;
+        using TColumns = TableColumns<
+            Generation,
+            Status,
+            StartTime
+        >;
+    };
+
+    struct WaitingDataErasureTenants : Table<116> {
+        struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct Status : Column<3, NScheme::NTypeIds::Uint32> { using Type = EDataErasureStatus; };
+
+        using TKey = TableKey<OwnerPathId, LocalPathId>;
+        using TColumns = TableColumns<
+            OwnerPathId,
+            LocalPathId,
+            Status
+        >;
+    };
+
+    struct TenantDataErasureGenerations : Table<117> {
+        struct Generation : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Status : Column<2, NScheme::NTypeIds::Uint32> { using Type = EDataErasureStatus; };
+
+        using TKey = TableKey<Generation>;
+        using TColumns = TableColumns<
+            Generation,
+            Status
+        >;
+    };
+
+    struct WaitingDataErasureShards : Table<118> {
+        struct OwnerShardIdx :  Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalShardIdx :  Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
+        struct Status : Column<3, NScheme::NTypeIds::Uint32> { using Type = EDataErasureStatus; };
+
+        using TKey = TableKey<OwnerShardIdx, LocalShardIdx>;
+        using TColumns = TableColumns<
+            OwnerShardIdx,
+            LocalShardIdx,
+            Status
+        >;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2052,7 +2106,11 @@ struct Schema : NIceDb::Schema {
         ResourcePool,
         BackupCollection,
         KMeansTreeProgress,
-        KMeansTreeSample
+        KMeansTreeSample,
+        DataErasureGenerations,
+        WaitingDataErasureTenants,
+        TenantDataErasureGenerations,
+        WaitingDataErasureShards
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

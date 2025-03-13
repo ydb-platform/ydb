@@ -91,7 +91,6 @@ public:
         auto& shardInfo = ShardsInfo.at(shardId);
         if (auto lockPtr = shardInfo.Locks.FindPtr(lock.GetKey()); lockPtr) {
             if (lock.Proto.GetHasWrites()) {
-                AFL_ENSURE(!ReadOnly);
                 lockPtr->Lock.Proto.SetHasWrites(true);
             }
 
@@ -202,6 +201,29 @@ public:
         return locks;
     }
 
+    void Reattached(ui64 shardId) override {
+        auto& shardInfo = ShardsInfo.at(shardId);
+        shardInfo.Reattaching = false;
+    }
+
+    void SetRestarting(ui64 shardId) override {
+        auto& shardInfo = ShardsInfo.at(shardId);
+        shardInfo.Restarting = true;
+    }
+
+    bool ShouldReattach(ui64 shardId, TInstant now) override {
+        auto& shardInfo = ShardsInfo.at(shardId);
+        if (!std::exchange(shardInfo.Restarting, false) && !shardInfo.Reattaching) {
+            return false;
+        }
+        return ::NKikimr::NKqp::ShouldReattach(now, shardInfo.ReattachState.ReattachInfo);;
+    }
+
+    TReattachState& GetReattachState(ui64 shardId) override {
+        auto& shardInfo = ShardsInfo.at(shardId);
+        return shardInfo.ReattachState;
+    }
+
     bool IsTxPrepared() const override {
         for (const auto& [_, shardInfo] : ShardsInfo) {
             if (shardInfo.State != EShardState::PREPARED) {
@@ -282,6 +304,10 @@ public:
     bool NeedCommit() const override {
         const bool dontNeedCommit = IsEmpty() || IsReadOnly() && (IsSingleShard() || HasSnapshot());
         return !dontNeedCommit;
+    }
+
+    virtual ui64 GetCoordinator() const override {
+        return Coordinator;
     }
 
     void StartPrepare() override {
@@ -454,11 +480,16 @@ private:
 
         bool IsOlap = false;
         THashSet<TStringBuf> Pathes;
+
+        bool Restarting = false;
+        bool Reattaching = false;
+        TReattachState ReattachState;
     };
 
     void MakeLocksIssue(const TShardInfo& shardInfo) {
         TStringBuilder message;
-        message << "Transaction locks invalidated. Tables: ";
+        message << "Transaction locks invalidated. ";
+        message << (shardInfo.Pathes.size() == 1 ? "Table: " : "Tables: ");
         bool first = true;
         // TODO: add error by pathid
         for (const auto& path : shardInfo.Pathes) {

@@ -2,17 +2,17 @@
 #include "transfer_writer.h"
 #include "worker.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/services/services.pb.h>
-
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 #include <ydb/core/kqp/runtime/kqp_write_table.h>
-#include <ydb/core/persqueue/purecalc/purecalc.h>
+#include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
+#include <ydb/core/persqueue/purecalc/purecalc.h> // should be after topic_message
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
 #include <yql/essentials/public/purecalc/helpers/stream/stream_from_vector.h>
@@ -236,27 +236,32 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
     });
 
     result.TableColumns.resize(keyColumns);
-    result.ColumnsMetadata.resize(keyColumns);
 
     for (const auto& [_, column] : entry.Columns) {
-        NKikimrKqp::TKqpColumnMetadataProto* c;
         if (column.KeyOrder >= 0) {
             result.TableColumns[column.KeyOrder] = {column.Name, column.Id, column.PType, column.KeyOrder >= 0, !column.IsNotNullColumn};
-            c = &result.ColumnsMetadata[column.KeyOrder];
         } else {
             result.TableColumns.emplace_back(column.Name, column.Id, column.PType, column.KeyOrder >= 0, !column.IsNotNullColumn);
-            result.ColumnsMetadata.emplace_back();
-            c = &result.ColumnsMetadata.back();
         }
+    }
 
-        result.WriteIndex.push_back(result.WriteIndex.size());
+    std::map<TString, TSysTables::TTableColumnInfo> columns;
+    for (const auto& [_, column] : entry.Columns) {
+        columns[column.Name] = column;
+    }
 
-        c->SetName(column.Name);
-        c->SetId(column.Id);
-        c->SetTypeId(column.PType.GetTypeId());
+    size_t i = keyColumns;
+    for (const auto& [_, column] : columns) {
+        result.ColumnsMetadata.emplace_back();
+        auto& c = result.ColumnsMetadata.back();
+        result.WriteIndex.push_back(column.KeyOrder >= 0 ? column.KeyOrder : i++);
+
+        c.SetName(column.Name);
+        c.SetId(column.Id);
+        c.SetTypeId(column.PType.GetTypeId());
 
         if (NScheme::NTypeIds::IsParametrizedType(column.PType.GetTypeId())) {
-            NScheme::ProtoFromTypeInfo(column.PType, "", *c->MutableTypeInfo());
+            NScheme::ProtoFromTypeInfo(column.PType, "", *c.MutableTypeInfo());
         }
     }
 
@@ -282,6 +287,10 @@ public:
 
     void AddData(const NMiniKQL::TUnboxedValueBatch &data) {
         Batcher->AddData(data);
+    }
+
+    i64 BatchSize() const {
+        return Batcher->GetMemory();
     }
 
     virtual NKqp::IDataBatcherPtr CreateDataBatcher() = 0;
@@ -317,24 +326,40 @@ public:
     }
 
     bool Flush() override {
+        auto doWrite = [&]() {
+            Issues = std::make_shared<NYql::TIssues>();
+
+            NTxProxy::DoLongTxWriteSameMailbox(TActivationContext::AsActorContext(), SelfId /* replyTo */, { /* longTxId */ }, { /* dedupId */ },
+                NavigateResult->DatabaseName, Path, NavigateResult, Data, Issues, true /* noTxWrite */);
+        };
+
+        if (Data) {
+            doWrite();
+            return true;
+        }
+
+        if (!Batcher || !Batcher->GetMemory()) {
+            return false;
+        }
+
         NKqp::IDataBatchPtr batch = Batcher->Build();
         auto data = batch->ExtractBatch();
 
-        auto arrowBatch = reinterpret_pointer_cast<arrow::RecordBatch>(data);
-        Y_VERIFY(arrowBatch);
+        Data = reinterpret_pointer_cast<arrow::RecordBatch>(data);
+        Y_VERIFY(Data);
 
-        Issues = std::make_shared<NYql::TIssues>();
-
-        NTxProxy::DoLongTxWriteSameMailbox(TActivationContext::AsActorContext(), SelfId /* replyTo */, { /* longTxId */ }, { /* dedupId */ },
-            NavigateResult->DatabaseName, Path, NavigateResult, arrowBatch, Issues, true /* noTxWrite */);
-        
+        doWrite();
         return true;
     }
 
     TString Handle(TEvents::TEvCompleted::TPtr& ev) override {
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            Data.reset();
+            Issues.reset();
+
             return "";
         }
+
         return Issues->ToOneLineString();
     }
 
@@ -342,6 +367,7 @@ private:
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> NavigateResult;
     TString Path;
 
+    std::shared_ptr<arrow::RecordBatch> Data;
     std::shared_ptr<NYql::TIssues> Issues;
 };
 
@@ -371,13 +397,22 @@ private:
     const std::vector<ui32> WriteIndex;
 };
 
-} // anonymous namespace
+enum class ETag {
+    FlushTimeout,
+    RetryFlush
+};
 
+} // anonymous namespace
 
 class TTransferWriter
     : public TActorBootstrapped<TTransferWriter>
     , private NSchemeCache::TSchemeCacheHelpers
 {
+    static constexpr i64 ExpectedBatchSize = 8_MB;
+    static constexpr TDuration FlushInterval = TDuration::Seconds(5);
+    static constexpr TDuration MinRetryDelay = TDuration::Seconds(1);
+    static constexpr TDuration MaxRetryDelay = TDuration::Minutes(10);
+
 public:
     void Bootstrap() {
         GetTableScheme();
@@ -397,7 +432,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
 
-            hFunc(TEvWorker::TEvHandshake, HoldHandle);
+            hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, HoldHandle);
             sFunc(TEvents::TEvWakeup, GetTableScheme);
             sFunc(TEvents::TEvPoison, PassAway);
@@ -496,9 +531,8 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(NFq::TEvRowDispatcher::TEvPurecalcCompileResponse, Handle);
 
-            hFunc(TEvWorker::TEvHandshake, HoldHandle);
+            hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, HoldHandle);
-            //sFunc(TEvents::TEvWakeup, SendS3Request);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -540,14 +574,17 @@ private:
     void StartWork() {
         Become(&TThis::StateWork);
 
-        if (PendingWorker) {
-            ProcessWorker(*PendingWorker);
-            PendingWorker.reset();
-        }
+        Attempt = 0;
+        Delay = MinRetryDelay;
 
         if (PendingRecords) {
-            ProcessData(*PendingRecords);
+            ProcessData(PendingPartitionId, *PendingRecords);
             PendingRecords.reset();
+        }
+
+        if (!WakeupScheduled) {
+            WakeupScheduled = true;
+            Schedule(FlushInterval, new TEvents::TEvWakeup(ui32(ETag::FlushTimeout)));
         }
     }
 
@@ -557,56 +594,90 @@ private:
             hFunc(TEvWorker::TEvData, Handle);
 
             sFunc(TEvents::TEvPoison, PassAway);
+            sFunc(TEvents::TEvWakeup, TryFlush);
         }
     }
 
-    void HoldHandle(TEvWorker::TEvHandshake::TPtr& ev) {
-        Y_ABORT_UNLESS(!PendingWorker);
-        PendingWorker = ev->Sender;
-    }
-
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
-        ProcessWorker(ev->Sender);
-    }
-
-    void ProcessWorker(const TActorId& worker) {
-        Worker = worker;
+        Worker = ev->Sender;
         LOG_D("Handshake"
             << ": worker# " << Worker);
 
-        Send(Worker, new TEvWorker::TEvHandshake());
+        if (ProcessingError) {
+            Leave(ProcessingErrorStatus, *ProcessingError);
+        } else {
+            PollSent = true;
+            Send(Worker, new TEvWorker::TEvHandshake());
+        }
     }
 
     void HoldHandle(TEvWorker::TEvData::TPtr& ev) {
         Y_ABORT_UNLESS(!PendingRecords);
+        PendingPartitionId = ev->Get()->PartitionId;
         PendingRecords = std::move(ev->Get()->Records);
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
-        LOG_D("Handle TEvData " << ev->Get()->ToString());
-        ProcessData(ev->Get()->Records);
+        LOG_D("Handle TEvData record count: " << ev->Get()->Records.size());
+        ProcessData(ev->Get()->PartitionId, ev->Get()->Records);
     }
 
-    void ProcessData(const TVector<TEvWorker::TEvData::TRecord>& records) {
+    void ProcessData(const ui32 partitionId, const TVector<TTopicMessage>& records) {
         if (!records) {
             Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::DONE));
             return;
         }
 
+        PollSent = false;
+
         TableState->EnshureDataBatch();
+        if (!LastWriteTime) {
+            LastWriteTime = TInstant::Now();
+        }
 
         for (auto& message : records) {
-            NYdb::NTopic::NPurecalc::TMessage input(message.Data);
-            input.WithOffset(message.Offset);
+            NYdb::NTopic::NPurecalc::TMessage input;
+            input.Data = std::move(message.GetData());
+            input.MessageGroupId = std::move(message.GetMessageGroupId());
+            input.Partition = partitionId;
+            input.ProducerId = std::move(message.GetProducerId());
+            input.Offset = message.GetOffset();
+            input.SeqNo = message.GetSeqNo();
 
-            auto result = ProgramHolder->GetProgram()->Apply(NYql::NPureCalc::StreamFromVector(TVector{input}));
-            while (auto* m = result->Fetch()) {
-                TableState->AddData(m->Data);
+            try {
+                auto result = ProgramHolder->GetProgram()->Apply(NYql::NPureCalc::StreamFromVector(TVector{input}));
+                while (auto* m = result->Fetch()) {
+                    TableState->AddData(m->Data);
+                }
+            } catch (const yexception& e) {
+                ProcessingErrorStatus = TEvWorker::TEvGone::EStatus::SCHEME_ERROR;
+                ProcessingError = TStringBuilder() << "Error transform message: " << e.what();
+                break;
             }
         }
 
-        if (TableState->Flush()) {
+        if (TableState->BatchSize() >= ExpectedBatchSize || *LastWriteTime < TInstant::Now() - FlushInterval) {
+            if (TableState->Flush()) {
+                LastWriteTime.reset();
+                return Become(&TThis::StateWrite);
+            } 
+        }
+        
+        if (ProcessingError) {
+            LogCritAndLeave(*ProcessingError);
+        } else {
+            PollSent = true;
+            Send(Worker, new TEvWorker::TEvPoll(true));
+        }
+    }
+
+    void TryFlush() {
+        if (LastWriteTime && LastWriteTime < TInstant::Now() - FlushInterval && TableState->Flush()) {
+            LastWriteTime.reset();
+            WakeupScheduled = false;
             Become(&TThis::StateWrite);
+        } else {
+            Schedule(FlushInterval, new TEvents::TEvWakeup(ui32(ETag::FlushTimeout)));
         }
     }
 
@@ -614,10 +685,11 @@ private:
     STFUNC(StateWrite) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvCompleted, Handle);
-            hFunc(TEvWorker::TEvHandshake, HoldHandle);
+            hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, HoldHandle);
 
             sFunc(TEvents::TEvPoison, PassAway);
+            hFunc(TEvents::TEvWakeup, WriteWakeup);
         }
     }
 
@@ -627,15 +699,42 @@ private:
             << " status# " << ev->Get()->Status);
 
         auto error = TableState->Handle(ev);
-        if (error) {
-            return LogCritAndLeave(error);
+        if (ui32(NYdb::EStatus::SUCCESS) != ev->Get()->Status && Delay < MaxRetryDelay && !PendingLeave()) {
+            return LogWarnAndRetry(error);
         }
 
-        Send(Worker, new TEvWorker::TEvPoll());
+        if (error && !ProcessingError) {
+            ProcessingError = error;
+        }
+
+        if (ProcessingError) {
+            return LogCritAndLeave(*ProcessingError);
+        }
+
+        if (!PollSent) {
+            PollSent = true;
+            Send(Worker, new TEvWorker::TEvPoll());
+        }
+
         return StartWork();
     }
 
+    void WriteWakeup(TEvents::TEvWakeup::TPtr& ev) {
+        switch(ETag(ev->Get()->Tag)) {
+            case ETag::FlushTimeout:
+                WakeupScheduled = false;
+                break;
+            case ETag::RetryFlush:
+                TableState->Flush();
+                break;
+        }
+    }
+
 private:
+
+    bool PendingLeave() {
+        return PendingRecords && PendingRecords->empty();
+    }
 
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
@@ -661,17 +760,22 @@ private:
     }
 
     void Retry() {
-        Delay = Min(Delay * ++Attempt, MaxDelay);
+        Delay = Attempt++ ? Delay * 2 : MinRetryDelay;
+        Delay = Min(Delay, MaxRetryDelay);
         const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
-        this->Schedule(Delay + random, new TEvents::TEvWakeup());
+        this->Schedule(Delay + random, new TEvents::TEvWakeup(ui32(ETag::RetryFlush)));
     }
 
-    template <typename... Args>
-    void Leave(Args&&... args) {
+    void Leave(TEvWorker::TEvGone::EStatus status, const TString& message) {
         LOG_I("Leave");
 
-        Send(Worker, new TEvWorker::TEvGone(std::forward<Args>(args)...));
-        PassAway();
+        if (Worker) {
+            Send(Worker, new TEvWorker::TEvGone(status, message));
+            PassAway();
+        } else {
+            ProcessingErrorStatus = status;
+            ProcessingError = message;
+        }
     }
 
     void PassAway() override {
@@ -703,14 +807,20 @@ private:
     size_t InFlightCompilationId = 0;
     TProgramHolder::TPtr ProgramHolder;
 
+    mutable bool WakeupScheduled = false;
+    mutable bool PollSent = false;
+    mutable std::optional<TInstant> LastWriteTime;
+
     mutable TMaybe<TString> LogPrefix;
 
-    std::optional<TActorId> PendingWorker;
-    std::optional<TVector<TEvWorker::TEvData::TRecord>> PendingRecords;
+    mutable TEvWorker::TEvGone::EStatus ProcessingErrorStatus;
+    mutable TMaybe<TString> ProcessingError;
+
+    ui32 PendingPartitionId = 0;
+    std::optional<TVector<TTopicMessage>> PendingRecords;
 
     ui32 Attempt = 0;
-    TDuration Delay = TDuration::Minutes(1);
-    static constexpr TDuration MaxDelay = TDuration::Minutes(10);
+    TDuration Delay = MinRetryDelay;
 
 }; // TTransferWriter
 

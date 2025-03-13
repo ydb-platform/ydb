@@ -5,6 +5,8 @@
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/splitter/simple.h>
 
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
+
 namespace NKikimr::NArrow::NAccessor {
 
 std::optional<ui64> TTrivialArray::DoGetRawSize() const {
@@ -18,6 +20,36 @@ std::shared_ptr<arrow::Scalar> TTrivialArray::DoGetMaxScalar() const {
 
 ui32 TTrivialArray::DoGetValueRawBytes() const {
     return NArrow::GetArrayDataSize(Array);
+}
+
+std::shared_ptr<TTrivialArray> TTrivialArray::BuildEmpty(const std::shared_ptr<arrow::DataType>& type) {
+    return std::make_shared<TTrivialArray>(TThreadSimpleArraysCache::GetNull(type, 0));
+}
+
+void TTrivialArray::Reallocate() {
+    Array = NArrow::ReallocateArray(Array);
+}
+
+std::shared_ptr<arrow::Array> TTrivialArray::BuildArrayFromOptionalScalar(
+    const std::shared_ptr<arrow::Scalar>& scalar, const std::shared_ptr<arrow::DataType>& type) {
+    if (scalar) {
+        AFL_VERIFY(scalar->type->id() == type->id());
+        auto builder = NArrow::MakeBuilder(scalar->type, 1);
+        TStatusValidator::Validate(builder->AppendScalar(*scalar));
+        return NArrow::FinishBuilder(std::move(builder));
+    } else {
+        auto builder = NArrow::MakeBuilder(type, 1);
+        TStatusValidator::Validate(builder->AppendNull());
+        return NArrow::FinishBuilder(std::move(builder));
+    }
+}
+
+std::optional<bool> TTrivialArray::DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
+    if (Array->length() == 1) {
+        value = TStatusValidator::GetValid(Array->GetScalar(0));
+        return true;
+    }
+    return {};
 }
 
 namespace {

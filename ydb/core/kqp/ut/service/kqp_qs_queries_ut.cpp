@@ -6,10 +6,10 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb-cpp-sdk/client/operation/operation.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb-cpp-sdk/client/types/exceptions/exceptions.h>
-#include <ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/base/counters.h>
@@ -2468,21 +2468,21 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             GRANT ROW SELECT ON `/Root` TO user1;
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unexpected token 'ROW'");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "extraneous input 'ROW'");
         checkPermissions(session, {{.Path = "/Root", .Permissions = {}}});
 
         result = db.ExecuteQuery(R"(
             GRANT `ydb.database.connect` ON `/Root` TO user1;
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unexpected token '`ydb.database.connect`'");
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "mismatched input '`ydb.database.connect`'", result.GetIssues().ToString());
         checkPermissions(session, {{.Path = "/Root", .Permissions = {}}});
 
         result = db.ExecuteQuery(R"(
             GRANT CONNECT, READ ON `/Root` TO user1;
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unexpected token 'READ'");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "extraneous input 'READ'");
         checkPermissions(session, {{.Path = "/Root", .Permissions = {}}});
 
         result = db.ExecuteQuery(R"(
@@ -2759,6 +2759,82 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         checkUpsert(true, 2);
         checkCreate(false, EEx::Empty, 2); // already exists
         checkUpsert(true, 2);
+    }
+
+    Y_UNIT_TEST(ShowCreateTable) {
+        auto serverSettings = TKikimrSettings().SetEnableShowCreate(true);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE test_show_create (
+                    Key Uint32,
+                    Value Uint32,
+                    PRIMARY KEY (Key)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                SHOW CREATE TABLE `/Root/test_show_create`;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT(!result.GetResultSets().empty());
+
+            CompareYson(R"([
+                [["test_show_create"];["Table"];["CREATE TABLE `test_show_create` (\n    `Key` Uint32,\n    `Value` Uint32,\n    PRIMARY KEY (`Key`)\n);\n"]];
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(ShowCreateTableDisable) {
+        auto serverSettings = TKikimrSettings().SetEnableShowCreate(false);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE test_show_create (
+                    Key Uint32,
+                    Value Uint32,
+                    PRIMARY KEY (Key)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                SHOW CREATE TABLE `/Root/test_show_create`;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL("<main>: Error: Type annotation, code: 1030\n    <main>:2:35: Error: At function: KiReadTable!\n        <main>:2:35: Error: SHOW CREATE statement is not supported\n",
+                result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ShowCreateTableNotSuccess) {
+        auto serverSettings = TKikimrSettings().SetEnableShowCreate(true);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                SHOW CREATE TABLE test_show_create;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+        }
     }
 
     Y_UNIT_TEST(DdlCache) {
@@ -4506,7 +4582,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         void Execute() {
             AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
             AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(!IsOlap);
-            AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
             auto settings = TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false);
 
             Kikimr = std::make_unique<TKikimrRunner>(settings);
@@ -5778,7 +5853,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
         appConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
 
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)

@@ -21,18 +21,42 @@ class TFetchingScriptCursor;
 class TFetchingStepSignals: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
-    NMonitoring::TDynamicCounters::TCounterPtr DurationCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr ExecutionDurationCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr TotalDurationCounter;
     NMonitoring::TDynamicCounters::TCounterPtr BytesCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr SkipGraphNode;
+    NMonitoring::TDynamicCounters::TCounterPtr SkipGraphNodeRecords;
+    NMonitoring::TDynamicCounters::TCounterPtr ExecuteGraphNode;
+    NMonitoring::TDynamicCounters::TCounterPtr ExecuteGraphNodeRecords;
 
 public:
     TFetchingStepSignals(NColumnShard::TCommonCountersOwner&& owner)
         : TBase(std::move(owner))
-        , DurationCounter(TBase::GetDeriviative("Duration/Us"))
-        , BytesCounter(TBase::GetDeriviative("Bytes/Count")) {
+        , ExecutionDurationCounter(TBase::GetDeriviative("Duration/Execution/Us"))
+        , TotalDurationCounter(TBase::GetDeriviative("Duration/Total/Us"))
+        , BytesCounter(TBase::GetDeriviative("Bytes/Count"))
+        , SkipGraphNode(TBase::GetDeriviative("Skips/Count"))
+        , SkipGraphNodeRecords(TBase::GetDeriviative("Skips/Records/Count"))
+        , ExecuteGraphNode(TBase::GetDeriviative("Executions/Count"))
+        , ExecuteGraphNodeRecords(TBase::GetDeriviative("Executions/Records/Count")) {
     }
 
-    void AddDuration(const TDuration d) const {
-        DurationCounter->Add(d.MicroSeconds());
+    void OnSkipGraphNode(const ui32 recordsCount) {
+        SkipGraphNode->Add(1);
+        SkipGraphNodeRecords->Add(recordsCount);
+    }
+
+    void OnExecuteGraphNode(const ui32 recordsCount) {
+        ExecuteGraphNode->Add(1);
+        ExecuteGraphNodeRecords->Add(recordsCount);
+    }
+
+    void AddExecutionDuration(const TDuration d) const {
+        ExecutionDurationCounter->Add(d.MicroSeconds());
+    }
+
+    void AddTotalDuration(const TDuration d) const {
+        TotalDurationCounter->Add(d.MicroSeconds());
     }
 
     void AddBytes(const ui32 v) const {
@@ -86,9 +110,9 @@ public:
         return SumSize.Val();
     }
 
-    void AddDuration(const TDuration d) {
+    void AddExecutionDuration(const TDuration d) {
         SumDuration.Add(d.MicroSeconds());
-        Signals.AddDuration(d);
+        Signals.AddExecutionDuration(d);
     }
     void AddDataSize(const ui64 size) {
         SumSize.Add(size);
@@ -110,20 +134,21 @@ public:
         , Signals(TFetchingStepsSignalsCollection::GetSignals(name)) {
     }
 
-    TString DebugString() const;
+    TString DebugString(const bool stats = false) const;
 };
 
 class TFetchingScript {
 private:
-    YDB_ACCESSOR(TString, BranchName, "UNDEFINED");
+    YDB_READONLY_DEF(TString, BranchName);
     std::vector<std::shared_ptr<IFetchingStep>> Steps;
     TAtomic StartInstant;
     TAtomic FinishInstant;
 
 public:
-    TFetchingScript(const TSpecialReadContext& context);
-
-    void Allocation(const std::set<ui32>& entityIds, const EStageFeaturesIndexes stage, const EMemType mType);
+    TFetchingScript(const TString& branchName, std::vector<std::shared_ptr<IFetchingStep>>&& steps)
+        : BranchName(branchName)
+        , Steps(std::move(steps)) {
+    }
 
     void AddStepDataSize(const ui32 index, const ui64 size) {
         GetStep(index)->AddDataSize(size);
@@ -131,7 +156,7 @@ public:
 
     void AddStepDuration(const ui32 index, const TDuration d) {
         AtomicSet(FinishInstant, TMonotonic::Now().MicroSeconds());
-        GetStep(index)->AddDuration(d);
+        GetStep(index)->AddExecutionDuration(d);
     }
 
     void OnExecute() {
@@ -139,30 +164,11 @@ public:
     }
 
     TString DebugString() const;
+    TString ProfileDebugString() const;
 
     const std::shared_ptr<IFetchingStep>& GetStep(const ui32 index) const {
         AFL_VERIFY(index < Steps.size());
         return Steps[index];
-    }
-
-    template <class T, typename... Args>
-    std::shared_ptr<T> AddStep(Args... args) {
-        auto result = std::make_shared<T>(args...);
-        Steps.emplace_back(result);
-        return result;
-    }
-
-    template <class T, typename... Args>
-    std::shared_ptr<T> InsertStep(const ui32 index, Args... args) {
-        AFL_VERIFY(index <= Steps.size())("index", index)("size", Steps.size());
-        auto result = std::make_shared<T>(args...);
-        Steps.insert(Steps.begin() + index, result);
-        return result;
-    }
-
-    void AddStep(const std::shared_ptr<IFetchingStep>& step) {
-        AFL_VERIFY(step);
-        Steps.emplace_back(step);
     }
 
     bool IsFinished(const ui32 currentStepIdx) const {
@@ -189,9 +195,9 @@ public:
         return Script;
     }
 
-    TString DebugString() const {
+    TString ProfileDebugString() const {
         if (Script) {
-            return TStringBuilder() << Script->DebugString() << Endl;
+            return TStringBuilder() << Script->ProfileDebugString() << Endl;
         } else {
             return TStringBuilder() << "NO_SCRIPT" << Endl;
         }
@@ -231,41 +237,58 @@ public:
     }
 };
 
-class TColumnsAccumulator {
+class TFetchingScriptBuilder {
 private:
-    TColumnsSetIds FetchingReadyColumns;
-    TColumnsSetIds AssemblerReadyColumns;
-    ISnapshotSchema::TPtr FullSchema;
     std::shared_ptr<TColumnsSetIds> GuaranteeNotOptional;
+    ISnapshotSchema::TPtr FullSchema;
+
+    YDB_ACCESSOR(TString, BranchName, "UNDEFINED");
+    std::vector<std::shared_ptr<IFetchingStep>> Steps;
+    YDB_READONLY_DEF(TColumnsSetIds, AddedFetchingColumns);
+    YDB_READONLY_DEF(TColumnsSetIds, AddedAssembleColumns);
+
+    TFetchingScriptBuilder(const ISnapshotSchema::TPtr& schema, const std::shared_ptr<TColumnsSetIds>& guaranteeNotOptional)
+        : GuaranteeNotOptional(guaranteeNotOptional)
+        , FullSchema(schema) {
+    }
+
+private:
+    void AddAllocation(const std::set<ui32>& entityIds, const EStageFeaturesIndexes stage, const EMemType mType);
+
+    template <class T, typename... Args>
+    std::shared_ptr<T> InsertStep(const ui32 index, Args... args) {
+        AFL_VERIFY(index <= Steps.size())("index", index)("size", Steps.size());
+        auto result = std::make_shared<T>(args...);
+        Steps.insert(Steps.begin() + index, result);
+        return result;
+    }
 
 public:
-    TColumnsAccumulator(const std::shared_ptr<TColumnsSetIds>& guaranteeNotOptional, const ISnapshotSchema::TPtr& fullSchema)
-        : FullSchema(fullSchema)
-        , GuaranteeNotOptional(guaranteeNotOptional) {
+    TFetchingScriptBuilder(const TSpecialReadContext& context);
+
+    std::shared_ptr<TFetchingScript> Build()&& {
+        return std::make_shared<TFetchingScript>(BranchName, std::move(Steps));
     }
 
-    TColumnsSetIds GetNotFetchedAlready(const TColumnsSetIds& columns) const {
-        return columns - FetchingReadyColumns;
+    void AddStep(const std::shared_ptr<IFetchingStep>& step) {
+        AFL_VERIFY(step);
+        Steps.emplace_back(step);
     }
 
-    bool AddFetchingStep(TFetchingScript& script, const TColumnsSetIds& columns, const EStageFeaturesIndexes stage);
-    bool AddAssembleStep(TFetchingScript& script, const TColumnsSetIds& columns, const TString& purposeId, const EStageFeaturesIndexes stage,
-        const bool sequential);
+    void AddFetchingStep(const TColumnsSetIds& columns, const EStageFeaturesIndexes stage);
+    void AddAssembleStep(const TColumnsSetIds& columns, const TString& purposeId, const EStageFeaturesIndexes stage, const bool sequential);
+
+    static TFetchingScriptBuilder MakeForTests(ISnapshotSchema::TPtr schema, std::shared_ptr<TColumnsSetIds> guaranteeNotOptional = nullptr) {
+        return TFetchingScriptBuilder(schema, guaranteeNotOptional ? guaranteeNotOptional : std::make_shared<TColumnsSetIds>());
+    }
 };
 
 class TFetchingScriptCursor {
 private:
-    std::optional<TMonotonic> CurrentStartInstant;
-    std::optional<ui64> CurrentStartDataSize;
     ui32 CurrentStepIdx = 0;
     std::shared_ptr<TFetchingScript> Script;
-    void FlushDuration() {
-        AFL_VERIFY(CurrentStartInstant);
-        AFL_VERIFY(CurrentStartDataSize);
-        Script->AddStepDuration(CurrentStepIdx, TMonotonic::Now() - *CurrentStartInstant);
-        Script->AddStepDataSize(CurrentStepIdx, *CurrentStartDataSize);
-        CurrentStartInstant.reset();
-        CurrentStartDataSize.reset();
+    void FlushDuration(const TDuration d) {
+        Script->AddStepDuration(CurrentStepIdx, d);
     }
 
 public:
@@ -284,7 +307,6 @@ public:
     }
 
     bool Next() {
-        FlushDuration();
         return !Script->IsFinished(++CurrentStepIdx);
     }
 
@@ -318,13 +340,20 @@ public:
 class TProgramStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
-    const NArrow::NSSA::TResourceProcessorStep Step;
+    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
+    THashMap<ui32, std::shared_ptr<TFetchingStepSignals>> Signals;
+    const std::shared_ptr<TFetchingStepSignals>& GetSignals(const ui32 nodeId) const;
 
 public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
-    TProgramStep(const NArrow::NSSA::TResourceProcessorStep& step)
-        : TBase("EARLY_FILTER_STEP")
-        , Step(step) {
+
+    TProgramStep(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program)
+        : TBase("PROGRAM_EXECUTION")
+        , Program(program) {
+        for (auto&& i : Program->GetNodes()) {
+            Signals.emplace(
+                i.first, std::make_shared<TFetchingStepSignals>(TFetchingStepsSignalsCollection::GetSignals(i.second->GetSignalCategoryName())));
+        }
     }
 };
 

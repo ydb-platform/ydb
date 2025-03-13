@@ -23,6 +23,7 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_type_helpers.h>
 
 
 namespace NKikimr {
@@ -396,6 +397,9 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata&, TProto& re
 
     if constexpr (std::is_same_v<TProto, NKqpProto::TKqpPhyOpReadOlapRanges>) {
         readProto.SetSorted(settings.Sorted);
+        if (settings.TabletId) {
+            readProto.SetTabletId(*settings.TabletId);
+        }
     }
 
     readProto.SetReverse(settings.Reverse);
@@ -805,6 +809,8 @@ private:
                 tableOp.MutableReadOlapRange()->SetReadType(NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS);
             } else if (auto maybeDqSourceWrapBase = node.Maybe<TDqSourceWrapBase>()) {
                 stageCost += GetDqSourceWrapBaseCost(maybeDqSourceWrapBase.Cast(), TypesCtx);
+            } else if (auto maybeDqReadWrapBase = node.Maybe<TDqReadWrapBase>()) {
+                FillDqRead(maybeDqReadWrapBase.Cast(), stageProto, ctx);
             } else {
                 YQL_ENSURE(!node.Maybe<TKqpReadTable>());
             }
@@ -904,6 +910,7 @@ private:
             i.MutableProgram()->MutableSettings()->SetLevelDataPrediction(rPredictor.GetLevelDataVolume(i.GetProgram().GetSettings().GetStageLevel()));
         }
 
+        txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(false));
         txProto.SetHasEffects(hasEffectStage);
 
         for (const auto& paramBinding : tx.ParamBindings()) {
@@ -1077,40 +1084,67 @@ private:
         if (dataSourceCategory == NYql::KikimrProviderName || dataSourceCategory == NYql::YdbProviderName || dataSourceCategory == NYql::KqpReadRangesSourceName) {
             FillKqpSource(source, protoSource, allowSystemColumns, tablesMap);
         } else {
-            // Delegate source filling to dq integration of specific provider
-            const auto provider = TypesCtx.DataSourceMap.find(dataSourceCategory);
-            YQL_ENSURE(provider != TypesCtx.DataSourceMap.end(), "Unsupported data source category: \"" << dataSourceCategory << "\"");
-            NYql::IDqIntegration* dqIntegration = provider->second->GetDqIntegration();
-            YQL_ENSURE(dqIntegration, "Unsupported dq source for provider: \"" << dataSourceCategory << "\"");
-            auto& externalSource = *protoSource->MutableExternalSource();
+            FillDqInput(source.Ptr(), protoSource, dataSourceCategory, ctx, true);
+        }
+    }
 
-            // Partitioning
-            TVector<TString> partitionParams;
-            TString clusterName;
-            // In runtime, number of tasks with Sources is limited by 2x of node count
-            // We prepare a lot of partitions and distribute them between these tasks
-            // Constraint of 1 task per partition is NOT valid anymore
-            auto maxTasksPerStage = Config->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
-            IDqIntegration::TPartitionSettings pSettings;
-            pSettings.MaxPartitions = maxTasksPerStage;
-            pSettings.CanFallback = false;
-            dqIntegration->Partition(source.Ref(), partitionParams, &clusterName, ctx, pSettings);
-            externalSource.SetTaskParamKey(TString(dataSourceCategory));
-            for (const TString& partitionParam : partitionParams) {
-                externalSource.AddPartitionedTaskParams(partitionParam);
-            }
+    void FillDqInput(TExprNode::TPtr source, NKqpProto::TKqpSource* protoSource, TStringBuf dataSourceCategory, TExprContext& ctx, bool isDqSource) {
+        // Delegate source filling to dq integration of specific provider
+        const auto provider = TypesCtx.DataSourceMap.find(dataSourceCategory);
+        YQL_ENSURE(provider != TypesCtx.DataSourceMap.end(), "Unsupported data source category: \"" << dataSourceCategory << "\"");
+        NYql::IDqIntegration* dqIntegration = provider->second->GetDqIntegration();
+        YQL_ENSURE(dqIntegration, "Unsupported dq source for provider: \"" << dataSourceCategory << "\"");
+        auto& externalSource = *protoSource->MutableExternalSource();
 
-            if (const auto& secureParams = FindOneSecureParam(source.Ptr(), TypesCtx, "source", SecretNames)) {
+        // Partitioning
+        TVector<TString> partitionParams;
+        TString clusterName;
+        // In runtime, number of tasks with Sources is limited by 2x of node count
+        // We prepare a lot of partitions and distribute them between these tasks
+        // Constraint of 1 task per partition is NOT valid anymore
+        auto maxTasksPerStage = Config->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
+        IDqIntegration::TPartitionSettings pSettings;
+        pSettings.MaxPartitions = maxTasksPerStage;
+        pSettings.CanFallback = false;
+        pSettings.DataSizePerJob = NYql::TDqSettings::TDefault::DataSizePerJob;
+        dqIntegration->Partition(*source, partitionParams, &clusterName, ctx, pSettings);
+        externalSource.SetTaskParamKey(TString(dataSourceCategory));
+        for (const TString& partitionParam : partitionParams) {
+            externalSource.AddPartitionedTaskParams(partitionParam);
+        }
+
+        if (isDqSource) {
+            if (const auto& secureParams = FindOneSecureParam(source, TypesCtx, "source", SecretNames)) {
                 externalSource.SetSourceName(secureParams->first);
                 externalSource.SetAuthInfo(secureParams->second);
             }
 
             google::protobuf::Any& settings = *externalSource.MutableSettings();
             TString& sourceType = *externalSource.MutableType();
-            dqIntegration->FillSourceSettings(source.Ref(), settings, sourceType, maxTasksPerStage, ctx);
+            dqIntegration->FillSourceSettings(*source, settings, sourceType, maxTasksPerStage, ctx);
             YQL_ENSURE(!settings.type_url().empty(), "Data source provider \"" << dataSourceCategory << "\" didn't fill dq source settings for its dq source node");
             YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceCategory << "\" didn't fill dq source settings type for its dq source node");
+        } else {
+            // Source is embedded into stage as lambda
+            externalSource.SetType(TString(dataSourceCategory));
+            externalSource.SetEmbedded(true);
         }
+    }
+
+    void FillDqRead(const TDqReadWrapBase& readWrapBase, NKqpProto::TKqpPhyStage& stageProto, TExprContext& ctx) {
+        for (const auto& flag : readWrapBase.Flags()) {
+            if (flag.Value() == "Solid") {
+                return;
+            }
+        }
+
+        const auto read = readWrapBase.Input();
+        const ui32 dataSourceChildIndex = 1;
+        YQL_ENSURE(read.Ref().ChildrenSize() > dataSourceChildIndex);
+        YQL_ENSURE(read.Ref().Child(dataSourceChildIndex)->IsCallable("DataSource"));
+
+        const TStringBuf dataSourceCategory = read.Ref().Child(dataSourceChildIndex)->Child(0)->Content();
+        FillDqInput(read.Ptr(), stageProto.AddSources(), dataSourceCategory, ctx, false);
     }
 
     THashMap<TStringBuf, ui32> CreateColumnToOrder(
@@ -1283,10 +1317,46 @@ private:
         }
 
         if (auto maybeShuffle = connection.Maybe<TDqCnHashShuffle>()) {
+            const auto& shuffle = maybeShuffle.Cast();
             auto& shuffleProto = *connectionProto.MutableHashShuffle();
-            for (const auto& keyColumn : maybeShuffle.Cast().KeyColumns()) {
+            for (const auto& keyColumn : shuffle.KeyColumns()) {
                 shuffleProto.AddKeyColumns(TString(keyColumn));
             }
+
+            if (Config->OptShuffleElimination.Get().GetOrElse(false)) {
+                auto& columnHashV1 = *shuffleProto.MutableColumnShardHashV1();
+
+                const auto& outputType = NYql::NDq::GetDqConnectionType(connection, ctx);
+                auto structType = outputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                for (const auto& column: shuffle.KeyColumns().Ptr()->Children()) {
+                    auto ty = NYql::NDq::GetColumnType(connection, *structType, column->Content(), column->Pos(), ctx);
+                    NYql::NUdf::EDataSlot slot;
+                    switch (ty->GetKind()) {
+                        case ETypeAnnotationKind::Data: {
+                            slot = ty->Cast<TDataExprType>()->GetSlot();
+                            break;
+                        }
+                        case ETypeAnnotationKind::Optional: {
+                            auto optionalType = ty->Cast<TOptionalExprType>()->GetItemType();
+                            Y_ENSURE(
+                                optionalType->GetKind() == ETypeAnnotationKind::Data, 
+                                TStringBuilder{} << "Can't retrieve type from optional" << static_cast<std::int64_t>(optionalType->GetKind()) << "for ColumnHashV1 Shuffling"
+                            );
+                            slot = optionalType->Cast<TDataExprType>()->GetSlot();
+                            break;
+                        }
+                        default: {
+                            Y_ENSURE(false, TStringBuilder{} << "Can't get type for ColumnHashV1 Shuffling: " << static_cast<std::int64_t>(ty->GetKind()));
+                        }
+                    }
+
+                    auto typeId = GetDataTypeInfo(slot).TypeId;
+                    columnHashV1.AddKeyColumnTypes(typeId);
+                }
+            } else {
+                shuffleProto.MutableHashV1();
+            }
+
             return;
         }
 

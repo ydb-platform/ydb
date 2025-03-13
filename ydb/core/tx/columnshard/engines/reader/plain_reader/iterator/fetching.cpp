@@ -12,11 +12,6 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-TConclusion<bool> TIndexBlobsFetchingStep::DoExecuteInplace(
-    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
-    return !source->StartFetchingIndexes(source, step, Indexes);
-}
-
 TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
         source->GetStageData().GetTable()->ToTable(source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
@@ -69,11 +64,6 @@ TConclusion<bool> TShardingFilter::DoExecuteInplace(const std::shared_ptr<IDataS
     return true;
 }
 
-TConclusion<bool> TApplyIndexStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    source->ApplyIndex(IndexChecker);
-    return true;
-}
-
 NKikimr::TConclusion<bool> TFilterCutLimit::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     source->MutableStageData().CutFilter(source->GetRecordsCount(), Limit, Reverse);
@@ -104,9 +94,9 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSour
 TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     for (auto&& f : IIndexInfo::ArrowSchemaSnapshot()->fields()) {
-        source->MutableStageData().AddColumn(IIndexInfo::GetColumnIdVerified(f->name()),
+        source->MutableStageData().GetTable()->AddVerified(IIndexInfo::GetColumnIdVerified(f->name()),
             std::make_shared<NArrow::NAccessor::TTrivialArray>(
-                NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), source->GetRecordsCount())));
+                NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), source->GetRecordsCount())), true);
     }
     source->BuildStageResult(source);
     return true;

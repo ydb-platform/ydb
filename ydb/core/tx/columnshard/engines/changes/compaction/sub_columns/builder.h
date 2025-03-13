@@ -8,9 +8,6 @@
 #include <ydb/core/tx/columnshard/engines/changes/compaction/abstract/merger.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/library/formats/arrow/accessor/common/const.h>
-
 namespace NKikimr::NOlap::NCompaction::NSubColumns {
 
 class TMergedBuilder {
@@ -35,7 +32,8 @@ private:
     class TGeneralAccessorBuilder {
     private:
         std::variant<TSparsedBuilder, TPlainBuilder> Builder;
-
+        YDB_READONLY(ui32, FilledRecordsCount, 0);
+        YDB_READONLY(ui64, FilledRecordsSize, 0);
     public:
         TGeneralAccessorBuilder(TSparsedBuilder&& builder)
             : Builder(std::move(builder)) {
@@ -64,6 +62,8 @@ private:
                 }
             };
             std::visit(TVisitor(recordIndex, value), Builder);
+            ++FilledRecordsCount;
+            FilledRecordsSize += value.size();
         }
         std::shared_ptr<NArrow::NAccessor::IChunkedArray> Finish(const ui32 recordsCount) {
             struct TVisitor {
@@ -92,11 +92,16 @@ private:
         AFL_VERIFY(RecordIndex);
         auto portionOthersData = OthersBuilder->Finish(Remapper.BuildRemapInfo(OthersBuilder->GetStatsByKeyIndex(), Settings, RecordIndex));
         std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrays;
-        for (auto&& i : ColumnBuilders) {
-            arrays.emplace_back(i.Finish(RecordIndex));
+        TDictStats::TBuilder statsBuilder;
+        for (ui32 idx = 0; idx < ColumnBuilders.size(); ++idx) {
+            if (ColumnBuilders[idx].GetFilledRecordsCount()) {
+                statsBuilder.Add(ResultColumnStats.GetColumnName(idx), ColumnBuilders[idx].GetFilledRecordsCount(),
+                    ColumnBuilders[idx].GetFilledRecordsSize(), ResultColumnStats.GetAccessorType(idx));
+                arrays.emplace_back(ColumnBuilders[idx].Finish(RecordIndex));
+            }
         }
-        TColumnsData cData(
-            ResultColumnStats, std::make_shared<NArrow::TGeneralContainer>(ResultColumnStats.BuildColumnsSchema()->fields(), std::move(arrays)));
+        auto stats = statsBuilder.Finish();
+        TColumnsData cData(stats, std::make_shared<NArrow::TGeneralContainer>(stats.BuildColumnsSchema()->fields(), std::move(arrays)));
         Results.back().emplace_back(
             std::make_shared<TSubColumnsArray>(std::move(cData), std::move(portionOthersData), arrow::binary(), RecordIndex, Settings));
         Initialize();
@@ -116,6 +121,7 @@ private:
                 case NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray:
                 case NArrow::NAccessor::IChunkedArray::EType::CompositeChunkedArray:
                 case NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray:
+                case NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray:
                 case NArrow::NAccessor::IChunkedArray::EType::ChunkedArray:
                     AFL_VERIFY(false);
             }

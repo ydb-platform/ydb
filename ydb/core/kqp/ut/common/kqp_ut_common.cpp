@@ -5,7 +5,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <yql/essentials/core/yql_data_provider.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
@@ -1008,6 +1008,8 @@ TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
             if (mit != meta.end()) {
                 res.ConsumedRuFromHeader = std::stol(mit->second);
             }
+            UNIT_ASSERT_EQUAL_C(res.ConsumedRuFromHeader, streamPart.GetConsumedRu(),
+                "Request unit values from headers and TStatus are differ");
             break;
         }
 
@@ -1241,7 +1243,7 @@ std::vector<NJson::TJsonValue> FindPlanNodes(const NJson::TJsonValue& plan, cons
 
 std::vector<NJson::TJsonValue> FindPlanStages(const NJson::TJsonValue& plan) {
     std::vector<NJson::TJsonValue> stages;
-    FindPlanStagesImpl(plan.GetMapSafe().at("Plan"), stages);    
+    FindPlanStagesImpl(plan.GetMapSafe().at("Plan"), stages);
     return stages;
 }
 
@@ -1471,12 +1473,22 @@ void WaitForZeroReadIterators(Tests::TServer& server, const TString& path) {
 }
 
 NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& params) {
+    const auto& [_, nodeType] = *opt.GetMapSafe().find("Node Type");
+    bool isShuffle = nodeType.GetStringSafe().find("HashShuffle") != TString::npos;
+
+    if (isShuffle) {
+        NJson::TJsonValue op;
+        op["Name"] = "HashShuffle";
+        opt["Operators"].AppendValue(std::move(op));
+    }
+
     if (auto ops = opt.GetMapSafe().find("Operators"); ops != opt.GetMapSafe().end()) {
         auto opName = ops->second.GetArraySafe()[0].GetMapSafe().at("Name").GetStringSafe();
         if (
-            opName.find("Join") != TString::npos || 
+            opName.find("Join") != TString::npos ||
             opName.find("Union") != TString::npos ||
-            (opName.find("Filter") != TString::npos && params.IncludeFilters)
+            (opName.find("Filter") != TString::npos && params.IncludeFilters) ||
+            (opName.find("HashShuffle") != TString::npos && params.IncludeShuffles) 
         ) {
             NJson::TJsonValue newChildren;
 
@@ -1529,7 +1541,7 @@ bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference){
     NJson::TJsonValue optRoot;
     NJson::ReadJsonTree(optimized, &optRoot, true);
     optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"), {});
-    
+
     NJson::TJsonValue refRoot;
     NJson::ReadJsonTree(reference, &refRoot, true);
 
@@ -1555,7 +1567,7 @@ NJson::TJsonValue GetDetailedJoinOrderImpl(const NJson::TJsonValue& opt, const T
         res["table"] = op.GetMapSafe().at("Table").GetStringSafe();
         return res;
     }
-    
+
     auto subplans = opt.GetMapSafe().at("Plans").GetArraySafe();
     for (size_t i = 0; i < subplans.size(); ++i) {
         res["args"].AppendValue(GetDetailedJoinOrderImpl(subplans[i], params));

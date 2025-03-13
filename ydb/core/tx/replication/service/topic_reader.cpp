@@ -2,6 +2,7 @@
 #include "topic_reader.h"
 #include "worker.h"
 
+#include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -47,21 +48,24 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         LOG_D("Handle " << ev->Get()->ToString());
 
         Y_ABORT_UNLESS(ReadSession);
-        Send(ReadSession, new TEvYdbProxy::TEvReadTopicRequest());
+        auto settings = TEvYdbProxy::TReadTopicSettings()
+            .SkipCommit(ev->Get()->SkipCommit);
+
+        Send(ReadSession, new TEvYdbProxy::TEvReadTopicRequest(settings));
     }
 
     void Handle(TEvYdbProxy::TEvReadTopicResponse::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
         auto& result = ev->Get()->Result;
-        TVector<TEvWorker::TEvData::TRecord> records(::Reserve(result.Messages.size()));
+        TVector<TTopicMessage> records(::Reserve(result.Messages.size()));
 
         for (auto& msg : result.Messages) {
             Y_ABORT_UNLESS(msg.GetCodec() == NYdb::NTopic::ECodec::RAW);
-            records.emplace_back(msg.GetOffset(), std::move(msg.GetData()), msg.GetCreateTime());
+            records.push_back(std::move(msg));
         }
 
-        Send(Worker, new TEvWorker::TEvData(ToString(result.PartitionId), std::move(records)));
+        Send(Worker, new TEvWorker::TEvData(result.PartitionId, ToString(result.PartitionId), std::move(records)));
     }
 
     void Handle(TEvYdbProxy::TEvTopicEndPartition::TPtr& ev) {

@@ -8,7 +8,7 @@ arcanum:
       - name: cppcommittee
         roles: cppcommittee:consultant
     rules:
-      - subpaths: "config.clang-format"
+      - subpaths: ".clang-format"
         reviewers:
           - name: cppcommittee
             assign: 1

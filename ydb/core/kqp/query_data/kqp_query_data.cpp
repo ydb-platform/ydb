@@ -7,10 +7,10 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/utils/yql_panic.h>
-#include <ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr::NKqp {
 
@@ -276,12 +276,16 @@ void TQueryData::ValidateParameter(const TString& name, const NKikimrMiniKQL::TT
 void TQueryData::PrepareParameters(const TKqpPhyTxHolder::TConstPtr& tx, const TPreparedQueryHolder::TConstPtr& preparedQuery,
     NMiniKQL::TTypeEnvironment& txTypeEnv)
 {
-    for (const auto& paramDesc : preparedQuery->GetParameters()) {
-        ValidateParameter(paramDesc.GetName(), paramDesc.GetType(), txTypeEnv);
+    if (preparedQuery) {
+        for (const auto& paramDesc : preparedQuery->GetParameters()) {
+            ValidateParameter(paramDesc.GetName(), paramDesc.GetType(), txTypeEnv);
+        }
     }
 
-    for(const auto& paramBinding: tx->GetParamBindings()) {
-        MaterializeParamValue(true, paramBinding);
+    if (tx) {
+        for(const auto& paramBinding: tx->GetParamBindings()) {
+            MaterializeParamValue(true, paramBinding);
+        }
     }
 }
 

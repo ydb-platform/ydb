@@ -1,5 +1,32 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 24.4 {#24-4}
+
+### Version 24.4.2 {#24-4-2}
+
+Release date:
+
+#### Functionality
+
+* Enabled by default:
+
+  * support for [views](./concepts/datamodel/view),
+  * [auto-partitioning mode](./concepts/topic#autopartitioning) for topics,
+  * transactions involving [topics](./concepts/topic) and row-based tables,
+  * [volatile distributed transactions](./contributor/datashard-distributed-txs#volatile-transactions),
+  * [automatic index selection](./dev/secondary-indexes#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) for queries.
+
+* Added the ability to [read and write to a topic](./reference/kafka-api/examples#primery-rabot-s-kafka-api) using the Kafka API without authentication.
+
+#### Bug Fixes
+
+* [Fixed](https://github.com/ydb-platform/ydb/pull/14811) issues causing reads to be performed from masters instead of tablet followers. This allowed for a tenfold increase in read speed when using tablet followers.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/14516) an error that caused a lock during dataset confirmation until the completion of a volatile distributed transaction.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15077) a rare assertion (process crash) when followers attached to leaders with an inconsistent snapshot.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15074) a rare crash in datashard when a dropped table shard is restarted with uncommitted persistent changes.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15194) an error that could disrupt the order of message processing in a topic.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15308) a rare error that caused possible stop of reading from the topic partition.
+
 ## Version 24.3 {#24-3}
 
 ### Version 24.3.15.5 {#24-3-15-5}

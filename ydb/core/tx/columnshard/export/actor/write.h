@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/export/session/cursor.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NExport {
 
@@ -11,7 +12,7 @@ protected:
     virtual void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult);
 public:
     TWriteController(const TActorId& exportActorId, const std::vector<TString>& blobsToWrite, const std::shared_ptr<IBlobsWritingAction>& writeAction,
-        const TCursor& cursor, const TTabletId tabletId, const ui64 pathId);
+        const TCursor& cursor, const TTabletId tabletId, const NColumnShard::TInternalPathId pathId);
 };
 
 }

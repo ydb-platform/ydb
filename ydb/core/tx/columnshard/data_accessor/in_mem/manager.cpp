@@ -19,7 +19,7 @@ std::shared_ptr<NKikimr::ITxReader> TManager::DoBuildLoader(
     return result;
 }
 
-std::unique_ptr<IGranuleDataAccessor> TManager::DoBuildCollector(const ui64 pathId) {
+std::unique_ptr<IGranuleDataAccessor> TManager::DoBuildCollector(const NColumnShard::TInternalPathId pathId) {
     return std::make_unique<TCollector>(pathId);
 }
 

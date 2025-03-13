@@ -3,7 +3,7 @@
 #include <ydb/core/testlib/basics/runtime.h>
 
 #include <ydb/library/accessor/accessor.h>
-
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
 namespace NKikimr::NTxUT {

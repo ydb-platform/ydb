@@ -71,7 +71,7 @@ public:
         return DoStartFetchingAccessor(sourcePtr, step);
     }
 
-    virtual ui64 GetPathId() const = 0;
+    virtual NColumnShard::TInternalPathId GetPathId() const = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
     const NArrow::TReplaceKey& GetStartReplaceKey() const {
@@ -201,7 +201,7 @@ private:
         return result;
     }
     virtual void DoAbort() override;
-    virtual ui64 GetPathId() const override {
+    virtual NColumnShard::TInternalPathId GetPathId() const override {
         return Portion->GetPathId();
     }
 
@@ -308,8 +308,8 @@ private:
         result.InsertValue("info", CommittedBlob.DebugString());
         return result;
     }
-    virtual ui64 GetPathId() const override {
-        return 0;
+    virtual NColumnShard::TInternalPathId GetPathId() const override {
+        return NColumnShard::TInternalPathId{};
     }
 
     virtual bool DoAddTxConflict() override {

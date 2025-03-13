@@ -3,6 +3,7 @@
 #include "scheme/versions/versioned_index.h"
 #include <ydb/core/tx/columnshard/common/blob.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimrTxColumnShard {
 class TIndexPortionMeta;
@@ -44,26 +45,27 @@ public:
     virtual void EraseCommitted(const TCommittedData& data) = 0;
     virtual void EraseAborted(const TInsertedData& data) = 0;
     virtual void WriteColumns(const NOlap::TPortionInfo& portion, const NKikimrTxColumnShard::TIndexPortionAccessor& proto) = 0;
+    virtual void CloneColumns(const TPortionInfo& originalPortion, const ui64 newPathId) = 0;
 
     virtual bool Load(TInsertTableAccessor& insertTable, const TInstant& loadTime) = 0;
 
     virtual void WriteColumn(const TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) = 0;
     virtual void EraseColumn(const TPortionInfo& portion, const TColumnRecord& row) = 0;
-    virtual bool LoadColumns(const std::optional<ui64> pathId, const std::function<void(TColumnChunkLoadContextV2&&)>& callback) = 0;
+    virtual bool LoadColumns(const std::optional<NColumnShard::TInternalPathId> pathId, const std::function<void(TColumnChunkLoadContextV2&&)>& callback) = 0;
 
     virtual void WritePortion(const NOlap::TPortionInfo& portion) = 0;
     virtual void ErasePortion(const NOlap::TPortionInfo& portion) = 0;
-    virtual bool LoadPortions(const std::optional<ui64> pathId,
+    virtual bool LoadPortions(const std::optional<NColumnShard::TInternalPathId> pathId,
         const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) = 0;
 
     virtual void WriteIndex(const TPortionInfo& portion, const TIndexChunk& row) = 0;
     virtual void EraseIndex(const TPortionInfo& portion, const TIndexChunk& row) = 0;
-    virtual bool LoadIndexes(const std::optional<ui64> pathId,
-        const std::function<void(const ui64 pathId, const ui64 portionId, TIndexChunkLoadContext&&)>& callback) = 0;
+    virtual bool LoadIndexes(const std::optional<NColumnShard::TInternalPathId> pathId,
+        const std::function<void(const NColumnShard::TInternalPathId pathId, const ui64 portionId, TIndexChunkLoadContext&&)>& callback) = 0;
 
     virtual void WriteCounter(ui32 counterId, ui64 value) = 0;
     virtual bool LoadCounters(const std::function<void(ui32 id, ui64 value)>& callback) = 0;
-    virtual TConclusion<THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() = 0;
+    virtual TConclusion<THashMap<NColumnShard::TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() = 0;
 };
 
 class TDbWrapper : public IDbWrapper {
@@ -84,22 +86,24 @@ public:
 
     void WritePortion(const NOlap::TPortionInfo& portion) override;
     void ErasePortion(const NOlap::TPortionInfo& portion) override;
-    bool LoadPortions(const std::optional<ui64> pathId, const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override;
+    bool LoadPortions(const std::optional<NColumnShard::TInternalPathId> pathId, const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override;
 
     void WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) override;
     void WriteColumns(const NOlap::TPortionInfo& portion, const NKikimrTxColumnShard::TIndexPortionAccessor& proto) override;
+    void CloneColumns(const TPortionInfo& originalPortion, const ui64 newPathId) override;
+
     void EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) override;
-    bool LoadColumns(const std::optional<ui64> pathId, const std::function<void(TColumnChunkLoadContextV2&&)>& callback) override;
+    bool LoadColumns(const std::optional<NColumnShard::TInternalPathId> pathId, const std::function<void(TColumnChunkLoadContextV2&&)>& callback) override;
 
     virtual void WriteIndex(const TPortionInfo& portion, const TIndexChunk& row) override;
     virtual void EraseIndex(const TPortionInfo& portion, const TIndexChunk& row) override;
-    virtual bool LoadIndexes(const std::optional<ui64> pathId,
-        const std::function<void(const ui64 pathId, const ui64 portionId, TIndexChunkLoadContext&&)>& callback) override;
+    virtual bool LoadIndexes(const std::optional<NColumnShard::TInternalPathId> pathId,
+        const std::function<void(const NColumnShard::TInternalPathId pathId, const ui64 portionId, TIndexChunkLoadContext&&)>& callback) override;
 
     void WriteCounter(ui32 counterId, ui64 value) override;
     bool LoadCounters(const std::function<void(ui32 id, ui64 value)>& callback) override;
 
-    virtual TConclusion<THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override;
+    virtual TConclusion<THashMap<NColumnShard::TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override;
 
     virtual const IBlobGroupSelector* GetDsGroupSelector() const override {
         return DsGroupSelector;

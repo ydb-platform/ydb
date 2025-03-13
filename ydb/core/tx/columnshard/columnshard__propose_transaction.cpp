@@ -139,7 +139,7 @@ private:
         }
 
         // If no paths trigger schema defined TTL
-        THashMap<ui64, NOlap::TTiering> pathTtls;
+        THashMap<TInternalPathId, NOlap::TTiering> pathTtls;
         if (!ttlBody.GetPathIds().empty()) {
             auto unixTime = TInstant::Seconds(ttlBody.GetUnixTimeSeconds());
             if (!unixTime) {
@@ -164,10 +164,10 @@ private:
             auto ttlColumn = schemaSnapshot->GetFieldByColumnIdVerified(*index);
 
             const TInstant now = TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now();
-            for (ui64 pathId : ttlBody.GetPathIds()) {
+            for (const auto pathId : ttlBody.GetPathIds()) {
                 NOlap::TTiering tiering;
                 AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(now - unixTime, columnName)));
-                pathTtls.emplace(pathId, std::move(tiering));
+                pathTtls.emplace(TInternalPathId::FromInternalPathIdValue(pathId), std::move(tiering));
             }
         }
         if (!Self->SetupTtl(pathTtls)) {

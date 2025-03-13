@@ -7,7 +7,7 @@ namespace NKikimr::NOlap::NExport {
 
 std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TBackupSelector::DoBuildRequestInitiator(const TCursor& cursor) const {
     auto ev = std::make_unique<TEvDataShard::TEvKqpScan>();
-    ev->Record.SetLocalPathId(TablePathId);
+    ev->Record.SetLocalPathId(TablePathId.GetInternalPathIdValue());
 
     auto protoRanges = ev->Record.MutableRanges();
 
@@ -19,8 +19,8 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TBackupSelector::DoBuildReque
     ev->Record.MutableSnapshot()->SetStep(Snapshot.GetPlanStep());
     ev->Record.MutableSnapshot()->SetTxId(Snapshot.GetTxId());
     ev->Record.SetStatsMode(NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE);
-    ev->Record.SetScanId(TablePathId);
-    ev->Record.SetTxId(TablePathId);
+    ev->Record.SetScanId(TablePathId.GetInternalPathIdValue());
+    ev->Record.SetTxId(TablePathId.GetInternalPathIdValue());
     ev->Record.SetTablePath(TableName);
     ev->Record.SetSchemaVersion(0);
 

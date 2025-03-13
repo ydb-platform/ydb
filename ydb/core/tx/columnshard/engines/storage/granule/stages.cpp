@@ -24,7 +24,7 @@ bool TGranuleOnlyPortionsReader::DoExecute(NTabletFlatExecutor::TTransactionCont
 
 bool TGranuleOnlyPortionsReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
-    return db.Table<NColumnShard::Schema::IndexPortions>().Prefix(Self->GetPathId()).Select().IsReady();
+    return db.Table<NColumnShard::Schema::IndexPortions>().Prefix(Self->GetPathId().GetInternalPathIdValue()).Select().IsReady();
 }
 
 bool TGranuleColumnsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
@@ -38,20 +38,20 @@ bool TGranuleColumnsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& 
 
 bool TGranuleColumnsReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
-    return db.Table<NColumnShard::Schema::IndexColumnsV2>().Prefix(Self->GetPathId()).Select().IsReady();
+    return db.Table<NColumnShard::Schema::IndexColumnsV2>().Prefix(Self->GetPathId().GetInternalPathIdValue()).Select().IsReady();
 }
 
 bool TGranuleIndexesReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
     Context->ClearIndexes();
-    return db.LoadIndexes(Self->GetPathId(), [&](const ui64 /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&& loadContext) {
+    return db.LoadIndexes(Self->GetPathId(), [&](const NColumnShard::TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&& loadContext) {
         Context->Add(std::move(loadContext));
     });
 }
 
 bool TGranuleIndexesReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
-    return db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(Self->GetPathId()).Select().IsReady();
+    return db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(Self->GetPathId().GetInternalPathIdValue()).Select().IsReady();
 }
 
 bool TGranuleFinishAccessorsLoading::DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {

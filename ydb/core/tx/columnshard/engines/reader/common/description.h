@@ -18,7 +18,7 @@ public:
     // Table
     ui64 TxId = 0;
     std::optional<ui64> LockId;
-    ui64 PathId = 0;
+    NColumnShard::TInternalPathId PathId = NColumnShard::TInternalPathId{};
     TString TableName;
     bool ReadNothing = false;
     // Less[OrEqual], Greater[OrEqual] or both

@@ -14,7 +14,7 @@ bool TInsertTableInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
     auto localInsertTable = std::make_unique<NOlap::TInsertTable>();
     Self->TablesManager.ForEachPathId(
-        [&localInsertTable](const ui64 pathId) {
+        [&localInsertTable](const NColumnShard::TInternalPathId pathId) {
             localInsertTable->RegisterPathInfo(pathId);
         }
     );

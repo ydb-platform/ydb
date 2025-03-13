@@ -12,7 +12,7 @@ private:
     NOlap::ISnapshotSchema::TPtr Schema;
     const NActors::TActorId SourceId;
     const std::optional<ui32> GranuleShardingVersionId;
-    const ui64 PathId;
+    const NColumnShard::TUnifiedPathId PathId;
     const ui64 Cookie;
     const ui64 LockId;
     const NEvWrite::EModificationType ModificationType;
@@ -21,7 +21,7 @@ private:
 
 public:
     TWriteTask(const std::shared_ptr<TArrowData>& arrowData, const NOlap::ISnapshotSchema::TPtr& schema, const NActors::TActorId sourceId,
-        const std::optional<ui32>& granuleShardingVersionId, const ui64 pathId, const ui64 cookie, const ui64 lockId,
+        const std::optional<ui32>& granuleShardingVersionId, const NColumnShard::TUnifiedPathId pathId, const ui64 cookie, const ui64 lockId,
         const NEvWrite::EModificationType modificationType, const EOperationBehaviour behaviour)
         : ArrowData(arrowData)
         , Schema(schema)

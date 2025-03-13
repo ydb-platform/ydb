@@ -40,7 +40,6 @@ struct TReadInfo {
 class TKafkaTestClient {
     public:
         TKafkaTestClient(ui16 port, const TString clientName = "TestClient");
-
         template <std::derived_from<TApiMessage> T>
         void WriteToSocket(TRequestHeaderData& header, T& request) {
             Write(So, &header, &request);
@@ -119,13 +118,11 @@ class TKafkaTestClient {
         void Print(const TBuffer& buffer);
         char Hex0(const unsigned char c);
         void FillTopicsFromJoinGroupMetadata(TKafkaBytes& metadata, THashSet<TString>& topics);
-
     private:
         TNetworkAddress Addr;
         TSocket Socket;
         TSocketOutput So;
         TSocketInput Si;
-
         ui32 Correlation;
         TString ClientName;
     };

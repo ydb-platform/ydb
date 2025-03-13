@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include "kafka_test_client.h"
+
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>
@@ -24,7 +26,6 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/system/tempfile.h>
-#include <random>
 
 using namespace NKafka;
 using namespace NYdb;
@@ -37,8 +38,6 @@ static constexpr const char NON_CHARGEABLE_USER_Y[] = "superuser_y@builtin";
 static constexpr const char DEFAULT_CLOUD_ID[] = "somecloud";
 static constexpr const char DEFAULT_FOLDER_ID[] = "somefolder";
 
-static constexpr TKafkaUint16 ASSIGNMENT_VERSION = 3;
-
 static constexpr const ui64 FirstTopicOffset = -2;
 static constexpr const ui64 LastTopicOffset = -1;
 
@@ -49,22 +48,6 @@ struct WithSslAndAuth: TKikimrTestSettings {
     static constexpr bool AUTH = true;
 };
 using TKikimrWithGrpcAndRootSchemaSecure = NYdb::TBasicKikimrWithGrpcAndRootSchema<WithSslAndAuth>;
-
-char Hex0(const unsigned char c) {
-    return c < 10 ? '0' + c : 'A' + c - 10;
-}
-
-void Print(const TBuffer& buffer) {
-    TStringBuilder sb;
-    for (size_t i = 0; i < buffer.Size(); ++i) {
-        char c = buffer.Data()[i];
-        if (i > 0) {
-            sb << ", ";
-        }
-        sb << "0x" << Hex0((c & 0xF0) >> 4) << Hex0(c & 0x0F);
-    }
-    Cerr << ">>>>> Packet sent: " << sb << Endl;
-}
 
 template <class TKikimr, bool secure>
 class TTestServer {
@@ -218,153 +201,6 @@ class TInsecureTestServer : public TTestServer<TKikimrWithGrpcAndRootSchema, fal
 class TSecureTestServer : public TTestServer<TKikimrWithGrpcAndRootSchemaSecure, true> {
     using TTestServer::TTestServer;
 };
-
-void FillTopicsFromJoinGroupMetadata(TKafkaBytes& metadata, THashSet<TString>& topics) {
-    TKafkaVersion version = *(TKafkaVersion*)(metadata.value().data() + sizeof(TKafkaVersion));
-
-    TBuffer buffer(metadata.value().data() + sizeof(TKafkaVersion), metadata.value().size_bytes() - sizeof(TKafkaVersion));
-    TKafkaReadable readable(buffer);
-
-    TConsumerProtocolSubscription result;
-    result.Read(readable, version);
-
-    for (auto topic: result.Topics) {
-        if (topic.has_value()) {
-            topics.emplace(topic.value());
-        }
-    }
-}
-
-std::vector<NKafka::TSyncGroupRequestData::TSyncGroupRequestAssignment> MakeRangeAssignment(
-    TMessagePtr<TJoinGroupResponseData>& joinResponse,
-    int totalPartitionsCount)
-{
-
-    std::vector<NKafka::TSyncGroupRequestData::TSyncGroupRequestAssignment> assignments;
-
-    std::unordered_map<TString, THashSet<TString>> memberToTopics;
-
-    for (auto& member : joinResponse->Members) {
-        THashSet<TString> memberTopics;
-        FillTopicsFromJoinGroupMetadata(member.Metadata, memberTopics);
-        memberToTopics[member.MemberId.value()] = std::move(memberTopics);
-    }
-
-    THashSet<TString> allTopics;
-    for (auto& kv : memberToTopics) {
-        for (auto& t : kv.second) {
-            allTopics.insert(t);
-        }
-    }
-
-    std::unordered_map<TString, std::vector<TString>> topicToMembers;
-    for (auto& t : allTopics) {
-        for (auto& [mId, topicsSet] : memberToTopics) {
-            if (topicsSet.contains(t)) {
-                topicToMembers[t].push_back(mId);
-            }
-        }
-    }
-
-    for (const auto& member : joinResponse->Members) {
-        TConsumerProtocolAssignment consumerAssignment;
-
-        const auto& requestedTopics = memberToTopics[member.MemberId.value()];
-        for (auto& topicName : requestedTopics) {
-
-            auto& interestedMembers = topicToMembers[topicName];
-            auto it = std::find(interestedMembers.begin(), interestedMembers.end(), member.MemberId);
-            if (it == interestedMembers.end()) {
-                continue;
-            }
-
-            int idx = static_cast<int>(std::distance(interestedMembers.begin(), it));
-            int totalInterested = static_cast<int>(interestedMembers.size());
-
-            const int totalPartitions = totalPartitionsCount;
-
-            int baseCount = totalPartitions / totalInterested;
-            int remainder = totalPartitions % totalInterested;
-
-            int start = idx * baseCount + std::min<int>(idx, remainder);
-            int length = baseCount + (idx < remainder ? 1 : 0);
-
-
-            TConsumerProtocolAssignment::TopicPartition topicPartition;
-            topicPartition.Topic = topicName;
-            for (int p = start; p < start + length; ++p) {
-                topicPartition.Partitions.push_back(p);
-            }
-            consumerAssignment.AssignedPartitions.push_back(topicPartition);
-        }
-
-        {
-            TWritableBuf buf(nullptr, consumerAssignment.Size(ASSIGNMENT_VERSION) + sizeof(ASSIGNMENT_VERSION));
-            TKafkaWritable writable(buf);
-
-            writable << ASSIGNMENT_VERSION;
-            consumerAssignment.Write(writable, ASSIGNMENT_VERSION);
-            NKafka::TSyncGroupRequestData::TSyncGroupRequestAssignment syncAssignment;
-            syncAssignment.MemberId = member.MemberId;
-            syncAssignment.AssignmentStr = TString(buf.GetBuffer().data(), buf.GetBuffer().size());
-            syncAssignment.Assignment = syncAssignment.AssignmentStr;
-
-            assignments.push_back(std::move(syncAssignment));
-        }
-    }
-
-    return assignments;
-}
-
-void Write(TSocketOutput& so, TApiMessage* request, TKafkaVersion version) {
-    TWritableBuf sb(nullptr, request->Size(version) + 1000);
-    TKafkaWritable writable(sb);
-    request->Write(writable, version);
-    so.Write(sb.Data(), sb.Size());
-
-    Print(sb.GetBuffer());
-}
-
-void Write(TSocketOutput& so, TRequestHeaderData* header, TApiMessage* request) {
-    TKafkaVersion version = header->RequestApiVersion;
-    TKafkaVersion headerVersion = RequestHeaderVersion(request->ApiKey(), version);
-
-    TKafkaInt32 size = header->Size(headerVersion) + request->Size(version);
-    Cerr << ">>>>> Size=" << size << Endl;
-    NKafka::NormalizeNumber(size);
-    so.Write(&size, sizeof(size));
-
-    Write(so, header, headerVersion);
-    Write(so, request, version);
-
-    so.Flush();
-}
-
-template<std::derived_from<TApiMessage> T>
-TMessagePtr<T> Read(TSocketInput& si, TRequestHeaderData* requestHeader) {
-    TKafkaInt32 size;
-
-    si.Read(&size, sizeof(size));
-    NKafka::NormalizeNumber(size);
-
-    auto buffer= std::make_shared<TBuffer>();
-    buffer->Resize(size);
-    si.Load(buffer->Data(), size);
-
-    TKafkaVersion headerVersion = ResponseHeaderVersion(requestHeader->RequestApiKey, requestHeader->RequestApiVersion);
-
-    TKafkaReadable readable(*buffer);
-
-    TResponseHeaderData header;
-    header.Read(readable, headerVersion);
-
-    UNIT_ASSERT_VALUES_EQUAL(header.CorrelationId, requestHeader->CorrelationId);
-
-    auto response = CreateResponse(requestHeader->RequestApiKey);
-    response->Read(readable, requestHeader->RequestApiVersion);
-
-    return TMessagePtr<T>(buffer, std::shared_ptr<TApiMessage>(response.release()));
-}
 
 void AssertMessageMeta(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& msg, const TString& field,
                        const TString& expectedValue) {
@@ -2254,7 +2090,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                                     : isLeaderB ? joinRespB
                                     : joinRespC;
 
-        std::vector<TSyncGroupRequestData::TSyncGroupRequestAssignment> assignments = MakeRangeAssignment(leaderResp, totalPartitions);
+        // anyclient can make MakeRangeAssignment request, cause result does not depend on the client
+        std::vector<TSyncGroupRequestData::TSyncGroupRequestAssignment> assignments = clientA.MakeRangeAssignment(leaderResp, totalPartitions);
 
         TRequestHeaderData syncHeaderA = clientA.Header(NKafka::EApiKey::SYNC_GROUP, 5);
         TRequestHeaderData syncHeaderB = clientB.Header(NKafka::EApiKey::SYNC_GROUP, 5);
@@ -2304,9 +2141,9 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             return sum;
         };
 
-        size_t countA = countPartitions(GetAssignments(syncRespA->Assignment));
-        size_t countB = countPartitions(GetAssignments(syncRespB->Assignment));
-        size_t countC = countPartitions(GetAssignments(syncRespC->Assignment));
+        size_t countA = countPartitions(clientA.GetAssignments(syncRespA->Assignment));
+        size_t countB = countPartitions(clientB.GetAssignments(syncRespB->Assignment));
+        size_t countC = countPartitions(clientC.GetAssignments(syncRespC->Assignment));
 
         UNIT_ASSERT_VALUES_EQUAL(countA, size_t(totalPartitions / 3));
         UNIT_ASSERT_VALUES_EQUAL(countB, size_t(totalPartitions / 3));
@@ -2357,7 +2194,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         TMessagePtr<TJoinGroupResponseData> leaderResp2 = isLeaderA2 ? joinRespA2 : joinRespB2;
 
-        std::vector<TSyncGroupRequestData::TSyncGroupRequestAssignment> assignments2 = MakeRangeAssignment(leaderResp2, totalPartitions);
+        std::vector<TSyncGroupRequestData::TSyncGroupRequestAssignment> assignments2 = clientA.MakeRangeAssignment(leaderResp2, totalPartitions);
 
         TRequestHeaderData syncHeaderA2 = clientA.Header(NKafka::EApiKey::SYNC_GROUP, 5);
         TRequestHeaderData syncHeaderB2 = clientB.Header(NKafka::EApiKey::SYNC_GROUP, 5);
@@ -2388,8 +2225,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(syncRespA2->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
         UNIT_ASSERT_VALUES_EQUAL(syncRespB2->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
 
-        size_t countA2 = countPartitions(GetAssignments(syncRespA2->Assignment));
-        size_t countB2 = countPartitions(GetAssignments(syncRespB2->Assignment));
+        size_t countA2 = countPartitions(clientA.GetAssignments(syncRespA2->Assignment));
+        size_t countB2 = countPartitions(clientB.GetAssignments(syncRespB2->Assignment));
 
         UNIT_ASSERT_VALUES_EQUAL(countA2, size_t(totalPartitions / 2));
         UNIT_ASSERT_VALUES_EQUAL(countB2, size_t(totalPartitions / 2));

@@ -1,11 +1,16 @@
 #include "dq_arrow_helpers.h"
 
 #include <cstddef>
-#include <yql/essentials/public/udf/udf_value.h>
-#include <yql/essentials/minikql/defs.h>
+#include <yql/essentials/minikql/computation/mkql_block_trimmer.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/defs.h>
 #include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/public/udf/arrow/defs.h>
+#include <yql/essentials/public/udf/arrow/memory_pool.h>
+#include <yql/essentials/public/udf/arrow/util.h>
+#include <yql/essentials/public/udf/udf_value.h>
 
+#include <ydb/library/formats/arrow/size_calcer.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -942,6 +947,214 @@ std::shared_ptr<arrow::Array> DeserializeArray(const std::string& blob, std::sha
     return (*batch)->column(0);
 }
 
+// Block splitter
+
+namespace {
+
+class TBlockSplitter : public IBlockSplitter {
+    class TItem {
+    public:
+        TItem(TBlockSplitter& self, const NUdf::TUnboxedValuePod* values)
+            : Self(self)
+        {
+            Data.reserve(Self.Width);
+            ArraysIdx.reserve(Self.Width);
+            for (ui64 i = 0; i < Self.Width; ++i) {
+                auto datum = TBlockSplitter::ExtractDatum(values[i]);
+                if (datum.is_scalar()) {
+                    ScalarsSize += Self.GetDatumMemorySize(i, datum);
+                } else {
+                    ArraysIdx.emplace_back(i);
+                }
+                Data.emplace_back(std::move(datum));
+            }
+
+            NumberRows = Data.back().scalar_as<arrow::UInt64Scalar>().value;
+            UpdateArraysSize();
+        }
+
+        TItem(TBlockSplitter& self, std::vector<arrow::Datum>&& data, const std::vector<ui64>& arraysIdx, ui64 numberRows, ui64 scalarsSize)
+            : Self(self)
+            , Data(std::move(data))
+            , ArraysIdx(arraysIdx)
+            , NumberRows(numberRows)
+            , ScalarsSize(scalarsSize)
+        {
+            UpdateArraysSize();
+        }
+
+        ui64 GetNumberRows() const {
+            return NumberRows;
+        }
+
+        ui64 GetSize() const {
+            return ScalarsSize + ArraysSize;
+        }
+
+        std::vector<arrow::Datum> ExtractData() {
+            std::vector<arrow::Datum> result(std::move(Data));
+            for (ui64 i : ArraysIdx) {
+                result[i] = Self.GetColumnTrimmer(i).Trim(result[i].array());
+            }
+            result.back() = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(NumberRows));
+            return result;
+        }
+
+        TItem PopBack(ui64 length) {
+            MKQL_ENSURE(length <= NumberRows, "Can not pop more than number of rows");
+            std::vector<arrow::Datum> backData = Data;
+            for (ui64 i : ArraysIdx) {
+                auto array = Data[i].array();
+                Data[i] = NUdf::Chop(array, NumberRows - length);
+                backData[i] = array;
+            }
+
+            NumberRows -= length;
+            UpdateArraysSize();
+
+            return TItem(Self, std::move(backData), ArraysIdx, length, ScalarsSize);
+        }
+
+    private:
+        void UpdateArraysSize() {
+            ArraysSize = 0;
+            for (ui64 i : ArraysIdx) {
+                ArraysSize += NKikimr::NArrow::GetArrayDataSize(Data[i].make_array());
+            }
+        }
+
+    private:
+        TBlockSplitter& Self;
+        std::vector<arrow::Datum> Data;
+        std::vector<ui64> ArraysIdx;
+        ui64 NumberRows = 0;
+        ui64 ScalarsSize = 0;
+        ui64 ArraysSize = 0;
+    };
+
+public:
+    TBlockSplitter(const TVector<const TBlockType*>& items, ui64 chunkSizeLimit, arrow::MemoryPool* pool)
+        : Items(items)
+        , Width(items.size())
+        , ChunkSizeLimit(chunkSizeLimit)
+        , ArrowPool(pool ? *pool : *NYql::NUdf::GetYqlMemoryPool())
+        , ScalarSizes(Width)
+        , BlockTrimmers(Width)
+    {}
+
+    bool ShouldSplitItem(const NUdf::TUnboxedValuePod* values, ui32 count) override {
+        MKQL_ENSURE(count == Width, "Invalid width");
+
+        ui64 itemSize = 0;
+        for (size_t i = 0; i < Width; ++i) {
+            itemSize += GetDatumMemorySize(i, ExtractDatum(values[i]));
+        }
+        return itemSize > ChunkSizeLimit;
+    }
+
+    std::vector<std::vector<arrow::Datum>> SplitItem(const NUdf::TUnboxedValuePod* values, ui32 count) override {
+        MKQL_ENSURE(count == Width, "Invalid width");
+
+        SplitStack.clear();
+        SplitStack.emplace_back(*this, values);
+        std::vector<std::vector<arrow::Datum>> result;
+
+        const auto estimatedSize = SplitStack.back().GetSize() / std::max(ChunkSizeLimit, ui64(1));
+        result.reserve(estimatedSize);
+        SplitStack.reserve(estimatedSize);
+        while (!SplitStack.empty()) {
+            auto item = std::move(SplitStack.back());
+            SplitStack.pop_back();
+
+            while (item.GetSize() > ChunkSizeLimit) {
+                if (item.GetNumberRows() <= 1) {
+                    throw yexception() << "Row size in block is " << item.GetSize() << ", that is larger than allowed limit " << ChunkSizeLimit;
+                }
+                SplitStack.emplace_back(item.PopBack(item.GetNumberRows() / 2));
+            }
+            result.emplace_back(item.ExtractData());
+        }
+        return result;
+    }
+
+private:
+    static arrow::Datum ExtractDatum(const NUdf::TUnboxedValuePod& value) {
+        arrow::Datum datum = TArrowBlock::From(value).GetDatum();
+        MKQL_ENSURE(datum.is_array() || datum.is_scalar(), "Expecting array or scalar");
+        return datum;
+    }
+
+    ui64 GetDatumMemorySize(ui64 index, const arrow::Datum& datum) {
+        MKQL_ENSURE(index < Width, "Invalid index");
+        if (datum.is_array()) {
+            return NKikimr::NArrow::GetArrayMemorySize(datum.array());
+        }
+
+        if (!ScalarSizes[index]) {
+            const auto& array = ARROW_RESULT(arrow::MakeArrayFromScalar(*datum.scalar(), 1));
+            ScalarSizes[index] = NKikimr::NArrow::GetArrayMemorySize(array->data());
+        }
+        return *ScalarSizes[index];
+    }
+
+    IBlockTrimmer& GetColumnTrimmer(ui64 index) {
+        MKQL_ENSURE(index < Width, "Invalid index");
+        if (!BlockTrimmers[index]) {
+            BlockTrimmers[index] = MakeBlockTrimmer(TTypeInfoHelper(), Items[index]->GetItemType(), &ArrowPool);
+        }
+        return *BlockTrimmers[index];
+    }
+
+private:
+    const TVector<const TBlockType*> Items;
+    const ui64 Width;
+    const ui64 ChunkSizeLimit;
+    arrow::MemoryPool& ArrowPool;
+
+    std::vector<std::optional<ui64>> ScalarSizes;
+    std::vector<IBlockTrimmer::TPtr> BlockTrimmers;
+    std::vector<TItem> SplitStack;
+};
+
+} // namespace
+
+IBlockSplitter::TPtr CreateBlockSplitter(const TType* type, ui64 chunkSizeLimit, arrow::MemoryPool* pool) {
+    if (!type->IsMulti()) {
+        return nullptr;
+    }
+
+    const TMultiType* multiType = static_cast<const TMultiType*>(type);
+    const ui32 width = multiType->GetElementsCount();
+    if (!width) {
+        return nullptr;
+    }
+
+    TVector<const TBlockType*> items;
+    items.reserve(width);
+    for (ui32 i = 0; i < width; i++) {
+        const auto type = multiType->GetElementType(i);
+        if (!type->IsBlock()) {
+            return nullptr;
+        }
+
+        const TBlockType* blockType = static_cast<const TBlockType*>(type);
+        if (i == width - 1) {
+            if (blockType->GetShape() != TBlockType::EShape::Scalar) {
+                return nullptr;
+            }
+            if (!blockType->GetItemType()->IsData()) {
+                return nullptr;
+            }
+            if (static_cast<const TDataType*>(blockType->GetItemType())->GetDataSlot() != NUdf::EDataSlot::Uint64) {
+                return nullptr;
+            }
+        }
+
+        items.push_back(blockType);
+    }
+
+    return MakeIntrusive<TBlockSplitter>(items, chunkSizeLimit, pool);
+}
+
 } // namespace NArrow
 } // namespace NYql
-

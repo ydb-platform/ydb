@@ -458,6 +458,39 @@ Y_UNIT_TEST_TWIN(StreamLookupStats, StreamLookupJoin) {
     });
 }
 
+Y_UNIT_TEST(SelfJoin) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
+
+    TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(app));
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+    auto result = session.ExecuteDataQuery(R"(
+        SELECT a.Key FROM `/Root/TwoShard` AS a INNER JOIN `/Root/TwoShard` AS b ON a.Key = b.Key;
+    )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    Cerr << result.GetQueryPlan() << Endl;
+
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
+
+    auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 4); // TODO: fix it
+
+    AssertTableStats(result, "/Root/TwoShard", {
+        .ExpectedReads = 12,
+    });
+}
+
 Y_UNIT_TEST(SysViewClientLost) {
     TKikimrRunner kikimr;
     CreateLargeTable(kikimr, 500000, 10, 100, 5000, 1);

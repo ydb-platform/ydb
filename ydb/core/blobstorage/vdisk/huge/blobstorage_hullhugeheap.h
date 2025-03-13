@@ -94,16 +94,16 @@ namespace NKikimr {
             using TChunkID = ui32;
             using TFreeSpace = TMap<TChunkID, TMask>;
 
+        public:
             static constexpr ui32 MaxNumberOfSlots = 32768; // it's not a good idea to have more slots than this
             const TString VDiskLogPrefix;
-            const ui32 SlotsInChunk;
-            const TMask ConstMask; // mask of 'all slots are free'
+            ui32 SlotsInChunk;
+            TMask ConstMask; // mask of 'all slots are free'
             TFreeSpace FreeSpace;
             TFreeSpace LockedChunks;
             ui32 AllocatedSlots = 0;
             ui32 FreeSlotsInFreeSpace = 0;
 
-        public:
             static TMask BuildConstMask(const TString &prefix, ui32 slotsInChunk);
 
         public:
@@ -205,6 +205,8 @@ namespace NKikimr {
             // Builds a map of BlobSize -> THugeSlotsMap::TSlotInfo for THugeBlobCtx
             std::shared_ptr<THugeSlotsMap> BuildHugeSlotsMap() const;
 
+            TAllChainDelegators ChainDelegators;
+
         private:
 
             TAllChainDelegators BuildChains(ui32 minHugeBlobInBytes) const;
@@ -212,6 +214,7 @@ namespace NKikimr {
             void BuildLayout();
             inline ui32 SizeToBlocks(ui32 size) const;
             inline ui32 GetEndBlocks() const;
+            bool IsOldMinHugeBlobSizeCompatible() const;
 
             enum class EStartMode {
                 Empty = 1,
@@ -228,8 +231,6 @@ namespace NKikimr {
             const ui32 MaxBlobInBytes;
             const ui32 Overhead;
             EStartMode StartMode = EStartMode::Empty;
-            ui32 FirstLoadedSlotSize = 0;
-            TAllChainDelegators ChainDelegators;
             TSearchTable SearchTable;
         };
 
@@ -246,6 +247,7 @@ namespace NKikimr {
             const TString VDiskLogPrefix;
             const ui32 FreeChunksReservation;
             TFreeChunks FreeChunks;
+        public:
             TAllChains Chains;
 
         public:

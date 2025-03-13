@@ -5,7 +5,7 @@
 
 
 // change to Cerr if you want logging
-#define STR Cnull
+#define STR Cerr
 
 namespace NKikimr {
 
@@ -484,6 +484,130 @@ namespace NKikimr {
 
         Y_UNIT_TEST(RollbackFrom_New_To_Old) {
             Write_SaveEntryPoint_Restart(EWrite_SaveEntryPoint_Restart::RollbackFrom_New_To_Old);
+        }
+
+        NPrivate::TChainLayoutBuilder GetChainLayoutBuilder(ui32 minHugeBlobInBytes) {
+            ui32 appendBlockSize = 4064;
+            ui32 milestoneBlobInBytes = 524288;
+            ui32 maxBlobInBytes = 10485760;
+            ui32 overhead = 8u;
+
+            const ui32 startBlocks = minHugeBlobInBytes / appendBlockSize;
+            const ui32 mileStoneBlocks = milestoneBlobInBytes / appendBlockSize;
+
+            ui32 endBlocks = maxBlobInBytes / appendBlockSize;
+            endBlocks += !(endBlocks * appendBlockSize == maxBlobInBytes);
+
+            STR << "startBlocks# " << startBlocks
+                << " mileStoneBlocks# " << mileStoneBlocks
+                << " endBlocks# " << endBlocks << "\n";
+
+            return NPrivate::TChainLayoutBuilder(startBlocks, mileStoneBlocks, endBlocks, overhead);
+        }
+
+        Y_UNIT_TEST(ChainLength_4064) {
+            auto builder = GetChainLayoutBuilder(4064);
+            UNIT_ASSERT_VALUES_EQUAL(builder.GetLayout().size(), 53);
+        }
+
+        Y_UNIT_TEST(ChainLength_97537) {
+            auto builder = GetChainLayoutBuilder(97537);
+            UNIT_ASSERT_VALUES_EQUAL(builder.GetLayout().size(), 39);
+        }
+
+        Y_UNIT_TEST(ChainLength_524257) {
+            auto builder = GetChainLayoutBuilder(524257);
+            UNIT_ASSERT_VALUES_EQUAL(builder.GetLayout().size(), 26);
+        }
+
+        Y_UNIT_TEST(FailingRecovery) {
+            ui32 chunkSize = 135249920;
+            ui32 appendBlockSize = 4064;
+            ui32 milestoneBlobInBytes = 524288;
+            ui32 maxBlobInBytes = 10485760;
+            ui32 overhead = 8u;
+
+            TString serialized;
+
+            {
+                ui32 oldMinHugeBlobSizeInBytes = 524288;
+                ui32 minHugeBlobInBytes = 524288; // 24.2
+                THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, oldMinHugeBlobSizeInBytes, milestoneBlobInBytes,
+                    maxBlobInBytes, overhead, 0);
+                
+                serialized = heap.Serialize();
+            }
+
+            {
+                ui32 oldMinHugeBlobSizeInBytes = 524288;
+                ui32 minHugeBlobInBytes = appendBlockSize; // update 24.2 -> 24.3
+                THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, oldMinHugeBlobSizeInBytes, milestoneBlobInBytes,
+                    maxBlobInBytes, overhead, 0);
+
+                {
+                    // emulate old behavior
+                    TVector<TChainDelegator> delegators;
+                    for (auto& d: heap.Chains.ChainDelegators) {
+                        if (d.SlotSize >= 524288) {
+                            delegators.emplace_back(std::move(d));
+                        }
+                    }
+                    heap.Chains.ChainDelegators = std::move(delegators);
+                }
+
+                heap.ParseFromString(serialized);
+
+                serialized = heap.Serialize();
+            }
+
+            {
+                ui32 oldMinHugeBlobSizeInBytes = 524288;
+                ui32 minHugeBlobInBytes = appendBlockSize; // 24.3
+                THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, oldMinHugeBlobSizeInBytes, milestoneBlobInBytes,
+                    maxBlobInBytes, overhead, 0);
+                heap.ParseFromString(serialized);
+
+                heap.AddChunk(1);
+                heap.AddChunk(2);
+                heap.AddChunk(3);
+                THugeSlot slot;
+                ui32 slotSize;
+                UNIT_ASSERT(heap.Allocate(97536 - 1, &slot, &slotSize));
+                UNIT_ASSERT(heap.Allocate(113792 - 1, &slot, &slotSize));
+                UNIT_ASSERT(heap.Allocate(170688 - 1, &slot, &slotSize));
+
+                {
+                    // emulate old behavior
+                    TVector<TChainDelegator> delegators;
+                    for (auto& d: heap.Chains.ChainDelegators) {
+                        if (d.SlotSize >= 524288 || d.SlotSize == 97536 || d.SlotSize == 113792 || d.SlotSize == 170688) {
+                            delegators.emplace_back(std::move(d));
+                        }
+                    }
+                    heap.Chains.ChainDelegators = std::move(delegators);
+                }
+
+                serialized = heap.Serialize();
+            }
+
+            {
+                ui32 oldMinHugeBlobSizeInBytes = 524288;
+                ui32 minHugeBlobInBytes = appendBlockSize; // 24.3
+                THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, oldMinHugeBlobSizeInBytes, milestoneBlobInBytes,
+                    maxBlobInBytes, overhead, 0);
+                heap.ParseFromString(serialized);
+
+                THugeSlot slot;
+                ui32 slotSize;
+                UNIT_ASSERT(heap.Allocate(97537 - 1, &slot, &slotSize));
+                Cerr << slot.GetChunkId() << Endl;
+                UNIT_ASSERT(heap.Allocate(113792 - 1, &slot, &slotSize));
+                Cerr << slot.GetChunkId() << Endl;
+                UNIT_ASSERT(heap.Allocate(170688 - 1, &slot, &slotSize));
+                Cerr << slot.GetChunkId() << Endl;
+
+                serialized = heap.Serialize();
+            }
         }
     }
 

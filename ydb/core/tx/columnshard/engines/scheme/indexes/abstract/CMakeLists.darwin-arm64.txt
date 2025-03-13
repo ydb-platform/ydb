@@ -44,10 +44,6 @@ target_sources(scheme-indexes-abstract PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/abstract.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/meta.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/checker.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/simple.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/tree.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/coverage.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/like.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/common.cpp
 )
 
@@ -57,26 +53,3 @@ generate_enum_serilization(scheme-indexes-abstract
   INCLUDE_HEADERS
   ydb/core/tx/columnshard/engines/scheme/indexes/abstract/common.h
 )
-
-add_global_library_for(scheme-indexes-abstract.global
-  scheme-indexes-abstract)
-
-
-target_compile_options(scheme-indexes-abstract.global PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(scheme-indexes-abstract.global PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  core-formats-arrow
-  library-formats-arrow-protos
-  core-arrow_kernels-request
-  formats-arrow-program
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(scheme-indexes-abstract.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/composite.cpp
-)
-

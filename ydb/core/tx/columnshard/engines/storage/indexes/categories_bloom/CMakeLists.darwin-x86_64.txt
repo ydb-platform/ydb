@@ -43,6 +43,5 @@ target_link_libraries(storage-indexes-categories_bloom.global PUBLIC
 target_sources(storage-indexes-categories_bloom.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/categories_bloom/constructor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/categories_bloom/meta.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/categories_bloom/checker.cpp
 )
 

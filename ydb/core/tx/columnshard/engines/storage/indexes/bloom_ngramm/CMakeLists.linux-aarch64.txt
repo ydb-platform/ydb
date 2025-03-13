@@ -45,6 +45,5 @@ target_link_libraries(storage-indexes-bloom_ngramm.global PUBLIC
 target_sources(storage-indexes-bloom_ngramm.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/constructor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/meta.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/checker.cpp
 )
 

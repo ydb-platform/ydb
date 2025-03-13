@@ -12,15 +12,19 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(storage-indexes-bloom INTERFACE)
+add_library(storage-indexes-bloom)
 
 
-target_link_libraries(storage-indexes-bloom INTERFACE
+target_link_libraries(storage-indexes-bloom PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-protos
   core-formats-arrow
   storage-indexes-portions
+)
+
+target_sources(storage-indexes-bloom PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/bloom/bits_storage.cpp
 )
 
 
@@ -39,6 +43,5 @@ target_link_libraries(storage-indexes-bloom.global PUBLIC
 target_sources(storage-indexes-bloom.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/bloom/constructor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/bloom/meta.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/bloom/checker.cpp
 )
 

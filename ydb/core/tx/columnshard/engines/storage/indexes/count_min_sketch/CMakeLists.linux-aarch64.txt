@@ -41,6 +41,5 @@ target_link_libraries(storage-indexes-count_min_sketch.global PUBLIC
 target_sources(storage-indexes-count_min_sketch.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch/constructor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch/meta.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch/checker.cpp
 )
 

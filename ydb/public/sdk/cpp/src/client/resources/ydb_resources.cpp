@@ -29,7 +29,7 @@ const char* YDB_CLIENT_CAPABILITY_SESSION_BALANCER = "session-balancer";
 
 
 std::string GetSdkSemver() {
-    return NResource::Find("ydb_sdk_version_v3.txt");
+    return NResource::Find("ydb_sdk_version_dev.txt");
 }
 
 } // namespace NYdb

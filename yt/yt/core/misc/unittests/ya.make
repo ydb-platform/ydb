@@ -18,6 +18,7 @@ SRCS(
     callback_ut.cpp
     checksum_ut.cpp
     codicil_ut.cpp
+    collection_helpers_ut.cpp
     concurrent_cache_ut.cpp
     consistent_hashing_ut.cpp
     default_map_ut.cpp

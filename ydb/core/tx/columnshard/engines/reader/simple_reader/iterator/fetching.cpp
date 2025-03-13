@@ -20,11 +20,6 @@ ui64 IFetchingStep::GetProcessingDataSize(const std::shared_ptr<NCommon::IDataSo
     return GetProcessingDataSize(std::static_pointer_cast<IDataSource>(source));
 }
 
-TConclusion<bool> TIndexBlobsFetchingStep::DoExecuteInplace(
-    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
-    return !source->StartFetchingIndexes(source, step, Indexes);
-}
-
 TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
         source->GetStageData().GetTable()->ToTable(source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
@@ -76,11 +71,6 @@ TConclusion<bool> TShardingFilter::DoExecuteInplace(const std::shared_ptr<IDataS
     auto filter =
         shardingInfo->GetFilter(source->GetStageData().GetTable()->ToTable(ids, source->GetContext()->GetCommonContext()->GetResolver()));
     source->MutableStageData().AddFilter(filter);
-    return true;
-}
-
-TConclusion<bool> TApplyIndexStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    source->ApplyIndex(IndexChecker);
     return true;
 }
 

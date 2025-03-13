@@ -56,15 +56,4 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void RetryHeavyWriteRequest(
-    const IRawClientPtr& rawClient,
-    const IClientRetryPolicyPtr& clientRetryPolicy,
-    const ITransactionPingerPtr& transactionPinger,
-    const TClientContext& context,
-    const TTransactionId& parentId,
-    THttpHeader& header,
-    std::function<std::unique_ptr<IInputStream>()> streamMaker);
-
-////////////////////////////////////////////////////////////////////////////////
-
 } // namespace NYT

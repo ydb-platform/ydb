@@ -337,7 +337,7 @@ private:
 
         if (maxChunkCountExtendedStats) {
             TVector<TMaybe<IYtGateway::TPathStatResult::TExtendedResult>> extendedStats;
-            extendedStats = GetStatsFromCache(leaf, keyList, *maxChunkCountExtendedStats);
+            extendedStats = GetStatsFromCache(leaf, keyList);
             columnInfo = ExtractColumnInfo(extendedStats);
         }
 
@@ -364,43 +364,23 @@ private:
     }
 
     TVector<TMaybe<IYtGateway::TPathStatResult::TExtendedResult>> GetStatsFromCache(
-        TYtJoinNodeLeaf* nodeLeaf, const TVector<TString>& columns, ui64 maxChunkCount) {
-        TVector<IYtGateway::TPathStatReq> pathStatReqs;
+        TYtJoinNodeLeaf* nodeLeaf, const TVector<TString>& columns)
+    {
+        TVector<TYtPathInfo::TPtr> paths;
         TYtSection section{nodeLeaf->Section};
-        ui64 totalChunkCount = 0;
         for (auto path: section.Paths()) {
-            auto pathInfo = MakeIntrusive<TYtPathInfo>(path);
-
-            totalChunkCount += pathInfo->Table->Stat->ChunkCount;
-
-            auto ytPath = BuildYtPathForStatRequest(Cluster, *pathInfo, columns, *State, Ctx);
-            YQL_ENSURE(ytPath);
-
-            pathStatReqs.push_back(
-                IYtGateway::TPathStatReq()
-                    .Path(*ytPath)
-                    .IsTemp(pathInfo->Table->IsTemp)
-                    .IsAnonymous(pathInfo->Table->IsAnonymous)
-                    .Epoch(pathInfo->Table->Epoch.GetOrElse(0)));
-
-        }
-        if (pathStatReqs.empty() || (maxChunkCount != 0 && totalChunkCount > maxChunkCount)) {
-            return {};
+            paths.push_back(MakeIntrusive<TYtPathInfo>(path));
         }
 
-        IYtGateway::TPathStatOptions pathStatOptions =
-            IYtGateway::TPathStatOptions(State->SessionId)
-                .Cluster(Cluster)
-                .Paths(pathStatReqs)
-                .Config(State->Configuration->Snapshot())
-                .Extended(true);
-
-        IYtGateway::TPathStatResult pathStats = State->Gateway->TryPathStat(std::move(pathStatOptions));
-        if (!pathStats.Success()) {
+        TSet<TString> requestedColumns;
+        IYtGateway::TPathStatResult result;
+        auto status = TryEstimateDataSize(result, requestedColumns, Cluster, paths, columns, *State, Ctx);
+        YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
+        if (status != IGraphTransformer::TStatus::Ok) {
             YQL_CLOG(WARN, ProviderYt) << "Unable to read path stats that must be already present in cache";
             return {};
         }
-        return pathStats.Extended;
+        return result.Extended;
     }
 
     TVector<TYtColumnStatistic> ExtractColumnInfo(TVector<TMaybe<IYtGateway::TPathStatResult::TExtendedResult>> extendedResults)

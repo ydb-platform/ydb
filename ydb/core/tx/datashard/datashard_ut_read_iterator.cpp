@@ -17,7 +17,7 @@
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/protos/query_stats.pb.h>
 
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 #include <algorithm>
 #include <map>

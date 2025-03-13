@@ -43,15 +43,15 @@ private:
     std::vector<TChunkRestoreInfo> ColumnChunks;
     std::optional<TString> StorageId;
     virtual void DoOnDataCollected(TFetchingResultContext& context) override {
-        AFL_VERIFY(!IIndexInfo::IsSpecialColumn(GetColumnId()));
+        AFL_VERIFY(!IIndexInfo::IsSpecialColumn(GetEntityId()));
         std::vector<TPortionDataAccessor::TAssembleBlobInfo> chunks;
         for (auto&& i : ColumnChunks) {
             chunks.emplace_back(i.ExtractDataVerified());
         }
 
         TPortionDataAccessor::TPreparedColumn column(
-            std::move(chunks), context.GetSource()->GetSourceSchema()->GetColumnLoaderVerified(GetColumnId()));
-        context.GetAccessors().AddVerified(GetColumnId(), column.AssembleAccessor().DetachResult(), true);
+            std::move(chunks), context.GetSource()->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId()));
+        context.GetAccessors().AddVerified(GetEntityId(), column.AssembleAccessor().DetachResult(), true);
     }
 
     virtual void DoOnDataReceived(TReadActionsCollection& /*nextRead*/, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override {
@@ -69,13 +69,13 @@ private:
 
     virtual void DoStart(TReadActionsCollection& nextRead, TFetchingResultContext& context) override {
         auto source = context.GetSource();
-        auto columnChunks = source->GetStageData().GetPortionAccessor().GetColumnChunksPointers(GetColumnId());
+        auto columnChunks = source->GetStageData().GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
         if (columnChunks.empty()) {
             ColumnChunks.emplace_back(source->GetRecordsCount(), TPortionDataAccessor::TAssembleBlobInfo(source->GetRecordsCount(),
-                                                                     source->GetSourceSchema()->GetExternalDefaultValueVerified(GetColumnId())));
+                                                                     source->GetSourceSchema()->GetExternalDefaultValueVerified(GetEntityId())));
             return;
         }
-        StorageId = source->GetColumnStorageId(GetColumnId());
+        StorageId = source->GetColumnStorageId(GetEntityId());
         TBlobsAction blobsAction(source->GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
         auto reading = blobsAction.GetReading(*StorageId);
         auto filterPtr = source->GetStageData().GetAppliedFilter();
@@ -91,7 +91,7 @@ private:
             } else {
                 ColumnChunks.emplace_back(
                     c->GetMeta().GetRecordsCount(), TPortionDataAccessor::TAssembleBlobInfo(c->GetMeta().GetRecordsCount(),
-                                                        source->GetSourceSchema()->GetExternalDefaultValueVerified(c->GetColumnId())));
+                                                        source->GetSourceSchema()->GetExternalDefaultValueVerified(c->GetEntityId())));
             }
             itFinished = !itFilter.Next(c->GetMeta().GetRecordsCount());
         }
@@ -102,8 +102,8 @@ private:
     }
 
 public:
-    TDefaultFetchLogic(const ui32 columnId, const std::shared_ptr<IStoragesManager>& storagesManager)
-        : TBase(columnId, storagesManager) {
+    TDefaultFetchLogic(const ui32 entityId, const std::shared_ptr<IStoragesManager>& storagesManager)
+        : TBase(entityId, storagesManager) {
     }
 };
 

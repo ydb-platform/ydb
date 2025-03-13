@@ -39,6 +39,7 @@ public:
         , State_(state)
     {
 #define HNDL(name) "LogicalOptimizer-"#name, Hndl(&TYtLogicalOptProposalTransformer::name)
+        AddHandler(0, &TCoWithWorld::Match, HNDL(WithWorld));
         AddHandler(0, &TYtMap::Match, HNDL(DirectRow));
         AddHandler(0, Names({TYtReduce::CallableName(), TYtMapReduce::CallableName()}), HNDL(IsKeySwitch));
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
@@ -568,6 +569,50 @@ protected:
                     .Build()
                 .Build()
             .Done();
+    }
+
+    TMaybeNode<TExprBase> WithWorld(TExprBase node, TExprContext& ctx) const {
+        auto maybeRead = node.Cast<TCoWithWorld>().Input().Maybe<TCoRight>().Input().Maybe<TYtReadTable>();
+        if (maybeRead) {
+            auto read = maybeRead.Cast();
+            TExprNode::TListType worlds(1, read.World().Ptr());
+            worlds.push_back(node.Cast<TCoWithWorld>().World().Ptr());
+            auto sync = ctx.NewCallable(node.Pos(), TCoSync::CallableName(), std::move(worlds));
+            return Build<TCoRight>(ctx, node.Pos())
+                .Input<TYtReadTable>()
+                    .InitFrom(read)
+                    .World(sync)
+                    .Build()
+                .Done();
+        }
+
+        auto maybeOut = node.Cast<TCoWithWorld>().Input().Maybe<TYtOutput>();
+        if (maybeOut) {
+            TVector<TYtSection> sections;
+            sections.push_back(Build<TYtSection>(ctx, node.Pos())
+                .Paths()
+                    .Add()
+                        .Table(maybeOut.Cast())
+                        .Columns<TCoVoid>().Build()
+                        .Ranges<TCoVoid>().Build()
+                        .Stat<TCoVoid>().Build()
+                    .Build()
+                .Build()
+                .Settings().Build()
+                .Done());
+
+            return Build<TCoRight>(ctx, node.Pos())
+                    .Input<TYtReadTable>()
+                        .World(node.Cast<TCoWithWorld>().World())
+                        .DataSource(GetDataSource(maybeOut.Cast(), ctx))
+                        .Input()
+                            .Add(sections)
+                        .Build()
+                    .Build()
+                .Done();
+        }
+
+        return node;
     }
 
     TMaybeNode<TExprBase> TrimReadWorld(TExprBase node, TExprContext& ctx) const {

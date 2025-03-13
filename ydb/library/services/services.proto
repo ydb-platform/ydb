@@ -398,6 +398,7 @@ enum EServiceKikimr {
     TX_CONVEYOR = 2000;
     TX_LIMITER=2001;
     ARROW_HELPER = 2100;
+    SSA_GRAPH_EXECUTION = 2101;
 
     KAFKA_PROXY = 2200;
 

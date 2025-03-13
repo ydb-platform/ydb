@@ -3,14 +3,14 @@
 
 namespace NKikimr::NOlap::NIndexes::NCategoriesBloom {
 
-class TIndexMeta: public TIndexByColumns {
+class TIndexMeta: public TSkipIndex {
 public:
     static TString GetClassNameStatic() {
         return "CATEGORY_BLOOM_FILTER";
     }
 
 private:
-    using TBase = TIndexByColumns;
+    using TBase = TSkipIndex;
     double FalsePositiveProbability = 0.1;
     ui32 HashesCount = 0;
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
@@ -19,7 +19,22 @@ private:
         HashesCount = -1 * std::log(FalsePositiveProbability) / std::log(2);
     }
 
+    virtual bool DoCheckValue(
+        const TString& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const override;
+
     virtual TConclusion<std::shared_ptr<IIndexHeader>> DoBuildHeader(const TChunkOriginalData& data) const override;
+
+    virtual bool DoIsAppropriateFor(const TString& subColumnName, const EOperation op) const override {
+        if (!subColumnName) {
+            return false;
+        }
+        if (op != EOperation::Equals) {
+            return false;
+        }
+        return true;
+    }
+
+    virtual std::optional<ui64> DoCalcCategory(const TString& subColumnName) const override;
 
 protected:
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const override {
@@ -31,9 +46,6 @@ protected:
         AFL_VERIFY(FalsePositiveProbability < 1 && FalsePositiveProbability >= 0.01);
         return TBase::CheckSameColumnsForModification(newMeta);
     }
-    virtual void DoFillIndexCheckers(
-        const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const override;
-
     virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override {

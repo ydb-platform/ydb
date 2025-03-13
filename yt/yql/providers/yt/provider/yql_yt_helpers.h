@@ -92,7 +92,7 @@ bool IsOutputUsedMultipleTimes(const TExprNode& op, const TParentsMap& parentsMa
 
 TMaybe<TVector<ui64>> EstimateDataSize(const TString& cluster, const TVector<TYtPathInfo::TPtr>& paths,
     const TMaybe<TVector<TString>>& columns, const TYtState& state, TExprContext& ctx);
-IGraphTransformer::TStatus TryEstimateDataSize(TVector<ui64>& result, TSet<TString>& requestedColumns,
+IGraphTransformer::TStatus TryEstimateDataSize(IYtGateway::TPathStatResult& result, TSet<TString>& requestedColumns,
     const TString& cluster, const TVector<TYtPathInfo::TPtr>& paths,
     const TMaybe<TVector<TString>>& columns, const TYtState& state, TExprContext& ctx);
 TMaybe<NYT::TRichYPath> BuildYtPathForStatRequest(const TString& cluster, const TYtPathInfo& pathInfo,

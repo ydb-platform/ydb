@@ -187,12 +187,13 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
     return true;
 }
 
-IGraphTransformer::TStatus EstimateDataSize(TVector<ui64>& result, TSet<TString>& requestedColumns,
+IGraphTransformer::TStatus EstimateDataSize(IYtGateway::TPathStatResult& result, TSet<TString>& requestedColumns,
     const TString& cluster, const TVector<TYtPathInfo::TPtr>& paths,
     const TMaybe<TVector<TString>>& columns, const TYtState& state, TExprContext& ctx, bool sync)
 {
-    result.clear();
-    result.resize(paths.size(), 0);
+    result = IYtGateway::TPathStatResult{};
+    result.DataSize.resize(paths.size(), 0);
+    result.Extended.resize(paths.size());
     requestedColumns.clear();
 
     const bool useColumnarStat = GetJoinCollectColumnarStatisticsMode(*state.Configuration) != EJoinCollectColumnarStatisticsMode::Disable
@@ -200,16 +201,17 @@ IGraphTransformer::TStatus EstimateDataSize(TVector<ui64>& result, TSet<TString>
 
     TVector<size_t> reqMap;
     TVector<IYtGateway::TPathStatReq> pathStatReqs;
+    ui64 totalChunkCount = 0;
     for (size_t i: xrange(paths.size())) {
         const TYtPathInfo::TPtr& pathInfo = paths[i];
         YQL_ENSURE(pathInfo->Table->Stat);
-        result[i] = pathInfo->Table->Stat->DataSize;
+        result.DataSize[i] = pathInfo->Table->Stat->DataSize;
         if (pathInfo->Ranges) {
             if (auto usedRows = pathInfo->Ranges->GetUsedRows(pathInfo->Table->Stat->RecordsCount)) {
                 if (usedRows.GetRef() && pathInfo->Table->Stat->RecordsCount) {
-                    result[i] *= double(usedRows.GetRef()) / double(pathInfo->Table->Stat->RecordsCount);
+                    result.DataSize[i] *= double(usedRows.GetRef()) / double(pathInfo->Table->Stat->RecordsCount);
                 } else {
-                    result[i] = 0;
+                    result.DataSize[i] = 0;
                 }
             }
         }
@@ -234,6 +236,7 @@ IGraphTransformer::TStatus EstimateDataSize(TVector<ui64>& result, TSet<TString>
                         .Epoch(pathInfo->Table->Epoch.GetOrElse(0))
                 );
                 reqMap.push_back(i);
+                totalChunkCount += pathInfo->Table->Stat->ChunkCount;
             }
         }
     }
@@ -244,12 +247,17 @@ IGraphTransformer::TStatus EstimateDataSize(TVector<ui64>& result, TSet<TString>
             requestedColumns.insert(req.Path().Columns_->Parts_.begin(), req.Path().Columns_->Parts_.end());
         }
 
+        const TMaybe<ui64> maxChunkCountExtendedStats = state.Configuration->ExtendedStatsMaxChunkCount.Get();
+        const bool requestExtendedStats = !sync && maxChunkCountExtendedStats &&
+            (*maxChunkCountExtendedStats == 0 || totalChunkCount <= *maxChunkCountExtendedStats);
+
         IYtGateway::TPathStatResult pathStats;
         IYtGateway::TPathStatOptions pathStatOptions =
             IYtGateway::TPathStatOptions(state.SessionId)
                 .Cluster(cluster)
                 .Paths(pathStatReqs)
-                .Config(state.Configuration->Snapshot());
+                .Config(state.Configuration->Snapshot())
+                .Extended(requestExtendedStats);
         if (sync) {
             auto future = state.Gateway->PathStat(std::move(pathStatOptions));
             pathStats = future.GetValueSync();
@@ -265,8 +273,12 @@ IGraphTransformer::TStatus EstimateDataSize(TVector<ui64>& result, TSet<TString>
         }
 
         YQL_ENSURE(pathStats.DataSize.size() == reqMap.size());
+        YQL_ENSURE(!requestExtendedStats || pathStats.Extended.size() == reqMap.size());
         for (size_t i: xrange(pathStats.DataSize.size())) {
-            result[reqMap[i]] = pathStats.DataSize[i];
+            result.DataSize[reqMap[i]] = pathStats.DataSize[i];
+            if (requestExtendedStats) {
+                result.Extended[reqMap[i]] = pathStats.Extended[i];
+            }
         }
     }
 
@@ -1869,15 +1881,16 @@ TMaybe<TVector<ui64>> EstimateDataSize(const TString& cluster, const TVector<TYt
 
     bool sync = true;
 
-    auto status = EstimateDataSize(result, requestedColumns, cluster, paths, columns, state, ctx, sync);
+    IYtGateway::TPathStatResult res;
+    auto status = EstimateDataSize(res, requestedColumns, cluster, paths, columns, state, ctx, sync);
     if (status != IGraphTransformer::TStatus::Ok) {
         return {};
     }
 
-    return result;
+    return res.DataSize;
 }
 
-IGraphTransformer::TStatus TryEstimateDataSize(TVector<ui64>& result, TSet<TString>& requestedColumns,
+IGraphTransformer::TStatus TryEstimateDataSize(IYtGateway::TPathStatResult& result, TSet<TString>& requestedColumns,
     const TString& cluster, const TVector<TYtPathInfo::TPtr>& paths,
     const TMaybe<TVector<TString>>& columns, const TYtState& state, TExprContext& ctx)
 {

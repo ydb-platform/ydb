@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Use custom PR validation action
         id: validate

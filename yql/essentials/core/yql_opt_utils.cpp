@@ -1545,35 +1545,45 @@ template TExprNode::TPtr OptimizeIfPresent<true, true>(const TExprNode::TPtr& no
 template TExprNode::TPtr OptimizeIfPresent<false, true>(const TExprNode::TPtr& node, TExprContext& ctx);
 template TExprNode::TPtr OptimizeIfPresent<false, false>(const TExprNode::TPtr& node, TExprContext& ctx);
 
-TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx)  {
+TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typeCtx) {
     if (HasError(node->Head().GetTypeAnn(), ctx)) {
         return TExprNode::TPtr();
     }
 
     if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Void) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        return MakeBool<false>(node->Pos(), ctx);
+        auto res = MakeBool<false>(node->Pos(), ctx);
+        res = KeepWorld(res, *node, ctx, typeCtx);
+        return res;
     }
 
     if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        return MakeBool<false>(node->Pos(), ctx);
+        auto res = MakeBool<false>(node->Pos(), ctx);
+        res = KeepWorld(res, *node, ctx, typeCtx);
+        return res;
     }
 
     if (node->Head().IsCallable({"Just", "PgConst"})) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        return MakeBool<true>(node->Pos(), ctx);
+        auto res = MakeBool<true>(node->Pos(), ctx);
+        res = KeepWorld(res, *node, ctx, typeCtx);
+        return res;
     }
 
     if (node->Head().IsCallable({"Nothing","EmptyFrom"})) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        return MakeBool<false>(node->Pos(), ctx);
+        auto res = MakeBool<false>(node->Pos(), ctx);
+        res = KeepWorld(res, *node, ctx, typeCtx);
+        return res;
     }
 
     if (node->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional &&
         node->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Pg) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over non-optional";
-        return MakeBool<true>(node->Pos(), ctx);
+        auto res = MakeBool<true>(node->Pos(), ctx);
+        res = KeepWorld(res, *node, ctx, typeCtx);
+        return res;
     }
 
     if (const auto& input = node->Head(); IsTransparentIfPresent(input)) {
@@ -2334,7 +2344,27 @@ bool CheckSupportedTypes(
     return true;
 }
 
-TExprNode::TPtr KeepWorld(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx, TTypeAnnotationContext& types) {
+bool HasMissingWorlds(const TExprNode::TPtr& node, const TExprNode& src, const TTypeAnnotationContext& types) {
+    const bool optEnabled = IsOptimizerEnabled<KeepWorldOptName>(types) && !IsOptimizerDisabled<KeepWorldOptName>(types);
+    if (!optEnabled) {
+        return false;
+    }
+
+    const auto& worldLinks = src.GetWorldLinks();
+    if (!worldLinks) {
+        return false;
+    }
+
+    for (const auto& link : *worldLinks) {
+        if (!IsDepended(*node, *link)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+TExprNode::TPtr KeepWorld(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx, const TTypeAnnotationContext& types) {
     const bool optEnabled = IsOptimizerEnabled<KeepWorldOptName>(types) && !IsOptimizerDisabled<KeepWorldOptName>(types);
     if (!optEnabled) {
         return node;

@@ -1477,6 +1477,7 @@ private:
     TPathStatResult DoPathStat(TPathStatOptions&& options, bool onlyCached) {
         TPathStatResult res;
         res.DataSize.reserve(options.Paths().size());
+        res.Extended.reserve(options.Paths().size());
 
         auto extractSysColumns = [] (NYT::TRichYPath& ytPath) -> TVector<TString> {
             TVector<TString> res;
@@ -1499,6 +1500,7 @@ private:
             bool inferSchema = attrs.HasKey("infer_schema") && attrs["infer_schema"].AsBool();
 
             res.DataSize.push_back(0);
+            res.Extended.push_back(Nothing());
             auto ytPath = req.Path();
             if (auto sysColumns = extractSysColumns(ytPath)) {
                 NYT::TNode inputList = LoadTableContent(path);
@@ -1574,12 +1576,10 @@ private:
                                 }
                             }
                         }
-                        res.Extended.push_back(IYtGateway::TPathStatResult::TExtendedResult{
+                        res.Extended.back() = IYtGateway::TPathStatResult::TExtendedResult{
                             .DataWeight = dataWeight,
                             .EstimatedUniqueCounts = estimatedUniqueCounts
-                        });
-                    } else {
-                        res.Extended.push_back(Nothing());
+                        };
                     }
                 }
             } else {

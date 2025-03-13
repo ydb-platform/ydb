@@ -8754,7 +8754,6 @@ struct TPeepHoleRules {
         {"GraceSelfJoinCore", &OptimizeGraceSelfJoinCore},
         {"CommonJoinCore", &OptimizeCommonJoinCore},
         {"BuildTablePath", &DoBuildTablePath},
-        {"Exists", &OptimizeExists},
         {"SqueezeToDict", &OptimizeSqueezeToDict},
         {"NarrowFlatMap", &OptimizeNarrowFlatMap},
         {"NarrowMultiMap", &OptimizeWideMaps},
@@ -8774,7 +8773,9 @@ struct TPeepHoleRules {
         {"Coalesce", &OptimizeCoalesce},
     };
 
-    const TExtPeepHoleOptimizerMap FinalStageExtRules = {};
+    const TExtPeepHoleOptimizerMap FinalStageExtRules = {
+        {"Exists", &OptimizeExists},
+    };
 
     const TExtPeepHoleOptimizerMap FinalStageNonDetRules = {
         {"Random", &Random0Arg<double>},

@@ -145,6 +145,15 @@
             ]
         },
         {
+            "Name": "TCoWithWorld",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "WithWorld"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "World", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TCoTypeOf",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "TypeOf"},

@@ -56,6 +56,76 @@ extern const char Parse64UDF[] = "Parse64";
 extern const char TMResourceName[] = "DateTime2.TM";
 extern const char TM64ResourceName[] = "DateTime2.TM64";
 
+namespace {
+
+template<typename Type>
+static void PrintTypeAlternatives(NUdf::IFunctionTypeInfoBuilder& builder,
+    ITypeInfoHelper::TPtr typeInfoHelper, TStringBuilder& strBuilder)
+{
+    TTypePrinter(*typeInfoHelper, builder.SimpleType<Type>()).Out(strBuilder.Out);
+}
+
+template<typename Type, typename Head, typename... Tail>
+static void PrintTypeAlternatives(NUdf::IFunctionTypeInfoBuilder& builder,
+    ITypeInfoHelper::TPtr typeInfoHelper, TStringBuilder& strBuilder)
+{
+    PrintTypeAlternatives<Type>(builder, typeInfoHelper, strBuilder);
+    strBuilder << " or ";
+    PrintTypeAlternatives<Head, Tail...>(builder, typeInfoHelper, strBuilder);
+}
+
+template<typename... Types>
+static void SetInvalidTypeError(NUdf::IFunctionTypeInfoBuilder& builder,
+    ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
+{
+    ::TStringBuilder sb;
+    sb << "Invalid argument type: got ";
+    TTypePrinter(*typeInfoHelper, argType).Out(sb.Out);
+    sb << ", but ";
+    PrintTypeAlternatives<Types...>(builder, typeInfoHelper, sb);
+    sb << " expected";
+    builder.SetError(sb);
+}
+
+static void SetResourceExpectedError(NUdf::IFunctionTypeInfoBuilder& builder,
+    ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
+{
+    SetInvalidTypeError<
+        TResource<TMResourceName>,
+        TResource<TM64ResourceName>
+    >(builder, typeInfoHelper, argType);
+}
+
+static void SetIntervalExpectedError(NUdf::IFunctionTypeInfoBuilder& builder,
+    ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
+{
+    SetInvalidTypeError<TInterval, TInterval64>(builder, typeInfoHelper, argType);
+}
+
+template<const char* TResourceName>
+static void PrintTagAlternatives(TStringBuilder& strBuilder) {
+    strBuilder << "'" << TResourceName << "'";
+}
+
+template<const char* TResourceName, const char* Head, const char*... Tail>
+static void PrintTagAlternatives(TStringBuilder& strBuilder) {
+    PrintTagAlternatives<TResourceName>(strBuilder);
+    strBuilder << " or ";
+    PrintTagAlternatives<Head, Tail...>(strBuilder);
+}
+
+static void SetUnexpectedTagError(NUdf::IFunctionTypeInfoBuilder& builder,
+    TStringRef tag)
+{
+    ::TStringBuilder sb;
+    sb << "Unexpected Resource tag: got '" << tag << "', but ";
+    PrintTagAlternatives<TMResourceName, TM64ResourceName>(sb);
+    sb << " expected";
+    builder.SetError(sb);
+}
+
+} // namespace
+
 const auto UsecondsInDay = 86400000000ll;
 const auto UsecondsInHour = 3600000000ll;
 const auto UsecondsInMinute = 60000000ll;
@@ -429,12 +499,7 @@ struct TGetTimeComponent {
                 return true;
             }
 
-            ::TStringBuilder sb;
-            sb << "Invalid argument type: got ";
-            TTypePrinter(*typeInfoHelper, argType).Out(sb.Out);
-            sb << ", but Resource<" << TMResourceName <<"> or Resource<"
-               << TM64ResourceName << "> expected";
-            builder.SetError(sb);
+            SetResourceExpectedError(builder, typeInfoHelper, argType);
             return true;
         }
 
@@ -450,7 +515,7 @@ struct TGetTimeComponent {
             return true;
         }
 
-        builder.SetError("Unexpected Resource tag");
+        SetUnexpectedTagError(builder, resource.GetTag());
         return true;
     }
 private:
@@ -1306,12 +1371,7 @@ public:
                 return true;
             }
 
-            ::TStringBuilder sb;
-            sb << "Invalid argument type: got ";
-            TTypePrinter(*typeInfoHelper, argType).Out(sb.Out);
-            sb << ", but Resource<" << TMResourceName <<"> or Resource<"
-               << TM64ResourceName << "> expected";
-            builder.SetError(sb);
+            SetResourceExpectedError(builder, typeInfoHelper, argType);
             return true;
         }
 
@@ -1325,7 +1385,7 @@ public:
             return true;
         }
 
-        builder.SetError("Unexpected Resource tag");
+        SetUnexpectedTagError(builder, resource.GetTag());
         return true;
     }
 private:
@@ -1414,12 +1474,7 @@ public:
                 return true;
             }
 
-            ::TStringBuilder sb;
-            sb << "Invalid argument type: got ";
-            TTypePrinter(*typeInfoHelper, argType).Out(sb.Out);
-            sb << ", but Resource<" << TMResourceName <<"> or Resource<"
-               << TM64ResourceName << "> expected";
-            builder.SetError(sb);
+            SetResourceExpectedError(builder, typeInfoHelper, argType);
             return true;
         }
 
@@ -1433,7 +1488,7 @@ public:
             return true;
         }
 
-        builder.SetError("Unexpected Resource tag");
+        SetUnexpectedTagError(builder, resource.GetTag());
         return true;
     }
 private:
@@ -1634,7 +1689,7 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
             if (!resource) {
                 TDataTypeInspector data(*typeInfoHelper, argType);
                 if (!data) {
-                    SetInvalidTypeError(builder, typeInfoHelper, argType);
+                    SetResourceExpectedError(builder, typeInfoHelper, argType);
                     return true;
                 }
 
@@ -1648,7 +1703,7 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
                     return true;
                 }
 
-                SetInvalidTypeError(builder, typeInfoHelper, argType);
+                SetResourceExpectedError(builder, typeInfoHelper, argType);
                 return true;
             }
 
@@ -1662,9 +1717,7 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
                 return true;
             }
 
-            ::TStringBuilder sb;
-            sb << "Unexpected Resource tag: got '" << resource.GetTag() << "'";
-            builder.SetError(sb);
+            SetUnexpectedTagError(builder, resource.GetTag());
             return true;
         }
     private:
@@ -1748,17 +1801,6 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
             }
 
         };
-
-        static void SetInvalidTypeError(NUdf::IFunctionTypeInfoBuilder& builder,
-            ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
-        {
-            ::TStringBuilder sb;
-            sb << "Invalid argument type: got ";
-            TTypePrinter(*typeInfoHelper, argType).Out(sb.Out);
-            sb << ", but Resource<" << TMResourceName <<"> or Resource<"
-               << TM64ResourceName << "> expected";
-            builder.SetError(sb);
-        }
 
         template<const char* TResourceName>
         static void BuildSignature(NUdf::IFunctionTypeInfoBuilder& builder, bool typesOnly) {
@@ -1877,7 +1919,7 @@ public:
 
         TDataTypeInspector data(*typeInfoHelper, argType);
         if (!data) {
-            SetInvalidTypeError(builder, typeInfoHelper, argType);
+            SetResourceExpectedError(builder, typeInfoHelper, argType);
             return true;
         }
 
@@ -1890,7 +1932,7 @@ public:
             }
             return true;
         }
-        SetInvalidTypeError(builder, typeInfoHelper, argType);
+        SetIntervalExpectedError(builder, typeInfoHelper, argType);
         return true;
     }
 private:
@@ -1909,16 +1951,6 @@ private:
         }
 
     };
-
-    static void SetInvalidTypeError(NUdf::IFunctionTypeInfoBuilder& builder,
-        ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
-    {
-        ::TStringBuilder sb;
-        sb << "Invalid argument type: got ";
-        TTypePrinter(*typeInfoHelper, argType).Out(sb.Out);
-        sb << ", but Interval or Interval64 expected";
-        builder.SetError(sb);
-    }
 
     template<typename TInput, typename TOutput>
     static void BuildSignature(NUdf::IFunctionTypeInfoBuilder& builder, bool typesOnly) {
@@ -2007,7 +2039,7 @@ public:
         if (!resource) {
             TDataTypeInspector data(*typeInfoHelper, argType);
             if (!data) {
-                SetInvalidTypeError(builder, typeInfoHelper, argType);
+                SetResourceExpectedError(builder, typeInfoHelper, argType);
                 return true;
             }
 
@@ -2021,7 +2053,7 @@ public:
                 return true;
             }
 
-            SetInvalidTypeError(builder, typeInfoHelper, argType);
+            SetResourceExpectedError(builder, typeInfoHelper, argType);
             return true;
         }
 
@@ -2035,9 +2067,7 @@ public:
             return true;
         }
 
-        ::TStringBuilder sb;
-        sb << "Unexpected Resource tag: got '" << resource.GetTag() << "'";
-        builder.SetError(sb);
+        SetUnexpectedTagError(builder, resource.GetTag());
         return true;
     }
 private:
@@ -2055,17 +2085,6 @@ private:
             }
         }
     };
-
-    static void SetInvalidTypeError(NUdf::IFunctionTypeInfoBuilder& builder,
-        ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
-    {
-        ::TStringBuilder sb;
-        sb << "Invalid argument type: got ";
-        TTypePrinter(*typeInfoHelper, argType).Out(sb.Out);
-        sb << ", but Resource<" << TMResourceName <<"> or Resource<"
-           << TM64ResourceName << "> expected";
-        builder.SetError(sb);
-    }
 
     template< const char* TResourceName, auto Func>
     static void BuildSignature(NUdf::IFunctionTypeInfoBuilder& builder, bool typesOnly) {
@@ -2342,7 +2361,7 @@ public:
         if (!resource) {
             TDataTypeInspector data(*typeInfoHelper, argType);
             if (!data) {
-                SetInvalidTypeError(builder, typeInfoHelper, argType);
+                SetResourceExpectedError(builder, typeInfoHelper, argType);
                 return true;
             }
 
@@ -2356,7 +2375,7 @@ public:
                 return true;
             }
 
-            SetInvalidTypeError(builder, typeInfoHelper, argType);
+            SetResourceExpectedError(builder, typeInfoHelper, argType);
             return true;
         }
 
@@ -2370,9 +2389,7 @@ public:
             return true;
         }
 
-        ::TStringBuilder sb;
-        sb << "Unexpected Resource tag: got '" << resource.GetTag() << "'";
-        builder.SetError(sb);
+        SetUnexpectedTagError(builder, resource.GetTag());
         return true;
     }
 private:
@@ -2390,17 +2407,6 @@ private:
             }
         }
     };
-
-    static void SetInvalidTypeError(NUdf::IFunctionTypeInfoBuilder& builder,
-        ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
-    {
-        ::TStringBuilder sb;
-        sb << "Invalid argument type: got ";
-        TTypePrinter(*typeInfoHelper, argType).Out(sb.Out);
-        sb << ", but Resource<" << TMResourceName <<"> or Resource<"
-           << TM64ResourceName << "> expected";
-        builder.SetError(sb);
-    }
 
     template<const char* TResourceName, auto Func>
     static void BuildSignature(NUdf::IFunctionTypeInfoBuilder& builder, bool typesOnly) {
@@ -2471,7 +2477,7 @@ public:
         if (!resource) {
             TDataTypeInspector data(*typeInfoHelper, argType);
             if (!data) {
-                SetInvalidTypeError(builder, typeInfoHelper, argType);
+                SetResourceExpectedError(builder, typeInfoHelper, argType);
                 return true;
             }
 
@@ -2485,7 +2491,7 @@ public:
                 return true;
             }
 
-            SetInvalidTypeError(builder, typeInfoHelper, argType);
+            SetResourceExpectedError(builder, typeInfoHelper, argType);
             return true;
         }
 
@@ -2499,9 +2505,7 @@ public:
             return true;
         }
 
-        ::TStringBuilder sb;
-        sb << "Unexpected Resource tag: got '" << resource.GetTag() << "'";
-        builder.SetError(sb);
+        SetUnexpectedTagError(builder, resource.GetTag());
         return true;
     }
 private:
@@ -2521,17 +2525,6 @@ private:
             }
         }
     };
-
-    static void SetInvalidTypeError(NUdf::IFunctionTypeInfoBuilder& builder,
-        ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
-    {
-        ::TStringBuilder sb;
-        sb << "Invalid argument type: got ";
-        TTypePrinter(*typeInfoHelper, argType).Out(sb.Out);
-        sb << ", but Resource<" << TMResourceName <<"> or Resource<"
-           << TM64ResourceName << "> expected";
-        builder.SetError(sb);
-    }
 
     template< const char* TResourceName>
     static void BuildSignature(NUdf::IFunctionTypeInfoBuilder& builder, bool typesOnly) {
@@ -2605,7 +2598,7 @@ public:
         if (!resource) {
             TDataTypeInspector data(*typeInfoHelper, argType);
             if (!data) {
-                SetInvalidTypeError(builder, typeInfoHelper, argType);
+                SetResourceExpectedError(builder, typeInfoHelper, argType);
                 return true;
             }
 
@@ -2619,7 +2612,7 @@ public:
                 return true;
             }
 
-            SetInvalidTypeError(builder, typeInfoHelper, argType);
+            SetResourceExpectedError(builder, typeInfoHelper, argType);
             return true;
         }
 
@@ -2633,9 +2626,7 @@ public:
             return true;
         }
 
-        ::TStringBuilder sb;
-        sb << "Unexpected Resource tag: got '" << resource.GetTag() << "'";
-        builder.SetError(sb);
+        SetUnexpectedTagError(builder, resource.GetTag());
         return true;
     }
 private:
@@ -2646,17 +2637,6 @@ private:
             return ShiftHanler(args[0], args[1].Get<i32>(), valueBuilder->GetDateBuilder());
         }
     };
-
-    static void SetInvalidTypeError(NUdf::IFunctionTypeInfoBuilder& builder,
-        ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
-    {
-        ::TStringBuilder sb;
-        sb << "Invalid argument type: got ";
-        TTypePrinter(*typeInfoHelper, argType).Out(sb.Out);
-        sb << ", but Resource<" << TMResourceName <<"> or Resource<"
-           << TM64ResourceName << "> expected";
-        builder.SetError(sb);
-    }
 
     template<const char* TResourceName, auto ShiftHandler>
     static void BuildSignature(NUdf::IFunctionTypeInfoBuilder& builder, bool typesOnly) {

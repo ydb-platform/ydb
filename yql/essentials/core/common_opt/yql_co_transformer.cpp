@@ -170,8 +170,8 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(
             result = defaultOpt(node, ctx, optCtx);
         }
 
-        if (checkMissingWorld && result && result != node && !node->GetTypeAnn()->ReturnsWorld()) {
-            if (KeepWorld(result, *node, ctx, *optCtx.Types) != result) {
+        if (checkMissingWorld && result && result != node && !node->GetTypeAnn()->ReturnsWorld() && !node->IsCallable(RightName)) {
+            if (HasMissingWorlds(result, *node, *optCtx.Types)) {
                 throw yexception() << "Missing world over " << result->Dump();
             }
         }

@@ -611,7 +611,7 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
     template <typename Env>
     TEvYdbProxy::TReadTopicResult ReadTopicData(Env& env, TActorId& reader, const TString& topicPath) {
         do {
-            env.SendAsync(reader, new TEvYdbProxy::TEvReadTopicRequest());
+            env.SendAsync(reader, new TEvYdbProxy::TEvReadTopicRequest(TEvYdbProxy::TReadTopicSettings()));
 
             try {
                 TAutoPtr<IEventHandle> ev;
@@ -659,13 +659,13 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         }
 
         // wait next event
-        env.SendAsync(reader, new TEvYdbProxy::TEvReadTopicRequest());
+        env.SendAsync(reader, new TEvYdbProxy::TEvReadTopicRequest(TEvYdbProxy::TReadTopicSettings()));
 
         TActorId newReader;
         do {
             newReader = CreateTopicReader(env, "/Root/topic");
             // wait next event
-            env.SendAsync(newReader, new TEvYdbProxy::TEvReadTopicRequest());
+            env.SendAsync(newReader, new TEvYdbProxy::TEvReadTopicRequest(TEvYdbProxy::TReadTopicSettings()));
 
             // wait event from previous session
             try {
@@ -702,7 +702,7 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         TEnv env;
 
         auto reader = CreateTopicReader(env, "/Root/topic");
-        auto ev = env.Send<TEvYdbProxy::TEvTopicReaderGone>(reader, new TEvYdbProxy::TEvReadTopicRequest());
+        auto ev = env.Send<TEvYdbProxy::TEvTopicReaderGone>(reader, new TEvYdbProxy::TEvReadTopicRequest(TEvYdbProxy::TReadTopicSettings()));
 
         UNIT_ASSERT(ev);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);

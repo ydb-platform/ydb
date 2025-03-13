@@ -33,6 +33,17 @@ TEvWorker::TEvData::TRecord::TRecord(ui64 offset, TString&& data, TInstant creat
 {
 }
 
+TEvWorker::TEvPoll::TEvPoll(bool skipCommit)
+    : SkipCommit(skipCommit)
+{
+}
+
+TString TEvWorker::TEvPoll::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " SkipCommit: " << SkipCommit
+    << " }";
+}
+
 TEvWorker::TEvData::TEvData(ui32 partitionId, const TString& source, const TVector<TRecord>& records)
     : PartitionId(partitionId)
     , Source(source)

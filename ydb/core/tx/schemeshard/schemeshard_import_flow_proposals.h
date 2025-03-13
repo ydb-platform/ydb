@@ -49,7 +49,9 @@ THolder<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     TSchemeShard* ss,
     TTxId txId,
-    const TImportInfo::TItem& item
+    const TImportInfo::TItem& item,
+    TString& error,
+    Ydb::StatusIds::StatusCode& status
 );
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(

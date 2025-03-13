@@ -97,7 +97,7 @@ using namespace NResourceBroker;
 
 class TExecutor::TActiveTransactionZone {
 public:
-    explicit TActiveTransactionZone(TExecutor* self) noexcept
+    explicit TActiveTransactionZone(TExecutor* self)
         : Self(self)
     {
         Y_DEBUG_ABORT_UNLESS(!Self->ActiveTransaction);
@@ -105,11 +105,11 @@ public:
         Active = true;
     }
 
-    ~TActiveTransactionZone() noexcept {
+    ~TActiveTransactionZone() {
         Done();
     }
 
-    void Done() noexcept {
+    void Done() {
         if (Active) {
             Self->ActiveTransaction = false;
             Active = false;

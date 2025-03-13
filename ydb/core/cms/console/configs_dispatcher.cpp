@@ -307,9 +307,9 @@ void TConfigsDispatcher::Bootstrap()
 
     if (Labels.contains("configuration_version")) {
         if (Labels.at("configuration_version") == "v1") {
-            *ConfigurationV1 = 1
+            *ConfigurationV1 = 1;
         } else {
-            *ConfigurationV2 = 1
+            *ConfigurationV2 = 1;
         }
     }
 

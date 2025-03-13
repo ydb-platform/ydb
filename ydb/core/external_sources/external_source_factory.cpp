@@ -26,7 +26,7 @@ struct TExternalSourceFactory : public IExternalSourceFactory {
         if (it == Sources.end()) {
             ythrow TExternalSourceException() << "External source with type " << type << " was not found";
         }
-        if (!AvailableExternalDataSources.contains(type)) {
+        if (!AvailableExternalDataSources.empty() && !AvailableExternalDataSources.contains(type)) {
             ythrow TExternalSourceException() << "External source with type " << type << " is disabled. Please contact your system administrator to enable it";
         }
         return it->second;

@@ -248,6 +248,7 @@ private:
     bool IsWaitingEvents = false;
     ui64 QueuedBytes = 0;
     TMaybe<TString> ConsumerName;
+    TInstant StartingMessageTimestamp;
 
     // Metrics
     TInstant WaitEventStartedAt;
@@ -497,14 +498,17 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&) {
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&) {
     Metrics.ReconnectRate->Inc();
-    TInstant minTime = GetMinStartingMessageTimestamp();
+    Schedule(ReconnectPeriod, new NFq::TEvPrivate::TEvReconnectSession());
+    if (Clients.empty()) {
+        return;
+    }
+    StartingMessageTimestamp = GetMinStartingMessageTimestamp();   
     LOG_ROW_DISPATCHER_DEBUG("Reconnect topic session, " << TopicPathPartition
-        << ", StartingMessageTimestamp " << minTime
+        << ", StartingMessageTimestamp " << StartingMessageTimestamp
         << ", BufferSize " << BufferSize << ", WithoutConsumer " << Config.GetWithoutConsumer());
     RefreshParsers();
     StopReadSession();
     CreateTopicSession();
-    Schedule(ReconnectPeriod, new NFq::TEvPrivate::TEvReconnectSession());
 }
 
 void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
@@ -553,17 +557,23 @@ void TTopicSession::CloseTopicSession() {
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
     ui64 dataSize = 0;
-    for (const auto& message : event.GetMessages()) {
+    const auto& messages = event.GetMessages();
+    if (!messages.empty() && messages.back().GetWriteTime() < Self.StartingMessageTimestamp) {
+        LOG_ROW_DISPATCHER_TRACE("Skip data. StartingMessageTimestamp: " << Self.StartingMessageTimestamp << ". Write time: " << messages.back().GetWriteTime());
+        return;
+    }
+
+    for (const auto& message : messages) {
         LOG_ROW_DISPATCHER_TRACE("Data received: " << message.DebugString(true));
         dataSize += message.GetData().size();
         Self.LastMessageOffset = message.GetOffset();
     }
 
-    Self.Statistics.Add(dataSize, event.GetMessages().size());
+    Self.Statistics.Add(dataSize, messages.size());
     Self.Metrics.SessionDataRate->Add(dataSize);
     Self.Metrics.AllSessionsDataRate->Add(dataSize);
     DataReceivedEventSize += dataSize;
-    Self.SendToParsing(event.GetMessages());
+    Self.SendToParsing(messages);
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TSessionClosedEvent& ev) {

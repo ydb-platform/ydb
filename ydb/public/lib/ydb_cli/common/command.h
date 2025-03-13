@@ -102,6 +102,8 @@ public:
         TVector<TString> Tokens;
         TString SecurityToken;
         TList<TCommandInfo> ParentCommands;
+        THashSet<TString> ExecutableOptions;
+        bool HasExecutableOptions = false;
         TString Path;
         TArgSettings ArgsSettings;
         TString Address;
@@ -221,7 +223,7 @@ public:
 
         void CheckParamsCount() {
             size_t count = GetParamsCount();
-            if (HasHelpCommand()) {
+            if (HasHelpCommand() || HasExecutableOptions) {
                 return;
             }
             bool minSet = ArgsSettings.Min.GetIsSet();
@@ -380,6 +382,7 @@ protected:
 private:
     void HideOption(const TString& name);
     void ChangeOptionDescription(const TString& name, const TString& description);
+    void CheckForExecutableOptions(TConfig& config);
 
     constexpr static int DESCRIPTION_ALIGNMENT = 28;
 };

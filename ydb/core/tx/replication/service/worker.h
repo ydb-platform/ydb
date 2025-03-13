@@ -31,6 +31,7 @@ struct TEvWorker {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_REPLICATION_WORKER));
 
     struct TEvHandshake: public TEventLocal<TEvHandshake, EvHandshake> {};
+
     struct TEvPoll: public TEventLocal<TEvPoll, EvPoll> {
         TEvPoll(bool autoCommit = true)
             : AutoCommit(autoCommit)

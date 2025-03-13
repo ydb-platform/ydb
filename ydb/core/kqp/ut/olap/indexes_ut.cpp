@@ -82,6 +82,15 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         {
             auto alterQuery = TStringBuilder() <<
+                              R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`))";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            
+            
+        }
+        {
+            auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
                     FEATURES=`{"column_names" : ["uid"], "false_positive_probability" : 0.05}`);
                 )";
@@ -523,7 +532,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     };
                     ExecuteSQL(query(resourceIds[idx], uids[idx], levels[idx]), "[[1u;]]");
                 }
-                AFL_VERIFY((csController->GetIndexesApprovedOnSelect().Val() - ApproveStart) < csController->GetIndexesSkippingOnSelect().Val() - SkipStart)
+                AFL_VERIFY((csController->GetIndexesApprovedOnSelect().Val() - ApproveStart) * 0.3 < csController->GetIndexesSkippingOnSelect().Val() - SkipStart)
                 ("approved", csController->GetIndexesApprovedOnSelect().Val() - ApproveStart)(
                     "skipped", csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
             }

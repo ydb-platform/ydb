@@ -51,4 +51,34 @@ public:
         const TReadDataExtractorContainer& extractor);
 };
 
+
+class TSkipIndex: public TIndexByColumns {
+private:
+    using TBase = TIndexByColumns;
+public:
+    using EOperation = NArrow::NSSA::EIndexCheckOperation;
+
+private:
+    virtual bool DoIsAppropriateFor(const TString& subColumnName, const EOperation op) const = 0;
+    virtual bool DoCheckValue(
+        const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const = 0;
+
+public:
+    bool CheckValue(const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
+        return DoCheckValue(data, cat, value, op);
+    }
+
+    virtual bool IsSkipIndex() const override final {
+        return true;
+    }
+
+    bool IsAppropriateFor(const NRequest::TOriginalDataAddress& addr, const EOperation op) const {
+        if (GetColumnId() != addr.GetColumnId()) {
+            return false;
+        }
+        return DoIsAppropriateFor(addr.GetSubColumnName(), op);
+    }
+    using TBase::TBase;
+};
+
 }   // namespace NKikimr::NOlap::NIndexes

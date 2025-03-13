@@ -1116,26 +1116,6 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
                     }
                 };
 
-                if (!!stageInfo.Meta.ColumnTableInfoPtr) {
-                    std::shared_ptr<NSchemeShard::TOlapSchema> olapSchema = std::make_shared<NSchemeShard::TOlapSchema>();
-                    olapSchema->ParseFromLocalDB(stageInfo.Meta.ColumnTableInfoPtr->Description.GetSchema());
-                    if (olapSchema->GetIndexes().GetIndexes().size()) {
-                        NOlap::TProgramContainer container;
-                        TResolverTable resolver(*tableInfo);
-                        container.Init(resolver, *olapProgram).Ensure();
-                        auto data = NOlap::NIndexes::NRequest::TDataForIndexesCheckers::Build(container);
-                        if (data) {
-                            for (auto&& [indexId, i] : olapSchema->GetIndexes().GetIndexes()) {
-                                AFL_ENSURE(!!i.GetIndexMeta());
-                                i.GetIndexMeta()->FillIndexCheckers(data, *olapSchema);
-                            }
-                            auto checker = data->GetCoverChecker();
-                            if (!!checker) {
-                                checker.SerializeToProto(*olapProgram->MutableIndexChecker());
-                            }
-                        }
-                    }
-                }
             } else {
                 YQL_ENSURE(task.Meta.ReadInfo.OlapProgram.Program.empty());
             }

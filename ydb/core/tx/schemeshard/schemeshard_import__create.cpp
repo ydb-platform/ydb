@@ -526,7 +526,7 @@ private:
         return true;
     }
 
-    void CreateChangefeed(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
+    bool CreateChangefeed(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
         item.SubState = ESubState::Proposed;
@@ -539,9 +539,12 @@ private:
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
         
         auto propose = CreateChangefeedPropose(Self, txId, item);
-        Y_ABORT_UNLESS(propose);
+        if (!propose) {
+            return false;
+        }
 
         Send(Self->SelfId(), std::move(propose));
+        return true;
     }
 
     void CreateConsumers(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
@@ -1080,7 +1083,10 @@ private:
             
             case EState::CreateChangefeed:
                 if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {
-                    CreateChangefeed(importInfo, i, txId);
+                    if (!CreateChangefeed(importInfo, i, txId)) {
+                        NIceDb::TNiceDb db(txc.DB);
+                        CancelAndPersist(db, importInfo, i, "", "");
+                    }
                 } else {
                     CreateConsumers(importInfo, i, txId);
                 }

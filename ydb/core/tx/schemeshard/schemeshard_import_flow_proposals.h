@@ -50,7 +50,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo::TItem& item
-);
+); 
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     TSchemeShard* ss,

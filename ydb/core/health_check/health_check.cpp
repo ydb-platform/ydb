@@ -2520,7 +2520,9 @@ public:
         }
 
     public:
-        TGroupChecker(const TString& erasure) : ErasureSpecies(erasure) {}
+        TGroupChecker(const TString& erasure)
+            : ErasureSpecies(erasure)
+        {}
 
         void AddVDiskStatus(Ydb::Monitoring::StatusFlag::Status status, ui32 realm) {
             ++DisksColors[status];
@@ -3418,8 +3420,13 @@ public:
     {
     }
 
+    void ApplyConfig(const NKikimrConfig::THealthCheckConfig& config) {
+        HealthCheckConfig.CopyFrom(config);
+        HealthCheckConfig.MutableThresholds();
+    }
+
     void Bootstrap() {
-        HealthCheckConfig.CopyFrom(AppData()->HealthCheckConfig);
+        ApplyConfig(AppData()->HealthCheckConfig);
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
              new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({NKikimrConsole::TConfigItem::HealthCheckConfigItem}));
         TMon* mon = AppData()->Mon;
@@ -3437,7 +3444,7 @@ public:
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.GetConfig().HasHealthCheckConfig()) {
-            HealthCheckConfig.CopyFrom(record.GetConfig().GetHealthCheckConfig());
+            ApplyConfig(record.GetConfig().GetHealthCheckConfig());
         }
         Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
     }

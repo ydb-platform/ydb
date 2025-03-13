@@ -20,36 +20,25 @@
     ydb-dstool -e <bs_endpoint> cluster balance
     ```
 
+    `<bs_endpoint>` - эндпоинт произвольного [узла хранения](../../concepts/glossary.md#storage-node) кластера.
     Команда перевозит не более одного VDisk'а за один запуск.
 
 ## Изменение количествa слотов для VDisk'ов на PDisk'ах
 
-Для добавления групп хранения требуется переопределить конфиг хоста, увеличив для него количество слотов на PDisk'ах.
+Для добавления групп хранения требуется переопределить конфиг хоста, увеличив для него количество слотов на PDisk'ах. Это можно осуществить, проделав следующие шаги:
 
-Перед этим требуется получить изменяемые конфиг, это можно сделать следующей командой:
+1. Получить текущую конфигурацию кластера:
 
-```proto
-Command {
-  TReadHostConfig{
-    HostConfigId: <host-config-id>
-  }
-}
-```
+    ```bash
+    ydb -e <endpoint> admin cluster config fetch > config.yaml
+    ```
 
-```bash
-ydbd -s <endpoint> admin bs config invoke --proto-file ReadHostConfig.txt
-```
+    `<endpoint>` - эндпоинт произвольного узла кластера.
 
-Требуется вставить полученный конфиг в протобуф ниже и поменять в нем поле **PDiskConfig/ExpectedSlotCount**.
+2. Добавить (или изменить) поле `expected_slot_count` для нужного устройства `drive` в секции `host_configs`
 
-```proto
-Command {
-  TDefineHostConfig {
-    <хост конфиг>
-  }
-}
-```
+3. Загрузить обновленный конфигурационный файл на кластер:
 
-```bash
-ydbd -s <endpoint> admin bs config invoke --proto-file DefineHostConfig.txt
-```
+    ```bash
+    ydb -e <endpoint> admin cluster config replace -f config.yaml
+    ```

@@ -112,7 +112,7 @@ static bool AsyncReplicationAlterAction(std::map<TString, TNodePtr>& settings,
     return AsyncReplicationSettings(settings, in.GetRule_alter_replication_set_setting1().GetRule_replication_settings3(), ctx, false);
 }
 
-bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core) {
+bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core, size_t statementNumber) {
     TString internalStatementName;
     TString humanStatementName;
     ParseStatementName(core, internalStatementName, humanStatementName);
@@ -128,6 +128,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         altCase != TRule_sql_stmt_core::kAltSqlStmtCore18)) {
         Error() << humanStatementName << " statement is not supported in subqueries";
         return false;
+    }
+
+    if (NeedUseForAllStatements(altCase)) {
+        Ctx.ForAllStatementsParts.push_back(statementNumber);
     }
 
     switch (altCase) {
@@ -3030,12 +3034,13 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
         Ctx.PopCurrentBlocks();
     };
     if (query.Alt_case() == TRule_sql_query::kAltSqlQuery1) {
+        size_t statementNumber = 0;
         const auto& statements = query.GetAlt_sql_query1().GetRule_sql_stmt_list1();
-        if (!Statement(blocks, statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2())) {
+        if (!Statement(blocks, statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2(), statementNumber++)) {
             return nullptr;
         }
         for (auto block: statements.GetBlock3()) {
-            if (!Statement(blocks, block.GetRule_sql_stmt2().GetRule_sql_stmt_core2())) {
+            if (!Statement(blocks, block.GetRule_sql_stmt2().GetRule_sql_stmt_core2(), statementNumber++)) {
                 return nullptr;
             }
         }
@@ -3105,8 +3110,10 @@ TNodePtr TSqlQuery::Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_co
     Y_DEFER {
         Ctx.PopCurrentBlocks();
     };
+
+    size_t statementNumber = 0;
     for (const auto& statement : statements) {
-        if (!Statement(blocks, statement)) {
+        if (!Statement(blocks, statement, statementNumber++)) {
             return nullptr;
         }
     }

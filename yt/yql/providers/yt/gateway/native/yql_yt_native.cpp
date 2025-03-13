@@ -920,6 +920,8 @@ public:
                 execCtx->SetOutput(outputOp.Cast().Output());
             }
 
+            ReportBlockStatus(opBase, execCtx);
+
             TFuture<void> future;
             if (auto op = opBase.Maybe<TYtSort>()) {
                 future = DoSort(op.Cast(), execCtx);
@@ -5742,6 +5744,49 @@ private:
         } catch (...) {
             return ResultFromCurrentException<TClusterConnectionResult>({}, true);
         }
+    }
+
+    static void ReportBlockStatus(const TYtOpBase& op, const TExecContext<TRunOptions>::TPtr& execCtx) {
+        if (execCtx->Options_.PublicId().Empty()) {
+            return;
+        }
+
+        auto opPublicId = *execCtx->Options_.PublicId();
+
+        TOperationProgress::EOpBlockStatus status;
+        if (auto map = op.Maybe<TYtMap>()) {
+            status = DetermineProgramBlockStatus(map.Cast().Mapper().Body().Ref());
+        } else if (auto map = op.Maybe<TYtReduce>()) {
+            status = DetermineProgramBlockStatus(map.Cast().Reducer().Body().Ref());
+        } else if (auto map = op.Maybe<TYtMapReduce>()) {
+            status = DetermineProgramBlockStatus(map.Cast().Reducer().Body().Ref());
+            if (auto mapLambda = map.Cast().Mapper().Maybe<TCoLambda>()) {
+                status = TOperationProgress::CombineBlockStatuses(status, DetermineProgramBlockStatus(mapLambda.Cast().Body().Ref()));
+            }
+        } else if (auto fill = op.Maybe<TYtFill>()) {
+            status = DetermineProgramBlockStatus(fill.Cast().Content().Body().Ref());
+        } else if (op.Maybe<TYtSort>()) {
+            return;
+        } else if (op.Maybe<TYtCopy>()) {
+            return;
+        } else if (op.Maybe<TYtMerge>()) {
+            return;
+        } else if (op.Maybe<TYtTouch>()) {
+            return;
+        } else if (op.Maybe<TYtDropTable>()) {
+            return;
+        } else if (op.Maybe<TYtStatOut>()) {
+            return;
+        } else if (op.Maybe<TYtDqProcessWrite>()) {
+            return;
+        } else {
+            YQL_ENSURE(false, "unknown operation: " << op.Ref().Content());
+        }
+
+        YQL_CLOG(INFO, ProviderYt) << "Reporting " << status << " block status for operation " << op.Ref().Content() << " with public id #" << opPublicId;
+        auto p = TOperationProgress(TString(YtProviderName), opPublicId, TOperationProgress::EState::InProgress);
+        p.BlockStatus = status;
+        execCtx->Session_->ProgressWriter_(p);
     }
 
 private:

@@ -60,7 +60,7 @@ struct TPartitionActorInfo {
     ui64 MaxProcessedDirectReadId = 0;
     ui64 LastDirectReadId = 0;
 
-    std::map<ui64, TDirectReadInfo> DirectReads;  // TODO(qyryq) I changed the key type from i64 to ui64, is it OK?
+    std::map<ui64, TDirectReadInfo> DirectReads;
     std::queue<ui64> PendingDirectReadAcks;
 
     explicit TPartitionActorInfo(

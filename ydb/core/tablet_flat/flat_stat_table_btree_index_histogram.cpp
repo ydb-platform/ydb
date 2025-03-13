@@ -226,6 +226,9 @@ public:
 
         for (auto index : xrange(Subset.Flatten.size())) {
             auto& part = Subset.Flatten[index];
+            if (part.Slices) {
+                LOG_BUILD_STATS("slicing part " << part->Label << ": " << NFmt::Do(*part.Slices, KeyDefaults));
+            }
             auto& meta = part->IndexPages.GetBTree({});
             TCellsIterable beginKey = EmptyKey;
             if (part.Slices && part.Slices->front().FirstKey.GetCells()) {

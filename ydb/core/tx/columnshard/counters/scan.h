@@ -350,15 +350,19 @@ public:
     TScanAggregations Aggregations;
 
     void OnSkipGraphNode(const ui32 nodeId) const {
-        auto it = SkipNodesCount.find(nodeId);
-        AFL_VERIFY(it != SkipNodesCount.end());
-        it->second->Inc();
+        if (SkipNodesCount.size()) {
+            auto it = SkipNodesCount.find(nodeId);
+            AFL_VERIFY(it != SkipNodesCount.end());
+            it->second->Inc();
+        }
     }
 
     void OnExecuteGraphNode(const ui32 nodeId) const {
-        auto it = ExecuteNodesCount.find(nodeId);
-        AFL_VERIFY(it != ExecuteNodesCount.end());
-        it->second->Inc();
+        if (ExecuteNodesCount.size()) {
+            auto it = ExecuteNodesCount.find(nodeId);
+            AFL_VERIFY(it != ExecuteNodesCount.end());
+            it->second->Inc();
+        }
     }
 
     void AddExecutionDuration(const TDuration d) const {

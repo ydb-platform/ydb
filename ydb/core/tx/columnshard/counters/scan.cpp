@@ -126,10 +126,11 @@ TConcreteScanCounters::TConcreteScanCounters(
     const TScanCounters& counters, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program)
     : TBase(counters)
     , Aggregations(TBase::BuildAggregations()) {
-    AFL_VERIFY(program);
-    for (auto&& i : program->GetNodes()) {
-        SkipNodesCount.emplace(i.first, std::make_shared<TAtomicCounter>());
-        ExecuteNodesCount.emplace(i.first, std::make_shared<TAtomicCounter>());
+    if (program) {
+        for (auto&& i : program->GetNodes()) {
+            SkipNodesCount.emplace(i.first, std::make_shared<TAtomicCounter>());
+            ExecuteNodesCount.emplace(i.first, std::make_shared<TAtomicCounter>());
+        }
     }
 }
 

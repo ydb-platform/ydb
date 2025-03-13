@@ -82,6 +82,10 @@ public:
         return Program;
     }
 
+    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& GetGraphOptional() const {
+        return Program;
+    }
+
     [[nodiscard]] TConclusionStatus ApplyProgram(const std::shared_ptr<NArrow::NAccessor::TAccessorsCollection>& collection,
         const std::shared_ptr<NArrow::NSSA::IDataSource>& source) const;
     [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> ApplyProgram(

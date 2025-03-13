@@ -50,8 +50,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo::TItem& item,
-    TString& error,
-    Ydb::StatusIds::StatusCode& status
+    TString& error
 );
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(

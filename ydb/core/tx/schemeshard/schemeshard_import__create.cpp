@@ -526,7 +526,7 @@ private:
         return true;
     }
 
-    std::pair<Ydb::StatusIds::StatusCode, TString> CreateChangefeed(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
+    bool CreateChangefeed(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId, TString& error) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
         item.SubState = ESubState::Proposed;
@@ -537,17 +537,14 @@ private:
             << ", txId# " << txId);
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-        
-        TString error;
-        Ydb::StatusIds::StatusCode status;
 
-        auto propose = CreateChangefeedPropose(Self, txId, item, error, status);
+        auto propose = CreateChangefeedPropose(Self, txId, item, error);
         if (!propose) {
-            return {status, error};
+            return false;
         }
 
         Send(Self->SelfId(), std::move(propose));
-        return {Ydb::StatusIds::SUCCESS, ""};
+        return true;
     }
 
     void CreateConsumers(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
@@ -1086,10 +1083,10 @@ private:
             
             case EState::CreateChangefeed:
                 if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {
-                    auto responce = CreateChangefeed(importInfo, i, txId);
-                    if (responce.first != Ydb::StatusIds::SUCCESS) {
+                    TString error;
+                    if (!CreateChangefeed(importInfo, i, txId, error)) {
                         NIceDb::TNiceDb db(txc.DB);
-                        CancelAndPersist(db, importInfo, i, responce.second, "creation changefeed failed");
+                        CancelAndPersist(db, importInfo, i, error, "creation changefeed failed");
                     }
                 } else {
                     CreateConsumers(importInfo, i, txId);

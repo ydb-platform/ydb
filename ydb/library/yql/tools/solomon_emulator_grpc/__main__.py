@@ -7,9 +7,9 @@ from library.python.testing.recipe import declare_recipe, set_env
 from library.recipes.common import find_free_ports
 
 import grpc
-from ydb.library.yql.providers.solomon.solomon_accessor.grpc.solomon_accessor_pb_pb2_grpc import \
+from ydb.library.yql.providers.solomon.solomon_accessor.grpc.data_service_pb2_grpc import \
     DataServiceServicer, add_DataServiceServicer_to_server
-from ydb.library.yql.providers.solomon.solomon_accessor.grpc.solomon_accessor_pb_pb2 import ReadRequest, ReadResponse, MetricType
+from ydb.library.yql.providers.solomon.solomon_accessor.grpc.data_service_pb2 import ReadRequest, ReadResponse, MetricType
 
 PID_FILENAME = "solomon_recipe.pid"
 

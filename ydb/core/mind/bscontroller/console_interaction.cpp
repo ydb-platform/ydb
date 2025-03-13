@@ -220,7 +220,7 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvControllerReplaceConfigRequest::TPtr &ev) {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC24, "Console replace config request", (Request, ev->Get()->Record));
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC24, "BSC replace config request", (Request, ev->Get()->Record));
 
         auto& record = ev->Get()->Record;
 
@@ -320,6 +320,7 @@ namespace NKikimr::NBsController {
             }
         }
 
+        DryRun = record.GetDryRun();
         if (record.HasClusterYaml()) {
             PendingYamlConfig.emplace(record.GetClusterYaml());
 
@@ -515,10 +516,14 @@ namespace NKikimr::NBsController {
                     throw TExError(TStringBuilder() << "failed to validate derived StorageConfig: " << *errorReason);
                 }
             }
-            Self.Execute(Self.CreateTxCommitConfig(std::move(yamlConfig), std::exchange(PendingStorageYamlConfig, {}),
-                std::move(storageConfig), expectedStorageYamlConfigVersion, nullptr, SwitchEnableConfigV2));
-            CommitInProgress = true;
             PendingYamlConfig.reset();
+            if (!DryRun) {
+                Self.Execute(Self.CreateTxCommitConfig(std::move(yamlConfig), std::exchange(PendingStorageYamlConfig, {}),
+                    std::move(storageConfig), expectedStorageYamlConfigVersion, nullptr, SwitchEnableConfigV2));
+                CommitInProgress = true;
+            } else {
+                OnConfigCommit();
+            }
         } catch (const TExError& error) {
             IssueGRpcResponse(TResponseProto::BSCInvalidConfig, error.ErrorReason);
         }

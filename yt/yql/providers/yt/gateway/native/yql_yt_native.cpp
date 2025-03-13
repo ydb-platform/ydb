@@ -262,7 +262,7 @@ void GetIntegerConstraints(const TExprNode::TPtr& column, bool& isSigned, ui64& 
     }
 }
 
-void QuoteColumnForQL(const TStringBuf columnName, TStringBuilder& result) {
+void QuoteColumnForQL(const TStringBuf& columnName, TStringBuilder& result) {
     result << '`';
     if (!columnName.Contains('`')) {
         result << columnName;
@@ -276,6 +276,14 @@ void QuoteColumnForQL(const TStringBuf columnName, TStringBuilder& result) {
         }
     }
     result << '`';
+}
+
+void ConvertComparisonForQL(const TStringBuf& opName, TStringBuilder& result) {
+    if (opName == "==") {
+        result << '=';
+    } else {
+        result << opName;
+    }
 }
 
 void GenerateInputQueryIntegerComparison(const TStringBuf& opName, const TExprNode::TPtr& intColumn, const TExprNode::TPtr& intValue, TStringBuilder& result) {
@@ -310,7 +318,9 @@ void GenerateInputQueryIntegerComparison(const TStringBuf& opName, const TExprNo
         const auto columnName = intColumn->ChildPtr(1)->Content();
         const auto valueStr = maybeInt.Cast().Literal().Value();
         QuoteColumnForQL(columnName, result);
-        result << " " << opName << " " << valueStr;
+        result << " ";
+        ConvertComparisonForQL(opName, result);
+        result << " " << valueStr;
     }
 }
 

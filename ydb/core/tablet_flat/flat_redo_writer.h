@@ -44,8 +44,8 @@ namespace NRedo {
             single family tables but it is not scaled to multiple families.
          */
 
-        virtual TLimit Limit(ui32 table) noexcept = 0;
-        virtual TResult Place(ui32 table, TTag, TArrayRef<const char>) noexcept = 0;
+        virtual TLimit Limit(ui32 table) = 0;
+        virtual TResult Place(ui32 table, TTag, TArrayRef<const char>) = 0;
     };
 
     class TWriter {
@@ -203,7 +203,7 @@ namespace NRedo {
             return *this;
         }
 
-        TString Finish() && noexcept
+        TString Finish() &&
         {
             TString events;
             events.swap(Events);
@@ -254,7 +254,7 @@ namespace NRedo {
             return size;
         }
 
-        void Write(IOut &out, TRawVals key) noexcept
+        void Write(IOut &out, TRawVals key)
         {
             for (const auto &one : key) {
                 /* The only way of converting nulls in keys now */
@@ -268,7 +268,7 @@ namespace NRedo {
             }
         }
 
-        void Write(IOut &out, TOpsRef ops) noexcept
+        void Write(IOut &out, TOpsRef ops)
         {
             for (const auto &one: ops) {
                 /* Log enty cannot represent this ECellOp types with payload */

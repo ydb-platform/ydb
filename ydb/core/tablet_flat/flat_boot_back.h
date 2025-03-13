@@ -43,7 +43,7 @@ namespace NBoot {
     };
 
     struct TBody {
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "Body{ " << NFmt::Do(LargeGlobId)
@@ -68,7 +68,7 @@ namespace NBoot {
 
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << (Follower ? "Follower" : "Leader")

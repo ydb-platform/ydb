@@ -48,7 +48,7 @@ class TTableHistogramBuilderBtreeIndex {
         {
         }
 
-        TString ToString() const noexcept {
+        TString ToString() const {
             return TStringBuilder() 
                 << "Part: " << Part->Label.ToString()
                 << " PageId: " << PageId
@@ -83,7 +83,7 @@ class TTableHistogramBuilderBtreeIndex {
         //   1. Initial
         //   2. Closed - after processing TEvent.IsBegin = false
 
-        bool Open(ui64& openedRowCount, ui64& openedDataSize) noexcept {
+        bool Open(ui64& openedRowCount, ui64& openedDataSize) {
             if (Y_LIKELY(State == ENodeState::Initial)) {
                 State = ENodeState::Opened;
                 openedRowCount += GetRowCount();
@@ -93,7 +93,7 @@ class TTableHistogramBuilderBtreeIndex {
             return false;            
         }
 
-        bool Close(ui64& openedRowCount, ui64& closedRowCount, ui64& openedDataSize, ui64& closedDataSize) noexcept {
+        bool Close(ui64& openedRowCount, ui64& closedRowCount, ui64& openedDataSize, ui64& closedDataSize) {
             if (State == ENodeState::Opened) {
                 State = ENodeState::Closed;
                 ui64 rowCount = GetRowCount();
@@ -114,7 +114,7 @@ class TTableHistogramBuilderBtreeIndex {
             return false;
         }
 
-        bool IgnoreOpened(ui64& openedRowCount, ui64& openedDataSize) noexcept {
+        bool IgnoreOpened(ui64& openedRowCount, ui64& openedDataSize) {
             if (Y_LIKELY(State == ENodeState::Opened)) {
                 State = ENodeState::Ignored;
                 ui64 rowCount = GetRowCount();
@@ -134,7 +134,7 @@ class TTableHistogramBuilderBtreeIndex {
         bool IsBegin;
         TNodeState* Node;
 
-        TString ToString() const noexcept {
+        TString ToString() const {
             return TStringBuilder()
                 << Node->ToString()
                 << " IsBegin: " << IsBegin
@@ -145,11 +145,11 @@ class TTableHistogramBuilderBtreeIndex {
     struct TNodeEventKeyGreater {
         const TKeyCellDefaults& KeyDefaults;
 
-        bool operator ()(const TEvent& a, const TEvent& b) const noexcept {
+        bool operator ()(const TEvent& a, const TEvent& b) const {
             return Compare(a, b) > 0;
         }
 
-        i8 Compare(const TEvent& a, const TEvent& b) const noexcept {
+        i8 Compare(const TEvent& a, const TEvent& b) const {
             // events go in order:
             // - Key = {}, IsBegin = true
             // - ...
@@ -177,14 +177,14 @@ class TTableHistogramBuilderBtreeIndex {
         }
 
     private:
-        static i8 GetCategory(const TEvent& a) noexcept {
+        static i8 GetCategory(const TEvent& a) {
             if (a.Key) {
                 return 0;
             }
             return a.IsBegin ? -1 : +1;
         }
 
-        static i8 Compare(i8 a, i8 b) noexcept {
+        static i8 Compare(i8 a, i8 b) {
             if (a < b) return -1;
             if (a > b) return +1;
             return 0;
@@ -192,13 +192,13 @@ class TTableHistogramBuilderBtreeIndex {
     };
 
     struct TNodeRowCountLess {
-        bool operator ()(const TNodeState* a, const TNodeState* b) const noexcept {
+        bool operator ()(const TNodeState* a, const TNodeState* b) const {
             return a->GetRowCount() < b->GetRowCount();
         }
     };
 
     struct TNodeDataSizeLess {
-        bool operator ()(const TNodeState* a, const TNodeState* b) const noexcept {
+        bool operator ()(const TNodeState* a, const TNodeState* b) const {
             return a->GetDataSize() < b->GetDataSize();
         }
     };

@@ -14,6 +14,6 @@ namespace NTable {
         }
     };
 
-    IPages::TResult MemTableRefLookup(const TMemTable*, ui64 ref, ui32 tag) noexcept;
+    IPages::TResult MemTableRefLookup(const TMemTable*, ui64 ref, ui32 tag);
 }
 }

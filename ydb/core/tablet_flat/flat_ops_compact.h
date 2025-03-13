@@ -82,7 +82,7 @@ namespace NTabletFlatExecutor {
             // Y_ABORT_UNLESS(!Driver, "TOpsCompact is still running under scan");
         }
 
-        void Describe(IOutputStream &out) const noexcept override
+        void Describe(IOutputStream &out) const override
         {
             out
                 << "Compact{" << Mask.TabletID()
@@ -98,7 +98,7 @@ namespace NTabletFlatExecutor {
             Logger = new NUtil::TLogger(sys, NKikimrServices::OPS_COMPACT);
         }
 
-        TInitialState Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override
+        TInitialState Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) override
         {
             TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 
@@ -116,7 +116,7 @@ namespace NTabletFlatExecutor {
             return { EScan::Feed, conf };
         }
 
-        EScan Seek(TLead &lead, ui64 seq) noexcept override
+        EScan Seek(TLead &lead, ui64 seq) override
         {
             if (seq == 0) /* on first Seek() init compaction */ {
                 Y_ABORT_UNLESS(!Writer, "Initial IScan::Seek(...) called twice");
@@ -146,7 +146,7 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        EScan BeginKey(TArrayRef<const TCell> key) noexcept override
+        EScan BeginKey(TArrayRef<const TCell> key) override
         {
             Writer->BeginKey(key);
 
@@ -160,7 +160,7 @@ namespace NTabletFlatExecutor {
             return Flush(false /* intermediate, sleep or feed */);
         }
 
-        EScan BeginDeltas() noexcept override
+        EScan BeginDeltas() override
         {
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl << NFmt::Do(*this) << " begin deltas";
@@ -169,7 +169,7 @@ namespace NTabletFlatExecutor {
             return Flush(false /* intermediate, sleep or feed */);
         }
 
-        EScan Feed(const TRow &row, ui64 txId) noexcept override
+        EScan Feed(const TRow &row, ui64 txId) override
         {
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl << NFmt::Do(*this) << " feed row { ";
@@ -194,7 +194,7 @@ namespace NTabletFlatExecutor {
             return Flush(false /* intermediate, sleep or feed */);
         }
 
-        EScan EndDeltas() noexcept override
+        EScan EndDeltas() override
         {
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl << NFmt::Do(*this) << " end deltas";
@@ -218,7 +218,7 @@ namespace NTabletFlatExecutor {
             return Flush(false /* intermediate, sleep or feed */);
         }
 
-        EScan Feed(const TRow &row, TRowVersion &rowVersion) noexcept override
+        EScan Feed(const TRow &row, TRowVersion &rowVersion) override
         {
             if (Conf->RemovedRowVersions) {
                 // Adjust rowVersion so removed versions become compacted
@@ -242,7 +242,7 @@ namespace NTabletFlatExecutor {
             return Flush(false /* intermediate, sleep or feed */);
         }
 
-        EScan EndKey() noexcept override
+        EScan EndKey() override
         {
             ui32 written = Writer->EndKey();
 
@@ -253,7 +253,7 @@ namespace NTabletFlatExecutor {
             return Flush(false /* intermediate, sleep or feed */);
         }
 
-        void WriteTxStatus() noexcept
+        void WriteTxStatus()
         {
             if (!Conf->Frozen && !Conf->TxStatus) {
                 // Nothing to compact
@@ -325,7 +325,7 @@ namespace NTabletFlatExecutor {
             TxStatus.emplace_back(new NTable::TTxStatusPartStore(dataId, Conf->Epoch, data));
         }
 
-        TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override
+        TAutoPtr<IDestructable> Finish(EAbort abort) override
         {
             const auto fail = Failed || !Finished || abort != EAbort::None;
 
@@ -441,7 +441,7 @@ namespace NTabletFlatExecutor {
             return prod;
         }
 
-        EScan Flush(bool last) noexcept
+        EScan Flush(bool last)
         {
             for (NPageCollection::TGlob& one : Bundle->GetBlobsToSave())
                 FlushToBs(std::move(one));
@@ -476,7 +476,7 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        void Handle(TEvPutResult &msg) noexcept
+        void Handle(TEvPutResult &msg)
         {
             if (!NPageCollection::TGroupBlobsByCookie::IsInPlane(msg.Id, Mask)) {
                 Y_ABORT("TEvPutResult Id mask is differ from used");
@@ -538,7 +538,7 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        void FlushToBs(NPageCollection::TGlob&& glob) noexcept
+        void FlushToBs(NPageCollection::TGlob&& glob)
         {
             Y_ABORT_UNLESS(glob.GId.Logo.BlobSize() == glob.Data.size(),
                 "Written LogoBlob size doesn't match id");
@@ -554,7 +554,7 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        void SendToBs(NPageCollection::TGlob&& glob) noexcept
+        void SendToBs(NPageCollection::TGlob&& glob)
         {
             auto id = glob.GId;
 

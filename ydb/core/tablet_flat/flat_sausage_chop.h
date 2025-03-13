@@ -35,7 +35,7 @@ namespace NPageCollection {
                 && left.Cookie() != TLogoBlobID::MaxCookie - way;
         }
 
-        static TLargeGlobId ToLargeGlobId(TArray logo, ui32 group = TLargeGlobId::InvalidGroup) noexcept
+        static TLargeGlobId ToLargeGlobId(TArray logo, ui32 group = TLargeGlobId::InvalidGroup)
         {
             if (logo) {
                 for (auto num : xrange(logo.size())) {

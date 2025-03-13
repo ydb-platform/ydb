@@ -39,7 +39,7 @@ namespace {
 
     TDump::~TDump() { }
 
-    void TDump::Part(const TPart &part, ui32 depth) noexcept
+    void TDump::Part(const TPart &part, ui32 depth)
     {
         Out << NFmt::Do(part) << " data " << part.DataSize() << "b" << Endl;
 
@@ -70,7 +70,7 @@ namespace {
         }
     }
 
-    void TDump::Frames(const NPage::TFrames &page, const char *tag) noexcept
+    void TDump::Frames(const NPage::TFrames &page, const char *tag)
     {
         Out
             << " + " << tag << " Label{" << page.Raw.size() << "b}"
@@ -79,7 +79,7 @@ namespace {
             << Endl;
     }
 
-    void TDump::Blobs(const NPage::TExtBlobs &page) noexcept
+    void TDump::Blobs(const NPage::TExtBlobs &page)
     {
         Out
             << " + Blobs Label{" << page.Raw.size() << "b} "
@@ -88,7 +88,7 @@ namespace {
             << Endl;
     }
 
-    void TDump::Bloom(const NPage::TBloom &page) noexcept
+    void TDump::Bloom(const NPage::TBloom &page)
     {
         Out
             << " + Bloom Label{" << page.Raw.size() << "b} "
@@ -97,7 +97,7 @@ namespace {
             << Endl;
     }
 
-    void TDump::Index(const TPart &part, ui32 depth) noexcept
+    void TDump::Index(const TPart &part, ui32 depth)
     {
         if (!part.IndexPages.HasFlat()) {
             return;
@@ -170,7 +170,7 @@ namespace {
         }
     }
 
-    void TDump::BTreeIndex(const TPart &part) noexcept
+    void TDump::BTreeIndex(const TPart &part)
     {
         if (part.IndexPages.HasBTree()) {
             auto meta = part.IndexPages.GetBTree({});
@@ -184,7 +184,7 @@ namespace {
         }
     }
 
-    void TDump::DataPage(const TPart &part, ui32 page) noexcept
+    void TDump::DataPage(const TPart &part, ui32 page)
     {
         TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 
@@ -268,7 +268,7 @@ namespace {
         }
     }
 
-    void TDump::TName(ui32 num) noexcept
+    void TDump::TName(ui32 num)
     {
         const auto &type = Reg->GetType(num);
 
@@ -279,7 +279,7 @@ namespace {
         }
     }
 
-    void TDump::Key(TCellsRef key, const TPartScheme &scheme) noexcept
+    void TDump::Key(TCellsRef key, const TPartScheme &scheme)
     {
         Out << "(";
 
@@ -294,7 +294,7 @@ namespace {
         Out << ")";
     }
 
-    void TDump::BTreeIndexNode(const TPart &part, NPage::TBtreeIndexNode::TChild meta, ui32 level) noexcept
+    void TDump::BTreeIndexNode(const TPart &part, NPage::TBtreeIndexNode::TChild meta, ui32 level)
     {
         TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 

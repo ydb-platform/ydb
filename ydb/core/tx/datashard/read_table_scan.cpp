@@ -423,7 +423,7 @@ public:
 
     ~TReadTableScan() {}
 
-    void Describe(IOutputStream &out) const noexcept override
+    void Describe(IOutputStream &out) const override
     {
         out << "TReadTableScan";
     }
@@ -552,7 +552,7 @@ private:
                  IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     }
 
-    TInitialState Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override
+    TInitialState Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) override
     {
         Driver = driver;
 
@@ -576,7 +576,7 @@ private:
         return { EScan::Sleep, { } };
     }
 
-    EScan Seek(TLead &lead, ui64 seq) noexcept override
+    EScan Seek(TLead &lead, ui64 seq) override
     {
         if (seq) {
             MaybeSendResponseMessage(true);
@@ -672,7 +672,7 @@ private:
         return MessageQuota ? EScan::Feed : EScan::Sleep;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow &row) noexcept override
+    EScan Feed(TArrayRef<const TCell> key, const TRow &row) override
     {
         Y_DEBUG_ABORT_UNLESS(DebugCheckKeyInRange(key));
 
@@ -694,7 +694,7 @@ private:
         return cmp <= 0;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override
+    TAutoPtr<IDestructable> Finish(EAbort abort) override
     {
         auto ctx = ActorContext();
 

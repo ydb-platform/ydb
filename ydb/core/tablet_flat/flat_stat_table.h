@@ -76,7 +76,7 @@ public:
     }
 
 private:
-    int CompareKeys(const TDbTupleRef& a, const TDbTupleRef& b) const noexcept {
+    int CompareKeys(const TDbTupleRef& a, const TDbTupleRef& b) const {
         return ComparePartKeys(a.Cells(), b.Cells(), *KeyDefaults);
     }
 
@@ -126,7 +126,7 @@ struct TStats {
         DataSizeHistogram.swap(other.DataSizeHistogram);
     }
 
-    TString ToString() const noexcept {
+    TString ToString() const {
         return TStringBuilder() 
             << "RowCount: " << RowCount
             << " DataSize: " << DataSize.Size

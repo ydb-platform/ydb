@@ -102,7 +102,7 @@ namespace NActors {
         return (double)Min(passed, used) / passed;
     }
 
-    void IActor::Describe(IOutputStream &out) const noexcept {
+    void IActor::Describe(IOutputStream &out) const {
         SelfActorId.Out(out);
     }
 

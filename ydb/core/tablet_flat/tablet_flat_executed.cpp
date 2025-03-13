@@ -59,7 +59,7 @@ ui64 TTabletExecutedFlat::EnqueueLowPriority(TAutoPtr<ITransaction> transaction)
     }
 }
 
-const NTable::TScheme& TTabletExecutedFlat::Scheme() const noexcept {
+const NTable::TScheme& TTabletExecutedFlat::Scheme() const {
     return static_cast<TExecutor*>(Executor())->Scheme();
 }
 

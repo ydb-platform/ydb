@@ -33,7 +33,7 @@ namespace NFwd {
             }
         }
 
-        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept
+        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag)
         {
             const auto &glob = memTable->GetBlobs()->Get(ref);
 
@@ -47,7 +47,7 @@ namespace NFwd {
             return { !omit, omit ? nullptr : &glob.Data };
         }
 
-        TSieve Traced() noexcept
+        TSieve Traced()
         {
             /* Blobs in TMemTable catalog isn't sorted in order of appearance
                 in rows cells. That is way bitmap is used instead of just

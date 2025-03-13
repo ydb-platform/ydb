@@ -1182,7 +1182,7 @@ public:
     }
 
 private:
-    void Describe(IOutputStream& out) const noexcept final {
+    void Describe(IOutputStream& out) const final {
         out << "TDataShard::TReadScan{"
             << " TabletId# " << TabletId
             << " Reader# " << Ev->Sender
@@ -1190,7 +1190,7 @@ private:
             << " }";
     }
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept final {
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) final {
         Y_ABORT_UNLESS(driver);
         Y_ABORT_UNLESS(scheme);
 
@@ -1202,7 +1202,7 @@ private:
         return { EScan::Feed, {} };
     }
 
-    EScan Seek(TLead& lead, ui64 /* seq */) noexcept final {
+    EScan Seek(TLead& lead, ui64 /* seq */) final {
         if (RangeIndex >= Request->Ranges.size() || TotalRows >= TotalRowsLimit) {
             return EScan::Final;
         }
@@ -1237,7 +1237,7 @@ private:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
         if (!BlockBuilder) {
             TString error;
             BlockBuilder = CreateBlockBuilder(ColumnNamesTypes, Format, Max<ui64>(), Max<ui64>(), error);
@@ -1266,7 +1266,7 @@ private:
         return EScan::Feed;
     }
 
-    EScan Exhausted() noexcept final {
+    EScan Exhausted() final {
         ++RangeIndex;
         if (RangeIndex >= Request->Ranges.size()) {
             return EScan::Final;
@@ -1275,7 +1275,7 @@ private:
         return EScan::Reset;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
+    TAutoPtr<IDestructable> Finish(EAbort abort) final {
         if (!Aborted) {
             switch (abort) {
                 case EAbort::None:

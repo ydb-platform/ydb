@@ -29,22 +29,22 @@ namespace NPageCollection {
             return Meta.TotalPages();
         }
 
-        TBorder Bounds(ui32 page) const noexcept override
+        TBorder Bounds(ui32 page) const override
         {
             return Meta.Bounds(page);
         }
 
-        TGlobId Glob(ui32 blob) const noexcept override
+        TGlobId Glob(ui32 blob) const override
         {
             return Meta.Glob(blob);
         }
 
-        TInfo Page(ui32 page) const noexcept override
+        TInfo Page(ui32 page) const override
         {
             return Meta.Page(page);
         }
 
-        bool Verify(ui32 page, TArrayRef<const char> body) const noexcept override
+        bool Verify(ui32 page, TArrayRef<const char> body) const override
         {
             return
                 Meta.Page(page).Size == body.size()

@@ -49,7 +49,7 @@ namespace NTable {
          *
          * It is always non-negative and materialized as ui64.
          */
-        ui64 ToCounter() const noexcept {
+        ui64 ToCounter() const {
             const auto value = Value;
             Y_ABORT_UNLESS(value >= 0);
             return value;

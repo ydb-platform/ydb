@@ -77,7 +77,7 @@ public:
     }
 
 private:
-    EDo Spawn() noexcept
+    EDo Spawn()
     {
         Respawn -= Min(Respawn, ui32(1));
 

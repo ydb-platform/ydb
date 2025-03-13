@@ -37,14 +37,14 @@ namespace NRedo {
             Push(TEntry::Create(stamp, affects, std::move(embedded)));
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "LRedo{" << Overhead.size() << "t" << ", " << Items
                 << " (" << Memory << " mem" << ", " << LargeGlobIdsBytes << " raw)b }";
         }
 
-        void Push(TEntry *entry) noexcept
+        void Push(TEntry *entry)
         {
             if (bool(entry->Embedded) == bool(entry->LargeGlobId)) {
                 Y_Fail(NFmt::Do(*entry) << " has incorrect payload");
@@ -72,7 +72,7 @@ namespace NRedo {
                 Y_Fail(NFmt::Do(*entry) << " has no effects on data");
         }
 
-        void Cut(ui32 table, NTable::TSnapEdge edge, TGCBlobDelta &gc) noexcept
+        void Cut(ui32 table, NTable::TSnapEdge edge, TGCBlobDelta &gc)
         {
             Y_ABORT_UNLESS(edge.TxStamp != Max<ui64>(), "Undefined TxStamp of edge");
 
@@ -121,7 +121,7 @@ namespace NRedo {
             }
         }
 
-        TArrayRef<const TUsage> GrabUsage() noexcept
+        TArrayRef<const TUsage> GrabUsage()
         {
             Usage.clear();
 

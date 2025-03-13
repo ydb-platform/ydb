@@ -58,7 +58,7 @@ namespace NPage {
             return { Items, Hashes };
         }
 
-        bool MightHave(TArrayRef<const char> raw) const noexcept
+        bool MightHave(TArrayRef<const char> raw) const
         {
             NBloom::THash hash(raw);
 

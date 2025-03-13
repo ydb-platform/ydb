@@ -1,5 +1,9 @@
 #pragma once
 
+#include <ydb/core/tx/columnshard/blob_cache.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/message_seqno.h>
+
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -351,9 +355,20 @@ struct TTestSchema {
         return out;
     }
 
+    static TString MoveTableTxBody(ui64 srcPathId, ui64 dstPathId, const TMessageSeqNo& seqNo) {
+        NKikimrTxColumnShard::TSchemaTxBody tx;
+        tx.MutableMoveTable()->SetSrcPathId(srcPathId);
+        tx.MutableMoveTable()->SetDstPathId(dstPathId);
+        tx.MutableSeqNo()->SetGeneration(seqNo.Generation);
+        tx.MutableSeqNo()->SetRound(seqNo.Round);
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
+        return out;
+    }
+
     static THashMap<TString, NColumnShard::NTiers::TTierConfig> BuildSnapshot(const TTableSpecials& specials);
 
-    static TString CommitTxBody(ui64, const std::vector<ui64>& writeIds) {
+    static TString CommitTxBody(const std::vector<ui64>& writeIds) {
         NKikimrTxColumnShard::TCommitTxBody proto;
         for (ui64 id : writeIds) {
             proto.AddWriteIds(id);
@@ -408,7 +423,7 @@ struct TTestSchema {
 
 void RefreshTiering(TTestBasicRuntime& runtime, const TActorId& sender);
 
-bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, NOlap::TSnapshot snap);
+bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId);
 void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap);
 
 void PlanWriteTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap, bool waitResult = true);
@@ -432,8 +447,9 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
 void ProposeCommitFail(
      TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId = 1);
 void ProposeCommit(
-    TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId = 1);
-void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId = 1);
+    TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId = 1, bool expectSuccess = true);
+void ProposeCommit(
+    TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId = 1, bool expectSuccess = true);
 
 void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 planStep, const TSet<ui64>& txIds);
 void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, const TSet<ui64>& txIds);

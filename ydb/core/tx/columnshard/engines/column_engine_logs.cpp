@@ -555,4 +555,37 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
     return db.LoadCounters(callback);
 }
 
-}   // namespace NKikimr::NOlap
+
+bool TColumnEngineForLogs::ProgressMoveTableData(const ui64 srcPathId, const ui64 dstPathId, NTable::TDatabase& db) {
+    auto srcGranule = GranulesStorage->GetGranuleOptional(srcPathId);
+    AFL_VERIFY(srcGranule);
+    const auto& srcPortions = srcGranule->GetPortions();
+    if (srcPortions.empty()) {
+        return true;
+    }
+    const auto dstGranule = GranulesStorage->GetGranuleOptional(dstPathId);
+    AFL_VERIFY(dstGranule);
+    const size_t ChangeAtOnceLimit = 10000; //To fit max local db transaction change limit
+    size_t count = 0;
+    TDbWrapper dbWrapper(db, nullptr);
+    std::vector<ui64> ids;
+    for (auto& [id, portionInfo]: srcPortions) {
+        AFL_VERIFY(portionInfo->GetPathId() == srcPathId);
+        dbWrapper.CloneColumns(*portionInfo, dstPathId); //TODO Cloned columns have to be deleted after all scnans by original pathId complete
+        portionInfo->SetPathId(dstPathId);
+        portionInfo->SaveMetaToDatabase(dbWrapper);
+        dstGranule->AppendPortion(portionInfo);
+        ids.push_back(id);
+        ++count;
+        if (count == ChangeAtOnceLimit) {
+            return false;
+        }
+    }
+    for (const auto& id: ids) {
+        srcGranule->ErasePortion(id);
+    }
+
+    return true;
+}
+
+} // namespace NKikimr::NOlap

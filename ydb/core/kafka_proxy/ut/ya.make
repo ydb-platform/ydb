@@ -6,6 +6,8 @@ ADDINCL(
 
 SIZE(medium)
 SRCS(
+    kafka_test_client.cpp
+    kafka_test_client.h
     ut_kafka_functions.cpp
     ut_protocol.cpp
     ut_serialization.cpp

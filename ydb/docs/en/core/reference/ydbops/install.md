@@ -4,58 +4,84 @@
 
 ## Building from source
 
-1. [Install Go](https://go.dev/doc/install). The minimal required Go version is 1.21.
-
-2. Clone the `ydbops` repository from GitHub:
+1. Clone the `ydbops` repository from GitHub:
 
     ```bash
     git clone https://github.com/ydb-platform/ydbops.git
     ```
 
-3. There are two ways to build `ydbops`:
+2. There are two ways to build `ydbops`:
+    2.1. [Directly with Go](#go)
+    2.2. [Inside a Docker container](#docker)
 
-- **Manual build.** Invoke `go build` in the repository root folder:
+We are using official docker image for Golang v1.22. It gurantiees successful build. Description Docker container works in the Dockerfile in the repository. The assembly in Docker also performs additional manipulations: linter checks, the version for the ydbops assembly is substituted so that it is registered in the ydbops executable file.
 
-    ```bash
-    go build
-    ```
+### Building directly with Go {#go}
 
-    The `ydbops` executable will be available in the repository root folder.
+#### Prerequsites
 
-- **Automated build.** [^docker] Invoke this command in the repository root folder:
-
-  ```bash
-  make build-in-docker
-  ```
-
-  [^docker]: We are using official docker image for Golang v1.22. It gurantiees successful build. Description Docker container works in the Dockerfile in the repository. The assembly in Docker also performs additional manipulations: linter checks, the version for the ydbops assembly is substituted so that it is registered in the ydbops executable file.
-
-  The `ydbops` executables will be available in the `bin` folder. Binary files are generated for Linux and MacOS (arm64, amd64).
-
-  | Binary name | Platform
-  |-|-|
-  | ydbops | Linux(amd64) |
-  | ydbops_darwin_amd64 | MacOS(amd64) |
-  | ydbops_darwin_arm64 | MacOS(arm64) |
+[Install Go](https://go.dev/doc/install). The recommended version is 1.22
 
 
-4. To install the binary file, execute command `make`.
+#### Compiling
+Invoke `go build` in the repository root folder:
 
-   Optional parameters:
+```bash
+go build
+```
 
-    - `INSTALL_DIR`: The folder, to which the executable file will be installed. Default value: `~/ydb/bin`.
+The `ydbops` executable will be available in the repository root folder.
 
-    - `BUILD_DIR`: The folder that contains the generated binary file. Use this parameter if you created the binary file manually. For example, use `BUILD_DIR=.` if the executable file is in the current working folder.
+#### Installing
 
-    ```bash
-    make install [INSTALL_DIR=<path_to_install_folder>] [BUILD_DIR=<path_to_build_folder>]
-    ```
+You can copy executable file manually or use `make`
 
-    Sample command to install into `install_folder` from the current folder:
+```bash
+make install INSTALL_DIR=install_folder BUILD_DIR=.
+```
 
-    ```bash
-    make install INSTALL_DIR=install_folder BUILD_DIR=.
-    ```
+### Inside a Docker container {#docker}
+
+#### Prerequsites
+
+- make
+- [Install docker engine](https://docs.docker.com/engine/install/)
+
+#### Compiling
+Invoke this command in the repository root folder:
+
+```bash
+make build-in-docker
+```
+
+The `ydbops` executables will be available in the `bin` folder. Binary files are generated for Linux and MacOS (arm64, amd64).
+
+| Binary name | Platform
+|-|-|
+| ydbops | Linux(amd64) |
+| ydbops_darwin_amd64 | MacOS(amd64) |
+| ydbops_darwin_arm64 | MacOS(arm64) |
+
+
+#### Installing
+
+To install the binary file, execute command `make`.
+
+Optional parameters:
+
+- `INSTALL_DIR`: The folder, to which the executable file will be installed. Default value: `~/ydb/bin`.
+
+- `BUILD_DIR`: The folder that contains the generated executable file. Use this parameter if you created the executable file manually. For example, use `BUILD_DIR=.` if the executable file is in the current working folder.
+
+```bash
+make install [INSTALL_DIR=<path_to_install_folder>] [BUILD_DIR=<path_to_build_folder>]
+```
+
+Sample command to install into `install_folder` from the current folder:
+
+```bash
+make install INSTALL_DIR=install_folder BUILD_DIR=.
+```
 
 ## Download the binary from releases page
 

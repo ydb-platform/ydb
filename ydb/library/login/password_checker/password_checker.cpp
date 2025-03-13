@@ -5,7 +5,7 @@
 namespace NLogin {
 
 TPasswordComplexity::TPasswordComplexity()
-    : SpecialChars(VALID_SPECIAL_CHARS.cbegin(), VALID_SPECIAL_CHARS.cend())
+    : SpecialChars(VALID_SPECIAL_CHARS)
 {}
 
 TPasswordComplexity::TPasswordComplexity(const TInitializer& initializer)
@@ -16,10 +16,13 @@ TPasswordComplexity::TPasswordComplexity(const TInitializer& initializer)
     , MinSpecialCharsCount(initializer.MinSpecialCharsCount)
     , CanContainUsername(initializer.CanContainUsername)
 {
-    static const std::unordered_set<char> validSpecialChars(VALID_SPECIAL_CHARS.cbegin(), VALID_SPECIAL_CHARS.cend());
-    for (const char ch : initializer.SpecialChars) {
-        if (validSpecialChars.contains(ch)) {
-            SpecialChars.insert(ch);
+    if (initializer.SpecialChars.empty()) {
+        SpecialChars.insert(VALID_SPECIAL_CHARS.begin(), VALID_SPECIAL_CHARS.end());
+    } else {
+        for (const char ch : initializer.SpecialChars) {
+            if (VALID_SPECIAL_CHARS.contains(ch)) {
+                SpecialChars.insert(ch);
+            }
         }
     }
 }
@@ -28,7 +31,9 @@ bool TPasswordComplexity::IsSpecialCharValid(char ch) const {
     return SpecialChars.contains(ch);
 }
 
-const TString TPasswordComplexity::VALID_SPECIAL_CHARS = "!@#$%^&*()_+{}|<>?=";
+const std::unordered_set<char> TPasswordComplexity::VALID_SPECIAL_CHARS {'!', '@', '#', '$', '%', '^', '&',
+                                                                         '*', '(', ')', '_', '+', '{',
+                                                                         '}', '|', '<', '>', '?', '='};
 
 TPasswordChecker::TComplexityState::TComplexityState(const TPasswordComplexity& passwordComplexity)
     : PasswordComplexity(passwordComplexity)

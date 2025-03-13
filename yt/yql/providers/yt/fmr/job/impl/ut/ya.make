@@ -3,6 +3,7 @@ UNITTEST()
 SRCS(
     yql_yt_job_ut.cpp
     yql_yt_output_stream_ut.cpp
+    yql_yt_raw_table_reader_ut.cpp
 )
 
 PEERDIR(

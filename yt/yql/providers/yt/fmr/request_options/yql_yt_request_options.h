@@ -3,6 +3,7 @@
 #include <util/digest/numeric.h>
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
+#include <util/string/builder.h>
 #include <vector>
 
 namespace NYql::NFmr {
@@ -64,6 +65,14 @@ struct TTableRange {
     TString PartId;
     ui64 MinChunk = 0;
     ui64 MaxChunk = 1;  // Пока такой дефолт
+};
+
+struct TFmrChunkMeta {
+    TString TableId;
+    TString PartId;
+    ui64 Chunk = 0; // сделать out метод
+
+    TString ToString() const;
 };
 
 struct TFmrTableInputRef {

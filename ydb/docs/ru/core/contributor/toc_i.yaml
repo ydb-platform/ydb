@@ -54,3 +54,5 @@ items:
       href: load-actors-memory.md
     - name: Stop
       href: load-actors-stop.md
+  - name: Очистка данных
+    href: data-erasure.md

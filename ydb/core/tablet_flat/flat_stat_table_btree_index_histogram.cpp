@@ -106,6 +106,7 @@ class TTableHistogramBuilderBtreeIndex {
                 closedDataSize += dataSize;
                 return true;
             } else if (Y_UNLIKELY(State == ENodeState::Initial)) {
+                Y_ABORT("Close first");
                 State = ENodeState::Closed;
                 closedRowCount += GetRowCount();
                 closedDataSize += GetDataSize();

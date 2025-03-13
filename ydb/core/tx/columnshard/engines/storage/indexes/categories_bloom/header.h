@@ -22,7 +22,7 @@ public:
         ui32 currentOffset = headerShift;
         for (auto&& i : proto.GetCategories()) {
             for (auto&& h : i.GetHashes()) {
-                Ranges.emplace(h, TBlobRangeLink16(currentOffset, currentOffset + i.GetFilterSize()));
+                Ranges.emplace(h, TBlobRangeLink16(currentOffset, i.GetFilterSize()));
             }
             currentOffset += i.GetFilterSize();
         }

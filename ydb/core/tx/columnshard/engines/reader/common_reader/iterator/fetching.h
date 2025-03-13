@@ -21,18 +21,42 @@ class TFetchingScriptCursor;
 class TFetchingStepSignals: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
-    NMonitoring::TDynamicCounters::TCounterPtr DurationCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr ExecutionDurationCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr TotalDurationCounter;
     NMonitoring::TDynamicCounters::TCounterPtr BytesCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr SkipGraphNode;
+    NMonitoring::TDynamicCounters::TCounterPtr SkipGraphNodeRecords;
+    NMonitoring::TDynamicCounters::TCounterPtr ExecuteGraphNode;
+    NMonitoring::TDynamicCounters::TCounterPtr ExecuteGraphNodeRecords;
 
 public:
     TFetchingStepSignals(NColumnShard::TCommonCountersOwner&& owner)
         : TBase(std::move(owner))
-        , DurationCounter(TBase::GetDeriviative("Duration/Us"))
-        , BytesCounter(TBase::GetDeriviative("Bytes/Count")) {
+        , ExecutionDurationCounter(TBase::GetDeriviative("Duration/Execution/Us"))
+        , TotalDurationCounter(TBase::GetDeriviative("Duration/Total/Us"))
+        , BytesCounter(TBase::GetDeriviative("Bytes/Count"))
+        , SkipGraphNode(TBase::GetDeriviative("Skips/Count"))
+        , SkipGraphNodeRecords(TBase::GetDeriviative("Skips/Records/Count"))
+        , ExecuteGraphNode(TBase::GetDeriviative("Executions/Count"))
+        , ExecuteGraphNodeRecords(TBase::GetDeriviative("Executions/Records/Count")) {
     }
 
-    void AddDuration(const TDuration d) const {
-        DurationCounter->Add(d.MicroSeconds());
+    void OnSkipGraphNode(const ui32 recordsCount) {
+        SkipGraphNode->Add(1);
+        SkipGraphNodeRecords->Add(recordsCount);
+    }
+
+    void OnExecuteGraphNode(const ui32 recordsCount) {
+        ExecuteGraphNode->Add(1);
+        ExecuteGraphNodeRecords->Add(recordsCount);
+    }
+
+    void AddExecutionDuration(const TDuration d) const {
+        ExecutionDurationCounter->Add(d.MicroSeconds());
+    }
+
+    void AddTotalDuration(const TDuration d) const {
+        TotalDurationCounter->Add(d.MicroSeconds());
     }
 
     void AddBytes(const ui32 v) const {
@@ -86,9 +110,9 @@ public:
         return SumSize.Val();
     }
 
-    void AddDuration(const TDuration d) {
+    void AddExecutionDuration(const TDuration d) {
         SumDuration.Add(d.MicroSeconds());
-        Signals.AddDuration(d);
+        Signals.AddExecutionDuration(d);
     }
     void AddDataSize(const ui64 size) {
         SumSize.Add(size);
@@ -132,7 +156,7 @@ public:
 
     void AddStepDuration(const ui32 index, const TDuration d) {
         AtomicSet(FinishInstant, TMonotonic::Now().MicroSeconds());
-        GetStep(index)->AddDuration(d);
+        GetStep(index)->AddExecutionDuration(d);
     }
 
     void OnExecute() {
@@ -261,17 +285,10 @@ public:
 
 class TFetchingScriptCursor {
 private:
-    std::optional<TMonotonic> CurrentStartInstant;
-    std::optional<ui64> CurrentStartDataSize;
     ui32 CurrentStepIdx = 0;
     std::shared_ptr<TFetchingScript> Script;
-    void FlushDuration() {
-        AFL_VERIFY(CurrentStartInstant);
-        AFL_VERIFY(CurrentStartDataSize);
-        Script->AddStepDuration(CurrentStepIdx, TMonotonic::Now() - *CurrentStartInstant);
-        Script->AddStepDataSize(CurrentStepIdx, *CurrentStartDataSize);
-        CurrentStartInstant.reset();
-        CurrentStartDataSize.reset();
+    void FlushDuration(const TDuration d) {
+        Script->AddStepDuration(CurrentStepIdx, d);
     }
 
 public:
@@ -290,7 +307,6 @@ public:
     }
 
     bool Next() {
-        FlushDuration();
         return !Script->IsFinished(++CurrentStepIdx);
     }
 
@@ -324,39 +340,20 @@ public:
 class TProgramStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
-    const NArrow::NSSA::TResourceProcessorStep Step;
+    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
+    THashMap<ui32, std::shared_ptr<TFetchingStepSignals>> Signals;
+    const std::shared_ptr<TFetchingStepSignals>& GetSignals(const ui32 nodeId) const;
 
 public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
-    TProgramStep(const NArrow::NSSA::TResourceProcessorStep& step)
-        : TBase("EARLY_FILTER_STEP")
-        , Step(step) {
-    }
-};
 
-class TProgramStepPrepare: public IFetchingStep {
-private:
-    using TBase = IFetchingStep;
-    const NArrow::NSSA::TResourceProcessorStep Step;
-
-public:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
-    TProgramStepPrepare(const NArrow::NSSA::TResourceProcessorStep& step)
-        : TBase("PROGRAM_STEP_PREPARE")
-        , Step(step) {
-    }
-};
-
-class TProgramStepAssemble: public IFetchingStep {
-private:
-    using TBase = IFetchingStep;
-    const NArrow::NSSA::TResourceProcessorStep Step;
-
-public:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
-    TProgramStepAssemble(const NArrow::NSSA::TResourceProcessorStep& step)
-        : TBase("PROGRAM_STEP_ASSEMBLE")
-        , Step(step) {
+    TProgramStep(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program)
+        : TBase("PROGRAM_EXECUTION")
+        , Program(program) {
+        for (auto&& i : Program->GetNodes()) {
+            Signals.emplace(
+                i.first, std::make_shared<TFetchingStepSignals>(TFetchingStepsSignalsCollection::GetSignals(i.second->GetSignalCategoryName())));
+        }
     }
 };
 

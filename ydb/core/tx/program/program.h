@@ -3,8 +3,8 @@
 #include "registry.h"
 
 #include <ydb/core/formats/arrow/process_columns.h>
-#include <ydb/core/formats/arrow/program/chain.h>
 #include <ydb/core/formats/arrow/program/custom_registry.h>
+#include <ydb/core/formats/arrow/program/graph_execute.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/checker.h>
 
@@ -16,12 +16,11 @@ class TProgramContainer {
 private:
     using TColumnInfo = NArrow::NSSA::TColumnInfo;
     NKikimrSSA::TProgram ProgramProto;
-    std::shared_ptr<NArrow::NSSA::TProgramChain> Program;
+    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
     std::shared_ptr<arrow::RecordBatch> ProgramParameters;   // TODO
     NArrow::NSSA::TKernelsRegistry KernelsRegistry;
     std::optional<THashSet<ui32>> OverrideProcessingColumnsSet;
     std::optional<std::vector<ui32>> OverrideProcessingColumnsVector;
-    YDB_READONLY_DEF(NIndexes::TIndexCheckerContainer, IndexChecker);
 
 public:
     bool IsGenerated(const ui32 columnId) const {
@@ -78,12 +77,17 @@ public:
     [[nodiscard]] TConclusionStatus Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TOlapProgram& olapProgramProto) noexcept;
     [[nodiscard]] TConclusionStatus Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TProgram& programProto) noexcept;
 
-    const std::shared_ptr<NArrow::NSSA::TProgramChain>& GetChainVerified() const {
+    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& GetChainVerified() const {
         AFL_VERIFY(!!Program);
         return Program;
     }
 
-    [[nodiscard]] TConclusionStatus ApplyProgram(const std::shared_ptr<NArrow::NAccessor::TAccessorsCollection>& collection) const;
+    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& GetGraphOptional() const {
+        return Program;
+    }
+
+    [[nodiscard]] TConclusionStatus ApplyProgram(const std::shared_ptr<NArrow::NAccessor::TAccessorsCollection>& collection,
+        const std::shared_ptr<NArrow::NSSA::IDataSource>& source) const;
     [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> ApplyProgram(
         const std::shared_ptr<arrow::RecordBatch>& batch, const NArrow::NSSA::IColumnResolver& resolver) const;
 

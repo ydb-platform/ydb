@@ -34,23 +34,30 @@ TBlobsFetcherTask::TBlobsFetcherTask(const std::vector<std::shared_ptr<IBlobsRea
 }
 
 void TColumnsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
+    const TMonotonic start = TMonotonic::Now();
     NBlobOperations::NRead::TCompositeReadBlobs blobsData = ExtractBlobsData();
     blobsData.Merge(std::move(ProvidedBlobs));
     TReadActionsCollection readActions;
+    if (auto* signals = Source->GetExecutionContext().GetCurrentStepSignalsOptional()) {
+        signals->AddBytes(blobsData.GetTotalBlobsSize());
+    }
     for (auto&& [_, i] : DataFetchers) {
         i->OnDataReceived(readActions, blobsData);
     }
+    AFL_VERIFY(blobsData.IsEmpty());
     if (readActions.IsEmpty()) {
         for (auto&& i : DataFetchers) {
             Source->MutableStageData().AddFetcher(i.second);
         }
-        AFL_VERIFY(Cursor.Next());
         auto task = std::make_shared<TStepAction>(Source, std::move(Cursor), Source->GetContext()->GetCommonContext()->GetScanActorId());
         NConveyor::TScanServiceOperator::SendTaskToExecute(task, Source->GetContext()->GetCommonContext()->GetConveyorProcessId());
     } else {
         std::shared_ptr<TColumnsFetcherTask> nextReadTask = std::make_shared<TColumnsFetcherTask>(
             std::move(readActions), DataFetchers, Source, std::move(Cursor), GetTaskCustomer(), GetExternalTaskId());
         NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(nextReadTask));
+    }
+    if (auto* signals = Source->GetExecutionContext().GetCurrentStepSignalsOptional()) {
+        signals->AddExecutionDuration(TMonotonic::Now() - start);
     }
 }
 

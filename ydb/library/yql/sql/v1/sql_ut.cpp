@@ -7103,8 +7103,9 @@ Y_UNIT_TEST_SUITE(QuerySplit) {
 
         UNIT_ASSERT_VALUES_EQUAL(statements.size(), 3);
 
-        UNIT_ASSERT_VALUES_EQUAL(statements[0], "-- Comment 1\n        SELECT * From Input; -- Comment 2\n");
-        UNIT_ASSERT_VALUES_EQUAL(statements[1], R"(-- Comment 3
+        UNIT_ASSERT_VALUES_EQUAL(statements[0], "-- Comment 1\n        SELECT * From Input;");
+        UNIT_ASSERT_VALUES_EQUAL(statements[1], R"(-- Comment 2
+        -- Comment 3
         $a = "a";)");
         UNIT_ASSERT_VALUES_EQUAL(statements[2], R"(-- Comment 10
 

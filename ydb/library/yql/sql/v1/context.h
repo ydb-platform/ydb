@@ -87,7 +87,8 @@ namespace NSQLTranslationV1 {
     public:
         TContext(const NSQLTranslation::TTranslationSettings& settings,
                  const NSQLTranslation::TSQLHints& hints,
-                 NYql::TIssues& issues);
+                 NYql::TIssues& issues,
+                 const TString& query = {});
 
         virtual ~TContext();
 
@@ -232,6 +233,7 @@ namespace NSQLTranslationV1 {
         THashMap<TString, std::pair<TPosition, TNodePtr>> Variables;
         THashSet<TString> WeakVariables;
         NSQLTranslation::TTranslationSettings Settings;
+        const TString Query;
         std::unique_ptr<TMemoryPool> Pool;
         NYql::TIssues& Issues;
         TMap<TString, TNodePtr> UniversalAliases;
@@ -318,6 +320,7 @@ namespace NSQLTranslationV1 {
         ui64 ParallelModeCount = 0;
         bool CompactNamedExprs = false;
         bool ValidateUnusedExprs = false;
+        TVector<size_t> ForAllStatementsParts;
     };
 
     class TColumnRefScope {

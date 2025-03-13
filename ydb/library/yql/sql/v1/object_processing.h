@@ -55,6 +55,7 @@ protected:
         return Y(Q(Y(Q("mode"), Q(mode))));
     }
     virtual INode::TPtr FillFeatures(INode::TPtr options) const override;
+    bool DoInit(TContext& ctx, ISource* src) override;
 public:
     TCreateObject(TPosition pos, const TString& objectId,
         const TString& typeId, bool existingOk, bool replaceIfExists, std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context)

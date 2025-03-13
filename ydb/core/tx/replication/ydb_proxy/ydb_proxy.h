@@ -159,6 +159,14 @@ struct TEvYdbProxy {
         #undef PROXY_METHOD
     };
 
+    struct TReadTopicSettings {
+        using TSelf = TReadTopicSettings;
+
+        // This option allows you to postpone the auto-commit of read messages. All previously 
+        // read messages will be commited upon subsequent receipt of TEvPoll with SkipCommit set to false.
+        FLUENT_SETTING_DEFAULT(bool, SkipCommit, false);
+    };
+
     struct TReadTopicResult {
         explicit TReadTopicResult(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
             PartitionId = event.GetPartitionSession()->GetPartitionId();
@@ -234,7 +242,7 @@ struct TEvYdbProxy {
     DEFINE_GENERIC_REQUEST_RESPONSE(DescribeTopic, NYdb::NTopic::TDescribeTopicResult, TString, NYdb::NTopic::TDescribeTopicSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(DescribeConsumer, NYdb::NTopic::TDescribeConsumerResult, TString, TString, NYdb::NTopic::TDescribeConsumerSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(CreateTopicReader, TActorId, TTopicReaderSettings);
-    DEFINE_GENERIC_REQUEST_RESPONSE(ReadTopic, TReadTopicResult, void);
+    DEFINE_GENERIC_REQUEST_RESPONSE(ReadTopic, TReadTopicResult, TReadTopicSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(CommitOffset, NYdb::TStatus, TString, ui64, TString, ui64, NYdb::NTopic::TCommitOffsetSettings);
 
     #undef DEFINE_GENERIC_REQUEST_RESPONSE

@@ -54,4 +54,4 @@ ansible-playbook ydb_platform.ydb.restart --tags database --limit='<hostname>'
 
 Инструмент [ydbops](https://github.com/ydb-platform/ydbops) реализует различные манипуляции с кластерами {{ ydb-short-name }}, включая перезапуск. Описанный выше playbook `ydb_platform.ydb.restart` использует его за сценой, но использование его вручную тоже допустимо.
 
-Больше рекомендаций и информации о том, как это работает, находится в статье [{#T}](../../maintenance/maintenance-without-downtime.md).
+Больше рекомендаций и информации о том, как это работает, находится в статье [{#T}](../../concepts/maintenance-without-downtime.md).

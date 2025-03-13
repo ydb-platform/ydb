@@ -8,7 +8,7 @@
 
 ### Требования {#requirements}
 
-Ознакомьтесь с [системными требованиями](../../../devops/system-requirements.md) и [топологией кластера](../../../concepts/topology.md).
+Ознакомьтесь с [системными требованиями](../../../devops/concepts/system-requirements.md) и [топологией кластера](../../../concepts/topology.md).
 
 У вас должен быть SSH доступ на все сервера. Это необходимо для установки артефактов и запуска исполняемого файла {{ ydb-short-name }}.
 
@@ -36,7 +36,7 @@
 
 {% endnote %}
 
-Подробнее требования к оборудованию описаны в разделе [{#T}](../../../devops/system-requirements.md).
+Подробнее требования к оборудованию описаны в разделе [{#T}](../../../devops/concepts/system-requirements.md).
 
 ### Подготовка ключей и сертификатов TLS {#tls-certificates}
 
@@ -84,12 +84,6 @@ sudo usermod -aG disk ydb
     ```bash
     mkdir ydbd-stable-linux-amd64
     curl -L {{ ydb-binaries-url }}/{{ ydb-stable-binary-archive }} | tar -xz --strip-component=1 -C ydbd-stable-linux-amd64
-    ```
-
-1. Создайте директории для размещения программного обеспечения {{ ydb-short-name }}:
-
-    ```bash
-    sudo mkdir -p /opt/ydb /opt/ydb/cfg
     ```
 
 1. Скопируйте исполняемый файл и библиотеки в соответствующие директории:
@@ -230,7 +224,7 @@ grpc_config:
   - legacy
 ```
 
-Сохраните конфигурационный файл {{ ydb-short-name }} под именем `/opt/ydb/cfg/config.yaml` на каждом сервере кластера.
+Сохраните конфигурационный файл {{ ydb-short-name }} под именем `/tmp/config.yaml` на каждом сервере кластера.
 
 Более подробная информация по созданию файла конфигурации приведена в разделе [{#T}](../../../reference/configuration/index.md).
 
@@ -248,6 +242,18 @@ sudo chown -R ydb:ydb /opt/ydb/certs
 sudo chmod 700 /opt/ydb/certs
 ```
 
+## Подготовьте конфигурацию на статических узлах кластера
+
+Создайте на каждой машине пустую директорию `opt/ydb/cfg` для работы кластера с конфигурацией. Если на одной машине запускается несколько узлов, используйте одну и ту же директорию. Выполнив специальную команду на каждой машине, инициализируйте эту директорию файлом конфигурации.
+
+```bash
+sudo mkdir -p /opt/ydb/cfg
+sudo chown -R ydb:ydb /opt/ydb/cfg
+ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.yaml
+```
+
+Исходный файл `/tmp/config.yaml` после выполнения этой команды больше не используется, его можно удалить.
+
 ## Запустите статические узлы {#start-storage}
 
 {% list tabs group=manual-systemd %}
@@ -260,7 +266,7 @@ sudo chmod 700 /opt/ydb/certs
   sudo su - ydb
   cd /opt/ydb
   export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config  /opt/ydb/cfg/config.yaml \
+  /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --config-dir /opt/ydb/cfg \
       --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --mon-cert /opt/ydb/certs/web.pem --node static
   ```
 
@@ -288,7 +294,7 @@ sudo chmod 700 /opt/ydb/certs
   SyslogLevel=err
   Environment=LD_LIBRARY_PATH=/opt/ydb/lib
   ExecStart=/opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp \
-      --yaml-config  /opt/ydb/cfg/config.yaml \
+      --config-dir /opt/ydb/cfg \
       --grpcs-port 2135 --ic-port 19001 --mon-port 8765 \
       --mon-cert /opt/ydb/certs/web.pem --node static
   LimitNOFILE=65536
@@ -400,6 +406,16 @@ sudo chmod 700 /opt/ydb/certs
 * `testdb` - имя создаваемой базы данных;
 * `ssd:1` - имя пула хранения и количество выделяемых групп хранения. Имя пула обычно означает тип устройств хранения данных и должно соответствовать настройке `storage_pool_types`.`kind` внутри элемента `domains_config`.`domain` файла конфигурации.
 
+Создайте на каждом динамическом узле директорию `/opt/ydb/cfg` для работы кластера с конфигурацией. В случае поднятия нескольких узлов на одной машине, используйте одну и ту же директорию. Выполнив специальную команду на каждой машине, инициализируйте эту директорию с использованием произвольного статического узла кластера в качестве источника конфигурации.
+
+```bash
+sudo mkdir -p /opt/ydb/cfg
+sudo chown -R ydb:ydb /opt/ydb/cfg
+ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:2135>
+```
+
+В примере команды выше `<node.ydb.tech>` - FQDN статического узла кластера, с которого будет загружен файл конфигурации.
+
 ## Запустите динамические узлы {#start-dynnode}
 
 {% list tabs group=manual-systemd %}
@@ -415,7 +431,8 @@ sudo chmod 700 /opt/ydb/certs
   /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
-      --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb \
+      --config-dir /opt/ydb/cfg \
+      --tenant /Root/testdb \
       --node-broker grpcs://<ydb1>:2135 \
       --node-broker grpcs://<ydb2>:2135 \
       --node-broker grpcs://<ydb3>:2135
@@ -450,7 +467,8 @@ sudo chmod 700 /opt/ydb/certs
       --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
-      --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb \
+      --config-dir /opt/ydb/cfg \
+      --tenant /Root/testdb \
       --node-broker grpcs://<ydb1>:2135 \
       --node-broker grpcs://<ydb2>:2135 \
       --node-broker grpcs://<ydb3>:2135
@@ -577,7 +595,7 @@ sudo chmod 700 /opt/ydb/certs
 
     ```bash
     export LD_LIBRARY_PATH=/opt/ydb/lib
-    ydb admin blobstorage bootstrap --uuid <строка> 
+    ydb admin blobstorage bootstrap --uuid <строка>
     echo $?
     ```
 

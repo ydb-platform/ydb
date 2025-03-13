@@ -473,38 +473,48 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvDirectReadAc
         << ", directReadId# " << ev->Get()->DirectReadId
         << ", bytesInflight# " << BytesInflight_);
 
-    auto drIt = it->second.DirectReads.find(ev->Get()->DirectReadId);
-
-    if (drIt == it->second.DirectReads.end()) {
-        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
-            << "unknown direct read in in Ack: " << ev->Get()->DirectReadId, ctx);
-
-    }
-
     if (it->second.MaxProcessedDirectReadId + 1 != (ui64)ev->Get()->DirectReadId) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
             << "direct reads must be confirmed in strict order - expecting " << (it->second.MaxProcessedDirectReadId + 1)
             << " but got " << ev->Get()->DirectReadId, ctx);
     }
 
-    if (it->second.LastDirectReadId < (ui64)ev->Get()->DirectReadId) {
-        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder() << "got direct read id that is not existing yet " <<
-             ev->Get()->DirectReadId, ctx);
+    if (it->second.LastDirectReadId + MAX_PENDING_DIRECT_READ_ACKS < (ui64)ev->Get()->DirectReadId) {
+        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST,
+            TStringBuilder() << "too many direct read ids sent that are not existing yet " << ev->Get()->DirectReadId, ctx);
     }
-
 
     it->second.MaxProcessedDirectReadId = ev->Get()->DirectReadId;
 
+    auto drIt = it->second.DirectReads.find(ev->Get()->DirectReadId);
+
+    if (drIt == it->second.DirectReads.end()) {
+        it->second.PendingDirectReadAcks.push(ev->Get()->DirectReadId);
+        return;
+    }
+
+    ProcessDirectRead(it, drIt, ctx);
+}
+
+template <bool UseMigrationProtocol>
+void TReadSessionActor<UseMigrationProtocol>::ProcessDirectRead(
+    TPartitionsMap::iterator it,
+    decltype(TPartitionActorInfo::DirectReads)::iterator drIt,
+    const TActorContext& ctx
+) {
     BytesInflight_ -= drIt->second.ByteSize;
     if (BytesInflight) {
         (*BytesInflight) -= drIt->second.ByteSize;
     }
+
+    auto assignId = it->first;
+    auto directReadId = drIt->first;
+
     it->second.DirectReads.erase(drIt);
 
     ProcessReads(ctx);
-    ctx.Send(it->second.Actor, new TEvPQProxy::TEvDirectReadAck(ev->Get()->AssignId, ev->Get()->DirectReadId));
+    ctx.Send(it->second.Actor, new TEvPQProxy::TEvDirectReadAck(assignId, directReadId));
 }
-
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvStartRead::TPtr& ev, const TActorContext& ctx) {
@@ -1996,10 +2006,21 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessAnswer(typename TFormedRead
             return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
                 << "unknown partition_session_id " << formedResponse->AssignId << " #07", ctx);
         }
-        it->second.DirectReads[formedResponse->DirectReadId] = {formedResponse->DirectReadId, sizeEstimation};
+        auto drIt = it->second.DirectReads.emplace(
+            std::piecewise_construct,
+            std::forward_as_tuple(formedResponse->DirectReadId),
+            std::forward_as_tuple(formedResponse->DirectReadId, sizeEstimation)
+        ).first;
         it->second.LastDirectReadId = formedResponse->DirectReadId;
 
         Y_ABORT_UNLESS(diff == 0); // diff is zero; sizeEstimation already counted in inflight;
+
+        if (!it->second.PendingDirectReadAcks.empty()) {
+            LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " processing pending direct read ack" << ": guid# " << formedResponse->Guid);
+            Y_ABORT_UNLESS(it->second.PendingDirectReadAcks.front() == formedResponse->DirectReadId);
+            ProcessDirectRead(it, drIt, ctx);
+            it->second.PendingDirectReadAcks.pop();
+        }
     } else if (formedResponse->HasMessages) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " response to read"
             << ": guid# " << formedResponse->Guid);

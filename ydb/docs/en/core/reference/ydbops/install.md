@@ -24,6 +24,7 @@ We are using official docker image for Golang v1.22. It gurantiees successful bu
 
 
 #### Compiling
+
 Invoke `go build` in the repository root folder:
 
 ```bash
@@ -48,6 +49,7 @@ make install INSTALL_DIR=install_folder BUILD_DIR=.
 - [Install docker engine](https://docs.docker.com/engine/install/)
 
 #### Compiling
+
 Invoke this command in the repository root folder:
 
 ```bash

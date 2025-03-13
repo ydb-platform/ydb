@@ -23,6 +23,7 @@
 [Установите Go](https://go.dev/doc/install). Рекомендуемая версия Go — 1.22.
 
 #### Компиляция
+
 Вызовите `go build` в корневой папке репозитория:
 
 ```bash
@@ -42,10 +43,12 @@ make install INSTALL_DIR=install_folder BUILD_DIR=.
 ### Сборка внутри docker-контейнера {#docker}
 
 #### Требования
+
 - make
 - [Установка docker engine](https://docs.docker.com/engine/install/)
 
 #### Компиляция
+
 Выполните в папке репозитория команду:
 
 ```bash
@@ -61,6 +64,7 @@ make build-in-docker
 | ydbops_darwin_arm64 | MacOS(arm64) |
 
 #### Установка
+
 Установка исполняемого файла. Выполните команду `make`.
 
 Дополнительные параметры:

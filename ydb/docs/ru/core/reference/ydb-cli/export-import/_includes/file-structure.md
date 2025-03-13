@@ -30,7 +30,7 @@
 
 Базе данных соответствует директория в файловой структуре, в которой находятся:
 
-- Директории, содержащие информацию о схемных объектах базы данных, наприммер, о [таблицах](#tables)
+- Директории, содержащие информацию о схемных объектах базы данных, например, о [таблицах](#tables)
 - Файл `database.pb`, содержащий информацию о настройках базы данных в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 - Файл `permissions.pb`, содержащий информацию об ACL базы данных и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 - Файл `create_user.sql`, содержащий информацию о пользователях базы данных в формате YQL

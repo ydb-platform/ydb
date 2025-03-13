@@ -116,7 +116,7 @@ public:
             return PageCollection->Page(pageId).Size;
         }
 
-        TPage* EnsurePage(TPageId pageId) noexcept {
+        TPage* EnsurePage(TPageId pageId) {
             auto* page = GetPage(pageId);
             if (!page) {
                 PageMap.emplace(pageId, THolder<TPage>(page = new TPage(PageCollection->Page(pageId).Size, pageId, this)));
@@ -125,14 +125,14 @@ public:
         }
 
         // Note: this method is only called during a page collection creation
-        void Fill(TPageId pageId, TSharedPageRef sharedBody, bool sticky) noexcept {
+        void Fill(TPageId pageId, TSharedPageRef sharedBody, bool sticky) {
             if (sticky) {
                 AddSticky(pageId, sharedBody);
             }
             EnsurePage(pageId)->ProvideSharedBody(std::move(sharedBody));
         }
 
-        void AddSticky(TPageId pageId, TSharedPageRef page) noexcept {
+        void AddSticky(TPageId pageId, TSharedPageRef page) {
             Y_ABORT_UNLESS(page.IsUsed());
             if (StickyPages.emplace(pageId, page).second) {
                 StickyPagesSize += TPinnedPageRef(page)->size();

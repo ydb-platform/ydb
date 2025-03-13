@@ -18,7 +18,7 @@ using TCheckIter = TChecker<TWrapIter, TSubset>;
 using TCheckReverseIter = TChecker<TWrapReverseIter, TSubset>;
 
 namespace {
-    NPage::TConf PageConf(size_t groups) noexcept
+    NPage::TConf PageConf(size_t groups)
     {
         NPage::TConf conf{ false, 2 * 1024 };
 

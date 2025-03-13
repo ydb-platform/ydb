@@ -230,14 +230,14 @@ public:
     {
     }
 
-    void Describe(IOutputStream& o) const noexcept override {
+    void Describe(IOutputStream& o) const override {
         o << "CondEraseScan {"
           << " TableId: " << TableId
           << " TxId: " << TxId
         << " }";
     }
 
-    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
+    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) override {
         TlsActivationContext->AsActorContext().RegisterWithSameMailbox(this);
 
         Driver = driver;
@@ -273,12 +273,12 @@ public:
         sys->Send(DataShard.ActorId, new TDataShard::TEvPrivate::TEvConditionalEraseRowsRegistered(TxId, SelfId()));
     }
 
-    EScan Seek(TLead& lead, ui64) noexcept override {
+    EScan Seek(TLead& lead, ui64) override {
         lead.To(ScanTags, {}, ESeek::Lower);
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell>, const TRow& row) noexcept override {
+    EScan Feed(TArrayRef<const TCell>, const TRow& row) override {
         Stats.IncProcessed();
         if (!Condition->Check(row)) {
             return EScan::Feed;
@@ -294,7 +294,7 @@ public:
         return EScan::Sleep;
     }
 
-    EScan Exhausted() noexcept override {
+    EScan Exhausted() override {
         NoMoreData = true;
 
         if (!SerializedKeys) {
@@ -305,7 +305,7 @@ public:
         return EScan::Sleep;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
+    TAutoPtr<IDestructable> Finish(EAbort abort) override {
         Reply(abort != EAbort::None);
         PassAway();
 

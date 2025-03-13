@@ -260,7 +260,7 @@ public:
     {}
     ~TDummyScan() {}
 
-    void Describe(IOutputStream &out) const noexcept override
+    void Describe(IOutputStream &out) const override
     {
         out << "DummyScan";
     }
@@ -279,7 +279,7 @@ public:
     }
 
 private:
-    TInitialState Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override
+    TInitialState Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) override
     {
         Driver = driver;
         Scheme = std::move(scheme);
@@ -295,7 +295,7 @@ private:
         }
     }
 
-    EScan Seek(TLead &lead, ui64 seq) noexcept override
+    EScan Seek(TLead &lead, ui64 seq) override
     {
         if (seq && Abort == EAbort::None)
             return EScan::Final;
@@ -307,7 +307,7 @@ private:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow &) noexcept override
+    EScan Feed(TArrayRef<const TCell> key, const TRow &) override
     {
         Y_ABORT_UNLESS(key[0].AsValue<ui64>() == ExpectedRowId);
         ++ExpectedRowId;
@@ -315,12 +315,12 @@ private:
         return EScan::Feed;
     }
 
-    EScan PageFault() noexcept override {
+    EScan PageFault() override {
         PageFaults++;
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override
+    TAutoPtr<IDestructable> Finish(EAbort abort) override
     {
         Y_ABORT_UNLESS((int)Abort == (int)abort);
 
@@ -855,7 +855,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_BackgroundCompactions) {
             SendEv(MakeResourceBrokerID(), event.Release());
         }
 
-        static TCompactionPolicy* MakeCompactionPolicy() noexcept
+        static TCompactionPolicy* MakeCompactionPolicy()
         {
             auto *policy = new TCompactionPolicy();
             policy->InMemSizeToSnapshot = 40 * 1024 *1024;
@@ -1023,7 +1023,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
             SendSync(new TEvents::TEvPoison, false, true);
         }
 
-        static TCompactionPolicy* MakeCompactionPolicy() noexcept
+        static TCompactionPolicy* MakeCompactionPolicy()
         {
             auto *policy = new TCompactionPolicy();
             policy->InMemSizeToSnapshot = 40 * 1024 *1024;
@@ -1416,7 +1416,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_ResourceProfile) {
             SendSync(new TEvents::TEvPoison, false, true);
         }
 
-        static TCompactionPolicy* MakeCompactionPolicy() noexcept
+        static TCompactionPolicy* MakeCompactionPolicy()
         {
             auto *policy = new TCompactionPolicy();
             policy->InMemSizeToSnapshot = 40 * 1024 *1024;
@@ -3600,23 +3600,23 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
     struct TEmptyScan : public NTable::IScan {
         TEmptyScan() = default;
 
-        void Describe(IOutputStream& out) const noexcept override {
+        void Describe(IOutputStream& out) const override {
             out << "TEmptyScan{}";
         }
 
-        TInitialState Prepare(NTable::IDriver*, TIntrusiveConstPtr<TScheme>) noexcept override {
+        TInitialState Prepare(NTable::IDriver*, TIntrusiveConstPtr<TScheme>) override {
             return {EScan::Final, {}};
         }
 
-        EScan Seek(TLead&, ui64) noexcept override {
+        EScan Seek(TLead&, ui64) override {
             Y_ABORT("unreachable");
         }
 
-        EScan Feed(TArrayRef<const TCell>, const TRow&) noexcept override {
+        EScan Feed(TArrayRef<const TCell>, const TRow&) override {
             Y_ABORT("unreachable");
         }
 
-        TAutoPtr<IDestructable> Finish(EAbort) noexcept override {
+        TAutoPtr<IDestructable> Finish(EAbort) override {
             delete this;
             return nullptr;
         }
@@ -7050,7 +7050,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Reboot) {
         IActor *tabletActor = nullptr; // save tablet to get its actor id and avoid using tablet resolver which has outdated info
         while (true) {
             struct TReassignedStarter : NFake::TStarter {
-                NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channelsCount) noexcept override {
+                NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channelsCount) override {
                     auto *info = TStarter::MakeTabletInfo(tablet, channelsCount);
                     info->Channels[1].History.emplace_back(3, 3);
                     return info;

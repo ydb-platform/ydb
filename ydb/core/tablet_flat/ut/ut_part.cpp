@@ -16,7 +16,7 @@ namespace NTable {
 namespace {
     using namespace NTest;
 
-    NPage::TConf PageConf(size_t groups = 1) noexcept
+    NPage::TConf PageConf(size_t groups = 1)
     {
         NPage::TConf conf{ true, 2 * 1024 };
 

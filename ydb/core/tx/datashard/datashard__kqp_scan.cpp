@@ -183,7 +183,7 @@ private:
     }
 
 private:
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept final {
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) final {
         Y_ABORT_UNLESS(scheme);
         Y_ABORT_UNLESS(driver);
 
@@ -216,7 +216,7 @@ private:
         return startConfig;
     }
 
-    EScan Seek(TLead& lead, ui64 seq) noexcept final {
+    EScan Seek(TLead& lead, ui64 seq) final {
         YQL_ENSURE(seq == CurrentRange);
 
         if (CurrentRange == TableRanges.size()) {
@@ -259,7 +259,7 @@ private:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
         LastKey = TOwnedCellVec(key);
 
         Y_ABORT_UNLESS(SkipNullKeys.size() <= key.size());
@@ -298,7 +298,7 @@ private:
         return EScan::Feed; // sent by rows limit, can send one more batch
     }
 
-    EScan Exhausted() noexcept override {
+    EScan Exhausted() override {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
             "Range " << CurrentRange << " of " << TableRanges.size() << " exhausted: try next one."
             << " table: " << TablePath
@@ -314,7 +314,7 @@ private:
         return EScan::Reset;
     }
 
-    EScan PageFault() noexcept override final {
+    EScan PageFault() override final {
         ++PageFaults;
         if (Result && !Result->Rows.empty()) {
             bool sent = SendResult(/* pageFault */ true);
@@ -332,7 +332,7 @@ private:
     }
 
 private:
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
+    TAutoPtr<IDestructable> Finish(EAbort abort) final {
         auto prio = abort == EAbort::None ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR;
         LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_DATASHARD, "Finish scan"
             << ", at: " << ScanActorId << ", scanId: " << ScanId
@@ -378,7 +378,7 @@ private:
         return new TKqpScanResult();
     }
 
-    void Describe(IOutputStream& out) const noexcept final {
+    void Describe(IOutputStream& out) const final {
         out << "TExecuteKqpScanTxUnit, TKqpScan";
     }
 
@@ -422,7 +422,7 @@ private:
         }
     }
 
-    bool SendResult(bool pageFault, bool finish = false) noexcept {
+    bool SendResult(bool pageFault, bool finish = false) {
         if (Rows >= MAX_BATCH_ROWS || CellvecBytes >= ChunksLimiter.GetRemainedBytes() ||
             (pageFault && (Rows >= MIN_BATCH_ROWS_ON_PAGEFAULT || CellvecBytes >= MIN_BATCH_SIZE_ON_PAGEFAULT)) || finish)
         {

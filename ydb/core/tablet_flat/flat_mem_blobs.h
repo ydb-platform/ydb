@@ -45,19 +45,19 @@ namespace NMem {
             return Store[index];
         }
 
-        const NPageCollection::TMemGlob& Get(ui64 ref) const noexcept
+        const NPageCollection::TMemGlob& Get(ui64 ref) const
         {
             Y_ABORT_UNLESS(ref >= Head && ref < Tail(), "ELargeObj ref is out of cache");
 
             return Store[ref - Head];
         }
 
-        ui64 Push(const NPageCollection::TMemGlob &glob) noexcept
+        ui64 Push(const NPageCollection::TMemGlob &glob)
         {
             return Push(glob.GId, glob.Data);
         }
 
-        ui64 Push(const NPageCollection::TGlobId& glob, TSharedData data) noexcept
+        ui64 Push(const NPageCollection::TGlobId& glob, TSharedData data)
         {
             Y_ABORT_UNLESS(glob.Logo.BlobSize(), "Blob cannot have zero bytes");
 
@@ -69,7 +69,7 @@ namespace NMem {
             return ref;
         }
 
-        void Assign(TArrayRef<NPageCollection::TLoadedPage> pages) noexcept
+        void Assign(TArrayRef<NPageCollection::TLoadedPage> pages)
         {
             for (auto &one : pages) {
                 Y_ABORT_UNLESS(one.PageId < Store.size());
@@ -78,7 +78,7 @@ namespace NMem {
             }
         }
 
-        void Commit(size_t count, TArrayRef<const NPageCollection::TMemGlob> pages) noexcept
+        void Commit(size_t count, TArrayRef<const NPageCollection::TMemGlob> pages)
         {
             if (count > 0) {
                 size_t currentSize = Store.size();
@@ -93,7 +93,7 @@ namespace NMem {
             }
         }
 
-        void Rollback(size_t count) noexcept
+        void Rollback(size_t count)
         {
             if (count > 0) {
                 size_t currentSize = Store.size();

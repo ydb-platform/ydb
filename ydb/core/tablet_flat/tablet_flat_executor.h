@@ -59,7 +59,7 @@ public:
         AtomicStore(&Dropped, true);
     }
 
-    void Describe(IOutputStream &out) const noexcept
+    void Describe(IOutputStream &out) const
     {
         out << "Res{";
 
@@ -104,9 +104,9 @@ struct IExecuting {
     virtual void LoanTable(ui32 tableId, const TString &partsInfo) = 0; // attach table parts to table (called on part destination)
     virtual void CleanupLoan(const TLogoBlobID &bundleId, ui64 from) = 0; // mark loan completion (called on part source)
     virtual void ConfirmLoan(const TLogoBlobID &bundleId, const TLogoBlobID &borrowId) = 0; // confirm loan update delivery (called on part destination)
-    virtual void EnableReadMissingReferences() noexcept = 0;
-    virtual void DisableReadMissingReferences() noexcept = 0;
-    virtual ui64 MissingReferencesSize() const noexcept = 0;
+    virtual void EnableReadMissingReferences() = 0;
+    virtual void DisableReadMissingReferences() = 0;
+    virtual ui64 MissingReferencesSize() const = 0;
 };
 
 class TTxMemoryProviderBase : TNonCopyable {
@@ -232,11 +232,11 @@ public:
         return Rescheduled_;
     }
 
-    void StartExecutionSpan() noexcept {
+    void StartExecutionSpan() {
         TransactionExecutionSpan = NWilson::TSpan(TWilsonTablet::TabletDetailed, TransactionSpan.GetTraceId(), "Tablet.Transaction.Execute");
     }
 
-    void FinishExecutionSpan() noexcept {
+    void FinishExecutionSpan() {
         TransactionExecutionSpan.EndOk();
     }
 
@@ -306,18 +306,18 @@ public:
     virtual void ReleaseTxData(TTxMemoryProvider &/*provider*/, const TActorContext &/*ctx*/) {}
     virtual TTxType GetTxType() const { return UnknownTxType; }
 
-    virtual void Describe(IOutputStream &out) const noexcept
+    virtual void Describe(IOutputStream &out) const
     {
         out << TypeName(*this);
     }
 
-    void SetupTxSpanName() noexcept {
+    void SetupTxSpanName() {
         if (TxSpan) {
             TxSpan.Attribute("Type", TypeName(*this));
         }
     }
 
-    void SetupTxSpan(NWilson::TTraceId traceId) noexcept {
+    void SetupTxSpan(NWilson::TTraceId traceId) {
         TxSpan = NWilson::TSpan(TWilsonTablet::TabletBasic, std::move(traceId), "Tablet.Transaction");
         if (TxSpan) {
             TxSpan.Attribute("Type", TypeName(*this));
@@ -649,7 +649,7 @@ namespace NFlatExecutorSetup {
         virtual float GetRejectProbability() const = 0;
 
         // Returns current database scheme (executor must be active)
-        virtual const NTable::TScheme& Scheme() const noexcept = 0;
+        virtual const NTable::TScheme& Scheme() const = 0;
 
         virtual void SetPreloadTablesData(THashSet<ui32> tables) = 0;
 

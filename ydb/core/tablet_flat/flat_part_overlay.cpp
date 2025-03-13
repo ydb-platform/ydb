@@ -42,7 +42,7 @@ namespace {
     }
 }
 
-TString TOverlay::Encode() const noexcept
+TString TOverlay::Encode() const
 {
     if (!Screen && !Slices) {
         return { };
@@ -76,7 +76,7 @@ TString TOverlay::Encode() const noexcept
     return encoded;
 }
 
-TOverlay TOverlay::Decode(TArrayRef<const char> opaque, TArrayRef<const char> opaqueExt) noexcept
+TOverlay TOverlay::Decode(TArrayRef<const char> opaque, TArrayRef<const char> opaqueExt)
 {
     TOverlay overlay;
 
@@ -123,7 +123,7 @@ TOverlay TOverlay::Decode(TArrayRef<const char> opaque, TArrayRef<const char> op
     return overlay;
 }
 
-void TOverlay::Validate() const noexcept
+void TOverlay::Validate() const
 {
     if (Screen) {
         Screen->Validate();
@@ -171,7 +171,7 @@ void TOverlay::Validate() const noexcept
     }
 }
 
-void TOverlay::ApplyDelta(TArrayRef<const char> rawDelta) noexcept
+void TOverlay::ApplyDelta(TArrayRef<const char> rawDelta)
 {
     NProto::TOverlayDelta plain;
 
@@ -199,7 +199,7 @@ void TOverlay::ApplyDelta(TArrayRef<const char> rawDelta) noexcept
     }
 }
 
-TString TOverlay::EncodeRemoveSlices(const TIntrusiveConstPtr<TSlices>& slices) noexcept
+TString TOverlay::EncodeRemoveSlices(const TIntrusiveConstPtr<TSlices>& slices)
 {
     NProto::TOverlayDelta plain;
 
@@ -212,7 +212,7 @@ TString TOverlay::EncodeRemoveSlices(const TIntrusiveConstPtr<TSlices>& slices) 
     return encoded;
 }
 
-TString TOverlay::EncodeChangeSlices(TConstArrayRef<TSlice> slices) noexcept
+TString TOverlay::EncodeChangeSlices(TConstArrayRef<TSlice> slices)
 {
     NProto::TOverlayDelta plain;
 
@@ -225,7 +225,7 @@ TString TOverlay::EncodeChangeSlices(TConstArrayRef<TSlice> slices) noexcept
     return encoded;
 }
 
-TString TOverlay::MaybeUnsplitSlices(const TString& opaque, size_t maxSize) noexcept
+TString TOverlay::MaybeUnsplitSlices(const TString& opaque, size_t maxSize)
 {
     if (opaque.size() <= maxSize) {
         return { };

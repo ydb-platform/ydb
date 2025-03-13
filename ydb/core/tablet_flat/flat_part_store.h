@@ -54,12 +54,12 @@ public:
 
     }
 
-    const TLogoBlobID& BundleId() const override
+    const TLogoBlobID& BundleId() const noexcept override
     {
         return PageCollections[0]->PageCollection->Label();
     }
 
-    ui64 BackingSize() const override
+    ui64 BackingSize() const noexcept override
     {
         ui64 size = 0;
         for (const auto &cache : PageCollections) {
@@ -68,7 +68,7 @@ public:
         return size;
     }
 
-    ui64 DataSize() const override
+    ui64 DataSize() const noexcept override
     {
         return BackingSize() - IndexesRawSize;
     }
@@ -125,7 +125,7 @@ public:
         return dynamic_cast<const NPageCollection::TPageCollection*>(pageCollection);
     }
 
-    TCache* Locate(ELargeObj lob, ui64 ref) const noexcept
+    TCache* Locate(ELargeObj lob, ui64 ref) const
     {
         if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) {
             Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
@@ -134,7 +134,7 @@ public:
         return (lob == ELargeObj::Extern ? Pseudo : PageCollections.at(GroupsCount)).Get();
     }
 
-    TAutoPtr<NPageCollection::TFetch> GetPages(ui32 room) const noexcept
+    TAutoPtr<NPageCollection::TFetch> GetPages(ui32 room) const
     {
         Y_ABORT_UNLESS(room < PageCollections.size());
 
@@ -148,7 +148,7 @@ public:
         return new NPageCollection::TFetch{ 0, PageCollections[room]->PageCollection, std::move(pages) };
     }
 
-    static TVector<TIntrusivePtr<TCache>> Construct(TVector<TPageCollectionComponents> components) noexcept
+    static TVector<TIntrusivePtr<TCache>> Construct(TVector<TPageCollectionComponents> components)
     {
         TVector<TIntrusivePtr<TCache>> caches;
 
@@ -159,7 +159,7 @@ public:
         return caches;
     }
 
-    static TArrayRef<const TIntrusivePtr<TCache>> Storages(const TPartView &partView) noexcept
+    static TArrayRef<const TIntrusivePtr<TCache>> Storages(const TPartView &partView)
     {
         auto *part = partView.As<TPartStore>();
 
@@ -179,15 +179,15 @@ public:
         , DataId(dataId)
     { }
 
-    const NPageCollection::TLargeGlobId& GetDataId() const {
+    const NPageCollection::TLargeGlobId& GetDataId() const noexcept {
         return DataId;
     }
 
-    const TLogoBlobID& BundleId() const override {
+    const TLogoBlobID& BundleId() const noexcept override {
         return DataId.Lead;
     }
 
-    ui64 BackingSize() const override {
+    ui64 BackingSize() const noexcept override {
         return DataId.Bytes;
     }
 

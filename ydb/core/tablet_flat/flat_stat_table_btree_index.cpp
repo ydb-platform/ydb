@@ -93,7 +93,7 @@ ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, 
     return prevDataSize;
 }
 
-void AddBlobsSize(const TPart* part, TChanneledDataSize& stats, const TFrames* frames, ELargeObj lob, TRowId beginRowId, TRowId endRowId) noexcept {
+void AddBlobsSize(const TPart* part, TChanneledDataSize& stats, const TFrames* frames, ELargeObj lob, TRowId beginRowId, TRowId endRowId) {
     ui32 page = frames->Lower(beginRowId, 0, Max<ui32>());
 
     while (auto &rel = frames->Relation(page)) {

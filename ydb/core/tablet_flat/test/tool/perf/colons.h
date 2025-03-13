@@ -16,8 +16,8 @@ namespace NKikiSched {
             return At != TString::npos && At < Line.size();
         }
 
-        TString Next() noexcept;
-        TString Token(const TString &def) noexcept;
+        TString Next();
+        TString Token(const TString &def);
 
         template<typename TVal>
         TVal Pop(const TVal &def)

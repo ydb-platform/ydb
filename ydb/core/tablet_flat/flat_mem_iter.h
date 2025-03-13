@@ -44,7 +44,7 @@ namespace NTable {
                 TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults,
                 const TRemap *remap,
                 IPages *env,
-                EDirection direction = EDirection::Forward) noexcept
+                EDirection direction = EDirection::Forward)
         {
             auto *iter = new TMemIter(&memTable, std::move(keyDefaults), remap, env, snapshot.Iterator());
 
@@ -60,7 +60,7 @@ namespace NTable {
             return iter;
         }
 
-        void Seek(TCells key, ESeek seek) noexcept
+        void Seek(TCells key, ESeek seek)
         {
             Key.clear();
             CurrentVersion = nullptr;
@@ -92,7 +92,7 @@ namespace NTable {
             }
         }
 
-        void SeekReverse(TCells key, ESeek seek) noexcept
+        void SeekReverse(TCells key, ESeek seek)
         {
             Key.clear();
             CurrentVersion = nullptr;
@@ -141,7 +141,7 @@ namespace NTable {
             return { KeyCellDefaults->BasicTypes().begin(), Key.begin(), ui32(Key.size()) };
         }
 
-        bool IsDelta() const noexcept
+        bool IsDelta() const
         {
             auto* update = GetCurrentVersion();
             Y_ABORT_UNLESS(update);
@@ -149,7 +149,7 @@ namespace NTable {
             return update->RowVersion.Step == Max<ui64>();
         }
 
-        ui64 GetDeltaTxId() const noexcept
+        ui64 GetDeltaTxId() const
         {
             auto* update = GetCurrentVersion();
             Y_ABORT_UNLESS(update);
@@ -158,7 +158,7 @@ namespace NTable {
             return update->RowVersion.TxId;
         }
 
-        void ApplyDelta(TRowState& row) const noexcept
+        void ApplyDelta(TRowState& row) const
         {
             Y_ABORT_UNLESS(row.Size() == Remap->Size(), "row state doesn't match the remap index");
 
@@ -173,7 +173,7 @@ namespace NTable {
             }
         }
 
-        bool SkipDelta() noexcept
+        bool SkipDelta()
         {
             auto* update = GetCurrentVersion();
             Y_ABORT_UNLESS(update);
@@ -185,7 +185,7 @@ namespace NTable {
 
         void Apply(TRowState& row,
                    NTable::ITransactionMapSimplePtr committedTransactions,
-                   NTable::ITransactionObserverSimplePtr transactionObserver) const noexcept
+                   NTable::ITransactionObserverSimplePtr transactionObserver) const
         {
             Y_ABORT_UNLESS(row.Size() == Remap->Size(), "row state doesn't match the remap index");
 
@@ -224,7 +224,7 @@ namespace NTable {
         /**
          * Returns row version at which current row state materialized
          */
-        TRowVersion GetRowVersion() const noexcept
+        TRowVersion GetRowVersion() const
         {
             auto* update = GetCurrentVersion();
             Y_ABORT_UNLESS(update);
@@ -241,7 +241,7 @@ namespace NTable {
         bool SkipToRowVersion(TRowVersion rowVersion, TIteratorStats& stats,
                               NTable::ITransactionMapSimplePtr committedTransactions,
                               NTable::ITransactionObserverSimplePtr transactionObserver,
-                              const NTable::ITransactionSet& decidedTransactions) noexcept
+                              const NTable::ITransactionSet& decidedTransactions)
         {
             // Temporary: we don't cache erases when there are uncompacted deltas
             Y_UNUSED(decidedTransactions);
@@ -329,7 +329,7 @@ namespace NTable {
          */
         std::optional<TRowVersion> SkipToCommitted(
                 NTable::ITransactionMapSimplePtr committedTransactions,
-                NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
+                NTable::ITransactionObserverSimplePtr transactionObserver)
         {
             Y_DEBUG_ABORT_UNLESS(IsValid(), "Attempt to access an invalid row");
 
@@ -379,7 +379,7 @@ namespace NTable {
         }
 
     private:
-        void ApplyColumn(TRowState& row, const NMem::TColumnUpdate &up) const noexcept
+        void ApplyColumn(TRowState& row, const NMem::TColumnUpdate &up) const
         {
             const auto pos = Remap->Has(up.Tag);
             auto op = up.Op;
@@ -407,7 +407,7 @@ namespace NTable {
             }
         }
 
-        const NMem::TUpdate* GetCurrentVersion() const noexcept
+        const NMem::TUpdate* GetCurrentVersion() const
         {
             Y_DEBUG_ABORT_UNLESS(IsValid(), "Attempt to access an invalid row");
 

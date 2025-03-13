@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/formats/arrow/program/graph_execute.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -119,6 +120,18 @@ NKikimr::NColumnShard::TScanAggregations TScanCounters::BuildAggregations() {
 
 void TScanCounters::FillStats(::NKikimrTableStats::TTableStats& output) const {
     output.SetRangeReads(ScansFinishedByStatus[(ui32)EStatusFinish::Success]->Val());
+}
+
+TConcreteScanCounters::TConcreteScanCounters(
+    const TScanCounters& counters, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program)
+    : TBase(counters)
+    , Aggregations(TBase::BuildAggregations()) {
+    if (program) {
+        for (auto&& i : program->GetNodes()) {
+            SkipNodesCount.emplace(i.first, std::make_shared<TAtomicCounter>());
+            ExecuteNodesCount.emplace(i.first, std::make_shared<TAtomicCounter>());
+        }
+    }
 }
 
 }   // namespace NKikimr::NColumnShard

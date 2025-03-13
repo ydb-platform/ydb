@@ -112,6 +112,15 @@ private:
         Record.VisitValues(visitor);
     }
 
+    virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override {
+        if (Record.GetNotDefaultRecordsCount()) {
+            return false;
+        } else {
+            value = DefaultValue;
+            return true;
+        }
+    }
+
 protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
 

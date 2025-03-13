@@ -35,7 +35,10 @@ protected:
     }
     virtual ui32 DoGetValueRawBytes() const override;
 
+    virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override;
+
 public:
+
     virtual void Reallocate() override;
 
     virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const override {

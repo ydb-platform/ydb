@@ -115,10 +115,7 @@ private:
 protected:
     std::optional<ui64> UsedRawBytes;
 
-    virtual bool DoStartFetchingIndexes(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) = 0;
     virtual void DoAbort() = 0;
-    virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) = 0;
     virtual NJson::TJsonValue DoDebugJsonForMemory() const {
         return NJson::JSON_MAP;
     }
@@ -212,15 +209,6 @@ public:
     virtual ui64 GetPathId() const = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
-    void ApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) {
-        return DoApplyIndex(indexMeta);
-    }
-
-    bool StartFetchingIndexes(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) {
-        AFL_VERIFY(indexes);
-        return DoStartFetchingIndexes(sourcePtr, step, indexes);
-    }
     void InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching);
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const = 0;
@@ -279,12 +267,21 @@ private:
         UsedRawBytes = StageData->GetPortionAccessor().GetColumnRawBytes(GetContext()->GetAllUsageColumns()->GetColumnIds(), false);
     }
 
-    virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) override;
     virtual bool DoStartFetchingColumns(
         const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
-    virtual bool DoStartFetchingIndexes(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) override;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) override;
+
+    std::shared_ptr<NIndexes::TSkipIndex> SelectOptimalIndex(
+        const std::vector<std::shared_ptr<NIndexes::TSkipIndex>>& indexes, const NArrow::NSSA::EIndexCheckOperation op) const;
+
+    virtual TConclusion<bool> DoStartFetchIndex(const NArrow::NSSA::TProcessorContext& context, const TFetchIndexContext& fetchContext) override;
+    virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const NArrow::NSSA::TProcessorContext& context,
+        const TFetchIndexContext& fetchContext,
+        const std::shared_ptr<arrow::Scalar>& value) override;
+    virtual void DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
+    virtual TConclusion<bool> DoStartFetchData(
+        const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
+
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "portion");
@@ -316,6 +313,10 @@ private:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
 
 public:
+    virtual TString GetEntityStorageId(const ui32 entityId) const override {
+        return Portion->GetEntityStorageId(entityId, Schema->GetIndexInfo());
+    }
+
     virtual TString GetColumnStorageId(const ui32 columnId) const override {
         return Portion->GetColumnStorageId(columnId, Schema->GetIndexInfo());
     }

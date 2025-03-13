@@ -176,7 +176,7 @@ private:
                 i.Finish(nullptr, context.GetSource());
                 compositeBuilder.AddChunk(i.GetPartialArray());
             }
-            context.GetAccessors().AddVerified(GetColumnId(), compositeBuilder.Finish(), true);
+            context.GetAccessors().AddVerified(GetEntityId(), compositeBuilder.Finish(), true);
         } else {
             ui32 pos = 0;
             for (auto&& i : ColumnChunks) {
@@ -231,9 +231,9 @@ private:
 
     virtual void DoStart(TReadActionsCollection& nextRead, TFetchingResultContext& context) override {
         auto source = context.GetSource();
-        auto columnChunks = source->GetStageData().GetPortionAccessor().GetColumnChunksPointers(GetColumnId());
+        auto columnChunks = source->GetStageData().GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
         AFL_VERIFY(columnChunks.size());
-        StorageId = source->GetColumnStorageId(GetColumnId());
+        StorageId = source->GetColumnStorageId(GetEntityId());
         TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
         auto reading = blobsAction.GetReading(*StorageId);
         reading->SetIsBackgroundProcess(false);
@@ -242,7 +242,7 @@ private:
         auto itFilter = cFilter.GetIterator(false, source->GetRecordsCount());
         bool itFinished = false;
 
-        auto accessor = context.GetAccessors().GetAccessorOptional(GetColumnId());
+        auto accessor = context.GetAccessors().GetAccessorOptional(GetEntityId());
         NeedToAddResource = !accessor;
         std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> chunks;
         if (!NeedToAddResource) {
@@ -281,9 +281,9 @@ private:
 public:
     TSubColumnsFetchLogic(const ui32 columnId, const std::shared_ptr<IDataSource>& source, const std::vector<TString>& subColumns)
         : TBase(columnId, source->GetContext()->GetCommonContext()->GetStoragesManager())
-        , ChunkExternalInfo(source->GetSourceSchema()->GetColumnLoaderVerified(GetColumnId())->BuildAccessorContext(source->GetRecordsCount()))
+        , ChunkExternalInfo(source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(source->GetRecordsCount()))
         , SubColumns(subColumns) {
-        const auto loader = source->GetSourceSchema()->GetColumnLoaderVerified(GetColumnId());
+        const auto loader = source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
         AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray)
         ("type", loader->GetAccessorConstructor()->GetType());
     }

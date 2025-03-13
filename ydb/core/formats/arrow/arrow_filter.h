@@ -86,6 +86,8 @@ public:
         bool Next();
     };
 
+    TColumnFilter Cut(const ui32 filteredRecordsCount, const ui32 limit, const bool reverse) const;
+
     TSlicesIterator BuildSlicesIterator(const std::optional<ui32> startIndex, const std::optional<ui32> count) const {
         return TSlicesIterator(*this, startIndex, count);
     }

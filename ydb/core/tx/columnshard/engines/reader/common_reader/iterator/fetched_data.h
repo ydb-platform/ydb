@@ -34,8 +34,21 @@ private:
 
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AccessorsGuard;
     std::optional<TPortionDataAccessor> PortionAccessor;
+    THashMap<NIndexes::NRequest::TOriginalDataAddress, std::shared_ptr<NIndexes::IIndexMeta>> DataAddrToIndex;
 
 public:
+    void AddRemapDataToIndex(const NIndexes::NRequest::TOriginalDataAddress& addr, const std::shared_ptr<NIndexes::IIndexMeta>& index) {
+        AFL_VERIFY(DataAddrToIndex.emplace(addr, index).second);
+    }
+
+    std::shared_ptr<NIndexes::IIndexMeta> ExtractRemapDataToIndex(const NIndexes::NRequest::TOriginalDataAddress& addr) {
+        auto it = DataAddrToIndex.find(addr);
+        AFL_VERIFY(it != DataAddrToIndex.end());
+        auto result = it->second;
+        DataAddrToIndex.erase(it);
+        return result;
+    }
+
     void AddFetchers(const std::vector<std::shared_ptr<IKernelFetchLogic>>& fetchers);
     void AddFetcher(const std::shared_ptr<IKernelFetchLogic>& fetcher);
 

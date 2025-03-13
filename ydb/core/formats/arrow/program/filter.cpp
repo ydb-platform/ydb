@@ -1,4 +1,5 @@
 #include "collection.h"
+#include "execution.h"
 #include "filter.h"
 
 #include <ydb/core/formats/arrow/arrow_filter.h>
@@ -68,13 +69,12 @@ private:
     }
 };
 
-TConclusionStatus TFilterProcessor::DoExecute(const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& context) const {
+TConclusion<IResourceProcessor::EExecutionResult> TFilterProcessor::DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const {
     std::vector<std::shared_ptr<IChunkedArray>> inputColumns;
-    AFL_VERIFY(context.GetColumnsToDrop().size() <= 1)("size", context.GetColumnsToDrop().size());
-    if (context.GetColumnsToDrop().size() && GetInputColumnIdOnce() == context.GetColumnsToDrop().front()) {
-        inputColumns = resources->ExtractAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
+    if (nodeContext.GetRemoveResourceIds().contains(GetInputColumnIdOnce())) {
+        inputColumns = context.GetResources()->ExtractAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
     } else {
-        inputColumns = resources->GetAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
+        inputColumns = context.GetResources()->GetAccessors(TColumnChainInfo::ExtractColumnIds(GetInput()));
     }
     TFilterVisitor filterVisitor(inputColumns.front()->GetRecordsCount());
     for (auto& arr : inputColumns) {
@@ -88,8 +88,13 @@ TConclusionStatus TFilterProcessor::DoExecute(const std::shared_ptr<TAccessorsCo
     }
     NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
     filterVisitor.BuildColumnFilter(filter);
-    resources->AddFilter(filter);
-    return TConclusionStatus::Success();
+    if (context.GetLimit()) {
+        context.GetResources()->AddFilter(
+            filter.Cut(context.GetResources()->GetRecordsCountActualVerified(), *context.GetLimit(), context.GetReverse()));
+    } else {
+        context.GetResources()->AddFilter(filter);
+    }
+    return EExecutionResult::Success;
 }
 
 }   // namespace NKikimr::NArrow::NSSA

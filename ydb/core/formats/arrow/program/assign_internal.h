@@ -16,7 +16,11 @@ private:
 
     std::shared_ptr<IStepFunction> Function;
 
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& context) const override;
+    virtual NJson::TJsonValue DoDebugJson() const override;
+
+    virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
+
+    virtual TString DoGetSignalCategoryName() const override;
 
     TCalculationProcessor(std::vector<TColumnChainInfo>&& input, std::vector<TColumnChainInfo>&& output,
         const std::shared_ptr<IStepFunction>& function, const std::shared_ptr<IKernelLogic>& kernelLogic)
@@ -29,32 +33,9 @@ private:
         return Function->IsAggregation();
     }
 
-    virtual ui64 DoGetWeight() const override {
-        if (KernelLogic) {
-            return 0;
-        }
-        if (!YqlOperationId) {
-            return 10;
-        } else if ((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId == NYql::TKernelRequestBuilder::EBinaryOp::StartsWith ||
-                   (NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId == NYql::TKernelRequestBuilder::EBinaryOp::EndsWith) {
-            return 7;
-        } else if ((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId == NYql::TKernelRequestBuilder::EBinaryOp::StringContains) {
-            return 10;
-        } else if ((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId == NYql::TKernelRequestBuilder::EBinaryOp::Equals) {
-            return 5;
-        }
-        return 0;
-    }
+    virtual ui64 DoGetWeight() const override;
 
 public:
-    virtual std::optional<TFetchingInfo> BuildFetchTask(const ui32 columnId, const NAccessor::IChunkedArray::EType arrType,
-        const std::shared_ptr<TAccessorsCollection>& resources) const override {
-        if (!KernelLogic) {
-            return TBase::BuildFetchTask(columnId, arrType, resources);
-        }
-        return KernelLogic->BuildFetchTask(columnId, arrType, GetInput(), resources);
-    }
-
     static TConclusion<std::shared_ptr<TCalculationProcessor>> Build(std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output, 
         const std::shared_ptr<IStepFunction>& function, const std::shared_ptr<IKernelLogic>& kernelLogic = nullptr);
 };

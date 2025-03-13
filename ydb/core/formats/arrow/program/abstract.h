@@ -16,6 +16,13 @@ namespace NKikimr::NArrow::NSSA {
 using IChunkedArray = NAccessor::IChunkedArray;
 using TAccessorsCollection = NAccessor::TAccessorsCollection;
 
+class TExecutionNodeContext {
+private:
+    YDB_ACCESSOR_DEF(THashSet<ui32>, RemoveResourceIds);
+
+public:
+};
+
 class TColumnInfo {
 private:
     bool GeneratedFlag = false;
@@ -165,7 +172,11 @@ enum class EProcessorType {
     Projection,
     Filter,
     Aggregation,
-    Original
+    FetchOriginalData,
+    AssembleOriginalData,
+    FetchIndexData,
+    CheckIndexData,
+    StreamLogic
 };
 
 class TFetchingInfo {
@@ -188,38 +199,22 @@ public:
     }
 };
 
-class TProcessorContext {
-protected:
-    std::vector<TColumnChainInfo> ColumnsToFetch;
-    std::vector<TColumnChainInfo> OriginalColumnsToUse;
-    std::vector<TColumnChainInfo> ColumnsToDrop;
-
-public:
-    const std::vector<TColumnChainInfo>& GetColumnsToFetch() const {
-        return ColumnsToFetch;
-    }
-    const std::vector<TColumnChainInfo>& GetOriginalColumnsToUse() const {
-        return OriginalColumnsToUse;
-    }
-    const std::vector<TColumnChainInfo>& GetColumnsToDrop() const {
-        return ColumnsToDrop;
-    }
-
-    TProcessorContext(
-        std::vector<TColumnChainInfo>&& toFetch, std::vector<TColumnChainInfo>&& originalToUse, std::vector<TColumnChainInfo>&& toDrop)
-        : ColumnsToFetch(std::move(toFetch))
-        , OriginalColumnsToUse(std::move(originalToUse))
-        , ColumnsToDrop(std::move(toDrop)) {
-    }
-};
+class TProcessorContext;
 
 class IResourceProcessor {
+public:
+    enum class EExecutionResult {
+        Success,
+        Skipped,
+        InBackground
+    };
+
 private:
     YDB_READONLY_DEF(std::vector<TColumnChainInfo>, Input);
     YDB_READONLY_DEF(std::vector<TColumnChainInfo>, Output);
     YDB_READONLY(EProcessorType, ProcessorType, EProcessorType::Unknown);
 
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& context) const = 0;
+    virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const = 0;
 
     virtual NJson::TJsonValue DoDebugJson() const {
         return NJson::JSON_MAP;
@@ -227,20 +222,73 @@ private:
     virtual ui64 DoGetWeight() const {
         return 0;
     }
+    virtual TString DoGetSignalCategoryName() const {
+        return ::ToString(ProcessorType);
+    }
 
 public:
+    TString GetSignalCategoryName() const {
+        return DoGetSignalCategoryName();
+    }
+
+    virtual bool HasSubColumns() const {
+        return false;
+    }
+
     ui64 GetWeight() const {
         return DoGetWeight();
     }
-
-    virtual std::optional<TFetchingInfo> BuildFetchTask(
-        const ui32 columnId, const NAccessor::IChunkedArray::EType arrType, const std::shared_ptr<TAccessorsCollection>& resources) const;
 
     virtual bool IsAggregation() const = 0;
 
     virtual ~IResourceProcessor() = default;
 
     NJson::TJsonValue DebugJson() const;
+
+    void ExchangeInput(const ui32 resourceIdFrom, const ui32 resourceIdTo) {
+        bool found = false;
+        for (auto&& i : Input) {
+            AFL_VERIFY(i.GetColumnId() != resourceIdTo);
+            if (i.GetColumnId() == resourceIdFrom) {
+                AFL_VERIFY(!found);
+                found = true;
+                i = TColumnChainInfo(resourceIdTo);
+            }
+        }
+        AFL_VERIFY(found);
+    }
+
+    void AddInput(const ui32 resourceId) {
+        for (auto&& i : Input) {
+            AFL_VERIFY(i.GetColumnId() != resourceId);
+        }
+        Input.emplace_back(TColumnChainInfo(resourceId));
+    }
+
+    void RemoveInput(const ui32 resourceId) {
+        for (ui32 idx = 0; idx < Input.size(); ++idx) {
+            if (Input[idx].GetColumnId() == resourceId) {
+                std::swap(Input[idx], Input.back());
+                Input.pop_back();
+                return;
+            }
+        }
+        AFL_VERIFY(false);
+    }
+
+    bool HasInput(const ui32 resourceId) {
+        for (ui32 idx = 0; idx < Input.size(); ++idx) {
+            if (Input[idx].GetColumnId() == resourceId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void SetOutputResourceIdOnce(const ui32 resourceId) {
+        AFL_VERIFY(Output.size() == 1)("size", Output.size());
+        Output.front() = TColumnChainInfo(resourceId);
+    }
 
     ui32 GetOutputColumnIdOnce() const {
         AFL_VERIFY(Output.size() == 1)("size", Output.size());
@@ -258,20 +306,35 @@ public:
         , ProcessorType(type) {
     }
 
-    [[nodiscard]] TConclusionStatus Execute(const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& context) const;
+    [[nodiscard]] TConclusion<EExecutionResult> Execute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const;
 };
 
-class TResourceProcessorStep: public TProcessorContext {
+class TResourceProcessorStep {
 private:
     using TBase = TProcessorContext;
+    std::vector<TColumnChainInfo> ColumnsToFetch;
+    std::vector<TColumnChainInfo> OriginalColumnsToUse;
+    std::vector<TColumnChainInfo> ColumnsToDrop;
     YDB_READONLY_DEF(std::shared_ptr<IResourceProcessor>, Processor);
 
 public:
+    const std::vector<TColumnChainInfo>& GetColumnsToFetch() const {
+        return ColumnsToFetch;
+    }
+    const std::vector<TColumnChainInfo>& GetOriginalColumnsToUse() const {
+        return OriginalColumnsToUse;
+    }
+    const std::vector<TColumnChainInfo>& GetColumnsToDrop() const {
+        return ColumnsToDrop;
+    }
+
     NJson::TJsonValue DebugJson() const;
 
     TResourceProcessorStep(std::vector<TColumnChainInfo>&& toFetch, std::vector<TColumnChainInfo>&& originalToUse,
         std::shared_ptr<IResourceProcessor>&& processor, std::vector<TColumnChainInfo>&& toDrop)
-        : TBase(std::move(toFetch), std::move(originalToUse), std::move(toDrop))
+        : ColumnsToFetch(std::move(toFetch))
+        , OriginalColumnsToUse(std::move(originalToUse))
+        , ColumnsToDrop(std::move(toDrop))
         , Processor(std::move(processor)) {
         AFL_VERIFY(Processor);
     }

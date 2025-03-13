@@ -1,4 +1,4 @@
-#include "checker.h"
+#include "bits_storage.h"
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/hash/calcer.h>
@@ -63,31 +63,37 @@ TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui3
     return TFixStringBitsStorage(filterBits).GetData();
 }
 
-void TBloomIndexMeta::DoFillIndexCheckers(
-    const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& /*schema*/) const {
-    for (auto&& branch : info->GetBranches()) {
-        for (auto&& i : branch->GetEquals()) {
-            if (i.first.GetColumnId() != GetColumnId()) {
-                continue;
+bool TBloomIndexMeta::DoCheckValue(
+    const TString& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
+    std::set<ui64> hashes;
+    AFL_VERIFY(op == EOperation::Equals)("op", op);
+    TFixStringBitsStorage bits(data);
+    if (!!category) {
+        for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
+            const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(value, hashSeed);
+            if (!bits.Get(CombineHashes(*category, hash) % bits.GetSizeBits())) {
+                return false;
             }
-            ui64 hashBase = 0;
-            if (!GetDataExtractor()->CheckForIndex(i.first, hashBase)) {
-                continue;
-            }
-            std::set<ui64> hashes;
-            if (hashBase) {
-                for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
-                    const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(i.second, hashSeed);
-                    hashes.emplace(CombineHashes(hashBase, hash));
-                }
-            } else {
-                for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
-                    const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(i.second, hashSeed);
-                    hashes.emplace(hash);
-                }
-            }
-            branch->MutableIndexes().emplace_back(std::make_shared<TBloomFilterChecker>(GetIndexId(), std::move(hashes)));
         }
+    } else {
+        for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
+            const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(value, hashSeed);
+            if (!bits.Get(hash % bits.GetSizeBits())) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+std::optional<ui64> TBloomIndexMeta::DoCalcCategory(const TString& subColumnName) const {
+    ui64 result;
+    const NRequest::TOriginalDataAddress addr(Max<ui32>(), subColumnName);
+    AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, result));
+    if (subColumnName) {
+        return result;
+    } else {
+        return std::nullopt;
     }
 }
 

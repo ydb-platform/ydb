@@ -28,11 +28,6 @@ private:
     std::optional<TMonotonic> FinishInstant;
 
 public:
-    static constexpr auto ActorActivityType() {
-        return NKikimrServices::TActivity::KQP_OLAP_SCAN;
-    }
-
-public:
     virtual void PassAway() override;
 
     TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId,

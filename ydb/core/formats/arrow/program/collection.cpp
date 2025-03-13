@@ -22,7 +22,7 @@ void TAccessorsCollection::AddVerified(const ui32 columnId, const TAccessorColle
     if (UseFilter && withFilter && !Filter->IsTotalAllowFilter()) {
         auto filtered = Filter->Apply(data.GetData());
         RecordsCountActual = filtered->GetRecordsCount();
-        AFL_VERIFY(Accessors.emplace(columnId, filtered).second);
+        AFL_VERIFY(Accessors.emplace(columnId, filtered).second)("id", columnId);
     } else {
         if (Filter->IsTotalAllowFilter()) {
             if (!data.GetItWasScalar()) {
@@ -61,6 +61,14 @@ std::shared_ptr<arrow::Table> TAccessorsCollection::GetTable(const std::vector<u
     }
     AFL_VERIFY(recordsCount);
     return arrow::Table::Make(std::make_shared<arrow::Schema>(std::move(fields)), std::move(arrays), *recordsCount);
+}
+
+std::shared_ptr<IChunkedArray> TAccessorsCollection::ExtractAccessorOptional(const ui32 columnId) {
+    auto result = GetAccessorOptional(columnId);
+    if (!!result) {
+        Remove(columnId);
+    }
+    return result;
 }
 
 std::vector<std::shared_ptr<IChunkedArray>> TAccessorsCollection::ExtractAccessors(const std::vector<ui32>& columnIds) {
@@ -117,7 +125,7 @@ std::shared_ptr<IChunkedArray> TAccessorsCollection::GetConstantVerified(const u
 
 std::shared_ptr<arrow::Scalar> TAccessorsCollection::GetConstantScalarVerified(const ui32 columnId) const {
     auto it = Constants.find(columnId);
-    AFL_VERIFY(it != Constants.end());
+    AFL_VERIFY(it != Constants.end())("id", columnId);
     return it->second;
 }
 

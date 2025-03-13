@@ -41,23 +41,14 @@ NJson::TJsonValue IIndexMeta::SerializeDataToJson(const TIndexChunk& iChunk, con
     return result;
 }
 
-std::shared_ptr<NReader::NCommon::IKernelFetchLogic> IIndexMeta::DoBuildFetchTask(const TIndexDataAddress& dataAddress,
-    const std::vector<TChunkOriginalData>& chunks, const TIndexesCollection& collection, const std::shared_ptr<IIndexMeta>& selfPtr,
+std::shared_ptr<NReader::NCommon::IKernelFetchLogic> IIndexMeta::DoBuildFetchTask(const NRequest::TOriginalDataAddress& dataAddress,
+    const TIndexDataAddress& indexAddress, const std::shared_ptr<IIndexMeta>& selfPtr,
     const std::shared_ptr<IStoragesManager>& storagesManager) const {
-    if (collection.HasIndexData(dataAddress)) {
-        return nullptr;
-    } else {
-        const TIndexColumnChunked* chunkedIndex = collection.GetIndexDataOptional(GetIndexId());
-        std::vector<TIndexChunkFetching> fetchingChunks;
-        AFL_VERIFY(!chunkedIndex || chunkedIndex->GetChunksCount() == chunks.size());
-        ui32 idx = 0;
-        for (auto&& i : chunks) {
-            const std::shared_ptr<IIndexHeader> header = chunkedIndex ? chunkedIndex->GetHeader(idx) : selfPtr->BuildHeader(i).DetachResult();
-            fetchingChunks.emplace_back(TIndexChunkFetching(GetStorageId(), dataAddress, i, header));
-            ++idx;
-        }
-        return std::make_shared<TIndexFetcherLogic>(dataAddress, std::move(fetchingChunks), selfPtr, storagesManager);
-    }
+    return std::make_shared<TIndexFetcherLogic>(dataAddress, indexAddress, selfPtr, storagesManager);
+}
+
+std::optional<ui64> IIndexMeta::CalcCategory(const TString& subColumnName) const {
+    return DoCalcCategory(subColumnName);
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

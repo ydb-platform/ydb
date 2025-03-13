@@ -16,6 +16,14 @@ private:
     YDB_READONLY_DEF(std::optional<ui64>, Category);
 
 public:
+    TString DebugString() const {
+        if (Category) {
+            return TStringBuilder() << "[" << IndexId << "," << *Category << "]";
+        } else {
+            return TStringBuilder() << "[" << IndexId << "]";
+        }
+    }
+
     template <class TContainer>
     static std::set<ui32> ExtractIndexIds(const TContainer& addresses) {
         std::set<ui32> result;
@@ -32,7 +40,7 @@ public:
         AFL_VERIFY(IndexId);
     }
 
-    explicit TIndexDataAddress(const ui32 indexId, const ui64 category)
+    explicit TIndexDataAddress(const ui32 indexId, const std::optional<ui64> category)
         : IndexId(indexId)
         , Category(category) {
         AFL_VERIFY(IndexId);
@@ -52,48 +60,6 @@ public:
         } else {
             return IndexId;
         }
-    }
-};
-
-class IIndexChecker {
-protected:
-    virtual bool DoCheck(const THashMap<TIndexDataAddress, std::vector<TString>>& blobs) const = 0;
-    virtual bool DoDeserializeFromProto(const NKikimrSSA::TProgram::TOlapIndexChecker& proto) = 0;
-    virtual void DoSerializeToProto(NKikimrSSA::TProgram::TOlapIndexChecker& proto) const = 0;
-    virtual std::set<TIndexDataAddress> DoGetIndexIds() const = 0;
-
-public:
-    using TFactory = NObjectFactory::TObjectFactory<IIndexChecker, TString>;
-    using TProto = NKikimrSSA::TProgram::TOlapIndexChecker;
-    virtual ~IIndexChecker() = default;
-    bool Check(const THashMap<TIndexDataAddress, std::vector<TString>>& blobs) const {
-        return DoCheck(blobs);
-    }
-
-    bool DeserializeFromProto(const NKikimrSSA::TProgram::TOlapIndexChecker& proto) {
-        return DoDeserializeFromProto(proto);
-    }
-
-    void SerializeToProto(NKikimrSSA::TProgram::TOlapIndexChecker& proto) const {
-        return DoSerializeToProto(proto);
-    }
-
-    std::set<TIndexDataAddress> GetIndexIds() const {
-        return DoGetIndexIds();
-    }
-
-    virtual TString GetClassName() const = 0;
-};
-
-class TIndexCheckerContainer: public NBackgroundTasks::TInterfaceProtoContainer<IIndexChecker> {
-private:
-    using TBase = NBackgroundTasks::TInterfaceProtoContainer<IIndexChecker>;
-
-public:
-    TIndexCheckerContainer() = default;
-    TIndexCheckerContainer(const std::shared_ptr<IIndexChecker>& object)
-        : TBase(object) {
-        AFL_VERIFY(Object);
     }
 };
 

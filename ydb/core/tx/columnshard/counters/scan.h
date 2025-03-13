@@ -11,6 +11,10 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
+namespace NKikimr::NArrow::NSSA::NGraph::NExecution {
+class TCompiledGraph;
+}
+
 namespace NKikimr::NColumnShard {
 
 class TScanAggregations: public TCommonCountersOwner {
@@ -330,17 +334,44 @@ public:
 class TConcreteScanCounters: public TScanCounters {
 private:
     using TBase = TScanCounters;
-    std::shared_ptr<TAtomicCounter> FetchAccessorsCount;
-    std::shared_ptr<TAtomicCounter> FetchBlobsCount;
-    std::shared_ptr<TAtomicCounter> MergeTasksCount;
-    std::shared_ptr<TAtomicCounter> AssembleTasksCount;
-    std::shared_ptr<TAtomicCounter> ReadTasksCount;
-    std::shared_ptr<TAtomicCounter> ResourcesAllocationTasksCount;
-    std::shared_ptr<TAtomicCounter> ResultsForSourceCount;
-    std::shared_ptr<TAtomicCounter> ResultsForReplyGuard;
+    std::shared_ptr<TAtomicCounter> FetchAccessorsCount = std::make_shared<TAtomicCounter>();
+    std::shared_ptr<TAtomicCounter> FetchBlobsCount = std::make_shared<TAtomicCounter>();
+    std::shared_ptr<TAtomicCounter> MergeTasksCount = std::make_shared<TAtomicCounter>();
+    std::shared_ptr<TAtomicCounter> AssembleTasksCount = std::make_shared<TAtomicCounter>();
+    std::shared_ptr<TAtomicCounter> ReadTasksCount = std::make_shared<TAtomicCounter>();
+    std::shared_ptr<TAtomicCounter> ResourcesAllocationTasksCount = std::make_shared<TAtomicCounter>();
+    std::shared_ptr<TAtomicCounter> ResultsForSourceCount = std::make_shared<TAtomicCounter>();
+    std::shared_ptr<TAtomicCounter> ResultsForReplyGuard = std::make_shared<TAtomicCounter>();
+    std::shared_ptr<TAtomicCounter> TotalExecutionDurationUs = std::make_shared<TAtomicCounter>();
+    THashMap<ui32, std::shared_ptr<TAtomicCounter>> SkipNodesCount;
+    THashMap<ui32, std::shared_ptr<TAtomicCounter>> ExecuteNodesCount;
 
 public:
     TScanAggregations Aggregations;
+
+    void OnSkipGraphNode(const ui32 nodeId) const {
+        if (SkipNodesCount.size()) {
+            auto it = SkipNodesCount.find(nodeId);
+            AFL_VERIFY(it != SkipNodesCount.end());
+            it->second->Inc();
+        }
+    }
+
+    void OnExecuteGraphNode(const ui32 nodeId) const {
+        if (ExecuteNodesCount.size()) {
+            auto it = ExecuteNodesCount.find(nodeId);
+            AFL_VERIFY(it != ExecuteNodesCount.end());
+            it->second->Inc();
+        }
+    }
+
+    void AddExecutionDuration(const TDuration d) const {
+        TotalExecutionDurationUs->Add(d.MicroSeconds());
+    }
+
+    TDuration GetExecutionDuration() const {
+        return TDuration::MicroSeconds(TotalExecutionDurationUs->Val());
+    }
 
     TString DebugString() const {
         return TStringBuilder() << "FetchAccessorsCount:" << FetchAccessorsCount->Val() << ";"
@@ -390,23 +421,20 @@ public:
                FetchAccessorsCount->Val() || ResultsForSourceCount->Val() || FetchBlobsCount->Val() || ResultsForReplyGuard->Val();
     }
 
+    const THashMap<ui32, std::shared_ptr<TAtomicCounter>>& GetSkipStats() const {
+        return SkipNodesCount;
+    }
+
+    const THashMap<ui32, std::shared_ptr<TAtomicCounter>>& GetExecutionStats() const {
+        return ExecuteNodesCount;
+    }
+
     void OnBlobsWaitDuration(const TDuration d, const TDuration fullScanDuration) const {
         TBase::OnBlobsWaitDuration(d);
         Aggregations.OnBlobWaitingDuration(d, fullScanDuration);
     }
 
-    TConcreteScanCounters(const TScanCounters& counters)
-        : TBase(counters)
-        , FetchAccessorsCount(std::make_shared<TAtomicCounter>())
-        , FetchBlobsCount(std::make_shared<TAtomicCounter>())
-        , MergeTasksCount(std::make_shared<TAtomicCounter>())
-        , AssembleTasksCount(std::make_shared<TAtomicCounter>())
-        , ReadTasksCount(std::make_shared<TAtomicCounter>())
-        , ResourcesAllocationTasksCount(std::make_shared<TAtomicCounter>())
-        , ResultsForSourceCount(std::make_shared<TAtomicCounter>())
-        , ResultsForReplyGuard(std::make_shared<TAtomicCounter>())
-        , Aggregations(TBase::BuildAggregations()) {
-    }
+    TConcreteScanCounters(const TScanCounters& counters, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program);
 };
 
 }   // namespace NKikimr::NColumnShard

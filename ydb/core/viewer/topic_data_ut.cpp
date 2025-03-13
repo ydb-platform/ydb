@@ -3,11 +3,11 @@
 #include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
-#include<library/cpp/http/fetch/httpheader.h>
+#include <library/cpp/http/fetch/httpheader.h>
 #include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/core/testlib/test_client.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 using namespace NKikimr;
 using namespace Tests;

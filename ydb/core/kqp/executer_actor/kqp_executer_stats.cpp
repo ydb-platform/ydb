@@ -1092,9 +1092,9 @@ void ExportAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsMinMax& sta
         min4[2] = min4[2] ? (it[2] ? (min4[2] < it[2] ? min4[2] : it[2]) : min4[2]) : it[2];
         min4[3] = min4[3] ? (it[3] ? (min4[3] < it[3] ? min4[3] : it[3]) : min4[3]) : it[3];
         max4[0] = max4[0] > it[0] ? max4[0] : it[0];
-        min4[1] = max4[1] > it[1] ? max4[1] : it[1];
-        min4[2] = max4[2] > it[2] ? min4[2] : it[2];
-        min4[3] = max4[3] > it[3] ? min4[3] : it[3];
+        max4[1] = max4[1] > it[1] ? max4[1] : it[1];
+        max4[2] = max4[2] > it[2] ? max4[2] : it[2];
+        max4[3] = max4[3] > it[3] ? max4[3] : it[3];
     }
 
     if (count) {
@@ -1135,9 +1135,9 @@ void ExportOffsetAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsAggr&
         min4[2] = min4[2] ? (it[2] ? (min4[2] < it[2] ? min4[2] : it[2]) : min4[2]) : it[2];
         min4[3] = min4[3] ? (it[3] ? (min4[3] < it[3] ? min4[3] : it[3]) : min4[3]) : it[3];
         max4[0] = max4[0] > it[0] ? max4[0] : it[0];
-        min4[1] = max4[1] > it[1] ? max4[1] : it[1];
-        min4[2] = max4[2] > it[2] ? min4[2] : it[2];
-        min4[3] = max4[3] > it[3] ? min4[3] : it[3];
+        max4[1] = max4[1] > it[1] ? max4[1] : it[1];
+        max4[2] = max4[2] > it[2] ? max4[2] : it[2];
+        max4[3] = max4[3] > it[3] ? max4[3] : it[3];
     }
 
     if (count) {
@@ -1175,9 +1175,9 @@ void ExportAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsAggr& stats
         min4[2] = min4[2] ? (it[2] ? (min4[2] < it[2] ? min4[2] : it[2]) : min4[2]) : it[2];
         min4[3] = min4[3] ? (it[3] ? (min4[3] < it[3] ? min4[3] : it[3]) : min4[3]) : it[3];
         max4[0] = max4[0] > it[0] ? max4[0] : it[0];
-        min4[1] = max4[1] > it[1] ? max4[1] : it[1];
-        min4[2] = max4[2] > it[2] ? min4[2] : it[2];
-        min4[3] = max4[3] > it[3] ? min4[3] : it[3];
+        max4[1] = max4[1] > it[1] ? max4[1] : it[1];
+        max4[2] = max4[2] > it[2] ? max4[2] : it[2];
+        max4[3] = max4[3] > it[3] ? max4[3] : it[3];
     }
 
     if (count) {

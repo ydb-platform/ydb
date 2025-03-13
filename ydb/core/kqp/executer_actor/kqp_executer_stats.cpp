@@ -1057,7 +1057,7 @@ void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskSta
         tableAggr->SetWriteRows(tableAggr->GetWriteRows() + table.GetWriteRows());
         tableAggr->SetWriteBytes(tableAggr->GetWriteBytes() + table.GetWriteBytes());
         tableAggr->SetEraseRows(tableAggr->GetEraseRows() + table.GetEraseRows());
-        tableAggr->SetAffectedPartitions(table.GetAffectedPartitions());
+        tableAggr->SetAffectedPartitions(tableAggr->GetAffectedPartitions() + table.GetAffectedPartitions());
     }
 }
 

@@ -3,6 +3,7 @@
 
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
 #include <ydb/core/tx/columnshard/engines/reader/duplicates/manager.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/scanner.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
@@ -99,6 +100,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 
 TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
     : TBase(commonContext)
+    , Scheduler(std::make_shared<TSourceFetchingScheduler>())
     , DuplicatesManager(NActors::TActivationContext::Register(
           new TDuplicateFilterConstructor(commonContext->GetReadMetadataPtrVerifiedAs<TReadMetadata>()->SelectInfo->Portions))) {
 }

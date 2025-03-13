@@ -11,6 +11,7 @@
 namespace NKikimr::NOlap::NReader::NSimple {
 
 class IDataSource;
+class TSourceFetchingScheduler;
 using TColumnsSet = NCommon::TColumnsSet;
 using EStageFeaturesIndexes = NCommon::EStageFeaturesIndexes;
 using TColumnsSetIds = NCommon::TColumnsSetIds;
@@ -20,6 +21,7 @@ using TFetchingScript = NCommon::TFetchingScript;
 class TSpecialReadContext: public NCommon::TSpecialReadContext, TNonCopyable {
 private:
     using TBase = NCommon::TSpecialReadContext;
+    YDB_READONLY_DEF(std::shared_ptr<TSourceFetchingScheduler>, Scheduler);
     YDB_READONLY_DEF(TActorId, DuplicatesManager);
 
 private:

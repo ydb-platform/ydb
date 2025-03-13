@@ -243,7 +243,7 @@ bool TColumnShardScan::ProduceResults() noexcept {
     Result->LastKey = ConvertLastKey(CurrentLastReadKey->GetPKCursor());
     Result->LastCursorProto = CurrentLastReadKey->SerializeToProto();
     SendResult(false, false);
-    ScanIterator->OnSentDataFromInterval(result.GetNotFinishedIntervalIdx());
+    ScanIterator->OnSentDataFromInterval(result.GetNextIntervalHint());
     ACFL_DEBUG("stage", "finished")("iterator", ScanIterator->DebugString());
     return true;
 }

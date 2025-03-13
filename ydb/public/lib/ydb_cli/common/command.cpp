@@ -159,6 +159,31 @@ TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& conf
     Init(config.Opts, _argc, const_cast<const char**>(config.ArgV));
 }
 
+void TClientCommand::CheckForExecutableOptions(TConfig& config) {
+    int argc = 1;
+
+    while (argc < config.ArgC && config.ArgV[argc][0] == '-') {
+        const NLastGetopt::TOpt* opt = nullptr;
+        TStringBuf optName(config.ArgV[argc]);
+        auto eqPos = optName.find('=');
+        optName = optName.substr(0, eqPos);
+        if (optName.StartsWith("--")) {
+            opt = config.Opts->FindLongOption(optName.substr(2));
+        } else {
+            opt = config.Opts->FindCharOption(optName[1]);
+        }
+        if (config.ExecutableOptions.find(optName) != config.ExecutableOptions.end()) {
+            config.HasExecutableOptions = true;
+        }
+        if (opt != nullptr && opt->GetHasArg() != NLastGetopt::NO_ARGUMENT) {
+            if (eqPos == TStringBuf::npos) {
+                ++argc;
+            }
+        }
+        ++argc;
+    }
+}
+
 void TClientCommand::Config(TConfig& config) {
     config.Opts = &Opts;
     config.OnlyExplicitProfile = OnlyExplicitProfile;

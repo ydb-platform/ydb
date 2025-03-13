@@ -137,10 +137,13 @@ void TConfigsManager::Handle(TEvBlobStorage::TEvControllerProposeConfigRequest::
         responseRecord.SetYAML(MainYamlConfig);
     } else if (YamlVersion == proposedConfigVersion) {
         responseRecord.SetStatus(NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNeeded);
-    } else if (YamlVersion != proposedConfigVersion && (proposedConfigVersion && YamlVersion != proposedConfigVersion - 1)) {
+    } else if (YamlVersion != proposedConfigVersion + 1) {
         responseRecord.SetStatus(NKikimrBlobStorage::TEvControllerProposeConfigResponse::UnexpectedConfig);
         responseRecord.SetProposedConfigVersion(proposedConfigVersion);
         responseRecord.SetConsoleConfigVersion(YamlVersion);
+        if (proposedConfigVersion + 1 < YamlVersion) {
+            responseRecord.SetYAML(MainYamlConfig);
+        }
         LOG_ALERT_S(ctx, NKikimrServices::CMS, "Unexpected proposed config.");
     } else if (proposedConfigHash != currentConfigHash) {
         responseRecord.SetStatus(NKikimrBlobStorage::TEvControllerProposeConfigResponse::HashMismatch);

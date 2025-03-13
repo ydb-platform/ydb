@@ -54,7 +54,7 @@ public:
             );
         } else if (Scheduled != nullptr && Self->State->MaintenanceRequests.contains(Scheduled->RequestId)) {
             const auto& taskId = Self->State->MaintenanceRequests[Scheduled->RequestId];
-            auto& task = Self->State->MaintenanceTasks[taskId];
+            auto& task = Self->State->MaintenanceTasks.at(taskId);
 
             task.LastRefreshTime = now;
             db.Table<Schema::MaintenanceTasks>().Key(taskId).Update(

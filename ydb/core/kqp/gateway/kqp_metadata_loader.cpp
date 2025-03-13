@@ -873,7 +873,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalSource.Type);
                                 } catch (const std::exception& exception) {
                                     TTableMetadataResult wrapper;
-                                    wrapper.SetException(yexception() << "couldn't get external source: " <<  exception.what());
+                                    wrapper.SetException(yexception() << "couldn't get external source with type " << externalDataSourceMetadata.Metadata->ExternalSource.Type << ", " <<  exception.what());
                                     promise.SetValue(wrapper);
                                     return;
                                 }

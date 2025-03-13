@@ -135,6 +135,7 @@ private:
     std::map<ui64, std::shared_ptr<TGraphNode>> Nodes;
     THashMap<TResourceAddress, TGraphNode*> Producers;
     THashSet<ui32> IndexesConstructed;
+    THashSet<ui32> HeaderCheckConstructed;
     ui32 NodeId = 0;
     TGraphNode* GetProducerVerified(const TResourceAddress& resourceId) const {
         auto it = Producers.find(resourceId);
@@ -143,6 +144,7 @@ private:
     }
     std::optional<TResourceAddress> GetOriginalAddress(TGraphNode* condNode) const;
     TConclusion<bool> OptimizeForFetchSubColumns(TGraphNode* condNode);
+    TConclusion<bool> OptimizeConditionsForHeadersCheck(TGraphNode* condNode);
 
     TConclusion<bool> OptimizeConditionsForStream(TGraphNode* condNode);
     TConclusion<bool> OptimizeConditionsForIndexes(TGraphNode* condNode);

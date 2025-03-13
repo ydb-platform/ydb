@@ -2,6 +2,7 @@
 #include "assign_internal.h"
 #include "filter.h"
 #include "graph_optimization.h"
+#include "header.h"
 #include "index.h"
 #include "original.h"
 #include "stream_logic.h"
@@ -348,6 +349,65 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     return false;
 }
 
+TConclusion<bool> TGraph::OptimizeConditionsForHeadersCheck(TGraphNode* condNode) {
+    if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
+        return false;
+    }
+    if (condNode->GetProcessor()->GetInput().empty()) {
+        return false;
+    }
+    auto calc = condNode->GetProcessorAs<TCalculationProcessor>();
+    if (!calc->GetYqlOperationId()) {
+        return false;
+    }
+    if (condNode->GetOutputEdges().size() != 1) {
+        return false;
+    }
+    auto dataNode = GetProducerVerified(calc->GetInput().front().GetColumnId());
+    std::optional<TResourceAddress> dataAddr = GetOriginalAddress(dataNode);
+    if (!dataAddr) {
+        return false;
+    }
+    auto* dest = condNode->GetOutputEdges().begin()->second;
+    const ui32 destResourceId = condNode->GetOutputEdges().begin()->first.GetResourceId();
+    if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::Equals ||
+        (NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::StartsWith ||
+        (NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::EndsWith ||
+        (NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::StringContains) {
+        if (!HeaderCheckConstructed.emplace(condNode->GetIdentifier()).second) {
+            return false;
+        }
+        RemoveEdge(condNode, dest, destResourceId);
+
+        const ui32 resourceIdxFetch = BuildNextResourceId();
+        IDataSource::TFetchHeaderContext headerContext(dataAddr->GetColumnId(), dataAddr->GetSubColumnName());
+        auto indexFetchProc = std::make_shared<TOriginalHeaderDataProcessor>(resourceIdxFetch, headerContext);
+        auto indexFetchNode = AddNode(indexFetchProc);
+        RegisterProducer(resourceIdxFetch, indexFetchNode.get());
+
+        const ui32 resourceIdIndexToAnd = BuildNextResourceId();
+        auto indexCheckProc = std::make_shared<THeaderCheckerProcessor>(resourceIdxFetch, headerContext, resourceIdIndexToAnd);
+        auto indexProcNode = AddNode(indexCheckProc);
+        RegisterProducer(resourceIdIndexToAnd, indexProcNode.get());
+        AddEdge(indexFetchNode.get(), indexProcNode.get(), resourceIdxFetch);
+
+        const ui32 resourceIdEqToAnd = BuildNextResourceId();
+        RegisterProducer(resourceIdEqToAnd, condNode);
+        calc->SetOutputResourceIdOnce(resourceIdEqToAnd);
+
+        auto andProcessor = std::make_shared<TStreamLogicProcessor>(TColumnChainInfo::BuildVector({ resourceIdEqToAnd, resourceIdIndexToAnd }),
+            TColumnChainInfo(destResourceId), NKernels::EOperation::And);
+        auto andNode = AddNode(andProcessor);
+        AddEdge(andNode.get(), dest, destResourceId);
+
+        AddEdge(indexProcNode.get(), andNode.get(), resourceIdIndexToAnd);
+        AddEdge(condNode, andNode.get(), resourceIdEqToAnd);
+        ResetProducer(destResourceId, andNode.get());
+        return true;
+    }
+    return false;
+}
+
 TConclusion<bool> TGraph::OptimizeFilterWithCoalesce(TGraphNode* cNode) {
     if (cNode->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
         return false;
@@ -470,6 +530,17 @@ TConclusionStatus TGraph::Collapse() {
 
             {
                 auto conclusion = OptimizeConditionsForIndexes(n.get());
+                if (conclusion.IsFail()) {
+                    return conclusion;
+                }
+                if (*conclusion) {
+                    hasChanges = true;
+                    break;
+                }
+            }
+
+            {
+                auto conclusion = OptimizeConditionsForHeadersCheck(n.get());
                 if (conclusion.IsFail()) {
                     return conclusion;
                 }

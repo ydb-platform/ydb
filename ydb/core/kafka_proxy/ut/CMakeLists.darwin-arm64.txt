@@ -47,11 +47,13 @@ target_link_options(ydb-core-kafka_proxy-ut PRIVATE
 )
 
 target_sources(ydb-core-kafka_proxy-ut PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/ut/kafka_test_client.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/ut/ut_kafka_functions.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/ut/ut_protocol.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/ut/ut_serialization.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/ut/metarequest_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/ut/port_discovery_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/ut/kafka_test_client.h
 )
 
 

@@ -56,7 +56,7 @@ namespace NPQ {
         bool CheckInProgress(const TActorContext& ctx, TKvRequest& kvRequest)
         {
             for (const TRequestedBlob& reqBlob : kvRequest.Blobs) {
-                TBlobId blob(kvRequest.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
+                TBlobId blob = MakeBlobId(kvRequest.Partition, reqBlob);
                 auto it = ReadsInProgress.find(blob);
                 if (it != ReadsInProgress.end()) {
                     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Read request is blocked. Partition "
@@ -73,7 +73,7 @@ namespace NPQ {
         {
             TVector<TKvRequest> unblocked;
             for (const TRequestedBlob& reqBlob : blocker.Blobs) {
-                TBlobId blob(blocker.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
+                TBlobId blob = MakeBlobId(blocker.Partition, reqBlob);
                 ReadsInProgress.erase(blob);
 
                 auto it = BlockedReads.find(blob);
@@ -352,8 +352,8 @@ namespace NPQ {
             THolder<TCacheL2Response> resp(ev->Get()->Data.Release());
             Y_ABORT_UNLESS(resp->TabletId == TabletId);
 
-            for (TCacheBlobL2& blob : resp->Removed)
-                Cache.RemoveEvictedBlob(ctx, TBlobId(blob.Partition, blob.Offset, blob.PartNo, 0, 0), blob.Value);
+            for (const TCacheBlobL2& blob : resp->Removed)
+                Cache.RemoveEvictedBlob(ctx, TBlobId(blob.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount), blob.Value);
 
             if (resp->Overload) {
                 LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE,

@@ -220,41 +220,36 @@ private:
         if (!indexPath.Exists()) {
             return;
         }
-        try {
-
-            auto writer = memory->MakeWriter("", {});
-            TFileInput indexFile(indexPath.GetPath());
-            TInstant indexWrittenAt;
-            ui64 totalItems, loadedTotalBytes, loadedChecksum;
-            indexFile.LoadOrFail(&indexWrittenAt, sizeof(indexWrittenAt));
-            indexFile.LoadOrFail(&totalItems, sizeof(totalItems));
-            indexFile.LoadOrFail(&loadedTotalBytes, sizeof(loadedTotalBytes));
-            indexFile.LoadOrFail(&loadedChecksum, sizeof(loadedChecksum));
-            char dummy;
-            Y_ENSURE(!indexFile.ReadChar(dummy));
-            const TFsPath& dataPath = Folder_ / (operationId + ".dat");
-            TFileInput dataFile(dataPath.GetPath());
-            TInstant dataWrittenAt;
-            dataFile.LoadOrFail(&dataWrittenAt, sizeof(dataWrittenAt));
-            Y_ENSURE(indexWrittenAt == dataWrittenAt);
-            ui64 totalBytes = 0, checksum = 0;
-            for (ui64 i = 0; i < totalItems; ++i) {
-                TQItemKey key;
-                LoadString(dataFile, key.Component, totalBytes, checksum, loadedTotalBytes);
-                LoadString(dataFile, key.Label, totalBytes, checksum, loadedTotalBytes);
-                TString value;
-                LoadString(dataFile, value, totalBytes, checksum, loadedTotalBytes);
-                writer->Put(key, value).GetValueSync();
-                Y_ENSURE(totalBytes <= loadedTotalBytes);
-            }
-
-            Y_ENSURE(totalBytes == loadedTotalBytes);
-            Y_ENSURE(checksum == loadedChecksum);
-            // data file may have extra data
-            writer->Commit().GetValueSync();
-        } catch (...) {
-            throw yexception() << "QPlayer replay is probably broken. Exception: " << CurrentExceptionMessage();
+        auto writer = memory->MakeWriter("", {});
+        TFileInput indexFile(indexPath.GetPath());
+        TInstant indexWrittenAt;
+        ui64 totalItems, loadedTotalBytes, loadedChecksum;
+        indexFile.LoadOrFail(&indexWrittenAt, sizeof(indexWrittenAt));
+        indexFile.LoadOrFail(&totalItems, sizeof(totalItems));
+        indexFile.LoadOrFail(&loadedTotalBytes, sizeof(loadedTotalBytes));
+        indexFile.LoadOrFail(&loadedChecksum, sizeof(loadedChecksum));
+        char dummy;
+        Y_ENSURE(!indexFile.ReadChar(dummy));
+        const TFsPath& dataPath = Folder_ / (operationId + ".dat");
+        TFileInput dataFile(dataPath.GetPath());
+        TInstant dataWrittenAt;
+        dataFile.LoadOrFail(&dataWrittenAt, sizeof(dataWrittenAt));
+        Y_ENSURE(indexWrittenAt == dataWrittenAt);
+        ui64 totalBytes = 0, checksum = 0;
+        for (ui64 i = 0; i < totalItems; ++i) {
+            TQItemKey key;
+            LoadString(dataFile, key.Component, totalBytes, checksum, loadedTotalBytes);
+            LoadString(dataFile, key.Label, totalBytes, checksum, loadedTotalBytes);
+            TString value;
+            LoadString(dataFile, value, totalBytes, checksum, loadedTotalBytes);
+            writer->Put(key, value).GetValueSync();
+            Y_ENSURE(totalBytes <= loadedTotalBytes);
         }
+
+        Y_ENSURE(totalBytes == loadedTotalBytes);
+        Y_ENSURE(checksum == loadedChecksum);
+        // data file may have extra data
+        writer->Commit().GetValueSync();
     }
 
     void LoadString(TFileInput& file, TString& str, ui64& totalBytes, ui64& checksum, ui64 loadedTotalBytes) const {

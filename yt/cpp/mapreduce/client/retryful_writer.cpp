@@ -102,13 +102,29 @@ void TRetryfulWriter::Send(const TBuffer& buffer)
     THttpHeader header("PUT", Command_);
     header.SetInputFormat(Format_);
     header.MergeParameters(Parameters_);
-
-    auto streamMaker = [&buffer] () {
-        return std::make_unique<TBufferInput>(buffer);
-    };
+    header.SetRequestCompression(ToString(Context_.Config->ContentEncoding));
 
     auto transactionId = (WriteTransaction_ ? WriteTransaction_->GetId() : ParentTransactionId_);
-    RetryHeavyWriteRequest(RawClient_, ClientRetryPolicy_, TransactionPinger_, Context_, transactionId, header, streamMaker);
+
+    NDetail::TRequestConfig config;
+    config.IsHeavy = true;
+
+    NDetail::RequestWithRetry<void>(
+        CreateDefaultRequestRetryPolicy(Context_.Config),
+        [&](TMutationId&) {
+            TPingableTransaction attemptTx(
+                RawClient_, ClientRetryPolicy_, Context_,
+                transactionId, TransactionPinger_->GetChildTxPinger(), TStartTransactionOptions());
+
+            auto input = std::make_unique<TBufferInput>(buffer);
+            header.AddTransactionId(attemptTx.GetId(), /* overwrite = */ true);
+
+            auto request = NDetail::StartRequestWithoutRetry(Context_, header, config);
+            TransferData(input.get(), request->GetStream());
+            request->Finish()->GetResponse();
+
+            attemptTx.Commit();
+        });
 
     Parameters_ = SecondaryParameters_; // all blocks except the first one are appended
 }

@@ -108,9 +108,30 @@ message LockAction {
     google.protobuf.Duration duration = 2;
 }
 
+// Preparing for restart:
+// Taking an exclusive lock and draining load away
+message RestartAction {
+    ActionScope scope = 1;
+}
+
+// Preparing for decommit
+// Taking an exclusive lock, draining away all load and storage, and marking as down
+message DecommitAction {
+    string host = 1;
+}
+
+// Preparing for temporary removal
+// Draining load away and marking as down
+message ServiceAction {
+    ActionScope scope = 1;
+}
+
 message Action {
     oneof action {
         LockAction lock_action = 1;
+        RestartAction restart_action = 2;
+        DecommitAction decommit_action = 3;
+        ServiceAction service_action = 4;
     }
 }
 
@@ -143,6 +164,8 @@ message ActionState {
         ACTION_STATUS_PENDING = 1;
         // Action performed: e.g. lock is taken.
         ACTION_STATUS_PERFORMED = 2;
+        // Action is currently in progress
+        ACTION_STATUS_IN_PROGRESS = 3;
     }
 
     enum ActionReason {

@@ -266,6 +266,7 @@ message TKqpReadRangesSourceSettings {
     repeated TKqpTransaction.TColumnMeta DuplicateCheckColumns = 19;
 
     optional NKikimrDataEvents.ELockMode LockMode = 20;
+    optional bool IsBatch = 21 [default = false];
 }
 
 message TKqpTaskInfo {

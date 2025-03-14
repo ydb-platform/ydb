@@ -4,6 +4,7 @@
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/batch/params.h>
+#include <ydb/core/kqp/common/batch/batch_operation_settings.h>
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
@@ -100,6 +101,10 @@ public:
             }
         }
 
+        if (tableServiceConfig.HasBatchOperationSettings()) {
+            BatchOperationSettings = SetBatchOperationSettings(tableServiceConfig.GetBatchOperationSettings());
+        }
+
         PE_LOG_I("Create " << ActorName << " with KeyColumnInfo.size() = " << KeyColumnInfo.size());
     }
 
@@ -168,7 +173,7 @@ public:
             ptr->PartitionIdx = i;
             ptr->IsFirstQuery = (i == 0);
             ptr->IsLastQuery = (i + 1 == partitioning->size());
-            ptr->LimitSize = MaxLimitSize;
+            ptr->LimitSize = BatchOperationSettings.MaxBatchSize;
 
             if (i > 0) {
                 ptr->BeginRange = partitioning->at(i - 1).Range;
@@ -228,9 +233,10 @@ public:
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
         auto bufferActorId = RegisterWithSameMailbox(bufferActor);
 
+        auto batchSettings = TBatchOperationSettings(BatchOperationSettings.MinBatchSize, partInfo->LimitSize);
         auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, RequestCounters,
             TableServiceConfig, AsyncIoFactory, PreparedQuery, SelfId(), UserRequestContext, StatementResultIndex,
-            FederatedQuerySetup, GUCSettings, ShardIdToTableInfo, txManager, bufferActorId, partInfo->LimitSize);
+            FederatedQuerySetup, GUCSettings, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings));
         auto exId = RegisterWithSameMailbox(executerActor);
 
         PE_LOG_I("Create new KQP executer from Partitioned: ExId = " << exId << ", isRetry = "
@@ -298,8 +304,8 @@ public:
         auto partInfo = ExecuterPartition[ev->Sender];
         switch (response->GetStatus()) {
             case Ydb::StatusIds::SUCCESS:
-                if (partInfo->LimitSize < MaxLimitSize) {
-                    partInfo->LimitSize = MaxLimitSize;
+                if (partInfo->LimitSize < BatchOperationSettings.MaxBatchSize) {
+                    partInfo->LimitSize = BatchOperationSettings.MaxBatchSize;
                 }
 
                 OnSuccessResponse(ev->Sender, ev->Get());
@@ -308,7 +314,9 @@ public:
             case Ydb::StatusIds::ABORTED:
             case Ydb::StatusIds::UNAVAILABLE:
             case Ydb::StatusIds::OVERLOADED:
-                partInfo->LimitSize = (partInfo->LimitSize / 2 <= MinLimitSize) ? MinLimitSize : partInfo->LimitSize / 2;
+                partInfo->LimitSize = (partInfo->LimitSize / 2 <= BatchOperationSettings.MinBatchSize)
+                    ? BatchOperationSettings.MinBatchSize
+                    : partInfo->LimitSize / 2;
                 RetryPartExecution(ev->Sender, /* fromBuffer */ false);
                 break;
             default:
@@ -806,6 +814,7 @@ private:
 private:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
     TVector<TKeyColumnInfo> KeyColumnInfo;
+    TBatchOperationSettings BatchOperationSettings;
     TVector<TBatchPartitionInfo::TPtr> Partitions;
     THashMap<TActorId, TBatchPartitionInfo::TPtr> ExecuterPartition;
     THashMap<TActorId, TBatchPartitionInfo::TPtr> BufferPartition;

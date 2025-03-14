@@ -812,7 +812,7 @@ public:
             if (!IsSystemColumn(column.GetId())) {
                 record.AddColumns(column.GetId());
 
-                if (column.HasIsPrimary() && column.GetIsPrimary()) {
+                if (Settings->HasIsBatch() && Settings->GetIsBatch() && column.HasIsPrimary() && column.GetIsPrimary()) {
                     KeyColumnIndexes.push_back(i);
                     KeyColumnIds.push_back(column.GetId());
                 }
@@ -1042,7 +1042,7 @@ public:
         ui64 seqNo = ev->Get()->Record.GetSeqNo();
         Reads[id].RegisterMessage(*ev->Get());
 
-        if (KeyColumnIndexes.size() == KeyColumnTypes.size()) {
+        if (Settings->HasIsBatch() && Settings->GetIsBatch() && KeyColumnIndexes.size() == KeyColumnTypes.size()) {
             for (size_t row = 0; row < ev->Get()->GetRowsCount(); ++row) {
                 auto cells = ev->Get()->GetCells(row);
                 if (BatchMaxRow.empty()) {

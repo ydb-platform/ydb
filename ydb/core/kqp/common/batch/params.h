@@ -14,4 +14,4 @@ const TString End = Header + "end_";     // end_N
 const TString BeginPrefixSize = Begin + "prefix_size";
 const TString EndPrefixSize = End + "prefix_size";
 
-} // namespace NKikimr::NKqp::NPartitionedExecuter
+} // namespace NKikimr::NKqp::NBatchParams

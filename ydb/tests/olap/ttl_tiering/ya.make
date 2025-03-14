@@ -12,6 +12,10 @@ TEST_SRCS(
     unstable_connection.py
 )
 
+IF(SANITIZER_TYPE)
+    REQUIREMENTS(ram:16)
+ENDIF()
+
 SIZE(MEDIUM)
 
 PEERDIR(

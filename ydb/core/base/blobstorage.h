@@ -757,6 +757,9 @@ struct TEvBlobStorage {
         EvHugeQueryForbiddenChunks,
         EvHugeForbiddenChunks,
         EvContinueShred,
+        EvQuerySyncToken,
+        EvSyncToken,
+        EvReleaseSyncToken,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

@@ -1198,6 +1198,10 @@ public:
     }
 
     void FillStats(NYql::NDqProto::TDqTaskStats* stats) {
+        if (Stats.ReadRows + Stats.WriteRows + Stats.EraseRows == 0) {
+            // Avoid empty table_access stats
+            return;
+        }
         NYql::NDqProto::TDqTableStats* tableStats = nullptr;
         for (size_t i = 0; i < stats->TablesSize(); ++i) {
             auto* table = stats->MutableTables(i);

@@ -1084,5 +1084,6 @@ message TActivity {
         REPLICATION_TRANSFER_WRITER = 657;
         DATA_ERASURE = 658;
         TENANT_DATA_ERASURE = 659;
+        BS_SYNC_BROKER = 660;
     };
 };

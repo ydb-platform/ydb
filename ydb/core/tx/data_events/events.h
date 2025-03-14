@@ -11,7 +11,6 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/log.h>
-//#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>

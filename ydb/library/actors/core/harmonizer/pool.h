@@ -54,7 +54,7 @@ struct TPoolInfo {
     std::atomic<ui64> DecreasingThreadsByStarvedState = 0;
     std::atomic<ui64> DecreasingThreadsByHoggishState = 0;
     std::atomic<ui64> DecreasingThreadsByExchange = 0;
-    std::atomic<i16> PotentialMaxThreadCount = 0;
+    std::atomic<float> PotentialMaxThreadCount = 0;
     std::atomic<ui64> ReceivedHalfThreadByNeedyState = 0;
     std::atomic<ui64> GivenHalfThreadByOtherStarvedState = 0;
     std::atomic<ui64> GivenHalfThreadByHoggishState = 0;

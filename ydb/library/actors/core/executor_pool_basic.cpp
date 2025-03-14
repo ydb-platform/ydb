@@ -122,9 +122,8 @@ namespace NActors {
         Y_UNUSED(Jail, SoftProcessingDurationTs);
 
         ui32 threads = ThreadCount;
-        if (HasOwnSharedThread && threads) {
-            threads = threads - 1;
-        }
+        const ui32 sharedThreads = NFeatures::TUnitedFlags::UseUnited ? threads : (HasOwnSharedThread ? 1 : 0);
+        threads -= sharedThreads;
 
         if (MaxLocalQueueSize) {
             LocalQueues.Reset(new NThreading::TPadded<std::queue<ui32>>[threads]);
@@ -154,14 +153,16 @@ namespace NActors {
             MinFullThreadCount = DefaultFullThreadCount;
         }
 
-        ThreadCount = static_cast<i16>(MaxFullThreadCount);
+        if constexpr (NFeatures::TUnitedFlags::UseUnited) {
+            DefaultThreadCount = cfg.DefaultThreadCount;
+            MinThreadCount = cfg.MinThreadCount;
+            MaxThreadCount = cfg.MaxThreadCount;
+            ThreadCount = 0;
+        }
+
         auto semaphore = TSemaphore();
         semaphore.CurrentThreadCount = ThreadCount;
         Semaphore = semaphore.ConvertToI64();
-
-        DefaultThreadCount = DefaultFullThreadCount + HasOwnSharedThread;
-        MinThreadCount = MinFullThreadCount + HasOwnSharedThread;
-        MaxThreadCount = MaxFullThreadCount + HasOwnSharedThread;
 
         Threads.Reset(new NThreading::TPadded<TExecutorThreadCtx>[MaxFullThreadCount]);
         if constexpr (DebugMode) {
@@ -335,6 +336,7 @@ namespace NActors {
             TlsThreadContext->LocalQueueContext.LocalQueueSize = LocalQueueSize.load(std::memory_order_relaxed);
         }
         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "local queue done; moving to common");
+
         if (TlsThreadContext->UseRingQueue()) {
             return GetReadyActivationRingQueue(revolvingCounter);
         }
@@ -525,7 +527,7 @@ namespace NActors {
         ScheduleWriters.Reset(new NSchedulerQueue::TWriter[MaxFullThreadCount]);
 
 
-        for (i16 i = 0; i != MaxFullThreadCount; ++i) {
+        for (i16 i = 0; i != MaxFullThreadCount && !NFeatures::TUnitedFlags::UseUnited; ++i) {
             Threads[i].Thread.reset(
                 new TExecutorThread(
                     i,
@@ -547,7 +549,7 @@ namespace NActors {
         ThreadUtilization = 0;
         AtomicAdd(MaxUtilizationCounter, -(i64)GetCycleCountFast());
 
-        for (i16 i = 0; i != MaxFullThreadCount; ++i) {
+        for (i16 i = 0; i != MaxFullThreadCount && !NFeatures::TUnitedFlags::UseUnited; ++i) {
             Threads[i].Thread->Start();
         }
 
@@ -560,7 +562,7 @@ namespace NActors {
     void TBasicExecutorPool::PrepareStop() {
         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "stop flag set");
         StopFlag.store(true, std::memory_order_release);
-        for (i16 i = 0; i != MaxFullThreadCount; ++i) {
+        for (i16 i = 0; i != MaxFullThreadCount && !NFeatures::TUnitedFlags::UseUnited; ++i) {
             Threads[i].Thread->StopFlag.store(true, std::memory_order_release);
             Threads[i].Interrupt();
         }
@@ -572,7 +574,7 @@ namespace NActors {
 
     void TBasicExecutorPool::Shutdown() {
         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "shutdown");
-        for (i16 i = 0; i != MaxFullThreadCount; ++i) {
+        for (i16 i = 0; i != MaxFullThreadCount && !NFeatures::TUnitedFlags::UseUnited; ++i) {
             EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "join ", i);
             Threads[i].Thread->Join();
         }
@@ -635,6 +637,9 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::SetFullThreadCount(i16 threads) {
+        if constexpr (NFeatures::TUnitedFlags::UseUnited) {
+            return;
+        }
         threads = Max<i16>(MinFullThreadCount, Min(MaxFullThreadCount, threads));
         with_lock (ChangeThreadsLock) {
             i16 prevCount = GetFullThreadCount();

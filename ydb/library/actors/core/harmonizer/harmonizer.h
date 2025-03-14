@@ -30,7 +30,7 @@ namespace NActors {
         float MaxElapsedCpu = 0.0;
         float MinElapsedCpu = 0.0;
         float AvgElapsedCpu = 0.0;
-        i16 PotentialMaxThreadCount = 0;
+        float PotentialMaxThreadCount = 0.0;
         float SharedCpuQuota = 0.0;
         bool IsNeedy = false;
         bool IsStarved = false;

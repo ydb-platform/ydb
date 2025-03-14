@@ -5,6 +5,7 @@
 #include "debug.h"
 
 #include "executor_pool_basic.h"
+#include "executor_pool_basic_feature_flags.h"
 #include "executor_pool_io.h"
 #include "executor_pool_shared.h"
 
@@ -34,7 +35,7 @@ namespace NActors {
                 break;
             }
         }
-        if (!hasSharedThread) {
+        if (!hasSharedThread && !NFeatures::TUnitedFlags::UseUnited) {
             ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::SetupShared: no shared threads, skipping");
             return;
         }
@@ -52,14 +53,13 @@ namespace NActors {
 
         i16 sht = 1;
         for (ui32 i = 0; i < Config.Basic.size(); ++i) {
-            i16 sharedThreadCount = Config.Basic[poolIds[i]].HasSharedThread ? sht : 0;
-            if (sharedThreadCount) {
-                sht = 1;
-            }
-            poolInfos.push_back(TPoolShortInfo{static_cast<i16>(Config.Basic[poolIds[i]].PoolId), sharedThreadCount, true, Config.Basic[poolIds[i]].PoolName});
+            auto &basicCfg = Config.Basic[poolIds[i]];
+            i16 sharedThreadCount = NFeatures::TUnitedFlags::UseUnited ? basicCfg.DefaultThreadCount : (basicCfg.HasSharedThread ? sht : 0);
+            i16 availableSlots = NFeatures::TUnitedFlags::UseUnited ? basicCfg.MaxThreadCount - basicCfg.DefaultThreadCount : 0;
+            poolInfos.push_back(TPoolShortInfo{static_cast<i16>(basicCfg.PoolId), sharedThreadCount, availableSlots, true, basicCfg.PoolName});
         }
         for (ui32 i = 0; i < Config.IO.size(); ++i) {
-            poolInfos.push_back(TPoolShortInfo{static_cast<i16>(Config.IO[i].PoolId), 0, false, Config.IO[i].PoolName});
+            poolInfos.push_back(TPoolShortInfo{static_cast<i16>(Config.IO[i].PoolId), 0, 0, false, Config.IO[i].PoolName});
         }
         Shared = std::make_unique<TSharedExecutorPool>(Config.Shared, poolInfos);
 

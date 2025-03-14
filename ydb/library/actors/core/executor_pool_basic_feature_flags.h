@@ -33,6 +33,10 @@ namespace NActors::NFeatures {
         static constexpr bool CalcPerThread = false;
     };
 
+    struct TUnitedFlags {
+        static constexpr bool UseUnited = false;
+    };
+
     using TFeatureFlags = TCommonFeatureFlags;
 
     consteval bool IsCommon() {

@@ -164,8 +164,41 @@ struct MainTestCase {
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     }
 
-    void CreateTransfer(const TString& lambda, const TString& consumerName = "") {
-        TString customSettings = consumerName.empty() ? TString{} : (TStringBuilder() << ", CONSUMER_NAME = '" << consumerName << "'" << Endl);
+    struct CreateTransferSettings {
+        std::optional<TString> ConsumerName = std::nullopt;
+        std::optional<TDuration> FlushInterval;
+        std::optional<ui64> BatchSizeBytes;
+
+        CreateTransferSettings()
+            : ConsumerName(std::nullopt)
+            , FlushInterval(TDuration::Seconds(1))
+            , BatchSizeBytes(8_MB) {}
+
+        static CreateTransferSettings WithConsumerName(const TString& consumerName) {
+            CreateTransferSettings result;
+            result.ConsumerName = consumerName;
+            return result;
+        }
+
+        static CreateTransferSettings WithBatching(const TDuration& flushInterval, const ui64 batchSize) {
+            CreateTransferSettings result;
+            result.FlushInterval = flushInterval;
+            result.BatchSizeBytes = batchSize;
+            return result;
+        }
+    };
+
+    void CreateTransfer(const TString& lambda, const CreateTransferSettings& settings = CreateTransferSettings()) {
+        TStringBuilder sb;
+        if (settings.ConsumerName) {
+            sb << ", CONSUMER_NAME = '" << *settings.ConsumerName << "'" << Endl;
+        }
+        if (settings.FlushInterval) {
+            sb << ", FLUSH_INTERVAL = Interval('PT" << settings.FlushInterval->Seconds() << "S')" << Endl;
+        }
+        if (settings.BatchSizeBytes) {
+            sb << ", BATCH_SIZE = " << *settings.BatchSizeBytes << Endl;
+        }
 
         auto res = Session.ExecuteQuery(Sprintf(R"(
             %s;
@@ -173,12 +206,10 @@ struct MainTestCase {
             CREATE TRANSFER `%s`
             FROM `%s` TO `%s` USING $l
             WITH (
-                CONNECTION_STRING = 'grpc://%s',
-                FLUSH_INTERVAL = Interval('PT1S'),
-                BATCH_SIZE = 65535
+                CONNECTION_STRING = 'grpc://%s'
                 %s
             );
-        )", lambda.data(), TransferName.data(), TopicName.data(), TableName.data(), ConnectionString.data(), customSettings.data()),
+        )", lambda.data(), TransferName.data(), TopicName.data(), TableName.data(), ConnectionString.data(), sb.data()),
             TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     }
@@ -1007,7 +1038,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>
                     ];
                 };
-            )", "PredefinedConsumer");
+            )", MainTestCase::CreateTransferSettings::WithConsumerName("PredefinedConsumer"));
 
         Sleep(TDuration::Seconds(3));
 
@@ -1032,5 +1063,51 @@ Y_UNIT_TEST_SUITE(Transfer)
         }
     }
 
+    Y_UNIT_TEST(CustomFlushInterval)
+    {
+        TDuration flushInterval = TDuration::Seconds(5);
+
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithBatching(flushInterval, 13_MB));
+
+
+        TInstant expectedEnd = TInstant::Now() + flushInterval;
+        testCase.Write({"Message-1"});
+
+        // check that data in the table only after flush interval
+        for (size_t attempt = 20; attempt--; ) {
+            auto res = testCase.DoRead({{
+                _C("Key", ui64(0)),
+            }});
+            Cerr << "Attempt=" << attempt << " count=" << res.first << Endl << Flush;
+            if (res.first == 1) {
+                UNIT_ASSERT_C(expectedEnd <= TInstant::Now(), "Expected: " << expectedEnd << " Now: " << TInstant::Now());
+                break;
+            }
+
+            UNIT_ASSERT_C(attempt, "Unable to wait transfer result");
+            Sleep(TDuration::Seconds(1));
+        }
+    }
 }
 

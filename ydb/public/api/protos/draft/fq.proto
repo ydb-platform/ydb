@@ -439,8 +439,8 @@ message IamAuth {
     oneof identity {
         CurrentIAMTokenAuth current_iam = 1;
         ServiceAccountAuth service_account = 2;
-        TokenAuth token = 4;
         NoneAuth none = 3;
+        TokenAuth token = 4;
     }
 }
 

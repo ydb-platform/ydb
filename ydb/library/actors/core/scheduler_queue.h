@@ -5,6 +5,8 @@
 #include <ydb/library/actors/util/queue_chunk.h>
 #include <ydb/library/actors/core/event.h>
 
+#include <mutex>
+
 namespace NActors {
     class IEventHandle;
     class ISchedulerCookie;
@@ -65,6 +67,7 @@ namespace NActors {
         class TWriter : ::TNonCopyable {
             TChunk* WriteTo;
             ui32 WritePosition;
+            std::mutex Mutex;
 
         public:
             TWriter()
@@ -74,11 +77,13 @@ namespace NActors {
             }
 
             void Init(const TReader& reader) {
+                std::unique_lock<std::mutex> g(Mutex);
                 WriteTo = reader.ReadFrom;
                 WritePosition = 0;
             }
 
             void Push(ui64 instantMicrosends, IEventHandle* ev, ISchedulerCookie* cookie) {
+                std::unique_lock<std::mutex> g(Mutex); // TODO: use try_lock here and use other writer in case if this one is locked
                 if (Y_UNLIKELY(instantMicrosends == 0)) {
                     // Protect against Pop() getting stuck forever
                     instantMicrosends = 1;
@@ -90,7 +95,7 @@ namespace NActors {
                     AtomicStore(&entry.InstantMicroseconds, instantMicrosends);
                     ++WritePosition;
                 } else {
-                    TChunk* next = new TChunk();
+                    TChunk* next = new TChunk(); // allocated ad
                     volatile TEntry& entry = next->Entries[0];
                     entry.Cookie = cookie;
                     entry.Ev = ev;

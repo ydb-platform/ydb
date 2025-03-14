@@ -1013,18 +1013,10 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             const auto finalStage = useSink ? 3 : 4;
 
             // One update of main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access().size(), (useSink ? 2 : 1));
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(0).name(), "/Root/TestTable");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(0).updates().rows(), 1);
             UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + finalStage).table_access(0).has_deletes());
-
-            if (useSink) {
-                // Execution without sink uses literal execution stage, while execution with sink uses compute actor.
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-                UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + finalStage).table_access(1).has_updates());
-                UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + finalStage).table_access(1).has_deletes());
-                UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + finalStage).table_access(1).has_reads());
-            }
 
             {
                 const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
@@ -1178,24 +1170,13 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             const auto finalStage = UseSink ? 3 : 4;
             if (!UseSink) {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access().size(), 1);
-
-                // One update of main table
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(0).name(), "/Root/TestTable");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(0).updates().rows(), 1);
-                UNIT_ASSERT(            !stats.query_phases(finalStage).table_access(0).has_deletes());
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access().size(), 2);
-
-                // One update of main table
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(0).name(), "/Root/TestTable");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(0).updates().rows(), 1);
-                UNIT_ASSERT(            !stats.query_phases(finalStage).table_access(0).has_deletes());
-
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-                UNIT_ASSERT(            !stats.query_phases(finalStage).table_access(1).has_updates());
-                UNIT_ASSERT(            !stats.query_phases(finalStage).table_access(1).has_deletes());
             }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access().size(), 1);
+
+            // One update of main table
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(finalStage).table_access(0).has_deletes());
 
             {
                 const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");

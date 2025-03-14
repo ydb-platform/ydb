@@ -3352,7 +3352,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
     }
 
-    Y_UNIT_TEST(TestFollowerPromotion) {
+    void TestFollowerPromotion(bool killDuringPromotion) {
         constexpr int NODES = 3;
         TTestBasicRuntime runtime(NODES, false);
         Setup(runtime, true);
@@ -3383,30 +3383,42 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             MakeSureTabletIsUp(runtime, tabletId, i, &pipeConfig, &tabletRolesBefore[i]);
         }
         int leaders = std::accumulate(tabletRolesBefore.begin(), tabletRolesBefore.end(), 0, [](int a, bool b) -> int { return b ? a + 1 : a; });
-        UNIT_ASSERT_VALUES_EQUAL(leaders, 1);
         int leaderNode = std::find(tabletRolesBefore.begin(), tabletRolesBefore.end(), true) - tabletRolesBefore.begin();
-        // killing leader
-        SendKillLocal(runtime, leaderNode);
+        UNIT_ASSERT_VALUES_EQUAL(leaders, 1);
+        {
+            TBlockEvents<TEvTablet::TEvPromoteToLeader> blockPromote(runtime);
+            // killing leader
+            SendKillLocal(runtime, leaderNode);
+
+            while (blockPromote.empty()) {
+                runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+            }
+
+            if (killDuringPromotion) {
+                for (int i = 0; i < NODES; ++i) {
+                    if (i == leaderNode) {
+                        continue;
+                    }
+                    TActorId sender = runtime.AllocateEdgeActor(i);
+                    runtime.SendToPipe(tabletId, sender, new TEvents::TEvPoisonPill, i, pipeConfig);
+                }
+            }
+
+            runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+
+            blockPromote.Stop().Unblock();
+        }
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus);
-            runtime.DispatchEvents(options);
+            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus, killDuringPromotion ? 3 : 1);
+            runtime.DispatchEvents(options, TDuration::MilliSeconds(100));
         }
-        std::array<bool, NODES> tabletRolesIntermediate = {};
-        for (int i = 0; i < NODES; ++i) {
-            if (i != leaderNode) {
-                MakeSureTabletIsUp(runtime, tabletId, i, &pipeConfig, &tabletRolesIntermediate[i]);
-            } else {
-                tabletRolesIntermediate[i] = false;
-            }
-        }
-        leaders = std::accumulate(tabletRolesIntermediate.begin(), tabletRolesIntermediate.end(), 0, [](int a, bool b) -> int { return b ? a + 1 : a; });
-        int followers = std::accumulate(tabletRolesIntermediate.begin(), tabletRolesIntermediate.end(), 0, [](int a, bool b) -> int { return b ? a : a + 1; });
-        UNIT_ASSERT_VALUES_EQUAL(leaders, 1);
-        UNIT_ASSERT_VALUES_EQUAL(followers, 2);
         std::unordered_set<std::pair<TTabletId, TFollowerId>> activeTablets;
         TActorId senderA = runtime.AllocateEdgeActor();
         for (int i = 0; i < NODES; ++i) {
+            if (i == leaderNode) {
+                continue;
+            }
             TActorId whiteboard = NNodeWhiteboard::MakeNodeWhiteboardServiceId(runtime.GetNodeId(i));
             runtime.Send(new IEventHandle(whiteboard, senderA, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest()));
             TAutoPtr<IEventHandle> handle;
@@ -3421,6 +3433,16 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             }
         }
         UNIT_ASSERT_VALUES_EQUAL(activeTablets.size(), 3);
+        leaders = std::count_if(activeTablets.begin(), activeTablets.end(), [](auto&& p) { return p.second == 0; });
+        UNIT_ASSERT_VALUES_EQUAL(leaders, 1);
+    }
+
+    Y_UNIT_TEST(TestFollowerPromotion) {
+        TestFollowerPromotion(false);
+    }
+
+    Y_UNIT_TEST(TestFollowerPromotionFollowerDies) {
+        TestFollowerPromotion(true);
     }
 
     Y_UNIT_TEST(TestManyFollowersOnOneNode) {

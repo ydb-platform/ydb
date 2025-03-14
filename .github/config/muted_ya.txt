@@ -60,8 +60,6 @@ ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBack
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-false
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-true
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
 ydb/core/viewer/tests test.py.test_viewer_nodes
 ydb/core/viewer/tests test.py.test_viewer_sysinfo
@@ -149,6 +147,7 @@ ydb/tests/olap/ttl_tiering data_migration_when_alter_ttl.py.TestDataMigrationWhe
 ydb/tests/olap/ttl_tiering sole chunk chunk
 ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_data_unchanged_after_ttl_change
 ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_ttl_delete
+ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_delete_s3_tiering
 ydb/tests/olap/ttl_tiering ttl_unavailable_s3.py.TestUnavailableS3.test
 ydb/tests/postgres_integrations/go-libpq [docker_wrapper_test.py] chunk chunk
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]

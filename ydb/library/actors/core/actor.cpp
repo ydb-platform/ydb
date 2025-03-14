@@ -267,6 +267,26 @@ namespace NActors {
         return NHPTimer::GetSeconds(ElapsedTicks);
     }
 
+    void IActor::Receive(TAutoPtr<IEventHandle>& ev) {
+#ifndef NDEBUG
+        if (ev->Flags & IEventHandle::FlagDebugTrackReceive) {
+            YaDebugBreak();
+        }
+#endif
+        ++HandledEvents;
+        LastReceiveTimestamp = TActivationContext::Monotonic();
+
+        try {
+            (this->*StateFunc_)(ev);
+        } catch(const std::exception& e) {
+            if (auto* handler = dynamic_cast<IActorExceptionHandler*>(this);
+                !handler || !handler->OnUnhandledException(e))
+            {
+                throw;
+            }
+        }
+    }
+
     void IActor::Registered(TActorSystem* sys, const TActorId& owner) {
         // fallback to legacy method, do not use it anymore
         if (auto eh = AfterRegister(SelfId(), owner)) {

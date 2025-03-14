@@ -461,58 +461,58 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvAuth::TPtr& 
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvDirectReadAck::TPtr& ev, const TActorContext& ctx) {
-
     auto it = Partitions.find(ev->Get()->AssignId);
     if (it == Partitions.end()) {
         // do nothing - already released partition
         return;
     }
 
+    auto directReadId = ev->Get()->DirectReadId;
+
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " got DirectReadAck from client"
         << ": partition# " << it->second.Partition
-        << ", directReadId# " << ev->Get()->DirectReadId
+        << ", directReadId# " << directReadId
         << ", bytesInflight# " << BytesInflight_);
 
-    if (it->second.MaxProcessedDirectReadId + 1 != (ui64)ev->Get()->DirectReadId) {
+    if (it->second.MaxProcessedDirectReadId + 1 != directReadId) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
             << "direct reads must be confirmed in strict order - expecting " << (it->second.MaxProcessedDirectReadId + 1)
-            << " but got " << ev->Get()->DirectReadId, ctx);
+            << " but got " << directReadId, ctx);
     }
 
-    if (it->second.LastDirectReadId + MAX_PENDING_DIRECT_READ_ACKS < (ui64)ev->Get()->DirectReadId) {
+    if (it->second.LastDirectReadId + MAX_PENDING_DIRECT_READ_ACKS < directReadId) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder() << "too many pending DirectReadAcks", ctx);
     }
 
-    it->second.MaxProcessedDirectReadId = ev->Get()->DirectReadId;
-
-    auto drIt = it->second.DirectReads.find(ev->Get()->DirectReadId);
-
-    if (drIt == it->second.DirectReads.end()) {
-        it->second.PendingDirectReadAcks.push(ev->Get()->DirectReadId);
-        return;
-    }
-
-    ProcessDirectRead(it, drIt, ctx);
+    it->second.MaxProcessedDirectReadId = directReadId;
+    it->second.PendingDirectReadAcks.push(directReadId);
+    ProcessDirectReads(it, ctx);
+    ProcessReads(ctx);
 }
 
 template <bool UseMigrationProtocol>
-void TReadSessionActor<UseMigrationProtocol>::ProcessDirectRead(
-    TPartitionsMap::iterator it,
-    decltype(TPartitionActorInfo::DirectReads)::iterator drIt,
-    const TActorContext& ctx
-) {
-    BytesInflight_ -= drIt->second.ByteSize;
-    if (BytesInflight) {
-        (*BytesInflight) -= drIt->second.ByteSize;
+void TReadSessionActor<UseMigrationProtocol>::ProcessDirectReads(TPartitionsMap::iterator it, const TActorContext& ctx) {
+    auto& pendingAcks = it->second.PendingDirectReadAcks;
+    auto& directReads = it->second.DirectReads;
+    while (!pendingAcks.empty()) {
+        auto directReadId = pendingAcks.front();
+        auto drIt = directReads.find(directReadId);
+        if (drIt == directReads.end()) {
+            return;
+        }
+
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " processing direct read ack" << ": directReadId# " << directReadId);
+        pendingAcks.pop();
+        BytesInflight_ -= drIt->second.ByteSize;
+        if (BytesInflight) {
+            (*BytesInflight) -= drIt->second.ByteSize;
+        }
+
+        auto assignId = it->first;
+        directReads.erase(drIt);
+
+        ctx.Send(it->second.Actor, new TEvPQProxy::TEvDirectReadAck(assignId, directReadId));
     }
-
-    auto assignId = it->first;
-    auto directReadId = drIt->first;
-
-    it->second.DirectReads.erase(drIt);
-
-    ProcessReads(ctx);
-    ctx.Send(it->second.Actor, new TEvPQProxy::TEvDirectReadAck(assignId, directReadId));
 }
 
 template <bool UseMigrationProtocol>
@@ -2005,21 +2005,12 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessAnswer(typename TFormedRead
             return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
                 << "unknown partition_session_id " << formedResponse->AssignId << " #07", ctx);
         }
-        auto drIt = it->second.DirectReads.emplace(
-            std::piecewise_construct,
-            std::forward_as_tuple(formedResponse->DirectReadId),
-            std::forward_as_tuple(formedResponse->DirectReadId, sizeEstimation)
-        ).first;
+        it->second.DirectReads[formedResponse->DirectReadId] = {formedResponse->DirectReadId, sizeEstimation};
         it->second.LastDirectReadId = formedResponse->DirectReadId;
 
         Y_ABORT_UNLESS(diff == 0); // diff is zero; sizeEstimation already counted in inflight;
 
-        if (!it->second.PendingDirectReadAcks.empty()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " processing pending direct read ack" << ": guid# " << formedResponse->Guid);
-            Y_ABORT_UNLESS(it->second.PendingDirectReadAcks.front() == formedResponse->DirectReadId);
-            ProcessDirectRead(it, drIt, ctx);
-            it->second.PendingDirectReadAcks.pop();
-        }
+        ProcessDirectReads(it, ctx);
     } else if (formedResponse->HasMessages) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " response to read"
             << ": guid# " << formedResponse->Guid);

@@ -332,9 +332,8 @@ private:
     void ProcessReads(const TActorContext& ctx);
     ui64 PrepareResponse(typename TFormedReadResponse<TServerMessage>::TPtr formedResponse);
     void ProcessAnswer(typename TFormedReadResponse<TServerMessage>::TPtr formedResponse, const TActorContext& ctx);
-    void ProcessDirectRead(
+    void ProcessDirectReads(
         TPartitionsMap::iterator it,
-        decltype(TPartitionActorInfo::DirectReads)::iterator drIt,
         const TActorContext& ctx
     );
 

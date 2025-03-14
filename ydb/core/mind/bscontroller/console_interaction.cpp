@@ -140,13 +140,7 @@ namespace NKikimr::NBsController {
                 if (ConsolePipe) {
                     Y_ABORT_UNLESS(Self.YamlConfig);
                     if (const auto& [yaml, configVersion, yamlReturnedByFetch] = *Self.YamlConfig; yaml) {
-                        NTabletPipe::SendData(
-                            Self.SelfId(),
-                            ConsolePipe,
-                            new TEvBlobStorage::TEvControllerConsoleCommitRequest(
-                                yaml,
-                                AllowUnknownFields,
-                                BypassMetadataChecks));
+                        NTabletPipe::SendData(Self.SelfId(), ConsolePipe, new TEvBlobStorage::TEvControllerConsoleCommitRequest(yaml));
                     }
                 }
                 break;
@@ -176,13 +170,7 @@ namespace NKikimr::NBsController {
         if (ConsolePipe) {
             Y_ABORT_UNLESS(Self.YamlConfig);
             if (const auto& [yaml, configVersion, yamlReturnedByFetch] = *Self.YamlConfig; yaml) {
-                NTabletPipe::SendData(
-                    Self.SelfId(),
-                    ConsolePipe,
-                    new TEvBlobStorage::TEvControllerConsoleCommitRequest(
-                        yaml,
-                        AllowUnknownFields,
-                        BypassMetadataChecks));
+                NTabletPipe::SendData(Self.SelfId(), ConsolePipe, new TEvBlobStorage::TEvControllerConsoleCommitRequest(yaml));
             }
         } else {
             Y_ABORT_UNLESS(!ClientId);
@@ -229,17 +217,12 @@ namespace NKikimr::NBsController {
 
         auto& record = ev->Get()->Record;
 
-        if (!Working || CommitInProgress || (!record.GetOverwriteFlag() && ClientId)) {
+        if (!Working || CommitInProgress || ClientId) {
             // reply to newly came query
             const TActorId temp = std::exchange(ClientId, ev->Sender);
             IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::OngoingCommit, "ongoing commit");
             ClientId = temp;
             return;
-        }
-
-        if (ClientId) {
-            // abort previous query
-            IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Aborted, "request aborted");
         }
 
         ClientId = ev->Sender;
@@ -302,7 +285,6 @@ namespace NKikimr::NBsController {
             // don't need to reset them explicitly
             // every time we get new request we just replace them
             AllowUnknownFields = record.GetAllowUnknownFields();
-            BypassMetadataChecks = record.GetBypassMetadataChecks();
         } else {
             PendingYamlConfig.reset();
         }

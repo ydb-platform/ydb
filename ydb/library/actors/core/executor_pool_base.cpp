@@ -95,7 +95,7 @@ namespace NActors {
     }
 
     bool TExecutorPoolBaseMailboxed::Send(TAutoPtr<IEventHandle>& ev) {
-        //Y_DEBUG_ABORT_UNLESS(ev->GetRecipientRewrite().PoolID() == PoolId);
+        Y_DEBUG_ABORT_UNLESS(ev->GetRecipientRewrite().PoolID() == PoolId);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         RelaxedStore(&ev->SendTime, (::NHPTimer::STime)GetCycleCountFast());
 #endif

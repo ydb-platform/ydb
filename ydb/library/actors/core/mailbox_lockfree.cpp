@@ -3,7 +3,7 @@
 #include "events.h"
 #include "executor_pool.h"
 
-const int DebugLevel = 0;
+const int DebugLevel = 1;
 #define MY_DEBUG(x, y) if (x <= DebugLevel) { \
     Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " " << y << Endl); \
 }
@@ -48,7 +48,7 @@ namespace NActors {
                         return;
                     }
                 }
-                std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
+                std::unique_lock g(*ActorsMutex);
 
                 IActor* actor = nullptr;
                 TActorId recipient = evExt->GetRecipientRewrite();
@@ -95,7 +95,7 @@ namespace NActors {
     }
 
     void TMailbox::UnregisterActor(ui64 localActorId) noexcept {
-        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
+        std::unique_lock g(*ActorsMutex);
 
         IActor* actor = DetachActor(localActorId);
         MY_DEBUG(1, " local_actor# " <<  localActorId << " mailbox " << (void*)this << " actor# " << TypeName(*actor));
@@ -104,7 +104,7 @@ namespace NActors {
     }
 
     IActor* TMailbox::FindActor(ui64 localActorId) noexcept {
-        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
+        std::unique_lock g(*ActorsMutex);
         switch (ActorPack) {
             case EActorPack::Empty:
                 ///Cerr << (TStringBuilder() << __PRETTY_FUNCTION__  << " local_actor# " <<  localActorId
@@ -151,7 +151,7 @@ namespace NActors {
     }
 
     IActor* TMailbox::FindAlias(ui64 localActorId) noexcept {
-        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
+        std::unique_lock g(*ActorsMutex);
         switch (ActorPack) {
             case EActorPack::Empty:
             case EActorPack::Simple:
@@ -172,7 +172,7 @@ namespace NActors {
     }
 
     void TMailbox::AttachActor(ui64 localActorId, IActor* actor) noexcept {
-        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
+        std::unique_lock g(*ActorsMutex);
         MY_DEBUG(1, "Status# " << Status.load() << " local_actor# " <<  localActorId
             << " mailbox " << (void*)this << " actor# " << TypeName(*actor));
         switch (ActorPack) {
@@ -220,17 +220,15 @@ namespace NActors {
     }
 
     void TMailbox::AttachAlias(ui64 localActorId, IActor* actor) noexcept {
-        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
+        std::unique_lock g(*ActorsMutex);
         // Note: we assume the specified actor is registered and the alias is correct
-        ///Cerr << (TStringBuilder() << __PRETTY_FUNCTION__  << " local_actor# " <<  localActorId
-        ///    << " mailbox " << (void*)this << Endl);
         EnsureActorMap();
         actor->Aliases.insert(localActorId);
         ActorsInfo.Map.ActorsMap->Aliases.emplace(localActorId, actor);
     }
 
     IActor* TMailbox::DetachActor(ui64 localActorId) noexcept {
-        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
+        std::unique_lock g(*ActorsMutex);
         switch (ActorPack) {
             case EActorPack::Empty:
                 Y_ABORT("DetachActor(%" PRIu64 ") called for an empty mailbox", localActorId);
@@ -293,7 +291,7 @@ namespace NActors {
     }
 
     IActor* TMailbox::DetachAlias(ui64 localActorId) noexcept {
-        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
+        std::unique_lock g(*ActorsMutex);
         //Cerr << (TStringBuilder() << __PRETTY_FUNCTION__  << " local_actor# " <<  localActorId
         //    << " mailbox " << (void*)this << Endl);
         switch (ActorPack) {
@@ -321,7 +319,7 @@ namespace NActors {
     }
 
     void TMailbox::EnsureActorMap() {
-        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
+        std::unique_lock g(*ActorsMutex);
         switch (ActorPack) {
             case EActorPack::Empty:
                 Y_ABORT("Expected a non-empty mailbox");
@@ -359,14 +357,14 @@ namespace NActors {
     }
 
     void TMailbox::AddElapsedCycles(ui64 cycles) {
-        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
+        std::unique_lock g(*ActorsMutex);
         if (ActorPack == EActorPack::Map) {
             ActorsInfo.Map.ActorsMap->Stats.ElapsedCycles += cycles;
         }
     }
 
     std::optional<ui64> TMailbox::GetElapsedCycles() {
-        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
+        std::unique_lock g(*ActorsMutex);
         if (ActorPack == EActorPack::Map) {
             return ActorsInfo.Map.ActorsMap->Stats.ElapsedCycles;
         }
@@ -383,7 +381,7 @@ namespace NActors {
     bool TMailbox::CleanupActors() noexcept {
         bool done = true;
 
-        std::unique_lock<std::recursive_mutex> g(*ActorsMutex);
+        std::unique_lock g(*ActorsMutex);
         // Note: actor destructor might register more actors (including the same mailbox)
         for (int round = 0; round < 10; ++round) {
             switch (ActorPack) {
@@ -483,7 +481,7 @@ namespace NActors {
             if (ev) {
                 s << " for actor# " << ev->GetRecipientRewrite() << " ev_type# " << ev->GetTypeName();
             }
-            MY_DEBUG(1, "Status# " << Status.load() << " mailbox# " << (void*)this << " push event " << (void*)ev << s.Str());
+            MY_DEBUG(2, "Status# " << Status.load() << " mailbox# " << (void*)this << " push event " << (void*)ev << s.Str());
             if (current == MarkerFree) {
                 evPtr.Reset(ev);
                 return EMailboxPush::Free;
@@ -536,7 +534,7 @@ namespace NActors {
 
     void TMailbox::LockToFree() noexcept {
         uintptr_t current = Status.exchange(MarkerFree, std::memory_order_acquire);
-        MY_DEBUG(1, " mailbox# " << (void*)this << " current status# " << (int)current);
+        MY_DEBUG(2, " mailbox# " << (void*)this << " current status# " << (int)current);
         if (current) {
             Y_DEBUG_ABORT_UNLESS(current != MarkerUnlocked, "LockToFree called on an unlocked mailbox, status# %d, mailbox# %p", current, this);
             Y_DEBUG_ABORT_UNLESS(current != MarkerFree, "LockToFree called on a mailbox that is already free, status# %d, mailbox# %p", current, this);
@@ -545,7 +543,7 @@ namespace NActors {
 
     void TMailbox::LockFromFree() noexcept {
         uintptr_t current = MarkerFree;
-        MY_DEBUG(1, " mailbox# " << (void*)this);
+        MY_DEBUG(2, " mailbox# " << (void*)this);
         if (!Status.compare_exchange_strong(current, 0, std::memory_order_relaxed)) {
             Y_ABORT("LockFromFree called on a mailbox that is not free, %p", this);
         }
@@ -553,10 +551,10 @@ namespace NActors {
 
     void TMailbox::Unlock(IExecutorPool* , NHPTimer::STime , ui64& ) {
         if (!Worker) {
-            MY_DEBUG(1, " new worker");
+            MY_DEBUG(1, " mailbox# " << (void*)this << " new worker");
             Worker = std::thread(std::bind(&TMailbox::Work, this));
         } else {
-            MY_DEBUG(1, " reuse existing worker");
+            MY_DEBUG(1, " mailbox# " << (void*)this << " reuse existing worker");
         }
     }
 
@@ -1170,9 +1168,10 @@ namespace NActors {
     }
 
     TMailbox* TMailboxCache::Allocate() {
-        std::unique_lock<std::mutex> g(Mutex);
+        std::unique_lock g(Mutex);
         Y_ABORT_UNLESS(Table);
 
+        MY_DEBUG(1, "cache# " << (void*)this << " BackupBlock# " << (void*)BackupBlock << " block# " << (void*) CurrentBlock << " size# " << CurrentSize);
         if (!CurrentBlock) {
             if (BackupBlock) [[likely]] {
                 CurrentBlock = BackupBlock;
@@ -1193,16 +1192,19 @@ namespace NActors {
         CurrentBlock = mailbox->ActorsInfo.Empty.NextFree;
         CurrentSize--;
 
-        Y_DEBUG_ABORT_UNLESS(CurrentBlock ? CurrentSize > 0 : CurrentSize == 0);
+        MY_DEBUG(1, "cache# " << (void*)this << " mailbox# " << (void*)mailbox << " block# " << (void*) CurrentBlock << " size# " << CurrentSize);
+        if (!(CurrentBlock ? CurrentSize > 0 : CurrentSize == 0)) {
+            Sleep(TDuration::Seconds(1));
+        }
+        Y_DEBUG_ABORT_UNLESS(CurrentBlock ? CurrentSize > 0 : CurrentSize == 0, "%p, %zu", CurrentBlock, CurrentSize);
 
         mailbox->ActorsInfo.Empty.NextFree = nullptr;
-        MY_DEBUG(1, "mailbox# " << (void*)mailbox)
         return mailbox;
     }
 
     void TMailboxCache::Free(TMailbox* mailbox) {
-        std::unique_lock<std::mutex> g(Mutex);
-        MY_DEBUG(1, "mailbox# " << (void*)mailbox)
+        std::unique_lock g(Mutex);
+        MY_DEBUG(1, "cache# " << (void*)this << " mailbox# " << (void*)mailbox << " block# " << (void*) CurrentBlock << " size# " << CurrentSize);
         Y_ABORT_UNLESS(Table);
         Y_ABORT_UNLESS(mailbox != CurrentBlock, "double free");
 
@@ -1219,6 +1221,7 @@ namespace NActors {
         mailbox->ActorsInfo.Empty.NextFree = CurrentBlock;
         CurrentBlock = mailbox;
         CurrentSize++;
+        MY_DEBUG(1, "cache# " << (void*)this << " mailbox# " << (void*)mailbox << " block# " << (void*) CurrentBlock << " size# " << CurrentSize);
     }
 
     TMailboxTable::TMailboxTable(std::atomic<bool>* actorSystemStarted)
@@ -1294,6 +1297,7 @@ namespace NActors {
         std::unique_lock g(Lock);
 
         TMailbox* head = AllocateFullBlockLocked();
+        MY_DEBUG(1, "cache# " << (void*)this << " head# " << (void*) head << " BlockSize# " << BlockSize);
         if (head) [[likely]] {
             return { head, BlockSize };
         }

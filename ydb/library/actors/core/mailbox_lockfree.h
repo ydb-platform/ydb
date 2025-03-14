@@ -515,7 +515,7 @@ namespace NActors {
     class TMailboxTable {
     public:
         static constexpr size_t LinesCount = 0x1FFE0u;
-        static constexpr size_t MailboxesPerLine = 0x0100u;
+        static constexpr size_t MailboxesPerLine = 0x1000u;
         static constexpr size_t BlockSize = MailboxesPerLine / 2;
 
         static constexpr int LineIndexShift = 12;

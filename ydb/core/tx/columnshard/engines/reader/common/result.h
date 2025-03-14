@@ -22,7 +22,7 @@ private:
     // This 1-row batch contains the last key that was read while producing the ResultBatch.
     // NOTE: it might be different from the Key of last row in ResulBatch in case of filtering/aggregation/limit
     std::shared_ptr<IScanCursor> ScanCursor;
-    YDB_READONLY_DEF(std::optional<ui32>, NotFinishedIntervalIdx);
+    YDB_READONLY_DEF(std::optional<ui32>, NextIntervalHint);
     const NColumnShard::TCounterGuard Guard;
 
 public:

@@ -8,6 +8,35 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
+std::vector<std::shared_ptr<IDataSource>> TSourceFetchingSchedulerImpl::ExtractSourcesWithResult() {
+    std::vector<std::shared_ptr<IDataSource>> results;
+    while (FetchingSources.size()) {
+        auto frontSource = FetchingSources.front();
+        if (!frontSource->HasStageResult()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_no_result")("source_id", frontSource->GetSourceId())(
+                "source_idx", frontSource->GetSourceIdx());
+            break;
+        }
+        if (!frontSource->GetStageResult().HasResultChunk()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_no_result_chunk")("source_id", frontSource->GetSourceId())(
+                "source_idx", frontSource->GetSourceIdx());
+            break;
+        }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "has_result")("source_id", frontSource->GetSourceId())(
+            "source_idx", frontSource->GetSourceIdx());
+        results.emplace_back(frontSource);
+        if (!frontSource->GetStageResult().IsFinished()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "continue_source")("source_id", frontSource->GetSourceId())(
+                "source_idx", frontSource->GetSourceIdx());
+            Y_UNUSED(ScheduleNextSource());
+            break;
+        }
+        AFL_VERIFY(ActiveSources.erase(frontSource->GetSourceIdx()));
+        FetchingSources.pop_front();
+    }
+    return results;
+}
+
 void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::shared_ptr<arrow::Table>&& tableExt, const ui32 startIndex,
     const ui32 recordsCount, TPlainReadData& reader) {
     source->MutableResultRecordsCount() += tableExt ? tableExt->num_rows() : 0;
@@ -18,64 +47,36 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
         source->GetRecordsCount(), source->GetUsedRawBytes(), tableExt ? tableExt->num_rows() : 0);
 
     source->MutableStageResult().SetResultChunk(std::move(tableExt), startIndex, recordsCount);
-    while (FetchingSources.size()) {
-        auto frontSource = FetchingSources.front();
-        if (!frontSource->HasStageResult()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_no_result")("source_id", frontSource->GetSourceId())(
-                "source_idx", frontSource->GetSourceIdx());
-            break;
-        }
-        if (!frontSource->GetStageResult().HasResultChunk()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_no_result_chunk")("source_id", frontSource->GetSourceId())(
-                "source_idx", frontSource->GetSourceIdx());
-            break;
-        }
-        auto table = frontSource->MutableStageResult().ExtractResultChunk();
-        const bool isFinished = frontSource->GetStageResult().IsFinished();
-        std::optional<ui32> sourceIdxToContinue;
-        if (!isFinished) {
-            sourceIdxToContinue = frontSource->GetSourceIdx();
-        }
+    for (const std::shared_ptr<IDataSource>& source : Scheduler->ExtractSourcesWithResult()) {
+        auto table = source->MutableStageResult().ExtractResultChunk();
         if (table && table->num_rows()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "has_result")("source_id", frontSource->GetSourceId())(
-                "source_idx", frontSource->GetSourceIdx())("table", table->num_rows());
-            auto cursor =
-                std::make_shared<TSimpleScanCursor>(frontSource->GetStartPKRecordBatch(), frontSource->GetSourceId(), startIndex + recordsCount);
-            reader.OnIntervalResult(std::make_shared<TPartialReadResult>(frontSource->GetResourceGuards(), frontSource->GetGroupGuard(), table,
-                cursor, Context->GetCommonContext(), sourceIdxToContinue));
-        } else if (sourceIdxToContinue) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "continue_source")("source_id", frontSource->GetSourceId())(
-                "source_idx", frontSource->GetSourceIdx());
-            ContinueSource(*sourceIdxToContinue);
-            break;
+            auto cursor = std::make_shared<TSimpleScanCursor>(source->GetStartPKRecordBatch(), source->GetSourceId(), startIndex + recordsCount);
+            reader.OnIntervalResult(std::make_shared<TPartialReadResult>(
+                source->GetResourceGuards(), source->GetGroupGuard(), table, cursor, Context->GetCommonContext(), std::nullopt));
         }
-        if (!isFinished) {
-            break;
-        }
-        AFL_VERIFY(FetchingSourcesByIdx.erase(frontSource->GetSourceIdx()));
-        FetchingSources.pop_front();
-        frontSource->ClearResult();
-        if (Context->GetCommonContext()->GetReadMetadata()->HasLimit()) {
-            AFL_VERIFY(FetchingInFlightSources.erase(frontSource));
-            AFL_VERIFY(FinishedSources.emplace(frontSource).second);
-            while (FinishedSources.size() &&
-                   (SortedSources.empty() || (*FinishedSources.begin())->GetFinish() < SortedSources.front()->GetStart())) {
+        if (source->GetStageResult().IsFinished() && Context->GetCommonContext()->GetReadMetadata()->HasLimit()) {
+            source->ClearResult();
+            AFL_VERIFY(FetchingInFlightSources.erase(source));
+            AFL_VERIFY(FinishedSources.emplace(source).second);
+            std::shared_ptr<IDataSource> firstNotStarted = Scheduler->GetFirstNotStartedSourceOptional();
+            while (FinishedSources.size() && (!firstNotStarted || (*FinishedSources.begin())->GetFinish() < firstNotStarted->GetStart())) {
                 auto finishedSource = *FinishedSources.begin();
-                if (!finishedSource->GetResultRecordsCount() && InFlightLimit < MaxInFlight) {
-                    InFlightLimit = 2 * InFlightLimit;
+                const ui64 inFlightLimit = Scheduler->GetInFlightLimit();
+                if (!finishedSource->GetResultRecordsCount() && inFlightLimit < MaxInFlight) {
+                    Scheduler->SetInFlightLimit(Min(MaxInFlight, 2 * inFlightLimit));
                 }
                 FetchedCount += finishedSource->GetResultRecordsCount();
                 FinishedSources.erase(FinishedSources.begin());
                 if (Context->IsActive()) {
                     --IntervalsInFlightCount;
                 }
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "source_finished")("source_id", finishedSource->GetSourceId())(
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "source_finished")("source_id", finishedSource->GetSourceId())(
                     "source_idx", finishedSource->GetSourceIdx())("limit", Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust())(
                     "fetched", finishedSource->GetResultRecordsCount());
-                if (FetchedCount > (ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust() && SortedSources.size()) {
-                    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "limit_exhausted")(
+                if (FetchedCount > (ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust()) {
+                    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "limit_exhausted")(
                         "limit", Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust())("fetched", FetchedCount);
-                    SortedSources.clear();
+                    Scheduler->EraseNotStartedSources();
                     IntervalsInFlightCount = GetInFlightIntervalsCount();
                 }
             }
@@ -84,21 +85,24 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
 }
 
 TConclusionStatus TScanHead::Start() {
-    for (auto&& i : SortedSources) {
+    for (auto&& i : UninitializedSources) {
         i->InitFetchingPlan(Context->GetColumnsFetchingPlan(i));
+        Scheduler->AppendSource(i);
     }
+    UninitializedSources.clear();
     return TConclusionStatus::Success();
 }
 
 TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
-    : Context(context) {
+    : Context(context)
+    , Scheduler(context->GetScheduler()) {
     if (HasAppData() && AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
         MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
     }
     if (Context->GetReadMetadata()->HasLimit()) {
-        InFlightLimit = 1;
+        Scheduler->SetInFlightLimit(1);
     } else {
-        InFlightLimit = MaxInFlight;
+        Scheduler->SetInFlightLimit(MaxInFlight);
     }
     bool started = !context->GetCommonContext()->GetScanCursor()->IsInitialized();
     for (auto&& i : sources) {
@@ -113,7 +117,7 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
             }
             i->SetIsStartedByCursor();
         }
-        SortedSources.emplace_back(i);
+        UninitializedSources.emplace_back(i);
     }
 }
 
@@ -121,38 +125,27 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
     if (!Context->IsActive()) {
         return false;
     }
-    if (SortedSources.size() == 0) {
-        return false;
-    }
-    bool changed = false;
     if (!Context->GetCommonContext()->GetReadMetadata()->HasLimit()) {
-        while (SortedSources.size() && FetchingSources.size() < InFlightLimit && Context->IsActive()) {
-            SortedSources.front()->StartProcessing(SortedSources.front());
-            FetchingSources.emplace_back(SortedSources.front());
-            AFL_VERIFY(FetchingSourcesByIdx.emplace(SortedSources.front()->GetSourceIdx(), SortedSources.front()).second);
-            SortedSources.pop_front();
-            changed = true;
-        }
+        return !!Scheduler->ScheduleNextSource();
     } else {
-        if (InFlightLimit <= IntervalsInFlightCount) {
+        if (Scheduler->GetInFlightLimit() <= IntervalsInFlightCount) {
             return false;
         }
         ui32 inFlightCountLocal = GetInFlightIntervalsCount();
         AFL_VERIFY(IntervalsInFlightCount == inFlightCountLocal)("count_global", IntervalsInFlightCount)("count_local", inFlightCountLocal);
-        while (SortedSources.size() && inFlightCountLocal < InFlightLimit && Context->IsActive()) {
-            SortedSources.front()->StartProcessing(SortedSources.front());
-            FetchingSources.emplace_back(SortedSources.front());
-            AFL_VERIFY(FetchingSourcesByIdx.emplace(SortedSources.front()->GetSourceIdx(), SortedSources.front()).second);
-            AFL_VERIFY(FetchingInFlightSources.emplace(SortedSources.front()).second);
-            SortedSources.pop_front();
-            const ui32 inFlightCountLocalNew = GetInFlightIntervalsCount();
-            AFL_VERIFY(inFlightCountLocal <= inFlightCountLocalNew);
-            inFlightCountLocal = inFlightCountLocalNew;
-            changed = true;
+        if (inFlightCountLocal >= Scheduler->GetInFlightLimit()) {
+            return false;
         }
-        IntervalsInFlightCount = inFlightCountLocal;
+        auto scheduledSource = Scheduler->ScheduleNextSource();
+        if (!scheduledSource) {
+            return false;
+        }
+        AFL_VERIFY(FetchingInFlightSources.emplace(scheduledSource).second);
+        const ui32 inFlightCountLocalNew = GetInFlightIntervalsCount();
+        AFL_VERIFY(inFlightCountLocal <= inFlightCountLocalNew);
+        IntervalsInFlightCount = inFlightCountLocalNew;
+        return true;
     }
-    return changed;
 }
 
 const TReadContext& TScanHead::GetContext() const {
@@ -165,14 +158,7 @@ bool TScanHead::IsReverse() const {
 
 void TScanHead::Abort() {
     AFL_VERIFY(!Context->IsActive());
-    for (auto&& i : FetchingSources) {
-        i->Abort();
-    }
-    for (auto&& i : SortedSources) {
-        i->Abort();
-    }
-    FetchingSources.clear();
-    SortedSources.clear();
+    Scheduler->Abort();
     Y_ABORT_UNLESS(IsFinished());
 }
 
@@ -181,19 +167,20 @@ TScanHead::~TScanHead() {
 }
 
 ui32 TScanHead::GetInFlightIntervalsCount() const {
-    if (SortedSources.empty()) {
+    std::shared_ptr<IDataSource> firstNotStarted = Scheduler->GetFirstNotStartedSourceOptional();
+    if (!firstNotStarted) {
         return FetchingInFlightSources.size() + FinishedSources.size();
     }
     ui32 inFlightCountLocal = 0;
     for (auto it = FinishedSources.begin(); it != FinishedSources.end(); ++it) {
-        if (SortedSources.empty() || (*it)->GetFinish() < SortedSources.front()->GetStart()) {
+        if ((*it)->GetFinish() < firstNotStarted->GetStart()) {
             ++inFlightCountLocal;
         } else {
             break;
         }
     }
     for (auto it = FetchingInFlightSources.begin(); it != FetchingInFlightSources.end(); ++it) {
-        if (SortedSources.empty() || (*it)->GetFinish() < SortedSources.front()->GetStart()) {
+        if ((*it)->GetFinish() < firstNotStarted->GetStart()) {
             ++inFlightCountLocal;
         } else {
             break;

@@ -1281,18 +1281,20 @@ public:
         return Clusters_->TryGetServer(cluster);
     }
 
-    NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder) const final {
+    NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const final {
         auto richYPath = NYT::TRichYPath(table);
         if (TSession::TPtr session = GetSession(sessionId, true)) {
             if (auto ytServer = Clusters_->TryGetServer(cluster)) {
                 auto entry = session->TxCache_.GetEntry(ytServer);
-                if (auto p = entry->Snapshots.FindPtr(std::make_pair(table, epoch))) {
-                    richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(table, NYT::TConfig::Get()->Prefix));
-                } else {
-                    auto realTableName = NYql::TransformPath(tmpFolder, table, true, session->UserName_);
+                auto realTableName = NYql::TransformPath(tmpFolder, table, temp, session->UserName_);
+                if (temp && !anonymous) {
                     realTableName = NYT::AddPathPrefix(realTableName, NYT::TConfig::Get()->Prefix);
                     richYPath = NYT::TRichYPath(realTableName);
-                    richYPath.TransactionId(session->TxCache_.GetEntry(ytServer)->Tx->GetId());
+                    richYPath.TransactionId(entry->Tx->GetId());
+                } else {
+                    auto p = entry->Snapshots.FindPtr(std::make_pair(realTableName, epoch));
+                    YQL_ENSURE(p, "Table " << table << " has no snapshot");
+                    richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(realTableName, NYT::TConfig::Get()->Prefix));
                 }
             }
         }
@@ -1340,14 +1342,10 @@ public:
                 }
 
                 auto richYPath = NYT::TRichYPath(table);
-                if (auto p = entry->Snapshots.FindPtr(std::make_pair(table, epoch))) {
-                    richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p));
-                } else {
-                    auto realTableName = NYql::TransformPath(GetTablesTmpFolder(*options.Config()), table, anon, session->UserName_);
-                    realTableName = NYT::AddPathPrefix(realTableName, NYT::TConfig::Get()->Prefix);
-                    richYPath = NYT::TRichYPath(realTableName);
-                    richYPath.TransactionId(entry->Tx->GetId());
-                }
+                auto realTableName = NYql::TransformPath(GetTablesTmpFolder(*options.Config()), table, anon, session->UserName_);
+                auto p = entry->Snapshots.FindPtr(std::make_pair(realTableName, epoch));
+                YQL_ENSURE(p, "Table " << table << " has no snapshot");
+                richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(realTableName, NYT::TConfig::Get()->Prefix));
 
                 waits.push_back(session->Queue_->Async([entry, richYPath, targetPath, logCtx] () {
                     YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
@@ -1594,8 +1592,10 @@ public:
             for (const auto& pathInfo: execCtx->Options_.Paths()) {
                 const auto tablePath = TransformPath(tmpFolder, pathInfo->Table->Name, pathInfo->Table->IsTemp, session->UserName_);
                 NYT::TRichYPath richYtPath{NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix)};
-                if (auto p = entry->Snapshots.FindPtr(std::make_pair(pathInfo->Table->Name, pathInfo->Table->Epoch.GetOrElse(0)))) {
-                    richYtPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(pathInfo->Table->Name, NYT::TConfig::Get()->Prefix));
+                if (!pathInfo->Table->IsTemp || pathInfo->Table->IsAnonymous) {
+                    auto p = entry->Snapshots.FindPtr(std::make_pair(tablePath, pathInfo->Table->Epoch.GetOrElse(0)));
+                    YQL_ENSURE(p, "Table " << tablePath << " (epoch=" << pathInfo->Table->Epoch.GetOrElse(0) << ") has no snapshot");
+                    richYtPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix));
                 }
                 pathInfo->FillRichYPath(richYtPath);  // n.b. throws exception, if there is no RowSpec (we assume it is always there)
                 paths.push_back(std::move(richYtPath));

@@ -16,7 +16,6 @@ IF (NOT WITH_VALGRIND)
         ydb/core/tx
         ydb/core/tx/schemeshard/ut_helpers
         yql/essentials/public/udf/service/exception_policy
-        ydb/library/dbgtrace
     )
 
     YQL_LAST_ABI_VERSION()

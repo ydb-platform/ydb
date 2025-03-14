@@ -27,7 +27,7 @@ static const bool ENABLE_COORDINATOR_MEDIATOR_LOG = false;
 static const bool ENABLE_SCHEMEBOARD_LOG = false;
 static const bool ENABLE_COLUMNSHARD_LOG = false;
 static const bool ENABLE_EXPORT_LOG = false;
-static const bool ENABLE_TOPIC_LOG = true;
+static const bool ENABLE_TOPIC_LOG = false;
 
 using namespace NKikimr;
 using namespace NSchemeShard;

@@ -96,10 +96,19 @@ public:
     }
 
     ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings& settings) override {
-        Y_UNUSED(node);
-        for (size_t i = 0; i < settings.MaxPartitions; ++i) {
-            partitions.push_back(TStringBuilder() << "partition" << i);
+        const TDqSource dqSource(&node);
+
+        if (const auto maybeSettings = dqSource.Settings().Maybe<TSoSourceSettings>()) {
+            const auto soSourceSettings = maybeSettings.Cast();
+            if (!soSourceSettings.Selectors().StringValue().empty()) {
+                for (size_t i = 0; i < settings.MaxPartitions; ++i) {
+                    partitions.push_back(TStringBuilder() << "partition" << i);
+                }
+                return 0;
+            }
         }
+
+        partitions.push_back("partition");
         return 0;
     }
 
@@ -181,10 +190,13 @@ public:
                     if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), settingsRef.Child(i)->Head().Content(), ctx, value)) {
                         return {};
                     }
-                    if (!TryFromString<bool>(value, *downsamplingDisabled)) {
+                    bool boolValue;
+                    if (!TryFromString<bool>(value, boolValue)) {
                         ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), TStringBuilder() << "downsampling.disabled must be true or false, but has " << value));
                         return {};
                     }
+
+                    downsamplingDisabled = boolValue;
                     continue;
                 }
                 if (settingsRef.Child(i)->Head().IsAtom("downsampling.aggregation"sv)) {
@@ -273,7 +285,7 @@ public:
                     .To<TCoAtom>().Build(to.ToIsoStringLocalUpToSeconds())
                     .Selectors<TCoAtom>().Build(selectors)
                     .Program<TCoAtom>().Build(program)
-                    .DownsamplingDisabled<TCoBool>().Literal().Build(downsamplingDisabled ? "true" : "false").Build()
+                    .DownsamplingDisabled<TCoBool>().Literal().Build(*downsamplingDisabled ? "true" : "false").Build()
                     .DownsamplingAggregation<TCoAtom>().Build(downsamplingAggregation ? *downsamplingAggregation : "")
                     .DownsamplingFill<TCoAtom>().Build(downsamplingFill ? *downsamplingFill : "")
                     .DownsamplingGridSec<TCoUint32>().Literal().Build(ToString(downsamplingGridSec ? *downsamplingGridSec : 0)).Build()

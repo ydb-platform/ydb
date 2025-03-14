@@ -36,7 +36,7 @@ rows {
         bytes_value: "downsampling.aggregation"
       }
       payload {
-        bytes_value: "3"
+        bytes_value: "4"
       }
     }
     pairs {
@@ -52,7 +52,7 @@ rows {
         bytes_value: "downsampling.gridMillis"
       }
       payload {
-        bytes_value: "int 15000"
+        bytes_value: "int 300000"
       }
     }
     pairs {
@@ -113,7 +113,7 @@ rows {
         bytes_value: "downsampling.aggregation"
       }
       payload {
-        bytes_value: "3"
+        bytes_value: "4"
       }
     }
     pairs {
@@ -129,7 +129,7 @@ rows {
         bytes_value: "downsampling.gridMillis"
       }
       payload {
-        bytes_value: "int 15000"
+        bytes_value: "int 300000"
       }
     }
     pairs {
@@ -190,7 +190,7 @@ rows {
         bytes_value: "downsampling.aggregation"
       }
       payload {
-        bytes_value: "3"
+        bytes_value: "4"
       }
     }
     pairs {
@@ -206,7 +206,7 @@ rows {
         bytes_value: "downsampling.gridMillis"
       }
       payload {
-        bytes_value: "int 15000"
+        bytes_value: "int 300000"
       }
     }
     pairs {

@@ -408,8 +408,6 @@ class TTransferWriter
     : public TActorBootstrapped<TTransferWriter>
     , private NSchemeCache::TSchemeCacheHelpers
 {
-    static constexpr i64 ExpectedBatchSize = 8_MB;
-    static constexpr TDuration FlushInterval = TDuration::Seconds(5);
     static constexpr TDuration MinRetryDelay = TDuration::Seconds(1);
     static constexpr TDuration MaxRetryDelay = TDuration::Minutes(10);
 
@@ -656,7 +654,7 @@ private:
             }
         }
 
-        if (TableState->BatchSize() >= ExpectedBatchSize || *LastWriteTime < TInstant::Now() - FlushInterval) {
+        if (TableState->BatchSize() >= BatchSizeBytes || *LastWriteTime < TInstant::Now() - FlushInterval) {
             if (TableState->Flush()) {
                 LastWriteTime.reset();
                 return Become(&TThis::StateWrite);
@@ -790,16 +788,22 @@ public:
     explicit TTransferWriter(
             const TString& transformLambda,
             const TPathId& tablePathId,
-            const TActorId& compileServiceId)
+            const TActorId& compileServiceId,
+            const TDuration flushInterval,
+            const ui64 batchSizeBytes)
         : TransformLambda(transformLambda)
         , TablePathId(tablePathId)
         , CompileServiceId(compileServiceId)
+        , FlushInterval(flushInterval)
+        , BatchSizeBytes(batchSizeBytes)
     {}
 
 private:
     const TString TransformLambda;
     const TPathId TablePathId;
     const TActorId CompileServiceId;
+    const TDuration FlushInterval;
+    const i64 BatchSizeBytes;
     TActorId Worker;
 
     ITableKindState::TPtr TableState;
@@ -825,9 +829,9 @@ private:
 }; // TTransferWriter
 
 IActor* CreateTransferWriter(const TString& transformLambda, const TPathId& tablePathId,
-        const TActorId& compileServiceId)
+        const TActorId& compileServiceId, TDuration flushInterval, ui64 batchSizeBytes)
 {
-    return new TTransferWriter(transformLambda, tablePathId, compileServiceId);
+    return new TTransferWriter(transformLambda, tablePathId, compileServiceId, flushInterval, batchSizeBytes);
 }
 
 }

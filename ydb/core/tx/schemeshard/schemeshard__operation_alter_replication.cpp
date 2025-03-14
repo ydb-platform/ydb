@@ -432,20 +432,45 @@ public:
             }
         }
 
-        if (op.HasTransferTransformLambda()) {
+        auto transferSetter = [&](const TString& name, auto&& action) {
             auto& oldConf = *(alterData->Description.MutableConfig());
             if (!oldConf.HasTransferSpecific()) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "Change TransformLambda allowed only for transfer");
-                return result;
+                    TStringBuilder() << "Change " << name << " allowed only for transfer");
+                return false;
             }
             auto& targets = *oldConf.MutableTransferSpecific()->MutableTargets();
             if (targets.size() != 1) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
                     "Only one transfer target allowed");
+                return false;
+            }
+            action(*targets.begin());
+            return true;
+        };
+
+        if (op.HasTransferTransformLambda()) {
+            if (!transferSetter("TransformLambda", [&](NKikimrReplication::TReplicationConfig::TTransferSpecific::TTarget& target) -> void {
+                target.SetTransformLambda(op.GetTransferTransformLambda());
+            })) {
                 return result;
             }
-            targets.begin()->SetTransformLambda(op.GetTransferTransformLambda());
+        }
+
+        if (op.HasTransferFlushIntervalMilliSeconds()) {
+            if (!transferSetter("FlushInterval", [&](NKikimrReplication::TReplicationConfig::TTransferSpecific::TTarget& target) -> void {
+                target.SetFlushIntervalMilliSeconds(op.GetTransferFlushIntervalMilliSeconds());
+            })) {
+                return result;
+            }
+        }
+
+        if (op.HasTransferBatchSizeBytes()) {
+            if (!transferSetter("BatchSize", [&](NKikimrReplication::TReplicationConfig::TTransferSpecific::TTarget& target) -> void {
+                target.SetBatchSizeBytes(op.GetTransferBatchSizeBytes());
+            })) {
+                return result;
+            }
         }
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));

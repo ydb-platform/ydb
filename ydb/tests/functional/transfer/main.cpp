@@ -163,7 +163,9 @@ struct MainTestCase {
             CREATE TRANSFER `%s`
             FROM `%s` TO `%s` USING $l
             WITH (
-                CONNECTION_STRING = 'grpc://%s'
+                CONNECTION_STRING = 'grpc://%s',
+                FLUSH_INTERVAL = Interval('PT1S'),
+                BATCH_SIZE = 65535
                 -- , TOKEN = 'user@builtin'
             );
         )", lambda.data(), TransferName.data(), TopicName.data(), TableName.data(), ConnectionString.data()), TTxControl::NoTx()).GetValueSync();

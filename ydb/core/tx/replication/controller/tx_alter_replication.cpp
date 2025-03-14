@@ -43,10 +43,12 @@ public:
         const auto& newConfig = record.GetConfig();
 
         if (oldConfig.HasTransferSpecific()) {
-            auto& oldLambda = oldConfig.GetTransferSpecific().GetTargets(0).GetTransformLambda();
-            auto& newLambda = newConfig.GetTransferSpecific().GetTargets(0).GetTransformLambda();
+            auto& oldTarget = oldConfig.GetTransferSpecific().GetTargets(0);
+            auto& newTarget = newConfig.GetTransferSpecific().GetTargets(0);
 
-            alter = oldLambda != newLambda;
+            alter = oldTarget.GetTransformLambda() != newTarget.GetTransformLambda()
+                || oldTarget.GetBatchSizeBytes() != newTarget.GetBatchSizeBytes()
+                || oldTarget.GetFlushIntervalMilliSeconds() != newTarget.GetFlushIntervalMilliSeconds();
         }
 
         auto desiredState = Replication->GetState();

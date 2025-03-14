@@ -54,16 +54,21 @@ void RefreshTiering(TTestBasicRuntime& runtime, const TActorId& sender) {
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
 }
 
-bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, NOlap::TSnapshot snap) {
+std::optional<ui64> ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId) {
     auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
-        NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, snap.GetTxId(), txBody, 0, 0);
-
+        NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, txId, txBody, 0, 0);
+    const auto now = runtime.GetTimeProvider()->Now();
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
     auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
     const auto& res = ev->Get()->Record;
-    UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
+    UNIT_ASSERT_EQUAL(res.GetTxId(), txId);
     UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_SCHEMA);
-    return (res.GetStatus() == NKikimrTxColumnShard::PREPARED);
+    if (res.GetStatus() == NKikimrTxColumnShard::PREPARED) {
+        UNIT_ASSERT_LE(now.MilliSeconds(), res.GetMinStep());
+        UNIT_ASSERT_EQUAL(res.GetMaxStep(), std::numeric_limits<ui64>::max());
+        return {res.GetMinStep()};
+    }
+    return std::nullopt;
 }
 
 void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap) {
@@ -466,7 +471,7 @@ namespace NKikimr::NColumnShard {
         return NOlap::TIndexInfo::BuildDefault(NOlap::TTestStoragesManager::GetInstance(), columns, pkIds);
     }
 
-    void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const NOlap::TSnapshot& snapshot, bool succeed) {
+    std::optional<ui64> SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId, bool succeed) {
 
         auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
         while (controller && !controller->IsActiveTablet(TTestTxConfig::TxTablet0)) {
@@ -474,17 +479,18 @@ namespace NKikimr::NColumnShard {
         }
 
         using namespace NTxUT;
-        bool ok = ProposeSchemaTx(runtime, sender, txBody, snapshot);
-        UNIT_ASSERT_VALUES_EQUAL(ok, succeed);
+        const auto minPlanStep = ProposeSchemaTx(runtime, sender, txBody, txId);
+        UNIT_ASSERT_VALUES_EQUAL(!!minPlanStep, succeed);
         if (succeed) {
-            PlanSchemaTx(runtime, sender, snapshot);
+            PlanSchemaTx(runtime, sender, {*minPlanStep, txId});
         }
+        return minPlanStep;
     }
 
-    void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
+    std::optional<ui64> SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
                  const TestTableDescription& table, TString codec) {
         using namespace NTxUT;
-        NOlap::TSnapshot snapshot(10, 10);
+        const ui64 txId = 10;
         TString txBody;
         auto specials = TTestSchema::TTableSpecials().WithCodec(codec);
         if (table.InStore) {
@@ -492,7 +498,7 @@ namespace NKikimr::NColumnShard {
         } else {
             txBody = TTestSchema::CreateStandaloneTableTxBody(pathId, table.Schema, table.Pk, specials);
         }
-        SetupSchema(runtime, sender, txBody, snapshot, true);
+        return SetupSchema(runtime, sender, txBody, txId, true);
     }
 
 
@@ -524,7 +530,7 @@ namespace NKikimr::NColumnShard {
         runtime.DispatchEvents(options);
 
         TActorId sender = runtime.AllocateEdgeActor();
-        SetupSchema(runtime, sender, schemaTxBody, NOlap::TSnapshot(1000, 100), succeed);
+        SetupSchema(runtime, sender, schemaTxBody, 100, succeed);
     }
 
      std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema) {

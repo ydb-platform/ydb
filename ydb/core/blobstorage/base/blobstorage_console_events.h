@@ -33,14 +33,8 @@ namespace NKikimr {
             NKikimrBlobStorage::TEvControllerConsoleCommitRequest, EvControllerConsoleCommitRequest> {
         TEvControllerConsoleCommitRequest() = default;
 
-        TEvControllerConsoleCommitRequest(
-            const TString& yamlConfig,
-            bool allowUnknownFields = false,
-            bool bypassMetadataChecks = false) {
-
+        TEvControllerConsoleCommitRequest(const TString& yamlConfig) {
             Record.SetYAML(yamlConfig);
-            Record.SetAllowUnknownFields(allowUnknownFields);
-            Record.SetBypassMetadataChecks(bypassMetadataChecks);
         }
 
         TString ToString() const override {

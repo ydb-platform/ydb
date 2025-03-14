@@ -285,7 +285,7 @@ namespace NKikimr::NTable::NPage {
 
             void Describe(IOutputStream& out, const TKeyCellDefaults& keyDefaults) const
             {
-                out << '{';
+                out << '(';
 
                 auto iter = Iter();
                 for (TPos pos : xrange(iter.Count())) {
@@ -297,7 +297,7 @@ namespace NKikimr::NTable::NPage {
                     out << value;
                 }
 
-                out << '}';
+                out << ')';
             }
 
         private:

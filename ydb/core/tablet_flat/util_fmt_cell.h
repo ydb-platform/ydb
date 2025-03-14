@@ -17,7 +17,7 @@ public:
     }
 
     friend IOutputStream& operator<<(IOutputStream& out, const TPrintableTypedCells& v) {
-        out << '{';
+        out << '(';
         size_t pos = 0;
         for (const TCell& cell : v.Cells) {
             if (pos != 0) {
@@ -27,7 +27,7 @@ public:
             DbgPrintValue(value, cell, v.Types[pos++]);
             out << value;
         }
-        out << '}';
+        out << ')';
         return out;
     }
 

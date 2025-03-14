@@ -12,7 +12,7 @@ namespace {
 
 void PrintCells(IOutputStream& out, TArrayRef<const TCell> cells, const TCellDefaults& cellDefaults)
 {
-    out << '{';
+    out << '(';
     size_t pos = 0;
     for (const TCell& cell : cells) {
         if (pos != 0) {
@@ -22,7 +22,7 @@ void PrintCells(IOutputStream& out, TArrayRef<const TCell> cells, const TCellDef
         DbgPrintValue(value, cell, cellDefaults.Types[pos++]);
         out << value;
     }
-    out << '}';
+    out << ')';
 }
 
 bool ValidateSlices(TConstArrayRef<TSlice> slices) noexcept

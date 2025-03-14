@@ -1982,8 +1982,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     void ChangeNodeRestartsPerPeriod(TTestActorRuntime &runtime, const TActorId& sender, const ui32 restartsYellow, const ui32 restartsOrange) {
         NKikimrConfig::TAppConfig ext;
         auto &cfg = *ext.MutableHealthCheckConfig();
-        cfg.SetNodeRestartsPerPeriodYellowThreshold(restartsYellow);
-        cfg.SetNodeRestartsPerPeriodOrangeThreshold(restartsOrange);
+        cfg.MutableThresholds()->SetNodeRestartsYellow(restartsYellow);
+        cfg.MutableThresholds()->SetNodeRestartsOrange(restartsOrange);
         SendHealthCheckConfigUpdate(runtime, sender, cfg);
     }
 

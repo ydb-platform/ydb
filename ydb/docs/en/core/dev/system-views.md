@@ -97,7 +97,7 @@ Different runs of a query with the same text are deduplicated. The top list cont
 
 Fields that provide information about the used CPU time (...`CPUTime`) are expressed in microseconds.
 
-Query text limit is 4 KB.
+Query text limit is 10 KB.
 
 All tables have the same set of fields:
 
@@ -175,7 +175,7 @@ Each table row contains information about a set of queries with identical text t
 
 Restrictions:
 
-* Query text limit is 4 KB.
+* Query text limit is 10 KB.
 * Statistics may be incomplete if the database is under heavy load.
 
 Table structure:

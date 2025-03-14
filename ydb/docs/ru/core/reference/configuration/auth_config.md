@@ -196,16 +196,6 @@ auth_config:
 
 Значение по умолчанию: `as.private-api.cloud.yandex.net:4286`
     ||
-|| user_account_service_endpoint
-| Адрес, по которому отправляются запросы в каталогу пользователей IAM AccessService.
-
-Значение по умолчанию: `api-adapter.private-api.cloud.yandex.net:8443`
-    ||
-|| service_account_service_endpoint
-| Адрес, по которому отправляются запросы в каталогу сервисных аккаунтов IAM AccessService.
-
-Значение по умолчанию: `api-adapter.private-api.cloud.yandex.net:8443`
-    ||
 || use_access_service_tls
 | Флаг включает использование TLS-соединений между {{ ydb-short-name }} и AccessService.
 

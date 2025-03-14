@@ -27,27 +27,14 @@ java {
 }
 
 dependencies {
-{%- for library in target.consumer if library.classpath -%}
-{%-     set classpath = library.classpath -%}
-{%-     if classpath|replace('"','') == classpath -%}
-{%-         set classpath = '"' + classpath + '"' -%}
-{%-     endif %}
-{%-     if library.type != "contrib" %}
-    implementation
-{%-     else %}
-    api
-{%-     endif -%}({{ classpath }})
-{%-     if library.excludes.consumer is defined %} {
-{%          for exclude in library.excludes.consumer -%}
-{%              set classpath = exclude.classpath|replace('"','') -%}
-{%              set classpath_parts = split(classpath, ':') -%}
-        exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
-{%          endfor -%}
-    }
-{%-     endif -%}
-{%- endfor -%}
-
-{%- if target.proto_namespace %}
+{%- for library in target.consumer -%}
+{%      set classpath = library.classpath -%}
+{%      if classpath|replace('"','') == classpath -%}
+{%          set classpath = '"' + classpath + '"' -%}
+{%      endif %}
+    api({{ classpath }})
+{%- endfor %}
+{%  if target.proto_namespace %}
     protobuf(files(File(buildProtoDir, "{{ target.proto_namespace }}")))
 {%- else %}
     protobuf(files(buildProtoDir))

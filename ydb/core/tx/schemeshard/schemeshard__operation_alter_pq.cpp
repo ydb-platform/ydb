@@ -10,7 +10,6 @@
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/services/lib/sharding/sharding.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 
 namespace {
@@ -494,7 +493,6 @@ public:
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        DBGTRACE("TAlterPQ::Propose");
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& alter = Transaction.GetAlterPersQueueGroup();
@@ -578,8 +576,6 @@ public:
         }
 
         if (alterData->TotalGroupCount < topic->TotalGroupCount) {
-            DBGTRACE_LOG("alterData->TotalGroupCount=" << alterData->TotalGroupCount <<
-                         ", topic->TotalGroupCount=" << topic->TotalGroupCount);
             errStr = TStringBuilder() << "Invalid total groups count specified: " << alterData->TotalGroupCount
                                       << " vs " << topic->TotalGroupCount << " (current)";
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);

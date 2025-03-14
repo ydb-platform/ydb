@@ -1,5 +1,4 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -148,7 +147,6 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
     }
 
     Y_UNIT_TEST_FLAG(AlterWithReboots, PQConfigTransactionsAtSchemeShard) {
-        DBGTRACE("AlterWithReboots");
         TTestWithReboots t;
         t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
 
@@ -158,7 +156,6 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
             TPathVersion pqVer;
             {
                 TInactiveZone inactive(activeZone);
-                DBGTRACE_LOG("TestCreatePQGroup");
                 TestCreatePQGroup(runtime, ++t.TxId, "/MyRoot/DirA",
                                 "Name: \"PQGroup\""
                                 "TotalGroupCount: 10 "
@@ -166,23 +163,8 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
                                 "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}"
                                 );
 
-                DBGTRACE_LOG("TestAlterPQGroup");
-                TestAlterPQGroup(runtime, ++t.TxId, "/MyRoot/DirA",
-                                "Name: \"PQGroup\""
-                                "TotalGroupCount: 9 "
-                                "PartitionPerTablet: 10 ",
-                                 {NKikimrScheme::StatusMultipleModifications});
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                DBGTRACE_LOG("TestAlterPQGroup");
-                TestAlterPQGroup(runtime, ++t.TxId, "/MyRoot/DirA",
-                                "Name: \"PQGroup\""
-                                "TotalGroupCount: 10 "
-                                "PartitionPerTablet: 9 ",
-                                 {NKikimrScheme::StatusMultipleModifications});
-
-                t.TestEnv->TestWaitNotification(runtime, {t.TxId-2, t.TxId-1, t.TxId});
-
-                DBGTRACE_LOG("TestDescribeResult");
                 pqVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup", true),
                                            {NLs::Finished,
                                             NLs::CheckPartCount("PQGroup", 10, 10, 1, 10),

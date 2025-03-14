@@ -1781,11 +1781,15 @@ message THiveConfig {
 }
 
 message THealthCheckConfig {
-    optional uint32 NodeRestartsPerPeriodYellowThreshold = 1 [default = 10];
-    optional uint32 NodeRestartsPerPeriodOrangeThreshold = 2 [default = 30];
-    optional uint64 NodesTimeDifferenceUsYellowThreshold = 3 [default = 5000];
-    optional uint64 NodesTimeDifferenceUsOrangeThreshold = 4 [default = 25000];
-    optional uint32 TabletsRestartsPerPeriodOrangeThreshold = 5 [default = 30];
+    message TThresholds {
+        optional uint32 NodeRestartsYellow = 1 [default = 10]; // per period, see HiveConfig.NodeRestartWatchPeriod
+        optional uint32 NodeRestartsOrange = 2 [default = 30]; // per period, see HiveConfig.NodeRestartWatchPeriod
+        optional uint64 NodesTimeDifferenceYellow = 3 [default = 5000]; // microseconds
+        optional uint64 NodesTimeDifferenceOrange = 4 [default = 25000]; // microseconds
+        optional uint32 TabletsRestartsOrange = 5 [default = 30]; // per period, see HiveConfig.TabletRestartWatchPeriod
+    }
+    optional TThresholds Thresholds = 1;
+    optional uint32 Timeout = 2 [default = 20000]; // milliseconds
 }
 
 message TBlobCacheConfig {

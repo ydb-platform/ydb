@@ -15,6 +15,8 @@ PEERDIR(
 
 SRCS(
     defs.h
+    blobstorage_syncer_broker.cpp
+    blobstorage_syncer_broker.h
     blobstorage_syncer_committer.cpp
     blobstorage_syncer_committer.h
     blobstorage_syncer.cpp

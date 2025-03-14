@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ydb/core/persqueue/utils.h"
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -25,6 +26,7 @@ struct TTopicInitInfo {
     TString FolderId;
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
     THashMap<ui32, TPartitionInfo> Partitions;
+    std::shared_ptr<NPQ::TPartitionGraph> PartitionGraph;
 };
 
 using TTopicInitInfoMap = THashMap<TString, TTopicInitInfo>;
@@ -45,6 +47,7 @@ struct TTopicHolder {
 
     TVector<ui32> Groups;
     THashMap<ui32, TPartitionInfo> Partitions;
+    std::shared_ptr<NPQ::TPartitionGraph> PartitionGraph;
 
 
     inline static TTopicHolder FromTopicInfo(const TTopicInitInfo& info) {
@@ -59,6 +62,7 @@ struct TTopicHolder {
             .MeteringMode = info.MeteringMode,
             .FullConverter = info.TopicNameConverter,
             .Partitions = info.Partitions,
+            .PartitionGraph = info.PartitionGraph
         };
     }
 };

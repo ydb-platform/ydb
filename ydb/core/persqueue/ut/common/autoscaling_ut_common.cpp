@@ -261,7 +261,6 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
                                         TString{message.GetData()},
                                         impl->AutoCommit)
                                     .WithMsg(new MsgWrapper(message));
-
             impl->ReceivedMessages.push_back(msg);
 
             if (impl->AutoCommit) {
@@ -450,7 +449,7 @@ void TTestReadSession<Sdk>::WaitAllMessages() {
 
 template<SdkVersion Sdk>
 void TTestReadSession<Sdk>::Commit() {
-    Cerr << ">>>>> " << Impl->Name << " Commit all received messages" << Endl << Flush;
+    Cerr << ">>>>> " << Impl->Name << "Commit all received messages" << Endl << Flush;
     for (auto& m : Impl->ReceivedMessages) {
         if (!m.Commited) {
             m.Msg->Commit();

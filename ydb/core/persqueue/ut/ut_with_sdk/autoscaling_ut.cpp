@@ -622,6 +622,87 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         readSession2->Close();
     }
 
+    Y_UNIT_TEST(PartitionSplit_OffsetCommit) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(1)
+            .MaxActivePartitions(100)
+                .BeginConfigureAutoPartitioningSettings()
+                .UpUtilizationPercent(2)
+                .DownUtilizationPercent(1)
+                .StabilizationWindow(TDuration::Seconds(2))
+                .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings();
+
+        TConsumerSettings<TCreateTopicSettings> consumers(createSettings, TEST_CONSUMER);
+        createSettings.AppendConsumers(consumers);
+
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+
+        auto msg = TString(1_MB, 'a');
+
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, std::string{TEST_TOPIC}, false);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, std::string{TEST_TOPIC}, false);
+
+        {
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 1)));
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 2)));
+            Sleep(TDuration::Seconds(5));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+        }
+
+        {
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 3)));
+            UNIT_ASSERT(writeSession_2->Write(Msg(msg, 4)));
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 5)));
+            UNIT_ASSERT(writeSession_2->Write(Msg(msg, 6)));
+            Sleep(TDuration::Seconds(5));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+        }
+
+        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, std::string{TEST_TOPIC}, false);
+        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, std::string{TEST_TOPIC}, false);
+
+        {
+            UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 7)));
+            UNIT_ASSERT(writeSession2_2->Write(Msg(msg, 8)));
+            UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 9)));
+            UNIT_ASSERT(writeSession2_2->Write(Msg(msg, 10)));
+            Sleep(TDuration::Seconds(5));
+            auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
+        }
+
+        auto status = client.CommitOffset(TEST_TOPIC, 1, TEST_CONSUMER, 2).GetValueSync();
+        UNIT_ASSERT(status.IsSuccess());
+
+        auto describeConsumerSettings = TDescribeConsumerSettings().IncludeStats(true);
+        auto result = client.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER, describeConsumerSettings).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+
+        auto description = result.GetConsumerDescription();
+        UNIT_ASSERT(description.GetPartitions().size() == 5);
+
+        auto stats0 = description.GetPartitions().at(0).GetPartitionConsumerStats();
+        UNIT_ASSERT(stats0);
+        UNIT_ASSERT(stats0->GetCommittedOffset() == 6);
+
+        auto stats1 = description.GetPartitions().at(1).GetPartitionConsumerStats();
+        UNIT_ASSERT(stats1);
+        UNIT_ASSERT(stats1->GetCommittedOffset() == 2);
+
+        auto stats3 = description.GetPartitions().at(3).GetPartitionConsumerStats();
+        UNIT_ASSERT(stats3);
+        UNIT_ASSERT(stats3->GetCommittedOffset() == 0);
+    }
+
     Y_UNIT_TEST(CommitTopPast_BeforeAutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);
@@ -648,7 +729,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::SUCCESS, status.GetStatus(), "The consumer can commit at the end of the inactive partition.");
 
         status = client.CommitOffset(TEST_TOPIC, 0, TEST_CONSUMER, 0).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::BAD_REQUEST, status.GetStatus(), "The consumer cannot commit an offset for inactive, read-to-the-end partitions.");
+        UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::SUCCESS, status.GetStatus(), "The consumer can commit an offset for inactive, read-to-the-end partitions.");
     }
 
     Y_UNIT_TEST(ControlPlane_CreateAlterDescribe) {
@@ -867,6 +948,381 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         result = client.AlterTopic(autoscalingTestTopic, alterSettings).GetValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(PartitionSplit_DistributedTxCommit) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(1)
+            .MaxActivePartitions(100)
+                .BeginConfigureAutoPartitioningSettings()
+                .UpUtilizationPercent(2)
+                .DownUtilizationPercent(1)
+                .StabilizationWindow(TDuration::Seconds(2))
+                .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings()
+            .BeginAddConsumer()
+            .ConsumerName(TEST_CONSUMER);
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+
+        auto msg = TString(1_MB, 'a');
+
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, std::string{TEST_TOPIC}, false);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, std::string{TEST_TOPIC}, false);
+
+        {
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 1)));
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 2)));
+            Sleep(TDuration::Seconds(5));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+        }
+
+        {
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 3)));
+            UNIT_ASSERT(writeSession_2->Write(Msg(msg, 4)));
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 5)));
+            UNIT_ASSERT(writeSession_2->Write(Msg(msg, 6)));
+            Sleep(TDuration::Seconds(5));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+        }
+
+        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, std::string{TEST_TOPIC}, false);
+        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, std::string{TEST_TOPIC}, false);
+
+        {
+            UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 7)));
+            UNIT_ASSERT(writeSession2_2->Write(Msg(msg, 8)));
+            UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 9)));
+            UNIT_ASSERT(writeSession2_2->Write(Msg(msg, 10)));
+            Sleep(TDuration::Seconds(5));
+            auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
+        }
+
+        auto reader = client.CreateReadSession(
+        TReadSessionSettings()
+            .AutoPartitioningSupport(true)
+            .AppendTopics(TTopicReadSettings(TEST_TOPIC))
+            .ConsumerName(TEST_CONSUMER));
+
+        TInstant deadlineTime = TInstant::Now() + TDuration::Seconds(15);
+        auto count = 0;
+        auto expected = 10;
+        while(deadlineTime > TInstant::Now()) {
+            for (auto event : reader->GetEvents(false)) {
+                if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
+                    auto& messages = x->GetMessages();
+                    for (size_t i = 0u; i < messages.size(); ++i) {
+                        count++;
+                        auto& message = messages[i];
+                        message.Commit();
+                    }
+                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&event)) {
+                    x->Confirm();
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&event)) {
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>(&event)) {
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&event)) {
+                    x->Confirm();
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>(&event)) {
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&event)) {
+                    x->Confirm();
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                } else if (auto* sessionClosedEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&event)) {
+                    x->Confirm();
+                    Cerr << "SESSION EVENT" << x->DebugString() << Endl << Flush;
+                } else {
+                    Cerr << "SESSION EVENT unhandled \n";
+                }
+
+                if (count == expected) {
+                    break;
+                }
+            }
+            Sleep(TDuration::MilliSeconds(250));
+        }
+        Sleep(TDuration::Seconds(5));
+        UNIT_ASSERT_EQUAL(count, expected);
+
+        auto describeConsumerSettings = TDescribeConsumerSettings().IncludeStats(true);
+        auto result = client.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER, describeConsumerSettings).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+
+        auto description = result.GetConsumerDescription();
+        UNIT_ASSERT(description.GetPartitions().size() == 5);
+
+        auto stats1 = description.GetPartitions().at(1).GetPartitionConsumerStats();
+        UNIT_ASSERT(stats1);
+        UNIT_ASSERT(stats1->GetCommittedOffset() == 4);
+    }
+
+    Y_UNIT_TEST(PartitionSplit_DistributedTxCommit_ChildFirst) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+                .MinActivePartitions(1)
+                .MaxActivePartitions(100)
+                .BeginConfigureAutoPartitioningSettings()
+                    .UpUtilizationPercent(2)
+                    .DownUtilizationPercent(1)
+                    .StabilizationWindow(TDuration::Seconds(2))
+                    .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings()
+            .BeginAddConsumer()
+                .ConsumerName(TEST_CONSUMER);
+
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+
+        auto msg = TString(1_MB, 'a');
+
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, std::string{TEST_TOPIC}, false);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, std::string{TEST_TOPIC}, false);
+
+        {
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 1)));
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 2)));
+            Sleep(TDuration::Seconds(5));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+        }
+
+        {
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 3)));
+            UNIT_ASSERT(writeSession_2->Write(Msg(msg, 4)));
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 5)));
+            UNIT_ASSERT(writeSession_2->Write(Msg(msg, 6)));
+            Sleep(TDuration::Seconds(5));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+        }
+
+        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, std::string{TEST_TOPIC}, false);
+        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, std::string{TEST_TOPIC}, false);
+
+        {
+            UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 7)));
+            UNIT_ASSERT(writeSession2_2->Write(Msg(msg, 8)));
+            UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 9)));
+            UNIT_ASSERT(writeSession2_2->Write(Msg(msg, 10)));
+            Sleep(TDuration::Seconds(5));
+            auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
+        }
+
+        auto reader = client.CreateReadSession(
+            TReadSessionSettings()
+                .AutoPartitioningSupport(true)
+                .AppendTopics(TTopicReadSettings(TEST_TOPIC))
+                .ConsumerName(TEST_CONSUMER));
+
+        TInstant deadlineTime = TInstant::Now() + TDuration::Seconds(15);
+        auto count = 0;
+        auto expected = 10;
+
+        std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> partition0Messages;
+
+        while(deadlineTime > TInstant::Now()) {
+            for (auto event : reader->GetEvents(false)) {
+                if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
+                    auto& messages = x->GetMessages();
+                    for (size_t i = 0u; i < messages.size(); ++i) {
+                        auto& message = messages[i];
+                        count++;
+                        int partitionId = message.GetPartitionSession()->GetPartitionId();
+
+                        if (partitionId == 1) {
+                            // Commit messages from partition 1 immediately
+                            message.Commit();
+                        } else if (partitionId == 0) {
+                            // Store messages from partition 0 for later
+                            partition0Messages.push_back(message);
+                        }
+                    }
+                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&event)) {
+                    x->Confirm();
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&event)) {
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>(&event)) {
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&event)) {
+                    x->Confirm();
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>(&event)) {
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&event)) {
+                    x->Confirm();
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                } else if (auto* sessionClosedEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&event)) {
+                    Cerr << sessionClosedEvent->DebugString() << Endl << Flush;
+                } else {
+                    Cerr << "SESSION EVENT unhandled \n";
+                }
+
+                if (count == expected) {
+                    break;
+                }
+            }
+            if (count == expected) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(250));
+        }
+
+        UNIT_ASSERT_EQUAL(count, expected);
+
+        Sleep(TDuration::Seconds(5));
+
+        auto describeConsumerSettings = TDescribeConsumerSettings().IncludeStats(true);
+        auto result = client.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER, describeConsumerSettings).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+
+        auto description = result.GetConsumerDescription();
+        UNIT_ASSERT(description.GetPartitions().size() == 5);
+
+        auto stats1 = description.GetPartitions().at(1).GetPartitionConsumerStats();
+        UNIT_ASSERT(stats1);
+
+        UNIT_ASSERT(stats1->GetCommittedOffset() == 0);
+
+        for (auto& message : partition0Messages) {
+            message.Commit();
+        }
+
+        Sleep(TDuration::Seconds(5));
+
+        auto result2 = client.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER, describeConsumerSettings).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+
+        auto description2 = result2.GetConsumerDescription();
+        UNIT_ASSERT(description2.GetPartitions().size() == 5);
+
+        stats1 = description2.GetPartitions().at(1).GetPartitionConsumerStats();
+        UNIT_ASSERT(stats1);
+
+        UNIT_ASSERT(stats1->GetCommittedOffset() == 4);
+    }
+
+    Y_UNIT_TEST(PartitionSplit_DistributedTxCommit_CheckSessionReset) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+                .MinActivePartitions(1)
+                .MaxActivePartitions(100)
+                .BeginConfigureAutoPartitioningSettings()
+                    .UpUtilizationPercent(2)
+                    .DownUtilizationPercent(1)
+                    .StabilizationWindow(TDuration::Seconds(2))
+                    .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings()
+            .BeginAddConsumer()
+                .ConsumerName(TEST_CONSUMER);
+
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+
+        auto msg = TString(1_MB, 'a');
+
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, std::string{TEST_TOPIC}, false);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, std::string{TEST_TOPIC}, false);
+        auto seqNo = 1;
+        {
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, seqNo++)));
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, seqNo++)));
+            Sleep(TDuration::Seconds(5));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+        }
+
+        {
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, seqNo++)));
+            UNIT_ASSERT(writeSession_2->Write(Msg(msg, seqNo++)));
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, seqNo++)));
+            UNIT_ASSERT(writeSession_2->Write(Msg(msg, seqNo++)));
+            Sleep(TDuration::Seconds(5));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+        }
+
+        auto writeSession_3 = CreateWriteSession(client, "producer-2", 1, std::string{TEST_TOPIC}, false);
+        UNIT_ASSERT(writeSession_3->Write(Msg("message", seqNo++)));
+        UNIT_ASSERT(writeSession_3->Write(Msg("message", seqNo++)));
+
+        auto reader = client.CreateReadSession(
+            TReadSessionSettings()
+                .AutoPartitioningSupport(true)
+                .AppendTopics(TTopicReadSettings(TEST_TOPIC))
+                .ConsumerName(TEST_CONSUMER));
+
+        TInstant deadlineTime = TInstant::Now() + TDuration::Seconds(15);
+
+        auto commitSent = false;
+
+        while(deadlineTime > TInstant::Now()) {
+            for (auto event : reader->GetEvents(false)) {
+                if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                    auto& messages = x->GetMessages();
+                    for (size_t i = 0u; i < messages.size(); ++i) {
+                        auto& message = messages[i];
+                        message.Commit();
+
+                        if (message.GetSeqNo() == 8) {
+                            if (!commitSent) {
+                                commitSent = true;
+                                Sleep(TDuration::MilliSeconds(300));
+                                auto status = client.CommitOffset(TEST_TOPIC, 1, TEST_CONSUMER, 0).GetValueSync();
+                                UNIT_ASSERT(status.IsSuccess());
+                            } else {
+                                return;
+                            }
+                        }
+                    }
+                    UNIT_ASSERT(writeSession_3->Write(Msg(TStringBuilder() << "message-" << seqNo, seqNo)));
+                    seqNo++;
+                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&event)) {
+                    x->Confirm();
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&event)) {
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>(&event)) {
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&event)) {
+                    x->Confirm();
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>(&event)) {
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&event)) {
+                    x->Confirm();
+                    Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
+                } else if (auto* sessionClosedEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&event)) {
+                    Cerr << sessionClosedEvent->DebugString() << Endl << Flush;
+                } else {
+                    Cerr << "SESSION EVENT unhandled \n";
+                }
+            }
+            Sleep(TDuration::MilliSeconds(250));
+        }
+
+        UNIT_ASSERT(false);
     }
 
     Y_UNIT_TEST(PartitionSplit_AutosplitByLoad) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/defs.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <util/generic/bitmap.h>
 #include "flat_page_base.h"
 #include "flat_page_label.h"
@@ -280,6 +281,23 @@ namespace NKikimr::NTable::NPage {
             explicit operator bool() const noexcept
             {
                 return Count() > 0;
+            }
+
+            void Describe(IOutputStream& out, const TKeyCellDefaults& keyDefaults) const
+            {
+                out << '{';
+
+                auto iter = Iter();
+                for (TPos pos : xrange(iter.Count())) {
+                    if (pos != 0) {
+                        out << ", ";
+                    }
+                    TString value;
+                    DbgPrintValue(value, iter.Next(), keyDefaults.BasicTypes()[pos]);
+                    out << value;
+                }
+
+                out << '}';
             }
 
         private:

@@ -11784,4 +11784,76 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             });
         }
     }
+
+    Y_UNIT_TEST(NewOwnerOnDatabase) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TString newOwner = "user1";
+
+        TApplyIfUnit applyIfUnit;
+        applyIfUnit.AllowedPathTypes = std::vector<NKikimrSchemeOp::EPathType>();
+        applyIfUnit.AllowedPathTypes.value().push_back(NKikimrSchemeOp::EPathTypeSubDomain);
+        applyIfUnit.AllowedPathTypes.value().push_back(NKikimrSchemeOp::EPathTypeExtSubDomain);
+
+        TApplyIf applyIf = {applyIfUnit};
+
+        {
+            TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
+                Name: "Subdomain"
+            )");
+
+            {
+                AsyncModifyACL(runtime, ++txId, "/MyRoot", "Subdomain", TString(), newOwner, applyIf);
+                TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+                env.TestWaitNotification(runtime, txId);
+
+                auto checkOwner = [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& self = record.GetPathDescription().GetSelf();
+                    UNIT_ASSERT_EQUAL(self.GetOwner(), newOwner);
+                };
+
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Subdomain"), {checkOwner});
+            }
+        }
+
+        {
+            TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+                Name: "Extsubdomain"
+            )");
+
+            {
+                AsyncModifyACL(runtime, ++txId, "/MyRoot", "Extsubdomain", TString(), newOwner, applyIf);
+                TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+                env.TestWaitNotification(runtime, txId);
+
+                auto checkOwner = [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& self = record.GetPathDescription().GetSelf();
+                    UNIT_ASSERT_EQUAL(self.GetOwner(), newOwner);
+                };
+
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Extsubdomain"), {checkOwner});
+            }
+        }
+
+        {
+            TestCreateTable(runtime, txId, "/MyRoot", R"(
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )");
+
+            {
+                AsyncModifyACL(runtime, ++txId, "/MyRoot", "Table", TString(), newOwner, applyIf);
+                TestModificationResult(runtime, txId, NKikimrScheme::StatusPreconditionFailed);
+                env.TestWaitNotification(runtime, txId);
+
+                AsyncModifyACL(runtime, ++txId, "/MyRoot", "Table", TString(), newOwner);
+                TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+                env.TestWaitNotification(runtime, txId);
+            }
+        }
+    }
 }

@@ -123,7 +123,7 @@ Y_UNIT_TEST(ResolveTableError) {
 }
 
 Y_UNIT_TEST(ProposeError) {
-    TLocalFixture fixture;
+    TLocalFixture fixture(true, false);
     THashSet<TActorId> knownExecuters;
 
     using TMod = std::function<void(NKikimrTxDataShard::TEvProposeTransactionResult&)>;

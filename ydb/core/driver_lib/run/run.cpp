@@ -1944,7 +1944,9 @@ void TKikimrRunner::SetSignalHandlers() {
     signal(SIGINT, &TKikimrRunner::OnTerminate);
     signal(SIGTERM, &TKikimrRunner::OnTerminate);
 
-    Singleton<TTraceCollector>(TTraceCollector::DEFAULT_SIGNALS);
+    if (!GetEnv("YDB_ENABLE_SIGNAL_BACKTRACE").empty()) {
+        Singleton<TTraceCollector>(TTraceCollector::DEFAULT_SIGNALS);
+    }
 
 #if !defined(_win_)
     SetAsyncSignalHandler(SIGHUP, [](int) {

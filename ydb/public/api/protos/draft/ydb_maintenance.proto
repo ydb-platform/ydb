@@ -182,6 +182,10 @@ message MaintenanceTaskResult {
     repeated ActionGroupStates action_group_states = 2;
     // Try again after this deadline. Specified if there are no performed actions.
     optional google.protobuf.Timestamp retry_after = 3;
+    // The time when the mainteance task was created.
+    google.protobuf.Timestamp create_time = 4;
+    // The last time when the mainteance task was refreshed. Initially equals to create_time.
+    google.protobuf.Timestamp last_refresh_time = 5;
 }
 
 message MaintenanceTaskResponse {
@@ -197,6 +201,10 @@ message GetMaintenanceTaskRequest {
 message GetMaintenanceTaskResult {
     MaintenanceTaskOptions task_options = 1;
     repeated ActionGroupStates action_group_states = 2;
+    // The time when the mainteance task was created.
+    google.protobuf.Timestamp create_time = 3;
+    // The last time when the mainteance task was refreshed. Initially equals to create_time.
+    google.protobuf.Timestamp last_refresh_time = 4;
 }
 
 message GetMaintenanceTaskResponse {

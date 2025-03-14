@@ -519,7 +519,7 @@ TExprBase DqRewriteEquiJoin(
     EHashJoinMode mode,
     bool useCBO,
     TExprContext& ctx,
-    const TTypeAnnotationContext& typeCtx,
+    TTypeAnnotationContext& typeCtx,
     const TOptimizerHints& hints
 ) {
     int dummyJoinCounter = 0;
@@ -536,7 +536,7 @@ TExprBase DqRewriteEquiJoin(
     EHashJoinMode mode,
     bool useCBO,
     TExprContext& ctx,
-    const TTypeAnnotationContext& typeCtx,
+    TTypeAnnotationContext& typeCtx,
     int& joinCounter,
     const TOptimizerHints& hints
 ) {
@@ -563,6 +563,9 @@ TExprBase DqRewriteEquiJoin(
     if (!result) {
         return node;
     }
+
+    auto equiJoinStats = typeCtx.GetStats(equiJoin.Raw());
+    typeCtx.SetStats(result->Input.Raw(), equiJoinStats);
 
     THashMap<TStringBuf, TVector<TStringBuf>> columnsToRename;
     THashSet<TStringBuf> columnsToDrop;

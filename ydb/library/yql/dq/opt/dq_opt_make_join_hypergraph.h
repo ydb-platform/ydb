@@ -137,13 +137,14 @@ void MakeJoinHypergraphRec(
 template <typename TNodeSet>
 TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
     const std::shared_ptr<IBaseOptimizerNode>& joinTree,
-    const TOptimizerHints& hints = {}
+    const TOptimizerHints& hints = {},
+    bool logGraph = true
 ) {
     TJoinHypergraph<TNodeSet> graph{};
     std::unordered_map<std::shared_ptr<IBaseOptimizerNode>, TNodeSet> subtreeNodes{};
     MakeJoinHypergraphRec(graph, joinTree, subtreeNodes);
 
-    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
+    if (logGraph && NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         YQL_CLOG(TRACE, CoreDq) << "Hypergraph build: ";
         YQL_CLOG(TRACE, CoreDq) << graph.String();
     }
@@ -151,7 +152,7 @@ TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
     if (!hints.JoinOrderHints->Hints.empty()) {
         TJoinOrderHintsApplier joinHints(graph);
         joinHints.Apply(*hints.JoinOrderHints);
-        if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
+        if (logGraph && NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
             YQL_CLOG(TRACE, CoreDq) << "Hypergraph after hints: ";
             YQL_CLOG(TRACE, CoreDq) << graph.String();
         }
@@ -160,7 +161,7 @@ TJoinHypergraph<TNodeSet> MakeJoinHypergraph(
     TTransitiveClosureConstructor transitveClosure(graph);
     transitveClosure.Construct();
 
-    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
+    if (logGraph && NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         YQL_CLOG(TRACE, CoreDq) << "Hypergraph after transitive closure: ";
         YQL_CLOG(TRACE, CoreDq) << graph.String();
     }

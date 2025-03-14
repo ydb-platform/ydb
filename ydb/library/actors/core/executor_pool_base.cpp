@@ -205,11 +205,11 @@ namespace NActors {
 
         mailbox->SetExecutorPool(this);
 
-        // Free mailboxes are not executing, lock to a normal state
-        mailbox->LockFromFree();
-
         const ui64 localActorId = AllocateID();
         mailbox->AttachActor(localActorId, actor);
+
+        // Free mailboxes are not executing, lock to a normal state
+        mailbox->LockFromFree();
 
         // do init
         const TActorId actorId(ActorSystem->NodeId, PoolId, localActorId, mailbox->Hint);

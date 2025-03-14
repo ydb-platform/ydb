@@ -1227,6 +1227,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 134217728,
             DefaultValue: 0 }];
+
+        optional uint64 ReadIteratorKeysExtBlobsPrecharge = 21 [(ControlOptions) = {
+          Description: "Enable new precharge for DataShard read iterator",
+          MinValue: 0,
+          MaxValue: 1,
+          DefaultValue: 0 }];
     }
 
     message TTxLimitControls {

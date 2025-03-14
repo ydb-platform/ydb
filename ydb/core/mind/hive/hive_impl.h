@@ -286,7 +286,7 @@ protected:
     ITransaction* CreateReassignGroupsOnDecommit(ui32 groupId, std::unique_ptr<IEventHandle> reply);
     ITransaction* CreateLockTabletExecution(const NKikimrHive::TEvLockTabletExecution& rec, const TActorId& sender, const ui64 cookie);
     ITransaction* CreateUnlockTabletExecution(const NKikimrHive::TEvUnlockTabletExecution& rec, const TActorId& sender, const ui64 cookie);
-    ITransaction* CreateUnlockTabletExecution(ui64 tabletId, ui64 seqNo);
+    ITransaction* CreateUnlockTabletExecution(ui64 tabletId, ui64 seqNo, NKikimrHive::ELockLostReason reason);
     ITransaction* CreateRequestTabletSequence(TEvHive::TEvRequestTabletIdSequence::TPtr event);
     ITransaction* CreateResponseTabletSequence(TEvHive::TEvResponseTabletIdSequence::TPtr event);
     ITransaction* CreateDisconnectNode(THolder<TEvInterconnect::TEvNodeDisconnected> event);
@@ -981,7 +981,7 @@ protected:
     void DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet);
     void DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet, TSideEffects& sideEffects);
     TInstant GetAllowedBootingTime();
-    void ScheduleUnlockTabletExecution(TNodeInfo& node);
+    void ScheduleUnlockTabletExecution(TNodeInfo& node, NKikimrHive::ELockLostReason reason);
     TString DebugDomainsActiveNodes() const;
     TResourceNormalizedValues GetStDevResourceValues() const;
     bool IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& node) const;

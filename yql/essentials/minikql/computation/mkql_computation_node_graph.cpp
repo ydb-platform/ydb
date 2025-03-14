@@ -238,6 +238,7 @@ public:
         , TypeInfoHelper(new TTypeInfoHelper())
         , CountersProvider(opts.CountersProvider)
         , SecureParamsProvider(opts.SecureParamsProvider)
+        , LogProvider(opts.LogProvider)
         , Factory(opts.Factory)
         , FunctionRegistry(*opts.FunctionRegistry)
         , ValidateMode(opts.ValidateMode)
@@ -463,6 +464,7 @@ private:
                 TypeInfoHelper,
                 CountersProvider,
                 SecureParamsProvider,
+                LogProvider,
                 *NodeFactory,
                 *PatternNodes->HolderFactory,
                 PatternNodes->ValueBuilder.Get(),
@@ -559,6 +561,7 @@ private:
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
     NUdf::ICountersProvider* CountersProvider;
     const NUdf::ISecureParamsProvider* SecureParamsProvider;
+    const NUdf::ILogProvider* LogProvider;
     const TComputationNodeFactory Factory;
     const IFunctionRegistry& FunctionRegistry;
     TIntrusivePtr<TMemoryUsageInfo> MemInfo;

@@ -51,7 +51,7 @@ public:
         TFunctionTypeInfo funcInfo;
         const auto status = ctx.HolderFactory.GetFunctionRegistry()->FindFunctionTypeInfo(
             ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType->IsVoid() ? nullptr : UserType,
-            TypeConfig, flags, Pos, ctx.SecureParamsProvider, &funcInfo);
+            TypeConfig, flags, Pos, ctx.SecureParamsProvider, ctx.LogProvider, &funcInfo);
 
         if (!status.IsOk()) {
             UdfTerminate((TStringBuilder() << Pos << " Failed to find UDF function " << FunctionName << ", reason: "
@@ -205,7 +205,7 @@ private:
         TFunctionTypeInfo funcInfo;
         const auto status = ctx.HolderFactory.GetFunctionRegistry()->FindFunctionTypeInfo(
             ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType->IsVoid() ? nullptr : UserType,
-            TypeConfig, flags, Pos, ctx.SecureParamsProvider, &funcInfo);
+            TypeConfig, flags, Pos, ctx.SecureParamsProvider, ctx.LogProvider, &funcInfo);
 
         if (!status.IsOk()) {
             UdfTerminate((TStringBuilder() << Pos << " Failed to find UDF function " << FunctionName << ", reason: "
@@ -291,7 +291,7 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
 
     const auto status = ctx.FunctionRegistry.FindFunctionTypeInfo(
         ctx.Env, ctx.TypeInfoHelper, ctx.CountersProvider, funcName, userType->IsVoid() ? nullptr : userType,
-        typeConfig, flags, pos, ctx.SecureParamsProvider, &funcInfo);
+        typeConfig, flags, pos, ctx.SecureParamsProvider, ctx.LogProvider, &funcInfo);
 
     if (!status.IsOk()) {
         UdfTerminate((TStringBuilder() << pos << " Failed to find UDF function " << funcName << ", reason: "
@@ -353,7 +353,7 @@ IComputationNode* WrapScriptUdf(TCallable& callable, const TComputationNodeFacto
     TFunctionTypeInfo funcInfo;
     const auto status = ctx.FunctionRegistry.FindFunctionTypeInfo(
         ctx.Env, ctx.TypeInfoHelper, ctx.CountersProvider, funcName, userType,
-        typeConfig, flags, pos, ctx.SecureParamsProvider, &funcInfo);
+        typeConfig, flags, pos, ctx.SecureParamsProvider, ctx.LogProvider, &funcInfo);
 
     if (!status.IsOk()) {
         UdfTerminate((TStringBuilder() << pos << " Failed to find UDF function " << funcName << ", reason: "

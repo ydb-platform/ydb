@@ -557,10 +557,18 @@ void TTopicSession::CloseTopicSession() {
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
     ui64 dataSize = 0;
-    const auto& messages = event.GetMessages();
-    if (!messages.empty() && messages.back().GetWriteTime() < Self.StartingMessageTimestamp) {
-        LOG_ROW_DISPATCHER_TRACE("Skip data. StartingMessageTimestamp: " << Self.StartingMessageTimestamp << ". Write time: " << messages.back().GetWriteTime());
-        return;
+    auto& messages = event.GetMessages();
+
+    bool hasOldMessages = false;
+    for (auto it = messages.begin(); it != messages.end(); ++it) {
+        if (it->GetWriteTime() < Self.StartingMessageTimestamp) {
+            LOG_ROW_DISPATCHER_TRACE("Skip data. StartingMessageTimestamp: " << Self.StartingMessageTimestamp << ". Write time: " << it->GetWriteTime());
+            hasOldMessages = true;
+        } else if (hasOldMessages) {
+            messages.erase(messages.begin(), it);
+            Self.LastMessageOffset = it->GetOffset();
+            break;
+        }
     }
 
     for (const auto& message : messages) {

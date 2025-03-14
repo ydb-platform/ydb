@@ -61,6 +61,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             }
 
             AFL_VERIFY(Tables.emplace(table.GetPathId(), std::move(table)).second);
+            AFL_VERIFY(LocalToInternalPathIds.emplace(table.GetLocalPathId(), table.GetPathId()).second);
 
             if (!rowset.Next()) {
                 timer.AddLoadingFail();

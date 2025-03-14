@@ -112,6 +112,12 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelData::TPtr& ev)
 
     TInputChannelState& inputChannel = InCh(channelId);
 
+    if (Y_UNLIKELY(channelData.Proto.GetData().GetRows() == 0 && channelData.Proto.GetData().GetChunks() > 0)) {
+        // For backward compatibility, to support communication with old nodes during rollback/migration
+        // Should be deleted eventually ~ mid 2025
+        channelData.Proto.MutableData()->SetRows(channelData.Proto.GetData().GetChunks());
+    }
+
     LOG_T("Received input for channelId: " << channelId
         << ", seqNo: " << record.GetSeqNo()
         << ", size: " << channelData.Proto.GetData().GetRaw().size()

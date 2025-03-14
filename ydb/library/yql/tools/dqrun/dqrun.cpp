@@ -864,6 +864,15 @@ int RunMain(int argc, const char* argv[])
         tablesMapping[tableName] = filePath;
     }
 
+    TMaybe<TString> gatewaysPatch;
+    if (res.Has("gateways-patch")) {
+        if (!res.Has("replay")) {
+            YQL_LOG(ERROR) << "gateways-patch only can be used with replay option";
+            return 1;
+        }
+        gatewaysPatch = TFileInput(gwPatch).ReadAll();
+    }
+
     // Reinit logger with new level
     NYql::NLog::ELevel loggingLevel = NYql::NLog::ELevelHelpers::FromInt(verbosity);
     if (verbosity != LOG_DEF_PRIORITY) {
@@ -924,8 +933,14 @@ int RunMain(int argc, const char* argv[])
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
 
     TGatewaysConfig gatewaysConfig;
-    ReadGatewaysConfig(gatewaysCfgFile, &gatewaysConfig, sqlFlags);
-    UpdateSqlFlagsFromQContext(qContext, sqlFlags);
+    if (res.Has("replay")) {
+        const TGatewaysConfig* ptr = nullptr;
+        GetGatewaysConfForReplay(qContext, gatewaysConfig, ptr, gatewaysPatch);
+        UpdateSqlFlagsFromQContext(qContext, sqlFlags);
+        Y_ENSURE(ptr);
+    } else {
+        ReadGatewaysConfig(gatewaysCfgFile, &gatewaysConfig, sqlFlags);
+    }
     PatchGatewaysConfig(&gatewaysConfig, mrJobBin, mrJobUdfsDir, numYtThreads, res.Has("keep-temp"));
     if (runOptions.AnalyzeQuery) {
         auto* setting = gatewaysConfig.MutableDq()->AddDefaultSettings();
@@ -1216,15 +1231,6 @@ int RunMain(int argc, const char* argv[])
     if (res.Has("replay") && res.Has("capture")) {
         YQL_LOG(ERROR) << "replay and capture options can't be used simultaneously";
         return 1;
-    }
-
-    TMaybe<TString> gatewaysPatch;
-    if (res.Has("gateways-patch")) {
-        if (!res.Has("replay")) {
-            YQL_LOG(ERROR) << "gateways-patch only can be used with replay option";
-            return 1;
-        }
-        gatewaysPatch = TFileInput(gwPatch).ReadAll();
     }
 
     if (res.Has("replay")) {

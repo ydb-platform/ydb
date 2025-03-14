@@ -278,6 +278,8 @@ public:
         Build(fds, interestingOrderings);
     }
 
+    TOrderingsStateMachine() = default;
+
     TFDSet GetFDSet(std::size_t fdIdx) {
         return GetFDSet(std::vector<std::size_t> {fdIdx});
     }

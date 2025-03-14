@@ -80,7 +80,6 @@ struct TCounters {
         ResourceCount = Counters->GetCounter("ResourceCount");
         SenderCount = Counters->GetCounter("SenderCount");
     }
-      
 
     ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;

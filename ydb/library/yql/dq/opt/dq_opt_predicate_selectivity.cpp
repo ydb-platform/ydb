@@ -292,10 +292,10 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(cons
         return DefaultSelectivity(Stats, attributeName);
       }
 
-      if (auto histogramEstimator = Stats->ColumnStatistics->Data[attributeName].EqWidthHistogramEstimator) {
+      if (auto countMin = Stats->ColumnStatistics->Data[attributeName].CountMinSketch) {
         const auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
         std::optional<ui64> estimation =
-            EstimateInequalityPredicateByHistogram(right, columnType, histogramEstimator, EInequalityPredicateType::Equal);
+            EstimateCountMin(right, columnType, countMin);
         if (!estimation.has_value()) {
           return DefaultSelectivity(Stats, attributeName);
         }

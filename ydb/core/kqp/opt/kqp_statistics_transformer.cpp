@@ -521,9 +521,9 @@ public:
                   resSelectivity =
                       this->ComputeInequalitySelectivity(member, value, OlapCompStrToEInequalityPredicate[compSign]);
                 } else if (compSign == "eq") {
-                  resSelectivity = this->ComputeInequalitySelectivity(member, value, EInequalityPredicateType::Equal);
+                  resSelectivity = this->ComputeEqualitySelectivity(member, value);
                 } else if (compSign == "neq") {
-                  resSelectivity = 1 - this->ComputeInequalitySelectivity(member, value, EInequalityPredicateType::Equal);
+                  resSelectivity = 1 - this->ComputeEqualitySelectivity(member, value);
                 } else if (RegexpSigns.contains(compSign)) {
                   return 0.5;
                 }

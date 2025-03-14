@@ -2607,6 +2607,15 @@ public:
                 target.SetSrcPath(AdjustPath(src, params.GetDatabase()));
                 target.SetDstPath(AdjustPath(dst, GetDatabase()));
                 target.SetTransformLambda(lambda);
+                if (settings.Settings.Batching && settings.Settings.Batching->BatchSizeBytes) {
+                    target.SetBatchSizeBytes(settings.Settings.Batching->BatchSizeBytes);
+                }
+                if (settings.Settings.Batching && settings.Settings.Batching->FlushInterval) {
+                    target.SetFlushIntervalMilliSeconds(settings.Settings.Batching->FlushInterval.MilliSeconds());
+                }
+                if (settings.Settings.ConsumerName) {
+                    target.SetConsumerName(*settings.Settings.ConsumerName);
+                }
             }
 
             if (IsPrepare()) {
@@ -2651,6 +2660,14 @@ public:
             op.SetName(pathPair.second);
             if (!settings.TranformLambda.empty()) {
                 op.SetTransferTransformLambda(settings.TranformLambda);
+            }
+            if (auto& batching = settings.Settings.Batching) {
+                if (batching->FlushInterval) {
+                    op.SetTransferFlushIntervalMilliSeconds(batching->FlushInterval.MilliSeconds());
+                }
+                if (batching->BatchSizeBytes) {
+                    op.SetTransferBatchSizeBytes(batching->BatchSizeBytes);
+                }
             }
 
             if (const auto& done = settings.Settings.StateDone) {

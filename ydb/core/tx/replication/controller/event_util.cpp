@@ -8,6 +8,10 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         const TReplication::ITarget& target,
         ui64 workerId)
 {
+    ui64 flushIntervalMilliSeconds = replication->GetConfig().HasTransferSpecific() 
+        ? replication->GetConfig().GetTransferSpecific().GetTargets(0).GetFlushIntervalMilliSeconds() : 0;
+    ui64 batchSizeBytes = replication->GetConfig().HasTransferSpecific() 
+        ? replication->GetConfig().GetTransferSpecific().GetTargets(0).GetBatchSizeBytes() : 0;
     return MakeRunWorkerEv(
         replication->GetId(),
         target.GetId(),
@@ -17,7 +21,9 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         replication->GetConfig().GetConsistencySettings(),
         target.GetStreamPath(),
         target.GetStreamConsumerName(),
-        target.GetDstPathId());
+        target.GetDstPathId(),
+        flushIntervalMilliSeconds,
+        batchSizeBytes);
 }
 
 THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
@@ -29,7 +35,9 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         const NKikimrReplication::TConsistencySettings& consistencySettings,
         const TString& srcStreamPath,
         const TString& srcStreamConsumerName,
-        const TPathId& dstPathId)
+        const TPathId& dstPathId,
+        const ui64 flushIntervalMilliSeconds,
+        const ui64 batchSizeBytes)
 {
     auto ev = MakeHolder<TEvService::TEvRunWorker>();
     auto& record = ev->Record;
@@ -57,6 +65,8 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
             auto& writerSettings = *record.MutableCommand()->MutableTransferWriter();
             dstPathId.ToProto(writerSettings.MutablePathId());
             writerSettings.SetTransformLambda(p->GetTransformLambda());
+            writerSettings.SetFlushIntervalMilliSeconds(flushIntervalMilliSeconds);
+            writerSettings.SetBatchSizeBytes(batchSizeBytes);
             break;
         }
     }

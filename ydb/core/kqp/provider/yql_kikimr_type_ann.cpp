@@ -1844,6 +1844,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "password",
             "password_secret_name",
             "commit_interval",
+            "flush_interval",
+            "batch_size",
+            "consumer_name",
         };
 
         if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {
@@ -1871,6 +1874,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "password_secret_name",
             "state",
             "failover_mode",
+            "flush_interval",
+            "batch_size",
         };
 
         if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {

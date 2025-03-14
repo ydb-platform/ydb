@@ -3,6 +3,7 @@
 #include "stream_consumer_remover.h"
 #include "util.h"
 
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -79,7 +80,8 @@ public:
             ui64 tid,
             TReplication::ETargetKind kind,
             const TString& srcPath,
-            const TString& consumerName)
+            const TString& consumerName,
+            const bool needDrop)
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
@@ -87,6 +89,7 @@ public:
         , Kind(kind)
         , SrcPath(srcPath)
         , ConsumerName(consumerName)
+        , NeedDrop(needDrop)
         , LogPrefix("StreamConsumerRemover", ReplicationId, TargetId)
     {
     }
@@ -97,7 +100,12 @@ public:
         case TReplication::ETargetKind::IndexTable:
             Y_ABORT("Unreachable");
         case TReplication::ETargetKind::Transfer:
-            return RequestPermission();
+            if (NeedDrop) {
+                return RequestPermission();
+            } else {
+                Send(Parent, new TEvPrivate::TEvDropStreamResult(ReplicationId, TargetId, NYdb::TStatus(NYdb::EStatus::SUCCESS, {})));
+                PassAway();
+            }
         }
     }
 
@@ -115,6 +123,7 @@ private:
     const TReplication::ETargetKind Kind;
     const TString SrcPath;
     const TString ConsumerName;
+    const bool NeedDrop;
     const TActorLogPrefix LogPrefix;
 
 }; // TStreamRemover
@@ -122,14 +131,16 @@ private:
 IActor* CreateStreamConsumerRemover(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
+    auto needDrop = !replication->GetConfig().GetTransferSpecific().GetTargets(0).HasConsumerName();
+
     return CreateStreamConsumerRemover(ctx.SelfID, replication->GetYdbProxy(),
-        replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetStreamConsumerName());
+        replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetStreamConsumerName(), needDrop);
 }
 
 IActor* CreateStreamConsumerRemover(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
-        TReplication::ETargetKind kind, const TString& srcPath, const TString& consumerName)
+        TReplication::ETargetKind kind, const TString& srcPath, const TString& consumerName, bool needDrop)
 {
-    return new TStreamConsumerRemover(parent, proxy, rid, tid, kind, srcPath, consumerName);
+    return new TStreamConsumerRemover(parent, proxy, rid, tid, kind, srcPath, consumerName, needDrop);
 }
 
 }

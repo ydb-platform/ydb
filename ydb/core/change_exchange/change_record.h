@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/change_exchange/visitor.h>
+#include "visitor.h"
 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>

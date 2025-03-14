@@ -97,8 +97,8 @@ public:
         if (CheckForVolatileReadDependencies(userDb, writeOp, txc, ctx)) 
             return EExecutionStatus::Continue;
         
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting because an duplicate key");
-        writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Operation is aborting because an duplicate key");
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Duplicate keys found.");
+        writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Duplicate keys found.");
         ResetChanges(userDb, writeOp, txc);
         return EExecutionStatus::Executed;
     }

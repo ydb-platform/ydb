@@ -151,7 +151,12 @@ void Init(
     }
 
     if (protoConfig.GetRateLimiter().GetDataPlaneEnabled()) {
-        actorRegistrator(NFq::YqQuoterServiceActorId(), NFq::CreateQuoterService(protoConfig.GetRateLimiter(), yqSharedResources, NKikimr::CreateYdbCredentialsProviderFactory));
+        actorRegistrator(
+            NFq::YqQuoterServiceActorId(),
+            NFq::CreateQuoterService(protoConfig.GetRateLimiter(),
+            yqSharedResources,
+            NKikimr::CreateYdbCredentialsProviderFactory,
+            yqCounters->GetSubgroup("subsystem", "quoter_service")));
     }
 
     if (protoConfig.GetAudit().GetEnabled()) {

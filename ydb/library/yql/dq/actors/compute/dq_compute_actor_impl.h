@@ -397,6 +397,14 @@ protected:
             return;
         }
 
+        if (status == ERunStatus::PendingInput) {
+            for (auto& [id, inputTransform] : InputTransformsMap) {
+                if (!inputTransform.Buffer->Empty()) {
+                    ContinueExecute(EResumeSource::CAPendingInput);
+                }
+            }
+        }
+
         if (status != ERunStatus::Finished) {
             // If the incoming channel's buffer was full at the moment when last ChannelDataAck event had been sent,
             // there will be no attempts to send a new piece of data from the other side of this channel.
@@ -1389,26 +1397,38 @@ protected:
         }
     }
 
-    void PollAsyncInput() {
-        // Don't produce any input from sources if we're about to save checkpoint.
-        if (!Running || (Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved())) {
-            CA_LOG_T("Skip polling sources because of pending checkpoint");
-            return;
-        }
-
-        CA_LOG_T("Poll sources");
-        for (auto& [inputIndex, source] : SourcesMap) {
-            if (auto resume =  source.PollAsyncInput(MetricsReporter, WatermarksTracker, RuntimeSettings.AsyncInputPushLimit)) {
-                ContinueExecute(*resume);
-            }
+    [[nodiscard]]
+    TMaybe<EResumeSource> PollAsyncInput() {
+        TMaybe<EResumeSource> pollResult;
+        if (!Running) {
+            CA_LOG_T("Skip polling inputs and sources because not running");
+            return pollResult;
         }
 
         CA_LOG_T("Poll inputs");
         for (auto& [inputIndex, transform] : InputTransformsMap) {
             if (auto resume = transform.PollAsyncInput(MetricsReporter, WatermarksTracker, RuntimeSettings.AsyncInputPushLimit)) {
-                ContinueExecute(*resume);
+                if (!pollResult || *pollResult == EResumeSource::CAPollAsyncNoSpace) {
+                    pollResult = resume;
+                }
             }
         }
+
+        // Don't produce any input from sources if we're about to save checkpoint.
+        if ((Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved())) {
+            CA_LOG_T("Skip polling sources because of pending checkpoint");
+            return pollResult;
+        }
+
+        CA_LOG_T("Poll sources");
+        for (auto& [inputIndex, source] : SourcesMap) {
+            if (auto resume =  source.PollAsyncInput(MetricsReporter, WatermarksTracker, RuntimeSettings.AsyncInputPushLimit)) {
+                if (!pollResult || *pollResult == EResumeSource::CAPollAsyncNoSpace) {
+                    pollResult = resume;
+                }
+            }
+        }
+        return pollResult;
     }
 
     void OnNewAsyncInputDataArrived(const IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived::TPtr& ev) {

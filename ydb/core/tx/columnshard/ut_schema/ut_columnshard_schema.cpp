@@ -1450,4 +1450,33 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     }
 }
 
+Y_UNIT_TEST_SUITE(PlanStep) {
+    Y_UNIT_TEST(CreateTable) {
+        ui64 tableId = 1;
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+        using namespace NTxUT;
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        auto schema = TTestSchema::YdbSchema(NArrow::NTest::TTestColumn("k0", TTypeInfo(NTypeIds::Timestamp)));
+        auto pk = NArrow::NTest::TTestColumn::CropSchema(schema, 4);
+
+        ui64 planStep = 1000;
+        ui64 txId = 100;
+        ui64 generation = 0;
+
+        auto txBody = TTestSchema::CreateTableTxBody(tableId++, schema, pk, {}, ++generation);
+        SetupSchema(runtime, sender, txBody, NOlap::TSnapshot(planStep++, txId++));
+    }
+}
+    
 }

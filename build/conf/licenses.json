@@ -362,7 +362,9 @@
     "REQUIRE_MODIFICATIONS_DISCLOSURE": {
         "default": [
             "CDDL-1.0",
-            "CDDL-1.1"
+            "CDDL-1.1",
+            "EPL-1.0",
+            "EPL-2.0"
         ]
     },
     "SERVICE": {
@@ -414,14 +416,6 @@
         "LGPL-3.0-or-later": {
             "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
             "dynamic": [ "REQUIRE_CITATION" ]
-        },
-        "EPL-1.0": {
-            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
-            "dynamic": [ "REQUIRE_MODIFICATIONS_DISCLOSURE" ]
-        },
-        "EPL-2.0": {
-            "static": [ "REQUIRE_DERIVATIVE_DISCLOSURE" ],
-            "dynamic": [ "REQUIRE_MODIFICATIONS_DISCLOSURE" ]
         }
     }
 }

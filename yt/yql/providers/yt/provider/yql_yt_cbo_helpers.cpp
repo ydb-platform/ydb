@@ -21,7 +21,6 @@ void AddJoinColumns(THashMap<TString, THashSet<TString>>& relJoinColumns, const 
 
 IGraphTransformer::TStatus ExtractInMemorySize(
     const TYtState::TPtr& state,
-    TString cluster,
     TExprContext& ctx,
     TMaybe<ui64>& leftMemorySize,
     TMaybe<ui64>& rightMemorySize,
@@ -46,7 +45,7 @@ IGraphTransformer::TStatus ExtractInMemorySize(
     bool isCross = false;
     auto status = CollectStatsAndMapJoinSettings(mode, mapSettings, leftStats, rightStats,
                                                  leftTablesReady, leftTables, leftJoinKeys, rightTablesReady, rightTables, rightJoinKeys,
-                                                 leftLeaf, rightLeaf, *state, isCross, cluster, ctx);
+                                                 leftLeaf, rightLeaf, *state, isCross, ctx);
     if (status != IGraphTransformer::TStatus::Ok) {
         YQL_CLOG(WARN, ProviderYt) << "Unable to collect paths and labels: " << status;
         return status;
@@ -57,7 +56,7 @@ IGraphTransformer::TStatus ExtractInMemorySize(
         TVector<TString> leftJoinKeyList(leftJoinKeys.begin(), leftJoinKeys.end());
         const ui64 rows = mapSettings.LeftRows;
         ui64 size = 0;
-        auto status = CalculateJoinLeafSize(size, mapSettings, leftLeaf->Section, *op, ctx, true, leftItemType, leftJoinKeyList, state, cluster, leftTables);
+        auto status = CalculateJoinLeafSize(size, mapSettings, leftLeaf->Section, *op, ctx, true, leftItemType, leftJoinKeyList, state, leftTables);
         if (status != IGraphTransformer::TStatus::Ok) {
             YQL_CLOG(WARN, ProviderYt) << "Unable to calculate left join leaf size: " << status;
             return status;
@@ -77,7 +76,7 @@ IGraphTransformer::TStatus ExtractInMemorySize(
         const ui64 rows = mapSettings.RightRows;
         ui64 size = 0;
 
-        auto status = CalculateJoinLeafSize(size, mapSettings, rightLeaf->Section, *op, ctx, false, rightItemType, rightJoinKeyList, state, cluster, rightTables);
+        auto status = CalculateJoinLeafSize(size, mapSettings, rightLeaf->Section, *op, ctx, false, rightItemType, rightJoinKeyList, state, rightTables);
         if (status != IGraphTransformer::TStatus::Ok) {
             YQL_CLOG(WARN, ProviderYt) << "Unable to calculate right join leaf size: " << status;
             return status;
@@ -94,7 +93,6 @@ IGraphTransformer::TStatus ExtractInMemorySize(
 
 IGraphTransformer::TStatus CollectCboStatsLeaf(
     const THashMap<TString, THashSet<TString>>& relJoinColumns,
-    const TString& cluster,
     TYtJoinNodeLeaf& leaf,
     const TYtState::TPtr& state,
     TExprContext& ctx)
@@ -115,36 +113,36 @@ IGraphTransformer::TStatus CollectCboStatsLeaf(
     }
 
     IYtGateway::TPathStatResult result;
-    return TryEstimateDataSizeChecked(result, leaf.Section, cluster, tables, requestedColumnList, *state, ctx);
+    return TryEstimateDataSizeChecked(result, leaf.Section, tables, requestedColumnList, *state, ctx);
 }
 
-IGraphTransformer::TStatus CollectCboStatsNode(THashMap<TString, THashSet<TString>>& relJoinColumns, const TString& cluster, TYtJoinNodeOp& op, const TYtState::TPtr& state, TExprContext& ctx) {
+IGraphTransformer::TStatus CollectCboStatsNode(THashMap<TString, THashSet<TString>>& relJoinColumns, TYtJoinNodeOp& op, const TYtState::TPtr& state, TExprContext& ctx) {
     TYtJoinNodeLeaf* leftLeaf = dynamic_cast<TYtJoinNodeLeaf*>(op.Left.Get());
     TYtJoinNodeLeaf* rightLeaf = dynamic_cast<TYtJoinNodeLeaf*>(op.Right.Get());
     AddJoinColumns(relJoinColumns, op);
 
     TRelSizeInfo leftSizeInfo;
     TRelSizeInfo rightSizeInfo;
-    auto result = PopulateJoinStrategySizeInfo(leftSizeInfo, rightSizeInfo, state, cluster, ctx, &op);
+    auto result = PopulateJoinStrategySizeInfo(leftSizeInfo, rightSizeInfo, state, ctx, &op);
     if (result != IGraphTransformer::TStatus::Ok) {
         return result;
     }
 
     if (leftLeaf) {
-        result = CollectCboStatsLeaf(relJoinColumns, cluster, *leftLeaf, state, ctx);
+        result = CollectCboStatsLeaf(relJoinColumns, *leftLeaf, state, ctx);
     } else {
         auto& leftOp = *dynamic_cast<TYtJoinNodeOp*>(op.Left.Get());
-        result = CollectCboStatsNode(relJoinColumns, cluster, leftOp, state, ctx);
+        result = CollectCboStatsNode(relJoinColumns, leftOp, state, ctx);
     }
     if (result != IGraphTransformer::TStatus::Ok) {
         return result;
     }
 
     if (rightLeaf) {
-        result = CollectCboStatsLeaf(relJoinColumns, cluster, *rightLeaf, state, ctx);
+        result = CollectCboStatsLeaf(relJoinColumns, *rightLeaf, state, ctx);
     } else {
         auto& rightOp = *dynamic_cast<TYtJoinNodeOp*>(op.Right.Get());
-        result = CollectCboStatsNode(relJoinColumns, cluster, rightOp, state, ctx);
+        result = CollectCboStatsNode(relJoinColumns, rightOp, state, ctx);
     }
     return result;
 }
@@ -155,7 +153,6 @@ IGraphTransformer::TStatus PopulateJoinStrategySizeInfo(
     TRelSizeInfo& outLeft,
     TRelSizeInfo& outRight,
     const TYtState::TPtr& state,
-    TString cluster,
     TExprContext& ctx,
     TYtJoinNodeOp* op) {
     auto mapJoinUseFlow = state->Configuration->MapJoinUseFlow.Get().GetOrElse(DEFAULT_MAP_JOIN_USE_FLOW);
@@ -217,22 +214,22 @@ IGraphTransformer::TStatus PopulateJoinStrategySizeInfo(
         return IGraphTransformer::TStatus::Ok;
     }
 
-    auto status = ExtractInMemorySize(state, cluster, ctx, outLeft.MapJoinMemSize, outRight.MapJoinMemSize, ESizeStatCollectMode::ColumnarSize, op, labels,
+    auto status = ExtractInMemorySize(state, ctx, outLeft.MapJoinMemSize, outRight.MapJoinMemSize, ESizeStatCollectMode::ColumnarSize, op, labels,
         numLeaves, leftLeaf, leftTablesReady, leftTables, leftJoinKeys, leftItemType,
         rightLeaf, rightTablesReady, rightTables, rightJoinKeys, rightItemType);
     if (status != IGraphTransformer::TStatus::Ok) {
         return status;
     }
 
-    status = ExtractInMemorySize(state, cluster, ctx, outLeft.LookupJoinMemSize, outRight.LookupJoinMemSize, ESizeStatCollectMode::RawSize, op, labels,
+    status = ExtractInMemorySize(state, ctx, outLeft.LookupJoinMemSize, outRight.LookupJoinMemSize, ESizeStatCollectMode::RawSize, op, labels,
         numLeaves, leftLeaf, leftTablesReady, leftTables, leftJoinKeys, leftItemType,
         rightLeaf, rightTablesReady, rightTables, rightJoinKeys, rightItemType);
     return status;
 }
 
-IGraphTransformer::TStatus CollectCboStats(const TString& cluster, TYtJoinNodeOp& op, const TYtState::TPtr& state, TExprContext& ctx) {
+IGraphTransformer::TStatus CollectCboStats(TYtJoinNodeOp& op, const TYtState::TPtr& state, TExprContext& ctx) {
     THashMap<TString, THashSet<TString>> relJoinColumns;
-    return CollectCboStatsNode(relJoinColumns, cluster, op, state, ctx);
+    return CollectCboStatsNode(relJoinColumns, op, state, ctx);
 }
 
 TVector<TString> JoinLeafLabels(TExprNode::TPtr label) {

@@ -157,7 +157,7 @@ public:
     {
     }
 
-    TVector<TVector<ui64>> EstimateColumnStats(TExprContext& ctx, const TString& cluster, const TVector<TVector<TYtPathInfo::TPtr>>& groupIdPathInfos, ui64& sumAllTableSizes) {
+    TVector<TVector<ui64>> EstimateColumnStats(TExprContext& ctx, const TVector<TVector<TYtPathInfo::TPtr>>& groupIdPathInfos, ui64& sumAllTableSizes) {
         TVector<TVector<ui64>> groupIdColumnarStats;
         groupIdColumnarStats.reserve(groupIdPathInfos.size());
         TVector<bool> lookupsInfo;
@@ -175,7 +175,7 @@ public:
                 flattenPaths.push_back(pathInfo);
             }
         }
-        auto result = EstimateDataSize(cluster, flattenPaths, Nothing(), *State_, ctx);
+        auto result = EstimateDataSize(flattenPaths, Nothing(), *State_, ctx);
         size_t statIdx = 0;
         size_t pathIdx = 0;
         for (const auto& [idx, pathInfos]: Enumerate(groupIdPathInfos)) {
@@ -302,7 +302,7 @@ public:
         } else {
             TVector<TVector<std::tuple<ui64, ui64, NYT::TRichYPath>>> partitionTuplesArr;
             ui64 sumAllTableSizes = 0;
-            TVector<TVector<ui64>> groupIdColumnarStats = EstimateColumnStats(ctx, cluster, {groupIdPathInfos}, sumAllTableSizes);
+            TVector<TVector<ui64>> groupIdColumnarStats = EstimateColumnStats(ctx, {groupIdPathInfos}, sumAllTableSizes);
             ui64 parts = (sumAllTableSizes + dataSizePerJob - 1) / dataSizePerJob;
             if (settings.CanFallback && hasErasure && parts > maxTasks) {
                 auto message = DqFallbackErrorMessageWrap("too big table with erasure codec");
@@ -634,7 +634,7 @@ public:
         }
         ui64 dataSize = 0;
         for (auto& [cluster, info]: clusterToNodesAndErasure) {
-            auto res = EstimateColumnStats(ctx, cluster, clusterToGroups[cluster], dataSize);
+            auto res = EstimateColumnStats(ctx, clusterToGroups[cluster], dataSize);
             auto codecCpu = State_->Configuration->ErasureCodecCpuForDq.Get(cluster);
             if (!codecCpu) {
                 continue;

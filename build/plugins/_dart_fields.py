@@ -1150,6 +1150,7 @@ class TestFiles:
         'grut/libs/bigrt/profile',
         'grut/libs/bigrt/profiles',
         'grut/libs/bigrt/queue_info_config',
+        'grut/libs/bigrt/server',
         'grut/libs/shooter',
     )
 

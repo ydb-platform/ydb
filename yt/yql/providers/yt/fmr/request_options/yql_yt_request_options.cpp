@@ -10,6 +10,10 @@ TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, co
     return MakeIntrusive<TTaskState>(taskStatus, taskId, taskErrorMessage, stats);
 }
 
+TString TFmrChunkMeta::ToString() const {
+    return TStringBuilder() << TableId << ":" << PartId << ":" << std::to_string(Chunk);
+}
+
 } // namespace NYql::NFmr
 
 template<>
@@ -21,4 +25,9 @@ void Out<NYql::NFmr::TFmrError>(IOutputStream& out, const NYql::NFmr::TFmrError&
         out << "(OperationId: " << error.OperationId <<") ";
     }
     out << error.ErrorMessage;
+}
+
+template<>
+void Out<NYql::NFmr::TFmrChunkMeta>(IOutputStream& out, const NYql::NFmr::TFmrChunkMeta& meta) {
+    out << meta.ToString();
 }

@@ -10,7 +10,7 @@ from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.olap.common.thread_helper import TestThread
-from helpers.ydb_client import YdbClient
+from ydb.tests.olap.helpers.ydb_client import YdbClient
 
 from enum import Enum
 
@@ -49,9 +49,6 @@ class YdbWorkloadLog:
             "180"
         ]
         self._call(command=command, wait=wait)
-        # workload run сам делает разброс по умолчанию какой-то указан
-        # TODO: add deviation
-        # 
 
     # seconds - Seconds to run workload
     # threads - Number of parallel threads in workload
@@ -115,16 +112,15 @@ class TestLogScenario(object):
             self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` ")
             self.ydb_client.query(f"SELECT * FROM `{self.table_name}` WHERE ts < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
             self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE ts < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
-            self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE (ts >= CurrentUtcTimestamp() - DataTime::IntervalFromHours({hours}) - 1) AND (ts <= CurrentUtcTimestamp() - DataTime::IntervalFromHours({hours}))")
-            # добавить запросы now, now - 1h по COUNT(*)
-            # 
-            
+            self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE "
+                                  "(ts >= CurrentUtcTimestamp() - DataTime::IntervalFromHours({hours}) - 1) AND "
+                                  "(ts <= CurrentUtcTimestamp() - DataTime::IntervalFromHours({hours}))")
             # TODO
             # 1) перенести в olap/scenario
             # 2) отнаследовать от BaseTestSet
             # 3) переиспользовать
             # 4) добавить часовое окно
-            # 5) 
+            # 5)
 
     def check_insert(self, duration: int):
         prev_count: int = self.get_row_count()
@@ -137,8 +133,8 @@ class TestLogScenario(object):
         """As per https://github.com/ydb-platform/ydb/issues/13530"""
 
         wait_time: int = int(get_external_param("wait_minutes", "3")) * 60
-        insert_mode_str: str = str(get_external_param("insert_mode", "bulk_upsert"))
-        insert_mode: self.InsertMode = self.InsertMode[insert_mode_str.upper()]
+        # insert_mode_str: str = str(get_external_param("insert_mode", "bulk_upsert"))
+        # insert_mode: self.InsertMode = self.InsertMode[insert_mode_str.upper()]
         self.table_name: str = "log"
 
         ydb_workload: YdbWorkloadLog = YdbWorkloadLog(endpoint=self.ydb_client.endpoint, database=self.ydb_client.database, table_name=self.table_name)

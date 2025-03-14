@@ -51,7 +51,8 @@ namespace NKikimr {
                       VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
                         "TSyncerRLDFullSyncProxyActor(%s): START",
                             TargetVDiskId.ToString().data()));
-            ctx.Send(MakeBlobStorageSyncBrokerID(), new TEvQuerySyncToken(SyncerCtx->VCtx->VDiskActorId));
+            ctx.Send(MakeBlobStorageSyncBrokerID(), new TEvQuerySyncToken(SyncerCtx->VCtx->VDiskActorId),
+                IEventHandle::FlagTrackDelivery);
             Become(&TThis::WaitForBrokerStateFunc);
         }
 
@@ -64,9 +65,17 @@ namespace NKikimr {
             CreateAndRunTask(ctx);
         }
 
+        void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
+            // no sync broker service
+            if (ev->Get()->SourceType == TEvQuerySyncToken::EventType) {
+                CreateAndRunTask(ctx);
+            }
+        }
+
         STRICT_STFUNC(WaitForBrokerStateFunc,
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvSyncToken, Handle)
+            HFunc(TEvents::TEvUndelivered, Handle)
             HFunc(TEvVGenerationChange, Handle)
         )
 
@@ -119,7 +128,8 @@ namespace NKikimr {
 
         void Handle(TEvSyncerRLDWakeup::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
-            ctx.Send(MakeBlobStorageSyncBrokerID(), new TEvQuerySyncToken(SyncerCtx->VCtx->VDiskActorId));
+            ctx.Send(MakeBlobStorageSyncBrokerID(), new TEvQuerySyncToken(SyncerCtx->VCtx->VDiskActorId),
+                IEventHandle::FlagTrackDelivery);
             Become(&TThis::WaitForBrokerStateFunc);
         }
 

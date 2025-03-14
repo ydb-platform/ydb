@@ -224,8 +224,8 @@ std::optional<TResourceAddress> TGraph::GetOriginalAddress(TGraphNode* condNode)
         if (!proc->GetKernelLogic()) {
             return std::nullopt;
         }
-        if (proc->GetKernelLogic()->GetClassName() != TGetJsonPath::GetClassNameStatic()) {
-        } else if (proc->GetKernelLogic()->GetClassName() != TExistsJsonPath::GetClassNameStatic()) {
+        if (proc->GetKernelLogic()->GetClassName() == TGetJsonPath::GetClassNameStatic()) {
+        } else if (proc->GetKernelLogic()->GetClassName() == TExistsJsonPath::GetClassNameStatic()) {
 
         } else {
             return std::nullopt;

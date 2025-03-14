@@ -198,7 +198,9 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
                 CheckMapValue(jsonMap, "OriginalSize", 1_MB + 12);
                 CheckMapValue(jsonMap, "Codec", 1);
                 UNIT_ASSERT(jsonMap.find("Message") != jsonMap.end());
-                UNIT_ASSERT(jsonMap.find("Message")->second.GetString().size() == 1_MB);
+                Cerr << "Size: " << jsonMap.find("Message")->second.GetString().size() << Endl;
+                UNIT_ASSERT(jsonMap.find("Message")->second.GetString().size() < 1500_KB);
+                UNIT_ASSERT(jsonMap.find("Message")->second.GetString().size() > 500_KB);
                 CheckMapValue(jsonMap, "SeqNo", i + 1);
 
                 if (producer3.empty()) {

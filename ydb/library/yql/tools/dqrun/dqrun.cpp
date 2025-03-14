@@ -1098,7 +1098,7 @@ int RunMain(int argc, const char* argv[])
         auto solomonConfig = gatewaysConfig.GetSolomon();
         auto solomonGateway = CreateSolomonGateway(solomonConfig);
 
-        dataProvidersInit.push_back(NYql::GetSolomonDataProviderInitializer(solomonGateway, false));
+        dataProvidersInit.push_back(NYql::GetSolomonDataProviderInitializer(solomonGateway, nullptr, false));
         for (const auto& cluster: gatewaysConfig.GetSolomon().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{NYql::SolomonProviderName});
         }

@@ -151,7 +151,7 @@ class TTableHistogramBuilderBtreeIndex {
             return Compare(a, b) > 0;
         }
 
-        i8 Compare(const TEvent& a, const TEvent& b) const {
+        int Compare(const TEvent& a, const TEvent& b) const {
             // events go in order:
             // - Key = {}, IsBegin = true
             // - ...
@@ -163,13 +163,16 @@ class TTableHistogramBuilderBtreeIndex {
             // - ...
             // - Key = {}, IsBegin = false
 
+            // end goes before begin in order to 
+            // close previous node before open the next one
+
             if (a.GetKey() && b.GetKey()) { // compare by keys
                 auto cmp = CompareKeys(a.GetKey(), b.GetKey(), KeyDefaults);
                 if (cmp != 0) {
                     return cmp;
                 }
                 // keys are the same, compare by begin flag, end events first:
-                return Compare(a.IsBegin ? 1 : -1, b.IsBegin ? 1 : -1);
+                return Compare(a.IsBegin ? +1 : -1, b.IsBegin ? +1 : -1);
             }
 
             // category = -1 for Key = { }, IsBegin = true
@@ -179,14 +182,14 @@ class TTableHistogramBuilderBtreeIndex {
         }
 
     private:
-        static i8 GetCategory(const TEvent& a) {
+        static int GetCategory(const TEvent& a) {
             if (a.GetKey()) {
                 return 0;
             }
             return a.IsBegin ? -1 : +1;
         }
 
-        static i8 Compare(i8 a, i8 b) {
+        static int Compare(int a, int b) {
             if (a < b) return -1;
             if (a > b) return +1;
             return 0;
@@ -562,7 +565,9 @@ private:
     void AddFutureEvents(TNodeState& node) {
         auto cmp = NodeEventKeyGreater.Compare(TEvent{&node, true}, TEvent{&node, false});
         LOG_BUILD_STATS("adding node future events " << (i32)cmp << " " << node.ToString(KeyDefaults));
-        Y_ABORT_UNLESS(cmp < 0);
+        if (node.GetRowCount() > 1 && cmp >= 0) {
+            Y_DEBUG_ABORT_UNLESS(cmp < 0);
+        }
 
         FutureEvents.push(TEvent{&node, true});
         FutureEvents.push(TEvent{&node, false});

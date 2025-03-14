@@ -106,7 +106,6 @@ class TTableHistogramBuilderBtreeIndex {
                 closedDataSize += dataSize;
                 return true;
             } else if (Y_UNLIKELY(State == ENodeState::Initial)) {
-                Y_ABORT("Close first");
                 State = ENodeState::Closed;
                 closedRowCount += GetRowCount();
                 closedDataSize += GetDataSize();
@@ -561,6 +560,10 @@ private:
     }
 
     void AddFutureEvents(TNodeState& node) {
+        auto cmp = NodeEventKeyGreater.Compare(TEvent{&node, true}, TEvent{&node, false});
+        LOG_BUILD_STATS("adding node future events " << (i32)cmp << " " << node.ToString(KeyDefaults));
+        Y_ABORT_UNLESS(cmp < 0);
+
         FutureEvents.push(TEvent{&node, true});
         FutureEvents.push(TEvent{&node, false});
     }

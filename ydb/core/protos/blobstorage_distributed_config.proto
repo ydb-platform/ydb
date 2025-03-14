@@ -204,6 +204,8 @@ message TEvNodeConfigInvokeOnRoot {
         bool DedicatedStorageSectionConfigMode = 5;
         bool SkipConsoleValidation = 2;
         bool DryRun = 6;
+        bool AllowUnknownFields = 7;
+        bool BypassMetadataChecks = 8;
     }
 
     message TBootstrapCluster {

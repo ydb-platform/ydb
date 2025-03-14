@@ -195,7 +195,7 @@ public:
             cmd->SetSwitchDedicatedStorageSection(*shim.SwitchDedicatedStorageSection);
         }
         cmd->SetDedicatedStorageSectionConfigMode(shim.DedicatedConfigMode);
-        cmd->SetDryRun(*GetProtoRequest()->dry_run());
+        cmd->SetDryRun(GetProtoRequest()->dry_run());
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,

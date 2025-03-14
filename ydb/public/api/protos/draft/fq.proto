@@ -431,11 +431,16 @@ message ServiceAccountAuth {
     string id = 1 [(Ydb.length).le = 1024];
 }
 
+message TokenAuth {
+    string token = 1 [(Ydb.length).le = 1024, (Ydb.sensitive) = true];
+}
+
 message IamAuth {
     oneof identity {
         CurrentIAMTokenAuth current_iam = 1;
         ServiceAccountAuth service_account = 2;
         NoneAuth none = 3;
+        TokenAuth token = 4;
     }
 }
 

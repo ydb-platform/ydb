@@ -50,8 +50,9 @@ namespace NKikimr::NBsController {
         std::optional<bool> SwitchEnableConfigV2;
         TEvBlobStorage::TEvControllerReplaceConfigRequest::TPtr PendingReplaceRequest;
 
-        std::optional<TString> PendingYamlConfig;
+    std::optional<TString> PendingYamlConfig;
         bool AllowUnknownFields = false;
+        bool DryRun = false;
         std::optional<std::optional<TString>> PendingStorageYamlConfig;
         std::optional<ui64> ExpectedYamlConfigVersion;
 

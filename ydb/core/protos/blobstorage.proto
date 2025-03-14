@@ -1408,8 +1408,6 @@ message TEvControllerProposeConfigRequest {
     optional uint64 ConfigHash = 1;
     optional uint64 ConfigVersion = 2;
     optional bool Distconf = 3; // is the request originated from distconf?
-    optional bool AllowUnknownFields = 4;
-    optional bool BypassMetadataChecks = 5;
 }
 
 message TEvControllerProposeConfigResponse {

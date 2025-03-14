@@ -457,7 +457,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev);
         void OnConsolePipeError();
-        bool EnqueueConsoleConfigValidation(TActorId queryId, bool enablingDistconf, TString yaml);
+        bool EnqueueConsoleConfigValidation(TActorId queryId, bool enablingDistconf, TString yaml,  bool allowUnknownFields, bool bypassMetadataChecks);
 
         static std::optional<TString> UpdateConfigComposite(NKikimrBlobStorage::TStorageConfig& config, const TString& yaml,
             const std::optional<TString>& fetched);

@@ -818,7 +818,12 @@ namespace {
                 }
                 dstSettings.EnsureBatching().BatchSizeBytes = batchSizeBytes;
             } else if (name == "flush_interval") {
-                YQL_ENSURE(setting.Value().Maybe<TCoInterval>());
+                if (!setting.Value().Maybe<TCoInterval>()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " must be Interval"));
+                    return false;
+                }
+
                 const auto value = FromString<i64>(
                     setting.Value().Cast<TCoInterval>().Literal().Value()
                 );

@@ -560,15 +560,18 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
     auto& messages = event.GetMessages();
 
     bool hasOldMessages = false;
-    for (auto it = messages.begin(); it != messages.end(); ++it) {
-        if (it->GetWriteTime() < Self.StartingMessageTimestamp) {
-            LOG_ROW_DISPATCHER_TRACE("Skip data. StartingMessageTimestamp: " << Self.StartingMessageTimestamp << ". Write time: " << it->GetWriteTime());
-            hasOldMessages = true;
-        } else if (hasOldMessages) {
-            messages.erase(messages.begin(), it);
-            Self.LastMessageOffset = it->GetOffset();
+    auto it = messages.begin();
+    for (; it != messages.end(); ++it) {
+        if (it->GetWriteTime() >= Self.StartingMessageTimestamp) {
             break;
         }
+        hasOldMessages = true;
+    }
+
+    if (hasOldMessages) {
+        LOG_ROW_DISPATCHER_TRACE("Skip data. StartingMessageTimestamp: " << Self.StartingMessageTimestamp << ". Write time: " << messages.begin()->GetWriteTime());
+        Self.LastMessageOffset = std::prev(it)->GetOffset();
+        messages.erase(messages.begin(), it);
     }
 
     for (const auto& message : messages) {

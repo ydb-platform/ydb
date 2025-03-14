@@ -124,8 +124,14 @@ struct TColumnShardHashV1 {
 
     template <typename TValue>
     void Update(const TValue& uv, size_t keyIdx) {
+        if (!uv.HasValue()) {
+            return;
+        }
+
         switch (KeyColumnTypes[keyIdx]) {
             case NYql::NProto::Bool: {
+                TUnboxedValue v;
+                v.HasValue();
                 auto value = uv.template Get<bool>();
                 HashCalcer.Update(reinterpret_cast<const ui8*>(&value), sizeof(value));
                 break;

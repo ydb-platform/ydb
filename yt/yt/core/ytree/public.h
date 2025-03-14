@@ -120,6 +120,7 @@ YT_DEFINE_ERROR_ENUM(
     ((MaxStringLengthViolation)            (503))
     ((MaxAttributeSizeViolation)           (504))
     ((MaxKeyLengthViolation)               (505))
+    ((CannotRemoveNonemptyCompositeNode)   (506))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

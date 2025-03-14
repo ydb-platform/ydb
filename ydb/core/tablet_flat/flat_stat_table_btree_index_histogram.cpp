@@ -240,7 +240,7 @@ public:
             if (part.Slices && part.Slices->back().LastKey.GetCells()) {
                 endKey = MakeCellsIterableKey(part.Part.Get(), part.Slices->back().LastKey);
             }
-            LoadedStateNodes.emplace_back(part.Part.Get(), meta.GetPageId(), meta.LevelCount, 0, meta.GetRowCount(), 0, meta.GetDataSize(), beginKey, endKey);
+            LoadedStateNodes.emplace_back(part.Part.Get(), meta.GetPageId(), meta.LevelCount, 0, meta.GetRowCount(), 0, meta.GetTotalDataSize(), beginKey, endKey);
             ready &= SlicePart(*part.Slices, LoadedStateNodes.back());
         }
 
@@ -283,10 +283,10 @@ private:
             // can't split, decide by node.EndRowId - 1
             // TODO: decide by non-empty slice and node intersection, but this requires size calculation changes too
             if (it->Has(node.EndRowId - 1)) {
-                LOG_BUILD_STATS("slicing node " << node.ToString(KeyDefaults) << " => take root");
+                LOG_BUILD_STATS("slicing node " << node.ToString(KeyDefaults) << " => take leaf");
                 AddFutureEvents(node);
             } else {
-                LOG_BUILD_STATS("slicing node " << node.ToString(KeyDefaults) << " => skip root");
+                LOG_BUILD_STATS("slicing node " << node.ToString(KeyDefaults) << " => skip leaf");
             }
             return true;
         }

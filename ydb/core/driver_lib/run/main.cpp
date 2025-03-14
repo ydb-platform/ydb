@@ -178,6 +178,10 @@ std::terminate_handler defaultTerminateHandler;
 void KikimrTerminateHandler() {
     Cerr << "======= terminate() call stack ========\n";
     FormatBackTrace(&Cerr);
+    if (auto backtrace = TBackTrace::FromCurrentException(); backtrace.size() > 0) {
+        Cerr << "======== exception call stack =========\n";
+        backtrace.PrintTo(Cerr);
+    }
     Cerr << "=======================================\n";
 
     auto oldHandler = defaultTerminateHandler;

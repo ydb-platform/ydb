@@ -3,12 +3,42 @@
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/blobs_reader/read_coordinator.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/actor.h>
+#include <ydb/core/tx/conveyor/usage/abstract.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
 
 #include <yql/essentials/core/issue/yql_issue.h>
 
 namespace NKikimr::NOlap::NReader {
 constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(10);
 constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5);
+
+namespace {
+
+class TInitializationTask: public NConveyor::ITask {
+public:
+    TActorId Recipient;
+    std::shared_ptr<TReadContext> ReadContext;
+    std::shared_ptr<const TReadMetadataBase> ReadMetadataRange;
+
+    TInitializationTask(const TActorId& recepient, const std::shared_ptr<TReadContext>& readContext, const std::shared_ptr<const TReadMetadataBase>& readMetadataRange)
+        : Recipient(recepient)
+        , ReadContext(readContext)
+        , ReadMetadataRange(readMetadataRange)
+    {}
+
+    TConclusionStatus DoExecute(const std::shared_ptr<ITask>&) override {
+        auto scanIterator = ReadMetadataRange->StartScan(ReadContext);
+        auto startResult = scanIterator->Start();
+        TActorContext::AsActorContext().Send(Recipient, new NColumnShard::TEvPrivate::TEvScanInit(std::move(scanIterator), startResult));
+        return TConclusionStatus::Success();
+    }
+
+    TString GetTaskClassIdentifier() const override {
+        return "KQP_OLAP_SCAN_INIT";
+    }
+};
+
+}
 
 void TColumnShardScan::PassAway() {
     Send(ResourceSubscribeActorId, new TEvents::TEvPoisonPill);
@@ -54,8 +84,14 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
 
     std::shared_ptr<TReadContext> context = std::make_shared<TReadContext>(StoragesManager, DataAccessorsManager, ScanCountersPool,
         ReadMetadataRange, SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy, ScanId);
-    ScanIterator = ReadMetadataRange->StartScan(context);
-    auto startResult = ScanIterator->Start();
+
+    NConveyor::TScanServiceOperator::SendTaskToExecute(std::make_shared<TInitializationTask>(SelfId(), context, ReadMetadataRange));
+    Become(&TColumnShardScan::StateScan);
+}
+
+void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvScanInit::TPtr& ev) {
+    ScanIterator = std::move(ev->Get()->ScanIterator);
+    auto startResult = ev->Get()->Status;
     StartInstant = TMonotonic::Now();
     if (!startResult) {
         ACFL_ERROR("event", "BootstrapError")("error", startResult.GetErrorMessage());
@@ -65,7 +101,7 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
         ScheduleWakeup(GetDeadline());
 
         // propagate self actor id // TODO: FlagSubscribeOnSession ?
-        Send(ScanComputeActorId, new NKqp::TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen, TabletId),
+        Send(ScanComputeActorId, new NKqp::TEvKqpCompute::TEvScanInitActor(ScanId, SelfId(), ScanGen, TabletId),
             IEventHandle::FlagTrackDelivery);
 
         Become(&TColumnShardScan::StateScan);

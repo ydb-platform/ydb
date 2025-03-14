@@ -608,7 +608,7 @@ private:
     void StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
     void SetupMetadata();
-    bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {});
+    bool SetupTtl();
     void SetupCleanupPortions();
     void SetupCleanupTables();
     void SetupCleanupInsertTable();

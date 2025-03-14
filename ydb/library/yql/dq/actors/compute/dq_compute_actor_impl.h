@@ -363,13 +363,15 @@ protected:
         }
         if (Terminated) {
             DoTerminateImpl();
-            MemoryQuota.Reset();
-            MemoryLimits.MemoryQuotaManager.reset();
         }
     }
 
     virtual void DoExecuteImpl() = 0;
-    virtual void DoTerminateImpl() {}
+
+    virtual void DoTerminateImpl() {
+            MemoryQuota.Reset();
+            MemoryLimits.MemoryQuotaManager.reset();
+    }
 
     virtual bool DoHandleChannelsAfterFinishImpl() = 0;
 
@@ -1124,6 +1126,7 @@ protected:
 
                 State = NDqProto::COMPUTE_STATE_FAILURE;
                 ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::TIMEOUT, {TIssue(reason)}, true);
+                DoTerminateImpl();
                 break;
             }
             case EEvWakeupTag::PeriodicStatsTag: {
@@ -1216,6 +1219,7 @@ protected:
         }
 
         ReportStateAndMaybeDie(ev->Get()->Record.GetStatusCode(), issues, true);
+        DoTerminateImpl();
     }
 
     void HandleExecuteBase(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {

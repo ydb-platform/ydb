@@ -20,8 +20,13 @@ PY3TEST()
     )
 
     PEERDIR(
-    ydb/tests/library
-    ydb/tests/library/test_meta
+        ydb/tests/library
+        ydb/tests/library/test_meta
+        ydb/tests/olap/lib
+        ydb/tests/olap/common
+        ydb/tests/olap/scenario/helpers
+        ydb/tests/olap/helpers
+        library/recipes/common
     )
 END()
 
@@ -32,5 +37,5 @@ RECURSE(
     load
     ttl_tiering
     column_family
-    common
+    helpers
 )

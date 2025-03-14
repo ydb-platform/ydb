@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <vector>
+
 namespace NKikimr::NReplication {
 
 Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
@@ -56,7 +58,7 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
         CType Events;
     };
 
-    struct MockPartitionSession : public TPartitionSession {
+    struct MockPartitionSession: public TPartitionSession {
         MockPartitionSession()
             : TPartitionSession()
         {
@@ -68,7 +70,7 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
     };
 
     TActorId MakeActorId() {
-        return TActorId(1,2,RandomNumber<ui64>(), 0);
+        return TActorId(1, 2, RandomNumber<ui64>(), 0);
     }
 
     TReadSessionEvent::TEndPartitionSessionEvent MakeTEndPartitionSessionEvent() {

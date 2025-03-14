@@ -34,41 +34,47 @@ java {
 }
 
 dependencies {
-{%  if has_junit5_test -%}
+{%- if has_junit5_test %}
     testImplementation("org.junit.jupiter:junit-jupiter:5.8.2")
     api("org.apache.commons:commons-math3:3.6.1")
     api("com.google.guava:guava:31.0.1-jre")
 {%  endif -%}
-{%  for library in target.consumer -%}
-{%      set classpath = library.classpath -%}
-{%      if classpath|replace('"','') == classpath -%}
-{%          set classpath = '"' + classpath + '"' -%}
-{%      endif -%}
-{%      if mainClass -%}
-{%          if library.excludes.consumer is defined %}
-    implementation({{ classpath }}) {
+{%- for library in target.consumer if library.classpath -%}
+{%-     set classpath = library.classpath -%}
+{%-     if classpath|replace('"','') == classpath -%}
+{%-         set classpath = '"' + classpath + '"' -%}
+{%-     endif -%}
+{%-     if library.type != "contrib" %}
+    implementation({{ classpath }})
+{%-     else %}
+    api({{ classpath }})
+{%-     endif -%}
+{%-     if library.excludes.consumer is defined %} {
+{%          for exclude in library.excludes.consumer if exclude.classpath -%}
+{%-             set classpath = exclude.classpath|replace('"','') -%}
+{%-             set classpath_parts = split(classpath, ':') -%}
+        exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
+{%          endfor -%}
+    }
+{%-     endif -%}
+{%  endfor -%}
+{%- for extra_target in extra_targets -%}
+{%-     for library in extra_target.consumer if library.classpath -%}
+{%-         set classpath = library.classpath -%}
+{%-         if classpath|replace('"','') == classpath -%}
+{%-              set classpath = '"' + classpath + '"' -%}
+{%-         endif %}
+    testImplementation({{ classpath }})
+{%-         if library.excludes.consumer is defined %} {
 {%              for exclude in library.excludes.consumer if exclude.classpath -%}
-{%                  set classpath = exclude.classpath|replace('"','') -%}
-{%                  set classpath_parts = split(classpath, ':') -%}
+{%-                 set classpath = exclude.classpath|replace('"','') -%}
+{%-                 set classpath_parts = split(classpath, ':') -%}
         exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
 {%              endfor -%}
     }
-{%          else -%}
-    implementation({{ classpath }})
-{%          endif -%}
-{%      else -%}
-    api({{ classpath }})
-{%      endif -%}
-{%  endfor -%}
-{%  for extra_target in extra_targets -%}
-{%      for library in extra_target.consumer -%}
-{%          set classpath = library.classpath -%}
-{%          if classpath|replace('"','') == classpath -%}
-{%              set classpath = '"' + classpath + '"' -%}
-{%          endif -%}
-    testImplementation({{ classpath }})
+{%-         endif -%}
 {%      endfor -%}
-{%  endfor -%}
+{%  endfor %}
 }
 
 {%  if has_junit5_test -%}

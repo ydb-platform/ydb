@@ -18,6 +18,7 @@ SRCS(
     callback_ut.cpp
     checksum_ut.cpp
     codicil_ut.cpp
+    collection_helpers_ut.cpp
     concurrent_cache_ut.cpp
     consistent_hashing_ut.cpp
     default_map_ut.cpp
@@ -52,6 +53,7 @@ SRCS(
     pool_allocator_ut.cpp
     proc_ut.cpp
     random_ut.cpp
+    range_helpers_ut.cpp
     ref_counted_tracker_ut.cpp
     ring_queue_ut.cpp
     skip_list_ut.cpp

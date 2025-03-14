@@ -1,12 +1,12 @@
 pkgs: attrs: with pkgs; with attrs; rec {
   pname = "croaring";
-  version = "4.2.2";
+  version = "4.2.3";
 
   src = fetchFromGitHub {
     owner = "RoaringBitmap";
     repo = "CRoaring";
     rev = "v${version}";
-    hash = "sha256-QaCYtuUU7hZ03x/bPEGG7jUlzbRNMGwi9s/hIHyd3U4=";
+    hash = "sha256-1yklwZj12yeGg8a/oss4EUHj8eezhKuo4PUltVdaXaM=";
   };
 
   patches = [];

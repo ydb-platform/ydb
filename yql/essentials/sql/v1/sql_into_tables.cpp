@@ -156,7 +156,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
 
     TVector<TString> eraseColumns;
     if (intoTableRef.HasBlock2()) {
-        if (service != StatProviderName) {
+        if (service != StatProviderName && service != UnknownProviderName) {
             Ctx.Error() << "ERASE BY is unsupported for " << service;
             return nullptr;
         }
@@ -217,6 +217,10 @@ bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const
     ESQLWriteColumnMode mode, const TPosition& pos) {
     Y_UNUSED(node);
     auto serviceName = table.Service;
+    if (serviceName == UnknownProviderName) {
+        return true;
+    }
+
     const bool isMapReduce = serviceName == YtProviderName;
     const bool isKikimr = serviceName == KikimrProviderName || serviceName == YdbProviderName;
     const bool isRtmr = serviceName == RtmrProviderName;

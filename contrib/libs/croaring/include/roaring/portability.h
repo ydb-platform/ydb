@@ -56,12 +56,11 @@
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif  // !(defined(_POSIX_C_SOURCE)) || (_POSIX_C_SOURCE < 200809L)
-#if !(defined(_XOPEN_SOURCE)) || (_XOPEN_SOURCE < 700)
-#define _XOPEN_SOURCE 700
-#endif  // !(defined(_XOPEN_SOURCE)) || (_XOPEN_SOURCE < 700)
 
 #ifdef __illumos__
+#ifndef __EXTENSIONS__
 #define __EXTENSIONS__
+#endif  // __EXTENSIONS__
 #endif
 
 #include <stdbool.h>

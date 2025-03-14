@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     yql_yt_job_impl.cpp
     yql_yt_output_stream.cpp
+    yql_yt_raw_table_reader.cpp
 )
 
 PEERDIR(

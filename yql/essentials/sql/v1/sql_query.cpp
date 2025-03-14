@@ -3486,7 +3486,7 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
     }
 
     const bool isKikimr = table.Service == KikimrProviderName;
-    if (!isKikimr) {
+    if (!isKikimr && table.Service != UnknownProviderName) {
         Ctx.Error(GetPos(stmt.GetToken2())) << "DELETE is unsupported for " << table.Service;
         return nullptr;
     }
@@ -3552,7 +3552,7 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
 
     const bool isKikimr = table.Service == KikimrProviderName;
 
-    if (!isKikimr) {
+    if (!isKikimr && table.Service != UnknownProviderName) {
         Ctx.Error(GetPos(stmt.GetToken2())) << "UPDATE is unsupported for " << table.Service;
         return nullptr;
     }

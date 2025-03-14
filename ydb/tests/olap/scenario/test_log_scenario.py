@@ -9,7 +9,7 @@ import yatest.common
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from scenario.helpers.thread_helper import TestThread
+from ydb.tests.olap.common.thread_helper import TestThread
 from helpers.ydb_client import YdbClient
 
 from enum import Enum
@@ -45,8 +45,13 @@ class YdbWorkloadLog:
             str(threads),
             "--rows",
             str(rows),
+            "--timestamp_deviation",
+            "180"
         ]
         self._call(command=command, wait=wait)
+        # workload run сам делает разброс по умолчанию какой-то указан
+        # TODO: add deviation
+        # 
 
     # seconds - Seconds to run workload
     # threads - Number of parallel threads in workload
@@ -100,6 +105,7 @@ class TestLogScenario(object):
         cls.ydb_client.wait_connection()
 
     def get_row_count(self) -> int:
+        # Exception check
         return self.ydb_client.query(f"select count(*) as Rows from `{self.table_name}`")[0].rows[0]["Rows"]
 
     def aggregation_query(self, duration: datetime.timedelta):
@@ -109,6 +115,16 @@ class TestLogScenario(object):
             self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` ")
             self.ydb_client.query(f"SELECT * FROM `{self.table_name}` WHERE ts < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
             self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE ts < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
+            self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE (ts >= CurrentUtcTimestamp() - DataTime::IntervalFromHours({hours}) - 1) AND (ts <= CurrentUtcTimestamp() - DataTime::IntervalFromHours({hours}))")
+            # добавить запросы now, now - 1h по COUNT(*)
+            # 
+            
+            # TODO
+            # 1) перенести в olap/scenario
+            # 2) отнаследовать от BaseTestSet
+            # 3) переиспользовать
+            # 4) добавить часовое окно
+            # 5) 
 
     def check_insert(self, duration: int):
         prev_count: int = self.get_row_count()
@@ -127,30 +143,18 @@ class TestLogScenario(object):
 
         ydb_workload: YdbWorkloadLog = YdbWorkloadLog(endpoint=self.ydb_client.endpoint, database=self.ydb_client.database, table_name=self.table_name)
         ydb_workload.create_table(self.table_name)
-        if insert_mode == self.InsertMode.BULK_UPSERT:
-            ydb_workload.bulk_upsert(seconds=60, threads=10, rows=1000, wait=True)
-        elif insert_mode == self.InsertMode.INSERT:
-            ydb_workload.insert(seconds=60, threads=10, rows=1000, wait=True)
-        elif insert_mode == self.InsertMode.UPSERT:
-            ydb_workload.upsert(seconds=60, threads=10, rows=1000, wait=True)
-        else:
-            raise "Wrong insert mode"
         logging.info(f"Count rows after insert {self.get_row_count()} before wait")
         assert self.get_row_count() != 0
 
         threads: list[TestThread] = []
-
-        if insert_mode == self.InsertMode.BULK_UPSERT:
-            threads.append(TestThread(target=ydb_workload.bulk_upsert, args=[wait_time, 10, 1000, True]))
-        elif insert_mode == self.InsertMode.INSERT:
-            threads.append(TestThread(target=ydb_workload.insert, args=[wait_time, 10, 1000, True]))
-        elif insert_mode == self.InsertMode.UPSERT:
-            threads.append(TestThread(target=ydb_workload.upsert, args=[wait_time, 10, 1000, True]))
-        else:
-            raise "Wrong insert mode"
+        threads.append(TestThread(target=ydb_workload.bulk_upsert, args=[wait_time, 10, 1000, True]))
+        threads.append(TestThread(target=ydb_workload.insert, args=[wait_time, 10, 1000, True]))
+        threads.append(TestThread(target=ydb_workload.upsert, args=[wait_time, 10, 1000, True]))
 
         for _ in range(10):
             threads.append(TestThread(target=self.aggregation_query, args=[datetime.timedelta(seconds=int(wait_time))]))
+        # проверить про исполнение queries. Exception.
+        # Проверить что сообщение об ошибке нормальное.
         threads.append(TestThread(target=self.check_insert, args=[wait_time + 10]))
 
         for thread in threads:

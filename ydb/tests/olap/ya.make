@@ -5,7 +5,6 @@ PY3TEST()
 
     TEST_SRCS(
         test_quota_exhaustion.py
-        test_log_scenario.py
     )
 
     IF (SANITIZER_TYPE OR WITH_VALGRIND)
@@ -24,6 +23,7 @@ PY3TEST()
         ydb/tests/library
         ydb/tests/library/test_meta
         ydb/tests/olap/lib
+        ydb/tests/olap/common
         ydb/tests/olap/scenario/helpers
         ydb/tests/olap/helpers
         library/recipes/common
@@ -37,6 +37,5 @@ RECURSE(
     load
     ttl_tiering
     column_family
-    common
     helpers
 )

@@ -24,6 +24,10 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
 
   [Examples on GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/main/examples/topic)
 
+- C#
+
+  [Examples on GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/Topic)
+
 {% endlist %}
 
 ## Initializing a connection {#init}
@@ -91,6 +95,45 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
 
   Both provided examples use ([try-with-resources](https://docs.oracle.com/javase/tutorial/essential/exceptions/tryResourceClose.html)) block.
   It allows to automatically close  client and transport on leaving this block, considering both classes extends `AutoCloseable`.
+
+- C#
+
+  To interact with {{ ydb-short-name }} Topics, create an instance of the {{ ydb-short-name }} driver and topic client.
+
+  The {{ ydb-short-name }} transport allows the app and {{ ydb-short-name }} to interact at the transport layer. The transport must exist during the {{ ydb-short-name }} access lifecycle and be initialized before creating a client.
+
+  App code snippet for transport initialization:
+
+  ```c#
+  var config = new DriverConfig(
+      endpoint: "grpc://localhost:2136",
+      database: "/local"
+  );
+
+  await using var driver = await Driver.CreateInitialized(
+      config: config,
+      loggerFactory: loggerFactory
+  );
+  ```
+
+  This example uses anonymous authentication. For details, see [Connecting to a database](../../concepts/connect.md) and [Authentication](../../security/authentication.md).
+
+  App code snippet for creating various clients:
+
+  ```c#
+  var topicClient = new TopicClient(driver);
+
+  await using var writer = new WriterBuilder<string>(driver, topicName)
+  {
+      ProducerId = "ProducerId_Example"
+  }.Build();
+  
+  await using var reader = new ReaderBuilder<string>(driver)
+  {
+      ConsumerName = "Consumer_Example",
+      SubscribeSettings = { new SubscribeSettings(topicName) }
+  }.Build();
+  ```  
 
 {% endlist %}
 
@@ -161,6 +204,23 @@ The topic path is mandatory. Other parameters are optional.
                           .setMinActivePartitions(3)
                           .build())
                   .build());
+  ```
+  
+- С#
+
+  Example of creating a topic with a list of supported codecs and a minimum number of partitions:
+
+  ```c#
+  await topicClient.CreateTopic(new CreateTopicSettings
+  {
+      Path = topicName,
+      Consumers = { new Consumer("Consumer_Example") },
+      SupportedCodecs = { Codec.Raw, Codec.Gzip },
+      PartitioningSettings = new PartitioningSettings
+      {
+          MinActivePartitions = 3
+      }
+  });
   ```
 
 {% endlist %}
@@ -317,6 +377,12 @@ To delete a topic, just specify the path to it.
   topicClient.dropTopic(topicPath);
   ```
 
+- C#
+
+  ```c#
+  await topicClient.DropTopic(topicName);
+  ```
+
 {% endlist %}
 
 ## Message writes {#write}
@@ -428,6 +494,15 @@ Only connections with matching [producer and message group](../../concepts/topic
               logger.error("Init failed with ex: ", ex);
               return null;
           });
+  ```
+
+- C#
+
+  ```c#
+  await using var writer = new WriterBuilder<string>(driver, topicName)
+  {
+      ProducerId = "ProducerId_Example"
+  }.Build();
   ```
 
 {% endlist %}
@@ -568,6 +643,14 @@ Only connections with matching [producer and message group](../../concepts/topic
   }
   ```
 
+- C#
+
+  Asynchronous writing of a message to a topic.
+
+  ```c#
+  var asyncWriteTask = writer.WriteAsync("Hello, Example YDB Topics!"); // Task<WriteResult>
+  ```
+
 {% endlist %}
 
 ### Message writes with storage confirmation on the server
@@ -690,6 +773,23 @@ Only connections with matching [producer and message group](../../concepts/topic
                   }
               }
           });
+  ```
+
+- С#
+
+  Asynchronous writing of a message to a topic. If the internal buffer overflows, it waits for the buffer to be released before resending.
+
+  ```c#
+  await writer.WriteAsync("Hello, Example YDB Topics!");
+  ```
+
+  If the server is unavailable, messages may accumulate while waiting to be sent. In this case, you can pass a cancellation token (`CancellationToken`) to control waiting. However, if the user cancels the recorded message, it will still be canceled.
+
+  ```c#
+  var writeCts = new CancellationTokenSource();
+  writeCts.CancelAfter(TimeSpan.FromSeconds(3));
+  
+  await writer.WriteAsync("Hello, Example YDB Topics!", writeCts.Token);
   ```
 
 {% endlist %}
@@ -858,6 +958,15 @@ All the metadata provided when writing a message is sent to a consumer with the 
   message = reader.receive_message()
   for meta_key, meta_value in message.metadata_items.items():
       print(f"{meta_key}: {meta_value}")
+  ```
+
+- C#
+
+  ```c#
+  await writer.WriteAsync(
+      new Ydb.Sdk.Services.Topic.Writer.Message<string>("Hello Example YDB Topics!")
+          { Metadata = { new Metadata("meta-key", "meta-value"u8.ToArray()) } }
+  );
   ```
 
 {% endlist %}
@@ -1169,6 +1278,16 @@ Topic can have several Consumers and for each of them server stores its own read
           });
   ```
 
+- С#
+
+  ```c#
+  await using var reader = new ReaderBuilder<string>(driver)
+  {
+      ConsumerName = "Consumer_Example",
+      SubscribeSettings = { new SubscribeSettings(topicName) }
+  }.Build(); 
+  ```
+
 {% endlist %}
 
 Additional options are used to specify multiple topics and other parameters.
@@ -1228,6 +1347,20 @@ To establish a connection to the `my-topic` and `my-specific-topic` topics using
           .build();
   ```
 
+- C#
+
+  ```c#
+  await using var reader = new ReaderBuilder<string>(driver)
+  {
+      ConsumerName = "Consumer_Example",
+      SubscribeSettings =
+      {
+          new SubscribeSettings(topicName),
+          new SubscribeSettings(topicName + "_another") { ReadFrom = DateTime.Now }
+      }
+  }.Build();
+  ```
+  
 {% endlist %}
 
 ### Reading messages {#reading-messages}
@@ -1252,15 +1385,19 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
 - Go
 
-  The SDK receives data from the server in batches and buffers it. Depending on the task, the client code can read messages from the buffer one by one or in batches.
+  {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
 
 - Python
 
-  The SDK receives data from the server in batches and buffers it. Depending on the task, the client code can read messages from the buffer one by one or in batches.
+  {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
 
 - Java
 
-  The SDK receives data from the server in batches and buffers it. Depending on the task, the client code can read messages from the buffer one by one or in batches.
+  {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
+
+- C#
+
+  {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
 
 {% endlist %}
 
@@ -1312,6 +1449,23 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
   Reading messages one-by-one is not supported in async Reader.
 
+- C#
+
+  ```c#
+  try
+  {
+      while (!readerCts.IsCancellationRequested)
+      {
+          var message = await reader.ReadAsync(readerCts.Token);
+
+          logger.LogInformation("Received message: [{MessageData}]", message.Data);
+      }
+  }
+  catch (OperationCanceledException)
+  {
+  }
+  ```
+  
 {% endlist %}
 
 #### Reading message batches
@@ -1376,6 +1530,26 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
               process(message);
           }
       }
+  }
+  ```
+
+- C#
+
+  ```c#
+  try
+  {
+      while (!readerCts.IsCancellationRequested)
+      {
+          var batchMessages = await reader.ReadBatchAsync(readerCts.Token);
+
+          foreach (var message in batchMessages.Batch)
+          {
+              logger.LogInformation("Received message: [{MessageData}]", message.Data);    
+          }
+      }
+  }
+  catch (OperationCanceledException)
+  {
   }
   ```
 
@@ -1445,6 +1619,32 @@ If a commit fails with an error, the application should log it and continue; it 
          });
   ```
 
+- C#
+
+  ```c#
+  try
+  {
+      while (!readerCts.IsCancellationRequested)
+      {
+          var message = await reader.ReadAsync(readerCts.Token);
+
+          logger.LogInformation("Received message: [{MessageData}]", message.Data);
+
+          try
+          {
+              await message.CommitAsync();
+          }
+          catch (ReaderException e)
+          {
+              logger.LogError(e, "Failed to commit a message");
+          }
+      }
+  }
+  catch (OperationCanceledException)
+  {
+  }
+  ```
+  
 {% endlist %}
 
 #### Reading message batches with commits
@@ -1522,6 +1722,35 @@ If a commit fails with an error, the application should log it and continue; it 
                      logger.info("message batch committed successfully");
                  }
              });
+  }
+  ```
+
+- С#
+
+  ```c#
+  try
+  {
+      while (!readerCts.IsCancellationRequested)
+      {
+          var batchMessages = await reader.ReadBatchAsync(readerCts.Token);
+
+          foreach (var message in batchMessages.Batch)
+          {
+              logger.LogInformation("Received message: [{MessageData}]", message.Data);    
+          }
+
+          try
+          {
+              await batchMessages.CommitBatchAsync();
+          }
+          catch (ReaderException e)
+          {
+              logger.LogError(e, "Failed to commit a message");
+          }
+      }
+  }
+  catch (OperationCanceledException)
+  {
   }
   ```
 

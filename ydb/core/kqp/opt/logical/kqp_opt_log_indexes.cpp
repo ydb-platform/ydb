@@ -150,7 +150,7 @@ bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lamb
     // TODO(mbkkt) We need to account top.Count(), but not clear what to if it's value is runtime?
     auto checkMember = [&] (const TExprBase& expr) {
         auto member = expr.Maybe<TCoMember>();
-        return member && member.Cast().Name().Value() == indexDesc.KeyColumns[0];
+        return member && member.Cast().Name().Value() == indexDesc.KeyColumns.back();
     };
     auto checkUdf = [&] (const TExprBase& expr, bool checkMembers) {
         auto apply = expr.Maybe<TCoApply>();
@@ -452,7 +452,7 @@ TExprBase DoRewriteTopSortOverKMeansTree(
             auto apply = newLambda.Body().Cast<TCoApply>();
             for (auto arg : apply.Args()) {
                 auto oldMember = arg.Maybe<TCoMember>();
-                if (oldMember && oldMember.Cast().Name().Value() == indexDesc.KeyColumns[0]) {
+                if (oldMember && oldMember.Cast().Name().Value() == indexDesc.KeyColumns.back()) {
                     auto newMember = Build<TCoMember>(ctx, pos)
                         .Name().Build(NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn)
                         .Struct(oldMember.Cast().Struct())

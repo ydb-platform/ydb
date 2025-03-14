@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
+
+import ydb
+from ydb._topic_writer.topic_writer import PublicMessage
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 import requests
 from urllib.parse import urlencode
@@ -569,5 +573,88 @@ def test_viewer_nodes_issue_14992():
     result = {
         'response_group_by': response_group_by,
         'response_group': response_group,
+    }
+    return result
+
+
+def test_topic_data():
+    grpc_port = cluster.nodes[1].grpc_port
+
+    call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'CREATE TOPIC topic1',
+        'schema': 'multi'
+    })
+
+    endpoint = "localhost:{}".format(grpc_port)
+    driver = ydb.Driver(endpoint=endpoint, database=dedicated_db, oauth=None)
+    driver.wait(10, fail_fast=True)
+    driver.topic_client.create_topic('topic2', min_active_partitions=1, max_active_partitions=1)
+
+    def write(writer, message_pattern, close=True):
+        writer.write(["{}-{}".format(message_pattern, i) for i in range(10)])
+        writer.flush()
+        if close:
+            writer.close()
+
+    writer = driver.topic_client.writer('topic2', producer_id="12345")
+    write(writer, "message", False)
+
+    # Also write one messagewith metadata
+    message_w_meta = PublicMessage(data="message_with_meta", metadata_items={"key1": "value1", "key2": "value2"})
+    writer.write(message_w_meta)
+    writer.close()
+
+    writer_compressed = driver.topic_client.writer('topic2', producer_id="12345", codec=2)
+    write(writer_compressed, "compressed-message")
+
+    response = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic2'.format(dedicated_db),
+        'partition': '0',
+        'offset': '0',
+        'limit': '5'
+    })
+
+    response_w_meta = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic2'.format(dedicated_db),
+        'partition': '0',
+        'offset': '10',
+        'limit': '1'
+    })
+    response_compressed = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic2'.format(dedicated_db),
+        'partition': '0',
+        'offset': '11',
+        'limit': '5'
+    })
+
+    response_last = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic2'.format(dedicated_db),
+        'partition': '0',
+        'offset': '20',
+        'limit': '5'
+    })
+
+    def strip_non_canonized(resp):
+        for message in resp["Messages"]:
+            assert int(message.get("CreateTimestamp", "0")) != 0
+            assert int(message.get("WriteTimestamp", "0")) != 0
+            assert int(message.get("TimestampDiff", None)) >= 0
+            assert message.get("ProducerId", None) is not None
+            del message["CreateTimestamp"]
+            del message["WriteTimestamp"]
+            del message["TimestampDiff"]
+            del message["ProducerId"]
+        return resp
+
+    result = {
+        'response_read': strip_non_canonized(response),
+        'response_metadata': strip_non_canonized(response_w_meta),
+        'response_compressed': strip_non_canonized(response_compressed),
+        'response_not_truncated': strip_non_canonized(response_last)
     }
     return result

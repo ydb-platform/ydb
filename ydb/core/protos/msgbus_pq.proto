@@ -417,6 +417,7 @@ message TCmdReadResult {
     optional uint64 ReadFromTimestampMs = 12;
     optional uint64 SizeEstimate = 13;
     optional int64 LastOffset = 14;
+    optional uint64 StartOffset = 17;
     optional uint64 EndOffset = 15;
     optional bool ReadingFinished = 16;
 }

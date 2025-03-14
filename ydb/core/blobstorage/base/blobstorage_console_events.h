@@ -54,8 +54,10 @@ namespace NKikimr {
             NKikimrBlobStorage::TEvControllerValidateConfigRequest, EvControllerValidateConfigRequest> {
         TEvControllerValidateConfigRequest() = default;
 
-        TEvControllerValidateConfigRequest(const TString& yamlConfig) {
+        TEvControllerValidateConfigRequest(const TString& yamlConfig, bool allowUnknownFields = false, bool bypassMetadataChecks = false) {
             Record.SetYAML(yamlConfig);
+            Record.SetAllowUnknownFields(allowUnknownFields);
+            Record.SetBypassMetadataChecks(bypassMetadataChecks);
         }
 
         TString ToString() const override {

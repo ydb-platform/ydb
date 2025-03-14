@@ -462,8 +462,12 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
             }
 
             // commit it
-            Execute(CreateTxCommitConfig(std::move(yamlConfig), std::make_optional(std::move(storageYaml)), std::nullopt,
-                expectedStorageYamlConfigVersion, std::exchange(h, {}), std::nullopt));
+            if (record.GetDryRun()) {
+                STLOG(PRI_DEBUG, BS_CONTROLLER, BSC30, "Dry run mode, skipping config commit", (SelfId, SelfId()));
+            } else {
+                Execute(CreateTxCommitConfig(std::move(yamlConfig), std::make_optional(std::move(storageYaml)), std::nullopt,
+                    expectedStorageYamlConfigVersion, std::exchange(h, {}), std::nullopt));
+            }
             break;
         }
 

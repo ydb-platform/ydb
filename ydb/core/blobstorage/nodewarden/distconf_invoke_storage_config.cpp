@@ -221,8 +221,8 @@ namespace NKikimr::NStorage {
         }
 
         if (request.GetSkipConsoleValidation() || !NewYaml) {
-            StartProposition(&ProposedStorageConfig);
-        } else if (!Self->EnqueueConsoleConfigValidation(SelfId(), enablingDistconf, *NewYaml)) {
+            StartProposition(&ProposedStorageConfig, true, request.GetDryRun());
+        } else if (!Self->EnqueueConsoleConfigValidation(SelfId(), enablingDistconf, *NewYaml, request.GetAllowUnknownFields(), request.GetBypassMetadataChecks())) {
             FinishWithError(TResult::ERROR, "console pipe is not available");
         }
     }
@@ -328,6 +328,7 @@ namespace NKikimr::NStorage {
         }
 
         record.SetDedicatedConfigMode(replaceStorageConfig.GetDedicatedStorageSectionConfigMode());
+        record.SetDryRun(replaceStorageConfig.GetDryRun());
 
         // fill in operation and operation-dependent fields
         switch (ControllerOp) {
@@ -438,7 +439,8 @@ namespace NKikimr::NStorage {
                 if (const auto& error = UpdateConfigComposite(ProposedStorageConfig, *NewYaml, record.GetYAML())) {
                     return FinishWithError(TResult::ERROR, TStringBuilder() << "failed to update config yaml: " << *error);
                 }
-                return StartProposition(&ProposedStorageConfig);
+                const auto& replaceRequest = Event->Get()->Record.GetReplaceStorageConfig();
+                return StartProposition(&ProposedStorageConfig, true, replaceRequest.GetDryRun());
         }
     }
 

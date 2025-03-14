@@ -1184,6 +1184,7 @@ int RunMain(int argc, const char* argv[])
         udfResolverImpl = NCommon::CreateSimpleUdfResolver(funcRegistry.Get(), storage, true);
     }
 
+    progFactory.SetUdfIndex(new TUdfIndex(), new TUdfIndexPackageSet());
     progFactory.SetUdfResolver(udfResolverImpl);
     progFactory.SetFileStorage(storage);
     progFactory.SetUrlPreprocessing(new TUrlPreprocessing(gatewaysConfig));

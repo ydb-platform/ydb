@@ -3,7 +3,7 @@
 #include "events.h"
 #include "executor_pool.h"
 
-const int DebugLevel = 1;
+const int DebugLevel = 0;
 #define MY_DEBUG(x, y) if (x <= DebugLevel) { \
     Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " " << y << Endl); \
 }
@@ -48,49 +48,51 @@ namespace NActors {
                         return;
                     }
                 }
-                std::unique_lock g(*ActorsMutex);
+                {
+                    std::unique_lock g(*ActorsMutex);
 
-                IActor* actor = nullptr;
-                TActorId recipient = evExt->GetRecipientRewrite();
-                actor = this->FindActor(recipient.LocalId());
-                if (!actor) {
-                    actor = this->FindAlias(recipient.LocalId());
+                    IActor* actor = nullptr;
+                    TActorId recipient = evExt->GetRecipientRewrite();
+                    actor = this->FindActor(recipient.LocalId());
+                    if (!actor) {
+                        actor = this->FindAlias(recipient.LocalId());
+                        if (actor) {
+                            // Work as if some alias actor rewrites events and delivers them to the real actor id
+                            evExt->Rewrite(evExt->GetTypeRewrite(), actor->SelfId());
+                            recipient = evExt->GetRecipientRewrite();
+                        }
+                    }
+                    NHPTimer::STime eventStart = 0;// = NHPTimer::HPNow();
+                    TActorContext ctx(*this, *ExecutorPool, eventStart, recipient);
+                    TlsActivationContext = &ctx; // ensure dtor (if any) is called within actor system
+                    // move for destruct before ctx;
+                    auto ev = std::move(evExt);
+
                     if (actor) {
-                        // Work as if some alias actor rewrites events and delivers them to the real actor id
-                        evExt->Rewrite(evExt->GetTypeRewrite(), actor->SelfId());
-                        recipient = evExt->GetRecipientRewrite();
-                    }
-                }
-                NHPTimer::STime eventStart = 0;// = NHPTimer::HPNow();
-                TActorContext ctx(*this, *ExecutorPool, eventStart, recipient);
-                TlsActivationContext = &ctx; // ensure dtor (if any) is called within actor system
-                // move for destruct before ctx;
-                auto ev = std::move(evExt);
+                        Y_ASSERT(ev);
+                        TAutoPtr<IEventHandle> evHandle(ev);
+                        actor->OnEnqueueEvent(0);
+                        actor->Receive(evHandle);
 
-                if (actor) {
-                    Y_ASSERT(ev);
-                    TAutoPtr<IEventHandle> evHandle(ev);
-                    actor->OnEnqueueEvent(0);
-                    actor->Receive(evHandle);
-
-                    actor->OnDequeueEvent();
-                } else {
-                    TAutoPtr<IEventHandle> nonDelivered = IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown);
-                    if (nonDelivered.Get()) {
-                        ctx.Send(nonDelivered);
+                        actor->OnDequeueEvent();
+                    } else {
+                        TAutoPtr<IEventHandle> nonDelivered = IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown);
+                        if (nonDelivered.Get()) {
+                            ctx.Send(nonDelivered);
+                        }
                     }
-                }
-            }
-            if (IsEmpty()) {
-                // there are no more alive actors on that mailbox
-                if (Status.exchange(MarkerFree) != MarkerFree) {
-                    ExecutorPool->GetMailboxCache()->Free(this);
                 }
             }
             TActorContext ctx(*this, *ExecutorPool, 0, {});
             TlsActivationContext = &ctx;
             DyingActors.clear();
             TlsActivationContext = nullptr;
+            if (IsEmpty()) {
+                // there are no more alive actors on that mailbox
+                if (Status.exchange(MarkerFree) != MarkerFree) {
+                    ExecutorPool->GetMailboxCache()->Free(this);
+                }
+            }
         }
     }
 

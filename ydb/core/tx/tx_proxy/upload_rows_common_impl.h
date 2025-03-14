@@ -562,6 +562,8 @@ private:
         // TODO: check all params;
         // Cerr << *Request->GetProtoRequest() << Endl;
 
+        Span && Span.Event("ResolveTable", {{"table", table}});
+
         AuditContextStart();
 
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
@@ -592,6 +594,7 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
+        Span && Span.Event("DataSerialization");
         const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request;
 
         Y_ABORT_UNLESS(request.ResultSet.size() == 1);
@@ -915,6 +918,7 @@ private:
     }
 
     void ResolveShards(const NActors::TActorContext& ctx) {
+        Span && Span.Event("ResolveShards");
         if (GetRows().empty()) {
             // We have already resolved the table and know it exists
             // No reason to resolve table range as well
@@ -1005,6 +1009,7 @@ private:
     }
 
     void MakeShardRequests(const NActors::TActorContext& ctx) {
+        Span && Span.Event("MakeShardRequests", {{"rows", long(GetRows().size())}});
         const auto* keyRange = GetKeyRange();
 
         Y_ABORT_UNLESS(!keyRange->GetPartitions().empty());
@@ -1092,6 +1097,7 @@ private:
         }
 
         TBase::Become(&TThis::StateWaitResults);
+        Span && Span.Event("WaitResults", {{"shardRequests", long(shardRequests.size())}});
 
         // Sanity check: don't break when we don't have any shards for some reason
         return ReplyIfDone(ctx);
@@ -1136,6 +1142,8 @@ private:
 
         ui64 shardId = shardResponse.GetTabletID();
 
+        Span && Span.Event("TEvUploadRowsResponse", {{"shardId", long(shardId)}});
+
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: got "
                     << NKikimrTxDataShard::TError::EKind_Name((NKikimrTxDataShard::TError::EKind)shardResponse.GetStatus())
                     << " from shard " << shardResponse.GetTabletID());
@@ -1174,6 +1182,8 @@ private:
         auto& record = ev->Get()->Record;
         ui64 shardId = record.GetTabletID();
         ui64 seqNo = record.GetSeqNo();
+
+        Span && Span.Event("TEvOverloadReady", {{"shardId", long(shardId)}});
 
         if (auto* state = ShardUploadRetryStates.FindPtr(shardId)) {
             if (state->SentOverloadSeqNo && state->SentOverloadSeqNo == seqNo && ShardRepliesLeft.contains(shardId)) {

@@ -34,6 +34,7 @@ target_link_libraries(blobstorage-vdisk-syncer PUBLIC
 )
 
 target_sources(blobstorage-vdisk-syncer PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_broker.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_committer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data.cpp
@@ -49,6 +50,7 @@ target_sources(blobstorage-vdisk-syncer PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/syncer_job_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/syncer_job_task.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/defs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_broker.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_committer.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_dataserdes.h

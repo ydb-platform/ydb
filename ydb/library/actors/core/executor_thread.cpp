@@ -214,7 +214,8 @@ namespace NActors {
         ThreadCtx.ResetOverwrittenTimePerMailboxTs();
         bool drained = false;
         for (; execCtx.ExecutedEvents < ThreadCtx.OverwrittenEventsPerMailbox(); execCtx.ExecutedEvents++) {
-            if (TAutoPtr<IEventHandle> evExt = mailbox->Pop()) {
+            if (false) { //TAutoPtr<IEventHandle> evExt = mailbox->Pop())
+                TAutoPtr<IEventHandle> evExt;
                 EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "mailbox->Pop()");
                 recipient = evExt->GetRecipientRewrite();
                 actor = mailbox->FindActor(recipient.LocalId());

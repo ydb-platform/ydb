@@ -38,6 +38,7 @@ namespace NActors {
 
         void ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingWriteCounter) override;
 
+        TActorSystem *GetActorSystem() const override { return ActorSystem; }
         void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) override;
         void Start() override;
         void PrepareStop() override;

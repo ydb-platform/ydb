@@ -3,3 +3,5 @@ items:
   href: tls.md
 - name: Аутентификация узлов баз данных
   href: node-authentication.md
+- name: Hive
+  href: hive.md

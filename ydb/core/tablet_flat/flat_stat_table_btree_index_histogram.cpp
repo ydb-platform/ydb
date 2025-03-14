@@ -565,7 +565,7 @@ private:
     void AddFutureEvents(TNodeState& node) {
         auto cmp = NodeEventKeyGreater.Compare(TEvent{&node, true}, TEvent{&node, false});
         LOG_BUILD_STATS("adding node future events " << (i32)cmp << " " << node.ToString(KeyDefaults));
-        if (node.GetRowCount() > 1 && cmp >= 0) {
+        if (node.GetRowCount() > 1) {
             Y_DEBUG_ABORT_UNLESS(cmp < 0);
         }
 

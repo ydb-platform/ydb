@@ -477,7 +477,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
                 }
                 Cerr << ") ";
             }
-            Cerr << DumpPart(*part.As<TPartStore>(), 2) << Endl;
+            // Cerr << DumpPart(*part.As<TPartStore>(), 2) << Endl;
             Cerr << Endl;
         }
     }

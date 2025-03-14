@@ -1983,7 +1983,13 @@ public:
         }
 
         if (!userType) {
-            builder.SetError("User type is missing");
+            // XXX: Function became polymorphic when overload for
+            // wide resources was implemented. Hence, to make it
+            // backward compatible with previous versions, the
+            // absence of the userType is considered as using the
+            // old version (i.e. without type awareness) that
+            // provides implementation only for narrow dates.
+            BuildSignature<TInterval, TResult>(builder, typesOnly);
             return true;
         }
 
@@ -2451,7 +2457,13 @@ public:
         }
 
         if (!userType) {
-            builder.SetError("User type is missing");
+            // XXX: Function became polymorphic when overload for
+            // wide resources was implemented. Hence, to make it
+            // backward compatible with previous versions, the
+            // absence of the userType is considered as using the
+            // old version (i.e. without type awareness) that
+            // provides implementation only for narrow dates.
+            BuildSignature<TMResourceName, Boundary>(builder, typesOnly);
             return true;
         }
 
@@ -2567,7 +2579,13 @@ public:
         }
 
         if (!userType) {
-            builder.SetError("User type is missing");
+            // XXX: Function became polymorphic when overload for
+            // wide resources was implemented. Hence, to make it
+            // backward compatible with previous versions, the
+            // absence of the userType is considered as using the
+            // old version (i.e. without type awareness) that
+            // provides implementation only for narrow dates.
+            BuildSignature<TMResourceName>(builder, typesOnly);
             return true;
         }
 

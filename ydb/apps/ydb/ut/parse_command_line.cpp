@@ -279,7 +279,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
                 "-v",
                 "-e", GetEndpoint(),
                 "-d", GetDatabase(),
-                "scheme", "ls", GetDatabase(),
+                "scheme", "ls",
             }
         );
     }
@@ -299,7 +299,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         RunCli(
             {
                 "-v",
-                "scheme", "ls", GetDatabase(),
+                "scheme", "ls",
             },
             {
                 {"YDB_TOKEN", "42"}
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             {
                 "-v",
                 "-p", "test_profile",
-                "scheme", "ls", GetDatabase(),
+                "scheme", "ls",
             },
             {
                 {"YDB_TOKEN", "42"}
@@ -360,7 +360,19 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             "-e", GetEndpoint(),
             "-d", GetDatabase(),
             "--iam-token-file", tokenFile,
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
+        },
+        {},
+        profile);
+
+        ExpectToken("iam_token");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--profile", "other_test_profile",
+            "--iam-token-file", tokenFile,
+            "scheme", "ls",
         },
         {},
         profile);
@@ -372,7 +384,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             "-d", GetDatabase(),
             "-p", "active_test_profile",
             "--iam-token-file", tokenFile,
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {},
         profile);
@@ -380,7 +392,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         ExpectToken("test-iam-token");
         RunCli({
             "-v",
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {},
         profile);
@@ -389,7 +401,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         RunCli({
             "-v",
             "--profile", "other_test_profile",
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {
             {"IAM_TOKEN", "env-iam-token"},
@@ -399,7 +411,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         ExpectToken("env-iam-token");
         RunCli({
             "-v",
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {
             {"IAM_TOKEN", "env-iam-token"},
@@ -437,7 +449,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             "-e", GetEndpoint(),
             "-d", GetDatabase(),
             "--token-file", tokenFile,
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {},
         profile);
@@ -449,7 +461,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             "-d", GetDatabase(),
             "--token-file", tokenFile,
             "--profile", "token_file_test_profile",
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {},
         profile);
@@ -457,7 +469,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         ExpectToken("test-ydb-token");
         RunCli({
             "-v",
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {},
         profile);
@@ -466,7 +478,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         RunCli({
             "-v",
             "--profile", "token_file_test_profile",
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {
             {"YDB_TOKEN", "env-ydb-token"},
@@ -476,7 +488,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         ExpectToken("env-ydb-token");
         RunCli({
             "-v",
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {
             {"YDB_TOKEN", "env-ydb-token"},
@@ -497,7 +509,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             "-d", GetDatabase(),
             "--user", "test-user",
             "--password-file", passwordFile,
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         });
 
         ExpectUserAndPassword("test-user", "", "no-pwd-token");
@@ -507,22 +519,23 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             "-d", GetDatabase(),
             "--user", "test-user",
             "--no-password",
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {
             {"YDB_PASSWORD", "pwd"},
         });
 
-        ExpectUserAndPassword("test-user", "test-password", "not-empty-pwd-token");
-        RunCli({
-            "-v",
-            "-e", GetEndpoint(),
-            "-d", GetDatabase(),
-            "--user", "test-user",
-            "--no-password",
-            "--password-file", passwordFile,
-            "scheme", "ls", GetDatabase(),
-        });
+        // TODO: make these options mutually exclusive
+        // ExpectFail();
+        // RunCli({
+        //     "-v",
+        //     "-e", GetEndpoint(),
+        //     "-d", GetDatabase(),
+        //     "--user", "test-user",
+        //     "--no-password",
+        //     "--password-file", passwordFile,
+        //     "scheme", "ls",
+        // });
 
         TString profile = fmt::format(R"yaml(
         profiles:
@@ -576,7 +589,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         RunCli({
             "-v",
             "--password-file", otherPasswordFile,
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {},
         profile);
@@ -585,7 +598,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         ExpectUserAndPassword("user-test", "password-test", "token-test");
         RunCli({
             "-v",
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {},
         profile);
@@ -594,7 +607,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         ExpectFail();
         RunCli({
             "-v",
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {
             {"YDB_PASSWORD", "pwd"},
@@ -604,7 +617,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         ExpectUserAndPassword("env-user", "env-password", "env-token");
         RunCli({
             "-v",
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {
             {"YDB_USER", "env-user"},
@@ -618,19 +631,20 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         RunCli({
             "-v",
             "-p", "test_profile",
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {},
         profile);
 
-        ExpectUserAndPassword("users", "test-password", "tkn");
-        RunCli({
-            "-v",
-            "-p", "test_profile_with_both_passwords",
-            "scheme", "ls", GetDatabase(),
-        },
-        {},
-        profile);
+        // TODO: validate that there is no ambiguity in setting passwords
+        // ExpectFail();
+        // RunCli({
+        //     "-v",
+        //     "-p", "test_profile_with_both_passwords",
+        //     "scheme", "ls",
+        // },
+        // {},
+        // profile);
 
         // TODO: Fix this case
         //ExpectUserAndPassword("user_no_password", "", "no-password-token");
@@ -638,7 +652,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             "-v",
             "-p", "test_profile_without_password",
             "--no-password",
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {},
         profile);
@@ -648,7 +662,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         RunCli({
             "-v",
             "-p", "test_profile_with_password_file",
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {
             {"YDB_PASSWORD", "pwd"},
@@ -661,7 +675,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             "-v",
             "-e", GetEndpoint(),
             "-d", GetDatabase(),
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         });
 
         TString profile = fmt::format(R"yaml(
@@ -681,7 +695,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             "-v",
             "-e", GetEndpoint(),
             "-d", GetDatabase(),
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {},
         profile);
@@ -691,7 +705,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             "-v",
             "-e", GetEndpoint(),
             "-d", GetDatabase(),
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {
             {"YDB_TOKEN", "ydb-token"},
@@ -704,7 +718,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             "-e", GetEndpoint(),
             "-d", GetDatabase(),
             "--profile", "active_test_profile",
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {
             {"YDB_TOKEN", "ydb-token"},
@@ -719,7 +733,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             "--profile", "active_test_profile",
             "--user", "user",
             "--no-password",
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {
             {"YDB_TOKEN", "ydb-token"},
@@ -733,7 +747,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             "-v",
             "-e", GetEndpoint(),
             "-d", GetDatabase(),
-            "scheme", "ls", GetDatabase(),
+            "scheme", "ls",
         },
         {
             {"IAM_TOKEN", "right-token"},

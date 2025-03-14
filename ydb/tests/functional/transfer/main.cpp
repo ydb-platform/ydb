@@ -156,7 +156,17 @@ struct MainTestCase {
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     }
 
-    void CreateTransfer(const TString& lambda) {
+    void CreateConsumer(const TString& consumerName) {
+        auto res = Session.ExecuteQuery(Sprintf(R"(
+            ALTER TOPIC `%s`
+            ADD CONSUMER `%s`;
+        )", TopicName.data(), consumerName.data()), TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    }
+
+    void CreateTransfer(const TString& lambda, const TString& consumerName = "") {
+        TString customSettings = consumerName.empty() ? TString{} : (TStringBuilder() << ", CONSUMER_NAME = '" << consumerName << "'" << Endl);
+
         auto res = Session.ExecuteQuery(Sprintf(R"(
             %s;
 
@@ -166,9 +176,10 @@ struct MainTestCase {
                 CONNECTION_STRING = 'grpc://%s',
                 FLUSH_INTERVAL = Interval('PT1S'),
                 BATCH_SIZE = 65535
-                -- , TOKEN = 'user@builtin'
+                %s
             );
-        )", lambda.data(), TransferName.data(), TopicName.data(), TableName.data(), ConnectionString.data()), TTxControl::NoTx()).GetValueSync();
+        )", lambda.data(), TransferName.data(), TopicName.data(), TableName.data(), ConnectionString.data(), customSettings.data()),
+            TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     }
 
@@ -203,7 +214,7 @@ struct MainTestCase {
         settings.IncludeLocation(true);
         settings.IncludeStats(true);
 
-        return TopicClient.DescribeTopic(TopicName, settings);
+        return TopicClient.DescribeTopic(TopicName, settings).ExtractValueSync();
     }
 
     void Write(const TMessage& message) {
@@ -868,7 +879,7 @@ Y_UNIT_TEST_SUITE(Transfer)
             )");
 
         for (size_t i = 20; i--; ) {
-            auto result = testCase.DescribeTopic().ExtractValueSync();
+            auto result = testCase.DescribeTopic();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
             auto& consumers = result.GetTopicDescription().GetConsumers();
             if (1 == consumers.size()) {
@@ -885,7 +896,7 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTransfer();
 
         for (size_t i = 20; i--; ) {
-            auto result = testCase.DescribeTopic().ExtractValueSync();
+            auto result = testCase.DescribeTopic();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
             auto& consumers = result.GetTopicDescription().GetConsumers();
             if (0 == consumers.size()) {
@@ -971,5 +982,55 @@ Y_UNIT_TEST_SUITE(Transfer)
         }
     }
 */
+
+    Y_UNIT_TEST(CustomConsumer)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+        
+        testCase.CreateTopic(1);
+        testCase.CreateConsumer("PredefinedConsumer");
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", "PredefinedConsumer");
+
+        Sleep(TDuration::Seconds(3));
+
+        { // Check that consumer is reused
+            auto result = testCase.DescribeTopic();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+            auto& consumers = result.GetTopicDescription().GetConsumers();
+            UNIT_ASSERT_VALUES_EQUAL(1, consumers.size());
+            UNIT_ASSERT_VALUES_EQUAL("PredefinedConsumer", consumers[0].GetConsumerName());
+        }
+
+        testCase.DropTransfer();
+
+        Sleep(TDuration::Seconds(3));
+
+        { // Check that consumer is not removed
+            auto result = testCase.DescribeTopic();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+            auto& consumers = result.GetTopicDescription().GetConsumers();
+            UNIT_ASSERT_VALUES_EQUAL(1, consumers.size());
+            UNIT_ASSERT_VALUES_EQUAL("PredefinedConsumer", consumers[0].GetConsumerName());
+        }
+    }
+
 }
 

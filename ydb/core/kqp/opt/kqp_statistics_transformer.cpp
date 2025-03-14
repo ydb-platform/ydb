@@ -2,6 +2,8 @@
 #include <yql/essentials/utils/log/log.h>
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 #include <yql/essentials/core/yql_cost_function.h>
+#include <yql/essentials/core/yql_join.h>
+#include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
@@ -98,7 +100,7 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
         keyColumns,
         inputStats->ColumnStatistics,
         inputStats->StorageType);
-    stats->SortColumns = sortedPrefixPtr; 
+    stats->SortColumns = sortedPrefixPtr;
     stats->ShuffledByColumns = inputStats->ShuffledByColumns;
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for read table" << stats->ToString();
@@ -486,7 +488,7 @@ public:
             if (listPtr->ChildrenSize() >= 2 && listPtr->Child(0)->Content() == "??") {
                 listPtr = listPtr->Child(1);
             }
-            
+
             size_t listSize = listPtr->ChildrenSize();
             if (listSize == 3) {
                 TString compSign = TString(listPtr->Child(0)->Content());
@@ -819,6 +821,77 @@ void AppendTxStats(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx
 
     txStats.push_back(vec);
 }
+
+
+class TInterestingOrderingsFSMBuilder {
+public:
+    TOrderingsStateMachine Build(const TExprNode::TPtr& node) {
+        InterestingOrderingsCollector collector;
+        VisitExpr(node, [&collector](const TExprNode::TPtr& node){
+            return collector.Collect(node);
+        });
+
+        auto& fdStorage = collector.FDStorage;
+        return TOrderingsStateMachine(fdStorage.FDs, fdStorage.InterestingOrderings);
+    }
+
+private:
+    class InterestingOrderingsCollector {
+    public:
+        bool Collect(const TExprNode::TPtr& node) {
+            bool matched = true;
+
+            if (TCoEquiJoin::Match(node.Get())) {
+                CollectEquiJoin(TExprBase(node).Cast<TCoEquiJoin>());
+            } else {
+                matched = false;
+            }
+
+            return matched;
+        }
+
+    public:
+        TFDStorage FDStorage;
+
+    private:
+        void CollectEquiJoin(const TCoEquiJoin& equiJoin) {
+            auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
+            CollectEquiJoinTuple(joinTuple);
+        }
+
+        void CollectEquiJoinTuple(const TCoEquiJoinTuple& joinTuple) {
+            if (joinTuple.LeftScope().Maybe<TCoEquiJoinTuple>()) {
+                CollectEquiJoinTuple(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>());
+            }
+
+            if (joinTuple.RightScope().Maybe<TCoEquiJoinTuple>()) {
+                CollectEquiJoinTuple(joinTuple.RightScope().Cast<TCoEquiJoinTuple>());
+            }
+
+            std::vector<TJoinColumn> leftKeys;
+            std::vector<TJoinColumn> rightKeys;
+            size_t joinKeysCount = joinTuple.LeftKeys().Size() / 2;
+            for (size_t i = 0; i < joinKeysCount; ++i) {
+                size_t keyIndex = i * 2;
+
+                auto leftScope = joinTuple.LeftKeys().Item(keyIndex).StringValue();
+                auto leftColumn = joinTuple.LeftKeys().Item(keyIndex + 1).StringValue();
+                auto leftJoinColumn = TJoinColumn(leftScope, leftColumn);
+                leftKeys.push_back(leftJoinColumn);
+
+                auto rightScope = joinTuple.RightKeys().Item(keyIndex).StringValue();
+                auto rightColumn = joinTuple.RightKeys().Item(keyIndex + 1).StringValue();
+                auto rightJoinColumn = TJoinColumn(rightScope, rightColumn);
+                rightKeys.push_back(rightJoinColumn);
+
+                FDStorage.AddFD(leftJoinColumn, rightJoinColumn, TFunctionalDependency::EEquivalence, false);
+            }
+
+            FDStorage.AddInterestingOrdering(leftKeys, TOrdering::EShuffle);
+            FDStorage.AddInterestingOrdering(rightKeys, TOrdering::EShuffle);
+        }
+    };
+};
 
 /**
  * DoTransform method matches operators and callables in the query DAG and

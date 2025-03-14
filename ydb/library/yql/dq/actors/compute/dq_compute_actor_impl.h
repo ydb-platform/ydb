@@ -1153,6 +1153,7 @@ protected:
 
                 TerminateSources("executer lost", false);
                 Terminate(false, "executer lost"); // Executer lost - no need to report state
+                DoTerminateImpl();
                 break;
             }
             default: {
@@ -1196,6 +1197,7 @@ protected:
         if (ev->Get()->Record.GetStatusCode() == NYql::NDqProto::StatusIds::INTERNAL_ERROR) {
             Y_ABORT_UNLESS(ev->Get()->GetIssues().Size() == 1);
             InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, *ev->Get()->GetIssues().begin());
+            DoTerminateImpl();
             return;
         }
 

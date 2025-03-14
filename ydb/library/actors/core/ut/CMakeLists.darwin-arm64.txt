@@ -43,6 +43,7 @@ target_link_options(ydb-library-actors-core-ut PRIVATE
 target_sources(ydb-library-actors-core-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut/actor_basic_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut/actor_coroutine_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut/actor_exception_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut/actor_shared_threads.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut/benchmark_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut/actor_ut.cpp

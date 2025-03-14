@@ -5272,6 +5272,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot");
     }
+}
 
 Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
 

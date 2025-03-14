@@ -203,6 +203,7 @@ message TEvNodeConfigInvokeOnRoot {
         optional bool SwitchDedicatedStorageSection = 4;
         bool DedicatedStorageSectionConfigMode = 5;
         bool SkipConsoleValidation = 2;
+        bool DryRun = 6;
     }
 
     message TBootstrapCluster {

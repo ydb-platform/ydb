@@ -36,7 +36,15 @@ rows {
         bytes_value: "downsampling.aggregation"
       }
       payload {
-        bytes_value: "4"
+        bytes_value: "3"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "downsampling.disabled"
+      }
+      payload {
+        bytes_value: "bool False"
       }
     }
     pairs {
@@ -52,23 +60,7 @@ rows {
         bytes_value: "downsampling.gridMillis"
       }
       payload {
-        bytes_value: "int 300000"
-      }
-    }
-    pairs {
-      key {
-        bytes_value: "from"
-      }
-      payload {
-        bytes_value: "seconds: 1702046439\n"
-      }
-    }
-    pairs {
-      key {
-        bytes_value: "downsampling.disabled"
-      }
-      payload {
-        bytes_value: "bool False"
+        bytes_value: "int 25000"
       }
     }
     pairs {
@@ -85,14 +77,6 @@ rows {
       }
       payload {
         bytes_value: "my_project"
-      }
-    }
-    pairs {
-      key {
-        bytes_value: "to"
-      }
-      payload {
-        bytes_value: "seconds: 1702046739\n"
       }
     }
   }
@@ -113,7 +97,15 @@ rows {
         bytes_value: "downsampling.aggregation"
       }
       payload {
-        bytes_value: "4"
+        bytes_value: "3"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "downsampling.disabled"
+      }
+      payload {
+        bytes_value: "bool False"
       }
     }
     pairs {
@@ -129,23 +121,7 @@ rows {
         bytes_value: "downsampling.gridMillis"
       }
       payload {
-        bytes_value: "int 300000"
-      }
-    }
-    pairs {
-      key {
-        bytes_value: "from"
-      }
-      payload {
-        bytes_value: "seconds: 1702046439\n"
-      }
-    }
-    pairs {
-      key {
-        bytes_value: "downsampling.disabled"
-      }
-      payload {
-        bytes_value: "bool False"
+        bytes_value: "int 25000"
       }
     }
     pairs {
@@ -162,14 +138,6 @@ rows {
       }
       payload {
         bytes_value: "my_project"
-      }
-    }
-    pairs {
-      key {
-        bytes_value: "to"
-      }
-      payload {
-        bytes_value: "seconds: 1702046739\n"
       }
     }
   }
@@ -190,7 +158,15 @@ rows {
         bytes_value: "downsampling.aggregation"
       }
       payload {
-        bytes_value: "4"
+        bytes_value: "3"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "downsampling.disabled"
+      }
+      payload {
+        bytes_value: "bool False"
       }
     }
     pairs {
@@ -206,23 +182,7 @@ rows {
         bytes_value: "downsampling.gridMillis"
       }
       payload {
-        bytes_value: "int 300000"
-      }
-    }
-    pairs {
-      key {
-        bytes_value: "from"
-      }
-      payload {
-        bytes_value: "seconds: 1702046439\n"
-      }
-    }
-    pairs {
-      key {
-        bytes_value: "downsampling.disabled"
-      }
-      payload {
-        bytes_value: "bool False"
+        bytes_value: "int 25000"
       }
     }
     pairs {
@@ -239,14 +199,6 @@ rows {
       }
       payload {
         bytes_value: "my_project"
-      }
-    }
-    pairs {
-      key {
-        bytes_value: "to"
-      }
-      payload {
-        bytes_value: "seconds: 1702046739\n"
       }
     }
   }

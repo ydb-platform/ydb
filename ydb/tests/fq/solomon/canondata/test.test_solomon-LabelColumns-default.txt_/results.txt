@@ -48,7 +48,7 @@ rows {
     bytes_value: "3"
   }
   items {
-    bytes_value: "int 300000"
+    bytes_value: "int 15000"
   }
   items {
     bytes_value: "my_project"
@@ -71,7 +71,7 @@ rows {
     bytes_value: "3"
   }
   items {
-    bytes_value: "int 300000"
+    bytes_value: "int 15000"
   }
   items {
     bytes_value: "my_project"
@@ -94,7 +94,7 @@ rows {
     bytes_value: "3"
   }
   items {
-    bytes_value: "int 300000"
+    bytes_value: "int 15000"
   }
   items {
     bytes_value: "my_project"

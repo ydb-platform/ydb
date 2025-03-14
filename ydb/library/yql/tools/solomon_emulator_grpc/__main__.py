@@ -20,8 +20,6 @@ logging.basicConfig(level=logging.DEBUG)
 def _dict_to_labels(request: ReadRequest):
     result = dict()
 
-    result["from"] = str(request.from_time)
-    result["to"] = str(request.to_time)
     result["program"] = f"program length {len(str(request.queries[0].value))}"
     if (request.downsampling.HasField("disabled")):
         result["downsampling.disabled"] = f"bool {True}"

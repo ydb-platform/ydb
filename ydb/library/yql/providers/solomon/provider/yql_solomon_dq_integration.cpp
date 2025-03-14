@@ -243,32 +243,27 @@ public:
 
             if (downsamplingDisabled.has_value() && *downsamplingDisabled) {
                 if (downsamplingAggregation || downsamplingFill || downsamplingGridSec) {
-                    ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Pos()), "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill and downsamplig.grid_interval are specified"));
+                    ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Pos()), "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsamplig.grid_interval are specified"));
                     return {};
                 }
-            }
-
-            if (downsamplingDisabled.has_value() && !*downsamplingDisabled) {
-                if (!downsamplingAggregation || !downsamplingFill || !downsamplingGridSec) {
-                    ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Pos()), "downsampling.aggregation, downsampling.fill and downsamplig.grid_interval must be specified id downsamplig.disabled is false"));
-                    return {};
-                }
-            }
-
-            if (!downsamplingDisabled) {
+            } else {
                 downsamplingDisabled = false;
-                downsamplingAggregation = "AVG";
-                downsamplingFill = "PREVIOUS";
-                downsamplingGridSec = 15;
+                if (!downsamplingAggregation) {
+                    downsamplingAggregation = "AVG";
+                }
+                if (!downsamplingFill) {
+                    downsamplingFill = "PREVIOUS";
+                }
+                if (!downsamplingGridSec) {
+                    downsamplingGridSec = 15;
+                }
             }
+
 
             if (from < TInstant::Now() - TDuration::Days(7)) {
                 downsamplingDisabled = false;
                 downsamplingAggregation = "AVG";
                 downsamplingGridSec = 5 * 60; // 5 minutes
-                if (!downsamplingFill) {
-                    downsamplingFill = "PREVIOUS";
-                }
             }
 
             return Build<TDqSourceWrap>(ctx, read->Pos())

@@ -28,8 +28,6 @@ namespace NMiniKQL {
 
 namespace {
 
-const ui32 PartialJoinBatchSize = 100000; // Number of tuples for one join batch
-
 struct TColumnDataPackInfo {
     ui32 ColumnIdx = 0; // Column index in tuple
     ui32 Bytes = 0; // Size in bytes for fixed size values
@@ -50,7 +48,7 @@ struct TGraceJoinPacker {
     ui64 TuplesPacked = 0; // Total number of packed tuples
     ui64 TuplesBatchPacked = 0; // Number of tuples packed during current join batch
     ui64 TuplesUnpacked = 0; // Total number of unpacked tuples
-    ui64 BatchSize = PartialJoinBatchSize; // Batch size for partial table packing and join
+    ui64 BatchSize = GraceJoin::PartialJoinBatchSize; // Batch size for partial table packing and join
     std::chrono::time_point<std::chrono::system_clock> StartTime; // Start time of execution
     std::chrono::time_point<std::chrono::system_clock> EndTime; // End time of execution
     std::vector<ui64> TupleIntVals; // Packed value of all fixed length values of table tuple.  Keys columns should be packed first.
@@ -819,6 +817,14 @@ private:
                     return EFetchResult::One;
                 }
 
+                if (JoinedTablePtr->PartialJoinIncomplete) {
+                    auto& leftTable = *LeftPacker->TablePtr;
+                    auto& rightTable = SelfJoinSameKeys_ ? *LeftPacker->TablePtr : *RightPacker->TablePtr;
+                    JoinedTablePtr->Join(leftTable, rightTable, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
+                    JoinedTablePtr->ResetIterator();
+                    continue;
+                }
+
                 // Resets batch state for batch join
                 if (!*HaveMoreRightRows) {
                     *PartialJoinCompleted = false;
@@ -984,6 +990,16 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
                 while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData, nextBucketToJoin + 1)) {
                     UnpackJoinedData(output);
                     return EFetchResult::One;
+                }
+
+                if (JoinedTablePtr->PartialJoinIncomplete) {
+                    if ( SelfJoinSameKeys_ ) {
+                        JoinedTablePtr->Join(*LeftPacker->TablePtr, *LeftPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows, nextBucketToJoin, nextBucketToJoin+1);
+                    } else {
+                        JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows, nextBucketToJoin, nextBucketToJoin+1);
+                    }
+                    JoinedTablePtr->ResetIterator();
+                    continue;
                 }
 
                 LeftPacker->TuplesBatchPacked = 0;

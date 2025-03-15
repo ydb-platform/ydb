@@ -10,6 +10,9 @@ namespace NKikimr {
 namespace NMiniKQL {
 namespace GraceJoin {
 
+const ui32 PartialJoinBatchSize = 100000; // Number of tuples for one join batch
+const ui32 JoinResultsSizeLimit = 2*PartialJoinBatchSize; // Number of tuples in
+
 class TTableBucketSpiller;
 #define GRACEJOIN_DEBUG DEBUG
 #define GRACEJOIN_TRACE TRACE
@@ -165,6 +168,8 @@ struct TTableBucket {
 
     std::vector<ui64, TMKQLAllocator<ui64>> JoinSlots;  // Hashtable
     ui64 NSlots = 0;  // Hashtable
+    ui64 ResumeOffset = 0;
+    ui32 ResumeIdx = 0;
 
  };
 
@@ -328,6 +333,7 @@ class TTable {
     // Pointers to the joined tables. Lifetime of source tables to join should be greater than joined table
     TTable * JoinTable1 = nullptr;
     TTable * JoinTable2 = nullptr;
+    bool PartialJoinIncomplete = false;
 
     // Returns tuple data in td from bucket with id bucketNum.  Tuple id inside bucket is tupleId.
     inline void GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData& td);

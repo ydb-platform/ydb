@@ -409,6 +409,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
     const bool needCrossIds = JoinKind == EJoinKind::Inner || JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Left || JoinKind == EJoinKind::Right;
 
     ui64 tuplesFound = 0;
+    bool partialJoinIncomplete = false;
 
     for (ui64 bucket = fromBucket; bucket < toBucket; bucket++) {
         auto &joinResults = TableBuckets[bucket].JoinIds;
@@ -444,6 +445,14 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             std::swap(table1HasKeyIColumns, table2HasKeyIColumns);
             std::swap(tuplesNum1, tuplesNum2);
        }
+
+        ui32 tuple1Idx = bucket1->ResumeIdx;
+        if (tuple1Idx == UINT32_MAX) { // This bucket completely proceeded
+	    Y_DEBUG_ABORT_UNLESS(!hasMoreLeftTuples);
+	    Y_DEBUG_ABORT_UNLESS(!hasMoreRightTuples);
+	    Y_DEBUG_ABORT_UNLESS(PartialJoinIncomplete);
+            continue;
+        }
 
         auto &leftIds = bucket1->LeftIds;
         leftIds.clear();
@@ -535,8 +544,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
 
         if (swapTables) JoinTable2Total_ += tuplesNum1; else JoinTable1Total_ += tuplesNum1;
 
-        ui32 tuple1Idx = 0;
-        auto it1 = bucket1->KeyIntVals.begin();
+        auto it1 = bucket1->KeyIntVals.begin() + bucket1->ResumeOffset;
         //  /-------headerSize---------------------------\
         //  hash nulls-bitmap keyInt[] KeyIHash[] strSize| [strPos | strs] slotIdx
         //  \---------------------------------------slotSize ---------------------/
@@ -548,6 +556,11 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         ui64 bloomLookups = 0;
 
         for (ui64 keysValSize = headerSize1; it1 != bucket1->KeyIntVals.end(); it1 += keysValSize, ++tuple1Idx ) {
+
+            if (joinResults.size() >= JoinResultsSizeLimit) {
+                partialJoinIncomplete = true;
+                break;
+            }
 
             if ( table1HasKeyStringColumns || table1HasKeyIColumns ) {
                 keysValSize = headerSize1 + *(it1 + headerSize1 - 1) ;
@@ -637,7 +650,10 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             }
         }
 
-        if (!hasMoreLeftTuples && !hasMoreRightTuples) {
+        bucket1->ResumeOffset = it1 - bucket1->KeyIntVals.begin();
+        bucket1->ResumeIdx = tuple1Idx;
+        if (!hasMoreLeftTuples && !hasMoreRightTuples && bucket1->ResumeOffset == bucket1->KeyIntVals.size()) {
+            bucket1->ResumeIdx = UINT32_MAX;
             bloomFilter.Shrink();
 
             if (bucketStats2->HashtableMatches) {
@@ -682,6 +698,8 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             << " initHashTable " << initHashTable
             ;
     }
+
+    PartialJoinIncomplete = partialJoinIncomplete;
 
     HasMoreLeftTuples_ = hasMoreLeftTuples;
     HasMoreRightTuples_ = hasMoreRightTuples;
@@ -914,6 +932,9 @@ void TTable::Clear() {
 
 void TTable::ClearBucket(ui64 bucket) {
     TTableBucket & tb = TableBuckets[bucket];
+    PartialJoinIncomplete = false;
+    tb.ResumeIdx = 0;
+    tb.ResumeOffset = 0;
     tb.KeyIntVals.clear();
     tb.DataIntVals.clear();
     tb.StringsOffsets.clear();

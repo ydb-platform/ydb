@@ -27,6 +27,7 @@ END()
 
 RECURSE(
     lib
+    s3_import
     scenario
     docs
     load

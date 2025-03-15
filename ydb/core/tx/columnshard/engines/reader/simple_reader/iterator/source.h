@@ -185,12 +185,34 @@ public:
         };
     };
 
-    class TCompareFinishForScanSequence {
+    class TCompareKeyForScanSequence {
+    private:
+        const TReplaceKeyAdapter Key;
+        const ui32 SourceId;
     public:
-        bool operator()(const std::shared_ptr<IDataSource>& l, const std::shared_ptr<IDataSource>& r) const {
-            const std::partial_ordering compareResult = l->GetFinish().Compare(r->GetFinish());
+        TCompareKeyForScanSequence(const TReplaceKeyAdapter& key, const ui32 sourceId)
+            : Key(key)
+            , SourceId(sourceId)
+        {
+
+        }
+
+        static TCompareKeyForScanSequence FromStart(const std::shared_ptr<IDataSource>& src) {
+            return TCompareKeyForScanSequence(src->GetStart(), src->GetSourceId());
+        }
+
+        static TCompareKeyForScanSequence FromFinish(const std::shared_ptr<IDataSource>& src) {
+            return TCompareKeyForScanSequence(src->GetFinish(), src->GetSourceId());
+        }
+
+        static TCompareKeyForScanSequence BorderStart(const std::shared_ptr<IDataSource>& src) {
+            return TCompareKeyForScanSequence(src->GetStart(), 0);
+        }
+
+        bool operator<(const TCompareKeyForScanSequence& item) const {
+            const std::partial_ordering compareResult = Key.Compare(item.Key);
             if (compareResult == std::partial_ordering::equivalent) {
-                return l->GetSourceId() < r->GetSourceId();
+                return SourceId < item.SourceId;
             } else {
                 return compareResult == std::partial_ordering::less;
             }

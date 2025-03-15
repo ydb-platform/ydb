@@ -56,11 +56,11 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
         FetchingSources.pop_front();
         frontSource->ClearResult();
         if (Context->GetCommonContext()->GetReadMetadata()->HasLimit()) {
-            AFL_VERIFY(FetchingInFlightSources.erase(frontSource));
-            AFL_VERIFY(FinishedSources.emplace(frontSource).second);
+            AFL_VERIFY(FetchingInFlightSources.erase(TCompareKeyForScanSequence::FromFinish(frontSource)));
+            AFL_VERIFY(FinishedSources.emplace(TCompareKeyForScanSequence::FromFinish(frontSource), frontSource).second);
             while (FinishedSources.size() &&
-                   (SortedSources.empty() || (*FinishedSources.begin())->GetFinish() < SortedSources.front()->GetStart())) {
-                auto finishedSource = *FinishedSources.begin();
+                   (SortedSources.empty() || FinishedSources.begin()->second->GetFinish() < SortedSources.front()->GetStart())) {
+                auto finishedSource = FinishedSources.begin()->second;
                 if (!finishedSource->GetResultRecordsCount() && InFlightLimit < MaxInFlight) {
                     InFlightLimit = 2 * InFlightLimit;
                 }
@@ -143,7 +143,7 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
             SortedSources.front()->StartProcessing(SortedSources.front());
             FetchingSources.emplace_back(SortedSources.front());
             AFL_VERIFY(FetchingSourcesByIdx.emplace(SortedSources.front()->GetSourceIdx(), SortedSources.front()).second);
-            AFL_VERIFY(FetchingInFlightSources.emplace(SortedSources.front()).second);
+            AFL_VERIFY(FetchingInFlightSources.emplace(TCompareKeyForScanSequence::FromFinish(SortedSources.front()), SortedSources.front()).second);
             SortedSources.pop_front();
             const ui32 inFlightCountLocalNew = GetInFlightIntervalsCount();
             AFL_VERIFY(inFlightCountLocal <= inFlightCountLocalNew);
@@ -185,18 +185,13 @@ ui32 TScanHead::GetInFlightIntervalsCount() const {
         return FetchingInFlightSources.size() + FinishedSources.size();
     }
     ui32 inFlightCountLocal = 0;
-    if (SortedSources.empty()) {
-        inFlightCountLocal += FinishedSources.size();
-        inFlightCountLocal += FetchingInFlightSources.size();
-    } else {
-        auto itUpperFinished = SortedSources.size() ? FinishedSources.upper_bound(SortedSources.front()) : FinishedSources.end();
-        auto itUpperFetching = SortedSources.size() ? FetchingInFlightSources.upper_bound(SortedSources.front()) : FinishedSources.end();
-        for (auto&& it = FinishedSources.begin(); it != itUpperFinished; ++it) {
-            ++inFlightCountLocal;
-        }
-        for (auto&& it = FetchingInFlightSources.begin(); it != itUpperFetching; ++it) {
-            ++inFlightCountLocal;
-        }
+    auto itUpperFinished = FinishedSources.upper_bound(TCompareKeyForScanSequence::BorderStart(SortedSources.front()));
+    for (auto&& it = FinishedSources.begin(); it != itUpperFinished; ++it) {
+        ++inFlightCountLocal;
+    }
+    auto itUpperFetching = FetchingInFlightSources.upper_bound(TCompareKeyForScanSequence::BorderStart(SortedSources.front()));
+    for (auto&& it = FetchingInFlightSources.begin(); it != itUpperFetching; ++it) {
+        ++inFlightCountLocal;
     }
     return inFlightCountLocal;
 }

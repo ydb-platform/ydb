@@ -14,7 +14,7 @@ class TTableBucketSpiller;
 #define GRACEJOIN_DEBUG INFO
 #define GRACEJOIN_TRACE INFO
 
-const ui64 BitsForNumberOfBuckets = 6; // 2^6 = 64
+const ui64 BitsForNumberOfBuckets = 3; // 2^6 = 64
 const ui64 BucketsMask = (0x00000001 << BitsForNumberOfBuckets)  - 1;
 const ui64 NumberOfBuckets = (0x00000001 << BitsForNumberOfBuckets);  // Number of hashed keys buckets to distribute incoming tables tuples
 const ui64 DefaultTuplesNum = 101; // Default initial number of tuples in one bucket to allocate memory

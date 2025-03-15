@@ -28,7 +28,7 @@ namespace NMiniKQL {
 
 namespace {
 
-const ui32 PartialJoinBatchSize = 100000; // Number of tuples for one join batch
+const ui32 PartialJoinBatchSize = 1000; // Number of tuples for one join batch
 
 struct TColumnDataPackInfo {
     ui32 ColumnIdx = 0; // Column index in tuple

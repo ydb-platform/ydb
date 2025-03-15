@@ -2264,7 +2264,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     auto activities = batchStats->GetColumnByName("Activity");
                     AFL_VERIFY(activities);
 
-                    NColumnShard::TInternalPathId pathId = static_cast<arrow::UInt64Array&>(*paths).Value(i);
+                    const auto pathId = NColumnShard::TLocalPathId::FromLocalPathIdValue(static_cast<arrow::UInt64Array&>(*paths).Value(i));
                     auto kind = static_cast<arrow::StringArray&>(*kinds).Value(i);
                     const TString kindStr(kind.data(), kind.size());
                     ui64 numRows = static_cast<arrow::UInt64Array&>(*rows).Value(i);
@@ -2277,7 +2277,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     Cerr << "[" << __LINE__ << "] " << activity << " " << table.Pk[0].GetType().GetTypeId() << " " << pathId << " " << kindStr
                          << " " << numRows << " " << numBytes << " " << numRawBytes << "\n";
 
-                    if (pathId == tableId) {
+                    if (pathId.GetLocalPathIdValue() == tableId) {
                         if (kindStr == ::ToString(NOlap::NPortion::EProduced::COMPACTED) ||
                             kindStr == ::ToString(NOlap::NPortion::EProduced::SPLIT_COMPACTED) || numBytes > (4LLU << 20)) {
                             sumCompactedBytes += numBytes;
@@ -2484,10 +2484,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     ++compactionsHappened;
                     TStringBuilder sb;
                     sb << "Compaction old portions:";
-                    ui64 srcPathId{ 0 };
+                    std::optional<NColumnShard::TInternalPathId> srcPathId;
                     for (const auto& portionInfo : compact->GetSwitchedPortions()) {
                         const NColumnShard::TInternalPathId pathId = portionInfo->GetPathId();
-                        UNIT_ASSERT(!srcPathId || srcPathId == pathId);
+                        UNIT_ASSERT(!srcPathId || *srcPathId == pathId);
                         srcPathId = pathId;
                         oldPortions.insert(portionInfo->GetPortionId());
                         sb << portionInfo->GetPortionId() << ",";

@@ -86,17 +86,17 @@ std::shared_ptr<IChunkedArray> TExistsJsonPath::ExtractArray(
     const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const {
     auto arr = TBase::ExtractArray(jsonAcc, svPath);
     auto chunkedArray = arr->GetChunkedArray();
-    auto builder = NArrow::MakeBuilder(arrow::boolean(), arr->GetRecordsCount());
+    auto builder = NArrow::MakeBuilder(arrow::uint8(), arr->GetRecordsCount());
     for (auto&& i : chunkedArray->chunks()) {
         for (ui32 idx = 0; idx < i->length(); ++idx) {
-            NArrow::Append<arrow::BooleanType>(*builder, !i->IsNull(idx));
+            NArrow::Append<arrow::UInt8Type>(*builder, i->IsNull(idx) ? 0 : 1);
         }
     }
     return std::make_shared<NAccessor::TTrivialArray>(FinishBuilder(std::move(builder)));
 }
 
 NAccessor::TCompositeChunkedArray::TBuilder TExistsJsonPath::MakeCompositeBuilder() const {
-    return NAccessor::TCompositeChunkedArray::TBuilder(arrow::boolean());
+    return NAccessor::TCompositeChunkedArray::TBuilder(arrow::uint8());
 }
 
 }   // namespace NKikimr::NArrow::NSSA

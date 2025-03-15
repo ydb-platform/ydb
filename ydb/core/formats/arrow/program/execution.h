@@ -17,6 +17,18 @@ enum class EIndexCheckOperation {
 class TProcessorContext;
 class IDataSource {
 public:
+    class TFetchHeaderContext {
+    private:
+        YDB_READONLY(ui32, ColumnId, 0);
+        YDB_READONLY_DEF(TString, SubColumnName);
+
+    public:
+        TFetchHeaderContext(const ui32 columnId, const TString& subColumnName)
+            : ColumnId(columnId)
+            , SubColumnName(subColumnName) {
+        }
+    };
+
     class TFetchIndexContext {
     public:
         using EOperation = EIndexCheckOperation;
@@ -40,25 +52,36 @@ private:
     virtual TConclusion<bool> DoStartFetchIndex(const TProcessorContext& context, const TFetchIndexContext& fetchContext) = 0;
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(
         const TProcessorContext& context, const TFetchIndexContext& fetchContext, const std::shared_ptr<arrow::Scalar>& value) = 0;
+    virtual TConclusion<bool> DoStartFetchHeader(const TProcessorContext& context, const TFetchHeaderContext& fetchContext) = 0;
+    virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
+        const TProcessorContext& context, const TFetchHeaderContext& fetchContext) = 0;
 
 public:
     virtual ~IDataSource() = default;
+
+    [[nodiscard]] TConclusion<bool> StartFetchHeader(const TProcessorContext& context, const TFetchHeaderContext& fetchContext) {
+        return DoStartFetchHeader(context, fetchContext);
+    }
+
+    TConclusion<NArrow::TColumnFilter> CheckHeader(const TProcessorContext& context, const TFetchHeaderContext& fetchContext) {
+        return DoCheckHeader(context, fetchContext);
+    }
+
+    [[nodiscard]] TConclusion<bool> StartFetchIndex(const TProcessorContext& context, const TFetchIndexContext& fetchContext) {
+        return DoStartFetchIndex(context, fetchContext);
+    }
 
     TConclusion<NArrow::TColumnFilter> CheckIndex(
         const TProcessorContext& context, const TFetchIndexContext& fetchContext, const std::shared_ptr<arrow::Scalar>& value) {
         return DoCheckIndex(context, fetchContext, value);
     }
 
-    void AssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
-        DoAssembleAccessor(context, columnId, subColumnName);
-    }
-
     [[nodiscard]] TConclusion<bool> StartFetchData(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
         return DoStartFetchData(context, columnId, subColumnName);
     }
 
-    [[nodiscard]] TConclusion<bool> StartFetchIndex(const TProcessorContext& context, const TFetchIndexContext& fetchContext) {
-        return DoStartFetchIndex(context, fetchContext);
+    void AssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
+        DoAssembleAccessor(context, columnId, subColumnName);
     }
 };
 
@@ -81,6 +104,14 @@ public:
 
 class TFailDataSource: public IDataSource {
 private:
+    virtual TConclusion<bool> DoStartFetchHeader(const TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
+        AFL_VERIFY(false);
+        return true;
+    }
+    virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(const TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
+        AFL_VERIFY(false);
+        return TColumnFilter::BuildAllowFilter();
+    }
     virtual TConclusion<bool> DoStartFetchData(
         const TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
         AFL_VERIFY(false);
@@ -102,6 +133,13 @@ private:
 
 class TFakeDataSource: public IDataSource {
 private:
+    virtual TConclusion<bool> DoStartFetchHeader(const TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
+        return false;
+    }
+    virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
+        const TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
+        return TColumnFilter::BuildAllowFilter();
+    }
     virtual TConclusion<bool> DoStartFetchData(
         const TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
         return false;
@@ -153,6 +191,15 @@ private:
     }
     virtual void DoAssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
 
+    virtual TConclusion<bool> DoStartFetchHeader(const TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
+        AFL_VERIFY(false);
+        return false;
+    }
+    virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
+        const TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
+        AFL_VERIFY(false);
+        return TColumnFilter::BuildAllowFilter();
+    }
     virtual TConclusion<bool> DoStartFetchIndex(const TProcessorContext& /*context*/, const TFetchIndexContext& /*fetchContext*/) override {
         AFL_VERIFY(false);
         return true;

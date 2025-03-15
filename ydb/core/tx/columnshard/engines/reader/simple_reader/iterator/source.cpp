@@ -2,6 +2,7 @@
 #include "plain_read_data.h"
 #include "source.h"
 
+#include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
@@ -179,8 +180,9 @@ TConclusion<bool> TPortionDataSource::DoStartFetchIndex(const NArrow::NSSA::TPro
     }
     THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>> fetchers;
     fetchers.emplace(indexMeta->GetIndexId(), fetcher);
-    NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(
-        std::make_shared<NCommon::TColumnsFetcherTask>(std::move(readActions), fetchers, source, GetExecutionContext().GetCursorStep(), "fetcher", "")));
+    NActors::TActivationContext::AsActorContext().Register(
+        new NOlap::NBlobOperations::NRead::TActor(std::make_shared<NCommon::TColumnsFetcherTask>(
+            std::move(readActions), fetchers, source, GetExecutionContext().GetCursorStep(), "fetcher", "")));
     return true;
 }
 
@@ -227,6 +229,76 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
 void TPortionDataSource::DoAbort() {
 }
 
+TConclusion<bool> TPortionDataSource::DoStartFetchHeader(
+    const NArrow::NSSA::TProcessorContext& context, const TFetchHeaderContext& fetchContext) {
+    std::shared_ptr<NCommon::IKernelFetchLogic> fetcher;
+    const ui32 columnId = fetchContext.GetColumnId();
+    auto source = std::static_pointer_cast<IDataSource>(context.GetDataSource());
+    if (GetStageData().GetPortionAccessor().GetColumnChunksPointers(columnId).size() &&
+        GetSourceSchema()->GetColumnLoaderVerified(columnId)->GetAccessorConstructor()->GetType() ==
+            NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
+        fetcher = std::make_shared<NCommon::TSubColumnsFetchLogic>(columnId, source, std::vector<TString>());
+    } else {
+        return false;
+    }
+
+    TReadActionsCollection readActions;
+    NCommon::TFetchingResultContext contextFetch(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
+    fetcher->Start(readActions, contextFetch);
+
+    if (readActions.IsEmpty()) {
+        NBlobOperations::NRead::TCompositeReadBlobs blobs;
+        fetcher->OnDataReceived(readActions, blobs);
+        MutableStageData().AddFetcher(fetcher);
+        AFL_VERIFY(readActions.IsEmpty());
+        return false;
+    }
+    THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>> fetchers;
+    fetchers.emplace(columnId, fetcher);
+    NActors::TActivationContext::AsActorContext().Register(
+        new NOlap::NBlobOperations::NRead::TActor(std::make_shared<NCommon::TColumnsFetcherTask>(
+            std::move(readActions), fetchers, source, GetExecutionContext().GetCursorStep(), "fetcher", "")));
+    return true;
+}
+
+TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckHeader(
+    const NArrow::NSSA::TProcessorContext& context, const TFetchHeaderContext& fetchContext) {
+    auto result = NArrow::TColumnFilter::BuildAllowFilter();
+    auto source = std::static_pointer_cast<IDataSource>(context.GetDataSource());
+    {
+        if (auto fetcher = MutableStageData().ExtractFetcherOptional(fetchContext.GetColumnId())) {
+            NCommon::TFetchingResultContext fetchContext(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
+            fetcher->OnDataCollected(fetchContext);
+        } else {
+            return result;
+        }
+    }
+
+    auto acc = context.GetResources()->GetAccessorVerified(fetchContext.GetColumnId());
+    NArrow::NAccessor::IChunkedArray::VisitDataOwners<bool>(acc, [&](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& arrData) {
+        bool isAllowed = false;
+        if (arrData->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
+            const auto* data = static_cast<const NArrow::NAccessor::TSubColumnsPartialArray*>(arrData.get());
+            isAllowed = data->GetHeader().HasSubColumn(fetchContext.GetSubColumnName());
+        } else if (arrData->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
+            const auto* data = static_cast<const NArrow::NAccessor::TSubColumnsArray*>(arrData.get());
+            isAllowed = data->HasSubColumn(fetchContext.GetSubColumnName());
+        } else {
+            AFL_VERIFY(false);
+        }
+        result.Add(isAllowed, arrData->GetRecordsCount());
+        NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed(isAllowed);
+        if (isAllowed) {
+            GetContext()->GetCommonContext()->GetCounters().OnAcceptedByHeader(source->GetRecordsCount());
+        } else {
+            GetContext()->GetCommonContext()->GetCounters().OnDeniedByHeader(source->GetRecordsCount());
+        }
+        
+        return false;
+    });
+    return result;
+}
+
 TConclusion<bool> TPortionDataSource::DoStartFetchData(
     const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
     std::shared_ptr<NCommon::IKernelFetchLogic> fetcher;
@@ -252,7 +324,8 @@ TConclusion<bool> TPortionDataSource::DoStartFetchData(
     }
     THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>> fetchers;
     fetchers.emplace(columnId, fetcher);
-    NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(std::make_shared<NCommon::TColumnsFetcherTask>(
+    NActors::TActivationContext::AsActorContext().Register(
+        new NOlap::NBlobOperations::NRead::TActor(std::make_shared<NCommon::TColumnsFetcherTask>(
             std::move(readActions), fetchers, source, GetExecutionContext().GetCursorStep(), "fetcher", "")));
     return true;
 }

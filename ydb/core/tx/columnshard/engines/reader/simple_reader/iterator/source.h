@@ -278,6 +278,9 @@ private:
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const NArrow::NSSA::TProcessorContext& context,
         const TFetchIndexContext& fetchContext,
         const std::shared_ptr<arrow::Scalar>& value) override;
+    virtual TConclusion<bool> DoStartFetchHeader(const NArrow::NSSA::TProcessorContext& context, const TFetchHeaderContext& fetchContext) override;
+    virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(const NArrow::NSSA::TProcessorContext& context,
+        const TFetchHeaderContext& fetchContext) override;
     virtual void DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
     virtual TConclusion<bool> DoStartFetchData(
         const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;

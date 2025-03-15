@@ -21,7 +21,7 @@ public:
         AFL_VERIFY(!!Ev);
     }
 
-    virtual bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+    virtual bool Execute(TTransactionContext& txc, const TActorContext& /* ctx */) override {
         txc.DB.NoMoreReadsForTx();
         NIceDb::TNiceDb db(txc.DB);
 
@@ -33,14 +33,6 @@ public:
         const auto& txBody = record.GetTxBody();
         NActors::TLogContextGuard lGuard =
             NActors::TLogContextBuilder::Build()("tablet_id", Self->TabletID())("tx_id", txId)("this", (ui64)this);
-
-        if (txKind == NKikimrTxColumnShard::TX_KIND_TTL) {
-            auto proposeResult = ProposeTtlDeprecated(txBody);
-            auto reply = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(
-                Self->TabletID(), txKind, txId, proposeResult.GetStatus(), proposeResult.GetStatusMessage());
-            ctx.Send(Ev->Sender, reply.release());
-            return true;
-        }
 
         if (!Self->ProcessingParams && record.HasProcessingParams()) {
             Self->ProcessingParams.emplace().CopyFrom(record.GetProcessingParams());
@@ -84,9 +76,6 @@ public:
 
     virtual void Complete(const TActorContext& ctx) override {
         auto& record = Proto(Ev->Get());
-        if (record.GetTxKind() == NKikimrTxColumnShard::TX_KIND_TTL) {
-            return;
-        }
         AFL_VERIFY(!!TxOperator);
         AFL_VERIFY(!!TxInfo);
         const ui64 txId = record.GetTxId();
@@ -128,55 +117,6 @@ private:
     TEvColumnShard::TEvProposeTransaction::TPtr Ev;
     std::shared_ptr<TTxController::ITransactionOperator> TxOperator;
 
-    TTxController::TProposeResult ProposeTtlDeprecated(const TString& txBody) {
-        /// @note There's no tx guaranties now. For now TX_KIND_TTL is used to trigger TTL in tests only.
-        /// In future we could trigger TTL outside of tablet. Then we need real tx with complete notification.
-        // TODO: make real tx: save and progress with tablets restart support
-
-        NKikimrTxColumnShard::TTtlTxBody ttlBody;
-        if (!ttlBody.ParseFromString(txBody)) {
-            return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx cannot be parsed");
-        }
-
-        // If no paths trigger schema defined TTL
-        THashMap<ui64, NOlap::TTiering> pathTtls;
-        if (!ttlBody.GetPathIds().empty()) {
-            auto unixTime = TInstant::Seconds(ttlBody.GetUnixTimeSeconds());
-            if (!unixTime) {
-                return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx wrong timestamp");
-            }
-
-            TString columnName = ttlBody.GetTtlColumnName();
-            if (columnName.empty()) {
-                return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx wrong TTL column ''");
-            }
-
-            if (!Self->TablesManager.HasPrimaryIndex()) {
-                return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "No primary index for TTL");
-            }
-
-            auto schemaSnapshot = Self->TablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema();
-            auto index = schemaSnapshot->GetColumnIdOptional(columnName);
-            if (!index) {
-                return TTxController::TProposeResult(
-                    NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx wrong TTL column '" + columnName + "'");
-            }
-            auto ttlColumn = schemaSnapshot->GetFieldByColumnIdVerified(*index);
-
-            const TInstant now = TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now();
-            for (ui64 pathId : ttlBody.GetPathIds()) {
-                NOlap::TTiering tiering;
-                AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(now - unixTime, columnName)));
-                pathTtls.emplace(pathId, std::move(tiering));
-            }
-        }
-        if (!Self->SetupTtl(pathTtls)) {
-            return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL not started");
-        }
-        Self->TablesManager.MutablePrimaryIndex().OnTieringModified(Self->TablesManager.GetTtl());
-
-        return TTxController::TProposeResult();
-    }
 };
 
 void TColumnShard::Handle(TEvColumnShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {

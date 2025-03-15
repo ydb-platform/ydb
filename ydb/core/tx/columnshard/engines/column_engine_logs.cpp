@@ -326,32 +326,19 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     return changes;
 }
 
-std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiering>& pathEviction,
-    const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit) noexcept {
+std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::StartTtl(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager,
+    const ui64 memoryUsageLimit) noexcept {
+
     AFL_VERIFY(dataLocksManager);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "StartTtl")("external", pathEviction.size());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "StartTtl");
 
     TSaverContext saverContext(StoragesManager);
     NActualizer::TTieringProcessContext context(memoryUsageLimit, saverContext, dataLocksManager, VersionedIndex, SignalCounters, ActualizationController);
     const TDuration actualizationLag = NYDBTest::TControllers::GetColumnShardController()->GetActualizationTasksLag();
-    for (auto&& i : pathEviction) {
-        auto g = GetGranuleOptional(i.first);
-        if (g) {
-            if (!ActualizationStarted) {
-                g->StartActualizationIndex();
-            }
-            g->RefreshTiering(i.second);
-            context.ResetActualInstantForTest();
-            g->BuildActualizationTasks(context, actualizationLag);
-        }
-    }
 
     if (ActualizationStarted) {
-        TLogContextGuard lGuard(TLogContextBuilder::Build()("queue", "ttl")("external_count", pathEviction.size()));
+        TLogContextGuard lGuard(TLogContextBuilder::Build()("queue", "ttl"));
         for (auto&& i : GranulesStorage->GetTables()) {
-            if (pathEviction.contains(i.first)) {
-                continue;
-            }
             i.second->BuildActualizationTasks(context, actualizationLag);
         }
     } else {

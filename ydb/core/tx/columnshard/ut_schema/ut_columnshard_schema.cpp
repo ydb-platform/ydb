@@ -83,20 +83,6 @@ std::shared_ptr<arrow::RecordBatch> UpdateColumn(std::shared_ptr<arrow::RecordBa
     return arrow::RecordBatch::Make(schema, batch->num_rows(), columns);
 }
 
-bool TriggerTTL(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap, const std::vector<ui64>& pathIds,
-                ui64 tsSeconds, const TString& ttlColumnName) {
-    TString txBody = TTestSchema::TtlTxBody(pathIds, ttlColumnName, tsSeconds);
-    auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
-        NKikimrTxColumnShard::TX_KIND_TTL, sender, snap.GetTxId(), txBody);
-
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
-    auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
-    const auto& res = ev->Get()->Record;
-    UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
-    UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_TTL);
-    return (res.GetStatus() == NKikimrTxColumnShard::SUCCESS);
-}
-
 bool TriggerMetadata(
     TTestBasicRuntime& runtime, TActorId& sender, NYDBTest::TControllers::TGuard<NOlap::TWaitCompactionController>& controller) {
     auto isDone = [initialCounter = controller->GetTieringMetadataActualizationCount().Val(), &controller]() {
@@ -191,6 +177,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     std::vector<ui64> ts = { 1600000000, 1620000000 };
 
     ui32 ttlIncSeconds = 1;
+    Y_UNUSED(ttlIncSeconds);
     for (auto& c : ydbSchema) {
         if (c.GetName() == spec.TtlColumn) {
             if (c.GetType().GetTypeId() == NTypeIds::Date) {
@@ -256,9 +243,9 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     }
 
     if (internal) {
-        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
+        //TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
     } else {
-        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), { tableId }, ts[0] + ttlIncSeconds, spec.TtlColumn);
+        //TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), { tableId }, ts[0] + ttlIncSeconds, spec.TtlColumn);
     }
     while (csControllerGuard->GetTTLFinishedCounter().Val() != csControllerGuard->GetTTLStartedCounter().Val()) {
         runtime.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
@@ -294,9 +281,9 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     }
 
     if (internal) {
-        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
+        //TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
     } else {
-        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {tableId}, ts[1] + ttlIncSeconds, spec.TtlColumn);
+        //TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {tableId}, ts[1] + ttlIncSeconds, spec.TtlColumn);
     }
     while (csControllerGuard->GetTTLFinishedCounter().Val() != csControllerGuard->GetTTLStartedCounter().Val()) {
         runtime.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
@@ -330,9 +317,9 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     PlanCommit(runtime, sender, ++planStep, txId);
 
     if (internal) {
-        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
+        //TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
     } else {
-        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {tableId}, ts[0] - ttlIncSeconds, spec.TtlColumn);
+        //TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {tableId}, ts[0] - ttlIncSeconds, spec.TtlColumn);
     }
     while (csControllerGuard->GetTTLFinishedCounter().Val() != csControllerGuard->GetTTLStartedCounter().Val()) {
         runtime.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
@@ -660,7 +647,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
                 reader->Ack();
             }
             // Eviction
-            TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, specs[i].TtlColumn);
+            //TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, specs[i].TtlColumn);
 
             Cerr << "-- " << (hasColdEviction ? "COLD" : "HOT")
                 << " TIERING(" << i << ") num tiers: " << specs[i].Tiers.size() << Endl;
@@ -1122,7 +1109,7 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
         PlanCommit(runtime, sender, planStep, txId);
 
         if (i % 2 == 0) {
-            TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
+            //TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
         }
     }
 }

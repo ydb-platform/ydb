@@ -1,6 +1,7 @@
 #include "kqp_ut_common.h"
 
 #include <ydb/core/base/backtrace.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
@@ -134,6 +135,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableTablePgTypes(true);
     ServerSettings->SetEnablePgSyntax(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
+    ServerSettings->Controls = settings.Controls;
     ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
 
     if (!settings.FeatureFlags.HasEnableOlapCompression()) {
@@ -1470,6 +1472,34 @@ void WaitForZeroReadIterators(Tests::TServer& server, const TString& path) {
     }
 
     UNIT_ASSERT_C(iterators == 0, "Unable to wait for proper read iterator count, it looks like cancelation doesn`t work (" << iterators << ")");
+}
+
+TTableId ResolveTableId(Tests::TServer* server, TActorId sender, const TString& path) {
+    auto response = Navigate(*server->GetRuntime(), sender, path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+    return response->ResultSet.at(0).TableId;
+}
+
+NKikimrTxDataShard::TEvCompactTableResult CompactTable(
+    Tests::TServer* server, ui64 shardId, const TTableId& tableId, bool compactBorrowed)
+{
+    TTestActorRuntime* runtime = server->GetRuntime();
+    auto sender = runtime->AllocateEdgeActor();
+    auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
+    request->Record.SetCompactBorrowed(compactBorrowed);
+    runtime->SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+    auto ev = runtime->GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);
+    return ev->Get()->Record;
+}
+
+void WaitForCompaction(Tests::TServer* server, const TString& path, bool compactBorrowed) {
+    TTestActorRuntime* runtime = server->GetRuntime();
+    auto sender = runtime->AllocateEdgeActor();
+    auto shards = GetTableShards(server, sender, path);
+    auto tableId = ResolveTableId(server, sender, path);
+    for (auto shard : shards) {
+        CompactTable(server, shard, tableId, compactBorrowed);
+    }
 }
 
 NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& params) {

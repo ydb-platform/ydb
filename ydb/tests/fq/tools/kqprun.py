@@ -1,4 +1,5 @@
 import os
+from typing import Optional, List
 
 import pytest
 import yatest.common
@@ -7,30 +8,54 @@ import yql_utils
 
 
 class KqpRun(object):
-    def __init__(self, config_file, scheme_file, udfs_dir=None):
-        self.kqprun_binary = yql_utils.yql_binary_path('ydb/tests/tools/kqprun/kqprun')
+    def __init__(self, config_file: str, scheme_file: str, udfs_dir: Optional[str] = None, path_prefix: str = ""):
+        self.kqprun_binary: str = yql_utils.yql_binary_path('ydb/tests/tools/kqprun/kqprun')
 
-        self.config_file = yql_utils.yql_source_path(config_file)
-        self.scheme_file = yql_utils.yql_source_path(scheme_file)
+        self.config_file: str = yql_utils.yql_source_path(config_file)
+        self.scheme_file: str = yql_utils.yql_source_path(scheme_file)
 
-        self.res_dir = yql_utils.get_yql_dir(prefix='kqprun_')
+        self.res_dir: str = yql_utils.get_yql_dir(prefix=f'{path_prefix}kqprun_')
 
         if udfs_dir is None:
-            self.udfs_dir = yql_utils.get_udfs_path()
+            self.udfs_dir: str = yql_utils.get_udfs_path()
         else:
-            self.udfs_dir = udfs_dir
+            self.udfs_dir: str = udfs_dir
 
-    def __res_file_path(self, name):
+        self.tables: List[str] = []
+        self.queries: List[str] = []
+
+    def __res_file_path(self, name: str) -> str:
         return os.path.join(self.res_dir, name)
 
-    def yql_exec(self, program=None, program_file=None, verbose=False, check_error=True, var_templates=None, tables=None):
+    def add_table(self, name: str, content: List[str], attrs: Optional[str] = None):
+        table_path = self.__res_file_path(f'table_{len(self.tables)}.yson')
+        with open(table_path, 'w') as table:
+            for row in content:
+                table.write(f'{row}\n')
+
+        if attrs is not None:
+            with open(f'{table_path}.attr', 'w') as table_attrs:
+                table_attrs.write(attrs)
+
+        self.tables.append(f'yt./Root/plato.{name}@{table_path}')
+
+    def add_query(self, sql: str):
+        query_path = self.__res_file_path(f'query_{len(self.queries)}.sql')
+        with open(query_path, 'w') as query:
+            query.write(sql)
+
+        self.queries.append(query_path)
+
+    def yql_exec(self, verbose: bool = False, check_error: bool = True, var_templates: Optional[List[str]] = None,
+                 yql_program: Optional[str] = None, yql_tables: List[yql_utils.Table] = []) -> yql_utils.YQLExecResult:
         udfs_dir = self.udfs_dir
 
         config_file = self.config_file
-        program_file = yql_utils.prepare_program(program, program_file, self.res_dir, ext='sql')[1]
         scheme_file = self.scheme_file
 
         results_file = self.__res_file_path('results.txt')
+        ast_file = self.__res_file_path('ast.txt')
+        plan_file = self.__res_file_path('plan.json')
         log_file = self.__res_file_path('log.txt')
 
         cmd = self.kqprun_binary + ' '
@@ -39,46 +64,60 @@ class KqpRun(object):
             '--emulate-yt '
             '--exclude-linked-udfs '
             '--execution-case query '
-            '--app-config=%(config_file)s '
-            '--script-query=%(program_file)s '
-            '--scheme-query=%(scheme_file)s '
-            '--result-file=%(results_file)s '
-            '--log-file=%(log_file)s '
-            '--udfs-dir=%(udfs_dir)s '
+            f'--app-config={config_file} '
+            f'--scheme-query={scheme_file} '
+            f'--result-file={results_file} '
+            f'--script-ast-file={ast_file} '
+            f'--script-plan-file={plan_file} '
+            f'--log-file={log_file} '
+            f'--udfs-dir={udfs_dir} '
             '--result-format full-proto '
-            '--result-rows-limit 0 ' % locals()
+            '--plan-format json '
+            '--result-rows-limit 0 '
         )
 
         if var_templates is not None:
             for var_template in var_templates:
-                cmd += '--var-template %s ' % var_template
+                cmd += f'--var-template {var_template} '
 
-        if tables is not None:
-            for table in tables:
-                if table.format != 'yson':
-                    pytest.skip('skip tests containing tables with a non-yson attribute format')
-                cmd += '--table=yt./Root/%s@%s ' % (table.full_name, table.yqlrun_file)
+        for query in self.queries:
+            cmd += f'--script-query={query} '
+
+        if yql_program is not None:
+            program_file = yql_utils.prepare_program(yql_program, None, self.res_dir, ext='sql')[1]
+            cmd += f'--script-query={program_file} '
+
+        for table in self.tables:
+            cmd += f'--table={table} '
+
+        for table in yql_tables:
+            if table.format != 'yson':
+                pytest.skip('skip tests containing tables with a non-yson attribute format')
+            cmd += f'--table=yt./Root/{table.full_name}@{table.yqlrun_file} '
 
         proc_result = yatest.common.process.execute(cmd.strip().split(), check_exit_code=False, cwd=self.res_dir)
         if proc_result.exit_code != 0 and check_error:
-            assert 0, (
-                'Command\n%(command)s\n finished with exit code %(code)d, stderr:\n\n%(stderr)s\n\nlog file:\n%(log_file)s'
-                % {
-                    'command': cmd,
-                    'code': proc_result.exit_code,
-                    'stderr': proc_result.std_err,
-                    'log_file': yql_utils.read_res_file(log_file)[1],
-                }
-            )
+            assert 0, f'Command\n{cmd}\n finished with exit code {proc_result.exit_code}, stderr:\n\n{proc_result.std_err}\n\nlog file:\n{yql_utils.read_res_file(log_file)[1]}'
 
         results, log_results = yql_utils.read_res_file(results_file)
+        ast, log_ast = yql_utils.read_res_file(ast_file)
+        plan, log_plan = yql_utils.read_res_file(plan_file)
         err, log_err = yql_utils.read_res_file(log_file)
 
         if verbose:
-            yql_utils.log('PROGRAM:')
-            yql_utils.log(program)
+            yql_utils.log('QUERIES:')
+            if yql_program is not None:
+                yql_utils.log(yql_program)
+
+            for query in self.queries:
+                yql_utils.log(yql_program)
+
             yql_utils.log('RESULTS:')
             yql_utils.log(log_results)
+            yql_utils.log('AST:')
+            yql_utils.log(log_ast)
+            yql_utils.log('PLAN:')
+            yql_utils.log(log_plan)
             yql_utils.log('ERROR:')
             yql_utils.log(log_err)
 
@@ -87,11 +126,11 @@ class KqpRun(object):
             proc_result.std_err,
             results,
             results_file,
-            None,
-            None,
-            None,
-            None,
-            program,
+            ast,
+            ast_file,
+            plan,
+            plan_file,
+            yql_program,
             proc_result,
             None,
         )

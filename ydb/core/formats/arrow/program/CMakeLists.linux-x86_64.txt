@@ -52,6 +52,7 @@ target_sources(formats-arrow-program PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/stream_logic.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/visitor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/index.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/header.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/execution.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/graph_optimization.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program/graph_execute.cpp

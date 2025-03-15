@@ -22,7 +22,7 @@ public:
 
     void ProcessResult();
 
-    TInstant KickstartDeadline();
+    TInstant GenerateKickstartDeadline();
 
     bool IsEnabled();
 
@@ -33,7 +33,7 @@ public:
     //! Returns the next time instant which is a multiple of the configured interval.
     //! NB: If the current instant is itself a multiple of the configured interval, this method will return the next
     //! suitable instant.
-    TInstant NextDeadline();
+    TInstant GenerateNextDeadline();
 
     bool IsOutOfBandProhibited();
 

@@ -39,7 +39,7 @@ TFuture<void> TPeriodicExecutorBase<TInvocationTimePolicy>::StartAndGetFirstExec
         IdlePromise_ = TPromise<void>();
         Started_ = true;
         if (TInvocationTimePolicy::IsEnabled()) {
-            PostDelayedCallback(TInvocationTimePolicy::KickstartDeadline());
+            PostDelayedCallback(TInvocationTimePolicy::GenerateKickstartDeadline());
         }
     }
 
@@ -251,7 +251,7 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::RunCallback()
             guard.Release();
             PostCallback();
         } else if (TInvocationTimePolicy::IsEnabled()) {
-            PostDelayedCallback(TInvocationTimePolicy::NextDeadline());
+            PostDelayedCallback(TInvocationTimePolicy::GenerateNextDeadline());
         }
     };
 
@@ -282,7 +282,7 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::OnCallbackCancelled()
     }
 
     if (TInvocationTimePolicy::IsEnabled()) {
-        PostDelayedCallback(TInvocationTimePolicy::NextDeadline());
+        PostDelayedCallback(TInvocationTimePolicy::GenerateNextDeadline());
     }
 }
 
@@ -299,7 +299,7 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::SetOptions(TPartialOptions...
     if (Started_ && !Busy_ && TInvocationTimePolicy::ShouldKickstart(options...)) {
         TInvocationTimePolicy::SetOptions(std::move(options)...);
 
-        PostDelayedCallback(TInvocationTimePolicy::KickstartDeadline());
+        PostDelayedCallback(TInvocationTimePolicy::GenerateKickstartDeadline());
     } else {
         TInvocationTimePolicy::SetOptions(std::move(options)...);
     }

@@ -9,6 +9,7 @@ TEST_SRCS(
 )
 
 SIZE(LARGE)
+REQUIREMENTS(cpu:all)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 DEPENDS(

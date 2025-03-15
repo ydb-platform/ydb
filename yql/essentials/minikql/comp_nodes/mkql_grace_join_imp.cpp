@@ -454,10 +454,10 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             Y_DEBUG_ABORT_UNLESS(PartialJoinIncomplete()); // join was suspended at previous step
             continue;
         }
-        YQL_LOG_IF(TRACE, tuple1Idx != 0)
+        YQL_LOG_IF(GRACEJOIN_TRACE, tuple1Idx != 0)
             << (const void *)this << '#'
             << bucket
-            << " resume at " << tuple1Idx
+            << " resume at " << tuple1Idx << '/' << bucket1->ResumeOffset
 	    ;
 
         auto &leftIds = bucket1->LeftIds;

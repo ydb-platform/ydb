@@ -59,6 +59,7 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
     , TypeInfoHelper(new TTypeInfoHelper)
     , CountersProvider(opts.CountersProvider)
     , SecureParamsProvider(opts.SecureParamsProvider)
+    , LogProvider(opts.LogProvider)
 {
     std::fill_n(MutableValues.get(), mutables.CurValueIndex, NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Invalid()));
 

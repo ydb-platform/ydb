@@ -204,6 +204,7 @@ private:
 
 template <CYsonStructDerived TStruct>
 class TSealedConfigurator
+    : public TMoveOnly
 {
 public:
     TSealedConfigurator(TConfigurator<TStruct> configurator);

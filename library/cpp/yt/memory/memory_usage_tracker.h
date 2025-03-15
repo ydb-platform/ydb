@@ -1,8 +1,9 @@
 #pragma once
 
-#include "error.h"
+#include "blob.h"
+#include "ref.h"
 
-#include <library/cpp/yt/memory/blob.h>
+#include <library/cpp/yt/error/error.h>
 
 namespace NYT {
 

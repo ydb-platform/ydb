@@ -466,13 +466,20 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
 
         if (tuplesNum2 == 0) {
             if (needLeftIds) {
-                for (ui32 leftId = 0; leftId != tuplesNum1; ++leftId)
-                    leftIds.push_back(leftId);
+                auto limit = tuple1Idx + std::min((ui32)tuplesNum1 - tuple1Idx, JoinResultsSizeLimit);
+                for (; tuple1Idx != limit; ++tuple1Idx) {
+                    leftIds.push_back(tuple1Idx);
+                }
+                if (tuple1Idx != tuplesNum1) {
+                    partialJoinIncomplete = true;
+                }
+                bucket1->ResumeIdx = tuple1Idx;
             }
             continue;
         }
-        if (tuplesNum1 == 0 && (hasMoreRightTuples || hasMoreLeftTuples || !bucketStats2->HashtableMatches))
+        if (tuplesNum1 == tuple1Idx && (hasMoreRightTuples || hasMoreLeftTuples || !bucketStats2->HashtableMatches)) {
             continue;
+        }
 
         ui64 slotSize = ComputeJoinSlotsSizeForBucket(*bucket2, *bucketStats2, headerSize2, table2HasKeyStringColumns, table2HasKeyIColumns);
 

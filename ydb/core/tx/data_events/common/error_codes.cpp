@@ -31,7 +31,7 @@ TConclusion<NErrorCodes::TOperator::TYdbStatusInfo> TOperator::GetStatusInfo(
         case NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE:
             return TYdbStatusInfo(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Wrong shard state");
         case NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION:
-            return TYdbStatusInfo(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Constraint violated");
+            return TYdbStatusInfo(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, "Constraint violated");
     }
 }
 

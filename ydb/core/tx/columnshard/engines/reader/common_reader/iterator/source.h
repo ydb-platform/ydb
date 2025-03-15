@@ -113,7 +113,7 @@ public:
     }
 };
 
-class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource {
+class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource, public NColumnShard::TMonitoringObjectsCounter<IDataSource> {
 private:
     YDB_READONLY(ui64, SourceId, 0);
     YDB_READONLY(ui32, SourceIdx, 0);

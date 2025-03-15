@@ -18,6 +18,9 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
         source->GetRecordsCount(), source->GetUsedRawBytes(), tableExt ? tableExt->num_rows() : 0);
 
     source->MutableStageResult().SetResultChunk(std::move(tableExt), startIndex, recordsCount);
+    if (source->GetStageResult().IsFinished()) {
+        SourcesInFlightCount.Dec();
+    }
     while (FetchingSources.size()) {
         auto frontSource = FetchingSources.front();
         if (!frontSource->HasStageResult()) {
@@ -126,9 +129,10 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
     }
     bool changed = false;
     if (!Context->GetCommonContext()->GetReadMetadata()->HasLimit()) {
-        while (SortedSources.size() && FetchingSources.size() < InFlightLimit && Context->IsActive()) {
+        while (SortedSources.size() && SourcesInFlightCount.Val() < InFlightLimit && Context->IsActive()) {
             SortedSources.front()->StartProcessing(SortedSources.front());
             FetchingSources.emplace_back(SortedSources.front());
+            SourcesInFlightCount.Inc();
             AFL_VERIFY(FetchingSourcesByIdx.emplace(SortedSources.front()->GetSourceIdx(), SortedSources.front()).second);
             SortedSources.pop_front();
             changed = true;
@@ -142,6 +146,7 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
         while (SortedSources.size() && inFlightCountLocal < InFlightLimit && Context->IsActive()) {
             SortedSources.front()->StartProcessing(SortedSources.front());
             FetchingSources.emplace_back(SortedSources.front());
+            SourcesInFlightCount.Inc();
             AFL_VERIFY(FetchingSourcesByIdx.emplace(SortedSources.front()->GetSourceIdx(), SortedSources.front()).second);
             AFL_VERIFY(FetchingInFlightSources.emplace(TCompareKeyForScanSequence::FromFinish(SortedSources.front()), SortedSources.front()).second);
             SortedSources.pop_front();

@@ -36,6 +36,7 @@ private:
     ui64 FetchedCount = 0;
     ui64 InFlightLimit = 1;
     ui64 MaxInFlight = 256;
+    TPositiveControlInteger SourcesInFlightCount;
 
     ui32 GetInFlightIntervalsCount() const;
 

@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "defs.h"
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -7,6 +8,7 @@
 #include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
+
 
 #include <type_traits>
 
@@ -181,13 +183,14 @@ struct Schema : NIceDb::Schema {
     };
 
     struct TableInfo : Table<(ui32)ECommonTables::TableInfo> {
-        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {}; //TODO Rename me ToInternalPathId
         struct DropStep : Column<2, NScheme::NTypeIds::Uint64> {};
         struct DropTxId : Column<3, NScheme::NTypeIds::Uint64> {};
         struct TieringUsage: Column<4, NScheme::NTypeIds::String> {};
+        struct LocalPathId : Column<5, NScheme::NTypeIds::Uint64> {}; //PathId the table is known as at SchemeShard
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, DropStep, DropTxId, TieringUsage>;
+        using TColumns = TableColumns<PathId, DropStep, DropTxId, TieringUsage, LocalPathId>;
     };
 
     struct TableVersionInfo : Table<(ui32)ECommonTables::TableVersionInfo> {
@@ -782,36 +785,41 @@ struct Schema : NIceDb::Schema {
         db.Table<SchemaPresetInfo>().Key(id).Delete();
     }
 
-    static void SaveTableInfo(NIceDb::TNiceDb& db, const ui64 pathId) {
-        db.Table<TableInfo>().Key(pathId).Update();
+    static void SaveTableInfo(NIceDb::TNiceDb& db, const NColumnShard::TInternalPathId pathId) {
+        db.Table<TableInfo>().Key(pathId.GetInternalPathIdValue()).Update();
     }
 
 
     static void SaveTableVersionInfo(
             NIceDb::TNiceDb& db,
-            ui64 pathId, const NOlap::TSnapshot& version,
+            NColumnShard::TInternalPathId pathId, const NOlap::TSnapshot& version,
             const NKikimrTxColumnShard::TTableVersionInfo& info)
     {
         TString serialized;
         Y_ABORT_UNLESS(info.SerializeToString(&serialized));
-        db.Table<TableVersionInfo>().Key(pathId, version.GetPlanStep(), version.GetTxId()).Update(
+        db.Table<TableVersionInfo>().Key(pathId.GetInternalPathIdValue(), version.GetPlanStep(), version.GetTxId()).Update(
             NIceDb::TUpdate<TableVersionInfo::InfoProto>(serialized));
     }
 
     static void SaveTableDropVersion(
-            NIceDb::TNiceDb& db, ui64 pathId, ui64 dropStep, ui64 dropTxId)
+            NIceDb::TNiceDb& db, NColumnShard::TInternalPathId pathId, ui64 dropStep, ui64 dropTxId)
     {
-        db.Table<TableInfo>().Key(pathId).Update(
+        db.Table<TableInfo>().Key(pathId.GetInternalPathIdValue()).Update(
             NIceDb::TUpdate<TableInfo::DropStep>(dropStep),
             NIceDb::TUpdate<TableInfo::DropTxId>(dropTxId));
     }
-
-    static void EraseTableVersionInfo(NIceDb::TNiceDb& db, ui64 pathId, const NOlap::TSnapshot& version) {
-        db.Table<TableVersionInfo>().Key(pathId, version.GetPlanStep(), version.GetTxId()).Delete();
+    static void UpdateTableLocalPathId(NIceDb::TNiceDb& db, const TInternalPathId pathId, const TLocalPathId localPathId) {
+        db.Table<TableInfo>().Key(pathId.GetInternalPathIdValue()).Update(
+            NIceDb::TUpdate<TableInfo::LocalPathId>(localPathId.GetLocalPathIdValue())
+        );
     }
 
-    static void EraseTableInfo(NIceDb::TNiceDb& db, ui64 pathId) {
-        db.Table<TableInfo>().Key(pathId).Delete();
+    static void EraseTableVersionInfo(NIceDb::TNiceDb& db, NColumnShard::TInternalPathId pathId, const NOlap::TSnapshot& version) {
+        db.Table<TableVersionInfo>().Key(pathId.GetInternalPathIdValue(), version.GetPlanStep(), version.GetTxId()).Delete();
+    }
+
+    static void EraseTableInfo(NIceDb::TNiceDb& db, NColumnShard::TInternalPathId pathId) {
+        db.Table<TableInfo>().Key(pathId.GetInternalPathIdValue()).Delete();
     }
 
     static void SaveLongTxWrite(NIceDb::TNiceDb& db, const TInsertWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion) {
@@ -834,7 +842,7 @@ struct Schema : NIceDb::Schema {
 
     static void InsertTable_Upsert(NIceDb::TNiceDb& db, const EInsertTableIds recType, const TInsertedData& data) {
         db.Table<InsertTable>()
-            .Key((ui8)recType, 0, (ui64)data.GetInsertWriteId(), data.GetPathId(), "")
+            .Key((ui8)recType, 0, (ui64)data.GetInsertWriteId(), data.GetPathId().GetInternalPathIdValue(), "")
             .Update(NIceDb::TUpdate<InsertTable::BlobId>(data.GetBlobRange().GetBlobId().ToStringLegacy()),
                 NIceDb::TUpdate<InsertTable::BlobRangeOffset>(data.GetBlobRange().Offset),
                 NIceDb::TUpdate<InsertTable::InsertWriteId>((ui64)data.GetInsertWriteId()),
@@ -845,7 +853,7 @@ struct Schema : NIceDb::Schema {
 
     static void InsertTable_Upsert(NIceDb::TNiceDb& db, const TCommittedData& data) {
         db.Table<InsertTable>()
-            .Key((ui8)EInsertTableIds::Committed, data.GetSnapshot().GetPlanStep(), data.GetSnapshot().GetTxId(), data.GetPathId(),
+            .Key((ui8)EInsertTableIds::Committed, data.GetSnapshot().GetPlanStep(), data.GetSnapshot().GetTxId(), data.GetPathId().GetInternalPathIdValue(),
                 data.GetDedupId())
             .Update(NIceDb::TUpdate<InsertTable::BlobId>(data.GetBlobRange().GetBlobId().ToStringLegacy()),
                 NIceDb::TUpdate<InsertTable::InsertWriteId>((ui64)data.GetInsertWriteId()),
@@ -856,12 +864,12 @@ struct Schema : NIceDb::Schema {
     }
 
     static void InsertTable_Erase(NIceDb::TNiceDb& db, EInsertTableIds recType, const TInsertedData& data) {
-        db.Table<InsertTable>().Key((ui8)recType, 0, (ui64)data.GetInsertWriteId(), data.GetPathId(), "").Delete();
+        db.Table<InsertTable>().Key((ui8)recType, 0, (ui64)data.GetInsertWriteId(), data.GetPathId().GetInternalPathIdValue(), "").Delete();
     }
 
     static void InsertTable_Erase(NIceDb::TNiceDb& db, const TCommittedData& data) {
         db.Table<InsertTable>()
-            .Key((ui8)EInsertTableIds::Committed, data.GetSnapshot().GetPlanStep(), data.GetSnapshot().GetTxId(), data.GetPathId(), data.GetDedupId())
+            .Key((ui8)EInsertTableIds::Committed, data.GetSnapshot().GetPlanStep(), data.GetSnapshot().GetTxId(), data.GetPathId().GetInternalPathIdValue(), data.GetDedupId())
             .Delete();
     }
 
@@ -925,7 +933,7 @@ struct Schema : NIceDb::Schema {
 namespace NKikimr::NOlap {
 class TPortionLoadContext {
 private:
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
     YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY_DEF(NKikimrTxColumnShard::TIndexPortionMeta, MetaProto);
     YDB_READONLY_DEF(std::optional<NOlap::TSnapshot>, DeprecatedMinSnapshot);
@@ -933,7 +941,7 @@ private:
 public:
     template <class TSource>
     TPortionLoadContext(const TSource& rowset) {
-        PathId = rowset.template GetValue<NColumnShard::Schema::IndexPortions::PathId>();
+        PathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(rowset.template GetValue<NColumnShard::Schema::IndexPortions::PathId>());
         PortionId = rowset.template GetValue<NColumnShard::Schema::IndexPortions::PortionId>();
         const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexPortions::Metadata>();
         AFL_VERIFY(rowset.template HaveValue<NColumnShard::Schema::IndexPortions::MinSnapshotPlanStep>() == rowset.template HaveValue<NColumnShard::Schema::IndexPortions::MinSnapshotTxId>());
@@ -949,7 +957,7 @@ class TColumnChunkLoadContext {
 private:
     YDB_READONLY_DEF(TBlobRange, BlobRange);
     TChunkAddress Address;
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
     YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY_DEF(NKikimrTxColumnShard::TIndexColumnMeta, MetaProto);
     YDB_READONLY(TSnapshot, RemoveSnapshot, TSnapshot::Zero());
@@ -968,7 +976,7 @@ public:
         return TFullChunkAddress(PathId, PortionId, Address.GetEntityId(), Address.GetChunkIdx());
     }
 
-    TColumnChunkLoadContext(const ui64 pathId, const ui64 portionId, const TChunkAddress& address, const TBlobRange& bRange,
+    TColumnChunkLoadContext(const NColumnShard::TInternalPathId pathId, const ui64 portionId, const TChunkAddress& address, const TBlobRange& bRange,
         const NKikimrTxColumnShard::TIndexColumnMeta& metaProto)
         : BlobRange(bRange)
         , Address(address)
@@ -993,7 +1001,7 @@ public:
         BlobRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
         BlobRange.Offset = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Offset>();
         BlobRange.Size = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Size>();
-        PathId = rowset.template GetValue<NColumnShard::Schema::IndexColumns::PathId>();
+        PathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(rowset.template GetValue<NColumnShard::Schema::IndexColumns::PathId>());
         PortionId = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Portion>();
         AFL_VERIFY(BlobRange.BlobId.IsValid() && BlobRange.Size)("event", "incorrect blob")("blob", BlobRange.ToString());
 
@@ -1006,7 +1014,7 @@ class TColumnChunkLoadContextV1 {
 private:
     TChunkAddress Address;
     YDB_READONLY_DEF(TBlobRangeLink16, BlobRange);
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
     YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY_DEF(NKikimrTxColumnShard::TIndexColumnMeta, MetaProto);
 
@@ -1032,7 +1040,7 @@ public:
         return Address;
     }
 
-    TColumnChunkLoadContextV1(const ui64 pathId, const ui64 portionId, const TChunkAddress& address, const TBlobRangeLink16& bRange,
+    TColumnChunkLoadContextV1(const NColumnShard::TInternalPathId pathId, const ui64 portionId, const TChunkAddress& address, const TBlobRangeLink16& bRange,
         const NKikimrTxColumnShard::TIndexColumnMeta& metaProto)
         : Address(address)
         , BlobRange(bRange)
@@ -1050,7 +1058,7 @@ public:
               rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::Size>())
     {
         AFL_VERIFY(Address.GetColumnId())("event", "incorrect address")("address", Address.DebugString());
-        PathId = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::PathId>();
+        PathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::PathId>());
         PortionId = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::PortionId>();
         const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::Metadata>();
         AFL_VERIFY(MetaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
@@ -1059,19 +1067,19 @@ public:
 
 class TColumnChunkLoadContextV2 {
 private:
-    YDB_READONLY(ui64, PathId, 0);
-    YDB_READONLY(ui64, PortionId, 0);
+YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
+YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY_DEF(TString, MetadataProto);
 
 public:
     template <class TSource>
     TColumnChunkLoadContextV2(const TSource& rowset) {
-        PathId = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>();
+        PathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>());
         PortionId = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PortionId>();
         MetadataProto = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::Metadata>();
     }
 
-    TColumnChunkLoadContextV2(const ui64 pathId, const ui64 portionId, const NKikimrTxColumnShard::TIndexPortionAccessor& proto)
+    TColumnChunkLoadContextV2(const NColumnShard::TInternalPathId pathId, const ui64 portionId, const NKikimrTxColumnShard::TIndexPortionAccessor& proto)
         : PathId(pathId)
         , PortionId(portionId)
         , MetadataProto(proto.SerializeAsString()) {
@@ -1094,7 +1102,7 @@ class TIndexChunkLoadContext {
 private:
     YDB_READONLY_DEF(std::optional<TBlobRange>, BlobRange);
     YDB_READONLY_DEF(std::optional<TString>, BlobData);
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
     YDB_READONLY(ui64, PortionId, 0);
     TChunkAddress Address;
     const ui32 RecordsCount;
@@ -1134,7 +1142,7 @@ public:
 
     template <class TSource>
     TIndexChunkLoadContext(const TSource& rowset, const IBlobGroupSelector* dsGroupSelector)
-        : PathId(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::PathId>())
+        : PathId(NColumnShard::TInternalPathId::FromInternalPathIdValue(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::PathId>()))
         , PortionId(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::PortionId>())
         , Address(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::IndexId>(), rowset.template GetValue<NColumnShard::Schema::IndexIndexes::ChunkIdx>())
         , RecordsCount(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::RecordsCount>())
@@ -1164,7 +1172,7 @@ private:
     ui64 PlanStep;
     ui64 WriteTxId;
     TInsertWriteId InsertWriteId;
-    ui64 PathId;
+    NColumnShard::TInternalPathId PathId;
     YDB_ACCESSOR_DEF(TString, DedupId);
     ui64 SchemaVersion;
     TString BlobIdString;
@@ -1216,14 +1224,14 @@ public:
 
     void Remove(NIceDb::TNiceDb& db) const {
         AFL_VERIFY(ParsedFlag);
-        db.Table<NColumnShard::Schema::InsertTable>().Key((ui8)RecType, PlanStep, WriteTxId, PathId, DedupId).Delete();
+        db.Table<NColumnShard::Schema::InsertTable>().Key((ui8)RecType, PlanStep, WriteTxId, PathId.GetInternalPathIdValue(), DedupId).Delete();
     }
 
     void Upsert(NIceDb::TNiceDb& db) const {
         AFL_VERIFY(ParsedFlag);
         using namespace NColumnShard;
         db.Table<Schema::InsertTable>()
-            .Key((ui8)RecType, PlanStep, WriteTxId, PathId, DedupId)
+            .Key((ui8)RecType, PlanStep, WriteTxId, PathId.GetInternalPathIdValue(), DedupId)
             .Update(NIceDb::TUpdate<Schema::InsertTable::BlobId>(BlobIdString),
                 NIceDb::TUpdate<Schema::InsertTable::BlobRangeOffset>(RangeOffset),
                 NIceDb::TUpdate<Schema::InsertTable::BlobRangeSize>(RangeSize), NIceDb::TUpdate<Schema::InsertTable::Meta>(MetadataString),
@@ -1241,7 +1249,7 @@ public:
         AFL_VERIFY(WriteTxId);
         InsertWriteId = (TInsertWriteId)rowset.template GetValueOrDefault<Schema::InsertTable::InsertWriteId>(WriteTxId);
 
-        PathId = rowset.template GetValue<Schema::InsertTable::PathId>();
+        PathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(rowset.template GetValue<Schema::InsertTable::PathId>());
         DedupId = rowset.template GetValue<Schema::InsertTable::DedupId>();
         SchemaVersion = rowset.template GetValueOrDefault<Schema::InsertTable::SchemaVersion>(0);
         BlobIdString = rowset.template GetValue<Schema::InsertTable::BlobId>();

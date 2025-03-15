@@ -406,29 +406,29 @@ void TColumnShard::FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDa
 }
 
 void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
-    auto tables = TablesManager.GetTables();
     TTableStatsBuilder tableStatsBuilder(Counters, Executor());
+    LOG_S_DEBUG("There are stats for " << TablesManager.GetTableCount() << " tables");
+    TablesManager.ForEachPathId(
+        [&](const NColumnShard::TInternalPathId pathId) {
+            auto* periodicTableStats = ev->Record.AddTables();
+            periodicTableStats->SetDatashardId(TabletID());
+            periodicTableStats->SetTableLocalId(pathId.GetInternalPathIdValue());
 
-    LOG_S_DEBUG("There are stats for " << tables.size() << " tables");
-    for (const auto& [pathId, _] : tables) {
-        auto* periodicTableStats = ev->Record.AddTables();
-        periodicTableStats->SetDatashardId(TabletID());
-        periodicTableStats->SetTableLocalId(pathId);
+            periodicTableStats->SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
+            periodicTableStats->SetGeneration(Executor()->Generation());
+            periodicTableStats->SetRound(StatsReportRound++);
+            periodicTableStats->SetNodeId(ctx.SelfID.NodeId());
+            periodicTableStats->SetStartTime(StartTime().MilliSeconds());
 
-        periodicTableStats->SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
-        periodicTableStats->SetGeneration(Executor()->Generation());
-        periodicTableStats->SetRound(StatsReportRound++);
-        periodicTableStats->SetNodeId(ctx.SelfID.NodeId());
-        periodicTableStats->SetStartTime(StartTime().MilliSeconds());
+            if (auto* resourceMetrics = Executor()->GetResourceMetrics()) {
+                resourceMetrics->Fill(*periodicTableStats->MutableTabletMetrics());
+            }
 
-        if (auto* resourceMetrics = Executor()->GetResourceMetrics()) {
-            resourceMetrics->Fill(*periodicTableStats->MutableTabletMetrics());
+            tableStatsBuilder.FillTableStats(pathId, *(periodicTableStats->MutableTableStats()));
+
+            LOG_S_TRACE("Add stats for table, tableLocalID=" << pathId);
         }
-
-        tableStatsBuilder.FillTableStats(pathId, *(periodicTableStats->MutableTableStats()));
-
-        LOG_S_TRACE("Add stats for table, tableLocalID=" << pathId);
-    }
+    );
 }
 
 void TColumnShard::SendPeriodicStats() {

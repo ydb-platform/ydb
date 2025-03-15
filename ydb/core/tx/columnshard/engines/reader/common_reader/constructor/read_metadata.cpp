@@ -106,7 +106,7 @@ void TReadMetadata::DoOnReplyConstruction(const ui64 tabletId, NKqp::NInternalIm
         lockInfo.SetGeneration(LockSharingInfo->GetGeneration());
         lockInfo.SetDataShard(tabletId);
         lockInfo.SetCounter(LockSharingInfo->GetCounter());
-        lockInfo.SetPathId(PathId);
+        lockInfo.SetPathId(PathId.GetInternalPathIdValue());
         lockInfo.SetHasWrites(LockSharingInfo->HasWrites());
         if (LockSharingInfo->IsBroken()) {
             scanData.LocksInfo.BrokenLocks.emplace_back(std::move(lockInfo));

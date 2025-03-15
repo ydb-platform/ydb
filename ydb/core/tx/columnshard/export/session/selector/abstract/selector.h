@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/library/conclusion/status.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/core/tx/columnshard/export/protos/selector.pb.h>
@@ -35,7 +36,7 @@ public:
         DoSerializeToProto(proto);
     }
 
-    virtual ui64 GetPathId() const = 0;
+    virtual NColumnShard::TInternalPathId GetPathId() const = 0;
     virtual TString GetClassName() const = 0;
 };
 

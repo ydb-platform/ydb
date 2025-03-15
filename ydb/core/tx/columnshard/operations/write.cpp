@@ -13,7 +13,7 @@
 
 namespace NKikimr::NColumnShard {
 
-TWriteOperation::TWriteOperation(const ui64 pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie,
+TWriteOperation::TWriteOperation(const NColumnShard::TUnifiedPathId& pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie,
     const EOperationStatus& status, const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId,
     const NEvWrite::EModificationType mType, const bool writePortions)
     : PathId(pathId)
@@ -52,7 +52,7 @@ void TWriteOperation::CommitOnExecute(
 
     if (!WritePortions) {
         THashSet<TInsertWriteId> insertWriteIds(InsertWriteIds.begin(), InsertWriteIds.end());
-        auto pathExists = [&](ui64 pathId) {
+        auto pathExists = [&](NColumnShard::TInternalPathId pathId) {
             return owner.TablesManager.HasTable(pathId);
         };
         if (insertWriteIds.size()) {
@@ -61,7 +61,7 @@ void TWriteOperation::CommitOnExecute(
         }
     } else {
         for (auto&& i : InsertWriteIds) {
-            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).CommitPortionOnExecute(txc, i, snapshot);
+            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId.InternalPathId).CommitPortionOnExecute(txc, i, snapshot);
         }
     }
 }
@@ -72,7 +72,7 @@ void TWriteOperation::CommitOnComplete(TColumnShard& owner, const NOlap::TSnapsh
         owner.UpdateInsertTableCounters();
     } else {
         for (auto&& i : InsertWriteIds) {
-            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).CommitPortionOnComplete(
+            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId.InternalPathId).CommitPortionOnComplete(
                 i, owner.MutableIndexAs<NOlap::TColumnEngineForLogs>());
         }
     }
@@ -109,7 +109,8 @@ void TWriteOperation::ToProto(NKikimrTxColumnShard::TInternalOperationData& prot
     }
     proto.SetModificationType((ui32)ModificationType);
     proto.SetWritePortions(WritePortions);
-    proto.SetPathId(PathId);
+    proto.SetLocalPathId(PathId.LocalPathId.GetLocalPathIdValue());
+    proto.SetPathId(PathId.InternalPathId.GetInternalPathIdValue());
 }
 
 void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationData& proto) {
@@ -117,7 +118,8 @@ void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationDa
         InsertWriteIds.push_back(TInsertWriteId(writeId));
     }
     WritePortions = proto.GetWritePortions();
-    PathId = proto.GetPathId();
+    PathId.InternalPathId = TInternalPathId::FromInternalPathIdValue(proto.GetPathId());
+    PathId.LocalPathId = TLocalPathId::FromLocalPathIdValue(proto.HasLocalPathId() ? proto.GetLocalPathId() : PathId.InternalPathId.GetInternalPathIdValue());
     AFL_VERIFY(!WritePortions || PathId);
     if (proto.HasModificationType()) {
         ModificationType = (NEvWrite::EModificationType)proto.GetModificationType();
@@ -138,7 +140,7 @@ void TWriteOperation::AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::T
         owner.InsertTable->Abort(dbTable, writeIds);
     } else {
         for (auto&& i : InsertWriteIds) {
-            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).AbortPortionOnExecute(txc, i, owner.GetCurrentSnapshotForInternalModification());
+            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId.InternalPathId).AbortPortionOnExecute(txc, i, owner.GetCurrentSnapshotForInternalModification());
         }
     }
 }
@@ -147,7 +149,7 @@ void TWriteOperation::AbortOnComplete(TColumnShard& owner) const {
     Y_ABORT_UNLESS(Status != EOperationStatus::Draft);
     if (WritePortions) {
         for (auto&& i : InsertWriteIds) {
-            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).AbortPortionOnComplete(
+            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId.InternalPathId).AbortPortionOnComplete(
                 i, owner.MutableIndexAs<NOlap::TColumnEngineForLogs>());
         }
     }

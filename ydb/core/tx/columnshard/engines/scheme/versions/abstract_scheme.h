@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/counters/splitter.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/column_ids.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <string>
 
@@ -90,7 +91,7 @@ public:
         const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::set<ui32>& restoreColumnIds) const;
     [[nodiscard]] TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> PrepareForModification(
         const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const;
-    [[nodiscard]] TConclusion<TWritePortionInfoWithBlobsResult> PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const ui64 pathId,
+    [[nodiscard]] TConclusion<TWritePortionInfoWithBlobsResult> PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const NColumnShard::TInternalPathId pathId,
         const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
         const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const;

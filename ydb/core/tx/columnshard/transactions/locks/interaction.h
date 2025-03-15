@@ -4,6 +4,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <util/generic/hash.h>
 
@@ -397,10 +398,10 @@ public:
 
 class TInteractionsContext {
 private:
-    THashMap<ui64, TReadIntervals> ReadIntervalsByPathId;
+    THashMap<NColumnShard::TInternalPathId, TReadIntervals> ReadIntervalsByPathId;
 
 public:
-    bool HasReadIntervals(const ui64 pathId) const {
+    bool HasReadIntervals(const NColumnShard::TInternalPathId pathId) const {
         return ReadIntervalsByPathId.contains(pathId);
     }
 
@@ -412,7 +413,7 @@ public:
         return result;
     }
 
-    THashSet<ui64> GetAffectedTxIds(const ui64 pathId, const std::shared_ptr<arrow::RecordBatch>& batch) const {
+    THashSet<ui64> GetAffectedTxIds(const NColumnShard::TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& batch) const {
         auto it = ReadIntervalsByPathId.find(pathId);
         if (it == ReadIntervalsByPathId.end()) {
             return {};
@@ -420,7 +421,7 @@ public:
         return it->second.GetAffectedTxIds(batch);
     }
 
-    void AddInterval(const ui64 txId, const ui64 pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
+    void AddInterval(const ui64 txId, const NColumnShard::TInternalPathId pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
         auto& intervals = ReadIntervalsByPathId[pathId];
         auto itFrom = intervals.InsertPoint(from);
         auto itTo = intervals.InsertPoint(to);
@@ -432,7 +433,7 @@ public:
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "add_interval")("interactions_info", DebugJson().GetStringRobust());
     }
 
-    void RemoveInterval(const ui64 txId, const ui64 pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
+    void RemoveInterval(const ui64 txId, const NColumnShard::TInternalPathId pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
         auto itIntervals = ReadIntervalsByPathId.find(pathId);
         AFL_VERIFY(itIntervals != ReadIntervalsByPathId.end())("path_id", pathId);
         auto& intervals = itIntervals->second;

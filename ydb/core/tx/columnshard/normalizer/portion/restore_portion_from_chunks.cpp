@@ -42,7 +42,7 @@ public:
             const auto removeSnapshot = i.GetChunkInfo().GetRemoveSnapshot();
             const auto minSnapshotDeprecated = i.GetChunkInfo().GetMinSnapshotDeprecated();
             db.Table<IndexPortions>()
-                .Key(i.GetChunkInfo().GetPathId(), i.GetChunkInfo().GetPortionId())
+                .Key(i.GetChunkInfo().GetPathId().GetInternalPathIdValue(), i.GetChunkInfo().GetPortionId())
                 .Update(NIceDb::TUpdate<IndexPortions::SchemaVersion>(i.GetSchemaVersion()), NIceDb::TUpdate<IndexPortions::ShardingVersion>(0),
                     NIceDb::TUpdate<IndexPortions::CommitPlanStep>(0), NIceDb::TUpdate<IndexPortions::CommitTxId>(0),
                     NIceDb::TUpdate<IndexPortions::InsertWriteId>(0), NIceDb::TUpdate<IndexPortions::XPlanStep>(removeSnapshot.GetPlanStep()),

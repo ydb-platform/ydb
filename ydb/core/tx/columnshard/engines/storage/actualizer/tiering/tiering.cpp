@@ -277,7 +277,7 @@ public:
 }   // namespace
 
 std::vector<TCSMetadataRequest> TTieringActualizer::BuildMetadataRequests(
-    const ui64 /*pathId*/, const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TTieringActualizer>& index) {
+    const NColumnShard::TInternalPathId /*pathId*/, const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TTieringActualizer>& index) {
     if (NewPortionIds.empty()) {
         NYDBTest::TControllers::GetColumnShardController()->OnTieringMetadataActualized();
         return {};

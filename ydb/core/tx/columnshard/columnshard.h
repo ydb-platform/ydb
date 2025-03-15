@@ -13,6 +13,7 @@
 #include <ydb/core/tx/long_tx_service/public/types.h>
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr {
 
@@ -97,7 +98,7 @@ namespace TEvColumnShard {
 
     struct TEvInternalScan: public TEventLocal<TEvInternalScan, EvInternalScan> {
     private:
-        YDB_READONLY(ui64, PathId, 0);
+        YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
         YDB_READONLY(NOlap::TSnapshot, Snapshot, NOlap::TSnapshot::Zero());
         YDB_READONLY_DEF(std::optional<ui64>, LockId);
         YDB_ACCESSOR(bool, Reverse, false);
@@ -113,7 +114,7 @@ namespace TEvColumnShard {
             ColumnIds.emplace_back(id);
         }
 
-        TEvInternalScan(const ui64 pathId, const NOlap::TSnapshot& snapshot, const std::optional<ui64> lockId)
+        TEvInternalScan(const NColumnShard::TInternalPathId pathId, const NOlap::TSnapshot& snapshot, const std::optional<ui64> lockId)
             : PathId(pathId)
             , Snapshot(snapshot)
             , LockId(lockId)
@@ -269,17 +270,12 @@ namespace TEvColumnShard {
     struct TEvWriteResult : public TEventPB<TEvWriteResult, NKikimrTxColumnShard::TEvWriteResult, TEvColumnShard::EvWriteResult> {
         TEvWriteResult() = default;
 
-        TEvWriteResult(ui64 origin, const NEvWrite::TWriteMeta& writeMeta, ui32 status)
-            : TEvWriteResult(origin, writeMeta, writeMeta.GetWriteId(), status)
-        {
-        }
-
-        TEvWriteResult(ui64 origin, const NEvWrite::TWriteMeta& writeMeta, const i64 writeId, ui32 status) {
+        TEvWriteResult(ui64 origin, const NColumnShard::TLocalPathId& localPathId, TString dedupId, const i64 writeId, ui32 status) {
             Record.SetOrigin(origin);
             Record.SetTxInitiator(0);
             Record.SetWriteId(writeId);
-            Record.SetTableId(writeMeta.GetTableId());
-            Record.SetDedupId(writeMeta.GetDedupId());
+            Record.SetTableId(localPathId.GetLocalPathIdValue());
+            Record.SetDedupId(dedupId);
             Record.SetStatus(status);
         }
 

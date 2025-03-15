@@ -5,6 +5,7 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -15,7 +16,7 @@ private:
     YDB_READONLY_CONST(std::shared_ptr<TInstant>, LastAccessTime);
     YDB_READONLY_CONST(std::shared_ptr<TInstant>, LastUpdateTime);
 
-    THashMap<ui64, std::shared_ptr<TSingleColumnTableCounters>> PathIdCounters;
+    THashMap<NColumnShard::TInternalPathId, std::shared_ptr<TSingleColumnTableCounters>> PathIdCounters;
 
     friend class TSingleColumnTableCounters;
 
@@ -30,7 +31,7 @@ public:
         output.SetLastUpdateTime(LastUpdateTime->MilliSeconds());
     }
 
-    std::shared_ptr<TSingleColumnTableCounters> GetPathIdCounter(ui64 pathId);
+    std::shared_ptr<TSingleColumnTableCounters> GetPathIdCounter(NColumnShard::TInternalPathId pathId);
 };
 
 class TSingleColumnTableCounters {

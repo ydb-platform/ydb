@@ -628,6 +628,11 @@ void TSchemeShard::ClearDescribePathCaches(const TPathElement::TPtr node, bool f
         tabletInfo->PreserializedTablePartitions.clear();
         tabletInfo->PreserializedTablePartitionsNoKeys.clear();
         tabletInfo->PreserializedTableSplitBoundaries.clear();
+    } else if (node->PathType == NKikimrSchemeOp::EPathType::EPathTypeColumnTable) {
+        auto tabletInfo = ColumnTables.GetVerified(node->PathId);
+        Y_ABORT_UNLESS(tabletInfo);
+        //tabletInfo->PreSerializedPathDescription.clear();
+        //tabletInfo->PreSerializedPathDescriptionWithoutRangeKey.clear();
     }
 }
 

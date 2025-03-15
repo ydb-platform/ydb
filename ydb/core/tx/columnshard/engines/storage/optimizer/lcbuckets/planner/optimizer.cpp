@@ -9,7 +9,7 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
-TOptimizerPlanner::TOptimizerPlanner(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
+TOptimizerPlanner::TOptimizerPlanner(const NColumnShard::TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
     const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::vector<TLevelConstructorContainer>& levelConstructors)
     : TBase(pathId)
     , Counters(std::make_shared<TCounters>())

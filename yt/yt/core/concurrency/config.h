@@ -22,7 +22,7 @@ struct TPeriodicExecutorOptions
 
     bool operator==(const TPeriodicExecutorOptions& other) const = default;
 
-    //! Sets #Period and Applies set#DefaultJitter.
+    //! Sets #Period and applies #DefaultJitter.
     static TPeriodicExecutorOptions WithJitter(TDuration period);
 
     //! Generates the delay for the next invocation from #Period and #Jitter.

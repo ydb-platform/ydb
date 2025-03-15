@@ -6,6 +6,10 @@ namespace NYT::NKafka {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static constexpr auto& Logger = KafkaLogger;
+
+////////////////////////////////////////////////////////////////////////////////
+
 int GetRequestHeaderVersion(ERequestType requestType, i16 apiVersion)
 {
     switch (requestType) {
@@ -100,24 +104,24 @@ void TRecord::Serialize(IKafkaProtocolWriter* writer, int version) const
     if (version == 2) {
         auto recordWriter = CreateKafkaProtocolWriter();
 
-        recordWriter->WriteByte(Attributes);
-        recordWriter->WriteVarLong(TimestampDelta);
-        recordWriter->WriteVarInt(OffsetDelta);
+        WRITE_KAFKA_FIELD(recordWriter, WriteByte, Attributes)
+        WRITE_KAFKA_FIELD(recordWriter, WriteVarLong, TimestampDelta)
+        WRITE_KAFKA_FIELD(recordWriter, WriteVarInt, OffsetDelta)
 
-        recordWriter->WriteVarInt(Key.size());
-        recordWriter->WriteData(Key);
+        WRITE_KAFKA_FIELD(recordWriter, WriteVarInt, Key.size())
+        WRITE_KAFKA_FIELD(recordWriter, WriteData, Key)
 
-        recordWriter->WriteVarInt(Value.size());
-        recordWriter->WriteData(Value);
+        WRITE_KAFKA_FIELD(recordWriter, WriteVarInt, Value.size())
+        WRITE_KAFKA_FIELD(recordWriter, WriteData, Value)
 
-        recordWriter->WriteVarInt(Headers.size());
+        WRITE_KAFKA_FIELD(recordWriter, WriteVarInt, Headers.size())
         for (const auto& header : Headers) {
             header.Serialize(recordWriter.get(), version);
         }
 
         auto record = recordWriter->Finish();
 
-        writer->WriteVarInt(record.Size());
+        WRITE_KAFKA_FIELD(writer, WriteVarInt, record.size())
         writer->WriteData(record);
     } else if (version == 1 || version == 0) {
         writer->WriteByte(Attributes);
@@ -135,29 +139,46 @@ void TRecord::Serialize(IKafkaProtocolWriter* writer, int version) const
 
 void TRecord::Deserialize(IKafkaProtocolReader* reader, int version)
 {
+    std::optional<i32> length;
     if (version == 2) {
-        reader->ReadVarInt();  // Length, not used.
+        READ_KAFKA_FIELD(length, ReadVarInt);
+        reader->StartReadBytes(/*needReadSize*/ false);
     }
-    Attributes = reader->ReadByte();
+    READ_KAFKA_FIELD(Attributes, ReadByte)
 
     if (version == 2) {
-        TimestampDelta = reader->ReadVarLong();
-        OffsetDelta = reader->ReadVarInt();
+        READ_KAFKA_FIELD(TimestampDelta, ReadVarLong)
+        READ_KAFKA_FIELD(OffsetDelta, ReadVarInt)
 
         auto keySize = reader->ReadVarInt();
+        YT_LOG_TRACE("Parsing Record (KeySize: %v)", keySize);
         reader->ReadString(&Key, keySize);
 
-        auto valueSize = reader->ReadVarInt();
-        reader->ReadString(&Value, valueSize);
+        i32 valueSize;
+        READ_KAFKA_FIELD(valueSize, ReadVarInt);
 
-        auto headerCount = reader->ReadVarInt();
-        Headers.resize(headerCount);
-        for (auto& header : Headers) {
-            header.Deserialize(reader, version);
+        if (valueSize > 0) {
+            YT_LOG_TRACE("Parsing Record (ValueSize: %v)", valueSize);
+            reader->ReadString(&Value, valueSize);
+        }
+
+        i32 headerCount;
+        READ_KAFKA_FIELD(headerCount, ReadVarInt);
+        if (headerCount > 0) {
+            Headers.resize(headerCount);
+            for (auto& header : Headers) {
+                header.Deserialize(reader, version);
+            }
+        }
+
+        reader->FinishReadBytes();
+
+        if (length && reader->GetReadBytesCount() != length) {
+            YT_LOG_ERROR("Not all record bytes were read (Expected: %v, Actual: %v)", *length, reader->GetReadBytesCount());
         }
     } else if (version == 1 || version == 0) {
         if (version == 1) {
-            TimestampDelta = reader->ReadInt64();
+            READ_KAFKA_FIELD(TimestampDelta, ReadInt64)
         }
         Key = reader->ReadBytes();
         Value = reader->ReadBytes();
@@ -168,32 +189,34 @@ void TRecord::Deserialize(IKafkaProtocolReader* reader, int version)
 
 void TRecordBatch::Serialize(IKafkaProtocolWriter* writer) const
 {
-    writer->WriteInt64(BaseOffset);
+    WRITE_KAFKA_FIELD(writer, WriteInt64, BaseOffset)
 
     writer->StartBytes();  // Write Length.
 
     if (MagicByte == 0 || MagicByte == 1) {
-        writer->WriteInt32(CrcOld);
-        writer->WriteByte(MagicByte);
+        // TODO(nadya73): implement it via [Start/Finish]CalculateChecksum and crc32.
+        WRITE_KAFKA_FIELD(writer, WriteUint32, CrcOld)
+        WRITE_KAFKA_FIELD(writer, WriteByte, MagicByte)
 
         YT_VERIFY(Records.size() == 1);
         Records[0].Serialize(writer, MagicByte);
     } else if (MagicByte == 2) {
-        writer->WriteInt32(PartitionLeaderEpoch);
-        writer->WriteByte(MagicByte);
-        writer->WriteUint32(Crc);
-        writer->WriteInt16(Attributes);
-        writer->WriteInt32(LastOffsetDelta);
-        writer->WriteInt64(FirstTimestamp);
-        writer->WriteInt64(MaxTimestamp);
-        writer->WriteInt64(ProducerId);
-        writer->WriteInt16(ProducerEpoch);
-        writer->WriteInt32(BaseSequence);
+        WRITE_KAFKA_FIELD(writer, WriteInt32, PartitionLeaderEpoch)
+        WRITE_KAFKA_FIELD(writer, WriteByte, MagicByte)
+        writer->StartCalculateChecksum();
+        WRITE_KAFKA_FIELD(writer, WriteInt16, Attributes)
+        WRITE_KAFKA_FIELD(writer, WriteInt32, LastOffsetDelta)
+        WRITE_KAFKA_FIELD(writer, WriteInt64, FirstTimestamp)
+        WRITE_KAFKA_FIELD(writer, WriteInt64, MaxTimestamp)
+        WRITE_KAFKA_FIELD(writer, WriteInt64, ProducerId)
+        WRITE_KAFKA_FIELD(writer, WriteInt16, ProducerEpoch)
+        WRITE_KAFKA_FIELD(writer, WriteInt32, BaseSequence)
 
-        writer->WriteInt32(Records.size());
+        WRITE_KAFKA_FIELD(writer, WriteInt32, Records.size())
         for (const auto& record : Records) {
             record.Serialize(writer, MagicByte);
         }
+        writer->FinishCalculateChecksum();
     } else {
         THROW_ERROR_EXCEPTION("Unsupported MagicByte %v in RecordBatch serialization", static_cast<int>(MagicByte));
     }
@@ -202,14 +225,13 @@ void TRecordBatch::Serialize(IKafkaProtocolWriter* writer) const
 
 void TRecordBatch::Deserialize(IKafkaProtocolReader* reader)
 {
-    BaseOffset = reader->ReadInt64();
-    Length = reader->ReadInt32();
+    READ_KAFKA_FIELD(BaseOffset, ReadInt64)
+    READ_KAFKA_FIELD(Length, ReadInt32)
 
     reader->StartReadBytes(/*needReadSize*/ false);
 
-    PartitionLeaderEpoch = reader->ReadInt32();
-
-    MagicByte = reader->ReadByte();
+    READ_KAFKA_FIELD(PartitionLeaderEpoch, ReadInt32)
+    READ_KAFKA_FIELD(MagicByte, ReadByte)
 
     if (MagicByte == 0 || MagicByte == 1) {
         // In v0/v1 CRC is before MagicByte and there is no PartitionLeaderEpoch;
@@ -218,22 +240,30 @@ void TRecordBatch::Deserialize(IKafkaProtocolReader* reader)
 
         // It's a message in v0/v1.
         auto& record = Records.emplace_back();
+        YT_LOG_TRACE("Parsing RecordBatch, reading Record");
         record.Deserialize(reader, MagicByte);
     } else if (MagicByte == 2) {
-        Crc = reader->ReadUint32();
+        READ_KAFKA_FIELD(Crc, ReadUint32)
+        READ_KAFKA_FIELD(Attributes, ReadInt16)
+        READ_KAFKA_FIELD(LastOffsetDelta, ReadInt32)
+        READ_KAFKA_FIELD(FirstTimestamp, ReadInt64)
+        READ_KAFKA_FIELD(MaxTimestamp, ReadInt64)
+        READ_KAFKA_FIELD(ProducerId, ReadInt64)
+        READ_KAFKA_FIELD(ProducerEpoch, ReadInt16)
+        READ_KAFKA_FIELD(BaseSequence, ReadInt32)
 
-        Attributes = reader->ReadInt16();
-        LastOffsetDelta = reader->ReadInt32();
-        FirstTimestamp = reader->ReadInt64();
-        MaxTimestamp = reader->ReadInt64();
-        ProducerId = reader->ReadInt64();
-        ProducerEpoch = reader->ReadInt16();
-        BaseSequence = reader->ReadInt32();
-
-        while (reader->GetReadBytesCount() < Length) {
-            TRecord record;
-            record.Deserialize(reader, MagicByte);
-            Records.push_back(std::move(record));
+        i32 recordCount = 0;
+        READ_KAFKA_FIELD(recordCount, ReadInt32)
+        if (recordCount > 0) {
+            Records.reserve(recordCount);
+            for (i32 recordIndex = 0; recordIndex < recordCount; ++recordIndex) {
+                TRecord record;
+                record.Deserialize(reader, MagicByte);
+                Records.push_back(std::move(record));
+            }
+        }
+        if (reader->GetReadBytesCount() != Length) {
+            THROW_ERROR_EXCEPTION("Unexpected record batch length (Expected: %v, Actual: %v)", Length, reader->GetReadBytesCount());
         }
     } else {
         THROW_ERROR_EXCEPTION("Unsupported MagicByte %v in RecordBatch deserialization", static_cast<int>(MagicByte));
@@ -481,6 +511,19 @@ void TRspHeartbeat::Serialize(IKafkaProtocolWriter* writer, int /*apiVersion*/) 
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TReqLeaveGroup::Deserialize(IKafkaProtocolReader* reader, int /*apiVersion*/)
+{
+    GroupId = reader->ReadString();
+    MemberId = reader->ReadString();
+}
+
+void TRspLeaveGroup::Serialize(IKafkaProtocolWriter* writer, int /*apiVersion*/) const
+{
+    writer->WriteErrorCode(ErrorCode);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TReqOffsetCommitTopicPartition::Deserialize(IKafkaProtocolReader* reader, int /*apiVersion*/)
 {
     PartitionIndex = reader->ReadInt32();
@@ -598,12 +641,13 @@ void TReqFetch::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
 
 void TRspFetchResponsePartition::Serialize(IKafkaProtocolWriter* writer, int /*apiVersion*/) const
 {
-    writer->WriteInt32(PartitionIndex);
-    writer->WriteErrorCode(ErrorCode);
-    writer->WriteInt64(HighWatermark);
+    WRITE_KAFKA_FIELD(writer, WriteInt32, PartitionIndex)
+    WRITE_KAFKA_FIELD(writer, WriteErrorCode, ErrorCode)
+    WRITE_KAFKA_FIELD(writer, WriteInt64, HighWatermark)
 
     if (!RecordBatches) {
-        writer->WriteInt32(-1);
+        i32 recordBatchesSize = -1;
+        WRITE_KAFKA_FIELD(writer, WriteInt32, recordBatchesSize)
     } else {
         writer->StartBytes();
         for (const auto& recordBatch : *RecordBatches) {
@@ -615,9 +659,9 @@ void TRspFetchResponsePartition::Serialize(IKafkaProtocolWriter* writer, int /*a
 
 void TRspFetchResponse::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 {
-    writer->WriteString(Topic);
+    WRITE_KAFKA_FIELD(writer, WriteString, Topic)
 
-    writer->WriteInt32(Partitions.size());
+    WRITE_KAFKA_FIELD(writer, WriteInt32, Partitions.size())
     for (const auto& partition : Partitions) {
         partition.Serialize(writer, apiVersion);
     }
@@ -626,9 +670,9 @@ void TRspFetchResponse::Serialize(IKafkaProtocolWriter* writer, int apiVersion) 
 void TRspFetch::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 {
     if (apiVersion >= 2) {
-        writer->WriteInt32(ThrottleTimeMs);
+        WRITE_KAFKA_FIELD(writer, WriteInt32, ThrottleTimeMs)
     }
-    writer->WriteInt32(Responses.size());
+    WRITE_KAFKA_FIELD(writer, WriteInt32, Responses.size())
 
     for (const auto& response : Responses) {
         response.Serialize(writer, apiVersion);
@@ -671,7 +715,7 @@ void TRspSaslAuthenticate::Serialize(IKafkaProtocolWriter* writer, int /*apiVers
 
 void TReqProduceTopicDataPartitionData::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
 {
-    Index = reader->ReadInt32();
+    READ_KAFKA_FIELD(Index, ReadInt32)
 
     i32 bytesCount;
     if (apiVersion < 9) {
@@ -695,9 +739,9 @@ void TReqProduceTopicDataPartitionData::Deserialize(IKafkaProtocolReader* reader
 void TReqProduceTopicData::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
 {
     if (apiVersion < 9) {
-        Name = reader->ReadString();
+        READ_KAFKA_FIELD(Name, ReadString)
     } else {
-        Name = reader->ReadCompactString();
+        READ_KAFKA_FIELD(Name, ReadCompactString)
     }
 
     NKafka::Deserialize(PartitionData, reader, /*isCompact*/ apiVersion >= 9, apiVersion);
@@ -711,13 +755,13 @@ void TReqProduce::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
 {
     if (apiVersion >= 3) {
         if (apiVersion < 9) {
-            TransactionalId = reader->ReadNullableString();
+            READ_KAFKA_FIELD(TransactionalId, ReadNullableString)
         } else {
-            TransactionalId = reader->ReadCompactNullableString();
+            READ_KAFKA_FIELD(TransactionalId, ReadCompactNullableString)
         }
     }
-    Acks = reader->ReadInt16();
-    TimeoutMs = reader->ReadInt32();
+    READ_KAFKA_FIELD(Acks, ReadInt16)
+    READ_KAFKA_FIELD(TimeoutMs, ReadInt32)
 
     NKafka::Deserialize(TopicData, reader, /*isCompact*/ apiVersion >= 9, apiVersion);
 
@@ -815,10 +859,14 @@ void TReqListOffsets::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
     }
 }
 
-void TRspListOffsetsTopicPartition::Serialize(IKafkaProtocolWriter* writer, int /*apiVersion*/) const
+void TRspListOffsetsTopicPartition::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 {
     writer->WriteInt32(PartitionIndex);
     writer->WriteErrorCode(ErrorCode);
+
+    if (apiVersion <= 0) {
+        writer->WriteInt32(1); // Size of 'old_style_offsets'.
+    }
     writer->WriteInt64(Offset);
 }
 

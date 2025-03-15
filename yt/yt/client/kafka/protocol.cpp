@@ -2,11 +2,17 @@
 
 #include <yt/yt/core/misc/error.h>
 
+#include <library/cpp/digest/crc32c/crc32c.h>
+
 #include <library/cpp/yt/coding/varint.h>
 
 #include <library/cpp/yt/string/guid.h>
 
 namespace NYT::NKafka {
+
+////////////////////////////////////////////////////////////////////////////////
+
+static constexpr auto& Logger = KafkaLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -20,37 +26,44 @@ public:
 
     bool ReadBool() override
     {
+        YT_LOG_TRACE("Reading bool");
         auto value = ReadByte();
         return value > 0;
     }
 
     char ReadByte() override
     {
+        YT_LOG_TRACE("Reading byte");
         return DoReadInt<char>();
     }
 
     i16 ReadInt16() override
     {
+        YT_LOG_TRACE("Reading int16");
         return DoReadInt<i16>();
     }
 
     i32 ReadInt32() override
     {
+        YT_LOG_TRACE("Reading int32");
         return DoReadInt<i32>();
     }
 
     i64 ReadInt64() override
     {
+        YT_LOG_TRACE("Reading int64");
         return DoReadInt<i64>();
     }
 
     ui32 ReadUint32() override
     {
+        YT_LOG_TRACE("Reading uint32");
         return DoReadInt<ui32>();
     }
 
     i32 ReadVarInt() override
     {
+        YT_LOG_TRACE("Reading varint");
         i32 result;
         Offset_ += ReadVarInt32(Data_.begin() + Offset_, &result);
         return result;
@@ -58,6 +71,7 @@ public:
 
     i64 ReadVarLong() override
     {
+        YT_LOG_TRACE("Reading varlong");
         i64 result;
         Offset_ += ReadVarInt64(Data_.begin() + Offset_, &result);
         return result;
@@ -65,6 +79,7 @@ public:
 
     ui32 ReadUnsignedVarInt() override
     {
+        YT_LOG_TRACE("Reading unsigned varint");
         ui32 result;
         Offset_ += ReadVarUint32(Data_.begin() + Offset_, &result);
         return result;
@@ -72,6 +87,7 @@ public:
 
     std::optional<TString> ReadNullableString() override
     {
+        YT_LOG_TRACE("Reading nullable string");
         auto length = ReadInt16();
         if (length == -1) {
             return {};
@@ -84,6 +100,7 @@ public:
 
     std::optional<TString> ReadCompactNullableString() override
     {
+        YT_LOG_TRACE("Reading compact nullable string");
         auto length = ReadUnsignedVarInt();
         if (length == 0) {
             return {};
@@ -97,6 +114,7 @@ public:
 
     TString ReadCompactString() override
     {
+        YT_LOG_TRACE("Reading compact string");
         TString result;
 
         auto length = ReadUnsignedVarInt();
@@ -111,6 +129,7 @@ public:
 
     TString ReadString() override
     {
+        YT_LOG_TRACE("Reading string");
         TString result;
 
         auto length = ReadInt16();
@@ -125,6 +144,7 @@ public:
 
     TString ReadBytes() override
     {
+        YT_LOG_TRACE("Reading bytes");
         TString result;
 
         auto length = ReadInt32();
@@ -139,6 +159,7 @@ public:
 
     TGuid ReadUuid() override
     {
+        YT_LOG_TRACE("Reading uuid");
         TString value;
         ReadString(&value, 16);
         return TGuid::FromString(value);
@@ -146,6 +167,10 @@ public:
 
     void ReadString(TString* result, int length) override
     {
+        YT_LOG_TRACE("Reading string with length (Length: %v, DataSize: %v, Offset: %v)",
+            length,
+            Data_.size(),
+            Offset_);
         ValidateSizeAvailable(length);
 
         result->resize(length);
@@ -156,6 +181,7 @@ public:
 
     TString ReadCompactBytes() override
     {
+        YT_LOG_TRACE("Reading compact bytes");
         TString result;
 
         auto length = ReadUnsignedVarInt();
@@ -169,6 +195,7 @@ public:
 
     i32 StartReadBytes(bool needReadCount) override
     {
+        YT_LOG_TRACE("Start reading bytes");
         i32 size = 0;
         if (needReadCount) {
             size = ReadInt32();
@@ -179,6 +206,7 @@ public:
 
     i32 StartReadCompactBytes(bool needReadCount) override
     {
+        YT_LOG_TRACE("Start reading compact bytes");
         i32 size = 0;
         if (needReadCount) {
             size = ReadUnsignedVarInt() - 1;
@@ -197,6 +225,7 @@ public:
 
     void FinishReadBytes() override
     {
+        YT_LOG_TRACE("Finish reading bytes");
         if (!BytesOffsets_.empty()) {
             return BytesOffsets_.pop_back();
         }
@@ -247,7 +276,9 @@ private:
     void ValidateSizeAvailable(i64 size)
     {
         if (std::ssize(Data_) - Offset_ < size) {
-            THROW_ERROR_EXCEPTION("Premature end of stream while reading %v bytes", size);
+            THROW_ERROR_EXCEPTION("Premature end of stream while reading %v bytes", size)
+                << TErrorAttribute("data_size", std::ssize(Data_))
+                << TErrorAttribute("offset", Offset_);
         }
     }
 };
@@ -392,8 +423,26 @@ public:
     void FinishBytes() override
     {
         YT_VERIFY(!BytesOffsets_.empty());
-        DoWriteInt<int32_t>(Size_ - BytesOffsets_.back(), BytesOffsets_.back() - sizeof(int32_t));
+        DoWriteInt<i32>(Size_ - BytesOffsets_.back(), BytesOffsets_.back() - sizeof(i32));
         BytesOffsets_.pop_back();
+    }
+
+    void StartCalculateChecksum() override
+    {
+        WriteInt32(0);
+        ChecksumOffsets_.push_back(Size_);
+    }
+
+    void FinishCalculateChecksum() override
+    {
+        YT_VERIFY(!ChecksumOffsets_.empty());
+        auto offset = ChecksumOffsets_.back();
+        ChecksumOffsets_.pop_back();
+
+        auto data = Buffer_.Slice(offset, Size_);
+        auto checksum = Crc32c(data.begin(), data.size());
+
+        DoWriteInt<ui32>(checksum, offset - sizeof(ui32));
     }
 
     TSharedRef Finish() override
@@ -417,6 +466,7 @@ private:
     i64 Size_ = 0;
 
     std::vector<i64> BytesOffsets_;
+    std::vector<i64> ChecksumOffsets_;
 
     template <typename T>
     void DoWriteInt(T value, std::optional<i64> position = std::nullopt)

@@ -10,6 +10,17 @@ namespace NYT::NKafka {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#define READ_KAFKA_FIELD(field, method)                                                    \
+    YT_LOG_TRACE("Parsing kafka data (Field: %v)", #field);                                \
+    field = reader->method();                                                              \
+    YT_LOG_TRACE("Parsing kafka data, value read (Field: %v, Value: %v)", #field, field);
+
+#define WRITE_KAFKA_FIELD(kafkaWriter, method, field)                                             \
+    YT_LOG_TRACE("Writing kafka data (Field: %v, Value: %v)", #field, field);                     \
+    kafkaWriter->method(field);
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct IKafkaProtocolReader
 {
     virtual ~IKafkaProtocolReader() = default;
@@ -85,6 +96,9 @@ struct IKafkaProtocolWriter
 
     virtual void StartBytes() = 0;
     virtual void FinishBytes() = 0;
+
+    virtual void StartCalculateChecksum() = 0;
+    virtual void FinishCalculateChecksum() = 0;
 
     virtual i64 GetSize() const = 0;
 

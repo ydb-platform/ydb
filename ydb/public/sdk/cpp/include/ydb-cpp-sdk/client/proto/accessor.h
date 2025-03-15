@@ -10,14 +10,14 @@
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
-#include <ydb-cpp-sdk/client/draft/ydb_replication.h>
-#include <ydb-cpp-sdk/client/draft/ydb_view.h>
-#include <ydb-cpp-sdk/client/coordination/coordination.h>
-#include <ydb-cpp-sdk/client/export/export.h>
-#include <ydb-cpp-sdk/client/import/import.h>
-#include <ydb-cpp-sdk/client/monitoring/monitoring.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_view.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/monitoring/monitoring.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 namespace NYdb::inline Dev {
 

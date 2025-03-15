@@ -299,7 +299,7 @@ struct TTransactionWaitPad : public TPrivatePageCacheWaitPad {
     TTransactionWaitPad(TSeat* seat);
     ~TTransactionWaitPad();
 
-    NWilson::TTraceId GetWaitingTraceId() const noexcept;
+    NWilson::TTraceId GetWaitingTraceId() const;
 };
 
 struct TCompactionChangesCtx;
@@ -312,6 +312,7 @@ struct TExecutorCaches {
 class TExecutor
     : public TActor<TExecutor>
     , public NFlatExecutorSetup::IExecutor
+    , public IActorExceptionHandler
     , private NTable::ICompactionBackend
     , private ILoadBlob
 {
@@ -496,8 +497,8 @@ class TExecutor
     void Broken();
     void Active(const TActorContext &ctx);
     void ActivateFollower(const TActorContext &ctx);
-    void RecreatePageCollectionsCache() noexcept;
-    void ReflectSchemeSettings() noexcept;
+    void RecreatePageCollectionsCache();
+    void ReflectSchemeSettings();
     void OnYellowChannels(TVector<ui32> yellowMoveChannels, TVector<ui32> yellowStopChannels) override;
     void CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&yellowStopChannels, bool terminal = false);
     void SendReassignYellowChannels(const TVector<ui32> &yellowChannels);
@@ -529,10 +530,10 @@ class TExecutor
     void PlanTransactionActivation();
     void MakeLogSnapshot();
     void ActivateWaitingTransactions(TPrivatePageCache::TPage::TWaitQueuePtr waitPadsQueue);
-    void AddCachesOfBundle(const NTable::TPartView &partView) noexcept;
-    void AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info) noexcept;
-    void DropCachesOfBundle(const NTable::TPart &part) noexcept;
-    void DropSingleCache(const TLogoBlobID&) noexcept;
+    void AddCachesOfBundle(const NTable::TPartView &partView);
+    void AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info);
+    void DropCachesOfBundle(const NTable::TPart &part);
+    void DropSingleCache(const TLogoBlobID&);
 
     void TranslateCacheTouchesToSharedCache();
     void RequestInMemPagesForDatabase(bool pendingOnly = false);
@@ -544,9 +545,9 @@ class TExecutor
     THolder<TScanSnapshot> PrepareScanSnapshot(ui32 table,
         const NTable::TCompactionParams* params, TRowVersion snapshot = TRowVersion::Max());
     void ReleaseScanLocks(TIntrusivePtr<TBarrier>, const NTable::TSubset&);
-    void StartScan(ui64 serial, ui32 table) noexcept;
-    void StartScan(ui64 task, TResource*) noexcept;
-    void StartSeat(ui64 task, TResource*) noexcept;
+    void StartScan(ui64 serial, ui32 table);
+    void StartScan(ui64 task, TResource*);
+    void StartSeat(ui64 task, TResource*);
     void PostponedScanCleared(NResourceBroker::TEvResourceBroker::TEvResourceAllocated *msg, const TActorContext &ctx);
 
     void ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update);
@@ -622,7 +623,7 @@ class TExecutor
             NKikimrCompaction::ECompactionStrategy strategy);
 
 public:
-    void Describe(IOutputStream &out) const noexcept override
+    void Describe(IOutputStream &out) const override
     {
         out
             << (Stats->IsFollower() ? "Follower" : "Leader")
@@ -633,7 +634,7 @@ public:
     // IExecutor interface
     void Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) override;
     void Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx) override;
-    void DetachTablet(const TActorContext &ctx) override;
+    void DetachTablet() override;
     ui64 DoExecute(TAutoPtr<ITransaction> transaction, ETxMode mode);
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) override;
     ui64 Enqueue(TAutoPtr<ITransaction> transaction) override;
@@ -705,6 +706,8 @@ public:
     TExecutor(NFlatExecutorSetup::ITablet *owner, const TActorId& ownerActorId);
     ~TExecutor();
 
+    bool OnUnhandledException(const std::exception&) override;
+
     STFUNC(StateInit);
     STFUNC(StateBoot);
     STFUNC(StateWork);
@@ -712,7 +715,7 @@ public:
     STFUNC(StateFollower);
 
     // database interface
-    const NTable::TScheme& Scheme() const noexcept override;
+    const NTable::TScheme& Scheme() const override;
     ui64 TabletId() const { return Owner->TabletID(); }
 
     float GetRejectProbability() const override;

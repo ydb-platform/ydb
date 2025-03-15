@@ -7,10 +7,10 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/utils/yql_panic.h>
-#include <ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr::NKqp {
 

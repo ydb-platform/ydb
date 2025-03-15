@@ -262,7 +262,7 @@ void GetIntegerConstraints(const TExprNode::TPtr& column, bool& isSigned, ui64& 
     }
 }
 
-void QuoteColumnForQL(const TStringBuf columnName, TStringBuilder& result) {
+void QuoteColumnForQL(const TStringBuf& columnName, TStringBuilder& result) {
     result << '`';
     if (!columnName.Contains('`')) {
         result << columnName;
@@ -276,6 +276,14 @@ void QuoteColumnForQL(const TStringBuf columnName, TStringBuilder& result) {
         }
     }
     result << '`';
+}
+
+void ConvertComparisonForQL(const TStringBuf& opName, TStringBuilder& result) {
+    if (opName == "==") {
+        result << '=';
+    } else {
+        result << opName;
+    }
 }
 
 void GenerateInputQueryIntegerComparison(const TStringBuf& opName, const TExprNode::TPtr& intColumn, const TExprNode::TPtr& intValue, TStringBuilder& result) {
@@ -310,7 +318,9 @@ void GenerateInputQueryIntegerComparison(const TStringBuf& opName, const TExprNo
         const auto columnName = intColumn->ChildPtr(1)->Content();
         const auto valueStr = maybeInt.Cast().Literal().Value();
         QuoteColumnForQL(columnName, result);
-        result << " " << opName << " " << valueStr;
+        result << " ";
+        ConvertComparisonForQL(opName, result);
+        result << " " << valueStr;
     }
 }
 
@@ -910,6 +920,8 @@ public:
                 execCtx->SetOutput(outputOp.Cast().Output());
             }
 
+            ReportBlockStatus(opBase, execCtx);
+
             TFuture<void> future;
             if (auto op = opBase.Maybe<TYtSort>()) {
                 future = DoSort(op.Cast(), execCtx);
@@ -1269,18 +1281,20 @@ public:
         return Clusters_->TryGetServer(cluster);
     }
 
-    NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder) const final {
+    NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const final {
         auto richYPath = NYT::TRichYPath(table);
         if (TSession::TPtr session = GetSession(sessionId, true)) {
             if (auto ytServer = Clusters_->TryGetServer(cluster)) {
                 auto entry = session->TxCache_.GetEntry(ytServer);
-                if (auto p = entry->Snapshots.FindPtr(std::make_pair(table, epoch))) {
-                    richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(table, NYT::TConfig::Get()->Prefix));
-                } else {
-                    auto realTableName = NYql::TransformPath(tmpFolder, table, true, session->UserName_);
+                auto realTableName = NYql::TransformPath(tmpFolder, table, temp, session->UserName_);
+                if (temp && !anonymous) {
                     realTableName = NYT::AddPathPrefix(realTableName, NYT::TConfig::Get()->Prefix);
                     richYPath = NYT::TRichYPath(realTableName);
-                    richYPath.TransactionId(session->TxCache_.GetEntry(ytServer)->Tx->GetId());
+                    richYPath.TransactionId(entry->Tx->GetId());
+                } else {
+                    auto p = entry->Snapshots.FindPtr(std::make_pair(realTableName, epoch));
+                    YQL_ENSURE(p, "Table " << table << " has no snapshot");
+                    richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(realTableName, NYT::TConfig::Get()->Prefix));
                 }
             }
         }
@@ -1328,14 +1342,10 @@ public:
                 }
 
                 auto richYPath = NYT::TRichYPath(table);
-                if (auto p = entry->Snapshots.FindPtr(std::make_pair(table, epoch))) {
-                    richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p));
-                } else {
-                    auto realTableName = NYql::TransformPath(GetTablesTmpFolder(*options.Config()), table, anon, session->UserName_);
-                    realTableName = NYT::AddPathPrefix(realTableName, NYT::TConfig::Get()->Prefix);
-                    richYPath = NYT::TRichYPath(realTableName);
-                    richYPath.TransactionId(entry->Tx->GetId());
-                }
+                auto realTableName = NYql::TransformPath(GetTablesTmpFolder(*options.Config()), table, anon, session->UserName_);
+                auto p = entry->Snapshots.FindPtr(std::make_pair(realTableName, epoch));
+                YQL_ENSURE(p, "Table " << table << " has no snapshot");
+                richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(realTableName, NYT::TConfig::Get()->Prefix));
 
                 waits.push_back(session->Queue_->Async([entry, richYPath, targetPath, logCtx] () {
                     YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
@@ -1582,8 +1592,10 @@ public:
             for (const auto& pathInfo: execCtx->Options_.Paths()) {
                 const auto tablePath = TransformPath(tmpFolder, pathInfo->Table->Name, pathInfo->Table->IsTemp, session->UserName_);
                 NYT::TRichYPath richYtPath{NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix)};
-                if (auto p = entry->Snapshots.FindPtr(std::make_pair(pathInfo->Table->Name, pathInfo->Table->Epoch.GetOrElse(0)))) {
-                    richYtPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(pathInfo->Table->Name, NYT::TConfig::Get()->Prefix));
+                if (!pathInfo->Table->IsTemp || pathInfo->Table->IsAnonymous) {
+                    auto p = entry->Snapshots.FindPtr(std::make_pair(tablePath, pathInfo->Table->Epoch.GetOrElse(0)));
+                    YQL_ENSURE(p, "Table " << tablePath << " (epoch=" << pathInfo->Table->Epoch.GetOrElse(0) << ") has no snapshot");
+                    richYtPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix));
                 }
                 pathInfo->FillRichYPath(richYtPath);  // n.b. throws exception, if there is no RowSpec (we assume it is always there)
                 paths.push_back(std::move(richYtPath));
@@ -5732,6 +5744,49 @@ private:
         } catch (...) {
             return ResultFromCurrentException<TClusterConnectionResult>({}, true);
         }
+    }
+
+    static void ReportBlockStatus(const TYtOpBase& op, const TExecContext<TRunOptions>::TPtr& execCtx) {
+        if (execCtx->Options_.PublicId().Empty()) {
+            return;
+        }
+
+        auto opPublicId = *execCtx->Options_.PublicId();
+
+        TOperationProgress::EOpBlockStatus status;
+        if (auto map = op.Maybe<TYtMap>()) {
+            status = DetermineProgramBlockStatus(map.Cast().Mapper().Body().Ref());
+        } else if (auto map = op.Maybe<TYtReduce>()) {
+            status = DetermineProgramBlockStatus(map.Cast().Reducer().Body().Ref());
+        } else if (auto map = op.Maybe<TYtMapReduce>()) {
+            status = DetermineProgramBlockStatus(map.Cast().Reducer().Body().Ref());
+            if (auto mapLambda = map.Cast().Mapper().Maybe<TCoLambda>()) {
+                status = TOperationProgress::CombineBlockStatuses(status, DetermineProgramBlockStatus(mapLambda.Cast().Body().Ref()));
+            }
+        } else if (auto fill = op.Maybe<TYtFill>()) {
+            status = DetermineProgramBlockStatus(fill.Cast().Content().Body().Ref());
+        } else if (op.Maybe<TYtSort>()) {
+            return;
+        } else if (op.Maybe<TYtCopy>()) {
+            return;
+        } else if (op.Maybe<TYtMerge>()) {
+            return;
+        } else if (op.Maybe<TYtTouch>()) {
+            return;
+        } else if (op.Maybe<TYtDropTable>()) {
+            return;
+        } else if (op.Maybe<TYtStatOut>()) {
+            return;
+        } else if (op.Maybe<TYtDqProcessWrite>()) {
+            return;
+        } else {
+            YQL_ENSURE(false, "unknown operation: " << op.Ref().Content());
+        }
+
+        YQL_CLOG(INFO, ProviderYt) << "Reporting " << status << " block status for operation " << op.Ref().Content() << " with public id #" << opPublicId;
+        auto p = TOperationProgress(TString(YtProviderName), opPublicId, TOperationProgress::EState::InProgress);
+        p.BlockStatus = status;
+        execCtx->Session_->ProgressWriter_(p);
     }
 
 private:

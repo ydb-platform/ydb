@@ -1,8 +1,11 @@
 #include "s3.h"
 
+#include <ydb/core/wrappers/abstract.h>
+
 namespace NKikimr::NBlobDepot {
 
     using TS3Manager = TBlobDepot::TS3Manager;
+    using TEvExternalStorage = NWrappers::TEvExternalStorage;
 
     struct TS3Manager::TEvUploadResult : TEventLocal<TEvUploadResult, TEvPrivate::EvUploadResult> {
     };

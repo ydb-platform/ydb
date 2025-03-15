@@ -39,7 +39,7 @@ public:
 
 class IKernelFetchLogic {
 private:
-    YDB_READONLY(ui32, ColumnId, 0);
+    YDB_READONLY(ui32, EntityId, 0);
 
     virtual void DoStart(TReadActionsCollection& nextRead, TFetchingResultContext& context) = 0;
     virtual void DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) = 0;
@@ -51,8 +51,8 @@ protected:
 public:
     virtual ~IKernelFetchLogic() = default;
 
-    IKernelFetchLogic(const ui32 columnId, const std::shared_ptr<IStoragesManager>& storagesManager)
-        : ColumnId(columnId)
+    IKernelFetchLogic(const ui32 entityId, const std::shared_ptr<IStoragesManager>& storagesManager)
+        : EntityId(entityId)
         , StoragesManager(storagesManager) {
         AFL_VERIFY(StoragesManager);
     }

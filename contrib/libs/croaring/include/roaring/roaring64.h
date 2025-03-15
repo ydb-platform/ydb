@@ -548,11 +548,14 @@ size_t roaring64_bitmap_portable_deserialize_size(const char *buf,
  * order. This is is guaranteed to happen when serializing an existing bitmap,
  * but not for random inputs.
  *
- * You may use roaring64_bitmap_internal_validate to check the validity of the
- * bitmap prior to using it.
+ * If the source is untrusted, you should call
+ * roaring64_bitmap_internal_validate to check the validity of the
+ * bitmap prior to using it. Only after calling
+ * roaring64_bitmap_internal_validate is the bitmap considered safe for use.
  *
- * We recommend that you use checksums to check that serialized data corresponds
- * to a serialized bitmap.
+ * We also recommend that you use checksums to check that serialized data
+ * corresponds to the serialized bitmap. The CRoaring library does not provide
+ * checksumming.
  *
  * This function is endian-sensitive. If you have a big-endian system (e.g., a
  * mainframe IBM s390x), the data format is going to be big-endian and not

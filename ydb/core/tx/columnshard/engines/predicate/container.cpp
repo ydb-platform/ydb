@@ -138,8 +138,13 @@ TConclusion<NKikimr::NOlap::TPredicateContainer> TPredicateContainer::BuildPredi
                     break;
                 }
             }
-            AFL_VERIFY(countSortingFields == object->Batch->num_columns())("count", countSortingFields)("object", object->Batch->num_columns())(
-                                               "schema", pkSchema->ToString())("object", JoinSeq(",", cNames));
+            if (countSortingFields != object->Batch->num_columns()) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "incorrect predicate")("count", countSortingFields)(
+                    "object", object->Batch->num_columns())("schema", pkSchema->ToString())(
+                    "object", JoinSeq(",", cNames));
+                return TConclusionStatus::Fail(
+                    "incorrect predicate (not prefix for pk: " + pkSchema->ToString() + " vs " + JoinSeq(",", cNames) + ")");
+            }
         }
         return TPredicateContainer(object, pkSchema ? ExtractKey(*object, pkSchema) : nullptr);
     }

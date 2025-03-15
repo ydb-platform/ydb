@@ -1,6 +1,4 @@
 GTEST()
-
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
 IF (SANITIZER_TYPE == "thread")

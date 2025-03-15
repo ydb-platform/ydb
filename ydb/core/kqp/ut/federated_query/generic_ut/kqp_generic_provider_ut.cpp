@@ -8,9 +8,9 @@
 #include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
-#include <ydb-cpp-sdk/client/operation/operation.h>
-#include <ydb-cpp-sdk/client/query/query.h>
-#include <ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

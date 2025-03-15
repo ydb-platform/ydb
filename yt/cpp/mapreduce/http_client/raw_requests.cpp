@@ -22,6 +22,8 @@
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
+#include <yt/cpp/mapreduce/io/helpers.h>
+
 #include <library/cpp/yson/node/node_io.h>
 
 #include <util/generic/guid.h>
@@ -307,6 +309,51 @@ NHttpClient::IHttpResponsePtr SkyShareTable(
     TClientContext skyApiHost({.ServerName = host, .HttpClient = NHttpClient::CreateDefaultHttpClient()});
 
     return RequestWithoutRetry(skyApiHost, mutationId, header, "");
+}
+
+struct THttpRequestStream
+    : public IOutputStream
+{
+public:
+    THttpRequestStream(NHttpClient::IHttpRequestPtr request, size_t bufferSize)
+        : Request_(std::move(request))
+        , Underlying_(std::make_unique<TBufferedOutput>(Request_->GetStream(), bufferSize))
+    { }
+
+private:
+    void DoWrite(const void* buf, size_t len) override
+    {
+        Underlying_->Write(buf, len);
+    }
+
+    void DoFinish() override
+    {
+        Underlying_->Finish();
+        Request_->Finish()->GetResponse();
+    }
+
+private:
+    NHttpClient::IHttpRequestPtr Request_;
+    std::unique_ptr<TBufferedOutput> Underlying_;
+};
+
+std::unique_ptr<IOutputStream> WriteTable(
+    const TClientContext& context,
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TMaybe<TFormat>& format,
+    const TTableWriterOptions& options)
+{
+    THttpHeader header("PUT", GetWriteTableCommand(context.Config->ApiVersion));
+    header.AddTransactionId(transactionId);
+    header.SetInputFormat(format);
+    header.SetRequestCompression(ToString(context.Config->ContentEncoding));
+    header.MergeParameters(FormIORequestParameters(path, options));
+
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto request = StartRequestWithoutRetry(context, header, config);
+    return std::make_unique<THttpRequestStream>(std::move(request), options.BufferSize_);
 }
 
 void InsertRows(

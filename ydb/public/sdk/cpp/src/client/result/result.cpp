@@ -1,6 +1,6 @@
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
-#include <ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
 
 #include <ydb/public/api/protos/ydb_common.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>

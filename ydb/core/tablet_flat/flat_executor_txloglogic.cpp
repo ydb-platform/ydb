@@ -37,7 +37,7 @@ TLogicRedo::TLogicRedo(TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookie
 TLogicRedo::~TLogicRedo()
 {}
 
-void TLogicRedo::Describe(IOutputStream &out) const noexcept
+void TLogicRedo::Describe(IOutputStream &out) const
 {
     return Queue->Describe(out);
 }
@@ -47,12 +47,12 @@ void TLogicRedo::InstallCounters(TExecutorCounters *counters, TTabletCountersWit
     AppTxCounters = appTxCounters;
 }
 
-NRedo::TStats TLogicRedo::LogStats() const noexcept
+NRedo::TStats TLogicRedo::LogStats() const
 {
     return { Queue->Items, Queue->Memory, Queue->LargeGlobIdsBytes };
 }
 
-TArrayRef<const NRedo::TUsage> TLogicRedo::GrabLogUsage() const noexcept
+TArrayRef<const NRedo::TUsage> TLogicRedo::GrabLogUsage() const
 {
     return Queue->GrabUsage();
 }

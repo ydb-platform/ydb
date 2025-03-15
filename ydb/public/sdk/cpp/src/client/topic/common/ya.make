@@ -1,7 +1,5 @@
 LIBRARY()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
-
 SRCS(
     callback_context.h
     executor_impl.h

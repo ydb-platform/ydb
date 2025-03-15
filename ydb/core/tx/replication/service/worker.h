@@ -31,7 +31,13 @@ struct TEvWorker {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_REPLICATION_WORKER));
 
     struct TEvHandshake: public TEventLocal<TEvHandshake, EvHandshake> {};
-    struct TEvPoll: public TEventLocal<TEvPoll, EvPoll> {};
+
+    struct TEvPoll: public TEventLocal<TEvPoll, EvPoll> {
+        bool SkipCommit;
+
+        explicit TEvPoll(bool skipCommit = false);
+        TString ToString() const override;
+    };
 
     struct TEvData: public TEventLocal<TEvData, EvData> {
         ui32 PartitionId;

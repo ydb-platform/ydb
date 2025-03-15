@@ -31,7 +31,7 @@ namespace NPage {
             Y_ABORT_UNLESS(tags <= ui32(-Min<i16>()), "Too many column tags");
         }
 
-        void Put(TRowId row, ui16 tag, ui32 bytes) noexcept
+        void Put(TRowId row, ui16 tag, ui32 bytes)
         {
             if (row < Last && Last != Max<TRowId>()) {
                 Y_ABORT("Frame items have to follow sorted by row");
@@ -47,12 +47,12 @@ namespace NPage {
             Cook.emplace_back(TFresh{ tag, bytes });
         }
 
-        void FlushRow() noexcept
+        void FlushRow()
         {
             Flush();
         }
 
-        TSharedData Make() noexcept
+        TSharedData Make()
         {
             Flush();
 
@@ -70,7 +70,7 @@ namespace NPage {
             return 0;
         }
 
-        void Reset() noexcept
+        void Reset()
         {
             Last = Max<TRowId>();
             Rows = 0;
@@ -81,7 +81,7 @@ namespace NPage {
         }
 
     private:
-        TSharedData MakeAnyway() noexcept
+        TSharedData MakeAnyway()
         {
             auto size = sizeof(NPage::TLabel) + sizeof(THeader)
                             + NUtil::NBin::SizeOf(Tags, Array);
@@ -110,7 +110,7 @@ namespace NPage {
             return buf;
         }
 
-        void Flush() noexcept
+        void Flush()
         {
             for (auto it: xrange(Cook.size())) {
                 const i16 ref = it ? i16(it) : -i16(Cook.size());
@@ -137,14 +137,14 @@ namespace NPage {
         using TEntry = TExtBlobs::TEntry;
 
     public:
-        ui32 Put(const NPageCollection::TGlobId &glob) noexcept
+        ui32 Put(const NPageCollection::TGlobId &glob)
         {
             Bytes += glob.Logo.BlobSize();
             Globs.emplace_back(glob);
             return Globs.size() - 1;
         }
 
-        TSharedData Make(bool force = false) const noexcept
+        TSharedData Make(bool force = false) const
         {
             return (Globs  || force) ? MakeAnyway() : TSharedData{ };
         }
@@ -164,13 +164,13 @@ namespace NPage {
             return 0;
         }
 
-        void Reset() noexcept
+        void Reset()
         {
             Globs.clear();
         }
 
     private:
-        TSharedData MakeAnyway() const noexcept
+        TSharedData MakeAnyway() const
         {
             auto size = sizeof(NPage::TLabel) + sizeof(THeader)
                             + NUtil::NBin::SizeOf(Globs);

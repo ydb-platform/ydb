@@ -48,7 +48,10 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         LOG_D("Handle " << ev->Get()->ToString());
 
         Y_ABORT_UNLESS(ReadSession);
-        Send(ReadSession, new TEvYdbProxy::TEvReadTopicRequest());
+        auto settings = TEvYdbProxy::TReadTopicSettings()
+            .SkipCommit(ev->Get()->SkipCommit);
+
+        Send(ReadSession, new TEvYdbProxy::TEvReadTopicRequest(settings));
     }
 
     void Handle(TEvYdbProxy::TEvReadTopicResponse::TPtr& ev) {

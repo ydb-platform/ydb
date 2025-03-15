@@ -4,7 +4,7 @@
 #include <ydb/core/fq/libs/events/events.h>
 
 #include <ydb/library/services/services.pb.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>

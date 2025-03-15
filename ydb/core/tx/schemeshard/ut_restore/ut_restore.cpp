@@ -5203,6 +5203,84 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestImportChangefeeds(3, AddedSchemeWithPermissions);
     }
 
+    void TestCreateCdcStreams(TTestEnv& env, TTestActorRuntime& runtime, ui64& txId, const TString& dbName, ui64 count, bool isShouldSuccess) {
+        for (ui64 i = 1; i <= count; ++i) {
+            TestCreateCdcStream(runtime, ++txId, dbName, Sprintf(R"(
+                TableName: "Original"
+                StreamDescription {
+                  Name: "Stream_%d"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: %s
+                }
+            )", i, isShouldSuccess ? "ECdcStreamFormatJson" : "ECdcStreamFormatProto"));
+            env.TestWaitNotification(runtime, txId);
+        }
+    }
+
+    void ChangefeedsExportRestore(bool isShouldSuccess) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
+        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Original"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "double_value" Type: "Double" }
+            Columns { Name: "float_value" Type: "Float" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStreams(env, runtime, txId, "/MyRoot", 3, isShouldSuccess);
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Original"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot", isShouldSuccess ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::CANCELLED);
+    }
+
+    Y_UNIT_TEST(ChangefeedsExportRestore) {
+        ChangefeedsExportRestore(true);
+    }
+
+    Y_UNIT_TEST(ChangefeedsExportRestoreUnhappyPropose) {
+        ChangefeedsExportRestore(false);
+    }
+
     Y_UNIT_TEST(IgnoreBasicSchemeLimits) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

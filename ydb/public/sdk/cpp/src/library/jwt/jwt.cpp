@@ -1,6 +1,6 @@
 #include <jwt-cpp/jwt.h>
 
-#include <ydb-cpp-sdk/library/jwt/jwt.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/jwt/jwt.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <util/string/builder.h>

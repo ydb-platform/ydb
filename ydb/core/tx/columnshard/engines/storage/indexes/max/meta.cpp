@@ -26,10 +26,6 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
     return NArrow::NScalar::TSerializer::SerializePayloadToString(result).DetachResult();
 }
 
-void TIndexMeta::DoFillIndexCheckers(
-    const std::shared_ptr<NRequest::TDataForIndexesCheckers>& /*info*/, const NSchemeShard::TOlapSchema& /*schema*/) const {
-}
-
 std::shared_ptr<arrow::Scalar> TIndexMeta::GetMaxScalarVerified(
     const std::vector<TString>& data, const std::shared_ptr<arrow::DataType>& dataType) const {
     AFL_VERIFY(data.size());

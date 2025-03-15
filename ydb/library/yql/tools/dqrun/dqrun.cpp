@@ -810,8 +810,12 @@ int RunMain(int argc, const char* argv[])
     }
 
     if (res.Has("replay")) {
-        qStorage = MakeFileQStorage(qStorageDir);
-        qContext = TQContext(qStorage->MakeReader(opId, {}));
+        try {
+            qStorage = MakeFileQStorage(qStorageDir);
+            qContext = TQContext(qStorage->MakeReader(opId, {}));
+        } catch (...) {
+            throw yexception() << "QPlayer replay is probably broken. Exception: " << CurrentExceptionMessage();
+        }
     } else if (res.Has("capture")) {
         qStorage = MakeFileQStorage(qStorageDir);
         qContext = TQContext(qStorage->MakeWriter(opId, {}));

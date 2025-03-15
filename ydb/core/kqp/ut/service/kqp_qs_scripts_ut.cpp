@@ -1,9 +1,9 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
-#include <ydb-cpp-sdk/client/operation/operation.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 
 #include <ydb/core/kqp/counters/kqp_counters.h>
 

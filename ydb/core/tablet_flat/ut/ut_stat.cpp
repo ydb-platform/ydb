@@ -48,7 +48,7 @@ namespace {
         ui64 TouchedBytes = 0, TouchedRows = 0, TouchedIndexBytes = 0, TouchedIndexPages = 0;
     };
 
-    NPage::TConf PageConf(size_t groups, bool writeBTreeIndex, bool lowResolution = false) noexcept
+    NPage::TConf PageConf(size_t groups, bool writeBTreeIndex, bool lowResolution = false)
     {
         NPage::TConf conf{ true, 2 * 1024 };
 
@@ -438,7 +438,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         MixedIndex,
     };
 
-    NPage::TConf PageConf(size_t groups, TMode mode) noexcept
+    NPage::TConf PageConf(size_t groups, TMode mode)
     {
         NPage::TConf conf{ true, 2 * 1024 };
 
@@ -705,7 +705,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             {
             }
 
-            ui32 operator()(const TRow&) noexcept
+            ui32 operator()(const TRow&)
             {
                 while (CurrentSize >= RowsPerBucket) {
                     CurrentSize = NextSize;
@@ -744,7 +744,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             {
             }
 
-            ui32 operator()(const TRow&) noexcept
+            ui32 operator()(const TRow&)
             {
                 auto x = Random.Uniform(1, 1 << Buckets);
                 return Min(ui32(log2(x)), Buckets - 1);
@@ -770,7 +770,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             {
             }
 
-            ui32 operator()(const TRow&) noexcept
+            ui32 operator()(const TRow&)
             {
                 while (CurrentSize >= RowsPerBucket && RowsPerBucket) {
                     CurrentSize = 0;
@@ -806,7 +806,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             {
             }
 
-            ui32 operator()(const TRow&) noexcept
+            ui32 operator()(const TRow&)
             {
                 while (CurrentSize >= RowsPerBucket && RowsPerBucket) {
                     CurrentSize = NextSize;
@@ -846,7 +846,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             {
             }
 
-            ui32 operator()(const TRow&) noexcept
+            ui32 operator()(const TRow&)
             {
                 if (Random.Uniform(20) == 0) {
                     return Random.Uniform(Buckets / 2);
@@ -877,7 +877,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             {
             }
 
-            ui32 operator()(const TRow&) noexcept
+            ui32 operator()(const TRow&)
             {
                 while (CurrentSize >= RowsPerBucket) {
                     CurrentSize = 0;
@@ -916,7 +916,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             {
             }
 
-            ui32 operator()(const TRow&) noexcept
+            ui32 operator()(const TRow&)
             {
                 while (CurrentSize >= RowsPerBucket && RowsPerBucket) {
                     CurrentSize = NextSize;

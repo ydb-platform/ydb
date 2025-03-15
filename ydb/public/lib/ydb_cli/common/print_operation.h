@@ -1,11 +1,11 @@
 #pragma once
 
 #include "formats.h"
-#include <ydb-cpp-sdk/client/export/export.h>
-#include <ydb-cpp-sdk/client/import/import.h>
-#include <ydb-cpp-sdk/client/operation/operation.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/query/query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
 
 namespace NYdb {
 namespace NConsoleClient {

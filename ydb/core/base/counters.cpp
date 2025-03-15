@@ -10,6 +10,7 @@ static const THashSet<TString> DATABASE_SERVICES
     = {{
          TString("blob_depot_agent"),
          TString("compile"),
+         TString("config"),
          TString("coordinator"),
          TString("dsproxy"),
          TString("dsproxy_mon"),

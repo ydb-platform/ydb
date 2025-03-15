@@ -3,8 +3,8 @@
 #include <ydb/library/backup/util.h>
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb-cpp-sdk/client/result/result.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/testing/unittest/registar.h>

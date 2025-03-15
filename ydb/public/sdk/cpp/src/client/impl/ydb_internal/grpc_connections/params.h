@@ -2,10 +2,10 @@
 
 #include <library/cpp/logger/log.h>
 
-#include <src/client/impl/ydb_internal/internal_header.h>
-#include <src/client/impl/ydb_internal/common/types.h>
-#include <ydb-cpp-sdk/client/common_client/ssl_credentials.h>
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/internal_header.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/common/types.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 namespace NYdb::inline Dev {
 

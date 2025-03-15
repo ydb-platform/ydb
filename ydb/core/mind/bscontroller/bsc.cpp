@@ -399,6 +399,96 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerConfigResponse:
         (Response, response));
 }
 
+void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest::TPtr ev) {
+    const auto& record = ev->Get()->Record;
+
+    // prepare the response
+    auto response = std::make_unique<TEvBlobStorage::TEvControllerDistconfResponse>();
+    auto& rr = response->Record;
+    auto h = std::make_unique<IEventHandle>(ev->Sender, SelfId(), response.release(), 0, ev->Cookie);
+    if (ev->InterconnectSession) {
+        h->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
+    }
+
+    rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::OK);
+
+    bool putConfigs = false;
+    bool lock = false;
+
+    std::optional<TString> mainYaml = record.HasCompressedMainConfig()
+        ? std::make_optional(NYamlConfig::DecompressYamlString(record.GetCompressedMainConfig()))
+        : std::nullopt;
+
+    std::optional<TString> storageYaml = record.HasCompressedStorageConfig()
+        ? std::make_optional(NYamlConfig::DecompressYamlString(record.GetCompressedStorageConfig()))
+        : std::nullopt;
+
+    switch (record.GetOperation()) {
+        case NKikimrBlobStorage::TEvControllerDistconfRequest::EnableDistconf:
+            if (ConsoleInteraction->RequestIsBeingProcessed()) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("a request is being processed right now");
+            } else if (record.GetDedicatedConfigMode() != StorageYamlConfig.has_value()) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("can't switch dedicated storage config section along with enabling distconf");
+            } else {
+                putConfigs = lock = true;
+            }
+            break;
+
+        case NKikimrBlobStorage::TEvControllerDistconfRequest::DisableDistconf: {
+            // commit new configuration to the local database and then reply
+            if (!mainYaml) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("missing main config yaml while disabling distconf");
+                break;
+            } else if (storageYaml.has_value() != record.GetDedicatedConfigMode()) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("storage yaml setting does not match desired dedicated storage config section mode");
+                break;
+            }
+
+            // create full yaml config
+            auto metadata = NYamlConfig::GetMainMetadata(*mainYaml);
+            const ui64 mainYamlVersion = metadata.Version.value_or(0);
+            auto updatedMetadata = metadata;
+            updatedMetadata.Version.emplace(mainYamlVersion + 1);
+            TYamlConfig yamlConfig(*mainYaml, mainYamlVersion, NYamlConfig::ReplaceMetadata(*mainYaml, updatedMetadata));
+
+            // check if we have storage yaml expected version
+            std::optional<ui64> expectedStorageYamlConfigVersion;
+            if (record.HasExpectedStorageConfigVersion()) {
+                expectedStorageYamlConfigVersion.emplace(record.GetExpectedStorageConfigVersion());
+            }
+
+            // commit it
+            Execute(CreateTxCommitConfig(std::move(yamlConfig), std::make_optional(std::move(storageYaml)), std::nullopt,
+                expectedStorageYamlConfigVersion, std::exchange(h, {})));
+            break;
+        }
+
+        case NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateConfig:
+            break;
+    }
+
+    if (putConfigs) {
+        if (YamlConfig) {
+            rr.SetCompressedMainConfig(CompressSingleConfig(*YamlConfig));
+            rr.SetExpectedMainConfigVersion(GetVersion(*YamlConfig) + 1);
+        }
+        if (StorageYamlConfig) {
+            rr.SetCompressedStorageConfig(CompressStorageYamlConfig(*StorageYamlConfig));
+        }
+        rr.SetExpectedStorageConfigVersion(ExpectedStorageYamlConfigVersion);
+    }
+
+    if (lock) {
+        ConfigLock.insert(ev->Recipient);
+    }
+
+    TActivationContext::Send(h.release());
+}
+
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateGroupStat::TPtr& ev) {
     TActivationContext::Send(ev->Forward(StatProcessorActorId));
 }
@@ -558,6 +648,7 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(TEvTabletPipe::TEvClientConnected, ConsoleInteraction->Handle);
         hFunc(TEvTabletPipe::TEvClientDestroyed, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvGetBlockResult, ConsoleInteraction->Handle);
+        hFunc(TEvBlobStorage::TEvControllerDistconfRequest, Handle);
         fFunc(TEvBlobStorage::EvControllerShredRequest, EnqueueIncomingEvent);
         cFunc(TEvPrivate::EvUpdateShredState, ShredState.HandleUpdateShredState);
         cFunc(TEvPrivate::EvCommitMetrics, CommitMetrics);

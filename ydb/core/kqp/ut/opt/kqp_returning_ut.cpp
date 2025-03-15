@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
 

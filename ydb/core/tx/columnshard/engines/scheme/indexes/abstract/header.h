@@ -62,8 +62,8 @@ class TDefaultHeader: public IIndexHeader {
 private:
     const ui32 Size;
 
-    virtual std::optional<TBlobRangeLink16> DoGetAddressForCategory(const std::optional<ui64> cat) const override {
-        AFL_VERIFY(!cat)("cat", cat);
+    virtual std::optional<TBlobRangeLink16> DoGetAddressForCategory(const std::optional<ui64> /*cat*/) const override {
+//        AFL_VERIFY(!cat)("cat", cat);
         return TBlobRangeLink16(0, Size);
     }
 

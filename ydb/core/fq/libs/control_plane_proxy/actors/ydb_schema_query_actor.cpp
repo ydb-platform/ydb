@@ -10,7 +10,7 @@
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
 #include <ydb/public/lib/fq/scope.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 namespace NFq::NPrivate {

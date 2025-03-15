@@ -533,6 +533,9 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
                                         if (info->Table->Meta->IsDynamic) {
                                             useItemsCount = false;
                                         }
+                                        if (!info->Table->Cluster) {
+                                            info->Table->Cluster = maybeRead.Cast().DataSource().Cluster().StringValue();
+                                        }
                                         records.push_back(tableRecord);
                                         tableInfos.push_back(info);
                                     }
@@ -553,7 +556,7 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
                                 }
                             }
                             if (!hasNotCalculated && !tableInfos.empty()) {
-                                if (auto dataSizes = EstimateDataSize(TString{maybeRead.Cast().DataSource().Cluster().Value()}, tableInfos, Nothing(), *state, ctx)) {
+                                if (auto dataSizes = EstimateDataSize(tableInfos, Nothing(), *state, ctx)) {
                                     YQL_ENSURE(dataSizes->size() == records.size());
                                     for (size_t i: xrange(records.size())) {
                                         for (auto& factor: factors) {

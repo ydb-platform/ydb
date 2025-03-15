@@ -51,23 +51,6 @@ message TProgram {
     message TCountMinSketchChecker {
     }
 
-    message TOlapIndexChecker {
-        optional uint32 IndexId = 1;
-        optional string ClassName = 2;
-        optional uint64 IndexCategory = 3;
-
-        message TCompositeChecker {
-            repeated TOlapIndexChecker ChildrenCheckers = 1;
-        }
-
-        oneof Implementation {
-            TBloomFilterChecker BloomFilter = 40;
-            TCompositeChecker Composite = 41;
-            TCountMinSketchChecker CountMinSketch = 42;
-            TBloomNGrammFilterChecker BloomNGrammFilter = 43;
-        }
-    }
-
     message TParameter {
         optional string Name = 1;
     }
@@ -215,5 +198,5 @@ message TOlapProgram {
     // RecordBatch deserialization require arrow::Schema, thus store it here
     optional bytes ParametersSchema = 2;
     optional bytes Parameters = 3;
-    optional TProgram.TOlapIndexChecker IndexChecker = 4;
+    reserved 4;
 }

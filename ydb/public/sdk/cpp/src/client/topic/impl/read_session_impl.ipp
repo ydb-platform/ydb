@@ -4,10 +4,10 @@
 #include "read_session_impl.h"
 #undef INCLUDE_READ_SESSION_IMPL_H
 
-#include <src/client/topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <google/protobuf/util/time_util.h>

@@ -28,7 +28,7 @@ TLoader::TLoader(TVector<TIntrusivePtr<TCache>> pageCollections,
 
 TLoader::~TLoader() { }
 
-void TLoader::StageParseMeta() noexcept
+void TLoader::StageParseMeta()
 {
     auto* metaPacket = dynamic_cast<const NPageCollection::TPageCollection*>(Packs.at(0)->PageCollection.Get());
     if (!metaPacket) {
@@ -149,7 +149,7 @@ void TLoader::StageParseMeta() noexcept
     }
 }
 
-TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView(bool preloadIndex) noexcept
+TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView(bool preloadIndex)
 {
     Y_ABORT_UNLESS(!PartView, "PartView already initialized in CreatePartView stage");
     Y_ABORT_UNLESS(Packs && Packs.front());
@@ -275,7 +275,7 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView(bool preloadIndex
     return nullptr;
 }
 
-TAutoPtr<NPageCollection::TFetch> TLoader::StageSliceBounds() noexcept
+TAutoPtr<NPageCollection::TFetch> TLoader::StageSliceBounds()
 {
     Y_ABORT_UNLESS(PartView, "Cannot generate bounds for a missing part");
 
@@ -301,7 +301,7 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageSliceBounds() noexcept
     }
 }
 
-void TLoader::StageDeltas() noexcept
+void TLoader::StageDeltas()
 {
     Y_ABORT_UNLESS(PartView, "Cannot apply deltas to a missing part");
     Y_ABORT_UNLESS(PartView.Slices, "Missing slices in deltas stage");
@@ -316,7 +316,7 @@ void TLoader::StageDeltas() noexcept
     }
 }
 
-TAutoPtr<NPageCollection::TFetch> TLoader::StagePreloadData() noexcept
+TAutoPtr<NPageCollection::TFetch> TLoader::StagePreloadData()
 {
     auto partStore = PartView.As<TPartStore>();
 
@@ -331,7 +331,7 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StagePreloadData() noexcept
     return LoaderEnv->GetFetch();
 }
 
-void TLoader::Save(ui64 cookie, TArrayRef<NSharedCache::TEvResult::TLoaded> loadedPages) noexcept
+void TLoader::Save(ui64 cookie, TArrayRef<NSharedCache::TEvResult::TLoaded> loadedPages)
 {
     Y_ABORT_UNLESS(cookie == 0, "Only the leader pack is used on load");
 

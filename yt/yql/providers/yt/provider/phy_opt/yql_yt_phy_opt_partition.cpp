@@ -38,8 +38,10 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
 
     auto cluster = TString{GetClusterName(input)};
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(keySelectorLambda.Ref(), syncList, cluster, false)
-        || !IsYtCompleteIsolatedLambda(handlerLambda.Ref(), syncList, cluster, false)) {
+    const ERuntimeClusterSelectionMode selectionMode =
+        State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+    if (!IsYtCompleteIsolatedLambda(keySelectorLambda.Ref(), syncList, cluster, false, selectionMode)
+        || !IsYtCompleteIsolatedLambda(handlerLambda.Ref(), syncList, cluster, false, selectionMode)) {
         return node;
     }
 
@@ -97,7 +99,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
         }
 
         TCoLambda sortKeySelectorLambda = partByKey.SortKeySelectorLambda().Cast<TCoLambda>();
-        if (!IsYtCompleteIsolatedLambda(sortKeySelectorLambda.Ref(), syncList, cluster, false)) {
+        if (!IsYtCompleteIsolatedLambda(sortKeySelectorLambda.Ref(), syncList, cluster, false, selectionMode)) {
             return node;
         }
 

@@ -1,7 +1,7 @@
 #include "ydb_ping.h"
 
-#include <ydb-cpp-sdk/client/debug/client.h>
-#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/debug/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <library/cpp/time_provider/monotonic.h>
 

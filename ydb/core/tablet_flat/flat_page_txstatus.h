@@ -131,7 +131,7 @@ namespace NPage {
             }
         }
 
-        TSharedData Finish() noexcept {
+        TSharedData Finish() {
             if (CommittedItems.empty() && RemovedItems.empty()) {
                 return { };
             }

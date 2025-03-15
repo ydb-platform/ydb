@@ -1,7 +1,7 @@
 #include "ut_common.h"
 
-#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>

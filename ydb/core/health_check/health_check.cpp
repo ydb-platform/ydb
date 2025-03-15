@@ -773,7 +773,7 @@ public:
 
     TTabletRequestsState TabletRequests;
 
-    TDuration Timeout = TDuration::MilliSeconds(20000);
+    TDuration Timeout = TDuration::MilliSeconds(HealthCheckConfig.GetTimeout());
     bool ReturnHints = false;
     static constexpr TStringBuf STATIC_STORAGE_POOL_NAME = "static";
 
@@ -1644,7 +1644,7 @@ public:
         for (const auto& [hiveId, hiveResponse] : HiveInfo) {
             if (hiveResponse.IsOk()) {
                 settings.AliveBarrier = TInstant::MilliSeconds(hiveResponse->Record.GetResponseTimestamp()) - TDuration::Minutes(5);
-                settings.MaxRestartsPerPeriod = HealthCheckConfig.GetTabletsRestartsPerPeriodOrangeThreshold();
+                settings.MaxRestartsPerPeriod = HealthCheckConfig.GetThresholds().GetTabletsRestartsOrange();
                 for (const NKikimrHive::TTabletInfo& hiveTablet : hiveResponse->Record.GetTablets()) {
                     TSubDomainKey tenantId = TSubDomainKey(hiveTablet.GetObjectDomain());
                     auto itDomain = FilterDomainKey.find(tenantId);
@@ -1870,9 +1870,9 @@ public:
         FillNodeInfo(nodeId, context.Location.mutable_compute()->mutable_node());
 
         TSelfCheckContext rrContext(&context, "NODE_UPTIME");
-        if (databaseState.NodeRestartsPerPeriod[nodeId] >= HealthCheckConfig.GetNodeRestartsPerPeriodOrangeThreshold()) {
+        if (databaseState.NodeRestartsPerPeriod[nodeId] >= HealthCheckConfig.GetThresholds().GetNodeRestartsOrange()) {
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Node is restarting too often", ETags::Uptime);
-        } else if (databaseState.NodeRestartsPerPeriod[nodeId] >= HealthCheckConfig.GetNodeRestartsPerPeriodYellowThreshold()) {
+        } else if (databaseState.NodeRestartsPerPeriod[nodeId] >= HealthCheckConfig.GetThresholds().GetNodeRestartsYellow()) {
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "The number of node restarts has increased", ETags::Uptime);
         } else {
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
@@ -1910,9 +1910,9 @@ public:
                 long timeDifferenceUs = nodeSystemState.GetMaxClockSkewWithPeerUs();
                 TDuration timeDifferenceDuration = TDuration::MicroSeconds(abs(timeDifferenceUs));
                 Ydb::Monitoring::StatusFlag::Status status;
-                if (timeDifferenceDuration > TDuration::MicroSeconds(HealthCheckConfig.GetNodesTimeDifferenceUsOrangeThreshold())) {
+                if (timeDifferenceDuration > TDuration::MicroSeconds(HealthCheckConfig.GetThresholds().GetNodesTimeDifferenceOrange())) {
                     status = Ydb::Monitoring::StatusFlag::ORANGE;
-                } else if (timeDifferenceDuration > TDuration::MicroSeconds(HealthCheckConfig.GetNodesTimeDifferenceUsYellowThreshold())) {
+                } else if (timeDifferenceDuration > TDuration::MicroSeconds(HealthCheckConfig.GetThresholds().GetNodesTimeDifferenceYellow())) {
                     status = Ydb::Monitoring::StatusFlag::YELLOW;
                 } else {
                     status = Ydb::Monitoring::StatusFlag::GREEN;

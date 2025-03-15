@@ -11,11 +11,11 @@ namespace NDataShard {
 
     template<class TValue>
     struct TRangeTreapDefaultValueTraits {
-        static bool Less(const TValue& a, const TValue& b) noexcept {
+        static bool Less(const TValue& a, const TValue& b) {
             return a < b;
         }
 
-        static bool Equal(const TValue& a, const TValue& b) noexcept {
+        static bool Equal(const TValue& a, const TValue& b) {
             return a == b;
         }
     };
@@ -123,7 +123,7 @@ namespace NDataShard {
         /**
          * Removes all ranges with the given value
          */
-        void RemoveRanges(const TValue& value) noexcept {
+        void RemoveRanges(const TValue& value) {
             auto it = Values.find(value);
             if (it != Values.end()) {
                 while (!it->second.Empty()) {
@@ -250,7 +250,7 @@ namespace NDataShard {
          */
         TNode* FindOrSplit(THolder<TNode>&& t,
                            THolder<TNode>& l, THolder<TNode>& r,
-                           const TBorder& key, const TValue& value) noexcept
+                           const TBorder& key, const TValue& value)
         {
             if (!t) {
                 return nullptr;
@@ -295,7 +295,7 @@ namespace NDataShard {
         /**
          * Removes node t from the tree
          */
-        void DoRemove(TNode* t) noexcept {
+        void DoRemove(TNode* t) {
             Y_DEBUG_ABORT_UNLESS(t, "Trying to remove a nullptr node");
             TNode* p = t->Parent;
             if (p) {
@@ -314,7 +314,7 @@ namespace NDataShard {
         /**
          * Removes the node linked by tptr from the tree
          */
-        void DoRemove(THolder<TNode>* tptr) noexcept {
+        void DoRemove(THolder<TNode>* tptr) {
             THolder<TNode> d = std::move(*tptr);
             Y_DEBUG_ABORT_UNLESS(d, "Cannot remove a null node");
             ++Stats_.Deletes;
@@ -334,7 +334,7 @@ namespace NDataShard {
         /**
          * Merges two subtrees l and r (where l < r)
          */
-        THolder<TNode> Merge(THolder<TNode> l, THolder<TNode> r) noexcept {
+        THolder<TNode> Merge(THolder<TNode> l, THolder<TNode> r) {
             Y_DEBUG_ABORT_UNLESS(!l || l->Parent == nullptr);
             Y_DEBUG_ABORT_UNLESS(!r || r->Parent == nullptr);
             if (!l || !r) {
@@ -356,7 +356,7 @@ namespace NDataShard {
          *
          * Returns the node which was the source of the new MaxRightKey
          */
-        TNode* RecomputeMaxRight(TNode* t) noexcept {
+        TNode* RecomputeMaxRight(TNode* t) {
             TNode* source = t;
             t->MaxRightKey = t->RightKey;
             t->MaxRightMode = t->RightMode;
@@ -379,7 +379,7 @@ namespace NDataShard {
         /**
          * Recomputes MaxRightKey for subtree root t and its parents
          */
-        void RecomputeMaxRights(TNode* t) noexcept {
+        void RecomputeMaxRights(TNode* t) {
             while (t) {
                 RecomputeMaxRight(t);
                 t = t->Parent;
@@ -418,7 +418,7 @@ namespace NDataShard {
          *
          * Returns true when t->MaxRightKey is modified
          */
-        bool ExtendMaxRightKey(TNode* t, const TOwnedCellVec& rightKey, EPrefixMode rightMode) noexcept {
+        bool ExtendMaxRightKey(TNode* t, const TOwnedCellVec& rightKey, EPrefixMode rightMode) {
             int cmp = CompareBorders(t->MaxRightBorder(), TBorder{ rightKey, rightMode });
             if (cmp < 0) {
                 t->MaxRightKey = rightKey;
@@ -433,7 +433,7 @@ namespace NDataShard {
         /**
          * Extends MaxRightKey of node t and all its parents
          */
-        void ExtendMaxRightKeys(TNode* t, const TOwnedCellVec& rightKey, EPrefixMode rightMode) noexcept {
+        void ExtendMaxRightKeys(TNode* t, const TOwnedCellVec& rightKey, EPrefixMode rightMode) {
             while (t && ExtendMaxRightKey(t, rightKey, rightMode)) {
                 t = t->Parent;
             }
@@ -516,7 +516,7 @@ namespace NDataShard {
         /**
          * Validates all invariants for the tree, used for tests
          */
-        void Validate() const noexcept {
+        void Validate() const {
             if (Root) {
                 Y_ABORT_UNLESS(Root->Parent == nullptr, "Root must not have a parent");
                 DoValidate(Root.Get());
@@ -527,7 +527,7 @@ namespace NDataShard {
         /**
          * Validates all invariants for subtree t
          */
-        std::tuple<TNode*, TNode*> DoValidate(TNode* t) const noexcept {
+        std::tuple<TNode*, TNode*> DoValidate(TNode* t) const {
             int cmp;
             TNode* leftMost = t;
             TNode* rightMost = t;

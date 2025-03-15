@@ -12,11 +12,6 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-TConclusion<bool> TIndexBlobsFetchingStep::DoExecuteInplace(
-    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
-    return !source->StartFetchingIndexes(source, step, Indexes);
-}
-
 TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
         source->GetStageData().GetTable()->ToTable(source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
@@ -66,11 +61,6 @@ TConclusion<bool> TShardingFilter::DoExecuteInplace(const std::shared_ptr<IDataS
     auto filter =
         shardingInfo->GetFilter(source->GetStageData().GetTable()->ToTable({}, source->GetContext()->GetCommonContext()->GetResolver()));
     source->MutableStageData().AddFilter(filter);
-    return true;
-}
-
-TConclusion<bool> TApplyIndexStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    source->ApplyIndex(IndexChecker);
     return true;
 }
 

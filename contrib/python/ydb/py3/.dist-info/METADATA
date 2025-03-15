@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: ydb
-Version: 3.18.17
+Version: 3.19.2
 Summary: YDB Python SDK
 Home-page: http://github.com/ydb-platform/ydb-python-sdk
 Author: Yandex LLC
@@ -16,7 +16,7 @@ License-File: LICENSE
 License-File: AUTHORS
 Requires-Dist: grpcio >=1.42.0
 Requires-Dist: packaging
-Requires-Dist: protobuf <5.0.0,>=3.13.0
+Requires-Dist: protobuf <6.0.0,>=3.13.0
 Requires-Dist: aiohttp <4
 Provides-Extra: yc
 Requires-Dist: yandexcloud ; extra == 'yc'

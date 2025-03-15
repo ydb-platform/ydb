@@ -757,6 +757,9 @@ struct TEvBlobStorage {
         EvHugeQueryForbiddenChunks,
         EvHugeForbiddenChunks,
         EvContinueShred,
+        EvQuerySyncToken,
+        EvSyncToken,
+        EvReleaseSyncToken,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -870,6 +873,8 @@ struct TEvBlobStorage {
         EvControllerShredResponse                   = 0x1003162a,
         EvControllerFetchConfigRequest              = 0x1003162b,
         EvControllerFetchConfigResponse             = 0x1003162c,
+        EvControllerDistconfRequest                 = 0x1003162d,
+        EvControllerDistconfResponse                = 0x1003162e,
 
         // BSC interface result section
         EvControllerNodeServiceSetUpdate            = 0x10031802,
@@ -2523,6 +2528,8 @@ struct TEvBlobStorage {
     struct TEvControllerShredResponse;
     struct TEvControllerFetchConfigRequest;
     struct TEvControllerFetchConfigResponse;
+    struct TEvControllerDistconfRequest;
+    struct TEvControllerDistconfResponse;
 
     struct TEvMonStreamQuery;
     struct TEvMonStreamActorDeathNote;

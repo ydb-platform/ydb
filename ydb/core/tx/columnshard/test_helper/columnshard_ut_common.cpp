@@ -67,6 +67,9 @@ bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString
 }
 
 void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap) {
+    auto evSubscribe = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(snap.GetTxId());
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evSubscribe.release());
+
     auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(snap.GetPlanStep(), 0, TTestTxConfig::TxTablet0);
     auto tx = plan->Record.AddTransactions();
     tx->SetTxId(snap.GetTxId());
@@ -74,11 +77,8 @@ void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSn
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, plan.release());
     UNIT_ASSERT(runtime.GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(sender));
-    auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
-    const auto& res = ev->Get()->Record;
-    UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
-    UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_SCHEMA);
-    UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::SUCCESS);
+    auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender);
+    UNIT_ASSERT_EQUAL(ev->Get()->Record.GetTxId(), snap.GetTxId());
 }
 
 void PlanWriteTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap, bool waitResult) {

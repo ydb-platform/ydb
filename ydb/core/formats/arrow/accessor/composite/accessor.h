@@ -61,6 +61,24 @@ public:
         , Chunks(std::move(chunks)) {
     }
 
+    virtual bool HasSubColumnData(const TString& subColumnName) const override {
+        for (auto&& i : Chunks) {
+            if (!i->HasSubColumnData(subColumnName)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    virtual bool HasWholeDataVolume() const override {
+        for (auto&& i : Chunks) {
+            if (!i->HasWholeDataVolume()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     class TIterator: TNonCopyable {
     private:
         const std::shared_ptr<TCompositeChunkedArray> Owner;

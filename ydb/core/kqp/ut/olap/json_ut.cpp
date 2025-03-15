@@ -753,7 +753,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                                                                     (13u, JsonDocument('{"b.c.d" : "1b3"}')), (14u, JsonDocument('{"b.c.d" : "1b4", "a" : "a4"}'))
             ------
             SCHEMA:
-            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=a_index, TYPE=BLOOM_FILTER,
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=a_index, TYPE=$$CATEGORY_BLOOM_FILTER|BLOOM_FILTER$$,
                     FEATURES=`{"column_names" : ["Col2"], "false_positive_probability" : 0.01}`)
             ------
             SCHEMA:
@@ -770,9 +770,16 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             EXPECTED: [[1u;["{\"a.b.c\":\"a1\"}"]]]
             IDX_ND_SKIP_APPROVE: 0, 4, 1
             ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=DROP_INDEX, NAME=a_index)
+            ------
             READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"a.b.c\"") = "1a1" ORDER BY Col1;
             EXPECTED: [[11u;["{\"a.b.c\":\"1a1\"}"]]]
             IDX_ND_SKIP_APPROVE: 0, 4, 1
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=b_index, TYPE=CATEGORY_BLOOM_FILTER,
+                    FEATURES=`{"column_names" : ["Col2"], "false_positive_probability" : 0.01}`)
             ------
             READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") = "1b4" ORDER BY Col1;
             EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]

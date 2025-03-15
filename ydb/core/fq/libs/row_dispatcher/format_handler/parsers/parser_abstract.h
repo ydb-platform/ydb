@@ -3,7 +3,7 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/topic_session_stats.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/common/common.h>
 
-#include <ydb-cpp-sdk/client/topic/read_events.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_events.h>
 
 #include <yql/essentials/public/udf/udf_value.h>
 

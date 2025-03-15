@@ -83,7 +83,7 @@ namespace NTable {
             EraseRowState.Touch(ERowOp::Erase);
         }
 
-        void BeginKey(TCellsRef key) noexcept {
+        void BeginKey(TCellsRef key) {
             Y_ABORT_UNLESS(Phase == 0, "BeginKey called after Finish");
 
             KeyState.Key = key;
@@ -109,7 +109,7 @@ namespace NTable {
             }
         }
 
-        void AddKeyDelta(const TRowState& row, ui64 txId) noexcept
+        void AddKeyDelta(const TRowState& row, ui64 txId)
         {
             Y_ABORT_UNLESS(KeyState.Written == 0, "Cannot add deltas after committed versions");
             Y_ABORT_UNLESS(txId != 0, "Cannot add delta with txId == 0");
@@ -117,7 +117,7 @@ namespace NTable {
             WriteDeltaRow(row, txId);
         }
 
-        void AddKeyVersion(const TRowState& row, TRowVersion version) noexcept
+        void AddKeyVersion(const TRowState& row, TRowVersion version)
         {
             Y_DEBUG_ABORT_UNLESS(version < KeyState.LastVersion, "Key versions must be in descending order");
 
@@ -130,7 +130,7 @@ namespace NTable {
             KeyState.DelayedErase = row == ERowOp::Erase;
         }
 
-        ui32 EndKey() noexcept
+        ui32 EndKey()
         {
             if (!KeyState.Final && KeyState.DelayedErase) {
                 WriteRow(EraseRowState, KeyState.LastVersion, TRowVersion::Max());
@@ -145,7 +145,7 @@ namespace NTable {
             return KeyState.Written + KeyState.WrittenDeltas;
         }
 
-        ERowOp AddRowLegacy(TCellsRef key, const TRowState& row) noexcept
+        ERowOp AddRowLegacy(TCellsRef key, const TRowState& row)
         {
             BeginKey(key);
             AddKeyVersion(row, TRowVersion::Min());
@@ -158,7 +158,7 @@ namespace NTable {
             return row.GetRowState();
         }
 
-        TWriteStats Finish() noexcept
+        TWriteStats Finish()
         {
             Flush(true);
 
@@ -166,7 +166,7 @@ namespace NTable {
         }
 
     private:
-        void WriteRow(const TRowState& row, TRowVersion minVersion, TRowVersion maxVersion) noexcept
+        void WriteRow(const TRowState& row, TRowVersion minVersion, TRowVersion maxVersion)
         {
             if (KeyState.Written == 0) {
                 WriteMainRow(row, minVersion, maxVersion);
@@ -177,7 +177,7 @@ namespace NTable {
             ++KeyState.Written;
         }
 
-        void WriteDeltaRow(const TRowState& row, ui64 txId) noexcept
+        void WriteDeltaRow(const TRowState& row, ui64 txId)
         {
             Y_ABORT_UNLESS(Phase == 0, "WriteDeltaRow called after Finish");
 
@@ -227,7 +227,7 @@ namespace NTable {
             ++KeyState.WrittenDeltas;
         }
 
-        void FlushDeltaRows() noexcept
+        void FlushDeltaRows()
         {
             Y_ABORT_UNLESS(Phase == 0, "FlushDeltaRows called after Finish");
 
@@ -241,7 +241,7 @@ namespace NTable {
             FinishMainKey(false);
         }
 
-        void WriteMainRow(const TRowState& row, TRowVersion minVersion, TRowVersion maxVersion) noexcept
+        void WriteMainRow(const TRowState& row, TRowVersion minVersion, TRowVersion maxVersion)
         {
             Y_ABORT_UNLESS(Phase == 0, "WriteMainRow called after Finish");
 
@@ -317,7 +317,7 @@ namespace NTable {
             }
         }
 
-        void FinishMainKey(bool erased) noexcept
+        void FinishMainKey(bool erased)
         {
             KeyState.RowId = Groups[0].Data.GetLastRowId();
 
@@ -343,7 +343,7 @@ namespace NTable {
             }
         }
 
-        void WriteHistoryRow(const TRowState& row, TRowVersion minVersion, TRowVersion maxVersion) noexcept
+        void WriteHistoryRow(const TRowState& row, TRowVersion minVersion, TRowVersion maxVersion)
         {
             Y_ABORT_UNLESS(Phase == 0, "WriteHistoryRow called after Finish");
 
@@ -419,7 +419,7 @@ namespace NTable {
             }
         }
 
-        bool NeedFlush() const noexcept
+        bool NeedFlush() const
         {
             // Check if adding this row would overflow page collection size limits
             if (Current.Rows > 0) {
@@ -483,7 +483,7 @@ namespace NTable {
             return false;
         }
 
-        void Flush(bool last) noexcept
+        void Flush(bool last)
         {
             // The first group must write the last key
             Y_ABORT_UNLESS(std::exchange(Phase, 1) == 0, "Called twice");
@@ -607,7 +607,7 @@ namespace NTable {
             }
         }
 
-        TString MakeMetaBlob(bool last) const noexcept
+        TString MakeMetaBlob(bool last) const
         {
             NProto::TRoot proto;
 
@@ -718,7 +718,7 @@ namespace NTable {
             return blob;
         }
 
-        TPageId WritePage(TSharedData page, EPage type, ui32 group = 0) noexcept
+        TPageId WritePage(TSharedData page, EPage type, ui32 group = 0)
         {
             NSan::CheckMemIsInitialized(page.data(), page.size());
 
@@ -729,19 +729,19 @@ namespace NTable {
             return Pager.Write(std::move(page), type, group);
         }
 
-        void WriteInplace(TPageId page, TArrayRef<const char> body) noexcept
+        void WriteInplace(TPageId page, TArrayRef<const char> body)
         {
             NSan::CheckMemIsInitialized(body.data(), body.size());
 
             Pager.WriteInplace(page, std::move(body));
         }
 
-        TPageId WriteIf(TSharedData page, EPage type) noexcept
+        TPageId WriteIf(TSharedData page, EPage type)
         {
             return page ? WritePage(std::move(page), type) : Max<TPageId>();
         }
 
-        void Save(TSharedData raw, NPage::TGroupId groupId) noexcept override
+        void Save(TSharedData raw, NPage::TGroupId groupId) override
         {
             auto& g = groupId.Historic ? Histories[groupId.Index] : Groups[groupId.Index];
 
@@ -845,12 +845,12 @@ namespace NTable {
             }
         }
 
-        TLargeObj Save(TRowId row, ui32 tag, const TGlobId &glob) noexcept override
+        TLargeObj Save(TRowId row, ui32 tag, const TGlobId &glob) override
         {
             return Register(row, tag, glob);
         }
 
-        TLargeObj Save(TRowId row, ui32 tag, TArrayRef<const char> plain) noexcept override
+        TLargeObj Save(TRowId row, ui32 tag, TArrayRef<const char> plain) override
         {
             if (plain.size() >= LargeEdge && plain.size() <= MaxLargeBlob) {
                 auto blob = NPage::TLabelWrapper::WrapString(plain, EPage::Opaque, 0);
@@ -878,7 +878,7 @@ namespace NTable {
             }
         }
 
-        TLargeObj Register(TRowId row, ui32 tag, const TGlobId &glob) noexcept
+        TLargeObj Register(TRowId row, ui32 tag, const TGlobId &glob)
         {
             ui32 ref;
 
@@ -904,7 +904,7 @@ namespace NTable {
             return { ELargeObj::Extern, ref };
         }
 
-        TSharedData Encode(TArrayRef<const char> page, ECodec codec, bool force) noexcept
+        TSharedData Encode(TArrayRef<const char> page, ECodec codec, bool force)
         {
             Y_ABORT_UNLESS(codec == ECodec::LZ4, "Only LZ4 encoding allowed");
 
@@ -948,7 +948,7 @@ namespace NTable {
             }
         }
 
-        void InitKey(TStackVec<TCell, 16>& key, const NPage::TDataPage::TRecord* record, NPage::TGroupId groupId) noexcept
+        void InitKey(TStackVec<TCell, 16>& key, const NPage::TDataPage::TRecord* record, NPage::TGroupId groupId)
         {
             const auto& layout = Scheme->GetLayout(groupId);
             key.resize(layout.ColsKeyData.size());
@@ -957,7 +957,7 @@ namespace NTable {
             }
         }
 
-        void CutKey(NPage::TGroupId groupId) noexcept
+        void CutKey(NPage::TGroupId groupId)
         {
             if (!PrevPageLastKey) {
                 return;
@@ -1021,7 +1021,7 @@ namespace NTable {
             return false;
         }
 
-        void SaveSlice(TRowId lastRowId, TSerializedCellVec lastKey) noexcept
+        void SaveSlice(TRowId lastRowId, TSerializedCellVec lastKey)
         {
             Y_ABORT_UNLESS(NextSliceFirstRowId != Max<TRowId>());
             Y_ABORT_UNLESS(NextSliceFirstRowId <= lastRowId);

@@ -33,7 +33,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
         }
     }();
 
-    const bool useIndexes = (IndexChecker ? source->HasIndexes(NIndexes::TIndexDataAddress::ExtractIndexIds(IndexChecker->GetIndexIds())) : false);
+    const bool useIndexes = false;
     const bool hasDeletions = source->GetHasDeletions();
     bool needShardingFilter = false;
     if (!!GetReadMetadata()->GetRequestShardingInfo()) {
@@ -58,15 +58,10 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
 }
 
 std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
-    const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion) const {
+    const bool /*useIndexes*/, const bool needFilterSharding, const bool needFilterDeletion) const {
     const bool partialUsageByPredicate = partialUsageByPredicateExt && GetPredicateColumns()->GetColumnsCount();
 
     NCommon::TFetchingScriptBuilder acc(*this);
-    if (!!IndexChecker && useIndexes) {
-        acc.AddStep(std::make_shared<TIndexBlobsFetchingStep>(
-            std::make_shared<TIndexesSet>(NIndexes::TIndexDataAddress::ExtractIndexIds(IndexChecker->GetIndexIds()))));
-        acc.AddStep(std::make_shared<TApplyIndexStep>(IndexChecker));
-    }
     if (needFilterSharding && !GetShardingColumns()->IsEmpty()) {
         const TColumnsSetIds columnsFetch = *GetShardingColumns();
         acc.AddFetchingStep(columnsFetch, EStageFeaturesIndexes::Filter);
@@ -75,44 +70,23 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
     }
     {
         acc.SetBranchName("exclusive");
-        acc.AddFetchingStep(*GetEFColumns(), EStageFeaturesIndexes::Filter);
         if (needFilterDeletion) {
             acc.AddFetchingStep(*GetDeletionColumns(), EStageFeaturesIndexes::Filter);
-        }
-        if (needSnapshots || GetFFColumns()->Cross(*GetSpecColumns())) {
-            acc.AddFetchingStep(*GetSpecColumns(), EStageFeaturesIndexes::Filter);
-        }
-        if (partialUsageByPredicate) {
-            acc.AddFetchingStep(*GetPredicateColumns(), EStageFeaturesIndexes::Filter);
-        }
-
-        if (needFilterDeletion) {
             acc.AddAssembleStep(*GetDeletionColumns(), "SPEC_DELETION", EStageFeaturesIndexes::Filter, false);
             acc.AddStep(std::make_shared<TDeletionFilter>());
         }
         if (partialUsageByPredicate) {
+            acc.AddFetchingStep(*GetPredicateColumns(), EStageFeaturesIndexes::Filter);
             acc.AddAssembleStep(*GetPredicateColumns(), "PREDICATE", EStageFeaturesIndexes::Filter, false);
             acc.AddStep(std::make_shared<TPredicateFilter>());
         }
         if (needSnapshots || GetFFColumns()->Cross(*GetSpecColumns())) {
+            acc.AddFetchingStep(*GetSpecColumns(), EStageFeaturesIndexes::Filter);
             acc.AddAssembleStep(*GetSpecColumns(), "SPEC", EStageFeaturesIndexes::Filter, false);
             acc.AddStep(std::make_shared<TSnapshotFilter>());
         }
         const auto& chainProgram = GetReadMetadata()->GetProgram().GetChainVerified();
-        for (ui32 stepIdx = 0; stepIdx < chainProgram->GetProcessors().size(); ++stepIdx) {
-            auto& step = chainProgram->GetProcessors()[stepIdx];
-            if (!chainProgram->GetLastOriginalDataFilter() && GetReadMetadata()->HasLimit() &&
-                step->GetProcessorType() == NArrow::NSSA::EProcessorType::Projection) {
-                acc.AddStep(std::make_shared<TFilterCutLimit>(GetReadMetadata()->GetLimitRobust(), GetReadMetadata()->IsDescSorted()));
-            }
-            acc.AddStep(std::make_shared<NCommon::TProgramStepPrepare>(step));
-            acc.AddStep(std::make_shared<NCommon::TProgramStepAssemble>(step));
-            acc.AddStep(std::make_shared<NCommon::TProgramStep>(step));
-            if (step->GetProcessorType() == NArrow::NSSA::EProcessorType::Filter && GetReadMetadata()->HasLimit() &&
-                chainProgram->GetLastOriginalDataFilter() == stepIdx) {
-                acc.AddStep(std::make_shared<TFilterCutLimit>(GetReadMetadata()->GetLimitRobust(), GetReadMetadata()->IsDescSorted()));
-            }
-        }
+        acc.AddStep(std::make_shared<NCommon::TProgramStep>(chainProgram));
     }
     acc.AddStep(std::make_shared<NCommon::TBuildStageResultStep>());
     acc.AddStep(std::make_shared<TPrepareResultStep>());

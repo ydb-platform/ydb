@@ -33,14 +33,8 @@ namespace NKikimr {
             NKikimrBlobStorage::TEvControllerConsoleCommitRequest, EvControllerConsoleCommitRequest> {
         TEvControllerConsoleCommitRequest() = default;
 
-        TEvControllerConsoleCommitRequest(
-            const TString& yamlConfig,
-            bool allowUnknownFields = false,
-            bool bypassMetadataChecks = false) {
-
+        TEvControllerConsoleCommitRequest(const TString& yamlConfig) {
             Record.SetYAML(yamlConfig);
-            Record.SetAllowUnknownFields(allowUnknownFields);
-            Record.SetBypassMetadataChecks(bypassMetadataChecks);
         }
 
         TString ToString() const override {
@@ -130,5 +124,11 @@ namespace NKikimr {
 
     struct TEvBlobStorage::TEvControllerFetchConfigResponse : TEventPB<TEvControllerFetchConfigResponse,
         NKikimrBlobStorage::TEvControllerFetchConfigResponse, EvControllerFetchConfigResponse> {};
+
+    struct TEvBlobStorage::TEvControllerDistconfRequest : TEventPB<TEvControllerDistconfRequest,
+        NKikimrBlobStorage::TEvControllerDistconfRequest, EvControllerDistconfRequest> {};
+
+    struct TEvBlobStorage::TEvControllerDistconfResponse : TEventPB<TEvControllerDistconfResponse,
+        NKikimrBlobStorage::TEvControllerDistconfResponse, EvControllerDistconfResponse> {};
 
 }

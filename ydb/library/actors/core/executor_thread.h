@@ -110,9 +110,9 @@ namespace NActors {
         ui64 CurrentActorScheduledEventsCounter = 0;
 
         // Thread-specific
-        mutable TThreadContext ThreadCtx;
-        mutable TExecutionStats ExecutionStats;
-        ui64 RevolvingReadCounter = 0;
+        alignas(64) mutable TThreadContext ThreadCtx;
+        alignas(64) mutable TExecutionStats ExecutionStats;
+        alignas(64) ui64 RevolvingReadCounter = 0;
         ui64 RevolvingWriteCounter = 0;
         const TString ThreadName;
         volatile TThreadId ThreadId = UnknownThreadId;

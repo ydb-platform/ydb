@@ -1,4 +1,4 @@
-#include <ydb-cpp-sdk/client/table/query_stats/stats.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/query_stats/stats.h>
 
 namespace NYdb::inline Dev {
 namespace NTable {

@@ -1452,6 +1452,9 @@ TFuture<TListJobsResult> TClient::ListJobs(
     if (options.WithMonitoringDescriptor) {
         req->set_with_monitoring_descriptor(*options.WithMonitoringDescriptor);
     }
+    if (options.WithInterruptionInfo) {
+        req->set_with_interruption_info(*options.WithInterruptionInfo);
+    }
     if (options.TaskName) {
         req->set_task_name(*options.TaskName);
     }

@@ -1,6 +1,6 @@
-#include <ydb-cpp-sdk/client/cms/cms.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/cms/cms.h>
 
-#include <src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 #include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 

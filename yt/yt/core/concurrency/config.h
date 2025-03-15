@@ -24,6 +24,9 @@ struct TPeriodicExecutorOptions
 
     //! Sets #Period and Applies set#DefaultJitter.
     static TPeriodicExecutorOptions WithJitter(TDuration period);
+
+    //! Generates the delay for the next invocation from #Period and #Jitter.
+    TDuration GenerateDelay() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

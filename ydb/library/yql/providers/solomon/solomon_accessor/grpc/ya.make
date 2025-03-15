@@ -9,7 +9,7 @@ ENDIF()
 GRPC()
 
 SRCS(
-    solomon_accessor_pb.proto
+    data_service.proto
 )
 
 USE_COMMON_GOOGLE_APIS(

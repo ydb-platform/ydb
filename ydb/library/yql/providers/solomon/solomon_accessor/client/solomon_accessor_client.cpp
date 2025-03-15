@@ -1,13 +1,16 @@
 #include "solomon_accessor_client.h"
 
+#include <library/cpp/json/writer/json.h>
 #include <library/cpp/protobuf/interop/cast.h>
+#include <library/cpp/threading/future/wait/wait.h>
+#include <util/string/join.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <yql/essentials/utils/url_builder.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/solomon_accessor_pb.pb.h>
-#include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/solomon_accessor_pb.grpc.pb.h>
+#include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/data_service.pb.h>
+#include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/data_service.grpc.pb.h>
 
 namespace NYql::NSo {
 
@@ -68,6 +71,161 @@ TString MetricTypeToString(MetricType type)
     }
 }
 
+TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& response)
+{
+    TGetLabelsResult result;
+
+    if (response.CurlResponseCode != CURLE_OK) {
+        return TGetLabelsResponse(TStringBuilder{} << "Error while sending list metric names request to monitoring api: " << response.Issues.ToOneLineString());
+    }
+
+    if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
+        return TGetLabelsResponse(TStringBuilder{} << "Error while sending list metric names request to monitoring api: " << response.Content.data());
+    }
+
+    NJson::TJsonValue json;
+    try {
+        NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
+    } catch (const std::exception& e) {
+        return TGetLabelsResponse(TStringBuilder{} << "Failed to parse response from monitoring api: " << e.what());
+    }
+
+    if (!json.IsMap() || !json.Has("names") || !json["names"].IsArray()) {
+        return TGetLabelsResponse("Invalid result from monitoring api");
+    }
+
+    const auto names = json["names"].GetArray();
+
+    for (const auto& name : names) {
+        if (!name.IsString()) {
+            return TGetLabelsResponse("Invalid label names from monitoring api");
+        } else {
+            result.Labels.push_back(name.GetString());
+        }
+    }
+
+    return TGetLabelsResponse(std::move(result));
+}
+
+TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& response)
+{
+    TListMetricsResult result;
+
+    if (response.CurlResponseCode != CURLE_OK) {
+        return TListMetricsResponse(TStringBuilder{} << "Error while sending list metrics request to monitoring api: " << response.Issues.ToOneLineString());
+    }
+
+    if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
+        return TListMetricsResponse(TStringBuilder{} << "Error while sending list metrics request to monitoring api: " << response.Content.data());
+    }
+
+    NJson::TJsonValue json;
+    try {
+        NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
+    } catch (const std::exception& e) {
+        return TListMetricsResponse(TStringBuilder{} << "Failed to parse response from monitoring api: " << e.what());
+    }
+
+    if (!json.IsMap() || !json.Has("result") || !json.Has("page")) {
+        return TListMetricsResponse("Invalid list metrics result from monitoring api");
+    }
+
+    const auto pagesInfo = json["page"];
+    if (!pagesInfo.IsMap() || !pagesInfo.Has("pagesCount") || !pagesInfo["pagesCount"].IsInteger()) {
+        return TListMetricsResponse("Invalid paging info from monitoring api");
+    }
+
+    result.PagesCount = pagesInfo["pagesCount"].GetInteger();
+
+    for (const auto& metricObj : json["result"].GetArray()) {
+        if (!metricObj.IsMap() || !metricObj.Has("labels") || !metricObj["labels"].IsMap() || !metricObj.Has("type") || !metricObj["type"].IsString()) {
+            return TListMetricsResponse("Invalid list metrics result from monitoring api");
+        }
+
+        std::map<TString, TString> metricLabels;
+        for (const auto& [key, value] : metricObj["labels"].GetMap()) {
+            metricLabels[key] = value.GetString();
+        }
+
+        result.Metrics.emplace_back(std::move(metricLabels), metricObj["type"].GetString());
+    }
+
+    return TListMetricsResponse(std::move(result));
+}
+
+TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResult&& response, size_t expectedSize)
+{
+    TGetPointsCountResult result;
+
+    if (response.CurlResponseCode != CURLE_OK) {
+        return TGetPointsCountResponse(TStringBuilder() << "Error while sending points count request to monitoring api: " << response.Issues.ToOneLineString());
+    }
+
+    if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
+        return TGetPointsCountResponse(TStringBuilder{} << "Error while sending points count request to monitoring api: " << response.Content.data());
+    }
+
+    NJson::TJsonValue json;
+    try {
+        NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
+    } catch (const std::exception& e) {
+        return TGetPointsCountResponse(TStringBuilder{} << "Failed to parse points count response from monitoring api: " << e.what());
+    }
+
+    if (!json.Has("vector") || !json["vector"].IsArray()) {
+        return TGetPointsCountResponse("Invalid points count result from monitoring api");
+    }
+
+    const auto counts = json["vector"].GetArray();
+    if (counts.size() != expectedSize) {
+        return TGetPointsCountResponse("Invalid points count response size from monitoring api");
+    }
+
+    for (size_t i = 0; i < counts.size(); ++i) {
+        if (!counts[i].IsMap() || !counts[i].Has("scalar") || !counts[i].GetMap().at("scalar").IsInteger()) {
+            return TGetPointsCountResponse("Invalid points count response format from monitoring api");
+        }
+        result.PointsCount.push_back(counts[i].GetMap().at("scalar").GetInteger());
+    }
+
+    return TGetPointsCountResponse(std::move(result));
+}
+
+TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResponse&& response)
+{
+    TGetDataResult result;
+
+    if (!status.Ok()) {
+        if (status.GRpcStatusCode == grpc::StatusCode::RESOURCE_EXHAUSTED) {
+            return TGetDataResponse();
+        }
+        return TGetDataResponse(TStringBuilder{} << "Error while sending data request to monitoring api: " << status.Msg);
+    }
+
+    if (response.response_per_query_size() != 1) {
+        return TGetDataResponse("Invalid get data repsonse size from monitoring api");
+    }
+
+    const auto& responseValue = response.response_per_query()[0];
+    YQL_ENSURE(responseValue.has_timeseries_vector());
+    for (const auto& queryResponse : responseValue.timeseries_vector().values()) {
+        auto type = MetricTypeToString(queryResponse.type());
+
+        std::map<TString, TString> labels(queryResponse.labels().begin(), queryResponse.labels().end());
+        std::vector<int64_t> timestamps(queryResponse.timestamp_values().values().begin(), queryResponse.timestamp_values().values().end());
+        std::vector<double> values(queryResponse.double_values().values().begin(), queryResponse.double_values().values().end());
+
+        TMetric metric {
+            .Labels = labels,
+            .Type = type,
+        };
+
+        result.Timeseries.emplace_back(std::move(metric), std::move(timestamps), std::move(values));
+    }
+
+    return TGetDataResponse(std::move(result));
+}
+
 class TSolomonAccessorClient : public ISolomonAccessorClient, public std::enable_shared_from_this<TSolomonAccessorClient>
 {
 public:
@@ -81,92 +239,120 @@ public:
         , DefaultGrpcPort(defaultGrpcPort)
         , Settings(settings)
         , CredentialsProvider(credentialsProvider)
-        , HttpGateway(IHTTPGateway::Make())
-        , GrpcClient(std::make_shared<NYdbGrpc::TGRpcClientLow>())
     {
+        HttpConfig.SetMaxInFlightCount(HttpMaxInflight);
+        HttpGateway = IHTTPGateway::Make(&HttpConfig);
+
         GrpcConfig.Locator = GetGrpcSolomonEndpoint();
         GrpcConfig.EnableSsl = Settings.GetUseSsl();
+        GrpcConfig.MaxInFlight = GrpcMaxInflight;
+        GrpcClient = std::make_shared<NYdbGrpc::TGRpcClientLow>();
+        GrpcConnection = GrpcClient->CreateGRpcServiceConnection<DataService>(GrpcConfig);
+    }
+
+    ~TSolomonAccessorClient() override
+    {
+        GrpcClient->Stop();
     }
 
 public:
-    NThreading::TFuture<TListMetricsResult> ListMetrics(const TString& selectors, int pageSize, int page) const override final
+    NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const TString& selectors) const override final
     {
-        const auto request = BuildListMetricsRequest(selectors, pageSize, page);
-
-        IHTTPGateway::THeaders headers;
-        if (auto authInfo = GetAuthInfo()) {
-            headers.Fields.emplace_back(TStringBuilder{} << "Authorization: " << *authInfo);
-        }
-
-        auto resultPromise = NThreading::NewPromise<TListMetricsResult>();
+        auto resultPromise = NThreading::NewPromise<TGetLabelsResponse>();
         
-        std::weak_ptr<const TSolomonAccessorClient> weakSelf = shared_from_this();
-        // hold context until reply
-        auto cb = [weakSelf, resultPromise](NYql::IHTTPGateway::TResult&& result) mutable
+        auto cb = [resultPromise](NYql::IHTTPGateway::TResult&& result) mutable
         {
-            if (auto self = weakSelf.lock()) {
-                resultPromise.SetValue(self->ProcessHttpResponse(std::move(result)));
-            } else {
-                resultPromise.SetValue(TListMetricsResult("Client has been shut down"));
-            }
+            resultPromise.SetValue(ProcessGetLabelsResponse(std::move(result)));
         };
 
-        HttpGateway->Download(
-            request,
-            headers,
-            0,
-            ListSizeLimit,
-            std::move(cb)
+        DoHttpRequest(
+            std::move(cb),
+            BuildGetLabelsUrl(selectors)
         );
 
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TGetDataResult> GetData(const std::vector<TString>& selectors) const override final
+    NThreading::TFuture<TListMetricsResponse> ListMetrics(const TString& selectors, int pageSize, int page) const override final
     {
-        const auto request = BuildGetDataRequest(selectors);
+        auto resultPromise = NThreading::NewPromise<TListMetricsResponse>();
+        
+        auto cb = [resultPromise](NYql::IHTTPGateway::TResult&& result) mutable
+        {
+            resultPromise.SetValue(ProcessListMetricsResponse(std::move(result)));
+        };
+
+        DoHttpRequest(
+            std::move(cb),
+            BuildListMetricsUrl(selectors, pageSize, page)
+        );
+
+        return resultPromise.GetFuture();
+    }
+
+    NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const std::vector<TMetric>& metrics) const override final
+    {
+        auto requestUrl = BuildGetPointsCountUrl();
+        auto requestBody = BuildGetPointsCountBody(metrics);
+
+        auto resultPromise = NThreading::NewPromise<TGetPointsCountResponse>();
+
+        auto cb = [resultPromise, extectedSize = metrics.size()](NYql::IHTTPGateway::TResult&& response) mutable 
+        {
+            resultPromise.SetValue(ProcessGetPointsCountResponse(std::move(response), extectedSize));
+        };
+
+        DoHttpRequest(
+            std::move(cb),
+            std::move(requestUrl),
+            std::move(requestBody)
+        );
+
+        return resultPromise.GetFuture();
+    }
+
+    NThreading::TFuture<TGetDataResponse> GetData(TMetric metric, TInstant from, TInstant to) const override final
+    {
+        return GetData(BuildSelectorsProgram(metric), from, to);
+    }
+
+    NThreading::TFuture<TGetDataResponse> GetData(TString selectors, TInstant from, TInstant to) const override final
+    {
+        const auto request = BuildGetDataRequest(selectors, from, to);
 
         NYdbGrpc::TCallMeta callMeta;
         if (auto authInfo = GetAuthInfo()) {
             callMeta.Aux.emplace_back("authorization", *authInfo);
         }
+        callMeta.Aux.emplace_back("x-client-id", "yandex-query");
 
-        auto resultPromise = NThreading::NewPromise<TGetDataResult>();
-
-        const auto connection = GrpcClient->CreateGRpcServiceConnection<DataService>(GrpcConfig);
+        auto resultPromise = NThreading::NewPromise<TGetDataResponse>();
 
         auto context = GrpcClient->CreateContext();
         if (!context) {
-            resultPromise.SetValue(TGetDataResult("Client is being shutted down"));
+            resultPromise.SetValue(TGetDataResponse("Client is being shutted down"));
             return resultPromise.GetFuture();
         }
         
-        std::weak_ptr<const TSolomonAccessorClient> weakSelf = shared_from_this();
         // hold context until reply
-        auto cb = [weakSelf, resultPromise, context](
-            NYdbGrpc::TGrpcStatus&& status,
-            ReadResponse&& result) mutable
+        auto cb = [resultPromise, context](NYdbGrpc::TGrpcStatus&& status, ReadResponse&& result) mutable
         {
-            if (auto self = weakSelf.lock()) {
-                resultPromise.SetValue(self->ProcessGrpcResponse(std::move(status), std::move(result)));
-            } else {
-                resultPromise.SetValue(TGetDataResult("Client has been shut down"));
-            }
+            resultPromise.SetValue(ProcessGetDataResponse(std::move(status), std::move(result)));
         };
 
-        connection->DoRequest<ReadRequest, ReadResponse>(
-                    std::move(request),
-                    std::move(cb),
-                    &DataService::Stub::AsyncRead,
-                    callMeta,
-                    context.get()
-                );
+        GrpcConnection->DoRequest<ReadRequest, ReadResponse>(
+            std::move(request),
+            std::move(cb),
+            &DataService::Stub::AsyncRead,
+            callMeta,
+            context.get()
+        );
 
         return resultPromise.GetFuture();
     }
 
 private:
-    TMaybe<TString> GetAuthInfo() const
+    std::optional<TString> GetAuthInfo() const
     {
         if (!Settings.GetUseSsl()) {
             return {};
@@ -194,7 +380,72 @@ private:
         return TStringBuilder() << Settings.GetEndpoint() << ":" << DefaultGrpcPort;
     }
 
-    TString BuildListMetricsRequest(const TString& selectors, int pageSize, int page) const
+    template <typename Callback>
+    void DoHttpRequest(Callback&& callback, TString&& url, TString&& body = "") const
+    {
+        IHTTPGateway::THeaders headers;
+        if (auto authInfo = GetAuthInfo()) {
+            headers.Fields.emplace_back(TStringBuilder{} << "Authorization: " << *authInfo);
+        }
+        headers.Fields.emplace_back("x-client-id: yandex-query");
+        headers.Fields.emplace_back("accept: application/json;charset=UTF-8");
+        headers.Fields.emplace_back("Content-Type: application/json;charset=UTF-8");
+
+        auto retryPolicy = IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy(
+            [](CURLcode, long httpCode)
+            {
+                if (httpCode == 429 /*RESOURCE_EXHAUSTED*/) {
+                    return ERetryErrorClass::ShortRetry;
+                }
+                return ERetryErrorClass::NoRetry;
+            },
+            TDuration::MilliSeconds(10),
+            TDuration::MilliSeconds(200),
+            TDuration::Seconds(1)
+        );
+
+        if (!body.empty()) {
+            HttpGateway->Upload(
+                std::move(url),
+                std::move(headers),
+                std::move(body),
+                std::move(callback),
+                false,
+                retryPolicy
+            );
+        } else {
+            HttpGateway->Download(
+                std::move(url),
+                std::move(headers),
+                0,
+                ListSizeLimit,
+                std::move(callback),
+                {},
+                retryPolicy
+            );
+        }
+    }
+
+    TString BuildGetLabelsUrl(const TString& selectors) const
+    {
+        TUrlBuilder builder(GetHttpSolomonEndpoint());
+
+        builder.AddPathComponent("api");
+        builder.AddPathComponent("v2");
+        builder.AddPathComponent("projects");
+        builder.AddPathComponent(Settings.GetProject());
+        builder.AddPathComponent("sensors");
+        builder.AddPathComponent("names");
+
+        builder.AddUrlParam("selectors", selectors);
+        builder.AddUrlParam("forceCluster", DefaultReplica);
+        builder.AddUrlParam("from", TInstant::Seconds(Settings.GetFrom()).ToIsoStringLocalUpToSeconds());
+        builder.AddUrlParam("to", TInstant::Seconds(Settings.GetTo()).ToIsoStringLocalUpToSeconds());
+
+        return builder.Build();
+    }
+
+    TString BuildListMetricsUrl(const TString& selectors, int pageSize, int page) const
     {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
@@ -208,17 +459,68 @@ private:
         builder.AddUrlParam("forceCluster", DefaultReplica);
         builder.AddUrlParam("pageSize", std::to_string(pageSize));
         builder.AddUrlParam("page", std::to_string(page));
+        builder.AddUrlParam("from", TInstant::Seconds(Settings.GetFrom()).ToIsoStringLocalUpToSeconds());
+        builder.AddUrlParam("to", TInstant::Seconds(Settings.GetTo()).ToIsoStringLocalUpToSeconds());
 
         return builder.Build();
     }
 
-    ReadRequest BuildGetDataRequest(const std::vector<TString>& selectors) const
+    TString BuildGetPointsCountUrl() const
+    {
+        TUrlBuilder builder(GetHttpSolomonEndpoint());
+
+        builder.AddPathComponent("api");
+        builder.AddPathComponent("v2");
+        builder.AddPathComponent("projects");
+        builder.AddPathComponent(Settings.GetProject());
+        builder.AddPathComponent("sensors");
+        builder.AddPathComponent("data");
+
+        return builder.Build();
+    }
+
+    TString BuildGetPointsCountBody(const std::vector<TMetric>& metrics) const
+    {
+        std::vector<TString> selectors;
+        selectors.reserve(metrics.size());
+        std::transform(
+            metrics.begin(),
+            metrics.end(),
+            std::back_inserter(selectors),
+            [this](const TMetric& metric) -> TString 
+            {
+                return TStringBuilder() << "count(" << BuildSelectorsProgram(metric) << ")";
+            }
+        );
+
+        TString program = TStringBuilder() << "[" << JoinSeq(",", selectors) << "]";
+
+        const auto& ds = Settings.GetDownsampling();
+        NJsonWriter::TBuf w;
+        w.BeginObject()
+            .UnsafeWriteKey("from").WriteString(TInstant::Seconds(Settings.GetFrom()).ToString())
+            .UnsafeWriteKey("to").WriteString(TInstant::Seconds(Settings.GetTo()).ToString())
+            .UnsafeWriteKey("program").WriteString(program)
+            .UnsafeWriteKey("downsampling")
+                .BeginObject()
+                    .UnsafeWriteKey("disabled").WriteBool(ds.GetDisabled())
+                    .UnsafeWriteKey("aggregation").WriteString(ds.GetAggregation())
+                    .UnsafeWriteKey("fill").WriteString(ds.GetFill())
+                    .UnsafeWriteKey("gridMillis").WriteLongLong(ds.GetGridMs())
+                .EndObject()
+            .UnsafeWriteKey("forceCluster").WriteString(DefaultReplica)
+        .EndObject();
+
+        return w.Str();
+    }
+
+    ReadRequest BuildGetDataRequest(const TString& selectors, TInstant from, TInstant to) const
     {
         ReadRequest request;
 
         request.mutable_container()->set_project_id(Settings.GetProject());
-        *request.mutable_from_time() = NProtoInterop::CastToProto(TInstant::Seconds(Settings.GetFrom()));
-        *request.mutable_to_time() = NProtoInterop::CastToProto(TInstant::Seconds(Settings.GetTo()));
+        *request.mutable_from_time() = NProtoInterop::CastToProto(from);
+        *request.mutable_to_time() = NProtoInterop::CastToProto(to);
         *request.mutable_force_replica() = DefaultReplica;
 
         if (Settings.GetDownsampling().GetDisabled()) {
@@ -230,146 +532,51 @@ private:
             request.mutable_downsampling()->set_gap_filling(ParseGapFilling(downsampling.GetFill()));
         }
 
-        ui64 cnt = 0;
-        for (const auto& metric : selectors) {
-            auto query = request.mutable_queries()->Add();
-            *query->mutable_value() = metric;
-            *query->mutable_name() = TStringBuilder() << "query" << cnt++;
-            query->set_hidden(false);
-        }
+        auto query = request.mutable_queries()->Add();
+        *query->mutable_value() = selectors;
+        *query->mutable_name() = "query";
+        query->set_hidden(false);
 
         return request;
     }
 
-    TListMetricsResult ProcessHttpResponse(NYql::IHTTPGateway::TResult&& response) const
+    TString BuildSelectorsProgram(const TMetric& metric) const
     {
-        std::vector<TMetric> result;
-
-        if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-            return TListMetricsResult(TStringBuilder{} << "Error while sending list metrics request to monitoring api: " << response.Content.data());
-        }
-
-        NJson::TJsonValue json;
-        try {
-            NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
-        } catch (const std::exception& e) {
-            return TListMetricsResult(TStringBuilder{} << "Failed to parse response from monitoring api: " << e.what());
-        }
-
-        if (!json.IsMap() || !json.Has("result") || !json.Has("page")) {
-            return TListMetricsResult(TStringBuilder{} << "Invalid result from monitoring api");
-        }
-
-        const auto pagesInfo = json["page"];
-        if (!pagesInfo.IsMap() || !pagesInfo.Has("pagesCount") || !pagesInfo["pagesCount"].IsInteger()) {
-            return TListMetricsResult(TStringBuilder{} << "Invalid paging info from monitoring api");
-        }
-
-        size_t pagesCount = pagesInfo["pagesCount"].GetInteger();
-
-        for (const auto& metricObj : json["result"].GetArray()) {
-            try {
-                result.emplace_back(metricObj);
-            } catch (const std::exception& e) {
-                return TListMetricsResult(TStringBuilder{} << "Failed to parse result response from monitoring: " << e.what());
+        std::vector<TString> mappedValues;
+        mappedValues.reserve(Settings.GetRequiredLabelNames().size());
+        std::transform(
+            Settings.GetRequiredLabelNames().begin(),
+            Settings.GetRequiredLabelNames().end(),
+            std::back_inserter(mappedValues),
+            [&labels = metric.Labels](const TString& labelName) -> TString 
+            {
+                if (labels.find(labelName) == labels.end()) {
+                    return TStringBuilder() << labelName << "=\"-\"";
+                }
+                return TStringBuilder() << labelName << "=\"" << labels.at(labelName) << "\"";
             }
-        }
+        );
 
-        return TListMetricsResult(pagesCount, std::move(result));
-    }
-
-    TGetDataResult ProcessGrpcResponse(NYdbGrpc::TGrpcStatus&& status, ReadResponse&& response) const
-    {
-        std::vector<TTimeseries> result;
-
-        if (!status.Ok()) {
-            return TGetDataResult(TStringBuilder{} << "Error while sending data request to monitoring api: " << status.Msg);
-        }
-
-        for (const auto& responseValue : response.response_per_query()) {
-            YQL_ENSURE(responseValue.has_timeseries_vector());
-            for (const auto& queryResponse : responseValue.timeseries_vector().values()) {
-                auto type = MetricTypeToString(queryResponse.type());
-    
-                std::map<TString, TString> labels(queryResponse.labels().begin(), queryResponse.labels().end());                
-                std::vector<int64_t> timestamps(queryResponse.timestamp_values().values().begin(), queryResponse.timestamp_values().values().end());
-                std::vector<double> values(queryResponse.double_values().values().begin(), queryResponse.double_values().values().end());
-    
-                result.emplace_back(queryResponse.name(), std::move(labels), type, std::move(timestamps), std::move(values));
-            }
-
-        }
-
-        return TGetDataResult(std::move(result));
+        return TStringBuilder() << "{" << JoinSeq(",", mappedValues) << "}";
     }
 
 private:
     const TString DefaultReplica;
     const ui64 DefaultGrpcPort;
-    const size_t ListSizeLimit = 1ull << 20;
+    const ui64 ListSizeLimit = 1ull << 20;
+    const ui64 HttpMaxInflight = 200;
+    const ui64 GrpcMaxInflight = 2000;
     const NYql::NSo::NProto::TDqSolomonSource& Settings;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
 
+    THttpGatewayConfig HttpConfig;
     IHTTPGateway::TPtr HttpGateway;
     NYdbGrpc::TGRpcClientConfig GrpcConfig;
+    std::unique_ptr<NYdbGrpc::TServiceConnection<DataService>> GrpcConnection;
     std::shared_ptr<NYdbGrpc::TGRpcClientLow> GrpcClient;
 };
 
 } // namespace
-
-TMetric::TMetric(const NJson::TJsonValue& value)
-{
-    YQL_ENSURE(value.IsMap());
-
-    if (value.Has("labels")) {
-        auto labels = value["labels"];
-        YQL_ENSURE(labels.IsMap());
-
-        for (const auto& [key, value] : labels.GetMapSafe()) {
-            YQL_ENSURE(value.IsString());
-            Labels[key] = value.GetString();
-        }
-    }
-
-    if (value.Has("type")) {
-        YQL_ENSURE(value["type"].IsString());
-        Type = value["type"].GetString();
-    }
-
-    if (value.Has("createdAt")) {
-        YQL_ENSURE(value["createdAt"].IsString());
-        CreatedAt = value["createdAt"].GetString();
-    }
-}
-
-ISolomonAccessorClient::TListMetricsResult::TListMetricsResult()
-    : Success(false)
-{}
-
-ISolomonAccessorClient::TListMetricsResult::TListMetricsResult(const TString& error)
-    : Success(false)
-    , ErrorMsg(error)
-{}
-
-ISolomonAccessorClient::TListMetricsResult::TListMetricsResult(size_t pagesCount, std::vector<TMetric>&& result)
-    : Success(true)
-    , PagesCount(pagesCount)
-    , Result(std::move(result))
-{}
-
-ISolomonAccessorClient::TGetDataResult::TGetDataResult()
-    : Success(false)
-{}
-
-ISolomonAccessorClient::TGetDataResult::TGetDataResult(const TString& error)
-    : Success(false)
-    , ErrorMsg(error)
-{}
-
-ISolomonAccessorClient::TGetDataResult::TGetDataResult(std::vector<TTimeseries>&& result)
-    : Success(true)
-    , Result(std::move(result))
-{}
 
 ISolomonAccessorClient::TPtr
 ISolomonAccessorClient::Make(

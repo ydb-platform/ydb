@@ -47,9 +47,9 @@ public:
             "expected EvEnd <= EventSpaceEnd(TEvents::ES_PRIVATE)");
 
         struct TEvNextListingChunkReceived : public NActors::TEventLocal<TEvNextListingChunkReceived, EvNextListingChunkReceived> {
-            NSo::ISolomonAccessorClient::TListMetricsResult ListingResult;
-            TEvNextListingChunkReceived(NSo::ISolomonAccessorClient::TListMetricsResult listingResult)
-                : ListingResult(std::move(listingResult)) {};
+            NSo::TListMetricsResponse Response;
+            TEvNextListingChunkReceived(NSo::TListMetricsResponse&& response)
+                : Response(std::move(response)) {};
         };
 
         struct TEvRoundRobinStageTimeout : public NActors::TEventLocal<TEvRoundRobinStageTimeout, EvRoundRobinStageTimeout> {
@@ -90,6 +90,7 @@ public:
     STATEFN(ThereAreMetricsToListState) {
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
+                hFunc(TEvSolomonProvider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
                 hFunc(TEvSolomonProvider::TEvGetNextBatch, HandleGetNextBatch);
                 hFunc(TEvPrivatePrivate::TEvNextListingChunkReceived, HandleNextListingChunkReceived);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
@@ -109,6 +110,7 @@ public:
     STATEFN(NoMoreMetricsState) {
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
+                hFunc(TEvSolomonProvider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
                 hFunc(TEvSolomonProvider::TEvGetNextBatch, HandleGetNextBatchForEmptyState);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
                 cFunc(NActors::TEvents::TSystem::Poison, HandlePoison);
@@ -126,6 +128,7 @@ public:
     STATEFN(AnErrorOccurredState) {
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
+                hFunc(TEvSolomonProvider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
                 hFunc(TEvSolomonProvider::TEvGetNextBatch, HandleGetNextBatchForErrorState);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
                 cFunc(NActors::TEvents::TSystem::Poison, HandlePoison);
@@ -141,6 +144,16 @@ public:
     }
 
 private:
+    void HandleUpdateConsumersCount(TEvSolomonProvider::TEvUpdateConsumersCount::TPtr& ev) {
+        if (!UpdatedConsumers.contains(ev->Sender)) {
+            LOG_D("TDqSolomonMetricsQueueActor",
+                "HandleUpdateConsumersCount Reducing ConsumersCount by " << ev->Get()->Record.GetConsumersCountDelta() << ", recieved from " << ev->Sender);
+            UpdatedConsumers.insert(ev->Sender);
+            ConsumersCount -= ev->Get()->Record.GetConsumersCountDelta();
+        }
+        Send(ev->Sender, new TEvSolomonProvider::TEvAck(ev->Get()->Record.GetTransportMeta()));
+    }
+
     void HandleGetNextBatch(TEvSolomonProvider::TEvGetNextBatch::TPtr& ev) {
         if (HasEnoughToSend()) {
             LOG_I("TDqSolomonMetricsQueueActor", "HandleGetNextBatch has enough metrics to send, trying to send them");
@@ -157,7 +170,7 @@ private:
         YQL_ENSURE(ListingFuture.Defined());
         ListingFuture = Nothing();
         LOG_D("TDqSolomonMetricsQueueActor", "HandleNextListingChunkReceived");
-        if (SaveRetrievedResults(ev->Get()->ListingResult)) {
+        if (SaveRetrievedResults(ev->Get()->Response)) {
             AnswerPendingRequests(true);
             if (!HasPendingRequests) {
                 LOG_D("TDqSolomonMetricsQueueActor", "HandleNextListingChunkReceived no pending requests. Trying to prefetch");
@@ -213,22 +226,22 @@ private:
         Become(&TDqSolomonMetricsQueueActor::AnErrorOccurredState);
     }
 
-    bool SaveRetrievedResults(const NSo::ISolomonAccessorClient::TListMetricsResult& listingResult) {
+    bool SaveRetrievedResults(const NSo::TListMetricsResponse& response) {
         LOG_T("TDqSolomonMetricsQueueActor", "SaveRetrievedResults");
-        if (!listingResult.Success) {
-            MaybeIssues = listingResult.ErrorMsg;
+        if (response.Status != NSo::EStatus::STATUS_OK) {
+            MaybeIssues = response.Error;
             return false;
         }
 
-        if (CurrentPage >= listingResult.PagesCount) {
+        if (CurrentPage >= response.Result.PagesCount) {
             LOG_I("TDqSolomonMetricsQueueActor", "SaveRetrievedResults no more metrics to list");
             HasMoreMetrics = false;
             Become(&TDqSolomonMetricsQueueActor::NoMoreMetricsState);
         }
 
-        LOG_D("TDqSolomonMetricsQueueActor", "SaveRetrievedResults saving: " << listingResult.Result.size() << " metrics");
-        for (const auto& metric : listingResult.Result) {
-            NSo::MetricQueue::TMetricLabels protoMetric;
+        LOG_D("TDqSolomonMetricsQueueActor", "SaveRetrievedResults saving: " << response.Result.Metrics.size() << " metrics");
+        for (const auto& metric : response.Result.Metrics) {
+            NSo::MetricQueue::TMetric protoMetric;
             protoMetric.SetType(metric.Type);
             protoMetric.MutableLabels()->insert(metric.Labels.begin(), metric.Labels.end());
             Metrics.emplace_back(std::move(protoMetric));
@@ -266,12 +279,11 @@ private:
             SolomonClient
                 ->ListMetrics(ReadParams.Source.GetSelectors(), PageSize, CurrentPage++)
                 .Subscribe([actorSystem, selfId = SelfId()](
-                                const NThreading::TFuture<NSo::ISolomonAccessorClient::TListMetricsResult>& future) -> void {
+                                NThreading::TFuture<NSo::TListMetricsResponse> future) -> void {
                     try {
                         actorSystem->Send(
                             selfId, 
-                            new TEvPrivatePrivate::TEvNextListingChunkReceived(
-                                std::move(future.GetValue())));
+                            new TEvPrivatePrivate::TEvNextListingChunkReceived(future.ExtractValue()));
                     } catch (const std::exception& e) {
                         actorSystem->Send(
                             selfId,
@@ -347,7 +359,7 @@ private:
 
     void SendMetrics(const NActors::TActorId& consumer, const NDqProto::TMessageTransportMeta& transportMeta) {
         YQL_ENSURE(!MaybeIssues.Defined());
-        std::vector<NSo::MetricQueue::TMetricLabels> result;
+        std::vector<NSo::MetricQueue::TMetric> result;
         while (!Metrics.empty() && result.size() < BatchCountLimit) {
             result.push_back(Metrics.back());
             Metrics.pop_back();
@@ -396,13 +408,14 @@ private:
     bool IsRoundRobinFinishScheduled = false;
     bool RoundRobinStageFinished = false;
     THashSet<NActors::TActorId> StartedConsumers;
+    THashSet<NActors::TActorId> UpdatedConsumers;
     THashSet<NActors::TActorId> FinishedConsumers;
     THashMap<NActors::TActorId, ui64> FinishingConsumerToLastSeqNo;
 
-    TMaybe<NThreading::TFuture<NSo::ISolomonAccessorClient::TListMetricsResult>> ListingFuture;
+    TMaybe<NThreading::TFuture<NSo::TListMetricsResponse>> ListingFuture;
     bool HasPendingRequests;
     THashMap<NActors::TActorId, TDeque<NDqProto::TMessageTransportMeta>> PendingRequests;
-    std::vector<NSo::MetricQueue::TMetricLabels> Metrics;
+    std::vector<NSo::MetricQueue::TMetric> Metrics;
     TMaybe<TString> MaybeIssues;
     
     ui64 PageSize;

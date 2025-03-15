@@ -15,7 +15,6 @@ struct TSolomonSettings {
     NCommon::TConfSetting<ui64, false> MetricsQueuePrefetchSize;
     NCommon::TConfSetting<ui64, false> MetricsQueueBatchCountLimit;
     NCommon::TConfSetting<TString, false> SolomonClientDefaultReplica;
-    NCommon::TConfSetting<ui64, false> MaxInflightDataRequests;
     NCommon::TConfSetting<ui64, false> ComputeActorBatchSize;
 };
 

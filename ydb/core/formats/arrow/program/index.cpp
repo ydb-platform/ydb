@@ -7,7 +7,11 @@ namespace NKikimr::NArrow::NSSA {
 
 TConclusion<IResourceProcessor::EExecutionResult> TOriginalIndexDataProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    auto conclusion = context.GetDataSource()->StartFetchIndex(context, IndexContext);
+    auto source = context.GetDataSource().lock();
+    if (!source) {
+        return TConclusionStatus::Fail("source was destroyed before (index fetch start)");
+    }
+    auto conclusion = source->StartFetchIndex(context, IndexContext);
     if (conclusion.IsFail()) {
         return conclusion;
     } else if (*conclusion) {
@@ -31,7 +35,11 @@ TConclusion<IResourceProcessor::EExecutionResult> TIndexCheckerProcessor::DoExec
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     auto scalarConst = context.GetResources()->GetConstantScalarVerified(GetInput().back().GetColumnId());
 
-    auto conclusion = context.GetDataSource()->CheckIndex(context, IndexContext, scalarConst);
+    auto source = context.GetDataSource().lock();
+    if (!source) {
+        return TConclusionStatus::Fail("source was destroyed before (index check start)");
+    }
+    auto conclusion = source->CheckIndex(context, IndexContext, scalarConst);
     if (conclusion.IsFail()) {
         return conclusion;
     }

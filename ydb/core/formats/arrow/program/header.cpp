@@ -7,7 +7,11 @@ namespace NKikimr::NArrow::NSSA {
 
 TConclusion<IResourceProcessor::EExecutionResult> TOriginalHeaderDataProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    auto conclusion = context.GetDataSource()->StartFetchHeader(context, HeaderContext);
+    auto source = context.GetDataSource().lock();
+    if (!source) {
+        return TConclusionStatus::Fail("source was destroyed before (header fetch start)");
+    }
+    auto conclusion = source->StartFetchHeader(context, HeaderContext);
     if (conclusion.IsFail()) {
         return conclusion;
     } else if (*conclusion) {
@@ -26,7 +30,11 @@ NJson::TJsonValue TOriginalHeaderDataProcessor::DoDebugJson() const {
 
 TConclusion<IResourceProcessor::EExecutionResult> THeaderCheckerProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    auto conclusion = context.GetDataSource()->CheckHeader(context, HeaderContext);
+    auto source = context.GetDataSource().lock();
+    if (!source) {
+        return TConclusionStatus::Fail("source was destroyed before (header check start)");
+    }
+    auto conclusion = source->CheckHeader(context, HeaderContext);
     if (conclusion.IsFail()) {
         return conclusion;
     }

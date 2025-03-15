@@ -185,18 +185,17 @@ ui32 TScanHead::GetInFlightIntervalsCount() const {
         return FetchingInFlightSources.size() + FinishedSources.size();
     }
     ui32 inFlightCountLocal = 0;
-    for (auto it = FinishedSources.begin(); it != FinishedSources.end(); ++it) {
-        if (SortedSources.empty() || (*it)->GetFinish() < SortedSources.front()->GetStart()) {
+    if (SortedSources.empty()) {
+        inFlightCountLocal += FinishedSources.size();
+        inFlightCountLocal += FetchingInFlightSources.size();
+    } else {
+        auto itUpperFinished = SortedSources.size() ? FinishedSources.upper_bound(SortedSources.front()) : FinishedSources.end();
+        auto itUpperFetching = SortedSources.size() ? FetchingInFlightSources.upper_bound(SortedSources.front()) : FinishedSources.end();
+        for (auto&& it = FinishedSources.begin(); it != itUpperFinished; ++it) {
             ++inFlightCountLocal;
-        } else {
-            break;
         }
-    }
-    for (auto it = FetchingInFlightSources.begin(); it != FetchingInFlightSources.end(); ++it) {
-        if (SortedSources.empty() || (*it)->GetFinish() < SortedSources.front()->GetStart()) {
+        for (auto&& it = FetchingInFlightSources.begin(); it != itUpperFetching; ++it) {
             ++inFlightCountLocal;
-        } else {
-            break;
         }
     }
     return inFlightCountLocal;

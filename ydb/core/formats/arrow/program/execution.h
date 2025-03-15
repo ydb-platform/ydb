@@ -88,12 +88,19 @@ public:
 class TProcessorContext {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NAccessor::TAccessorsCollection>, Resources);
-    YDB_READONLY_DEF(std::shared_ptr<IDataSource>, DataSource);
+    YDB_READONLY_DEF(std::weak_ptr<IDataSource>, DataSource);
     YDB_READONLY_DEF(std::optional<ui32>, Limit);
     YDB_READONLY(bool, Reverse, false);
 
 public:
-    TProcessorContext(const std::shared_ptr<IDataSource>& dataSource, const std::shared_ptr<NAccessor::TAccessorsCollection>& resources,
+    template <class T>
+    std::shared_ptr<T> GetDataSourceVerifiedAs() const {
+        auto result = std::static_pointer_cast<T>(DataSource.lock());
+        AFL_VERIFY(result);
+        return result;
+    }
+
+    TProcessorContext(const std::weak_ptr<IDataSource>& dataSource, const std::shared_ptr<NAccessor::TAccessorsCollection>& resources,
         const std::optional<ui32> limit, const bool reverse)
         : Resources(resources)
         , DataSource(dataSource)

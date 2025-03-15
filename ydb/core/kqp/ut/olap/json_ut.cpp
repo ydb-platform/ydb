@@ -6,8 +6,11 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
+#include <ydb/core/tx/limiter/grouped_memory/service/process.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -96,13 +99,11 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             Cerr << noData << "/" << skip << "/" << approves << Endl;
             if (ExpectIndexSkip) {
                 AFL_VERIFY(skip == *ExpectIndexSkip)("expect", ExpectIndexSkip)("real", skip)(
-                                     "current", controller->GetIndexesSkippingOnSelect().Val())(
-                                     "pred", IndexSkipStart);
+                                     "current", controller->GetIndexesSkippingOnSelect().Val())("pred", IndexSkipStart);
             }
             if (ExpectIndexNoData) {
                 AFL_VERIFY(noData == *ExpectIndexNoData)("expect", ExpectIndexNoData)("real", noData)(
-                                       "current", controller->GetIndexesSkippedNoData().Val())(
-                                       "pred", IndexNoDataStart);
+                                       "current", controller->GetIndexesSkippedNoData().Val())("pred", IndexNoDataStart);
             }
             if (ExpectIndexApprove) {
                 AFL_VERIFY(approves == *ExpectIndexApprove)("expect", ExpectIndexApprove)("real", approves)(
@@ -256,6 +257,10 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             for (auto&& i : Commands) {
                 i->Execute(kikimr);
             }
+            AFL_VERIFY(NColumnShard::TMonitoringObjectsCounter<NOlap::NGroupedMemoryManager::TProcessMemoryScope>::GetCounter().Val() == 0)("count",
+                           NColumnShard::TMonitoringObjectsCounter<NOlap::NGroupedMemoryManager::TProcessMemoryScope>::GetCounter().Val());
+            AFL_VERIFY(NColumnShard::TMonitoringObjectsCounter<NOlap::NReader::NCommon::IDataSource>::GetCounter().Val() == 0)(
+                           "count", NColumnShard::TMonitoringObjectsCounter<NOlap::NReader::NCommon::IDataSource>::GetCounter().Val());
         }
     };
 

@@ -17,7 +17,11 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
             return EExecutionResult::Success;
         }
     }
-    auto conclusion = context.GetDataSource()->StartFetchData(context, GetOutputColumnIdOnce(), SubColumnName);
+    auto source = context.GetDataSource().lock();
+    if (!source) {
+        return TConclusionStatus::Fail("source was destroyed before (original fetch start)");
+    }
+    auto conclusion = source->StartFetchData(context, GetOutputColumnIdOnce(), SubColumnName);
     if (conclusion.IsFail()) {
         return conclusion;
     } else if (*conclusion) {
@@ -31,7 +35,11 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnAccessorProcess
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     const auto acc = context.GetResources()->GetAccessorOptional(GetOutputColumnIdOnce());
     if (!acc || !acc->HasSubColumnData(SubColumnName)) {
-        context.GetDataSource()->AssembleAccessor(context, GetOutputColumnIdOnce(), SubColumnName);
+        auto source = context.GetDataSource().lock();
+        if (!source) {
+            return TConclusionStatus::Fail("source was destroyed before (original assemble start)");
+        }
+        source->AssembleAccessor(context, GetOutputColumnIdOnce(), SubColumnName);
     }
     return EExecutionResult::Success;
 }

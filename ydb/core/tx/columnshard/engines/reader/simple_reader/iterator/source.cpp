@@ -167,7 +167,7 @@ TConclusion<bool> TPortionDataSource::DoStartFetchIndex(const NArrow::NSSA::TPro
         addr, NIndexes::TIndexDataAddress(indexMeta->GetIndexId(), category), indexMeta, GetContext()->GetCommonContext()->GetStoragesManager());
 
     TReadActionsCollection readActions;
-    auto source = std::static_pointer_cast<IDataSource>(context.GetDataSource());
+    auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
     NCommon::TFetchingResultContext contextFetch(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
     fetcher->Start(readActions, contextFetch);
 
@@ -198,7 +198,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
 
     {
         auto fetcher = MutableStageData().ExtractFetcherVerified(meta->GetIndexId());
-        auto source = std::static_pointer_cast<IDataSource>(context.GetDataSource());
+        auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
         NCommon::TFetchingResultContext fetchContext(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
         fetcher->OnDataCollected(fetchContext);
     }
@@ -233,7 +233,7 @@ TConclusion<bool> TPortionDataSource::DoStartFetchHeader(
     const NArrow::NSSA::TProcessorContext& context, const TFetchHeaderContext& fetchContext) {
     std::shared_ptr<NCommon::IKernelFetchLogic> fetcher;
     const ui32 columnId = fetchContext.GetColumnId();
-    auto source = std::static_pointer_cast<IDataSource>(context.GetDataSource());
+    auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
     if (GetStageData().GetPortionAccessor().GetColumnChunksPointers(columnId).size() &&
         GetSourceSchema()->GetColumnLoaderVerified(columnId)->GetAccessorConstructor()->GetType() ==
             NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
@@ -264,7 +264,7 @@ TConclusion<bool> TPortionDataSource::DoStartFetchHeader(
 TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckHeader(
     const NArrow::NSSA::TProcessorContext& context, const TFetchHeaderContext& fetchContext) {
     auto result = NArrow::TColumnFilter::BuildAllowFilter();
-    auto source = std::static_pointer_cast<IDataSource>(context.GetDataSource());
+    auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
     {
         if (auto fetcher = MutableStageData().ExtractFetcherOptional(fetchContext.GetColumnId())) {
             NCommon::TFetchingResultContext fetchContext(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
@@ -302,7 +302,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckHeader(
 TConclusion<bool> TPortionDataSource::DoStartFetchData(
     const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
     std::shared_ptr<NCommon::IKernelFetchLogic> fetcher;
-    auto source = std::static_pointer_cast<IDataSource>(context.GetDataSource());
+    auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
     if (subColumnName && GetStageData().GetPortionAccessor().GetColumnChunksPointers(columnId).size() &&
         GetSourceSchema()->GetColumnLoaderVerified(columnId)->GetAccessorConstructor()->GetType() ==
             NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
@@ -332,7 +332,7 @@ TConclusion<bool> TPortionDataSource::DoStartFetchData(
 
 void TPortionDataSource::DoAssembleAccessor(
     const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& /*subColumnName*/) {
-    auto source = std::static_pointer_cast<IDataSource>(context.GetDataSource());
+    auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
     NCommon::TFetchingResultContext fetchContext(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
     auto fetcher = MutableStageData().ExtractFetcherVerified(columnId);
     fetcher->OnDataCollected(fetchContext);

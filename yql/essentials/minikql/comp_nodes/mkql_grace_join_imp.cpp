@@ -447,12 +447,18 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
        }
 
         ui32 tuple1Idx = bucket1->ResumeIdx;
-        if (tuple1Idx == UINT32_MAX) { // This bucket completely proceeded
-	    Y_DEBUG_ABORT_UNLESS(!hasMoreLeftTuples);
-	    Y_DEBUG_ABORT_UNLESS(!hasMoreRightTuples);
-	    Y_DEBUG_ABORT_UNLESS(PartialJoinIncomplete());
+        if (tuple1Idx == UINT32_MAX) { // Partial join is finished for this bucket
+            // This is only possible when
+            Y_DEBUG_ABORT_UNLESS(!hasMoreLeftTuples); // we reached both ends
+            Y_DEBUG_ABORT_UNLESS(!hasMoreRightTuples);
+            Y_DEBUG_ABORT_UNLESS(PartialJoinIncomplete()); // join was suspended at previous step
             continue;
         }
+        YQL_LOG_IF(TRACE, tuple1Idx != 0)
+            << (const void *)this << '#'
+            << bucket
+            << " resume at " << tuple1Idx
+	    ;
 
         auto &leftIds = bucket1->LeftIds;
         leftIds.clear();
@@ -511,6 +517,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         };
 
         if (initHashTable) {
+            Y_DEBUG_ABORT_UNLESS(!PartialJoinIncomplete());
             ui32 tuple2Idx = 0;
             auto it2 = bucket2->KeyIntVals.begin();
             for (ui64 keysValSize = headerSize2; it2 != bucket2->KeyIntVals.end(); it2 += keysValSize, ++tuple2Idx) {
@@ -564,7 +571,13 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
 
         for (ui64 keysValSize = headerSize1; it1 != bucket1->KeyIntVals.end(); it1 += keysValSize, ++tuple1Idx ) {
 
-            if (joinResults.size() >= JoinResultsSizeLimit) {
+            if (joinResults.size() + leftIds.size() >= JoinResultsSizeLimit) {
+                YQL_LOG(GRACEJOIN_TRACE)
+                    << (const void *)this << '#'
+                    << bucket
+                    << " suspend join at "  << tuple1Idx << '/' << tuplesNum1
+                    << ", join result size is " << joinResults.size() << " + " << leftIds.size()
+                    ;
                 partialJoinIncomplete = true;
                 break;
             }
@@ -660,7 +673,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         bucket1->ResumeOffset = it1 - bucket1->KeyIntVals.begin();
         bucket1->ResumeIdx = tuple1Idx;
         if (!hasMoreLeftTuples && !hasMoreRightTuples && bucket1->ResumeOffset == bucket1->KeyIntVals.size()) {
-            bucket1->ResumeIdx = UINT32_MAX;
+            bucket1->ResumeIdx = UINT32_MAX; // partial join is finished for this bucket
             bloomFilter.Shrink();
 
             if (bucketStats2->HashtableMatches) {

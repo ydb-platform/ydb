@@ -818,6 +818,7 @@ private:
                 }
 
                 if (JoinedTablePtr->PartialJoinIncomplete()) {
+                    // Resume suspended join
                     auto& leftTable = *LeftPacker->TablePtr;
                     auto& rightTable = SelfJoinSameKeys_ ? *LeftPacker->TablePtr : *RightPacker->TablePtr;
                     JoinedTablePtr->Join(leftTable, rightTable, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
@@ -843,6 +844,7 @@ private:
                     JoinedTablePtr->ResetIterator();
                 }
             }
+            YQL_DEBUG_ABORT_UNLESS(!JoinedTablePtr->PartialJoinIncomplete());
 
             if (!*HaveMoreRightRows && !*HaveMoreLeftRows) {
                 *JoinCompleted = true;
@@ -1016,7 +1018,7 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
 
                 SpilledBucketsJoinOrderCurrentIndex++;
             } else {
-                *PartialJoinCompleted = true;
+                YQL_DEBUG_ABORT_UNLESS(!JoinedTablePtr->PartialJoinIncomplete());
                 LeftPacker->StartTime = std::chrono::system_clock::now();
                 RightPacker->StartTime = std::chrono::system_clock::now();
                 if ( SelfJoinSameKeys_ ) {

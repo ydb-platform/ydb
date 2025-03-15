@@ -817,7 +817,7 @@ private:
                     return EFetchResult::One;
                 }
 
-                if (JoinedTablePtr->PartialJoinIncomplete) {
+                if (JoinedTablePtr->PartialJoinIncomplete()) {
                     auto& leftTable = *LeftPacker->TablePtr;
                     auto& rightTable = SelfJoinSameKeys_ ? *LeftPacker->TablePtr : *RightPacker->TablePtr;
                     JoinedTablePtr->Join(leftTable, rightTable, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
@@ -992,7 +992,7 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
                     return EFetchResult::One;
                 }
 
-                if (JoinedTablePtr->PartialJoinIncomplete) {
+                if (JoinedTablePtr->PartialJoinIncomplete()) {
                     if ( SelfJoinSameKeys_ ) {
                         JoinedTablePtr->Join(*LeftPacker->TablePtr, *LeftPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows, nextBucketToJoin, nextBucketToJoin+1);
                     } else {

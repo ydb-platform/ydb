@@ -333,7 +333,7 @@ class TTable {
     // Pointers to the joined tables. Lifetime of source tables to join should be greater than joined table
     TTable * JoinTable1 = nullptr;
     TTable * JoinTable2 = nullptr;
-    bool PartialJoinIncomplete = false;
+    bool PartialJoinIncomplete_ = false;
 
     // Returns tuple data in td from bucket with id bucketNum.  Tuple id inside bucket is tupleId.
     inline void GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData& td);
@@ -362,6 +362,8 @@ public:
 
     // Returns value of next tuple. Returs true if there are more tuples
     bool NextTuple(TupleData& td);
+   
+    bool PartialJoinIncomplete() { return PartialJoinIncomplete_; } 
 
     bool TryToPreallocateMemoryForJoin(TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLeftTuples, bool hasMoreRightTuples);
 

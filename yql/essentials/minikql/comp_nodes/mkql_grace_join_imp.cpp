@@ -450,7 +450,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         if (tuple1Idx == UINT32_MAX) { // This bucket completely proceeded
 	    Y_DEBUG_ABORT_UNLESS(!hasMoreLeftTuples);
 	    Y_DEBUG_ABORT_UNLESS(!hasMoreRightTuples);
-	    Y_DEBUG_ABORT_UNLESS(PartialJoinIncomplete);
+	    Y_DEBUG_ABORT_UNLESS(PartialJoinIncomplete());
             continue;
         }
 
@@ -699,7 +699,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             ;
     }
 
-    PartialJoinIncomplete = partialJoinIncomplete;
+    PartialJoinIncomplete_ = partialJoinIncomplete;
 
     HasMoreLeftTuples_ = hasMoreLeftTuples;
     HasMoreRightTuples_ = hasMoreRightTuples;
@@ -932,7 +932,7 @@ void TTable::Clear() {
 
 void TTable::ClearBucket(ui64 bucket) {
     TTableBucket & tb = TableBuckets[bucket];
-    PartialJoinIncomplete = false;
+    PartialJoinIncomplete_ = false;
     tb.ResumeIdx = 0;
     tb.ResumeOffset = 0;
     tb.KeyIntVals.clear();

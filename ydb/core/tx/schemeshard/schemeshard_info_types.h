@@ -2869,7 +2869,6 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         int NextIndexIdx = 0;
         int NextChangefeedIdx = 0;
         TString Issue;
-        int ViewCreationRetries = 0;
         TPathId StreamImplPathId;
 
         TItem() = default;
@@ -2901,6 +2900,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     EState State = EState::Invalid;
     TString Issue;
     TVector<TItem> Items;
+    int WaitingViews = 0;
 
     TSet<TActorId> Subscribers;
 

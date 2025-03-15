@@ -27,6 +27,8 @@ TScanCounters::TScanCounters(const TString& module)
     , NotIndexBlobs(TBase::GetDeriviative("Indexes/NoData/Count"))
     , RecordsAcceptedByIndex(TBase::GetDeriviative("Indexes/Accepted/Records"))
     , RecordsDeniedByIndex(TBase::GetDeriviative("Indexes/Denied/Records"))
+    , RecordsAcceptedByHeader(TBase::GetDeriviative("Headers/Accepted/Records"))
+    , RecordsDeniedByHeader(TBase::GetDeriviative("Headers/Denied/Records"))
 
     , PortionBytes(TBase::GetDeriviative("PortionBytes"))
     , FilterBytes(TBase::GetDeriviative("FilterBytes"))

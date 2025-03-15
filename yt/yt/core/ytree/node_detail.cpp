@@ -123,7 +123,9 @@ void TNodeBase::RemoveSelf(
 
     bool isComposite = (GetType() == ENodeType::Map || GetType() == ENodeType::List);
     if (!request->recursive() && isComposite && AsComposite()->GetChildCount() > 0) {
-        THROW_ERROR_EXCEPTION("Cannot remove non-empty composite node");
+        THROW_ERROR_EXCEPTION(
+            NYTree::EErrorCode::CannotRemoveNonemptyCompositeNode,
+            "Cannot remove non-empty composite node");
     }
 
     DoRemoveSelf(request->recursive(), request->force());

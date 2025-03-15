@@ -176,6 +176,8 @@ enum class EProcessorType {
     AssembleOriginalData,
     FetchIndexData,
     CheckIndexData,
+    FetchHeaderData,
+    CheckHeaderData,
     StreamLogic
 };
 

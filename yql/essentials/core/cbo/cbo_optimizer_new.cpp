@@ -295,8 +295,9 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     }
 
     int newNCols = leftStats.Ncols + rightStats.Ncols;
-    double newByteSize = leftStats.Nrows ? (leftStats.ByteSize / leftStats.Nrows) * newCard : 0 +
-            rightStats.Nrows ? (rightStats.ByteSize / rightStats.Nrows) * newCard : 0;
+    double lhsBytes = leftStats.Nrows ? (leftStats.ByteSize / leftStats.Nrows) * newCard : 0;
+    double rhsBytes = rightStats.Nrows ? (rightStats.ByteSize / rightStats.Nrows) * newCard : 0;
+    double newByteSize = lhsBytes + rhsBytes;
 
     double cost = ComputeJoinCost(leftStats, rightStats, newCard, newByteSize, joinAlgo)
         + leftStats.Cost + rightStats.Cost;

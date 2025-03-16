@@ -316,4 +316,235 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
             }
         }
     }
+
+    Y_UNIT_TEST(TestOptional) {
+        TBlockLayoutConverterTestData data;
+
+        const auto optionalInt64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, true);
+        TVector< NKikimr::NMiniKQL::TType*> types{optionalInt64Type};
+        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+
+        size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(optionalInt64Type);
+        size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
+        Y_ENSURE(blockLen > 8);
+
+        constexpr auto testSize = NMiniKQL::MaxBlockSizeInBytes / sizeof(i64);
+
+        auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), optionalInt64Type, *data.ArrowPool, blockLen, nullptr);
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+
+        for (size_t i = 0; i < testSize; i++) {
+            if (i % 2) {
+                builder->Add(TBlockItem());
+            } else {
+                builder->Add(TBlockItem(i));
+            }
+        }
+        auto datum = builder->Build(true);
+        Y_ENSURE(datum.is_array());
+        TVector<arrow::Datum> columns{datum};
+
+        IBlockLayoutConverter::PackResult packRes;
+        converter->Pack(columns, packRes);
+        UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
+
+        TVector<arrow::Datum> columnsAfterConversion;
+        converter->Unpack(packRes, columnsAfterConversion);
+        UNIT_ASSERT_VALUES_EQUAL_C(columnsAfterConversion.size(), 1, "Expected the one column after conversion");
+        Y_ENSURE(columnsAfterConversion.front().is_array());
+
+        const auto& columnBefore = columns.front().array();
+        const auto& columnAfter = columnsAfterConversion.front().array();
+        auto reader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), optionalInt64Type);
+
+        for (size_t elemIdx = 0; elemIdx < testSize; elemIdx++) {
+            TBlockItem lhs = reader->GetItem(*columnBefore, elemIdx);
+            TBlockItem rhs = reader->GetItem(*columnAfter, elemIdx);
+            UNIT_ASSERT_VALUES_EQUAL_C(bool(lhs), bool(rhs), "Expected the same optionality after conversion");
+
+            if (lhs) {
+                UNIT_ASSERT_VALUES_EQUAL_C(lhs.Get<i64>(), rhs.Get<i64>(), "Expected the same data after conversion");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TestTuple) {
+        TBlockLayoutConverterTestData data;
+
+        std::vector<NMiniKQL::TType*> t;
+        t.push_back(data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64));
+        t.push_back(data.PgmBuilder.NewDataType(NUdf::EDataSlot::String));
+        t.push_back(data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, true));
+        const auto tupleType = data.PgmBuilder.NewTupleType(t);
+        TVector< NKikimr::NMiniKQL::TType*> types{tupleType};
+        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+
+        size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(tupleType);
+        size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
+        Y_ENSURE(blockLen > 8);
+
+        constexpr auto testSize = 512;
+
+        auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), tupleType, *data.ArrowPool, blockLen, nullptr);
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+
+        std::string testString;
+        testString.resize(testSize);
+        std::vector<TBlockItem*> testTuples(testSize);
+        for (size_t i = 0; i < testSize; i++) {
+            testString[i] = static_cast<char>(i);
+
+            TBlockItem* tupleItems = new TBlockItem[3];
+            testTuples.push_back(tupleItems);
+            tupleItems[0] = TBlockItem(i);
+            tupleItems[1] = TBlockItem(TStringRef(testString.data(), i + 1));
+            tupleItems[2] = i % 2 ? TBlockItem(i) : TBlockItem();
+
+            builder->Add(TBlockItem(tupleItems));
+        }
+        auto datum = builder->Build(true);
+        Y_ENSURE(datum.is_array());
+        TVector<arrow::Datum> columns{datum};
+
+        IBlockLayoutConverter::PackResult packRes;
+        converter->Pack(columns, packRes);
+        UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
+
+        TVector<arrow::Datum> columnsAfterConversion;
+        converter->Unpack(packRes, columnsAfterConversion);
+        UNIT_ASSERT_VALUES_EQUAL_C(columnsAfterConversion.size(), columns.size(), "Expected the one column after conversion");
+        Y_ENSURE(columnsAfterConversion.front().is_array());
+
+        const auto& columnBefore = columns.front().array();
+        const auto& columnAfter = columnsAfterConversion.front().array();
+        auto reader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), tupleType);
+
+        for (size_t elemIdx = 0; elemIdx < testSize; elemIdx++) {
+            TBlockItem lhs = reader->GetItem(*columnBefore, elemIdx);
+            TBlockItem rhs = reader->GetItem(*columnAfter, elemIdx);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(lhs.GetElement(0).Get<i64>(), rhs.GetElement(0).Get<i64>(), "Expected the same data after conversion");
+            UNIT_ASSERT_VALUES_EQUAL_C(lhs.GetElement(1).AsStringRef(), rhs.GetElement(1).AsStringRef(), "Expected the same data after conversion");
+            UNIT_ASSERT_VALUES_EQUAL_C(bool(lhs.GetElement(2)), bool(rhs.GetElement(2)), "Expected the same optionality after conversion");
+            if (bool(lhs.GetElement(2))) {
+                UNIT_ASSERT_VALUES_EQUAL_C(lhs.GetElement(2).Get<i64>(), rhs.GetElement(2).Get<i64>(), "Expected the same data after conversion");
+            }
+        }
+
+        for (auto tupleItems : testTuples) {
+            delete[] tupleItems;
+        }
+    }
+
+    Y_UNIT_TEST(TestTzDate) {
+        TBlockLayoutConverterTestData data;
+        using TDtLayout = NUdf::TDataType<TTzDatetime>::TLayout;
+
+        const auto tzDatetimeType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::TzDatetime, false);
+        TVector< NKikimr::NMiniKQL::TType*> types{tzDatetimeType};
+        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+
+        size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(tzDatetimeType);
+        size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
+        Y_ENSURE(blockLen > 8);
+
+        constexpr auto testSize = NMiniKQL::MaxBlockSizeInBytes / (sizeof(TDtLayout) + sizeof(ui16));
+
+        auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), tzDatetimeType, *data.ArrowPool, blockLen, nullptr);
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+
+        for (size_t i = 0; i < testSize; i++) {
+            TBlockItem dt = TBlockItem(i);
+            dt.SetTimezoneId(i * 2);
+            builder->Add(dt);
+        }
+        auto datum = builder->Build(true);
+        Y_ENSURE(datum.is_array());
+        TVector<arrow::Datum> columns{datum};
+
+        IBlockLayoutConverter::PackResult packRes;
+        converter->Pack(columns, packRes);
+        UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
+
+        TVector<arrow::Datum> columnsAfterConversion;
+        converter->Unpack(packRes, columnsAfterConversion);
+        UNIT_ASSERT_VALUES_EQUAL_C(columnsAfterConversion.size(), columns.size(), "Expected the one column after conversion");
+        Y_ENSURE(columnsAfterConversion.front().is_array());
+
+        const auto& columnBefore = columns.front().array();
+        const auto& columnAfter = columnsAfterConversion.front().array();
+        auto reader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), tzDatetimeType);
+
+        for (size_t elemIdx = 0; elemIdx < testSize; elemIdx++) {
+            TBlockItem lhs = reader->GetItem(*columnBefore, elemIdx);
+            TBlockItem rhs = reader->GetItem(*columnAfter, elemIdx);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(lhs.Get<TDtLayout>(), rhs.Get<TDtLayout>(), "Expected the same data after conversion");
+            UNIT_ASSERT_VALUES_EQUAL_C(lhs.GetTimezoneId(), rhs.GetTimezoneId(), "Expected the same data after conversion");
+        }
+    }
+
+    #if 0
+    Y_UNIT_TEST(TestExternalOptional) {
+        TBlockLayoutConverterTestData data;
+
+        const auto doubleOptInt64Type = data.PgmBuilder.NewOptionalType(data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, true));
+        TVector< NKikimr::NMiniKQL::TType*> types{doubleOptInt64Type};
+        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+
+        size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(doubleOptInt64Type);
+        size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
+        Y_ENSURE(blockLen > 8);
+
+        constexpr auto testSize = NMiniKQL::MaxBlockSizeInBytes / sizeof(i64);
+
+        auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), doubleOptInt64Type, *data.ArrowPool, blockLen, nullptr);
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+
+        for (size_t i = 0; i < testSize; i++) {
+            if (i % 2) {
+                builder->Add(TBlockItem(i).MakeOptional());
+            } else if (i % 4) {
+                builder->Add(TBlockItem());
+            } else {
+                builder->Add(TBlockItem().MakeOptional());
+            }
+        }
+        auto datum = builder->Build(true);
+        Y_ENSURE(datum.is_array());
+        TVector<arrow::Datum> columns{datum};
+
+        IBlockLayoutConverter::PackResult packRes;
+        converter->Pack(columns, packRes);
+        UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
+
+        TVector<arrow::Datum> columnsAfterConversion;
+        converter->Unpack(packRes, columnsAfterConversion);
+        UNIT_ASSERT_VALUES_EQUAL_C(columnsAfterConversion.size(), 1, "Expected the one column after conversion");
+        Y_ENSURE(columnsAfterConversion.front().is_array());
+
+        const auto& columnBefore = columns.front().array();
+        const auto& columnAfter = columnsAfterConversion.front().array();
+        auto reader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), doubleOptInt64Type);
+
+        for (size_t elemIdx = 0; elemIdx < testSize; elemIdx++) {
+            TBlockItem lhs = reader->GetItem(*columnBefore, elemIdx);
+            TBlockItem rhs = reader->GetItem(*columnAfter, elemIdx);
+
+            for (size_t i = 0; i < 2; i++) {
+                UNIT_ASSERT_VALUES_EQUAL_C(bool(lhs), bool(rhs), "Expected the same optionality after conversion");
+                if (!lhs) {
+                    break;
+                }
+
+                lhs = lhs.GetOptionalValue();
+                rhs = rhs.GetOptionalValue();
+            }
+
+            if (lhs) {
+                UNIT_ASSERT_VALUES_EQUAL_C(lhs.Get<i64>(), rhs.Get<i64>(), "Expected the same data after conversion");
+            }
+        }
+    }
+    #endif
 }

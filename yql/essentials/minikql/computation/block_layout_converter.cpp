@@ -29,7 +29,9 @@ struct IColumnDataExtractor {
     virtual TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) = 0;
     virtual ui32 GetElementSize() = 0;
     virtual NPackedTuple::EColumnSizeType GetElementSizeType() = 0;
-    virtual std::shared_ptr<arrow::ArrayData> ReserveArray(ui64 bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) = 0;
+    virtual std::shared_ptr<arrow::ArrayData> ReserveArray(const TVector<ui64>& bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) = 0;
+    // Ugly interface, but I dont care
+    virtual void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) = 0;
 };
 
 // ------------------------------------------------------------
@@ -49,7 +51,7 @@ public:
     }
 
     TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
-        Y_ENSURE(array->buffers.size() == 2);
+        Y_ENSURE(array->buffers.size() > 0);
 
         return {array->GetMutableValues<ui8>(0)};
     }
@@ -62,8 +64,10 @@ public:
         return NPackedTuple::EColumnSizeType::Fixed;
     }
 
-    std::shared_ptr<arrow::ArrayData> ReserveArray(ui64 bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) override {
-        Y_ENSURE(bytes == len * GetElementSize());
+    std::shared_ptr<arrow::ArrayData> ReserveArray(const TVector<ui64>& bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) override {
+        Y_ENSURE(bytes.size() == 1);
+        auto bytesCount = bytes.front();
+        Y_ENSURE(bytesCount == len * GetElementSize());
 
         std::shared_ptr<arrow::DataType> type;
         auto isConverted = ConvertArrowType(Type_, type);
@@ -73,9 +77,13 @@ public:
         if (!isBitmapNull) {
             nullBitmap = NUdf::AllocateBitmapWithReserve(len, Pool_);
         }
-        auto dataBuffer = NUdf::AllocateResizableBuffer(bytes, Pool_);
+        auto dataBuffer = NUdf::AllocateResizableBuffer(bytesCount, Pool_);
 
         return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap), std::move(dataBuffer)});
+    }
+
+    void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) override {
+        extractors.push_back(this);
     }
 
 protected:
@@ -99,8 +107,7 @@ public:
     }
 
     TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
-        Y_ENSURE(array->buffers.size() == 2);
-        Y_ENSURE(array->child_data.empty());
+        Y_ENSURE(array->buffers.size() > 0);
 
         return {array->GetMutableValues<ui8>(0)};
     }
@@ -113,8 +120,10 @@ public:
         return NPackedTuple::EColumnSizeType::Fixed;
     }
 
-    std::shared_ptr<arrow::ArrayData> ReserveArray(ui64 bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) override {
-        Y_ENSURE(bytes == len * GetElementSize());
+    std::shared_ptr<arrow::ArrayData> ReserveArray(const TVector<ui64>& bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) override {
+        Y_ENSURE(bytes.size() == 1);
+        auto bytesCount = bytes.front();
+        Y_ENSURE(bytesCount == len * GetElementSize());
 
         std::shared_ptr<arrow::DataType> type;
         auto isConverted = ConvertArrowType(Type_, type);
@@ -124,10 +133,14 @@ public:
         if (!isBitmapNull) {
             nullBitmap = NUdf::AllocateBitmapWithReserve(len, Pool_);
         }
-        auto dataBuffer = NUdf::AllocateResizableBuffer<NUdf::TResizableManagedBuffer<NUdf::TUnboxedValue>>(bytes, Pool_);
-        ARROW_OK(dataBuffer->Resize(bytes));
+        auto dataBuffer = NUdf::AllocateResizableBuffer<NUdf::TResizableManagedBuffer<NUdf::TUnboxedValue>>(bytesCount, Pool_);
+        ARROW_OK(dataBuffer->Resize(bytesCount));
 
         return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap), std::move(dataBuffer)});
+    }
+
+    void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) override {
+        extractors.push_back(this);
     }
 
 protected:
@@ -153,8 +166,7 @@ public:
     }
 
     TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
-        Y_ENSURE(array->buffers.size() == 3);
-        Y_ENSURE(array->child_data.empty());
+        Y_ENSURE(array->buffers.size() > 0);
 
         return {array->GetMutableValues<ui8>(0), nullptr};
     }
@@ -167,7 +179,10 @@ public:
         return NPackedTuple::EColumnSizeType::Variable;
     }
 
-    std::shared_ptr<arrow::ArrayData> ReserveArray(ui64 bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) override {
+    std::shared_ptr<arrow::ArrayData> ReserveArray(const TVector<ui64>& bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) override {
+        Y_ENSURE(bytes.size() == 1);
+        auto bytesCount = bytes.front();
+
         std::shared_ptr<arrow::DataType> type;
         auto isConverted = ConvertArrowType(Type_, type);
         Y_ENSURE(isConverted);
@@ -177,9 +192,16 @@ public:
             nullBitmap = NUdf::AllocateBitmapWithReserve(len, Pool_);
         }
         auto offsetBuffer = NUdf::AllocateResizableBuffer(sizeof(TOffset) * len, Pool_);
-        auto dataBuffer = NUdf::AllocateResizableBuffer(bytes, Pool_);
+        // zeroize offsets buffer, or your code will die
+        // low-level unpack expects that first offset is set to null
+        std::memset(offsetBuffer->mutable_data(), 0, sizeof(TOffset) * len);
+        auto dataBuffer = NUdf::AllocateResizableBuffer(bytesCount, Pool_);
 
         return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap), std::move(offsetBuffer), std::move(dataBuffer)});
+    }
+
+    void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) override {
+        extractors.push_back(this);
     }
 
 protected:
@@ -227,30 +249,14 @@ public:
     }
 
     ui32 GetElementSize() override {
-        ui32 totalSize = 0;
-
-        for (size_t i = 0; i < Children_.size(); i++) {
-            totalSize += Children_[i]->GetElementSize();
-        }
-
-        return totalSize;
+        THROW yexception() << "Do not call GetElementSize on tuples";
     }
 
     NPackedTuple::EColumnSizeType GetElementSizeType() override {
-        auto result = NPackedTuple::EColumnSizeType::Fixed;
-
-        for (size_t i = 0; i < Children_.size(); i++) {
-            if (Children_[i]->GetElementSizeType() == NPackedTuple::EColumnSizeType::Variable) {
-                result = NPackedTuple::EColumnSizeType::Variable;
-            }
-        }
-
-        return result;
+        THROW yexception() << "Do not call GetElementSizeType on tuples";
     }
 
-    // This highly likely wont be working, because we need bytes and len per tuple component
-    // So do not use tuples)
-    std::shared_ptr<arrow::ArrayData> ReserveArray(ui64 bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) override {
+    std::shared_ptr<arrow::ArrayData> ReserveArray(const TVector<ui64>& bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) override {
         std::shared_ptr<arrow::DataType> type;
         auto isConverted = ConvertArrowType(Type_, type);
         Y_ENSURE(isConverted);
@@ -261,10 +267,16 @@ public:
         }
         std::vector<std::shared_ptr<arrow::ArrayData>> reservedChildren;
         for (size_t i = 0; i < Children_.size(); i++) {
-            reservedChildren.push_back(Children_[i]->ReserveArray(bytes, len));
+            reservedChildren.push_back(Children_[i]->ReserveArray({bytes[i]}, len)); // TODO: handle recursive tuple, only one level of nesting is available now
         }
 
         return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap)}, std::move(reservedChildren));
+    }
+
+    void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) override {
+        for (auto& child: Children_) {
+            child->AppendInnerExtractors(extractors);
+        }
     }
 
 protected:
@@ -283,8 +295,6 @@ class TTzDateColumnDataExtractor : public TTupleColumnDataExtractor<Nullable> {
 
 public:
     TTzDateColumnDataExtractor(arrow::MemoryPool* pool, TType* type) {
-        // This highly likely wont be working, because we need another type for datetime components
-        // So do not use datetime)
         this->Pool_ = pool;
         this->Type_ = type;
         this->Children_.push_back(std::make_unique<TFixedSizeColumnDataExtractor<TDateLayout, false>>(pool, type));
@@ -292,10 +302,11 @@ public:
     }
 };
 
+// TODO: Doesn't supported yet, use nullable parameter in type instead
 class TExternalOptionalColumnDataExtractor : public IColumnDataExtractor {
 public:
     TExternalOptionalColumnDataExtractor(
-        IColumnDataExtractor::TPtr inner, arrow::MemoryPool* pool, TType* type // use GetItemType method for type???
+        IColumnDataExtractor::TPtr inner, arrow::MemoryPool* pool, TType* type
     )
         : Inner_(std::move(inner))
         , Pool_(pool)
@@ -310,10 +321,9 @@ public:
     }
 
     TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
-        Y_ENSURE(array->buffers.size() == 1);
-        Y_ENSURE(array->child_data.size() == 1);
+        Y_ENSURE(array->buffers.size() > 0);
 
-        return Inner_->GetNullBitmap(array->child_data[0]);
+        return Inner_->GetNullBitmap(array);
     }
 
     ui32 GetElementSize() override {
@@ -324,7 +334,7 @@ public:
         return Inner_->GetElementSizeType();
     }
 
-    std::shared_ptr<arrow::ArrayData> ReserveArray(ui64 bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) override {
+    std::shared_ptr<arrow::ArrayData> ReserveArray(const TVector<ui64>& bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) override {
         std::shared_ptr<arrow::DataType> type;
         auto isConverted = ConvertArrowType(Type_, type);
         Y_ENSURE(isConverted);
@@ -336,6 +346,10 @@ public:
         auto reservedInner = Inner_->ReserveArray(bytes, len);
 
         return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap)}, {std::move(reservedInner)});
+    }
+
+    void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) override {
+        extractors.push_back(this);
     }
 
 private:
@@ -399,17 +413,33 @@ public:
         bool rememberNullBitmaps = true // remember bitmaps which are equal to nullptr to not allocate memory for them in unpack
     )
         : Extractors_(std::move(extractors))
+        , InnerMapping_(Extractors_.size())
         , RememberNullBitmaps_(rememberNullBitmaps)
         , IsBitmapNull_(Extractors_.size(), false)
     {
         Y_ENSURE(roles.size() == Extractors_.size());
-        TVector<NPackedTuple::TColumnDesc> columnDescrs(Extractors_.size());
+
+        ui32 colCounter = 0;
+        TVector<NPackedTuple::TColumnDesc> columnDescrs;
+        for (size_t i = 0; i < Extractors_.size(); ++i) {
+            auto& extractor = Extractors_[i];
+            auto& mapping = InnerMapping_[i];
+            auto prevSize = InnerExtractors_.size();
+            extractor->AppendInnerExtractors(InnerExtractors_);
+
+            for (size_t j = 0; j < InnerExtractors_.size() - prevSize; ++j) {
+                NPackedTuple::TColumnDesc descr;
+                descr.Role = roles[i];
+                columnDescrs.push_back(descr);
+                mapping.push_back(colCounter);
+                colCounter++;
+            }
+        }
 
         for (size_t i = 0; i < columnDescrs.size(); ++i) {
             auto& descr = columnDescrs[i];
-            descr.Role = roles[i];
-            descr.DataSize = Extractors_[i]->GetElementSize();
-            descr.SizeType = Extractors_[i]->GetElementSizeType();
+            descr.DataSize = InnerExtractors_[i]->GetElementSize();
+            descr.SizeType = InnerExtractors_[i]->GetElementSizeType();
         }
 
         TupleLayout_ = NPackedTuple::TTupleLayout::Create(columnDescrs);
@@ -442,7 +472,7 @@ public:
         auto tuplesToPack = columns.front().array()->length;
         nTuples += tuplesToPack;
         auto newSize = (TupleLayout_->TotalRowSize) * nTuples;
-        packedTuples.resize(newSize + 64);
+        packedTuples.resize(newSize);
 
         TupleLayout_->Pack(
             columnsData.data(), columnsNullBitmap.data(),
@@ -450,7 +480,7 @@ public:
     }
     
     void Unpack(const PackResult& packed, TVector<arrow::Datum>& columns) override {
-        columns.resize(TupleLayout_->Columns.size());
+        columns.resize(Extractors_.size());
 
         std::vector<ui64, TMKQLAllocator<ui64>> bytesPerColumn;
         TupleLayout_->CalculateColumnSizes(
@@ -459,11 +489,17 @@ public:
         TVector<ui8*> columnsData;
         TVector<ui8*> columnsNullBitmap;
         for (size_t i = 0; i < columns.size(); ++i) {
+            const auto& mapping = InnerMapping_[i];
+            TVector<ui64> bytesCount;
+            for (auto idx: mapping) {
+                bytesCount.push_back(bytesPerColumn[idx]);
+            }
+
             bool isBitmapNull = false;
             if (RememberNullBitmaps_) {
                 isBitmapNull = IsBitmapNull_[i];
             }
-            columns[i] = Extractors_[i]->ReserveArray(bytesPerColumn[i], packed.NTuples, isBitmapNull);
+            columns[i] = Extractors_[i]->ReserveArray(bytesCount, packed.NTuples, isBitmapNull);
 
             auto data = Extractors_[i]->GetColumnsData(columns[i].array());
             columnsData.insert(columnsData.end(), data.begin(), data.end());
@@ -483,6 +519,8 @@ public:
 
 private:
     TVector<IColumnDataExtractor::TPtr> Extractors_;
+    std::vector<IColumnDataExtractor*> InnerExtractors_;
+    TVector<TVector<ui32>> InnerMapping_;
     THolder<NPackedTuple::TTupleLayout> TupleLayout_;
     bool RememberNullBitmaps_;
     TVector<bool> IsBitmapNull_;

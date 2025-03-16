@@ -284,6 +284,7 @@ private:
             OutputRows = 0;
             ProbePackedInput.PackedTuples.clear();
             ProbePackedInput.Overflow.clear();
+            ProbePackedInput.NTuples = 0;
             // Do not clear build one, because it is constant for all DoProbe calls
             BuildPackedOutput.clear();
             ProbePackedOutput.clear();
@@ -298,7 +299,6 @@ private:
         IBlockLayoutConverter::PackResult BuildPackedInput;   // converted data right after fetch
         IBlockLayoutConverter::PackResult ProbePackedInput;
 
-        // TODO: should be reserved???
         IBlockLayoutConverter::TPackedTuple BuildPackedOutput;   // packed output after join operation
         IBlockLayoutConverter::TPackedTuple ProbePackedOutput;
 
@@ -402,6 +402,12 @@ public:
         // Reserve memory for probe input
         joinState.ProbePackedInput.PackedTuples.reserve(
             CalcMaxBlockLength(*rightItemTypesArg) * ProbeConverter_->GetTupleLayout()->TotalRowSize);
+        
+        // Reserve memory for output
+        joinState.BuildPackedOutput.reserve(
+            CalcMaxBlockLength(*leftItemTypesArg) * BuildConverter_->GetTupleLayout()->TotalRowSize);
+        joinState.ProbePackedOutput.reserve(
+            CalcMaxBlockLength(*rightItemTypesArg) * ProbeConverter_->GetTupleLayout()->TotalRowSize);
     }
 
     void BuildIndex() {
@@ -463,6 +469,7 @@ public:
             // Clear probe's packed tuples
             // Overflow cant be cleared because output have pointers to it
             joinState.ProbePackedInput.PackedTuples.clear();
+            joinState.ProbePackedInput.NTuples = 0;
         }
 
         // Nothing to do, all work was done

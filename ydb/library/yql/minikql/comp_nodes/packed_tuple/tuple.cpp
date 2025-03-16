@@ -98,6 +98,18 @@ bool TTupleLayout::KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow,
         return false;
     }
 
+    // TODO: better nulls detection??
+    const ui8 rem = KeyColumnsNum % 8;
+    const ui8 masks[2] = {static_cast<ui8>((1 << rem) - 1), 0xFF};
+    for (i32 i = KeyColumnsNum, byteN = 0; i > 0; i -= 8, byteN++) {
+        const ui8 lhsBits = ReadUnaligned<ui8>(lhsRow + BitmaskOffset + byteN);
+        const ui8 rhsBits = ReadUnaligned<ui8>(rhsRow + BitmaskOffset + byteN);
+        const ui8 midx = (i >= 8);
+        if (((lhsBits & masks[midx]) != masks[midx]) || (rhsBits & masks[midx]) != masks[midx]) { // if there is at least one null in key cols
+            return false;
+        }
+    }
+
     for (auto colInd = KeyColumnsFixedNum; colInd != KeyColumnsNum; ++colInd) {
         const auto &col = Columns[colInd];
 
@@ -943,7 +955,6 @@ void TTupleLayoutFallback<TTraits>::Unpack(
     ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
     const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
     ui32 count) const {
-
     std::vector<ui8 *> block_columns;
     for (const auto col_ind : BlockColumnsOrigInds_) {
         block_columns.push_back(columns[col_ind]);

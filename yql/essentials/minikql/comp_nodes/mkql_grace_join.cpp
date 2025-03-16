@@ -1000,7 +1000,7 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
                     } else {
                         JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows, nextBucketToJoin, nextBucketToJoin+1);
                     }
-                    JoinedTablePtr->ResetIterator();
+                    JoinedTablePtr->ResetIterator(nextBucketToJoin);
                     continue;
                 }
 
@@ -1027,7 +1027,7 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
                     JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows, nextBucketToJoin, nextBucketToJoin+1);
                 }
 
-                JoinedTablePtr->ResetIterator();
+                JoinedTablePtr->ResetIterator(nextBucketToJoin);
                 LeftPacker->EndTime = std::chrono::system_clock::now();
                 RightPacker->EndTime = std::chrono::system_clock::now();
             }

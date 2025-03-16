@@ -358,7 +358,7 @@ public:
 
 
     // Resets iterators. In case of join results table it also resets iterators for joined tables
-    void ResetIterator();
+    void ResetIterator(ui32 bucket = 0);
 
     // Returns value of next tuple. Returs true if there are more tuples
     bool NextTuple(TupleData& td);

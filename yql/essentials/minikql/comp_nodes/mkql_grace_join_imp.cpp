@@ -168,9 +168,9 @@ TTable::EAddTupleResult TTable::AddTuple(  ui64 * intColumns, char ** stringColu
     return EAddTupleResult::Added;
 }
 
-void TTable::ResetIterator() {
+void TTable::ResetIterator(ui32 bucket) {
     CurrIterIndex = 0;
-    CurrIterBucket = 0;
+    CurrIterBucket = bucket;
     if (IsTableJoined) {
         JoinTable1->ResetIterator();
         JoinTable2->ResetIterator();

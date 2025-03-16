@@ -287,6 +287,9 @@ private:
             // TODO: decide by non-empty slice and node intersection, but this requires size calculation changes too
             if (it->Has(node.EndRowId - 1)) {
                 LOG_BUILD_STATS("slicing node " << node.ToString(KeyDefaults) << " => take leaf");
+                // the slice may start after node begin, shift the node begin to make it more sensible
+                node.BeginRowId = it->BeginRowId();
+                node.BeginKey = MakeCellsIterableKey(node.Part, it->FirstKey);
                 AddFutureEvents(node);
             } else {
                 LOG_BUILD_STATS("slicing node " << node.ToString(KeyDefaults) << " => skip leaf");

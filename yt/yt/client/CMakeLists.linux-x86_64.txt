@@ -52,6 +52,7 @@ target_link_libraries(yt-yt-client PUBLIC
   yt-library-numeric
   yt-library-quantile_digest
   yt_proto-yt-client
+  cpp-digest-crc32c
   library-cpp-json
   cpp-string_utils-base64
   contrib-libs-pfr

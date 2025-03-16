@@ -17,6 +17,8 @@ Release date:
   * [automatic index selection](./dev/secondary-indexes#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) for queries.
 
 * Added the ability to [read and write to a topic](./reference/kafka-api/examples#primery-rabot-s-kafka-api) using the Kafka API without authentication.
+* [Force](https://github.com/ydb-platform/ydb/pull/15473) oldest (not newest) locks into shared locks due to range limits.
+
 
 #### Bug Fixes
 
@@ -26,6 +28,9 @@ Release date:
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15074) a rare crash in datashard when a dropped table shard is restarted with uncommitted persistent changes.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15194) an error that could disrupt the order of message processing in a topic.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15308) a rare error that caused possible stop of reading from the topic partition.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15160) the issue of the transaction hanging if a user performs a control plane operation with a topic (for example, adding partitions or a consumer) and the PQ tablet moves to another node. The transaction is now completed successfully.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15233) an problem with the counter value for UserInfo is leaking. As a result, the reading session returns the error too big in flight after a while.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15467) proxy crash on duplicate topics in request.
 
 ## Version 24.3 {#24-3}
 

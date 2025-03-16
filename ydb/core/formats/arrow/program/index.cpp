@@ -5,32 +5,6 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusion<IResourceProcessor::EExecutionResult> TOriginalIndexDataProcessor::DoExecute(
-    const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    auto source = context.GetDataSource().lock();
-    if (!source) {
-        return TConclusionStatus::Fail("source was destroyed before (index fetch start)");
-    }
-    auto conclusion = source->StartFetchIndex(context, IndexContext);
-    if (conclusion.IsFail()) {
-        return conclusion;
-    } else if (*conclusion) {
-        return EExecutionResult::InBackground;
-    } else {
-        return EExecutionResult::Success;
-    }
-}
-
-NJson::TJsonValue TOriginalIndexDataProcessor::DoDebugJson() const {
-    NJson::TJsonValue result = NJson::JSON_MAP;
-    result.InsertValue("c_id", IndexContext.GetColumnId());
-    if (IndexContext.GetSubColumnName()) {
-        result.InsertValue("sub_id", IndexContext.GetSubColumnName());
-    }
-    result.InsertValue("op", ::ToString(IndexContext.GetOperation()));
-    return result;
-}
-
 TConclusion<IResourceProcessor::EExecutionResult> TIndexCheckerProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     auto scalarConst = context.GetResources()->GetConstantScalarVerified(GetInput().back().GetColumnId());

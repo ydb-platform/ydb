@@ -142,6 +142,12 @@ private:
     virtual void DoBuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr) = 0;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) = 0;
 
+    virtual TConclusion<bool> DoStartFetchImpl(
+        const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<IKernelFetchLogic>>& fetchersExt) = 0;
+
+    virtual TConclusion<bool> DoStartFetch(
+        const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchersExt) override final;
+
     virtual bool DoStartFetchingColumns(
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;

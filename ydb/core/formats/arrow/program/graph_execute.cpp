@@ -152,7 +152,7 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
         }
     }
     AFL_TRACE(NKikimrServices::SSA_GRAPH_EXECUTION)("graph_constructed", DebugDOT());
-//    Cerr << DebugDOT() << Endl;
+    Cerr << DebugDOT() << Endl;
 }
 
 TConclusionStatus TCompiledGraph::Apply(
@@ -227,15 +227,9 @@ TString TCompiledGraph::DebugDOT(const THashSet<ui32>& special) const {
         } else {
             if (i.second->GetOutputEdges().empty()) {
                 result << ",style=filled,color=\"#FFAAAA\"";
-            } else if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::CheckHeaderData||
-                       i.second->GetProcessor()->GetProcessorType() == EProcessorType::FetchHeaderData) {
-                result << ",style=filled,color=\"#CCFFCC\"";
             } else if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::AssembleOriginalData ||
                        i.second->GetProcessor()->GetProcessorType() == EProcessorType::FetchOriginalData) {
                 result << ",style=filled,color=\"#FFFF88\"";
-            } else if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::CheckIndexData ||
-                       i.second->GetProcessor()->GetProcessorType() == EProcessorType::FetchIndexData) {
-                result << ",style=filled,color=\"#AAFFAA\"";
             }
         }
         result << "];" << Endl;

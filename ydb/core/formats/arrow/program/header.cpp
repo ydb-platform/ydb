@@ -5,29 +5,6 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusion<IResourceProcessor::EExecutionResult> TOriginalHeaderDataProcessor::DoExecute(
-    const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    auto source = context.GetDataSource().lock();
-    if (!source) {
-        return TConclusionStatus::Fail("source was destroyed before (header fetch start)");
-    }
-    auto conclusion = source->StartFetchHeader(context, HeaderContext);
-    if (conclusion.IsFail()) {
-        return conclusion;
-    } else if (*conclusion) {
-        return EExecutionResult::InBackground;
-    } else {
-        return EExecutionResult::Success;
-    }
-}
-
-NJson::TJsonValue TOriginalHeaderDataProcessor::DoDebugJson() const {
-    NJson::TJsonValue result = NJson::JSON_MAP;
-    result.InsertValue("c_id", HeaderContext.GetColumnId());
-    result.InsertValue("sub_id", HeaderContext.GetSubColumnName());
-    return result;
-}
-
 TConclusion<IResourceProcessor::EExecutionResult> THeaderCheckerProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     auto source = context.GetDataSource().lock();

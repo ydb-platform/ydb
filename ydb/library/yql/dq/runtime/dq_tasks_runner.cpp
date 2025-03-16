@@ -188,9 +188,9 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
             YQL_ENSURE(!keyColumns.empty());
             YQL_ENSURE(outputDesc.GetHashPartition().GetPartitionsCount() == outputDesc.ChannelsSize());
             return CreateOutputHashPartitionConsumer(
-                std::move(outputs), 
-                std::move(keyColumns), 
-                type, holderFactory, 
+                std::move(outputs),
+                std::move(keyColumns),
+                type, holderFactory,
                 minFillPercentage,
                 outputDesc.GetHashPartition(),
                 pgBuilder
@@ -540,6 +540,7 @@ public:
         const IDqTaskRunnerExecutionContext& execCtx) override
     {
         TaskId = task.GetId();
+        StageId = task.GetStageId();
         auto entry = BuildTask(task);
 
         LOG(TStringBuilder() << "Prepare task: " << TaskId);
@@ -760,8 +761,13 @@ public:
             StopWaiting();
         }
 
+        bool stop = false;
+        ERunStatus runStatus;
+
+        while (!stop) {
+
         InputConsumed = false;
-        auto runStatus = FetchAndDispatch();
+        runStatus = FetchAndDispatch();
 
         if (Y_UNLIKELY(CollectFull())) {
             if (SpillingTaskCounters) {
@@ -791,17 +797,24 @@ public:
         if (Y_LIKELY(CollectBasic())) {
             switch (runStatus) {
                 case ERunStatus::Finished:
+                    stop = true;
                     Stats->FinishTs = TInstant::Now();
                     break;
                 case ERunStatus::PendingInput:
                     if (!InputConsumed) {
+                        stop = true;
                         StartWaitingInput();
                     }
                     break;
                 case ERunStatus::PendingOutput:
+                    stop = true;
                     StartWaitingOutput();
                     break;
             }
+        } else stop = true;
+// if (StageId == 14) {
+//     Cerr << TStringBuilder() << "S14 T" << TaskId << " STATE " << (int)runStatus << Endl;
+// }
         }
 
         return runStatus;
@@ -996,6 +1009,7 @@ private:
     TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters;
 
     ui64 TaskId = 0;
+    ui64 StageId = 0;
     TDqTaskRunnerContext Context;
     TDqTaskRunnerSettings Settings;
     TLogFunc LogFunc;
@@ -1060,28 +1074,47 @@ private:
     std::unique_ptr<NUdf::IPgBuilder> PgBuilder_ = CreatePgBuilder();
 
     void StartWaitingInput() {
-        if (!StartWaitInputTime) {
-            StartWaitInputTime = TInstant::Now();
+        auto now = TInstant::Now();
+        if (Y_LIKELY(StartWaitInputTime)) {
+            auto delta = now - *StartWaitInputTime;
+            if (Y_LIKELY(Stats->StartTs)) {
+                Stats->WaitInputTime += delta;
+                // if (StageId == 14) {
+                //     Cerr << TStringBuilder() <<  "S14 T" << TaskId << " WAIT INPUT" << Stats->WaitInputTime << Endl;
+                // }
+            } else {
+                Stats->WaitStartTime += delta;
+            }
         }
+        StartWaitInputTime = now;
     }
 
     void StartWaitingOutput() {
-        if (!StartWaitOutputTime) {
-            StartWaitOutputTime = TInstant::Now();
+        auto now = TInstant::Now();
+        if (Y_LIKELY(StartWaitOutputTime)) {
+            auto delta = now - *StartWaitOutputTime;
+            Stats->WaitOutputTime += delta;
+            // if (StageId == 14) {
+            //     Cerr << TStringBuilder() <<  "S14 T" << TaskId << " WAIT OUTPUT" << Stats->WaitOutputTime << Endl;
+            // }
         }
+        StartWaitOutputTime = now;
     }
 
     void StopWaiting() {
+        auto now = TInstant::Now();
         if (StartWaitInputTime) {
+            auto delta = now - *StartWaitInputTime;
             if (Y_LIKELY(Stats->StartTs)) {
-                Stats->WaitInputTime += (TInstant::Now() - *StartWaitInputTime);
+                Stats->WaitInputTime += delta;
             } else {
-                Stats->WaitStartTime += (TInstant::Now() - *StartWaitInputTime);
+                Stats->WaitStartTime += delta;
             }
             StartWaitInputTime.reset();
         }
         if (StartWaitOutputTime) {
-            Stats->WaitOutputTime += (TInstant::Now() - *StartWaitOutputTime);
+            auto delta = now - *StartWaitOutputTime;
+            Stats->WaitOutputTime += delta;
             StartWaitOutputTime.reset();
         }
     }

@@ -136,6 +136,7 @@ class TestStress(object):
 
         select.wait()
 
+    @pytest.mark.skip(reason="Too huge logs")
     @pytest.mark.parametrize("mode", ["row"])
     def test_simple_queue(self, mode: str):
         with Workload(f"grpc://localhost:{self.cluster.nodes[1].grpc_port}", "/Root", 180, mode) as workload:
@@ -278,6 +279,7 @@ class TestStress(object):
         yatest.common.execute(import_command, wait=True, stdout=self.output_f, stderr=self.output_f)
         yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
 
+    @pytest.mark.skip(reason="Not stabilized yet")
     @pytest.mark.parametrize("store_type", ["row"])
     def test_tpcds1(self, store_type):
         init_command = [

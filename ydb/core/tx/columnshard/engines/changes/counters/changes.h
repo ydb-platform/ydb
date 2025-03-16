@@ -62,6 +62,7 @@ public:
 
         void OnStageChanged(const EStage stage, const ui64 writePortions) const {
             AFL_VERIFY(static_cast<size_t>(stage) < Stages.size())("index", stage)("size", Stages.size());
+            // coverity[overrun-call]
             Stages[static_cast<size_t>(stage)]->Inc(writePortions);
         }
     };

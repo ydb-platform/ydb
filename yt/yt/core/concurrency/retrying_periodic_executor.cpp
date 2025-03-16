@@ -89,13 +89,13 @@ void TRetryingInvocationTimePolicy::SetOptions(
     }
 }
 
-TInstant TRetryingInvocationTimePolicy::NextDeadline()
+TInstant TRetryingInvocationTimePolicy::GenerateNextDeadline()
 {
     if (IsInBackoffMode()) {
         return TInstant::Now() + Backoff_.GetBackoff();
     }
 
-    return TDefaultInvocationTimePolicy::NextDeadline();
+    return TDefaultInvocationTimePolicy::GenerateNextDeadline();
 }
 
 bool TRetryingInvocationTimePolicy::IsOutOfBandProhibited()

@@ -25,6 +25,7 @@ PY3TEST()
         ydb/tests/library/test_meta
         ydb/tests/olap/lib
         ydb/tests/olap/scenario/helpers
+        ydb/tests/olap/common
         ydb/tests/olap/helpers
         library/recipes/common
     )

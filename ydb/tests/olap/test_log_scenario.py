@@ -9,7 +9,7 @@ import yatest.common
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from scenario.helpers.thread_helper import TestThread
+from ydb.tests.olap.common.thread_helper import TestThread
 from helpers.ydb_client import YdbClient
 
 from enum import Enum
@@ -45,6 +45,8 @@ class YdbWorkloadLog:
             str(threads),
             "--rows",
             str(rows),
+            "--timestamp_deviation",
+            "180"
         ]
         self._call(command=command, wait=wait)
 
@@ -109,6 +111,9 @@ class TestLogScenario(object):
             self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` ")
             self.ydb_client.query(f"SELECT * FROM `{self.table_name}` WHERE ts < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
             self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE ts < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
+            self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE "
+                                  f"(ts >= CurrentUtcTimestamp() - DataTime::IntervalFromHours({hours}) - 1) AND "
+                                  f"(ts <= CurrentUtcTimestamp() - DataTime::IntervalFromHours({hours}))")
 
     def check_insert(self, duration: int):
         prev_count: int = self.get_row_count()

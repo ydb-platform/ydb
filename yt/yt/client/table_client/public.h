@@ -317,6 +317,9 @@ struct TTypeErasedRow;
 class TKeyBound;
 class TOwningKeyBound;
 
+template <class T>
+concept CKeyBound = std::same_as<T, TKeyBound> || std::same_as<T, TOwningKeyBound>;
+
 class TKeyComparer;
 
 struct TColumnRenameDescriptor;

@@ -1018,6 +1018,7 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
 
                 SpilledBucketsJoinOrderCurrentIndex++;
             } else {
+		*PartialJoinCompleted = true;
                 Y_DEBUG_ABORT_UNLESS(!JoinedTablePtr->PartialJoinIncomplete());
                 LeftPacker->StartTime = std::chrono::system_clock::now();
                 RightPacker->StartTime = std::chrono::system_clock::now();

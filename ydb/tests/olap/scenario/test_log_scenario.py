@@ -4,13 +4,14 @@ import random
 
 import logging
 import time
+from ydb.tests.olap.scenario.helpers.scenario_tests_helper import TestContext
 import yatest.common
 
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.olap.common.thread_helper import TestThread
-from helpers.ydb_client import YdbClient
+from ydb.tests.olap.helpers.ydb_client import YdbClient
 
 from enum import Enum
 
@@ -122,37 +123,21 @@ class TestLogScenario(object):
         logging.info(f'check insert: {current_count} {prev_count}')
         assert current_count != prev_count
 
-    def test(self):
+    def test(self, ctx: TestContext):
         """As per https://github.com/ydb-platform/ydb/issues/13530"""
 
         wait_time: int = int(get_external_param("wait_minutes", "3")) * 60
-        insert_mode_str: str = str(get_external_param("insert_mode", "bulk_upsert"))
-        insert_mode: self.InsertMode = self.InsertMode[insert_mode_str.upper()]
         self.table_name: str = "log"
 
         ydb_workload: YdbWorkloadLog = YdbWorkloadLog(endpoint=self.ydb_client.endpoint, database=self.ydb_client.database, table_name=self.table_name)
         ydb_workload.create_table(self.table_name)
-        if insert_mode == self.InsertMode.BULK_UPSERT:
-            ydb_workload.bulk_upsert(seconds=60, threads=10, rows=1000, wait=True)
-        elif insert_mode == self.InsertMode.INSERT:
-            ydb_workload.insert(seconds=60, threads=10, rows=1000, wait=True)
-        elif insert_mode == self.InsertMode.UPSERT:
-            ydb_workload.upsert(seconds=60, threads=10, rows=1000, wait=True)
-        else:
-            raise "Wrong insert mode"
         logging.info(f"Count rows after insert {self.get_row_count()} before wait")
         assert self.get_row_count() != 0
 
         threads: list[TestThread] = []
-
-        if insert_mode == self.InsertMode.BULK_UPSERT:
-            threads.append(TestThread(target=ydb_workload.bulk_upsert, args=[wait_time, 10, 1000, True]))
-        elif insert_mode == self.InsertMode.INSERT:
-            threads.append(TestThread(target=ydb_workload.insert, args=[wait_time, 10, 1000, True]))
-        elif insert_mode == self.InsertMode.UPSERT:
-            threads.append(TestThread(target=ydb_workload.upsert, args=[wait_time, 10, 1000, True]))
-        else:
-            raise "Wrong insert mode"
+        threads.append(TestThread(target=ydb_workload.bulk_upsert, args=[wait_time, 10, 1000, True]))
+        threads.append(TestThread(target=ydb_workload.insert, args=[wait_time, 10, 1000, True]))
+        threads.append(TestThread(target=ydb_workload.upsert, args=[wait_time, 10, 1000, True]))
 
         for _ in range(10):
             threads.append(TestThread(target=self.aggregation_query, args=[datetime.timedelta(seconds=int(wait_time))]))

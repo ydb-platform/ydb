@@ -286,7 +286,7 @@ namespace {
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
-            roaring_bitmap_t *bitmap = roaring_bitmap_create();
+            roaring_bitmap_t* bitmap = roaring_bitmap_create();
             try {
                 roaring_bulk_context_t context = {};
 
@@ -311,6 +311,99 @@ namespace {
             }
         }
         TSourcePosition Pos_;
+    };
+
+    template <typename Derived>
+    class TRoaringNaiveBulkAndBase: public TBoxedValue {
+    public:
+        TRoaringNaiveBulkAndBase(TSourcePosition pos)
+            : Pos_(pos)
+        {
+        }
+
+        static TStringRef Name() {
+            return Derived::GetFunctionName();
+        }
+
+        using Base = TRoaringNaiveBulkAndBase<Derived>;
+
+    private:
+        TUnboxedValue Run(const IValueBuilder* valueBuilder,
+                          const TUnboxedValuePod* args) const override {
+            Y_UNUSED(valueBuilder);
+            try {
+                roaring_bitmap_t* smallest = nullptr;
+                std::vector<roaring_bitmap_t*> bitmaps;
+
+                const auto processValue = [&](const TUnboxedValuePod& value) {
+                    auto bitmap = Derived::GetBitmap(value);
+                    bitmaps.push_back(bitmap);
+                    if (!smallest || bitmap->high_low_container.size < smallest->high_low_container.size) {
+                        smallest = bitmap;
+                    }
+                };
+
+                const auto vector = args[0];
+                if (const auto* elements = vector.GetElements()) {
+                    for (const auto& value : TArrayRef{elements, vector.GetListLength()}) {
+                        processValue(value);
+                    }
+                } else {
+                    TUnboxedValue value;
+                    const auto it = vector.GetListIterator();
+                    while (it.Next(value)) {
+                        processValue(value);
+                    }
+                }
+
+                Y_ENSURE(smallest);
+
+                for (const auto& bitmap : bitmaps) {
+                    if (bitmap != smallest) {
+                        roaring_bitmap_and_inplace(smallest, bitmap);
+                        roaring_bitmap_free(bitmap);
+                    }
+                }
+
+                return TUnboxedValuePod(new TRoaringWrapper(smallest));
+            } catch (const std::exception& e) {
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            }
+        }
+
+        TSourcePosition Pos_;
+    };
+
+    class TRoaringNaiveBulkAnd: public TRoaringNaiveBulkAndBase<TRoaringNaiveBulkAnd> {
+    public:
+        TRoaringNaiveBulkAnd(TSourcePosition pos)
+            : Base(pos)
+        {
+        }
+
+        static const TStringRef GetFunctionName() {
+            return TStringRef::Of("NaiveBulkAnd");
+        }
+
+        static roaring_bitmap_t* GetBitmap(const TUnboxedValuePod& value) {
+            return GetBitmapFromArg(value);
+        }
+    };
+
+    class TRoaringNaiveBulkAndWithBinary: public TRoaringNaiveBulkAndBase<TRoaringNaiveBulkAndWithBinary> {
+    public:
+        TRoaringNaiveBulkAndWithBinary(TSourcePosition pos)
+            : Base(pos)
+        {
+        }
+
+        static const TStringRef GetFunctionName() {
+            return TStringRef::Of("NaiveBulkAndWithBinary");
+        }
+
+        static roaring_bitmap_t* GetBitmap(const TUnboxedValuePod& value) {
+            return DeserializePortable(value.AsStringRef());
+        }
     };
 
     class TRoaringSerialize: public TBoxedValue {
@@ -409,6 +502,8 @@ namespace {
 
             sink.Add(TRoaringAndWithBinary::Name());
             sink.Add(TRoaringAnd::Name());
+            sink.Add(TRoaringNaiveBulkAnd::Name());
+            sink.Add(TRoaringNaiveBulkAndWithBinary::Name());
 
             sink.Add(TRoaringAndNotWithBinary::Name());
             sink.Add(TRoaringAndNot::Name());
@@ -435,7 +530,9 @@ namespace {
                         builder.Implementation(new TRoaringDeserialize(builder.GetSourcePosition()));
                     }
                 } else if (TRoaringFromUint32List::Name() == name) {
-                    builder.Returns<TResource<RoaringResourceName>>().Args()->Add<TListType<ui32>>();
+                    builder.Returns<TResource<RoaringResourceName>>()
+                        .Args()
+                        ->Add<TListType<ui32>>();
 
                     if (!typesOnly) {
                         builder.Implementation(new TRoaringFromUint32List(builder.GetSourcePosition()));
@@ -525,6 +622,22 @@ namespace {
 
                     if (!typesOnly) {
                         builder.Implementation(new TRoaringRunOptimize());
+                    }
+                } else if (TRoaringNaiveBulkAnd::Name() == name) {
+                    builder.Returns<TResource<RoaringResourceName>>()
+                        .Args()
+                        ->Add<TAutoMap<TListType<TOptional<TResource<RoaringResourceName>>>>>();
+
+                    if (!typesOnly) {
+                        builder.Implementation(new TRoaringNaiveBulkAnd(builder.GetSourcePosition()));
+                    }
+                } else if (TRoaringNaiveBulkAndWithBinary::Name() == name) {
+                    builder.Returns<TResource<RoaringResourceName>>()
+                        .Args()
+                        ->Add<TAutoMap<TListType<TOptional<char*>>>>();
+
+                    if (!typesOnly) {
+                        builder.Implementation(new TRoaringNaiveBulkAndWithBinary(builder.GetSourcePosition()));
                     }
                 } else {
                     TStringBuilder sb;

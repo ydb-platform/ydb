@@ -5,3 +5,6 @@ SELECT Roaring::Uint32List(Roaring::AndWithBinary(Roaring::Deserialize(right), N
 SELECT Roaring::Uint32List(Roaring::AndNot(Roaring::Deserialize(left), Roaring::Deserialize(right))) AS AndNotList FROM Input;
 SELECT Roaring::Uint32List(Roaring::AndNotWithBinary(Roaring::Deserialize(right), left)) AS AndNotWithBinaryList FROM Input;
 SELECT Roaring::Uint32List(Roaring::AndNotWithBinary(Roaring::Deserialize(right), NULL)) AS AndNotWithBinaryListEmpty FROM Input;
+
+SELECT Roaring::Uint32List(Roaring::NaiveBulkAnd(AsList(Roaring::FromUint32List(AsList(10, 567, 42)), Roaring::FromUint32List(AsList(42))))) AS NaiveBulkAnd FROM Input;
+SELECT Roaring::Uint32List(Roaring::NaiveBulkAndWithBinary(AsList(right, left))) AS NaiveBulkAndWithBinary FROM Input;

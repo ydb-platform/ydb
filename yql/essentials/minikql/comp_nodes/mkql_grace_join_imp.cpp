@@ -458,7 +458,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             << (const void *)this << '#'
             << bucket
             << " resume at " << tuple1Idx << '/' << bucket1->ResumeOffset
-	    ;
+            ;
 
         auto &leftIds = bucket1->LeftIds;
         leftIds.clear();

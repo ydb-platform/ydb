@@ -11,6 +11,7 @@ PY3TEST()
         test_read_update_write_load.py
         test_scheme_load.py
         test_simple.py
+        test_log_scenario.py
     )
 
     ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
@@ -26,6 +27,7 @@ PY3TEST()
         contrib/python/boto3
         contrib/python/moto
         contrib/python/requests
+        ydb/tests/olap/helpers
         library/python/testing/yatest_common
         library/recipes/common
         ydb/public/sdk/python
@@ -33,6 +35,7 @@ PY3TEST()
         ydb/tests/library
         ydb/tests/olap/common
         ydb/tests/olap/lib
+        ydb/tests/olap/helpers
         ydb/tests/olap/scenario/helpers
     )
 

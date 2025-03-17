@@ -1919,20 +1919,20 @@ value {
      Y_UNIT_TEST_WITH_COMPRESSION(ExportImportWithChecksums) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
-    
+
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
-    
+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(true));
-    
+
         ui64 txId = 100;
-    
+
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-    
+
         // Create table
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Original"
@@ -1941,10 +1941,10 @@ value {
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId);
-    
+
         // Upload data
         UpdateRow(runtime, "Original", 1, "valueA", TTestTxConfig::FakeHiveTablets);
-    
+
         // Export table
         const char* compression = Codec == ECompressionCodec::Zstd ? "zstd" : "";
         TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -1960,12 +1960,12 @@ value {
         )", port, compression));
         const ui64 exportId = txId;
         env.TestWaitNotification(runtime, exportId);
-    
+
         // Check export
         TestGetExport(runtime, exportId, "/MyRoot");
-    
+
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 6);
-    
+
         // Restore table
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ImportFromS3Settings {
@@ -1979,10 +1979,10 @@ value {
         )", port));
         const ui64 importId = txId;
         env.TestWaitNotification(runtime, importId);
-    
+
         // Check import
         TestGetImport(runtime, importId, "/MyRoot");
-    
+
         // Check data in restored table
         {
             auto expectedJson = TStringBuilder() << "[[[["
@@ -2000,20 +2000,20 @@ value {
     void ExportImportWithCorruption(T corruption) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
-    
+
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
-    
+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(true).EnablePermissionsExport(true));
-    
+
         ui64 txId = 100;
-    
+
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-    
+
         // Create table
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Original"
@@ -2022,10 +2022,10 @@ value {
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId);
-    
+
         // Upload data
         UpdateRow(runtime, "Original", 1, "valueA", TTestTxConfig::FakeHiveTablets);
-    
+
         // Export table
         const char* compression = Codec == ECompressionCodec::Zstd ? "zstd" : "";
         TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -2041,12 +2041,12 @@ value {
         )", port, compression));
         const ui64 exportId = txId;
         env.TestWaitNotification(runtime, exportId);
-    
+
         // Check export
         TestGetExport(runtime, exportId, "/MyRoot");
-    
+
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 8);
-        
+
         // Make corruption
         corruption(s3Mock.GetData());
 
@@ -2063,7 +2063,7 @@ value {
         )", port));
         ui64 importId = txId;
         env.TestWaitNotification(runtime, importId);
-    
+
         // Check corrupted import
         TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
 
@@ -4949,8 +4949,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         TBlockEvents<TEvPrivate::TEvImportSchemeQueryResult> queryResultBlocker(runtime,
             [&](const TEvPrivate::TEvImportSchemeQueryResult::TPtr& event) {
-                // When we receive the scheme query result message, we can be sure that the SchemeShard actor ID is set,
-                // because the table is the first item on the import list.
+                // The test expects the SchemeShard actor ID to be already initialized when we receive the first query result message.
+                // This expectation is valid because we import items in order of their appearance on the import items list.
                 if (!schemeshardActorId || event->Recipient != schemeshardActorId) {
                     return false;
                 }
@@ -4991,6 +4991,114 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::Finished,
             NLs::IsView
         });
+    }
+
+    Y_UNIT_TEST(MultipleViewCreationRetries) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableViews(true);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        ui64 txId = 100;
+
+        constexpr int ViewLayers = 10;
+        THashMap<TString, TTestDataWithScheme> bucketContent(ViewLayers);
+        for (int i = 0; i < ViewLayers; ++i) {
+            bucketContent.emplace(std::format("/view{}", i), GenerateTestData(
+                {
+                    EPathTypeView,
+                    std::format(R"(
+                            -- backup root: "/MyRoot"
+                            CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS {};
+                        )", i == 0
+                            ? "SELECT 1"
+                            : std::format("SELECT * FROM `view{}`", i - 1)
+                    )
+                }
+            ));
+        }
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TActorId schemeshardActorId;
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> viewCreationBlocker(runtime,
+            [&](const TEvSchemeShard::TEvModifySchemeTransaction::TPtr& event) {
+                const auto& record = event->Get()->Record;
+                if (record.GetTransaction(0).GetOperationType() == ESchemeOpCreateView) {
+                    schemeshardActorId = event->Recipient;
+                    return true;
+                }
+                return false;
+            }
+        );
+
+        int missingDependencyFails = 0;
+        auto missingDependencyObserver = runtime.AddObserver<TEvPrivate::TEvImportSchemeQueryResult>(
+            [&](const TEvPrivate::TEvImportSchemeQueryResult::TPtr& event) {
+                if (!schemeshardActorId
+                    || event->Recipient != schemeshardActorId
+                    || event->Get()->Status != Ydb::StatusIds::SCHEME_ERROR) {
+                    return;
+                }
+                const auto* error = std::get_if<TString>(&event->Get()->Result);
+                if (error && error->Contains("Cannot find table")) {
+                    ++missingDependencyFails;
+                }
+            }
+        );
+
+        auto importSettings = TStringBuilder() << std::format(R"(
+                ImportFromS3Settings {{
+                    endpoint: "localhost:{}"
+                    scheme: HTTP
+            )", port
+        );
+        for (int i = 0; i < ViewLayers; ++i) {
+            importSettings << std::format(R"(
+                    items {{
+                        source_prefix: "view{}"
+                        destination_path: "/MyRoot/view{}"
+                    }}
+                )", i, i
+            );
+        }
+        importSettings << '}';
+
+        const ui64 importId = ++txId;
+        TestImport(runtime, importId, "/MyRoot", importSettings);
+
+        int expectedFails = 0;
+        for (int iteration = 1; iteration <= ViewLayers; ++iteration) {
+            runtime.WaitFor("blocked view creation", [&]{ return !viewCreationBlocker.empty(); });
+
+            expectedFails += ViewLayers - iteration;
+            if (iteration > 1) {
+                runtime.WaitFor("query results", [&]{ return missingDependencyFails >= expectedFails; });
+            } else {
+                // the first iteration might miss some query results due to the initially unset schemeshardActorId
+                missingDependencyFails = expectedFails;
+            }
+
+            viewCreationBlocker.Unblock(1);
+        }
+        UNIT_ASSERT(viewCreationBlocker.empty());
+        viewCreationBlocker.Stop();
+
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        for (int i = 0; i < ViewLayers; ++i) {
+            TestDescribeResult(DescribePath(runtime, std::format("/MyRoot/view{}", i)), {
+                NLs::Finished,
+                NLs::IsView
+            });
+        }
     }
 
     struct TGeneratedChangefeed {
@@ -5483,7 +5591,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
             primary_key: "key"
         )" , {{"a", 1}}, "", R"({"version": 1})");
-        
+
         TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 

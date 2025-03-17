@@ -1454,6 +1454,12 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 130 }];
+
+        optional uint64 MaxInProgressSyncCount = 27 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous VDisk sync processes; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 1000,
+            DefaultValue: 0 }];
     }
 
     message TTabletControls {

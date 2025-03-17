@@ -1397,7 +1397,7 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     queue = config.AddQueues();
     queue->SetName("queue_restore");
     queue->SetWeight(100);
-    queue->MutableLimit()->SetCpu(2);
+    queue->MutableLimit()->SetCpu(10);
 
     queue = config.AddQueues();
     queue->SetName(NLocalDb::KqpResourceManagerQueue);

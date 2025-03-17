@@ -22,6 +22,11 @@ namespace NActors {
         REQUIRED, // encryption is mandatory
     };
 
+    enum class ESocketSendOptimization {
+        DISABLED,
+        IC_MSG_ZEROCOPY,
+    };
+
     struct TInterconnectSettings {
         TDuration Handshake;
         TDuration DeadPeer;
@@ -56,6 +61,7 @@ namespace NActors {
         TDuration MaxErrorSleep = TDuration::Seconds(1);
         double ErrorSleepRetryMultiplier = 4.0;
         TDuration EventDelay = TDuration::Zero();
+        ESocketSendOptimization SocketSendOptimization = ESocketSendOptimization::DISABLED;
     };
 
     struct TWhiteboardSessionStatus {

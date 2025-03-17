@@ -80,7 +80,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TFilterProcessor::DoExecute(
                                                "first", inputColumns.front()->GetRecordsCount());
         std::shared_ptr<arrow::Scalar> monoValue;
         const auto isMonoValue = arr->CheckOneValueAccessor(monoValue);
-        if (*isMonoValue) {
+        if (isMonoValue && *isMonoValue) {
             const auto isTrueConclusion = ScalarIsTrue(monoValue);
             const auto isFalseConclusion = ScalarIsFalse(monoValue);
             if (isTrueConclusion.IsFail()) {

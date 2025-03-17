@@ -17,14 +17,10 @@ TConclusion<IResourceProcessor::EExecutionResult> THeaderCheckerProcessor::DoExe
     }
     if (conclusion->IsTotalDenyFilter()) {
         context.GetResources()->AddVerified(GetOutputColumnIdOnce(),
-            std::make_shared<NAccessor::TSparsedArray>(
-                std::make_shared<arrow::UInt8Scalar>(0), arrow::uint8(), context.GetResources()->GetRecordsCountActualVerified()),
-            false);
+            NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources()->GetRecordsCountActualVerified()), false);
     } else if (conclusion->IsTotalAllowFilter() || !ApplyToFilterFlag) {
         context.GetResources()->AddVerified(GetOutputColumnIdOnce(),
-            std::make_shared<NAccessor::TSparsedArray>(
-                std::make_shared<arrow::UInt8Scalar>(1), arrow::uint8(), context.GetResources()->GetRecordsCountActualVerified()),
-            false);
+            NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources()->GetRecordsCountActualVerified()), false);
     } else {
         context.GetResources()->AddFilter(*conclusion);
     }

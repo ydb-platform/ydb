@@ -34,7 +34,7 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
     const auto accResult = context.GetResources()->GetAccessorOptional(GetOutputColumnIdOnce());
 
     const auto isMonoValue = accInput->CheckOneValueAccessor(monoValue);
-    if (*isMonoValue) {
+    if (isMonoValue && *isMonoValue) {
         const auto isFalseConclusion = ScalarIsFalse(monoValue);
         if (isFalseConclusion.IsFail()) {
             return isFalseConclusion;

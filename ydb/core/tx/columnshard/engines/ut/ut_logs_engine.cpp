@@ -58,7 +58,7 @@ public:
         THashMap<ui32, ui64> Counters;
     };
 
-    virtual TConclusion<THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
+    virtual TConclusion<THashMap<NColumnShard::TLocalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
         THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>> result;
         return result;
     }

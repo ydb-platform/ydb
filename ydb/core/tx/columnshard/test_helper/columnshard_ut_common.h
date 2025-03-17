@@ -125,6 +125,10 @@ struct TTableSpecials: public TStorageTier {
 
         TTableSpecials() noexcept = default;
 
+        bool NeedTestStatistics(const std::vector<NArrow::NTest::TTestColumn>& pk) const {
+            return GetTtlColumn() != pk.front().GetName();
+        }
+
         bool HasTiers() const {
             return !Tiers.empty();
         }

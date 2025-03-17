@@ -1503,7 +1503,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
                 NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
                 NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8))
             },
-            {0, 1}
+            {0}
         };
         PrepareTablet(runtime, tableId, table);
         const ui64 txId = 111;
@@ -1548,7 +1548,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
                 NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
                 NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) 
             },
-            {0, 1}
+            {0}
         };
         PrepareTablet(runtime, tableId, table);
         const ui64 txId = 111;
@@ -1582,7 +1582,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
                 NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
                 NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) 
             },
-            {0, 1}
+            {0}
         };
         PrepareTablet(runtime, tableId, table);
         const ui64 txId = 111;
@@ -1619,7 +1619,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
                 NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
                 NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8))
             },
-            {0, 1}
+            {0}
         };
         const auto& columnIds = table.GetColumnIds();
         PrepareTablet(runtime, tableId, table);
@@ -2329,7 +2329,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         columns[0].SetType(TTypeInfo(typeId));
         columns[1].SetType(TTypeInfo(typeId));
-        TTestTableDescription table{ std::move(columns), TTestTableDescription::GetPredefinedPkIdxs(TTestTableDescription::EPredefined::Default) };
+        TTestTableDescription table{std::move(columns), TTestTableDescription::GetPredefinedPkIdxs(TTestTableDescription::EPredefined::Default)};
         TestCompactionSplitGranuleImpl(table, opts);
     }
 

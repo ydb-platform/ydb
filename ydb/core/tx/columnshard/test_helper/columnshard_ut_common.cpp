@@ -475,6 +475,9 @@ std::vector<NArrow::NTest::TTestColumn> TTestTableDescription::GetPredefinedColu
 NKikimrSchemeOp::TColumnTableSchema TTestTableDescription::InitSchema(const NTxUT::TTableSpecials& specials) const {
     NKikimrSchemeOp::TColumnTableSchema schema;
     for (ui32 i = 0; i < Columns.size(); ++i) {
+        if (!specials.NeedTestStatistics(GetPkColumns())) {
+            continue;
+        }
         *schema.MutableColumns()->Add() = Columns[i].CreateColumn(i + 1);
         if (NOlap::NIndexes::NMax::TIndexMeta::IsAvailableType(Columns[i].GetType())) {
             *schema.AddIndexes() = NOlap::NIndexes::TIndexMetaContainer(

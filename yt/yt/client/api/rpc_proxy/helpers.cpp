@@ -1172,14 +1172,14 @@ void FromProto(
 
 void ToProto(
     NProto::TBackupManifest::TClusterManifest* protoEntry,
-    const std::pair<TString, std::vector<NApi::TTableBackupManifestPtr>>& entry)
+    const std::pair<std::string, std::vector<NApi::TTableBackupManifestPtr>>& entry)
 {
     protoEntry->set_cluster(entry.first);
     ToProto(protoEntry->mutable_table_manifests(), entry.second);
 }
 
 void FromProto(
-    std::pair<TString, std::vector<NApi::TTableBackupManifestPtr>>* entry,
+    std::pair<std::string, std::vector<NApi::TTableBackupManifestPtr>>* entry,
     const NProto::TBackupManifest::TClusterManifest& protoEntry)
 {
     entry->first = protoEntry.cluster();

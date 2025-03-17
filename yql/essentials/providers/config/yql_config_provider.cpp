@@ -1068,12 +1068,13 @@ namespace {
             TString customUdfPrefix = args.size() > 1 ? TString(args[1]) : "";
             const auto key = TUserDataStorage::ComposeUserDataKey(fileAlias);
             TString errorMessage;
-            const TUserDataBlock* udfSource = Types.UserDataStorage->FreezeUdfNoThrow(key,
-                                                                                      errorMessage,
-                                                                                      customUdfPrefix);
-            if (!udfSource) {
-                ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown file: " << fileAlias << ", details: " << errorMessage));
-                return false;
+            const TUserDataBlock* udfSource = nullptr;
+            if (!Types.QContext.CanRead()) {
+                udfSource = Types.UserDataStorage->FreezeUdfNoThrow(key, errorMessage, customUdfPrefix);
+                if (!udfSource) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown file: " << fileAlias << ", details: " << errorMessage));
+                    return false;
+                }
             }
 
             IUdfResolver::TImport import;

@@ -305,7 +305,7 @@ const std::string& TConnection::GetLoggingTag() const
     return LoggingTag_;
 }
 
-const TString& TConnection::GetClusterId() const
+const std::string& TConnection::GetClusterId() const
 {
     return ClusterId_;
 }

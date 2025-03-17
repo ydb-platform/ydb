@@ -2822,6 +2822,54 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    Y_UNIT_TEST(ShowCreateSysView) {
+        auto serverSettings = TKikimrSettings().SetEnableShowCreate(true
+
+        );
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE test_show_create (
+                    Key Uint32,
+                    Value Uint32,
+                    PRIMARY KEY (Key)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                SELECT * FROM `.sys/show_create`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL("<main>: Error: Type annotation, code: 1030\n    <main>:2:17: Error: At function: KiReadTable!\n        <main>:2:17: Error: Cannot find table 'db.[/Root/.sys/show_create]' because it does not exist or you do not have access permissions. Please check correctness of table path and user permissions., code: 2003\n",
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                SELECT * FROM `.sys/show_create` WHERE Path = "/Root/test_show_create" and PathType = "Table";
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL("<main>: Error: Type annotation, code: 1030\n    <main>:2:17: Error: At function: KiReadTable!\n        <main>:2:17: Error: Cannot find table 'db.[/Root/.sys/show_create]' because it does not exist or you do not have access permissions. Please check correctness of table path and user permissions., code: 2003\n",
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+            NYdb::NTable::TDescribeTableResult describe = tableSession.DescribeTable("/Root/.sys/show_create").GetValueSync();
+            UNIT_ASSERT(!describe.IsSuccess());
+        }
+    }
+
     Y_UNIT_TEST(ShowCreateTableNotSuccess) {
         auto serverSettings = TKikimrSettings().SetEnableShowCreate(true);
 
@@ -2834,6 +2882,19 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 SHOW CREATE TABLE test_show_create;
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT(!result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL("<main>: Error: Type annotation, code: 1030\n    <main>:2:35: Error: At function: KiReadTable!\n        <main>:2:35: Error: Cannot find table 'db.[/Root/test_show_create]' because it does not exist or you do not have access permissions. Please check correctness of table path and user permissions., code: 2003\n",
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                SHOW CREATE TABLE `/Root/.sys/show_create`;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL("<main>: Error: Type annotation, code: 1030\n    <main>:2:35: Error: At function: KiReadTable!\n        <main>:2:35: Error: Cannot find table 'db.[/Root/.sys/show_create]' because it does not exist or you do not have access permissions. Please check correctness of table path and user permissions., code: 2003\n",
+                result.GetIssues().ToString());
         }
     }
 

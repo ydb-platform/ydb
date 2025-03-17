@@ -1092,12 +1092,18 @@ public:
             return *this;
         }
 
+        TLoadTableMetadataSettings& WithShowCreate(bool enable) {
+            ShowCreate_ = enable;
+            return *this;
+        }
+
         NKikimr::NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
         THashMap<TString, TString> ReadAttributes;
         bool RequestStats_ = false;
         bool WithPrivateTables_ = false;
         bool WithExternalDatasources_ = false;
         bool RequestAuthInfo_ = true;
+        bool ShowCreate_ = false;
     };
 
     class IKqpTableMetadataLoader : public std::enable_shared_from_this<IKqpTableMetadataLoader> {

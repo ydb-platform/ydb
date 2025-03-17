@@ -974,7 +974,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
 
             auto showCreateValue = Build<TCoNameValueTuple>(ctx, node.Pos())
                 .Name()
-                    .Build("showCreateTable")
+                    .Build("showCreateTableRewritten")
                 .Value<TCoAtom>()
                     .Value(key.GetTablePath())
                     .Build()
@@ -1012,7 +1012,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
                     for (auto arg : read.FreeArgs()) {
                         if (auto tuple = arg.Maybe<TCoNameValueTuple>()) {
                             auto name = tuple.Cast().Name().Value();
-                            if (name == "showCreateTable") {
+                            if (name == "showCreateTableRewritten") {
                                 showCreateTableRightReplaces[input.Get()] = nullptr;
                             }
                         }
@@ -1030,7 +1030,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
             for (auto arg : read.FreeArgs()) {
                 if (auto tuple = arg.Maybe<TCoNameValueTuple>()) {
                     auto name = tuple.Cast().Name().Value();
-                    if (name == "showCreateTable") {
+                    if (name == "showCreateTableRewritten") {
                         tablePath = tuple.Cast().Value().Cast().Cast<TCoAtom>().StringValue();
                     }
                 }

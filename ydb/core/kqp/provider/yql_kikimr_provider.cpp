@@ -172,7 +172,8 @@ const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TStrin
     return nullptr;
 }
 
-TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster, const TString& database, const TString& table, ETableType tableType) {
+TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster, const TString& database,
+        const TString& table, ETableType tableType, bool showCreate) {
     auto tablePath = table;
     if (TempTablesState) {
         auto tempTableInfoIt = TempTablesState->FindInfo(table, true);
@@ -191,6 +192,8 @@ TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster
             desc.RelativePath = pathPair.second;
         }
         desc.SetTableType(tableType);
+
+        desc.SetShowCreate(showCreate);
 
         return desc;
     }

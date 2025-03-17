@@ -1,5 +1,6 @@
 #pragma once
 
+#include "schema.h"
 #include "utils.h"
 
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
@@ -252,6 +253,11 @@ private:
         }
 
         AllowedByLimiter = true;
+
+        if (TableId.SysViewInfo == ShowCreateName) {
+            ProceedToScan();
+            return;
+        }
 
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 

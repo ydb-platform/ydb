@@ -637,4 +637,5 @@ namespace NSchemeShardUT_Private {
         TTestActorRuntime& runtime, const TString& path,
         Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
 
+    void UpdateQueryServiceConfig(TTestActorRuntime& runtime);
 } //NSchemeShardUT_Private

@@ -705,6 +705,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     CreateFakeMetering(runtime);
 
     SetSplitMergePartCountLimit(&runtime, -1);
+    UpdateQueryServiceConfig(runtime);
 }
 
 NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime &runtime, ui32 nchannels, bool enablePipeRetries,

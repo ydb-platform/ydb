@@ -55,6 +55,7 @@ struct TError {
 struct TYtTableRef {
     TString Path;
     TString Cluster;
+    bool operator == (const TYtTableRef&) const = default;
 };
 
 struct TFmrTableRef {
@@ -64,13 +65,13 @@ struct TFmrTableRef {
 struct TTableRange {
     TString PartId;
     ui64 MinChunk = 0;
-    ui64 MaxChunk = 1;  // Пока такой дефолт
+    ui64 MaxChunk = 1;
 };
 
 struct TFmrChunkMeta {
     TString TableId;
     TString PartId;
-    ui64 Chunk = 0; // сделать out метод
+    ui64 Chunk = 0;
 
     TString ToString() const;
 };
@@ -101,6 +102,13 @@ namespace std {
     struct hash<NYql::NFmr::TFmrTableOutputRef> {
         size_t operator()(const NYql::NFmr::TFmrTableOutputRef& ref) const {
             return CombineHashes(hash<TString>()(ref.TableId), hash<TString>()(ref.PartId));
+        }
+    };
+
+    template<>
+    struct hash<NYql::NFmr::TYtTableRef> {
+        size_t operator()(const NYql::NFmr::TYtTableRef& ref) const {
+            return CombineHashes(hash<TString>()(ref.Cluster), hash<TString>()(ref.Path));
         }
     };
 }

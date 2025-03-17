@@ -1,16 +1,13 @@
 UNITTEST()
 
 SRCS(
-    yql_yt_job_ut.cpp
-    yql_yt_table_data_service_reader_ut.cpp
-    yql_yt_table_data_service_writer_ut.cpp
+    yql_yt_parse_records_ut.cpp
 )
 
 PEERDIR(
-    yt/yql/providers/yt/fmr/job/impl
+    yt/yql/providers/yt/fmr/utils
+    yt/yql/providers/yt/fmr/request_options
     yt/yql/providers/yt/fmr/yt_service/mock
-    yt/yql/providers/yt/fmr/table_data_service/local
-    yql/essentials/utils/log
     yql/essentials/parser/pg_wrapper
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/udf

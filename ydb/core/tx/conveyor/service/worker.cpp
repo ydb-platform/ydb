@@ -2,33 +2,38 @@
 
 namespace NKikimr::NConveyor {
 
-void TWorker::ExecuteTask(const TWorkerTask& workerTask) {
-    std::optional<TMonotonic> start;
-    if (CPUUsage < 1) {
-        start = TMonotonic::Now();
+void TWorker::ExecuteTask(std::vector<TWorkerTask>&& workerTasks) {
+    AFL_VERIFY(ProcessIds.empty() && Instants.empty());
+    std::vector<TMonotonic> instants;
+    std::vector<ui64> processes;
+    instants.emplace_back(TMonotonic::Now());
+    for (auto&& t : workerTasks) {
+        Y_UNUSED(t.GetTask()->Execute(t.GetTaskSignals(), t.GetTask()));
+        instants.emplace_back(TMonotonic::Now());
+        processes.emplace_back(t.GetProcessId());
     }
-    Y_UNUSED(workerTask.GetTask()->Execute(workerTask.GetTaskSignals(), workerTask.GetTask()));
-    TBase::Sender<TEvInternal::TEvTaskProcessedResult>(workerTask).SendTo(DistributorId);
     if (CPUUsage < 1) {
-        Schedule((TMonotonic::Now() - *start) * (1 - CPUUsage), new NActors::TEvents::TEvWakeup);
+        ProcessIds = std::move(processes);
+        Instants = std::move(instants);
+        Schedule((Instants.back() - Instants.front()) * (1 - CPUUsage) / CPUUsage, new NActors::TEvents::TEvWakeup);
         WaitWakeUp = true;
+    } else {
+        TBase::Sender<TEvInternal::TEvTaskProcessedResult>(std::move(instants), std::move(processes)).SendTo(DistributorId);
     }
 }
 
 void TWorker::HandleMain(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
+    AFL_VERIFY(ProcessIds.size());
+    TBase::Sender<TEvInternal::TEvTaskProcessedResult>(std::move(Instants), std::move(ProcessIds)).SendTo(DistributorId);
+    ProcessIds.clear();
+    Instants.clear();
+
     WaitWakeUp = false;
-    if (WaitTask) {
-        ExecuteTask(*WaitTask);
-        WaitTask.reset();
-    }
 }
 
 void TWorker::HandleMain(TEvInternal::TEvNewTask::TPtr& ev) {
-    if (!WaitWakeUp) {
-        ExecuteTask(ev->Get()->GetTask());
-    } else {
-        WaitTask = ev->Get()->GetTask();
-    }
+    AFL_VERIFY(!WaitWakeUp);
+    ExecuteTask(ev->Get()->ExtractTasks());
 }
 
 }

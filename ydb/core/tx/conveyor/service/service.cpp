@@ -29,19 +29,27 @@ void TDistributor::Bootstrap() {
     Become(&TDistributor::StateMain);
 }
 
-void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev) {
-    const auto now = TMonotonic::Now();
-    const TDuration dExecution = now - ev->Get()->GetStartInstant();
-    Counters.SolutionsRate->Inc();
-    Counters.ExecuteHistogram->Collect(dExecution.MilliSeconds());
-    AddCPUTime(ev->Get()->GetProcessId(), now - std::max(LastAddProcessInstant, ev->Get()->GetStartInstant()));
+void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) {
+    auto* ev = evExt->Get();
+    for (ui32 idx = 0; idx < ev->GetProcessIds().size(); ++idx) {
+        const TDuration dExecution = ev->GetInstants()[idx + 1] - ev->GetInstants()[idx];
+        Counters.ExecuteHistogram->Collect(dExecution.MicroSeconds());
+        AddCPUTime(ev->GetProcessIds()[idx], ev->GetInstants()[idx + 1] - std::max(LastAddProcessInstant, ev->GetInstants()[idx]));
+    }
+    Counters.SolutionsRate->Add(ev->GetProcessIds().size());
     if (ProcessesOrdered.size()) {
-        auto task = PopTask();
-        Counters.WaitingHistogram->Collect((now - task.GetCreateInstant()).MilliSeconds());
-        task.OnBeforeStart();
-        Send(ev->Sender, new TEvInternal::TEvNewTask(task));
+        std::vector<TWorkerTask> tasks;
+        const TMonotonic now = TMonotonic::Now();
+        while (ProcessesOrdered.size() && (!tasks.size() || tasks.size() < WaitingTasksCount.Val() * 0.02)) {
+            auto task = PopTask();
+            Counters.WaitingHistogram->Collect((now - task.GetCreateInstant()).MicroSeconds());
+            task.OnBeforeStart();
+            tasks.emplace_back(std::move(task));
+        }
+        Counters.PackHistogram->Collect(tasks.size());
+        Send(evExt->Sender, new TEvInternal::TEvNewTask(std::move(tasks)));
     } else {
-        Workers.emplace_back(ev->Sender);
+        Workers.emplace_back(evExt->Sender);
     }
     Counters.WaitingQueueSize->Set(WaitingTasksCount.Val());
     Counters.AvailableWorkersCount->Set(Workers.size());
@@ -86,10 +94,10 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
 
         wTask.OnBeforeStart();
         if (Workers.size() == 1 || !SlowWorkerId || Workers.back() != *SlowWorkerId) {
-            Send(Workers.back(), new TEvInternal::TEvNewTask(wTask));
+            Send(Workers.back(), new TEvInternal::TEvNewTask({ wTask }));
             Workers.pop_back();
         } else {
-            Send(Workers.front(), new TEvInternal::TEvNewTask(wTask));
+            Send(Workers.front(), new TEvInternal::TEvNewTask({ wTask }));
             Workers.pop_front();
         }
         Counters.UseWorkerRate->Inc();

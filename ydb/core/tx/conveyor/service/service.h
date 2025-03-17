@@ -34,6 +34,7 @@ public:
     const ::NMonitoring::TDynamicCounters::TCounterPtr UseWorkerRate;
 
     const ::NMonitoring::THistogramPtr WaitingHistogram;
+    const ::NMonitoring::THistogramPtr PackHistogram;
     const ::NMonitoring::THistogramPtr ExecuteHistogram;
 
     TCounters(const TString& conveyorName, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals)
@@ -48,8 +49,9 @@ public:
         , OverlimitRate(TBase::GetDeriviative("Overlimit"))
         , WaitWorkerRate(TBase::GetDeriviative("WaitWorker"))
         , UseWorkerRate(TBase::GetDeriviative("UseWorker"))
-        , WaitingHistogram(TBase::GetHistogram("Waiting", NMonitoring::ExponentialHistogram(20, 2)))
-        , ExecuteHistogram(TBase::GetHistogram("Execute", NMonitoring::ExponentialHistogram(20, 2))) {
+        , WaitingHistogram(TBase::GetHistogram("WaitingUs", NMonitoring::ExponentialHistogram(25, 2, 50)))
+        , PackHistogram(TBase::GetHistogram("ExecutionPack/Count", NMonitoring::LinearHistogram(25, 1, 1)))
+        , ExecuteHistogram(TBase::GetHistogram("ExecuteUs", NMonitoring::ExponentialHistogram(25, 2, 50))) {
     }
 };
 

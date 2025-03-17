@@ -19,11 +19,6 @@ TCommandNodeConfigInit::TCommandNodeConfigInit()
 {
 }
 
-void TCommandNodeConfigInit::PropagateFlags(const TCommandFlags& flags) {
-    TYdbCommand::PropagateFlags(flags);
-    Dangerous = false;
-}
-
 void TCommandNodeConfigInit::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption('f', "from-config", "Path to the initial configuration file.")
@@ -92,14 +87,14 @@ int TCommandNodeConfigInit::Run(TConfig& config) {
             storageSaved = SaveConfig(storageConfig, STORAGE_CONFIG_FILE_NAME, ConfigDirPath);
 
             if (clusterSaved && storageSaved) {
-                Cout << "Initialized main and storage configs in " << ConfigDirPath << "/" 
+                Cout << "Initialized main and storage configs in " << ConfigDirPath << "/"
                      << CONFIG_FILE_NAME << " and " << STORAGE_CONFIG_FILE_NAME << Endl;
                 return EXIT_SUCCESS;
             }
-            Cerr << "Failed to save configs: " 
+            Cerr << "Failed to save configs: "
                  << (clusterSaved ? "" : "main config")
-                 << (clusterSaved && storageSaved ? ", " : "") 
-                 << (storageSaved ? "" : "storage config") 
+                 << (clusterSaved && storageSaved ? ", " : "")
+                 << (storageSaved ? "" : "storage config")
                  << Endl;
             return EXIT_FAILURE;
         }

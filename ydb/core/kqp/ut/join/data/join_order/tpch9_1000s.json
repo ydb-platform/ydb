@@ -21,6 +21,7 @@
               "args":
                 [
                   {
+<<<<<<< HEAD
                     "op_name":"InnerJoin (Grace)",
                     "args":
                       [
@@ -97,6 +98,32 @@
                                   ]
                               }
                             ]
+=======
+                    "op_name":"InnerJoin (MapJoin)",
+                    "args":
+                      [
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"supplier"
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"nation"
+>>>>>>> 3268d7aed52 ([KQP] fix canonization)
+                        }
+                      ]
+                  },
+                  {
+                    "op_name":"InnerJoin (Grace)",
+                    "args":
+                      [
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"partsupp"
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"part"
                         }
                       ]
                   }

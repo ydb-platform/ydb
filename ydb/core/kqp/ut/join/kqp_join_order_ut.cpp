@@ -98,7 +98,7 @@ static void CreateSampleTable(NYdb::NQuery::TSession session, bool useColumnStor
     CreateView(session, "view/tpch_random_join_view.sql");
 }
 
-static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = "", bool useCBO = true, bool useColumnStore = true){
+static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = "", bool useCBO = true){
     TVector<NKikimrKqp::TKqpSetting> settings;
 
     NKikimrKqp::TKqpSetting setting;
@@ -108,16 +108,6 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
         setting.SetValue(stats);
         settings.push_back(setting);
     }
-
-    if (useColumnStore) {
-        setting.SetName("OptShuffleElimination");
-        setting.SetValue("true");
-        settings.push_back(setting);
-    }
-
-    setting.SetName("OptShuffleEliminationWithMap");
-    setting.SetValue("true");
-    settings.push_back(setting);
 
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
@@ -388,7 +378,7 @@ private:
 };
 
 void ExplainJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true) {
-    auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO, useColumnStore);
+    auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO);
     kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
     auto db = kikimr.GetQueryClient();
     auto result = db.GetSession().GetValueSync();
@@ -554,7 +544,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         bool useColumnStore,
         bool useCBO = true
     ) {
-        auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO, useColumnStore);
+        auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
         auto db = kikimr.GetQueryClient();
         auto result = db.GetSession().GetValueSync();
@@ -590,7 +580,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     void CheckJoinCardinality(const TString& queryPath, const TString& statsPath, const TString& joinKind, double card, bool useStreamLookupJoin, bool useColumnStore) {
-        auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), true, useColumnStore);
+        auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), true);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
         auto db = kikimr.GetQueryClient();
         auto result = db.GetSession().GetValueSync();

@@ -7,6 +7,7 @@
         "args":
           [
             {
+<<<<<<< HEAD
               "op_name":"HashShuffle",
               "args":
                 [
@@ -64,6 +65,11 @@
         "op_name":"HashShuffle",
         "args":
           [
+=======
+              "op_name":"TableFullScan",
+              "table":"part"
+            },
+>>>>>>> 3268d7aed52 ([KQP] fix canonization)
             {
               "op_name":"InnerJoin (Grace)",
               "args":
@@ -77,6 +83,7 @@
                           "args":
                             [
                               {
+<<<<<<< HEAD
                                 "op_name":"HashShuffle",
                                 "args":
                                   [
@@ -115,6 +122,14 @@
                                         ]
                                     }
                                   ]
+=======
+                                "op_name":"TableFullScan",
+                                "table":"nation"
+                              },
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"region"
+>>>>>>> 3268d7aed52 ([KQP] fix canonization)
                               }
                             ]
                         }
@@ -131,6 +146,43 @@
                       ]
                   }
                 ]
+<<<<<<< HEAD
+=======
+            }
+          ]
+      },
+      {
+        "op_name":"InnerJoin (Grace)",
+        "args":
+          [
+            {
+              "op_name":"TableFullScan",
+              "table":"partsupp"
+            },
+            {
+              "op_name":"InnerJoin (MapJoin)",
+              "args":
+                [
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"supplier"
+                  },
+                  {
+                    "op_name":"InnerJoin (MapJoin)",
+                    "args":
+                      [
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"nation"
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"region"
+                        }
+                      ]
+                  }
+                ]
+>>>>>>> 3268d7aed52 ([KQP] fix canonization)
             }
           ]
       }

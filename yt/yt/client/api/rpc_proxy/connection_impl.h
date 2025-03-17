@@ -13,6 +13,8 @@
 
 #include <yt/yt/core/logging/log.h>
 
+#include <yt/yt/core/misc/backoff_strategy.h>
+
 #include <library/cpp/yt/threading/atomic_object.h>
 
 namespace NYT::NApi::NRpcProxy {
@@ -61,6 +63,7 @@ private:
     const TConnectionConfigPtr Config_;
 
     std::atomic<bool> Terminated_ = false;
+    std::atomic<bool> ProxyListUpdateStarted_ = false;
 
     const TGuid ConnectionId_;
     const std::string LoggingTag_;
@@ -70,19 +73,20 @@ private:
     const NRpc::IChannelFactoryPtr CachingChannelFactory_;
     const NRpc::TDynamicChannelPoolPtr ChannelPool_;
 
-    NConcurrency::TActionQueuePtr ActionQueue_;
-    IInvokerPtr ConnectionInvoker_;
+    const NConcurrency::TActionQueuePtr ActionQueue_;
+    const IInvokerPtr ConnectionInvoker_;
 
-    NConcurrency::TPeriodicExecutorPtr UpdateProxyListExecutor_;
+    TBackoffStrategy UpdateProxyListBackoffStrategy_;
+
+    const NServiceDiscovery::IServiceDiscoveryPtr ServiceDiscovery_;
 
     // TODO(prime@): Create HTTP endpoint for discovery that works without authentication.
     NThreading::TAtomicObject<std::string> DiscoveryToken_;
 
-    NServiceDiscovery::IServiceDiscoveryPtr ServiceDiscovery_;
-
     std::vector<std::string> DiscoverProxiesViaHttp();
     std::vector<std::string> DiscoverProxiesViaServiceDiscovery();
 
+    void ScheduleProxyListUpdate(TDuration delay);
     void OnProxyListUpdate();
 };
 

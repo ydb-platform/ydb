@@ -35,6 +35,9 @@ from string import ascii_lowercase
 
 
 class TestLoop:
+
+    __test__ = False
+
     def __init__(self, duration: datetime.timedelta):
         self._deadline = datetime.datetime.now() + duration
 

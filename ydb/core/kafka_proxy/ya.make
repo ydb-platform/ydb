@@ -39,6 +39,7 @@ SRCS(
     kqp_helper.h
     kafka_consumer_groups_metadata_initializers.cpp
     kafka_consumer_members_metadata_initializers.cpp
+    kafka_transactional_producers_initializers.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(kafka.h)

@@ -51,9 +51,7 @@ public:
 
         target->SetStreamName(CreateGuidAsString());
 
-        TString consumerName = Replication->GetConfig().HasTransferSpecific()
-            ? CreateGuidAsString()
-            : ReplicationConsumerName;
+        TString consumerName;
         if (Replication->GetConfig().HasTransferSpecific()) {
             auto& target = Replication->GetConfig().GetTransferSpecific().GetTarget();
             if (target.HasConsumerName()) {

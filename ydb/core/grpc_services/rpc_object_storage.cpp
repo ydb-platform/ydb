@@ -728,7 +728,11 @@ private:
             const auto type = getTypeFromColMeta(colMeta);
             auto* col = resultSet.Addcolumns();
             
-            *col->mutable_type()->mutable_optional_type()->mutable_item() = NYdb::TProtoAccessor::GetProto(type);
+            if (colMeta.IsNotNullColumn || colMeta.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
+                *col->mutable_type() = NYdb::TProtoAccessor::GetProto(type);
+            } else {
+                *col->mutable_type()->mutable_optional_type()->mutable_item() = NYdb::TProtoAccessor::GetProto(type);
+            }
             *col->mutable_name() = colMeta.Name;
         }
 
@@ -760,7 +764,9 @@ private:
                 } else {
                     const NScheme::TTypeInfo& typeInfo = colMeta.PType;
 
-                    if (cell.IsNull()) {
+                    if (colMeta.IsNotNullColumn) {
+                        ProtoValueFromCell(vb, typeInfo, cell);
+                    } else if (cell.IsNull()) {
                         vb.EmptyOptional((NYdb::EPrimitiveType)typeInfo.GetTypeId());
                     } else {
                         vb.BeginOptional();

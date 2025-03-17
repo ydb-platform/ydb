@@ -516,14 +516,15 @@ namespace NKikimr::NBsController {
                     throw TExError(TStringBuilder() << "failed to validate derived StorageConfig: " << *errorReason);
                 }
             }
+
             PendingYamlConfig.reset();
-            if (!DryRun) {
-                Self.Execute(Self.CreateTxCommitConfig(std::move(yamlConfig), std::exchange(PendingStorageYamlConfig, {}),
-                    std::move(storageConfig), expectedStorageYamlConfigVersion, nullptr, SwitchEnableConfigV2));
-                CommitInProgress = true;
-            } else {
-                OnConfigCommit();
+            if (DryRun) {
+                IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success);
+                return;
             }
+            Self.Execute(Self.CreateTxCommitConfig(std::move(yamlConfig), std::exchange(PendingStorageYamlConfig, {}),
+                std::move(storageConfig), expectedStorageYamlConfigVersion, nullptr));
+            CommitInProgress = true;
         } catch (const TExError& error) {
             IssueGRpcResponse(TResponseProto::BSCInvalidConfig, error.ErrorReason);
         }

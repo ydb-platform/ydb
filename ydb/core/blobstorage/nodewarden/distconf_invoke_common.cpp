@@ -179,7 +179,7 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool updateFields, bool dryRun) {
+    void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool updateFields) {
         if (updateFields) {
             config->MutablePrevConfig()->CopyFrom(*Self->StorageConfig);
             config->MutablePrevConfig()->ClearPrevConfig();
@@ -191,10 +191,6 @@ namespace NKikimr::NStorage {
                 (Error, *error), (Config, config));
             return FinishWithError(TResult::ERROR, TStringBuilder()
                 << "StartProposition config validation failed: " << *error);
-        }
-
-        if (dryRun) {
-            return Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
         }
 
         Self->CurrentProposedStorageConfig.emplace(std::move(*config));

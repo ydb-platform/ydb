@@ -21,6 +21,8 @@ target_link_libraries(ydb-apps-ydb-ut PUBLIC
   yutil
   library-cpp-cpuid_check
   cpp-testing-unittest_main
+  contrib-libs-grpc
+  contrib-libs-fmt
   src-client-topic
   src-client-table
   topic_workload
@@ -42,11 +44,12 @@ target_link_options(ydb-apps-ydb-ut PRIVATE
 )
 
 target_sources(ydb-apps-ydb-ut PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/ut/workload-topic.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/ut/workload-transfer-topic-to-table.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/ut/parse_command_line.cpp
   ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/ut/run_ydb.cpp
   ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/ut/supported_codecs.cpp
   ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/ut/supported_codecs_fixture.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/ut/workload-topic.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/ut/workload-transfer-topic-to-table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/ut/ydb-dump.cpp
 )
 

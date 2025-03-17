@@ -2608,10 +2608,10 @@ public:
                 target.SetDstPath(AdjustPath(dst, GetDatabase()));
                 target.SetTransformLambda(lambda);
                 if (settings.Settings.Batching && settings.Settings.Batching->BatchSizeBytes) {
-                    target.SetBatchSizeBytes(settings.Settings.Batching->BatchSizeBytes);
+                    config.MutableTransferSpecific()->MutableBatching()->SetBatchSizeBytes(settings.Settings.Batching->BatchSizeBytes);
                 }
                 if (settings.Settings.Batching && settings.Settings.Batching->FlushInterval) {
-                    target.SetFlushIntervalMilliSeconds(settings.Settings.Batching->FlushInterval.MilliSeconds());
+                    config.MutableTransferSpecific()->MutableBatching()->SetFlushIntervalMilliSeconds(settings.Settings.Batching->FlushInterval.MilliSeconds());
                 }
                 if (settings.Settings.ConsumerName) {
                     target.SetConsumerName(*settings.Settings.ConsumerName);

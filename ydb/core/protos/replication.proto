@@ -88,11 +88,14 @@ message TReplicationConfig {
             // transfer
             optional string TransformLambda = 6;
             optional string ConsumerName = 7;
-            optional uint64 FlushIntervalMilliSeconds = 8;
-            optional uint64 BatchSizeBytes = 9;
         }
-
         optional TTarget Target = 1;
+
+        message TBatching {
+            optional uint64 FlushIntervalMilliSeconds = 1;
+            optional uint64 BatchSizeBytes = 2;
+        }
+        optional TBatching Batching = 2;
     }
 
     optional TConnectionParams SrcConnectionParams = 1;

@@ -9,9 +9,9 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         ui64 workerId)
 {
     ui64 flushIntervalMilliSeconds = replication->GetConfig().HasTransferSpecific() 
-        ? replication->GetConfig().GetTransferSpecific().GetTarget().GetFlushIntervalMilliSeconds() : 0;
+        ? replication->GetConfig().GetTransferSpecific().GetBatching().GetFlushIntervalMilliSeconds() : 0;
     ui64 batchSizeBytes = replication->GetConfig().HasTransferSpecific() 
-        ? replication->GetConfig().GetTransferSpecific().GetTarget().GetBatchSizeBytes() : 0;
+        ? replication->GetConfig().GetTransferSpecific().GetBatching().GetBatchSizeBytes() : 0;
     return MakeRunWorkerEv(
         replication->GetId(),
         target.GetId(),

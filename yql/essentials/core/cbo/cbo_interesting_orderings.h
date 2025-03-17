@@ -280,6 +280,21 @@ public:
 
     TOrderingsStateMachine() = default;
 
+public:
+    void Build(
+        const std::vector<TFunctionalDependency>& fds,
+        const std::vector<TOrdering>& interestingOrderings
+    ) {
+        std::vector<TFunctionalDependency> processedFDs = PruneFDs(fds, interestingOrderings);
+        NFSM.Build(processedFDs, interestingOrderings);
+        DFSM.Build(NFSM, processedFDs, interestingOrderings);
+        Built = true;
+    }
+
+    bool IsBuilt() const {
+        return Built;
+    }
+
     TFDSet GetFDSet(std::size_t fdIdx) {
         return GetFDSet(std::vector<std::size_t> {fdIdx});
     }
@@ -575,15 +590,6 @@ private:
         std::vector<TInitState> InitStateByOrderingIdx;
     };
 
-    void Build(
-        const std::vector<TFunctionalDependency>& fds,
-        const std::vector<TOrdering>& interestingOrderings
-    ) {
-        std::vector<TFunctionalDependency> processedFDs = PruneFDs(fds, interestingOrderings);
-        NFSM.Build(processedFDs, interestingOrderings);
-        DFSM.Build(NFSM, processedFDs, interestingOrderings);
-    }
-
     /*
      * For equivalences we build equivalence classes and if item belongs to the class, which has no interesting
      * orderings, so we can easily prune it.
@@ -659,6 +665,7 @@ private:
     TDFSM DFSM;
 
     std::vector<std::int64_t> FdMapping; // We to remap FD idxes after the pruning
+    bool Built = false;
 };
 
 }

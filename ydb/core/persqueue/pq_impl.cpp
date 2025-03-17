@@ -4640,7 +4640,6 @@ TActorId TPersQueue::GetPartitionQuoter(const TPartitionId& partition) {
             partition,
             SelfId(),
             TabletID(),
-            IsLocalDC,
             *Counters
         ));
     }

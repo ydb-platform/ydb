@@ -370,7 +370,6 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
                 id,
                 Ctx->Edge,
                 Ctx->TabletId,
-                Config.GetLocalDC(),
                 *TabletCounters
         ));
     }

@@ -7,6 +7,8 @@
 #include "yql_arrow_resolver.h"
 #include "yql_statistics.h"
 
+#include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
+
 #include <yql/essentials/public/udf/udf_validate.h>
 #include <yql/essentials/core/credentials/yql_credentials.h>
 #include <yql/essentials/core/url_lister/interface/url_lister_manager.h>
@@ -357,6 +359,7 @@ inline TString GetRandomKey<TGUID>() {
 }
 
 struct TTypeAnnotationContext: public TThrRefBase {
+    NDq::TOrderingsStateMachine OrderingsFSM;
     THashMap<TString, TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>> ColumnStatisticsByTableName;
     THashMap<ui64, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
     TIntrusivePtr<ITimeProvider> TimeProvider;

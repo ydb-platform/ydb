@@ -825,6 +825,11 @@ void AppendTxStats(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx
 
 class TInterestingOrderingsFSMBuilder {
 public:
+    TInterestingOrderingsFSMBuilder(TKqpOptimizeContext& kqpCtx)
+        : KqpCtx(kqpCtx)
+    {}
+
+public:
     TOrderingsStateMachine Build(const TExprNode::TPtr& node) {
         InterestingOrderingsCollector collector;
         VisitExpr(node, [&collector](const TExprNode::TPtr& node){
@@ -836,13 +841,20 @@ public:
     }
 
 private:
+    TKqpOptimizeContext& KqpCtx;
+
+private:
     class InterestingOrderingsCollector {
     public:
+        InterestingOrderingsCollector()
+
         bool Collect(const TExprNode::TPtr& node) {
             bool matched = true;
 
             if (TCoEquiJoin::Match(node.Get())) {
                 CollectEquiJoin(TExprBase(node).Cast<TCoEquiJoin>());
+            } else if (TKqpTable::Match(node.Get())) {
+                CollectKqpTable(TExprBase(node).Cast<TKqpTable>());
             } else {
                 matched = false;
             }
@@ -890,6 +902,11 @@ private:
             FDStorage.AddInterestingOrdering(leftKeys, TOrdering::EShuffle);
             FDStorage.AddInterestingOrdering(rightKeys, TOrdering::EShuffle);
         }
+
+    private:
+        void CollectKqpTable(const TKqpTable& kqpTable) {
+
+        }
     };
 };
 
@@ -903,6 +920,11 @@ IGraphTransformer::TStatus TKqpStatisticsTransformer::DoTransform(TExprNode::TPt
     output = input;
     if (Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel) == 0) {
         return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (!TypeCtx->OrderingsFSM.IsBuilt()) {
+        auto fsmBuilder = TInterestingOrderingsFSMBuilder(KqpCtx);
+        TypeCtx->OrderingsFSM = fsmBuilder.Build(input);
     }
 
     TxStats.clear();

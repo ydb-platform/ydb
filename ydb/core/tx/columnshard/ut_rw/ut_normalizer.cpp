@@ -256,12 +256,17 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         checker.CorrectFeatureFlagsOnStart(runtime.GetAppData().FeatureFlags); 
 
         const ui64 tableId = 1;
-        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
-            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
-        const std::vector<ui32> columnsIds = { 1, 2, 3 };
-        PrepareTablet(runtime, tableId, schema, 2);
+        const auto tableDescritption = TTestTableDescription{
+            {
+                NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+                NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), 
+                NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8))
+            },
+            {0, 1}
+        };
+        PrepareTablet(runtime, tableId, tableDescritption);
         const ui64 txId = 111;
-
+        const std::vector<ui32> columnsIds = { 1, 2, 3 };
         NConstruction::IArrayBuilder::TPtr key1Column =
             std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key1");
         NConstruction::IArrayBuilder::TPtr key2Column =
@@ -276,13 +281,13 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(11, txId));
 
         {
-            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
+            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), tableDescritption.Columns);
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 20048);
         }
         RebootTablet(runtime, TTestTxConfig::TxTablet0, writer.GetSender());
 
         {
-            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
+            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), tableDescritption.Columns);
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), checker.RecordsCountAfterReboot(20048));
         }
     }

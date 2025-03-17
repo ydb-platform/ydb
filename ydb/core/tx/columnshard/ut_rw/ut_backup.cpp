@@ -61,13 +61,15 @@ Y_UNIT_TEST_SUITE(Backup) {
         TTester::Setup(runtime);
 
         const ui64 tableId = 1;
-        const std::vector<NArrow::NTest::TTestColumn> schema = {
-                                                                    NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
-                                                                    NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
-                                                                    NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8) )
-                                                                };
+        const auto tableDescritption = TTestTableDescription{{
+                NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+                NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
+                NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8) )
+            },
+            {0, 1}
+        };
         auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        PrepareTablet(runtime, tableId, schema, 2);
+        PrepareTablet(runtime, tableId, tableDescritption);
         ui64 txId = 111;
         ui64 planStep = 1000000000; // greater then delays
 
@@ -77,7 +79,7 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema, true, &writeIds));
+            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, tableDescritption.Columns), tableDescritption.Columns, true, &writeIds));
             ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, ++planStep, txId);
         }
@@ -86,7 +88,7 @@ Y_UNIT_TEST_SUITE(Backup) {
             [&]() {
             ++writeId;
             std::vector<ui64> writeIds;
-            WriteData(runtime, sender, writeId, tableId, MakeTestBlob({writeId * 100, (writeId + 1) * 100}, schema), schema, true, &writeIds);
+            WriteData(runtime, sender, writeId, tableId, MakeTestBlob({writeId * 100, (writeId + 1) * 100}, tableDescritption.Columns), tableDescritption.Columns, true, &writeIds);
             ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, ++planStep, txId);
             return true;

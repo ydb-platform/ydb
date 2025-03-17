@@ -46,81 +46,79 @@ namespace NTypeIds = NScheme::NTypeIds;
 using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 
-struct TTestSchema {
-    static inline const TString DefaultTtlColumn = "saved_at";
+struct TStorageTier {
+    static inline TString DefaultTtlColumn = "saved_at";
+    TString TtlColumn = DefaultTtlColumn;
+    std::optional<TDuration> EvictAfter;
+    TString Name;
+    TString Codec;
+    std::optional<int> CompressionLevel;
+    NKikimrSchemeOp::TS3Settings S3 = FakeS3();
 
-    struct TStorageTier {
-        TString TtlColumn = DefaultTtlColumn;
-        std::optional<TDuration> EvictAfter;
-        TString Name;
-        TString Codec;
-        std::optional<int> CompressionLevel;
-        NKikimrSchemeOp::TS3Settings S3 = FakeS3();
+    TStorageTier(const TString& name = {})
+        : Name(name) {
+    }
 
-        TStorageTier(const TString& name = {})
-            : Name(name) {
+    TString DebugString() const {
+        return TStringBuilder() << "{Column=" << TtlColumn << ";EvictAfter=" << EvictAfter.value_or(TDuration::Zero()) << ";Name=" << Name
+                                << ";Codec=" << Codec << "};";
+    }
+
+    NKikimrSchemeOp::EColumnCodec GetCodecId() const {
+        if (Codec == "none") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain;
+        } else if (Codec == "lz4") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4;
+        } else if (Codec == "zstd") {
+            return NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD;
         }
+        Y_ABORT_UNLESS(false);
+    }
 
-        TString DebugString() const {
-            return TStringBuilder() << "{Column=" << TtlColumn << ";EvictAfter=" << EvictAfter.value_or(TDuration::Zero()) << ";Name=" << Name
-                                    << ";Codec=" << Codec << "};";
+    bool HasCodec() const {
+        return !Codec.empty();
+    }
+
+    TStorageTier& SetCodec(const TString& codec, std::optional<int> level = {}) {
+        Codec = codec;
+        if (level) {
+            CompressionLevel = *level;
         }
+        return *this;
+    }
 
-        NKikimrSchemeOp::EColumnCodec GetCodecId() const {
-            if (Codec == "none") {
-                return NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain;
-            } else if (Codec == "lz4") {
-                return NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4;
-            } else if (Codec == "zstd") {
-                return NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD;
-            }
-            Y_ABORT_UNLESS(false);
-        }
+    TStorageTier& SetTtlColumn(const TString& columnName) {
+        TtlColumn = columnName;
+        return *this;
+    }
 
-        bool HasCodec() const {
-            return !Codec.empty();
-        }
+    static NKikimrSchemeOp::TS3Settings FakeS3() {
+        const TString bucket = "tiering-test-01";
 
-        TStorageTier& SetCodec(const TString& codec, std::optional<int> level = {}) {
-            Codec = codec;
-            if (level) {
-                CompressionLevel = *level;
-            }
-            return *this;
-        }
-
-        TStorageTier& SetTtlColumn(const TString& columnName) {
-            TtlColumn = columnName;
-            return *this;
-        }
-
-        static NKikimrSchemeOp::TS3Settings FakeS3() {
-            const TString bucket = "tiering-test-01";
-
-            NKikimrSchemeOp::TS3Settings s3Config;
-            s3Config.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
-            s3Config.SetVerifySSL(false);
-            s3Config.SetBucket(bucket);
+        NKikimrSchemeOp::TS3Settings s3Config;
+        s3Config.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
+        s3Config.SetVerifySSL(false);
+        s3Config.SetBucket(bucket);
 //#define S3_TEST_USAGE
 #ifdef S3_TEST_USAGE
-            s3Config.SetEndpoint("storage.cloud-preprod.yandex.net");
-            s3Config.SetAccessKey("...");
-            s3Config.SetSecretKey("...");
-            s3Config.SetProxyHost("localhost");
-            s3Config.SetProxyPort(8080);
-            s3Config.SetProxyScheme(NKikimrSchemeOp::TS3Settings::HTTP);
+        s3Config.SetEndpoint("storage.cloud-preprod.yandex.net");
+        s3Config.SetAccessKey("...");
+        s3Config.SetSecretKey("...");
+        s3Config.SetProxyHost("localhost");
+        s3Config.SetProxyPort(8080);
+        s3Config.SetProxyScheme(NKikimrSchemeOp::TS3Settings::HTTP);
 #else
-            s3Config.SetEndpoint("fake.fake");
-            s3Config.SetSecretKey("fakeSecret");
+        s3Config.SetEndpoint("fake.fake");
+        s3Config.SetSecretKey("fakeSecret");
 #endif
-            s3Config.SetRequestTimeoutMs(10000);
-            s3Config.SetHttpRequestTimeoutMs(10000);
-            s3Config.SetConnectionTimeoutMs(10000);
-            return s3Config;
-        }
-    };
+        s3Config.SetRequestTimeoutMs(10000);
+        s3Config.SetHttpRequestTimeoutMs(10000);
+        s3Config.SetConnectionTimeoutMs(10000);
+        return s3Config;
+    }
+};
 
-    struct TTableSpecials: public TStorageTier {
+struct TTableSpecials: public TStorageTier {
     public:
         std::vector<TStorageTier> Tiers;
         bool WaitEmptyAfter = false;
@@ -165,246 +163,113 @@ struct TTestSchema {
             }
             return TtlColumn;
         }
-    };
-    using TTestColumn = NArrow::NTest::TTestColumn;
-    static auto YdbSchema(const TTestColumn& firstKeyItem = TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp))) {
-        std::vector<TTestColumn> schema = { // PK
-            firstKeyItem, TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)),
-            TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)).SetAccessorClassName("SPARSED"),
-            TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)).SetStorageId("__MEMORY"), TTestColumn("level", TTypeInfo(NTypeIds::Int32)),
-            TTestColumn("message", TTypeInfo(NTypeIds::Utf8)).SetStorageId("__MEMORY"), TTestColumn("json_payload", TTypeInfo(NTypeIds::Json)),
-            TTestColumn("ingested_at", TTypeInfo(NTypeIds::Timestamp)), TTestColumn("saved_at", TTypeInfo(NTypeIds::Timestamp)),
-            TTestColumn("request_id", TTypeInfo(NTypeIds::Utf8))
-        };
-        return schema;
-    };
 
-    static std::vector<ui32> GetColumnIds(const std::vector<TTestColumn>& schema, const std::vector<TString>& names) {
-        std::vector<ui32> result;
-        for (auto&& i : names) {
-            bool found = false;
-            for (ui32 idx = 0; idx < schema.size(); ++idx) {
-                if (schema[idx].GetName() == i) {
-                    result.emplace_back(idx + 1);
-                    found = true;
-                    break;
-                }
+        NKikimrSchemeOp::TColumnDataLifeCycle InitTiersAndTtl() const{
+            NKikimrSchemeOp::TColumnDataLifeCycle ttlSettings;
+            ttlSettings.SetVersion(1);
+            if (!HasTiers() && !HasTtl()) {
+                return ttlSettings;
             }
-            AFL_VERIFY(found);
-        }
-        return result;
-    }
-
-    static auto YdbExoticSchema() {
-        std::vector<TTestColumn> schema = { // PK
-            TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)),
-            TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)).SetAccessorClassName("SPARSED"),
-            TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)), TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)).SetStorageId("__MEMORY"),
-            //
-            TTestColumn("level", TTypeInfo(NTypeIds::Int32)), TTestColumn("message", TTypeInfo(NTypeIds::String4k)).SetStorageId("__MEMORY"),
-            TTestColumn("json_payload", TTypeInfo(NTypeIds::JsonDocument)), TTestColumn("ingested_at", TTypeInfo(NTypeIds::Timestamp)),
-            TTestColumn("saved_at", TTypeInfo(NTypeIds::Timestamp)),
-            TTestColumn("request_id", TTypeInfo(NTypeIds::Yson)).SetAccessorClassName("SPARSED")
-        };
-        return schema;
-    };
-
-    static auto YdbPkSchema() {
-        std::vector<TTestColumn> schema = { TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)),
-            TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)).SetStorageId("__MEMORY"),
-            TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)).SetAccessorClassName("SPARSED"),
-            TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)).SetStorageId("__MEMORY") };
-        return schema;
-    }
-
-    static auto YdbAllTypesSchema() {
-        std::vector<TTestColumn> schema = { TTestColumn("ts", TTypeInfo(NTypeIds::Timestamp)),
-
-            TTestColumn("i8", TTypeInfo(NTypeIds::Int8)), TTestColumn("i16", TTypeInfo(NTypeIds::Int16)),
-            TTestColumn("i32", TTypeInfo(NTypeIds::Int32)), TTestColumn("i64", TTypeInfo(NTypeIds::Int64)),
-            TTestColumn("u8", TTypeInfo(NTypeIds::Uint8)), TTestColumn("u16", TTypeInfo(NTypeIds::Uint16)),
-            TTestColumn("u32", TTypeInfo(NTypeIds::Uint32)), TTestColumn("u64", TTypeInfo(NTypeIds::Uint64)),
-            TTestColumn("float", TTypeInfo(NTypeIds::Float)), TTestColumn("double", TTypeInfo(NTypeIds::Double)),
-
-            TTestColumn("byte", TTypeInfo(NTypeIds::Byte)),
-            //{ "bool", TTypeInfo(NTypeIds::Bool) },
-            //{ "decimal", TTypeInfo(NTypeIds::Decimal) },
-            //{ "dynum", TTypeInfo(NTypeIds::DyNumber) },
-
-            TTestColumn("date", TTypeInfo(NTypeIds::Date)), TTestColumn("datetime", TTypeInfo(NTypeIds::Datetime)),
-            //{ "interval", TTypeInfo(NTypeIds::Interval) },
-
-            TTestColumn("text", TTypeInfo(NTypeIds::Text)), TTestColumn("bytes", TTypeInfo(NTypeIds::Bytes)),
-            TTestColumn("yson", TTypeInfo(NTypeIds::Yson)), TTestColumn("json", TTypeInfo(NTypeIds::Json)),
-            TTestColumn("jsondoc", TTypeInfo(NTypeIds::JsonDocument)) };
-        return schema;
-    };
-
-    static void InitSchema(const std::vector<NArrow::NTest::TTestColumn>& columns, const std::vector<NArrow::NTest::TTestColumn>& pk,
-        const TTableSpecials& specials, NKikimrSchemeOp::TColumnTableSchema* schema);
-
-    static bool InitTiersAndTtl(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle* ttlSettings) {
-        ttlSettings->SetVersion(1);
-        if (!specials.HasTiers() && !specials.HasTtl()) {
-            return false;
-        }
-        ttlSettings->MutableEnabled()->SetColumnName(specials.TtlColumn);
-        for (const auto& tier : specials.Tiers) {
-            UNIT_ASSERT(tier.EvictAfter);
-            UNIT_ASSERT_EQUAL(specials.TtlColumn, tier.TtlColumn);
-            auto* tierSettings = ttlSettings->MutableEnabled()->AddTiers();
-            tierSettings->MutableEvictToExternalStorage()->SetStorage(tier.Name);
-            tierSettings->SetApplyAfterSeconds(tier.EvictAfter->Seconds());
-        }
-        if (specials.HasTtl()) {
-            auto* tier = ttlSettings->MutableEnabled()->AddTiers();
-            tier->MutableDelete();
-            tier->SetApplyAfterSeconds((*specials.EvictAfter).Seconds());
-        }
-        return true;
-    }
-
-    static TString CreateTableTxBody(ui64 pathId, const std::vector<NArrow::NTest::TTestColumn>& columns,
-        const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specialsExt = {}, ui64 generation = 0) {
-        auto specials = specialsExt;
-        NKikimrTxColumnShard::TSchemaTxBody tx;
-        tx.MutableSeqNo()->SetGeneration(generation);
-        auto* table = tx.MutableEnsureTables()->AddTables();
-        table->SetPathId(pathId);
-
-        {   // preset
-            auto* preset = table->MutableSchemaPreset();
-            preset->SetId(1);
-            preset->SetName("default");
-
-            // schema
-            InitSchema(columns, pk, specials, preset->MutableSchema());
+            ttlSettings.MutableEnabled()->SetColumnName(TtlColumn);
+            for (const auto& tier : Tiers) {
+                UNIT_ASSERT(tier.EvictAfter);
+                UNIT_ASSERT_EQUAL(TtlColumn, tier.TtlColumn);
+                auto* tierSettings = ttlSettings.MutableEnabled()->AddTiers();
+                tierSettings->MutableEvictToExternalStorage()->SetStorage(tier.Name);
+                tierSettings->SetApplyAfterSeconds(tier.EvictAfter->Seconds());
+            }
+            if (HasTtl()) {
+                auto* tier = ttlSettings.MutableEnabled()->AddTiers();
+                tier->MutableDelete();
+                tier->SetApplyAfterSeconds((*EvictAfter).Seconds());
+            }
+            return ttlSettings;
         }
 
-        InitTiersAndTtl(specials, table->MutableTtlSettings());
+        THashMap<TString, NColumnShard::NTiers::TTierConfig> BuildSnapshot() const;
 
-        Cerr << "CreateTable: " << tx << "\n";
-
-        TString out;
-        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
-        return out;
-    }
-
-    static TString CreateInitShardTxBody(ui64 pathId, const std::vector<NArrow::NTest::TTestColumn>& columns,
-        const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials = {}, const TString& ownerPath = "/Root/olap") {
-        NKikimrTxColumnShard::TSchemaTxBody tx;
-        auto* table = tx.MutableInitShard()->AddTables();
-        tx.MutableInitShard()->SetOwnerPath(ownerPath);
-        table->SetPathId(pathId);
-
-        InitSchema(columns, pk, specials, table->MutableSchema());
-        InitTiersAndTtl(specials, table->MutableTtlSettings());
-
-        Cerr << "CreateInitShard: " << tx << "\n";
-
-        TString out;
-        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
-        return out;
-    }
-
-    static TString CreateStandaloneTableTxBody(ui64 pathId, const std::vector<NArrow::NTest::TTestColumn>& columns,
-        const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials = {}) {
-        NKikimrTxColumnShard::TSchemaTxBody tx;
-        auto* table = tx.MutableEnsureTables()->AddTables();
-        table->SetPathId(pathId);
-
-        InitSchema(columns, pk, specials, table->MutableSchema());
-        InitTiersAndTtl(specials, table->MutableTtlSettings());
-
-        Cerr << "CreateStandaloneTable: " << tx << "\n";
-
-        TString out;
-        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
-        return out;
-    }
-
-    static TString AlterTableTxBody(ui64 pathId, ui32 version, const TTableSpecials& specials) {
-        NKikimrTxColumnShard::TSchemaTxBody tx;
-        auto* table = tx.MutableAlterTable();
-        table->SetPathId(pathId);
-        tx.MutableSeqNo()->SetRound(version);
-
-        auto* ttlSettings = table->MutableTtlSettings();
-        if (!InitTiersAndTtl(specials, ttlSettings)) {
-            ttlSettings->MutableDisabled();
-        }
-
-        Cerr << "AlterTable: " << tx << "\n";
-
-        TString out;
-        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
-        return out;
-    }
-
-    static TString DropTableTxBody(ui64 pathId, ui32 version) {
-        NKikimrTxColumnShard::TSchemaTxBody tx;
-        tx.MutableDropTable()->SetPathId(pathId);
-        tx.MutableSeqNo()->SetRound(version);
-
-        TString out;
-        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
-        return out;
-    }
-
-    static THashMap<TString, NColumnShard::NTiers::TTierConfig> BuildSnapshot(const TTableSpecials& specials);
-
-    static TString CommitTxBody(ui64, const std::vector<ui64>& writeIds) {
-        NKikimrTxColumnShard::TCommitTxBody proto;
-        for (ui64 id : writeIds) {
-            proto.AddWriteIds(id);
-        }
-
-        TString txBody;
-        Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&txBody);
-        return txBody;
-    }
-
-    static TString TtlTxBody(const std::vector<ui64>& pathIds, TString ttlColumnName, ui64 tsSeconds) {
-        NKikimrTxColumnShard::TTtlTxBody proto;
-        proto.SetTtlColumnName(ttlColumnName);
-        proto.SetUnixTimeSeconds(tsSeconds);
-        for (auto& pathId : pathIds) {
-            proto.AddPathIds(pathId);
-        }
-
-        TString txBody;
-        Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&txBody);
-        return txBody;
-    }
-
-    static std::vector<TString> ExtractNames(const std::vector<NArrow::NTest::TTestColumn>& columns) {
-        std::vector<TString> out;
-        out.reserve(columns.size());
-        for (auto& col : columns) {
-            out.push_back(col.GetName());
-        }
-        return out;
-    }
-
-    static std::vector<ui32> ExtractIds(const std::vector<NArrow::NTest::TTestColumn>& columns) {
-        std::vector<ui32> out;
-        out.reserve(columns.size());
-        for (auto& col : columns) {
-            Y_UNUSED(col);
-            out.push_back(out.size() + 1);
-        }
-        return out;
-    }
-
-    static std::vector<NScheme::TTypeInfo> ExtractTypes(const std::vector<NArrow::NTest::TTestColumn>& columns) {
-        std::vector<NScheme::TTypeInfo> types;
-        types.reserve(columns.size());
-        for (auto& i : columns) {
-            types.push_back(i.GetType());
-        }
-        return types;
-    }
 };
+
+
+inline TString TtlTxBody(const std::vector<ui64>& pathIds, TString ttlColumnName, ui64 tsSeconds) {
+    NKikimrTxColumnShard::TTtlTxBody proto;
+    proto.SetTtlColumnName(ttlColumnName);
+    proto.SetUnixTimeSeconds(tsSeconds);
+    for (auto& pathId : pathIds) {
+        proto.AddPathIds(pathId);
+    }
+
+    TString txBody;
+    Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&txBody);
+    return txBody;
+}
+
+inline std::vector<TString> ExtractNames(const std::vector<NArrow::NTest::TTestColumn>& columns) {
+    std::vector<TString> out;
+    out.reserve(columns.size());
+    for (auto& col : columns) {
+        out.push_back(col.GetName());
+    }
+    return out;
+}
+
+inline std::vector<ui32> ExtractIds(const std::vector<NArrow::NTest::TTestColumn>& columns) {
+    std::vector<ui32> out;
+    out.reserve(columns.size());
+    for (auto& col : columns) {
+        Y_UNUSED(col);
+        out.push_back(out.size() + 1);
+    }
+    return out;
+}
+
+inline std::vector<NScheme::TTypeInfo> ExtractTypes(const std::vector<NArrow::NTest::TTestColumn>& columns) {
+    std::vector<NScheme::TTypeInfo> types;
+    types.reserve(columns.size());
+    for (auto& i : columns) {
+        types.push_back(i.GetType());
+    }
+    return types;
+}
+
+inline TString AlterTableTxBody(ui64 pathId, ui32 version, const TTableSpecials& specials) {
+    NKikimrTxColumnShard::TSchemaTxBody tx;
+    auto* table = tx.MutableAlterTable();
+    table->SetPathId(pathId);
+    tx.MutableSeqNo()->SetRound(version);
+
+    *table->MutableTtlSettings() = specials.InitTiersAndTtl();
+
+    Cerr << "AlterTable: " << tx << "\n";
+
+    TString out;
+    Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
+    return out;
+}
+
+inline TString DropTableTxBody(ui64 pathId, ui32 version) {
+    NKikimrTxColumnShard::TSchemaTxBody tx;
+    tx.MutableDropTable()->SetPathId(pathId);
+    tx.MutableSeqNo()->SetRound(version);
+
+    TString out;
+    Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
+    return out;
+}
+
+
+inline TString CommitTxBody(ui64, const std::vector<ui64>& writeIds) {
+    NKikimrTxColumnShard::TCommitTxBody proto;
+    for (ui64 id : writeIds) {
+        proto.AddWriteIds(id);
+    }
+
+    TString txBody;
+    Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&txBody);
+    return txBody;
+}
+
+
 
 void RefreshTiering(TTestBasicRuntime& runtime, const TActorId& sender);
 
@@ -560,21 +425,127 @@ public:
 
 NOlap::TIndexInfo BuildTableInfo(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const std::vector<NArrow::NTest::TTestColumn>& key);
 
-struct TestTableDescription {
-    std::vector<NArrow::NTest::TTestColumn> Schema = NTxUT::TTestSchema::YdbSchema();
-    std::vector<NArrow::NTest::TTestColumn> Pk = NTxUT::TTestSchema::YdbPkSchema();
-    bool InStore = true;
+struct TTestTableDescription {
+    enum EPredefined {
+        Default,
+        Exotic,
+        AllTypes
+    };
+    const TString StorePath;
+    const std::vector<NArrow::NTest::TTestColumn> Columns;
+    const THashMap<TString, size_t> ColumnNameToIdx;
+    const std::vector<size_t> Pk; //indexes from columns
+    TTestTableDescription(std::vector<NArrow::NTest::TTestColumn>&& columns, std::vector<size_t>&& pk, TString&& storePath = "/Root/olapStore")
+        : StorePath(std::move(storePath))
+        , Columns(std::move(columns))
+        , ColumnNameToIdx(GetColumnToIdxMap(Columns))
+        , Pk(std::move(pk)){
+    }
+    TTestTableDescription(const EPredefined predefined, TString&& storePath = "/Root/olapStore")
+        : TTestTableDescription(GetPredefinedColumns(predefined), GetPredefinedPkIdxs(predefined), std::move(storePath)) {
+    }
+
+    static THashMap<TString, size_t> GetColumnToIdxMap(const std::vector<NArrow::NTest::TTestColumn>& columns) {
+        THashMap<TString, size_t> result;
+        for (size_t i = 0; i != columns.size(); ++i) {
+            result[columns[i].GetName()] = i;
+        }
+        return result;
+    }
+
+    static std::vector<NArrow::NTest::TTestColumn> GetPredefinedColumns(EPredefined predefined);
+
+    static std::vector<size_t> GetPredefinedPkIdxs(EPredefined /* predefined */) {
+        return {0, 1, 2, 3};
+    }
+
+    bool IsInStore() const {
+        return StorePath.size();
+    }
+
+    bool IsStandalone() const {
+        return !IsInStore();
+    }
+
+    NKikimrSchemeOp::TColumnTableSchema InitSchema(const NTxUT::TTableSpecials& specials) const;
+
+    TString CreateTableTxBody(ui64 pathId, const NTxUT::TTableSpecials& spec = {}, ui64 generation = 0) const {
+        NKikimrTxColumnShard::TSchemaTxBody tx;
+        tx.MutableSeqNo()->SetGeneration(generation);
+        auto* table = tx.MutableEnsureTables()->AddTables();
+        table->SetPathId(pathId);
+        if (IsInStore()) {
+            auto* preset = table->MutableSchemaPreset();
+            preset->SetId(1);
+            preset->SetName("default");
+            *preset->MutableSchema() = InitSchema(spec);
+        } else {
+            *table->MutableSchema() = InitSchema(spec);
+        }
+        *table->MutableTtlSettings() = spec.InitTiersAndTtl();
+
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
+        return out;
+    }
+
+    TString CreateInitShardTxBody(ui64 pathId, const NTxUT::TTableSpecials& spec) const {
+        AFL_VERIFY(IsInStore());
+        NKikimrTxColumnShard::TSchemaTxBody tx;
+        auto* table = tx.MutableInitShard()->AddTables();
+        tx.MutableInitShard()->SetOwnerPath(StorePath);
+        table->SetPathId(pathId);
+
+        *table->MutableSchema() =InitSchema(spec);
+        *table->MutableTtlSettings() = spec.InitTiersAndTtl();
+
+        Cerr << "CreateInitShard: " << tx << "\n";
+
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
+        return out;
+    }
+
+    std::vector<NArrow::NTest::TTestColumn> GetPkColumns() const {
+        std::vector<NArrow::NTest::TTestColumn> result;
+        for (const auto& i: Pk) {
+            result.push_back(Columns[i]);
+        }
+        return result;
+    } 
+
+    std::vector<ui32> GetColumnIds() const {
+        std::vector<ui32> result;
+        for (const auto& _: Columns) {
+            result.push_back(result.size() + 1);
+        }
+        return result;
+    }
 
     std::vector<ui32> GetColumnIds(const std::vector<TString>& names) const {
-        return NTxUT::TTestSchema::GetColumnIds(Schema, names);
+        std::vector<ui32> result;
+        for (const auto& name : names) {
+            const auto* p = ColumnNameToIdx.FindPtr(name);
+            AFL_VERIFY(p);
+            result.push_back(*p + 1);
+        }
+        return result;
+    }
+
+    std::vector<TString> GetColumnNames() const {
+        std::vector<TString> result;
+        for (const auto& c: Columns) {
+            result.push_back(c.GetName());
+        }
+        return result;
     }
 };
 
-void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table = {}, TString codec = "none");
+void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TTestTableDescription& table, TString codec = "none");
 void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const NOlap::TSnapshot& snapshot, bool succeed = true);
 
 void PrepareTablet(
-    TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize = 1);
+    TTestBasicRuntime& runtime, const ui64 tableId, const TTestTableDescription& tableDescription);
 void PrepareTablet(TTestBasicRuntime& runtime, const TString& schemaTxBody, bool succeed);
 
 std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(

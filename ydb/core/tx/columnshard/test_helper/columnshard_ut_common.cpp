@@ -343,7 +343,7 @@ TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTes
     }
 
     std::vector<TString> mem;
-    std::vector<TTypeInfo> types = TTestSchema::ExtractTypes(columns);
+    std::vector<TTypeInfo> types = ExtractTypes(columns);
     // insert, not ordered
     for (size_t i = range.first; i < range.second; i += 2) {
         std::vector<TCell> cells = MakeTestCells(types, i, mem);
@@ -381,7 +381,7 @@ TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTes
 TSerializedTableRange MakeTestRange(std::pair<ui64, ui64> range, bool inclusiveFrom, bool inclusiveTo,
                                     const std::vector<NArrow::NTest::TTestColumn>& columns) {
     std::vector<TString> mem;
-    std::vector<TTypeInfo> types = TTestSchema::ExtractTypes(columns);
+    std::vector<TTypeInfo> types = ExtractTypes(columns);
     std::vector<TCell> cellsFrom = MakeTestCells(types, range.first, mem);
     std::vector<TCell> cellsTo = MakeTestCells(types, range.second, mem);
 
@@ -389,12 +389,12 @@ TSerializedTableRange MakeTestRange(std::pair<ui64, ui64> range, bool inclusiveF
                                  TConstArrayRef<TCell>(cellsTo), inclusiveTo);
 }
 
-THashMap<TString, NColumnShard::NTiers::TTierConfig> TTestSchema::BuildSnapshot(const TTableSpecials& specials) {
-    if (specials.Tiers.empty()) {
+THashMap<TString, NColumnShard::NTiers::TTierConfig> TTableSpecials::BuildSnapshot() const {
+    if (Tiers.empty()) {
         return {};
     }
     THashMap<TString, NColumnShard::NTiers::TTierConfig> tiers;
-    for (auto&& tier : specials.Tiers) {
+    for (auto&& tier : Tiers) {
         {
             NKikimrSchemeOp::TCompressionOptions compressionProto;
             if (tier.Codec) {
@@ -410,135 +410,183 @@ THashMap<TString, NColumnShard::NTiers::TTierConfig> TTestSchema::BuildSnapshot(
     return tiers;
 }
 
-void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& columns, const std::vector<NArrow::NTest::TTestColumn>& pk,
-    const TTableSpecials& specials, NKikimrSchemeOp::TColumnTableSchema* schema) {
 
-    for (ui32 i = 0; i < columns.size(); ++i) {
-        *schema->MutableColumns()->Add() = columns[i].CreateColumn(i + 1);
-        if (!specials.NeedTestStatistics(pk)) {
+
+} // namespace NKikimr::NTxUT
+
+namespace NKikimr::NColumnShard {
+std::vector<NArrow::NTest::TTestColumn> TTestTableDescription::GetPredefinedColumns(EPredefined predefined) {
+    using namespace NKikimr::NScheme;
+    using namespace NArrow::NTest;
+    switch (predefined) {
+        case Default:
+            return {
+                TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)),
+                TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)),
+                TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)).SetAccessorClassName("SPARSED"),
+                TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)).SetStorageId("__MEMORY"),
+                TTestColumn("level", TTypeInfo(NTypeIds::Int32)),
+                TTestColumn("message", TTypeInfo(NTypeIds::Utf8)).SetStorageId("__MEMORY"),
+                TTestColumn("json_payload", TTypeInfo(NTypeIds::Json)),
+                TTestColumn("ingested_at", TTypeInfo(NTypeIds::Timestamp)),
+                TTestColumn("saved_at", TTypeInfo(NTypeIds::Timestamp)),
+                TTestColumn("request_id", TTypeInfo(NTypeIds::Utf8))
+            };
+        case Exotic:
+            return {
+                TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)),
+                TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)).SetAccessorClassName("SPARSED"),
+                TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)),
+                TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)).SetStorageId("__MEMORY"),
+                TTestColumn("level", TTypeInfo(NTypeIds::Int32)), TTestColumn("message", TTypeInfo(NTypeIds::String4k)).SetStorageId("__MEMORY"),
+                TTestColumn("json_payload", TTypeInfo(NTypeIds::JsonDocument)), TTestColumn("ingested_at", TTypeInfo(NTypeIds::Timestamp)),
+                TTestColumn("saved_at", TTypeInfo(NTypeIds::Timestamp)),
+                TTestColumn("request_id", TTypeInfo(NTypeIds::Yson)).SetAccessorClassName("SPARSED")
+            };
+        case AllTypes:
+            return {
+                TTestColumn("ts", TTypeInfo(NTypeIds::Timestamp)),
+                TTestColumn("i8", TTypeInfo(NTypeIds::Int8)),
+                TTestColumn("i16", TTypeInfo(NTypeIds::Int16)),
+                TTestColumn("i32", TTypeInfo(NTypeIds::Int32)),
+                TTestColumn("i64", TTypeInfo(NTypeIds::Int64)),
+                TTestColumn("u8", TTypeInfo(NTypeIds::Uint8)),
+                TTestColumn("u16", TTypeInfo(NTypeIds::Uint16)),
+                TTestColumn("u32", TTypeInfo(NTypeIds::Uint32)),
+                TTestColumn("u64", TTypeInfo(NTypeIds::Uint64)),
+                TTestColumn("float", TTypeInfo(NTypeIds::Float)),
+                TTestColumn("double", TTypeInfo(NTypeIds::Double)),
+                TTestColumn("byte", TTypeInfo(NTypeIds::Byte)),
+                //{ "bool", TTypeInfo(NTypeIds::Bool) },
+                //{ "decimal", TTypeInfo(NTypeIds::Decimal) },
+                //{ "dynum", TTypeInfo(NTypeIds::DyNumber) },
+                TTestColumn("date", TTypeInfo(NTypeIds::Date)),
+                TTestColumn("datetime", TTypeInfo(NTypeIds::Datetime)),
+                //{ "interval", TTypeInfo(NTypeIds::Interval) },
+                TTestColumn("text", TTypeInfo(NTypeIds::Text)),
+                TTestColumn("bytes", TTypeInfo(NTypeIds::Bytes)),
+                TTestColumn("yson", TTypeInfo(NTypeIds::Yson)),
+                TTestColumn("json", TTypeInfo(NTypeIds::Json)),
+                TTestColumn("jsondoc", TTypeInfo(NTypeIds::JsonDocument))
+            };
+    }
+}
+
+NKikimrSchemeOp::TColumnTableSchema TTestTableDescription::InitSchema(const NTxUT::TTableSpecials& specials) const {
+    NKikimrSchemeOp::TColumnTableSchema schema;
+    for (ui32 i = 0; i < Columns.size(); ++i) {
+        if (!specials.NeedTestStatistics(GetPkColumns())) {
             continue;
         }
-        if (NOlap::NIndexes::NMax::TIndexMeta::IsAvailableType(columns[i].GetType())) {
-            *schema->AddIndexes() = NOlap::NIndexes::TIndexMetaContainer(
-                std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(1000 + i, "MAX::INDEX::" + columns[i].GetName(), "__LOCAL_METADATA", i + 1))
+        *schema.MutableColumns()->Add() = Columns[i].CreateColumn(i + 1);
+        if (NOlap::NIndexes::NMax::TIndexMeta::IsAvailableType(Columns[i].GetType())) {
+            *schema.AddIndexes() = NOlap::NIndexes::TIndexMetaContainer(
+                std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(1000 + i, "MAX::INDEX::" + Columns[i].GetName(), "__LOCAL_METADATA", i + 1))
                     .SerializeToProto();
         }
     }
 
-    Y_ABORT_UNLESS(pk.size() > 0);
-    for (auto& column : ExtractNames(pk)) {
-        schema->AddKeyColumnNames(column);
+    Y_ABORT_UNLESS(Pk.size() > 0);
+    for (auto& idx : Pk) {
+        schema.AddKeyColumnNames(Columns[idx].GetName());
     }
 
     if (specials.HasCodec()) {
-        schema->MutableDefaultCompression()->SetCodec(specials.GetCodecId());
+        schema.MutableDefaultCompression()->SetCodec(specials.GetCodecId());
     }
     if (specials.CompressionLevel) {
-        schema->MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
+        schema.MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
+    }
+    return schema;
+}
+
+NOlap::TIndexInfo BuildTableInfo(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
+                        const std::vector<NArrow::NTest::TTestColumn>& key) {
+    THashMap<ui32, NTable::TColumn> columns;
+    THashMap<TString, ui32> columnIdByName;
+    for (ui32 i = 0; i < ydbSchema.size(); ++i) {
+        ui32 id = i + 1;
+        auto& name = ydbSchema[i].GetName();
+        auto& type = ydbSchema[i].GetType();
+
+        columns[id] = NTable::TColumn(name, id, type, "");
+        AFL_VERIFY(columnIdByName.emplace(name, id).second);
+    }
+
+    std::vector<ui32> pkIds;
+    ui32 idx = 0;
+    for (const auto& c : key) {
+        auto it = columnIdByName.FindPtr(c.GetName());
+        AFL_VERIFY(it);
+        AFL_VERIFY(*it < columns.size());
+        columns[*it].KeyOrder = idx++;
+        pkIds.push_back(*it);
+    }
+    return NOlap::TIndexInfo::BuildDefault(NOlap::TTestStoragesManager::GetInstance(), columns, pkIds);
+}
+
+void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const NOlap::TSnapshot& snapshot, bool succeed) {
+
+    auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
+    while (controller && !controller->IsActiveTablet(TTestTxConfig::TxTablet0)) {
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    }
+
+    using namespace NTxUT;
+    bool ok = ProposeSchemaTx(runtime, sender, txBody, snapshot);
+    UNIT_ASSERT_VALUES_EQUAL(ok, succeed);
+    if (succeed) {
+        PlanSchemaTx(runtime, sender, snapshot);
     }
 }
 
+void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
+                const TTestTableDescription& table, TString codec) {
+    using namespace NTxUT;
+    NOlap::TSnapshot snapshot(10, 10);
+    TString txBody;
+    auto specials = TTableSpecials().WithCodec(codec);
+    txBody = table.CreateTableTxBody(pathId, specials);
+    SetupSchema(runtime, sender, txBody, snapshot, true);
 }
 
-namespace NKikimr::NColumnShard {
-    NOlap::TIndexInfo BuildTableInfo(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
-                         const std::vector<NArrow::NTest::TTestColumn>& key) {
-        THashMap<ui32, NTable::TColumn> columns;
-        THashMap<TString, ui32> columnIdByName;
-        for (ui32 i = 0; i < ydbSchema.size(); ++i) {
-            ui32 id = i + 1;
-            auto& name = ydbSchema[i].GetName();
-            auto& type = ydbSchema[i].GetType();
 
-            columns[id] = NTable::TColumn(name, id, type, "");
-            AFL_VERIFY(columnIdByName.emplace(name, id).second);
-        }
+void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const TTestTableDescription& tableDescription) {
+    using namespace NTxUT;
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
 
-        std::vector<ui32> pkIds;
-        ui32 idx = 0;
-        for (const auto& c : key) {
-            auto it = columnIdByName.FindPtr(c.GetName());
-            AFL_VERIFY(it);
-            AFL_VERIFY(*it < columns.size());
-            columns[*it].KeyOrder = idx++;
-            pkIds.push_back(*it);
-        }
-        return NOlap::TIndexInfo::BuildDefault(NOlap::TTestStoragesManager::GetInstance(), columns, pkIds);
-    }
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
 
-    void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const NOlap::TSnapshot& snapshot, bool succeed) {
-
-        auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
-        while (controller && !controller->IsActiveTablet(TTestTxConfig::TxTablet0)) {
-            runtime.SimulateSleep(TDuration::Seconds(1));
-        }
-
-        using namespace NTxUT;
-        bool ok = ProposeSchemaTx(runtime, sender, txBody, snapshot);
-        UNIT_ASSERT_VALUES_EQUAL(ok, succeed);
-        if (succeed) {
-            PlanSchemaTx(runtime, sender, snapshot);
-        }
-    }
-
-    void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
-                 const TestTableDescription& table, TString codec) {
-        using namespace NTxUT;
-        NOlap::TSnapshot snapshot(10, 10);
-        TString txBody;
-        auto specials = TTestSchema::TTableSpecials().WithCodec(codec);
-        if (table.InStore) {
-            txBody = TTestSchema::CreateTableTxBody(pathId, table.Schema, table.Pk, specials);
-        } else {
-            txBody = TTestSchema::CreateStandaloneTableTxBody(pathId, table.Schema, table.Pk, specials);
-        }
-        SetupSchema(runtime, sender, txBody, snapshot, true);
-    }
-
-
-    void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize) {
-        using namespace NTxUT;
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-        runtime.DispatchEvents(options);
-
-        TestTableDescription tableDescription;
-        tableDescription.Schema = schema;
-        tableDescription.Pk = {};
-        for (ui64 i = 0; i < keySize; ++i) {
-            Y_ABORT_UNLESS(i < schema.size());
-            tableDescription.Pk.push_back(schema[i]);
-        }
-        TActorId sender = runtime.AllocateEdgeActor();
-        SetupSchema(runtime, sender, tableId, tableDescription);
-    }
-
-    void PrepareTablet(TTestBasicRuntime& runtime, const TString& schemaTxBody, bool succeed) {
-        using namespace NTxUT;
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-        runtime.DispatchEvents(options);
-
-        TActorId sender = runtime.AllocateEdgeActor();
-        SetupSchema(runtime, sender, schemaTxBody, NOlap::TSnapshot(1000, 100), succeed);
-    }
-
-     std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema) {
-         std::vector<ui32> fields;
-         ui32 idx = 1;
-         for (auto&& f : schema) {
-             Y_UNUSED(f);
-             fields.emplace_back(idx++);
-         }
- 
-         NTxUT::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
-         reader.SetReplyColumnIds(fields);
-         auto rb = reader.ReadAll();
-         UNIT_ASSERT(reader.IsCorrectlyFinished());
-         return rb ? rb : NArrow::MakeEmptyBatch(NArrow::MakeArrowSchema(schema));
-     }
+    TActorId sender = runtime.AllocateEdgeActor();
+    SetupSchema(runtime, sender, tableId, tableDescription);
 }
+
+void PrepareTablet(TTestBasicRuntime& runtime, const TString& schemaTxBody, bool succeed) {
+    using namespace NTxUT;
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    SetupSchema(runtime, sender, schemaTxBody, NOlap::TSnapshot(1000, 100), succeed);
+}
+
+    std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema) {
+        std::vector<ui32> fields;
+        ui32 idx = 1;
+        for (auto&& f : schema) {
+            Y_UNUSED(f);
+            fields.emplace_back(idx++);
+        }
+
+        NTxUT::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+        reader.SetReplyColumnIds(fields);
+        auto rb = reader.ReadAll();
+        UNIT_ASSERT(reader.IsCorrectlyFinished());
+        return rb ? rb : NArrow::MakeEmptyBatch(NArrow::MakeArrowSchema(schema));
+    }
+} //namespace NKikimr::NColumnShard

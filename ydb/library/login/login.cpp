@@ -744,19 +744,19 @@ bool TLoginProvider::TImpl::VerifyHash(const TString& password, const TString& p
 bool TLoginProvider::TImpl::VerifyHashWithCache(const TLruCache::TKey& key) {
     const auto successCacheIt = SuccessPasswordsCache.Find(key);
     if (successCacheIt != SuccessPasswordsCache.End()) {
-        return successCacheIt->second;
+        return true;
     }
 
     const auto wrongCacheIt = WrongPasswordsCache.Find(key);
     if (wrongCacheIt != WrongPasswordsCache.End()) {
-        return wrongCacheIt->second;
+        return false;
     }
 
     bool isSuccessVerifying = VerifyHash(key.Password, key.Hash);
     if (isSuccessVerifying) {
-        SuccessPasswordsCache.Insert(key, isSuccessVerifying);
+        SuccessPasswordsCache.Insert(key, true);
     } else {
-        WrongPasswordsCache.Insert(key, isSuccessVerifying);
+        WrongPasswordsCache.Insert(key, false);
     }
     return isSuccessVerifying;
 }

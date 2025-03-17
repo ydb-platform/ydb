@@ -357,6 +357,23 @@ TSingleMetric::TSingleMetric(std::shared_ptr<TSummaryMetric> summary, ui64 value
     Summary->Add(Details.Sum);
 }
 
+TString ParseColumns(const NJson::TJsonValue* node) {
+    TStringBuilder builder;
+    builder << '(';
+    if (node) {
+        bool firstColumn = true;
+        for (const auto& subNode : node->GetArray()) {
+            if (firstColumn) {
+                firstColumn = false;
+            } else {
+                builder << ", ";
+            }
+            builder << subNode.GetStringSafe();
+        }
+    }
+    builder << ')';
+    return builder;
+}
 
 void TPlan::Load(const NJson::TJsonValue& node) {
     if (auto* subplanNameNode = node.GetValueByPath("Subplan Name")) {
@@ -514,10 +531,16 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 TStringBuilder builder;
 
                 if (name == "Iterator" || name == "Member" || name == "ToFlow") {
+                    if (auto* referenceNode = subNode.GetValueByPath(name)) {
+                        auto referenceName = referenceNode->GetStringSafe();
+                        references.insert(referenceName);
+                        info = referenceName;
+                        auto cteRef = "CTE " + referenceName;
+                        auto stageCopy = stage;
+                        MemberRefs.emplace_back(cteRef, std::make_pair<std::shared_ptr<TStage>, ui32>(std::move(stageCopy), stage->Operators.size()));
+                    }
                     name = "Reference";
-                }
-
-                if (name == "Limit") {
+                } else if (name == "Limit") {
                     if (auto* limitNode = subNode.GetValueByPath("Limit")) {
                         info = limitNode->GetStringSafe();
                     }
@@ -644,19 +667,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                         builder << table;
                     }
-                    builder << "(";
-                    if (auto* readColumnsNode = subNode.GetValueByPath("ReadColumns")) {
-                        bool firstColumn = true;
-                        for (const auto& subNode : readColumnsNode->GetArray()) {
-                            if (firstColumn) {
-                                firstColumn = false;
-                            } else {
-                                builder << ", ";
-                            }
-                            builder << subNode.GetStringSafe();
-                        }
-                    }
-                    builder << ")";
+                    builder << ParseColumns(subNode.GetValueByPath("ReadColumns"));
                     info = builder;
                     externalOperator = true;
                 } else if (name == "TopSort" || name == "Top") {
@@ -677,15 +688,6 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                     }
                     info = builder;
-                } else if (name == "Reference") {
-                    if (auto* referenceNode = subNode.GetValueByPath(name)) {
-                        auto referenceName = referenceNode->GetStringSafe();
-                        references.insert(referenceName);
-                        info = referenceName;
-                        auto cteRef = "CTE " + referenceName;
-                        auto stageCopy = stage;
-                        MemberRefs.emplace_back(cteRef, std::make_pair<std::shared_ptr<TStage>, ui32>(std::move(stageCopy), stage->Operators.size()));
-                    }
                 } else if (name.Contains("Join")) {
                     operatorType = "Join";
                     if (auto* conditionNode = subNode.GetValueByPath("Condition")) {
@@ -693,7 +695,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     }
                 }
 
-                if (externalOperator) {
+                if (externalOperator && !stage->External) {
                     externalOperators.emplace_back(name, info);
                     externalOperators.back().Estimations = GetEstimation(subNode);
                 } else {
@@ -789,7 +791,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         }
     }
 
-    if (!externalOperators.empty()) {
+    if (!externalOperators.empty() && !stage->External) {
         auto connection = std::make_shared<TConnection>(*stage, "External", 0);
         stage->Connections.push_back(connection);
         Stages.push_back(std::make_shared<TStage>("External"));
@@ -853,7 +855,8 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         if (auto* outputNode = stage->StatsNode->GetValueByPath("Output")) {
             for (const auto& subNode : outputNode->GetArray()) {
                 if (auto* nameNode = subNode.GetValueByPath("Name")) {
-                    if (ToString(parentPlanNodeId) == nameNode->GetStringSafe()) {
+                    auto name = nameNode->GetStringSafe();
+                    if (name == ToString(parentPlanNodeId) || name == "RESULT") {
                         if (auto* popNode = subNode.GetValueByPath("Pop")) {
                             if (auto* bytesNode = popNode->GetValueByPath("Bytes")) {
                                 stage->OutputBytes = std::make_shared<TSingleMetric>(OutputBytes,
@@ -917,6 +920,26 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
             }
 
             if (planNodeType == "Connection") {
+                if (subNodeType == "TableLookup") {
+                    // "TableLookup" => "Table" + "Lookup"
+                    auto connection = std::make_shared<TConnection>(*stage, "Lookup", stage->PlanNodeId);
+                    stage->Connections.push_back(connection);
+                    Stages.push_back(std::make_shared<TStage>("External"));
+                    connection->FromStage = Stages.back();
+                    Stages.back()->External = true;
+                    TStringBuilder builder;
+                    if (auto* tableNode = plan.GetValueByPath("Table")) {
+                        auto table = tableNode->GetStringSafe();
+                        auto n = table.find_last_of('/');
+                        if (n != table.npos) {
+                            table = table.substr(n + 1);
+                        }
+                        builder << table;
+                    }
+                    builder << ParseColumns(plan.GetValueByPath("Columns")) << " by " << ParseColumns(plan.GetValueByPath("LookupKeyColumns"));
+                    Stages.back()->Operators.emplace_back("TableLookup", builder);
+                    subNodeType = "Table";
+                }
                 auto* keyColumnsNode = plan.GetValueByPath("KeyColumns");
                 auto* sortColumnsNode = plan.GetValueByPath("SortColumns");
                 if (auto* subNode = plan.GetValueByPath("Plans")) {
@@ -1027,6 +1050,17 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                     }
                     LoadSource(plan, stage->Operators, ingressRowsNode);
+                } else if (subNodeType == "TableFullScan") {
+                    if (stage->IngressName) {
+                        ythrow yexception() << "Plan stage already has Ingress [" << stage->IngressName << "]";
+                    }
+                    stage->IngressName = subNodeType;
+                    auto connection = std::make_shared<TConnection>(*stage, "External", 0);
+                    stage->Connections.push_back(connection);
+                    Stages.push_back(std::make_shared<TStage>("External"));
+                    connection->FromStage = Stages.back();
+                    Stages.back()->External = true;
+                    LoadStage(Stages.back(), plan, stage->PlanNodeId);
                 } else {
                     stage->Connections.push_back(std::make_shared<TConnection>(*stage, "Implicit", stage->PlanNodeId));
                     Stages.push_back(std::make_shared<TStage>(subNodeType));
@@ -1822,6 +1856,8 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
             else if (c->NodeType == "UnionAll")  mark = "U";
             else if (c->NodeType == "Broadcast") mark = "B";
             else if (c->NodeType == "External")  mark = "E";
+            else if (c->NodeType == "Table")     mark = "T";
+            else if (c->NodeType == "Lookup")    mark = "L";
             else                                 mark = "?";
 
             canvas

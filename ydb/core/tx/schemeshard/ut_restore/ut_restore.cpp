@@ -4255,6 +4255,114 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    Y_UNIT_TEST(MultipleViewCreationRetries) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableViews(true);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        ui64 txId = 100;
+
+        constexpr int ViewLayers = 10;
+        THashMap<TString, TTestDataWithScheme> bucketContent(ViewLayers);
+        for (int i = 0; i < ViewLayers; ++i) {
+            bucketContent.emplace(std::format("/view{}", i), GenerateTestData(
+                {
+                    EPathTypeView,
+                    std::format(R"(
+                            -- backup root: "/MyRoot"
+                            CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS {};
+                        )", i == 0
+                            ? "SELECT 1"
+                            : std::format("SELECT * FROM `view{}`", i - 1)
+                    )
+                }
+            ));
+        }
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TActorId schemeshardActorId;
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> viewCreationBlocker(runtime,
+            [&](const TEvSchemeShard::TEvModifySchemeTransaction::TPtr& event) {
+                const auto& record = event->Get()->Record;
+                if (record.GetTransaction(0).GetOperationType() == ESchemeOpCreateView) {
+                    schemeshardActorId = event->Recipient;
+                    return true;
+                }
+                return false;
+            }
+        );
+
+        int missingDependencyFails = 0;
+        auto missingDependencyObserver = runtime.AddObserver<TEvPrivate::TEvImportSchemeQueryResult>(
+            [&](const TEvPrivate::TEvImportSchemeQueryResult::TPtr& event) {
+                if (!schemeshardActorId
+                    || event->Recipient != schemeshardActorId
+                    || event->Get()->Status != Ydb::StatusIds::SCHEME_ERROR) {
+                    return;
+                }
+                const auto* error = std::get_if<TString>(&event->Get()->Result);
+                if (error && error->Contains("Cannot find table")) {
+                    ++missingDependencyFails;
+                }
+            }
+        );
+
+        auto importSettings = TStringBuilder() << std::format(R"(
+                ImportFromS3Settings {{
+                    endpoint: "localhost:{}"
+                    scheme: HTTP
+            )", port
+        );
+        for (int i = 0; i < ViewLayers; ++i) {
+            importSettings << std::format(R"(
+                    items {{
+                        source_prefix: "view{}"
+                        destination_path: "/MyRoot/view{}"
+                    }}
+                )", i, i
+            );
+        }
+        importSettings << '}';
+
+        const ui64 importId = ++txId;
+        TestImport(runtime, importId, "/MyRoot", importSettings);
+
+        int expectedFails = 0;
+        for (int iteration = 1; iteration <= ViewLayers; ++iteration) {
+            runtime.WaitFor("blocked view creation", [&]{ return !viewCreationBlocker.empty(); });
+
+            expectedFails += ViewLayers - iteration;
+            if (iteration > 1) {
+                runtime.WaitFor("query results", [&]{ return missingDependencyFails >= expectedFails; });
+            } else {
+                // the first iteration might miss some query results due to the initially unset schemeshardActorId
+                missingDependencyFails = expectedFails;
+            }
+
+            viewCreationBlocker.Unblock(1);
+        }
+        UNIT_ASSERT(viewCreationBlocker.empty());
+        viewCreationBlocker.Stop();
+
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        for (int i = 0; i < ViewLayers; ++i) {
+            TestDescribeResult(DescribePath(runtime, std::format("/MyRoot/view{}", i)), {
+                NLs::Finished,
+                NLs::IsView
+            });
+        }
+    }
+
     Y_UNIT_TEST(IgnoreBasicSchemeLimits) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

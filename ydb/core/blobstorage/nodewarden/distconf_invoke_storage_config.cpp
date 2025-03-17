@@ -219,11 +219,12 @@ namespace NKikimr::NStorage {
         } else if (!targetDedicatedStorageSection) {
             ProposedStorageConfig.ClearCompressedStorageYaml();
         }
-        if (request.GetDryRun()) {
-            return Finish(Sender, SelfId(), PrepareResult(TResult::DRY_RUN_SUCCESS, std::nullopt).release(), 0, Cookie);
-        }
         if (request.GetSkipConsoleValidation() || !NewYaml) {
-            StartProposition(&ProposedStorageConfig);
+            if (request.GetDryRun()) {
+                return Finish(Sender, SelfId(), PrepareResult(TResult::DRY_RUN_SUCCESS, std::nullopt).release(), 0, Cookie);
+            } else {
+                StartProposition(&ProposedStorageConfig);
+            }
         } else if (!Self->EnqueueConsoleConfigValidation(SelfId(), enablingDistconf, *NewYaml, request.GetAllowUnknownFields(), request.GetBypassMetadataChecks())) {
             FinishWithError(TResult::ERROR, "console pipe is not available");
         }

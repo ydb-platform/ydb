@@ -120,7 +120,7 @@ namespace NKikimr::NStorage {
         // Configuration proposition
 
         void AdvanceGeneration();
-        void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool updateFields = true, bool dryRun = false);
+        void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool updateFields = true);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Query termination and result delivery

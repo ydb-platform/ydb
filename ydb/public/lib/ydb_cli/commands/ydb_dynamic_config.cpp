@@ -192,7 +192,7 @@ TCommandConfigReplace::TCommandConfigReplace(bool allowEmptyDatabase)
 void TCommandConfigReplace::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption('f', "filename", "Filename of the file containing configuration")
-        .Required().RequiredArgument("[config.yaml]").StoreResult(&Filename);
+        .RequiredArgument("[config.yaml]").StoreResult(&Filename);
     config.Opts->AddLongOption("ignore-local-validation", "Ignore local config applicability checks")
         .NoArgument().SetFlag(&IgnoreCheck);
     config.Opts->AddLongOption("dry-run", "Check config applicability")
@@ -209,7 +209,6 @@ void TCommandConfigReplace::Config(TConfig& config) {
         .StoreTrue(&EnableDedicatedStorageSection);
     config.Opts->AddLongOption("disable-dedicated-storage-section", "Turn off dedicated storage section in stored configuration")
         .StoreTrue(&DisableDedicatedStorageSection);
-    config.SetFreeArgsNum(0);
     config.AllowEmptyDatabase = AllowEmptyDatabase;
     config.SetFreeArgsNum(0);
 }
@@ -244,7 +243,7 @@ void TCommandConfigReplace::Parse(TConfig& config) {
         SwitchDedicatedStorageSection.emplace(false);
     }
 
-    if (!IgnoreCheck) {
+    if (!IgnoreCheck && ClusterYaml) {
         NYamlConfig::GetMainMetadata(ClusterYaml.value());
         auto tree = NFyaml::TDocument::Parse(ClusterYaml.value());
         const auto resolved = NYamlConfig::ResolveAll(tree);
@@ -272,18 +271,34 @@ int TCommandConfigReplace::Run(TConfig& config) {
 
     auto status = [&]() {
         if (SwitchDedicatedStorageSection && !*SwitchDedicatedStorageSection) {
+            if (!ClusterYaml) {
+                ythrow yexception() << "Cluster config is required when disabling dedicated storage section";
+            }
             return client.ReplaceConfigDisableDedicatedStorageSection(ClusterYaml.value(), settings).GetValueSync();
         } else if (SwitchDedicatedStorageSection && *SwitchDedicatedStorageSection) {
+            if (!ClusterYaml || !StorageYaml) {
+                ythrow yexception() << "Both cluster and storage configs are required when enabling dedicated storage section";
+            }
             return client.ReplaceConfigEnableDedicatedStorageSection(ClusterYaml.value(), StorageYaml.value(), settings).GetValueSync();
         } else if (DedicatedConfigMode) {
+            if (!ClusterYaml || !StorageYaml) {
+                ythrow yexception() << "Both cluster and storage configs are required when using dedicated config mode";
+            }
             return client.ReplaceConfig(ClusterYaml.value(), StorageYaml.value(), settings).GetValueSync();
         } else {
+            if (!ClusterYaml) {
+                ythrow yexception() << "Cluster config is required when not using dedicated config mode";
+            }
             return client.ReplaceConfig(ClusterYaml.value(), settings).GetValueSync();
         }
     }();
 
     if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED) {
         Cerr << "Warning: Fallback to DynamicConfig API" << Endl;
+
+        if (!ClusterYaml) {
+            ythrow yexception() << "Can't use DynamicConfig API without cluster config";
+        }
 
         auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
 

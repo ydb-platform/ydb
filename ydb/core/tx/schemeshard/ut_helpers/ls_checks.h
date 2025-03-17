@@ -24,10 +24,8 @@ struct TPathVersion {
     ui64 Version = Max<ui64>();
 };
 
-struct TApplyIfUnit {
-    std::optional<TPathId> PathId;
-    std::optional<ui64> Version;
-    std::optional<std::vector<NKikimrSchemeOp::EPathType>> AllowedPathTypes;
+struct TApplyIfUnit : TPathVersion {
+    std::vector<NKikimrSchemeOp::EPathType> PathTypes;
 
     TApplyIfUnit() {}
 

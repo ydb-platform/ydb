@@ -190,18 +190,13 @@ namespace NSchemeShardUT_Private {
         for (const auto& applyIfUnit: applyIf) {
             auto condition = transaction.AddApplyIf();
 
-            if (applyIfUnit.PathId.has_value()) {
-                condition->SetPathId(applyIfUnit.PathId.value().LocalPathId);
+            if (applyIfUnit.PathId != TPathId()) {
+                condition->SetPathId(applyIfUnit.PathId.LocalPathId);
+                condition->SetPathVersion(applyIfUnit.Version);
             }
 
-            if (applyIfUnit.Version.has_value()) {
-                condition->SetPathVersion(applyIfUnit.Version.value());
-            }
-
-            if (applyIfUnit.AllowedPathTypes.has_value()) {
-                for (auto allowedPathType : applyIfUnit.AllowedPathTypes.value()) {
-                    condition->AddAllowedPathTypes(allowedPathType);
-                }
+            for (auto pathType : applyIfUnit.PathTypes) {
+                condition->AddPathTypes(pathType);
             }
         }
     }

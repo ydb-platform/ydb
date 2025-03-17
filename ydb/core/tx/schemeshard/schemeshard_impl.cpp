@@ -1256,7 +1256,7 @@ TString TSchemeShard::PathToString(TPathElement::TPtr item) {
     return path.PathString();
 }
 
-bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme &scheme, TString &errStr) {
+bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr, std::optional<const TPath> path) {
     const auto& conditions = scheme.GetApplyIf();
 
     for (const auto& item: conditions) {
@@ -1371,49 +1371,88 @@ bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme &scheme, TS
             }
         }
 
-        if (!item.GetAllowedPathTypes().empty()) {
-            if (scheme.HasModifyACL()) {
-                const auto& parDir = scheme.GetWorkingDir();
-                const auto& name = scheme.GetModifyACL().GetName();
-                const auto path = TPath::Resolve(parDir, this).Dive(name);
-
-                bool allowed = false;
-
-                for (const auto& type : item.GetAllowedPathTypes()) {
-                    switch (type) {
-                        case NKikimrSchemeOp::EPathType::EPathTypeSubDomain : {
-                            const auto checkSubDomain = path.Check();
-                            checkSubDomain.IsSubDomain();
-                            allowed |= !!checkSubDomain;
-                            break;
-                        }
-
-                        case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain : {
-                            const auto checkExtSubDomain = path.Check();
-                            checkExtSubDomain.IsExternalSubDomain();
-                            allowed |= !!checkExtSubDomain;
-                            break;
-                        }
-
-                        default: {
-                            break;
-                        }
-                    }
-                }
-
-                if (!allowed) {
-                    errStr = TStringBuilder()
-                        << "fail in ApplyIf section:"
-                        << " path is not database";
-
-                    return false;
-                }
-            } else {
+        if (!item.GetPathTypes().empty()) {
+            if (!path.has_value()) {
                 errStr = TStringBuilder()
                     << "fail in ApplyIf section:"
-                    << " Tx message has field AllowedPathTypes, but transaction's type is not `ModifyACL`;"
-                    << " probably, it is bug in the YDB's code;"
-                    << " if you see this message, please contact with us";
+                    << " argument `path` is undefined,"
+                    << " but ApplyIf has non-empty field `PathTypes.`";
+
+                return false;
+            }
+
+            bool allowed = false;
+
+            for (const auto& type : item.GetPathTypes()) {
+                const auto check = path.value().Check();
+
+                switch (type) {
+                    case NKikimrSchemeOp::EPathType::EPathTypeSubDomain:
+                        check.IsSubDomain();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
+                        check.IsExternalSubDomain();
+                        break;
+                    case NKikimrSchemeOp::EPathTypePersQueueGroup:
+                        check.IsPQGroup();
+                        break;
+                    case NKikimrSchemeOp::EPathTypeTable:
+                        check.IsTable();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeBlockStoreVolume:
+                        check.IsBlockStoreVolume();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeFileStore:
+                        check.IsFileStore();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeKesus:
+                        check.IsKesus();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeRtmrVolume:
+                        check.IsRtmrVolume();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeSolomonVolume:
+                        check.IsSolomon();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
+                        check.IsTableIndex();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeColumnStore:
+                        check.IsOlapStore();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeColumnTable:
+                        check.IsColumnTable();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeCdcStream:
+                        check.IsCdcStream();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeSequence:
+                        check.IsSequence();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeReplication:
+                        check.IsReplication();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeTransfer:
+                        check.IsTransfer();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeExternalTable:
+                        check.IsExternalTable();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeExternalDataSource:
+                        check.IsExternalDataSource();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeView:
+                        check.IsView();
+                        break;
+                }
+
+                allowed |= static_cast<bool>(check);
+            }
+
+            if (!allowed) {
+                errStr = TStringBuilder()
+                    << "fail in ApplyIf section:"
+                    << " path is not database";
 
                 return false;
             }

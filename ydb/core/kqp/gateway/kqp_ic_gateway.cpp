@@ -921,8 +921,8 @@ public:
             modifyScheme->MutableModifyACL()->SetName(basename);
 
             auto condition = modifyScheme->AddApplyIf();
-            condition->AddAllowedPathTypes(NKikimrSchemeOp::EPathType::EPathTypeSubDomain);
-            condition->AddAllowedPathTypes(NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain);
+            condition->AddPathTypes(NKikimrSchemeOp::EPathType::EPathTypeSubDomain);
+            condition->AddPathTypes(NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain);
 
             SendSchemeRequest(ev.Release()).Apply(
                 [alterDatabasePromise](const TFuture<TGenericResult>& future) mutable {

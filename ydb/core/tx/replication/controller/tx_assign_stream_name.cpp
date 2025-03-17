@@ -55,7 +55,7 @@ public:
             ? CreateGuidAsString()
             : ReplicationConsumerName;
         if (Replication->GetConfig().HasTransferSpecific()) {
-            auto& target = Replication->GetConfig().GetTransferSpecific().GetTargets(0);
+            auto& target = Replication->GetConfig().GetTransferSpecific().GetTarget();
             if (target.HasConsumerName()) {
                 consumerName = target.GetConsumerName();
             } else {

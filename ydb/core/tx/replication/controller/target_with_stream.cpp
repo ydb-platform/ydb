@@ -161,9 +161,9 @@ IActor* TTargetWithStream::CreateWorkerRegistar(const TActorContext& ctx) const 
     const auto& config = replication->GetConfig();
 
     ui64 flushIntervalMilliSeconds = config.HasTransferSpecific()
-        ? config.GetTransferSpecific().GetTargets(0).GetFlushIntervalMilliSeconds() : 0;
+        ? config.GetTransferSpecific().GetTarget().GetFlushIntervalMilliSeconds() : 0;
     ui64 batchSizeBytes = config.HasTransferSpecific()
-        ? config.GetTransferSpecific().GetTargets(0).GetBatchSizeBytes() : 0;
+        ? config.GetTransferSpecific().GetTarget().GetBatchSizeBytes() : 0;
 
     return new TWorkerRegistar(ctx.SelfID, replication->GetYdbProxy(),
         config.GetSrcConnectionParams(), config.GetConsistencySettings(),

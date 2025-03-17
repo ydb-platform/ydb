@@ -43,8 +43,8 @@ public:
         const auto& newConfig = record.GetConfig();
 
         if (oldConfig.HasTransferSpecific()) {
-            auto& oldTarget = oldConfig.GetTransferSpecific().GetTargets(0);
-            auto& newTarget = newConfig.GetTransferSpecific().GetTargets(0);
+            auto& oldTarget = oldConfig.GetTransferSpecific().GetTarget();
+            auto& newTarget = newConfig.GetTransferSpecific().GetTarget();
 
             alter = oldTarget.GetTransformLambda() != newTarget.GetTransformLambda()
                 || oldTarget.GetBatchSizeBytes() != newTarget.GetBatchSizeBytes()

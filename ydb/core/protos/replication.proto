@@ -92,7 +92,7 @@ message TReplicationConfig {
             optional uint64 BatchSizeBytes = 9;
         }
 
-        repeated TTarget Targets = 1;
+        optional TTarget Target = 1;
     }
 
     optional TConnectionParams SrcConnectionParams = 1;

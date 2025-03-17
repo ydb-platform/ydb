@@ -2601,9 +2601,9 @@ public:
                 staticCreds->Serialize(*params.MutableStaticCredentials());
             }
 
-            auto& targets = *config.MutableTransferSpecific();
-            for (const auto& [src, dst, lambda] : settings.Targets) {
-                auto& target = *targets.AddTargets();
+            {
+                const auto& [src, dst, lambda] = settings.Target;
+                auto& target = *config.MutableTransferSpecific()->MutableTarget();
                 target.SetSrcPath(AdjustPath(src, params.GetDatabase()));
                 target.SetDstPath(AdjustPath(dst, GetDatabase()));
                 target.SetTransformLambda(lambda);

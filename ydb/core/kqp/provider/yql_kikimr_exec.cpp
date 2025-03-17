@@ -2404,11 +2404,11 @@ public:
             TCreateTransferSettings settings;
             settings.Name = TString(createTransfer.Transfer());
 
-            settings.Targets.emplace_back(
+            settings.Target = std::tuple<TString, TString, TString>{
                 createTransfer.Source(),
                 createTransfer.Target(),
                 createTransfer.TransformLambda()
-            );
+            };
 
             if (!ParseTransferSettings(settings.Settings, createTransfer.TransferSettings(), ctx, createTransfer.Pos())) {
                 return SyncError();

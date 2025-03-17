@@ -131,7 +131,7 @@ private:
 IActor* CreateStreamConsumerRemover(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
-    auto needDrop = !replication->GetConfig().GetTransferSpecific().GetTargets(0).HasConsumerName();
+    auto needDrop = !replication->GetConfig().GetTransferSpecific().GetTarget().HasConsumerName();
 
     return CreateStreamConsumerRemover(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetStreamConsumerName(), needDrop);

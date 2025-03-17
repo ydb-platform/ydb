@@ -439,13 +439,8 @@ public:
                     TStringBuilder() << "Change " << name << " allowed only for transfer");
                 return false;
             }
-            auto& targets = *oldConf.MutableTransferSpecific()->MutableTargets();
-            if (targets.size() != 1) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "Only one transfer target allowed");
-                return false;
-            }
-            action(*targets.begin());
+            auto& target = *oldConf.MutableTransferSpecific()->MutableTarget();
+            action(target);
             return true;
         };
 

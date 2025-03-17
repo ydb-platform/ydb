@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(TransferWriter) {
 
         auto compiler = env.GetRuntime().Register(NFq::NRowDispatcher::CreatePurecalcCompileService({}, MakeIntrusive<NMonitoring::TDynamicCounters>()));
 
-        auto writer = env.GetRuntime().Register(CreateTransferWriter(lambda, tablePathId, compiler));
+        auto writer = env.GetRuntime().Register(CreateTransferWriter(lambda, tablePathId, compiler, TDuration::Seconds(1), 8_MB));
         env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
 
         env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData(0, "TestSource", {

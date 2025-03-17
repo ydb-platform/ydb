@@ -53,7 +53,7 @@ void FillPqClusterConfig(NYql::TPqClusterConfig& clusterConfig,
     clusterConfig.SetDatabase(ds.database());
     clusterConfig.SetDatabaseId(ds.database_id());
     clusterConfig.SetUseSsl(ds.secure());
-    clusterConfig.SetAddBearerToToken(useBearerForYdb);
+    clusterConfig.SetAddBearerToToken(useBearerForYdb && ds.auth().identity_case() != FederatedQuery::IamAuth::kToken);
     clusterConfig.SetClusterType(TPqClusterConfig::CT_DATA_STREAMS);
     clusterConfig.SetSharedReading(ds.shared_reading());
     clusterConfig.SetReadGroup(readGroup);

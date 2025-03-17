@@ -63,7 +63,7 @@ target_sources(ydb-core-kafka_proxy PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_records.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_consumer_protocol.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_metrics.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kqp_balance_transaction.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kqp_helper.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_consumer_members_metadata_initializers.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_connection.h
@@ -75,6 +75,7 @@ target_sources(ydb-core-kafka_proxy PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages.h
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages_int.h
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_proxy.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kqp_helper.h
 )
 
 

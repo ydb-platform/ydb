@@ -676,7 +676,7 @@ public:
 
     virtual TString GetDefaultClusterName() const = 0;
     virtual TString GetClusterServer(const TString& cluster) const = 0;
-    virtual NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder) const = 0;
+    virtual NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const = 0;
     virtual NYT::TRichYPath GetWriteTable(const TString& sessionId, const TString& cluster, const TString& table, const TString& tmpFolder) const = 0;
 
     virtual NThreading::TFuture<TDownloadTablesResult> DownloadTables(TDownloadTablesOptions&& options) = 0;

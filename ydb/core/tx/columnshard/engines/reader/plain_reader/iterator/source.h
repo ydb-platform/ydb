@@ -66,6 +66,16 @@ private:
         AFL_VERIFY(false);
         return false;
     }
+    virtual TConclusion<bool> DoStartFetchHeader(
+        const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
+        AFL_VERIFY(false);
+        return false;
+    }
+    virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
+        const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
+        AFL_VERIFY(false);
+        return NArrow::TColumnFilter::BuildAllowFilter();
+    }
 
 protected:
     THashMap<ui32, TFetchingInterval*> Intervals;

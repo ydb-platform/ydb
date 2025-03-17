@@ -26,6 +26,39 @@ namespace {
 
 static const TString UdfName("UDF");
 
+class TPrefixLogger : public NUdf::ILogger {
+public:
+    TPrefixLogger(const TString& moduleName, const NUdf::TLoggerPtr& inner)
+        : ModuleName_(moduleName)
+        , Inner_(inner)
+    {}
+
+    NUdf::TLogComponentId RegisterComponent(const NUdf::TStringRef& component) final {
+        TString fullName = TStringBuilder() << ModuleName_ << "." << component;
+        return Inner_->RegisterComponent(fullName);
+    }
+
+    void SetDefaultLevel(NUdf::ELogLevel level) final {
+        Inner_->SetDefaultLevel(level);
+    }
+
+    void SetComponentLevel(NUdf::TLogComponentId component, NUdf::ELogLevel level) final {
+        Inner_->SetComponentLevel(component, level);
+    }
+
+    bool IsActive(NUdf::TLogComponentId component, NUdf::ELogLevel level) const final {
+        return Inner_->IsActive(component, level);
+    }
+
+    void Log(NUdf::TLogComponentId component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+        Inner_->Log(component, level, message);
+    }
+
+private:
+    const TString ModuleName_;
+    const NUdf::TLoggerPtr Inner_;
+};
+
 class TPgTypeIndex {
     using TUdfTypes = TVector<NYql::NUdf::TPgTypeDescription>;
     TUdfTypes Types;
@@ -1688,7 +1721,8 @@ TFunctionTypeInfoBuilder::TFunctionTypeInfoBuilder(
         const TStringBuf& moduleName,
         NUdf::ICountersProvider* countersProvider,
         const NUdf::TSourcePosition& pos,
-        const NUdf::ISecureParamsProvider* provider)
+        const NUdf::ISecureParamsProvider* secureParamsProvider,
+        const NUdf::ILogProvider* logProvider)
     : Env_(env)
     , ReturnType_(nullptr)
     , RunConfigType_(Env_.GetTypeOfVoidLazy())
@@ -1697,7 +1731,8 @@ TFunctionTypeInfoBuilder::TFunctionTypeInfoBuilder(
     , ModuleName_(moduleName)
     , CountersProvider_(countersProvider)
     , Pos_(pos)
-    , SecureParamsProvider_(provider)
+    , SecureParamsProvider_(secureParamsProvider)
+    , LogProvider_(logProvider)
 {
 }
 
@@ -1779,6 +1814,20 @@ bool TFunctionTypeInfoBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStrin
     if (SecureParamsProvider_)
         return SecureParamsProvider_->GetSecureParam(key, value);
     return false;
+}
+
+NUdf::TLoggerPtr TFunctionTypeInfoBuilder::MakeLogger(bool synchronized) const {
+    if (!LogProvider_) {
+        return NUdf::MakeNullLogger();
+    }
+
+    auto inner = LogProvider_->MakeLogger();
+    NUdf::TLoggerPtr ret(new TPrefixLogger(TString(ModuleName_), inner));
+    if (synchronized) {
+        ret = NUdf::MakeSynchronizedLogger(ret);
+    }
+
+    return ret;
 }
 
 NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ReturnsImpl(

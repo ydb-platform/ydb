@@ -178,6 +178,9 @@ namespace NDataShardReadTableTest {
             case NYdb::EPrimitiveType::Timestamp:
                 out << parser.GetTimestamp();
                 break;
+            case NYdb::EPrimitiveType::Uuid:
+                out << parser.GetUuid().ToString();
+                break;
 
             default:
                 Y_ABORT("Unhandled");

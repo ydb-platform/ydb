@@ -5,6 +5,7 @@
 #include <library/cpp/json/writer/json_value.h>
 #include <util/digest/fnv.h>
 #include <util/digest/numeric.h>
+#include <yql/essentials/core/arrow_kernels/request/request.h>
 
 namespace NKikimr::NArrow::NSSA {
 class TCalculationProcessor;
@@ -135,6 +136,7 @@ private:
     std::map<ui64, std::shared_ptr<TGraphNode>> Nodes;
     THashMap<TResourceAddress, TGraphNode*> Producers;
     THashSet<ui32> IndexesConstructed;
+    THashSet<ui32> HeaderCheckConstructed;
     ui32 NodeId = 0;
     TGraphNode* GetProducerVerified(const TResourceAddress& resourceId) const {
         auto it = Producers.find(resourceId);
@@ -143,6 +145,8 @@ private:
     }
     std::optional<TResourceAddress> GetOriginalAddress(TGraphNode* condNode) const;
     TConclusion<bool> OptimizeForFetchSubColumns(TGraphNode* condNode);
+    TConclusion<bool> OptimizeConditionsForHeadersCheck(TGraphNode* condNode);
+    bool IsBoolResultYqlOperator(const NYql::TKernelRequestBuilder::EBinaryOp op) const;
 
     TConclusion<bool> OptimizeConditionsForStream(TGraphNode* condNode);
     TConclusion<bool> OptimizeConditionsForIndexes(TGraphNode* condNode);

@@ -550,7 +550,7 @@ namespace NFlatExecutorSetup {
         // tablet generation restoration complete, tablet could act as leader
         virtual void Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx) = 0;
         // die!
-        virtual void DetachTablet(const TActorContext &ctx) = 0;
+        virtual void DetachTablet() = 0;
 
         // tablet assigned as follower (or follower connection refreshed), must begin loading
         virtual void FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext &ctx) = 0;

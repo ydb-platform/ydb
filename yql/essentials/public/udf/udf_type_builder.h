@@ -6,6 +6,7 @@
 #include "udf_string_ref.h"
 #include "udf_type_size_check.h"
 #include "udf_value.h"
+#include "udf_log.h"
 
 #include <type_traits>
 
@@ -367,35 +368,6 @@ private:
 UDF_ASSERT_TYPE_SIZE(IFunctionArgTypesBuilder, 16);
 
 //////////////////////////////////////////////////////////////////////////////
-// IRefCounted
-//////////////////////////////////////////////////////////////////////////////
-class IRefCounted {
-public:
-    virtual ~IRefCounted() = default;
-
-    inline void Ref() noexcept {
-        Refs_++;
-    }
-
-    inline void UnRef() noexcept {
-        Y_DEBUG_ABORT_UNLESS(Refs_ > 0);
-        if (--Refs_ == 0) {
-            delete this;
-        }
-    }
-
-private:
-    ui32 Refs_ = 0;
-    ui32 Reserved_ = 0;
-
-    void Unused() {
-        Y_UNUSED(Reserved_);
-    }
-};
-
-UDF_ASSERT_TYPE_SIZE(IRefCounted, 16);
-
-//////////////////////////////////////////////////////////////////////////////
 // IHash
 //////////////////////////////////////////////////////////////////////////////
 class IHash : public IRefCounted {
@@ -668,7 +640,16 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 32)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 42)
+class IFunctionTypeInfoBuilder17: public IFunctionTypeInfoBuilder16 {
+public:
+    virtual TLoggerPtr MakeLogger(bool synchronized) const = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 42)
+using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder17;
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 32)
 using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder16;
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 28)
 using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder15;

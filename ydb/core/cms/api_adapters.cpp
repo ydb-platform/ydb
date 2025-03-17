@@ -109,6 +109,11 @@ namespace {
         ConvertPermission(taskUid, protoPermission, actionState);
     }
 
+    void ConvertInstant(const TInstant& instant, google::protobuf::Timestamp& protoValue) {
+        protoValue.set_seconds(instant.Seconds());
+        protoValue.set_nanos(instant.NanoSecondsOfSecond());
+    }
+
 } // anonymous
 
 template <typename TDerived, typename TEvRequest, typename TEvResponse>
@@ -312,6 +317,10 @@ public:
         // performed actions: existing permissions
         if (cmsState->MaintenanceTasks.contains(taskUid)) {
             const auto& task = cmsState->MaintenanceTasks.at(taskUid);
+
+            ConvertInstant(task.CreateTime, *result.mutable_create_time());
+            ConvertInstant(task.LastRefreshTime, *result.mutable_last_refresh_time());
+
             for (const auto& id : task.Permissions) {
                 if (!cmsState->Permissions.contains(id) || permissionsSeen.contains(id)) {
                     continue;
@@ -501,6 +510,8 @@ public:
 
             auto& result = *response->Record.MutableResult();
             result.set_task_uid(taskUid);
+            ConvertInstant(task.CreateTime, *result.mutable_create_time());
+            ConvertInstant(task.LastRefreshTime, *result.mutable_last_refresh_time());
 
             // performed actions
             for (const auto& id : task.Permissions) {
@@ -566,6 +577,8 @@ public:
 
             auto& result = *response->Record.MutableResult();
             result.mutable_task_options()->set_task_uid(taskUid);
+            ConvertInstant(task.CreateTime, *result.mutable_create_time());
+            ConvertInstant(task.LastRefreshTime, *result.mutable_last_refresh_time());
 
             // performed actions
             for (const auto& id : task.Permissions) {
@@ -633,6 +646,10 @@ public:
         // performed actions
         if (cmsState->MaintenanceTasks.contains(taskUid)) {
             const auto& task = cmsState->MaintenanceTasks.at(taskUid);
+
+            ConvertInstant(task.CreateTime, *result.mutable_create_time());
+            ConvertInstant(task.LastRefreshTime, *result.mutable_last_refresh_time());
+
             for (const auto& id : task.Permissions) {
                 if (!cmsState->Permissions.contains(id)) {
                     continue;

@@ -183,13 +183,22 @@ void TSlice::Describe(IOutputStream& out) const
 {
     out << (FirstInclusive ? '[' : '(');
     out << FirstRowId;
-    out << ',';
+    out << ", ";
     if (LastRowId != Max<TRowId>()) {
         out << LastRowId;
     } else {
         out << "+inf";
     }
     out << (LastInclusive ? ']' : ')');
+}
+
+void TSlice::Describe(IOutputStream& out, const TKeyCellDefaults& keyDefaults) const
+{
+    out << "{rows: ";
+    Describe(out);
+    out << " keys: ";
+    TBounds::Describe(out, keyDefaults);
+    out << "}";
 }
 
 void TSlices::Describe(IOutputStream& out) const
@@ -202,6 +211,20 @@ void TSlices::Describe(IOutputStream& out) const
         else
             out << ", ";
         bounds.Describe(out);
+    }
+    out << (first ? "}" : " }");
+}
+
+void TSlices::Describe(IOutputStream& out, const TKeyCellDefaults& keyDefaults) const
+{
+    bool first = true;
+    out << "{ ";
+    for (const auto& bounds : *this) {
+        if (first)
+            first = false;
+        else
+            out << ", ";
+        bounds.Describe(out, keyDefaults);
     }
     out << (first ? "}" : " }");
 }
